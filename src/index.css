@@ -1,0 +1,22 @@
+@import "tailwindcss";
+
+/* Custom theme for Deadlock Mod Manager */
+@theme {
+  --color-bg-primary: #0f0f0f;
+  --color-bg-secondary: #1a1a1a;
+  --color-bg-tertiary: #242424;
+  --color-accent: #f97316;
+  --color-accent-hover: #ea580c;
+  --color-text-primary: #ffffff;
+  --color-text-secondary: #a1a1aa;
+  --color-border: #2d2d2d;
+}
+
+/* Base styles */
+body {
+  @apply bg-bg-primary text-text-primary m-0 font-sans antialiased;
+}
+
+#root {
+  @apply min-h-screen w-full;
+}
