@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Package, Loader2, Settings, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
+import { getActiveDeadlockPath } from '../lib/appSettings';
 
 type ViewMode = 'grid' | 'list';
 
@@ -17,6 +18,7 @@ export default function Installed() {
   const navigate = useNavigate();
   const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, deleteMod } =
     useAppStore();
+  const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   useEffect(() => {
@@ -24,19 +26,19 @@ export default function Installed() {
   }, [loadSettings]);
 
   useEffect(() => {
-    if (settings?.deadlockPath) {
+    if (activeDeadlockPath) {
       loadMods();
     }
-  }, [settings?.deadlockPath, loadMods]);
+  }, [activeDeadlockPath, loadMods]);
 
   // No path configured
-  if (!settings?.deadlockPath) {
+  if (!activeDeadlockPath) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
         <Package className="w-16 h-16 mb-4 opacity-50" />
         <h2 className="text-xl font-semibold text-text-primary mb-2">No Game Path Set</h2>
         <p className="text-center max-w-md mb-4">
-          Configure your Deadlock installation path to start managing mods.
+          Configure your Deadlock installation path or enable dev mode to start managing mods.
         </p>
         <button
           onClick={() => navigate('/settings')}

@@ -16,6 +16,10 @@ export async function validateDeadlockPath(path: string): Promise<boolean> {
   return invoke('validate_deadlock_path', { path });
 }
 
+export async function createDevDeadlockPath(): Promise<string> {
+  return invoke('create_dev_deadlock_path');
+}
+
 export async function getSettings(): Promise<AppSettings> {
   return invoke('get_settings');
 }

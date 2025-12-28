@@ -1,4 +1,5 @@
 mod commands;
+mod dev;
 mod deadlock;
 mod error;
 mod extract;
@@ -28,6 +29,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             detect_deadlock,
             validate_deadlock_path,
+            create_dev_deadlock_path,
             get_settings,
             set_settings,
             get_mods,

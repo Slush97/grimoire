@@ -9,7 +9,14 @@ import {
   ChevronRight,
   ExternalLink,
 } from 'lucide-react';
-import { browseMods, getModDetails, downloadMod, getGamebananaSections, getGamebananaCategories } from '../lib/api';
+import {
+  browseMods,
+  getModDetails,
+  downloadMod,
+  getGamebananaSections,
+  getGamebananaCategories,
+} from '../lib/api';
+import { getActiveDeadlockPath } from '../lib/appSettings';
 import type {
   GameBananaMod,
   GameBananaModDetails,
@@ -81,7 +88,8 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadMods } = useAppStore();
+  const { settings, loadMods, mods: installedMods } = useAppStore();
+  const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [mods, setMods] = useState<GameBananaMod[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -270,6 +278,12 @@ export default function Browse() {
   }, [fetchMods]);
 
   useEffect(() => {
+    if (activeDeadlockPath) {
+      loadMods();
+    }
+  }, [activeDeadlockPath, loadMods]);
+
+  useEffect(() => {
     const unlistenProgress = listen<{ modId: number; fileId: number; downloaded: number; total: number }>(
       'download-progress',
       (event) => {
@@ -310,7 +324,6 @@ export default function Browse() {
           setDownloading(null);
           setDownloadProgress(null);
           setExtracting(false);
-          setSelectedMod(null);
           loadMods(); // Refresh installed mods
         }
       }
@@ -348,7 +361,7 @@ export default function Browse() {
   };
 
   const handleDownload = async (fileId: number, fileName: string) => {
-    if (!selectedMod || !settings?.deadlockPath) return;
+    if (!selectedMod || !activeDeadlockPath) return;
 
     setDownloading({ modId: selectedMod.id, fileId });
     setDownloadProgress({ downloaded: 0, total: 0 });
@@ -410,6 +423,16 @@ export default function Browse() {
     return sorted;
   }, [mods, sort, search]);
 
+  const installedIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const mod of installedMods) {
+      if (typeof mod.gameBananaId === 'number') {
+        ids.add(mod.gameBananaId);
+      }
+    }
+    return ids;
+  }, [installedMods]);
+
   const totalPages = Math.max(
     1,
     Math.ceil((isFullResult ? sortedMods.length : totalCount) / perPage)
@@ -418,13 +441,13 @@ export default function Browse() {
     ? sortedMods.slice((page - 1) * perPage, page * perPage)
     : sortedMods;
 
-  if (!settings?.deadlockPath) {
+  if (!activeDeadlockPath) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
         <Search className="w-16 h-16 mb-4 opacity-50" />
         <h2 className="text-xl font-semibold text-text-primary mb-2">Configure Game Path</h2>
         <p className="text-center max-w-md">
-          Set your Deadlock installation path in Settings before downloading mods.
+          Set your Deadlock installation path in Settings (or enable dev mode) before downloading mods.
         </p>
       </div>
     );
@@ -617,6 +640,7 @@ export default function Browse() {
               <ModCard
                 key={mod.id}
                 mod={mod}
+                installed={installedIds.has(mod.id)}
                 viewMode={viewMode}
                 section={section}
                 onClick={() => handleModClick(mod)}
@@ -653,6 +677,7 @@ export default function Browse() {
       {selectedMod && (
         <ModDetailsModal
           mod={selectedMod}
+          installed={installedIds.has(selectedMod.id)}
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
           extracting={extracting}
           progress={downloadProgress}
@@ -666,12 +691,13 @@ export default function Browse() {
 
 interface ModCardProps {
   mod: GameBananaMod;
+  installed: boolean;
   viewMode: ViewMode;
   section: string;
   onClick: () => void;
 }
 
-function ModCard({ mod, viewMode, section, onClick }: ModCardProps) {
+function ModCard({ mod, installed, viewMode, section, onClick }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -703,7 +729,18 @@ function ModCard({ mod, viewMode, section, onClick }: ModCardProps) {
 
       {/* Info */}
       <div className={isList ? 'min-w-0 flex-1' : isCompact ? 'p-2' : 'p-3'}>
-        <h3 className={`font-medium truncate ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
+        <div className="flex items-center gap-2">
+          <h3 className={`font-medium truncate ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
+          {installed && (
+            <span
+              className={`rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 ${
+                isCompact ? 'text-[9px]' : ''
+              }`}
+            >
+              Installed
+            </span>
+          )}
+        </div>
         <div className={`flex items-center gap-3 text-text-secondary mt-1 ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
           <span className="flex items-center gap-1">
             <ThumbsUp className="w-3 h-3" />
@@ -734,6 +771,7 @@ function ModCard({ mod, viewMode, section, onClick }: ModCardProps) {
 
 interface ModDetailsModalProps {
   mod: GameBananaModDetails;
+  installed: boolean;
   downloadingFileId: number | null;
   extracting: boolean;
   progress: { downloaded: number; total: number } | null;
@@ -743,6 +781,7 @@ interface ModDetailsModalProps {
 
 function ModDetailsModal({
   mod,
+  installed,
   downloadingFileId,
   extracting,
   progress,
@@ -759,7 +798,14 @@ function ModDetailsModal({
       <div className="bg-bg-secondary rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto">
         {/* Header */}
         <div className="sticky top-0 bg-bg-secondary border-b border-border p-4 flex items-center justify-between">
-          <h2 className="text-xl font-bold truncate">{mod.name}</h2>
+          <div className="flex items-center gap-2 min-w-0">
+            <h2 className="text-xl font-bold truncate">{mod.name}</h2>
+            {installed && (
+              <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
+                Installed
+              </span>
+            )}
+          </div>
           <button
             onClick={onClose}
             className="p-2 hover:bg-bg-tertiary rounded-lg transition-colors"
@@ -819,7 +865,7 @@ function ModDetailsModal({
                     ) : (
                       <>
                         <Download className="w-4 h-4" />
-                        Install
+                        {installed ? 'Reinstall' : 'Install'}
                       </>
                     )}
                   </button>

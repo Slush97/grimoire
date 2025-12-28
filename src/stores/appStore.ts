@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Mod, AppSettings } from '../types/mod';
+import { getActiveDeadlockPath } from '../lib/appSettings';
 import * as api from '../lib/api';
 
 interface AppState {
@@ -50,7 +51,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await api.setSettings(settings);
       set({ settings, settingsLoading: false });
       // Reload mods if path changed
-      if (settings.deadlockPath) {
+      if (getActiveDeadlockPath(settings)) {
         get().loadMods();
       }
     } catch (err) {

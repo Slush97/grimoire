@@ -7,6 +7,7 @@ import {
   listMinaVariants,
   setMinaPreset,
 } from '../lib/api';
+import { getActiveDeadlockPath } from '../lib/appSettings';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 
@@ -46,6 +47,11 @@ function slugifyHeroName(name: string): string {
     .replace(/&/g, 'and')
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '');
+}
+
+function getHeroWikiUrl(name: string): string {
+  const fileName = name.trim().replace(/\s+/g, '_');
+  return `https://deadlock.wiki/File:${fileName}_Render.png`;
 }
 
 function findCategoryByName(
@@ -219,6 +225,7 @@ function groupModsByCategory(mods: Mod[]) {
 export default function Locker() {
   const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod } =
     useAppStore();
+  const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
@@ -245,10 +252,10 @@ export default function Locker() {
   }, [loadSettings]);
 
   useEffect(() => {
-    if (settings?.deadlockPath) {
+    if (activeDeadlockPath) {
       loadMods();
     }
-  }, [settings?.deadlockPath, loadMods]);
+  }, [activeDeadlockPath, loadMods]);
 
   useEffect(() => {
     let active = true;
@@ -386,13 +393,13 @@ export default function Locker() {
     }
   };
 
-  if (!settings?.deadlockPath) {
+  if (!activeDeadlockPath) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
         <Layers className="w-16 h-16 mb-4 opacity-50" />
         <h2 className="text-xl font-semibold text-text-primary mb-2">No Game Path Set</h2>
         <p className="text-center max-w-md">
-          Configure your Deadlock installation path to manage hero skins.
+          Configure your Deadlock installation path or enable dev mode to manage hero skins.
         </p>
       </div>
     );
@@ -546,8 +553,10 @@ function HeroCard({
   selectedMinaVariant,
   onApplyMinaVariant,
 }: HeroCardProps) {
-  const [iconSrc, setIconSrc] = useState(() => `/heroes/${slugifyHeroName(hero.name)}.png`);
-  const [fallbackUsed, setFallbackUsed] = useState(false);
+  const wikiUrl = getHeroWikiUrl(hero.name);
+  const localUrl = `/heroes/${slugifyHeroName(hero.name)}.png`;
+  const [iconSrc, setIconSrc] = useState(() => wikiUrl);
+  const [fallbackStep, setFallbackStep] = useState(0);
 
   const hasMods = mods.length > 0;
   const activeMod = mods.find((mod) => mod.enabled);
@@ -559,12 +568,18 @@ function HeroCard({
     Boolean(onApplyMinaVariant);
 
   const handleError = () => {
-    if (!fallbackUsed && hero.iconUrl) {
+    if (fallbackStep === 0) {
+      setIconSrc(localUrl);
+      setFallbackStep(1);
+      return;
+    }
+    if (fallbackStep === 1 && hero.iconUrl) {
       setIconSrc(hero.iconUrl);
-      setFallbackUsed(true);
+      setFallbackStep(2);
       return;
     }
     setIconSrc('');
+    setFallbackStep(3);
   };
 
   return (

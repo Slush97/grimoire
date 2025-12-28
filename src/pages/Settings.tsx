@@ -2,30 +2,46 @@ import { useEffect, useState, useMemo } from 'react';
 import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2 } from 'lucide-react';
 import { open } from '@tauri-apps/plugin-dialog';
 import { useAppStore } from '../stores/appStore';
-import { cleanupAddons, fixGameinfo, getGameinfoStatus, validateDeadlockPath } from '../lib/api';
+import {
+  cleanupAddons,
+  createDevDeadlockPath,
+  fixGameinfo,
+  getGameinfoStatus,
+  validateDeadlockPath,
+} from '../lib/api';
+import { getActiveDeadlockPath } from '../lib/appSettings';
 
 export default function Settings() {
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
   const [localPath, setLocalPath] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<boolean | null>(null);
   const [isDetecting, setIsDetecting] = useState(false);
+  const [isCreatingDevPath, setIsCreatingDevPath] = useState(false);
   const [cleanupResult, setCleanupResult] = useState<string | null>(null);
   const [isCleaning, setIsCleaning] = useState(false);
   const [gameinfoStatus, setGameinfoStatus] = useState<string | null>(null);
   const [gameinfoConfigured, setGameinfoConfigured] = useState<boolean | null>(null);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
 
+  const isDevMode = settings?.devMode ?? false;
+  const activeDeadlockPath = getActiveDeadlockPath(settings);
+
   // The displayed path: local override or settings value
-  const displayPath = localPath ?? settings?.deadlockPath ?? '';
+  const displayPath = isDevMode
+    ? settings?.devDeadlockPath ?? ''
+    : localPath ?? settings?.deadlockPath ?? '';
 
   // Compute isValidPath: if we have a saved path and no local override, it's valid
   // Otherwise use the validation result
   const isValidPath = useMemo(() => {
+    if (isDevMode) {
+      return settings?.devDeadlockPath ? true : null;
+    }
     if (localPath !== null) {
       return validationResult;
     }
     return settings?.deadlockPath ? true : null;
-  }, [localPath, validationResult, settings?.deadlockPath]);
+  }, [isDevMode, localPath, validationResult, settings?.deadlockPath, settings?.devDeadlockPath]);
 
   useEffect(() => {
     loadSettings();
@@ -34,7 +50,7 @@ export default function Settings() {
   useEffect(() => {
     let active = true;
     const loadStatus = async () => {
-      if (!settings?.deadlockPath) {
+      if (!activeDeadlockPath) {
         setGameinfoStatus(null);
         setGameinfoConfigured(null);
         return;
@@ -54,9 +70,10 @@ export default function Settings() {
     return () => {
       active = false;
     };
-  }, [settings?.deadlockPath]);
+  }, [activeDeadlockPath]);
 
   const handleBrowse = async () => {
+    if (isDevMode) return;
     const selected = await open({
       directory: true,
       title: 'Select Deadlock Installation Folder',
@@ -75,6 +92,7 @@ export default function Settings() {
   };
 
   const handleAutoDetect = async () => {
+    if (isDevMode) return;
     setIsDetecting(true);
     const detected = await detectDeadlock();
     setIsDetecting(false);
@@ -92,6 +110,7 @@ export default function Settings() {
   };
 
   const handlePathChange = async (newPath: string) => {
+    if (isDevMode) return;
     setLocalPath(newPath);
     if (newPath) {
       const valid = await validateDeadlockPath(newPath);
@@ -109,6 +128,27 @@ export default function Settings() {
   const handleAutoConfigChange = async (checked: boolean) => {
     if (settings) {
       await saveSettings({ ...settings, autoConfigureGameInfo: checked });
+    }
+  };
+
+  const handleDevModeChange = async (checked: boolean) => {
+    if (!settings) return;
+    if (checked) {
+      setIsCreatingDevPath(true);
+      try {
+        const devPath = await createDevDeadlockPath();
+        await saveSettings({
+          ...settings,
+          devMode: true,
+          devDeadlockPath: devPath,
+        });
+        setLocalPath(null);
+        setValidationResult(null);
+      } finally {
+        setIsCreatingDevPath(false);
+      }
+    } else {
+      await saveSettings({ ...settings, devMode: false });
     }
   };
 
@@ -181,7 +221,8 @@ export default function Settings() {
                 value={displayPath}
                 onChange={(e) => handlePathChange(e.target.value)}
                 placeholder="/path/to/Deadlock"
-                className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 pr-10 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
+                disabled={isDevMode}
+                className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 pr-10 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed"
               />
               {isValidPath !== null && (
                 <div className="absolute right-3 top-1/2 -translate-y-1/2">
@@ -195,6 +236,7 @@ export default function Settings() {
             </div>
             <button
               onClick={handleBrowse}
+              disabled={isDevMode}
               className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
             >
               <FolderOpen className="w-4 h-4" />
@@ -203,11 +245,13 @@ export default function Settings() {
           </div>
           <div className="flex items-center justify-between mt-2">
             <p className="text-xs text-text-secondary">
-              Select your Deadlock game folder (contains the 'game' directory)
+              {isDevMode
+                ? 'Dev mode is active. Deadlock path selection is disabled.'
+                : "Select your Deadlock game folder (contains the 'game' directory)"}
             </p>
             <button
               onClick={handleAutoDetect}
-              disabled={isDetecting}
+              disabled={isDetecting || isDevMode}
               className="text-xs text-accent hover:text-accent-hover transition-colors disabled:opacity-50"
             >
               {isDetecting ? 'Detecting...' : 'Auto-detect'}
@@ -216,6 +260,31 @@ export default function Settings() {
           {isValidPath === false && (
             <p className="text-xs text-red-500 mt-2">
               Invalid Deadlock path. Make sure the folder contains a 'game/citadel' directory.
+            </p>
+          )}
+        </div>
+
+        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={isDevMode}
+              onChange={(e) => handleDevModeChange(e.target.checked)}
+              disabled={isCreatingDevPath}
+              className="w-4 h-4 rounded border-border bg-bg-tertiary accent-accent disabled:opacity-50"
+            />
+            <div>
+              <span className="font-medium">
+                {isCreatingDevPath ? 'Creating dev folder…' : 'Dev mode'}
+              </span>
+              <p className="text-xs text-text-secondary">
+                Use a dummy Deadlock directory for local testing.
+              </p>
+            </div>
+          </label>
+          {isDevMode && settings?.devDeadlockPath && (
+            <p className="text-xs text-text-secondary mt-2">
+              Using dummy path: {settings.devDeadlockPath}
             </p>
           )}
         </div>
@@ -252,7 +321,7 @@ export default function Settings() {
             </div>
             <button
               onClick={handleFixGameinfo}
-              disabled={isFixingGameinfo || !settings?.deadlockPath}
+              disabled={isFixingGameinfo || !activeDeadlockPath}
               className="px-4 py-2 rounded-lg bg-bg-tertiary border border-border hover:border-accent/60 text-sm disabled:opacity-50"
             >
               {isFixingGameinfo ? 'Fixing…' : 'Fix gameinfo.gi'}
@@ -273,7 +342,7 @@ export default function Settings() {
             </div>
             <button
               onClick={handleCleanup}
-              disabled={isCleaning || !settings?.deadlockPath}
+              disabled={isCleaning || !activeDeadlockPath}
               className="px-4 py-2 rounded-lg bg-bg-tertiary border border-border hover:border-accent/60 text-sm disabled:opacity-50"
             >
               {isCleaning ? 'Cleaning…' : 'Clean'}

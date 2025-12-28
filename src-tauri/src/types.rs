@@ -25,10 +25,12 @@ pub struct Mod {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", default)]
 pub struct AppSettings {
     pub deadlock_path: Option<String>,
     pub auto_configure_game_info: bool,
+    pub dev_mode: bool,
+    pub dev_deadlock_path: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -36,6 +38,8 @@ impl Default for AppSettings {
         Self {
             deadlock_path: None,
             auto_configure_game_info: true,
+            dev_mode: false,
+            dev_deadlock_path: None,
         }
     }
 }

@@ -1,4 +1,5 @@
 use crate::deadlock::{detect_deadlock_path, get_addons_path, is_valid_deadlock_path};
+use crate::dev::ensure_dev_deadlock_path;
 use crate::error::AppError;
 use crate::extract::{cleanup_archive, extract_archive, is_archive};
 use crate::gamebanana::{
@@ -15,6 +16,27 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::{AppHandle, Emitter};
 
+fn resolve_deadlock_path(app: &AppHandle) -> Result<PathBuf, AppError> {
+    let mut settings = load_settings(app)?;
+
+    if settings.dev_mode {
+        if let Some(path) = settings.dev_deadlock_path.clone() {
+            let path_buf = PathBuf::from(&path);
+            if is_valid_deadlock_path(&path_buf) {
+                return Ok(path_buf);
+            }
+        }
+
+        let dev_path = ensure_dev_deadlock_path(app)?;
+        settings.dev_deadlock_path = Some(dev_path.to_string_lossy().to_string());
+        save_settings(app, &settings)?;
+        return Ok(dev_path);
+    }
+
+    let path = settings.deadlock_path.ok_or(AppError::DeadlockNotFound)?;
+    Ok(PathBuf::from(path))
+}
+
 /// Auto-detect Deadlock installation path
 #[tauri::command]
 pub fn detect_deadlock() -> Option<String> {
@@ -27,10 +49,30 @@ pub fn validate_deadlock_path(path: String) -> bool {
     is_valid_deadlock_path(Path::new(&path))
 }
 
+/// Create or reuse a dev-mode Deadlock path
+#[tauri::command]
+pub fn create_dev_deadlock_path(app: AppHandle) -> Result<String, AppError> {
+    let path = ensure_dev_deadlock_path(&app)?;
+    Ok(path.to_string_lossy().to_string())
+}
+
 /// Get current app settings
 #[tauri::command]
 pub fn get_settings(app: AppHandle) -> Result<AppSettings, AppError> {
-    load_settings(&app)
+    let mut settings = load_settings(&app)?;
+    if settings.dev_mode {
+        let needs_dev_path = settings
+            .dev_deadlock_path
+            .as_ref()
+            .map(|path| !is_valid_deadlock_path(Path::new(path)))
+            .unwrap_or(true);
+        if needs_dev_path {
+            let dev_path = ensure_dev_deadlock_path(&app)?;
+            settings.dev_deadlock_path = Some(dev_path.to_string_lossy().to_string());
+            save_settings(&app, &settings)?;
+        }
+    }
+    Ok(settings)
 }
 
 /// Save app settings
@@ -42,12 +84,8 @@ pub fn set_settings(app: AppHandle, settings: AppSettings) -> Result<(), AppErro
 /// Get list of installed mods
 #[tauri::command]
 pub fn get_mods(app: AppHandle) -> Result<Vec<Mod>, AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let mut mods = scan_mods(Path::new(&deadlock_path))?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let mut mods = scan_mods(deadlock_path.as_path())?;
 
     if let Ok(metadata) = mod_metadata::load_metadata(&app) {
         mod_metadata::apply_metadata_to_mods(&mut mods, &metadata);
@@ -59,12 +97,8 @@ pub fn get_mods(app: AppHandle) -> Result<Vec<Mod>, AppError> {
 /// Enable a mod
 #[tauri::command]
 pub fn enable_mod_cmd(app: AppHandle, mod_id: String) -> Result<Mod, AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let mut mod_item = enable_mod(Path::new(&deadlock_path), &mod_id)?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let mut mod_item = enable_mod(deadlock_path.as_path(), &mod_id)?;
     if let Ok(metadata) = mod_metadata::load_metadata(&app) {
         mod_metadata::apply_metadata_to_mod(&mut mod_item, &metadata);
     }
@@ -74,12 +108,8 @@ pub fn enable_mod_cmd(app: AppHandle, mod_id: String) -> Result<Mod, AppError> {
 /// Disable a mod
 #[tauri::command]
 pub fn disable_mod_cmd(app: AppHandle, mod_id: String) -> Result<Mod, AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let mut mod_item = disable_mod(Path::new(&deadlock_path), &mod_id)?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let mut mod_item = disable_mod(deadlock_path.as_path(), &mod_id)?;
     if let Ok(metadata) = mod_metadata::load_metadata(&app) {
         mod_metadata::apply_metadata_to_mod(&mut mod_item, &metadata);
     }
@@ -89,17 +119,13 @@ pub fn disable_mod_cmd(app: AppHandle, mod_id: String) -> Result<Mod, AppError> 
 /// Delete a mod
 #[tauri::command]
 pub fn delete_mod_cmd(app: AppHandle, mod_id: String) -> Result<(), AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let mods = scan_mods(Path::new(&deadlock_path))?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let mods = scan_mods(deadlock_path.as_path())?;
     if let Some(target_mod) = mods.iter().find(|m| m.id == mod_id) {
         let _ = mod_metadata::remove_metadata_entry(&app, &target_mod.file_name);
     }
 
-    delete_mod(Path::new(&deadlock_path), &mod_id)
+    delete_mod(deadlock_path.as_path(), &mod_id)
 }
 
 /// Set mod priority
@@ -109,18 +135,14 @@ pub fn set_mod_priority_cmd(
     mod_id: String,
     priority: u32,
 ) -> Result<Mod, AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let existing_mods = scan_mods(Path::new(&deadlock_path))?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let existing_mods = scan_mods(deadlock_path.as_path())?;
     let old_file_name = existing_mods
         .iter()
         .find(|m| m.id == mod_id)
         .map(|m| m.file_name.clone());
 
-    let mut mod_item = set_mod_priority(Path::new(&deadlock_path), &mod_id, priority)?;
+    let mut mod_item = set_mod_priority(deadlock_path.as_path(), &mod_id, priority)?;
 
     if let Some(old_file_name) = old_file_name {
         let _ = mod_metadata::rename_metadata_key(&app, &old_file_name, &mod_item.file_name);
@@ -197,12 +219,8 @@ pub async fn download_mod(
     app: AppHandle,
     args: DownloadModArgs,
 ) -> Result<(), AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let addons_path = get_addons_path(Path::new(&deadlock_path))?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let addons_path = get_addons_path(deadlock_path.as_path())?;
 
     // Get mod details to find the download URL
     let section = args.section.unwrap_or_else(|| "Mod".to_string());
@@ -323,13 +341,9 @@ pub fn set_mina_preset(
     app: AppHandle,
     args: SetMinaPresetArgs,
 ) -> Result<(), AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let addons_path = get_addons_path(Path::new(&deadlock_path))?;
-    let disabled_path = get_disabled_path(Path::new(&deadlock_path))?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let addons_path = get_addons_path(deadlock_path.as_path())?;
+    let disabled_path = get_disabled_path(deadlock_path.as_path())?;
 
     let metadata_map = mod_metadata::load_metadata(&app).unwrap_or_default();
     let mut preset_files = Vec::new();
@@ -454,13 +468,9 @@ pub struct ApplyMinaVariantArgs {
 
 #[tauri::command]
 pub fn apply_mina_variant(app: AppHandle, args: ApplyMinaVariantArgs) -> Result<(), AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let addons_path = get_addons_path(Path::new(&deadlock_path))?;
-    let disabled_path = get_disabled_path(Path::new(&deadlock_path))?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let addons_path = get_addons_path(deadlock_path.as_path())?;
+    let disabled_path = get_disabled_path(deadlock_path.as_path())?;
 
     let temp_dir = create_temp_dir("modmanager-mina")?;
     extract_7z_entry(&args.archive_path, &args.archive_entry, &temp_dir)?;
@@ -586,13 +596,9 @@ pub struct CleanupAddonsResult {
 
 #[tauri::command]
 pub fn cleanup_addons(app: AppHandle) -> Result<CleanupAddonsResult, AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-
-    let addons_path = get_addons_path(Path::new(&deadlock_path))?;
-    let disabled_path = get_disabled_path(Path::new(&deadlock_path))?;
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let addons_path = get_addons_path(deadlock_path.as_path())?;
+    let disabled_path = get_disabled_path(deadlock_path.as_path())?;
 
     let mut removed = 0u32;
     let mut renamed_mina_presets = 0u32;
@@ -751,11 +757,8 @@ pub struct GameinfoStatus {
 
 #[tauri::command]
 pub fn get_gameinfo_status(app: AppHandle) -> Result<GameinfoStatus, AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-    let gameinfo_path = crate::deadlock::get_gameinfo_path(Path::new(&deadlock_path));
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let gameinfo_path = crate::deadlock::get_gameinfo_path(deadlock_path.as_path());
     let content = fs::read_to_string(&gameinfo_path)?;
     let configured = is_gameinfo_configured(&content);
     Ok(GameinfoStatus {
@@ -770,11 +773,8 @@ pub fn get_gameinfo_status(app: AppHandle) -> Result<GameinfoStatus, AppError> {
 
 #[tauri::command]
 pub fn fix_gameinfo(app: AppHandle) -> Result<GameinfoStatus, AppError> {
-    let settings = load_settings(&app)?;
-    let deadlock_path = settings
-        .deadlock_path
-        .ok_or(AppError::DeadlockNotFound)?;
-    let gameinfo_path = crate::deadlock::get_gameinfo_path(Path::new(&deadlock_path));
+    let deadlock_path = resolve_deadlock_path(&app)?;
+    let gameinfo_path = crate::deadlock::get_gameinfo_path(deadlock_path.as_path());
     let content = fs::read_to_string(&gameinfo_path)?;
     let updated = normalize_gameinfo(&content)?;
     if updated != content {
