@@ -254,98 +254,109 @@ export default function LockerHero() {
   }
 
   return (
-    <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Link
-            to="/locker"
-            className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary"
-          >
-            <ArrowLeft className="w-4 h-4" />
-            Back to gallery
-          </Link>
-        </div>
-        <button
-          type="button"
-          onClick={() =>
-            setFavoriteHeroes((prev) =>
-              prev.includes(hero.id) ? prev.filter((id) => id !== hero.id) : [...prev, hero.id]
-            )
-          }
-          className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
-            favoriteHeroes.includes(hero.id)
-              ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
-              : 'border-border/70 text-text-secondary hover:text-text-primary'
-          }`}
-        >
-          <Star className="w-4 h-4" />
-          {favoriteHeroes.includes(hero.id) ? 'Favorite' : 'Save'}
-        </button>
-      </div>
+    <div className="flex h-full">
+      {/* Left Panel - Skin Selection */}
+      <div className="w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto border-r border-border bg-bg-secondary animate-slide-in-left">
+        <div className="p-6 space-y-6">
+          {/* Header */}
+          <div className="flex items-center justify-between gap-3">
+            <Link
+              to="/locker"
+              className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
+            >
+              <ArrowLeft className="w-4 h-4" />
+              Back
+            </Link>
+            <button
+              type="button"
+              onClick={() =>
+                setFavoriteHeroes((prev) =>
+                  prev.includes(hero.id) ? prev.filter((id) => id !== hero.id) : [...prev, hero.id]
+                )
+              }
+              className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
+                favoriteHeroes.includes(hero.id)
+                  ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
+                  : 'border-border/70 text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Star className="w-4 h-4" />
+              {favoriteHeroes.includes(hero.id) ? 'Favorite' : 'Save'}
+            </button>
+          </div>
 
-      <div className="relative overflow-hidden rounded-3xl border border-border bg-bg-secondary">
-        <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/15 to-transparent" />
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)]" />
-        <div className="relative h-72 sm:h-96 lg:h-[28rem]">
-          {renderSrc ? (
-            <img
-              src={renderSrc}
-              alt={hero.name}
-              className="absolute inset-0 h-full w-full object-cover object-right-top"
-              onError={handleRenderError}
+          {/* Hero Name */}
+          <div className="flex items-center gap-3">
+            {nameFailed ? (
+              <h1 className="text-2xl font-bold text-text-primary">{hero.name}</h1>
+            ) : (
+              <img
+                src={getHeroNamePath(hero.name)}
+                alt={hero.name}
+                className="h-8 w-auto object-contain"
+                onError={() => setNameFailed(true)}
+              />
+            )}
+            <span className="text-sm text-text-secondary">
+              {list.length > 0 ? `${list.length} skin${list.length !== 1 ? 's' : ''}` : 'No skins'}
+            </span>
+          </div>
+
+          {/* Skin Selection */}
+          <div className="space-y-4">
+            <HeroSkinsPanel
+              mods={list}
+              onSelect={setActiveSkin}
+              minaPresets={hero.name === 'Mina' ? minaPresets : []}
+              activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
+              minaTextures={hero.name === 'Mina' ? minaTextures : []}
+              onApplyMinaPreset={hero.name === 'Mina' ? applyMinaPreset : undefined}
+              minaArchivePath={hero.name === 'Mina' ? minaArchivePath : undefined}
+              onMinaArchivePathChange={hero.name === 'Mina' ? setMinaArchivePath : undefined}
+              minaVariants={hero.name === 'Mina' ? minaVariants : []}
+              minaVariantsLoading={hero.name === 'Mina' ? minaVariantsLoading : false}
+              minaVariantsError={hero.name === 'Mina' ? minaVariantsError : null}
+              onLoadMinaVariants={hero.name === 'Mina' ? loadMinaVariants : undefined}
+              minaSelection={hero.name === 'Mina' ? minaSelection : undefined}
+              onMinaSelectionChange={hero.name === 'Mina' ? setMinaSelection : undefined}
+              selectedMinaVariant={hero.name === 'Mina' ? selectedMinaVariant : undefined}
+              onApplyMinaVariant={hero.name === 'Mina' ? applyMinaVariantSelection : undefined}
             />
-          ) : (
-            <div className="absolute inset-0 flex items-center justify-center text-text-secondary">
-              {hero.name}
-            </div>
-          )}
-        </div>
-        <div className="absolute bottom-0 left-0 right-0 p-6 flex flex-col items-end text-right">
-          {nameFailed ? (
-            <div className="text-2xl font-semibold text-white">{hero.name}</div>
-          ) : (
-            <img
-              src={getHeroNamePath(hero.name)}
-              alt={hero.name}
-              className="h-9 w-auto object-contain drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]"
-              onError={() => setNameFailed(true)}
-            />
-          )}
-          <div className="mt-3 text-sm text-white/80">
-            {list.length > 0 ? `${list.length} skin${list.length !== 1 ? 's' : ''}` : 'No skins yet'}
+          </div>
+
+          {/* Quick Tips */}
+          <div className="rounded-xl border border-border bg-bg-tertiary p-4 text-sm text-text-secondary">
+            <div className="text-xs uppercase tracking-wider text-text-secondary mb-2">Quick Tips</div>
+            <ul className="space-y-1.5 text-xs">
+              <li>Pick a skin to set it active for this hero.</li>
+              <li>Only one skin can be enabled per hero at a time.</li>
+              <li>Use Favorites to keep your go-to heroes at the top.</li>
+            </ul>
           </div>
         </div>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div className="rounded-2xl border border-border bg-bg-secondary p-5">
-          <HeroSkinsPanel
-            mods={list}
-            onSelect={setActiveSkin}
-            minaPresets={hero.name === 'Mina' ? minaPresets : []}
-            activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
-            minaTextures={hero.name === 'Mina' ? minaTextures : []}
-            onApplyMinaPreset={hero.name === 'Mina' ? applyMinaPreset : undefined}
-            minaArchivePath={hero.name === 'Mina' ? minaArchivePath : undefined}
-            onMinaArchivePathChange={hero.name === 'Mina' ? setMinaArchivePath : undefined}
-            minaVariants={hero.name === 'Mina' ? minaVariants : []}
-            minaVariantsLoading={hero.name === 'Mina' ? minaVariantsLoading : false}
-            minaVariantsError={hero.name === 'Mina' ? minaVariantsError : null}
-            onLoadMinaVariants={hero.name === 'Mina' ? loadMinaVariants : undefined}
-            minaSelection={hero.name === 'Mina' ? minaSelection : undefined}
-            onMinaSelectionChange={hero.name === 'Mina' ? setMinaSelection : undefined}
-            selectedMinaVariant={hero.name === 'Mina' ? selectedMinaVariant : undefined}
-            onApplyMinaVariant={hero.name === 'Mina' ? applyMinaVariantSelection : undefined}
+      {/* Right Panel - Hero Portrait */}
+      <div className="hidden lg:block relative flex-1 overflow-hidden bg-bg-primary animate-hero-zoom-in">
+        {/* Gradient overlay from left to blend with panel */}
+        <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-bg-secondary to-transparent z-10" />
+
+        {/* Hero Portrait */}
+        {renderSrc ? (
+          <img
+            src={renderSrc}
+            alt={hero.name}
+            className="absolute inset-0 h-full w-full object-cover object-right"
+            onError={handleRenderError}
           />
-        </div>
-        <div className="rounded-2xl border border-border bg-bg-secondary p-5 text-sm text-text-secondary">
-          <div className="text-xs uppercase tracking-wider text-text-secondary">Quick Tips</div>
-          <ul className="mt-3 space-y-2">
-            <li>Pick a skin to set it active for this hero.</li>
-            <li>Only one skin can be enabled per hero at a time.</li>
-            <li>Use Favorites to keep your go-to heroes at the top of the gallery.</li>
-          </ul>
-        </div>
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">
+            {hero.name}
+          </div>
+        )}
+
+        {/* Bottom gradient for depth */}
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
     </div>
   );

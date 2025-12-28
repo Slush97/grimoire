@@ -1,6 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Layers, Loader2, Star } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Layers, Loader2, Star, X } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -32,7 +31,6 @@ import {
 export default function Locker() {
   const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod } =
     useAppStore();
-  const navigate = useNavigate();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
@@ -42,7 +40,9 @@ export default function Locker() {
     return stored === 'list' ? 'list' : 'gallery';
   });
   const [activeHeroId, setActiveHeroId] = useState<number | null>(null);
-  const navigateTimeoutRef = useRef<number | null>(null);
+  const [selectedHero, setSelectedHero] = useState<HeroCategory | null>(null);
+  const [overlayVisible, setOverlayVisible] = useState(false);
+  const [cardRect, setCardRect] = useState<DOMRect | null>(null);
   const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>([]);
   const [minaArchivePath, setMinaArchivePath] = useState(() => {
     return localStorage.getItem('minaArchivePath') || MINA_ARCHIVE_DEFAULT;
@@ -124,23 +124,42 @@ export default function Locker() {
     localStorage.setItem('lockerViewMode', viewMode);
   }, [viewMode]);
 
-  useEffect(() => {
-    return () => {
-      if (navigateTimeoutRef.current) {
-        window.clearTimeout(navigateTimeoutRef.current);
-      }
-    };
+  // Open hero overlay
+  const openHeroOverlay = useCallback((hero: HeroCategory, rect: DOMRect) => {
+    setSelectedHero(hero);
+    setActiveHeroId(hero.id);
+    setCardRect(rect);
+    // Small delay to trigger animation
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        setOverlayVisible(true);
+      });
+    });
   }, []);
 
-  const heroList = useMemo(() => {
-    const list = buildHeroList(categories);
-    return list.sort((a, b) => {
-      const aFav = favoriteHeroes.includes(a.id);
-      const bFav = favoriteHeroes.includes(b.id);
-      if (aFav !== bFav) return aFav ? -1 : 1;
-      return a.name.localeCompare(b.name);
-    });
-  }, [categories, favoriteHeroes]);
+  // Close hero overlay
+  const closeHeroOverlay = useCallback(() => {
+    setOverlayVisible(false);
+    // Unmount after fade completes (500ms)
+    setTimeout(() => {
+      setSelectedHero(null);
+      setActiveHeroId(null);
+      setCardRect(null);
+    }, 550);
+  }, []);
+
+  // Escape key to close overlay
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && selectedHero) {
+        closeHeroOverlay();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedHero, closeHeroOverlay]);
+
+  // Calculate heroMods first so we can use it for sorting
   const heroMods = useMemo(() => {
     const modSkins = mods.filter((mod) => {
       if (mod.sourceSection !== 'Mod') return false;
@@ -156,6 +175,22 @@ export default function Locker() {
     });
     return groupModsByCategory(modSkins);
   }, [mods]);
+
+  const heroList = useMemo(() => {
+    const list = buildHeroList(categories);
+    return list.sort((a, b) => {
+      const aFav = favoriteHeroes.includes(a.id);
+      const bFav = favoriteHeroes.includes(b.id);
+      // Favorites first
+      if (aFav !== bFav) return aFav ? -1 : 1;
+      // Then heroes with skins
+      const aHasSkins = (heroMods.map.get(a.id)?.length ?? 0) > 0;
+      const bHasSkins = (heroMods.map.get(b.id)?.length ?? 0) > 0;
+      if (aHasSkins !== bHasSkins) return aHasSkins ? -1 : 1;
+      // Then alphabetically
+      return a.name.localeCompare(b.name);
+    });
+  }, [categories, favoriteHeroes, heroMods]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -303,15 +338,7 @@ export default function Locker() {
               skinCount={heroMods.map.get(hero.id)?.length ?? 0}
               isFavorite={favoriteHeroes.includes(hero.id)}
               isActive={activeHeroId === hero.id}
-              onNavigate={(id) => {
-                setActiveHeroId(id);
-                if (navigateTimeoutRef.current) {
-                  window.clearTimeout(navigateTimeoutRef.current);
-                }
-                navigateTimeoutRef.current = window.setTimeout(() => {
-                  navigate(`/locker/hero/${id}`);
-                }, 220);
-              }}
+              onNavigate={(rect) => openHeroOverlay(hero, rect)}
               onToggleFavorite={() =>
                 setFavoriteHeroes((prev) =>
                   prev.includes(hero.id)
@@ -386,6 +413,280 @@ export default function Locker() {
           </div>
         </div>
       )}
+
+      {/* Hero Detail Overlay */}
+      {selectedHero && (
+        <HeroOverlay
+          hero={selectedHero}
+          visible={overlayVisible}
+          onClose={closeHeroOverlay}
+          cardRect={cardRect}
+          mods={heroMods.map.get(selectedHero.id) ?? []}
+          onSelectSkin={(modId) => setActiveSkin(selectedHero.id, modId)}
+          isFavorite={favoriteHeroes.includes(selectedHero.id)}
+          onToggleFavorite={() =>
+            setFavoriteHeroes((prev) =>
+              prev.includes(selectedHero.id)
+                ? prev.filter((id) => id !== selectedHero.id)
+                : [...prev, selectedHero.id]
+            )
+          }
+          minaPresets={selectedHero.name === 'Mina' ? minaPresets : []}
+          activeMinaPreset={selectedHero.name === 'Mina' ? activeMinaPreset : undefined}
+          minaTextures={selectedHero.name === 'Mina' ? minaTextures : []}
+          onApplyMinaPreset={selectedHero.name === 'Mina' ? applyMinaPreset : undefined}
+          minaArchivePath={selectedHero.name === 'Mina' ? minaArchivePath : undefined}
+          onMinaArchivePathChange={selectedHero.name === 'Mina' ? setMinaArchivePath : undefined}
+          minaVariants={selectedHero.name === 'Mina' ? minaVariants : []}
+          minaVariantsLoading={selectedHero.name === 'Mina' ? minaVariantsLoading : false}
+          minaVariantsError={selectedHero.name === 'Mina' ? minaVariantsError : null}
+          onLoadMinaVariants={selectedHero.name === 'Mina' ? loadMinaVariants : undefined}
+          minaSelection={selectedHero.name === 'Mina' ? minaSelection : undefined}
+          onMinaSelectionChange={selectedHero.name === 'Mina' ? setMinaSelection : undefined}
+          selectedMinaVariant={selectedHero.name === 'Mina' ? selectedMinaVariant : undefined}
+          onApplyMinaVariant={selectedHero.name === 'Mina' ? applyMinaVariantSelection : undefined}
+        />
+      )}
+    </div>
+  );
+}
+
+interface HeroOverlayProps {
+  hero: HeroCategory;
+  visible: boolean;
+  onClose: () => void;
+  cardRect: DOMRect | null;
+  mods: Mod[];
+  onSelectSkin: (modId: string) => void;
+  isFavorite: boolean;
+  onToggleFavorite: () => void;
+  minaPresets: MinaPreset[];
+  activeMinaPreset?: MinaPreset;
+  minaTextures: Mod[];
+  onApplyMinaPreset?: (presetFileName: string) => void;
+  minaArchivePath?: string;
+  onMinaArchivePathChange?: (path: string) => void;
+  minaVariants: MinaVariant[];
+  minaVariantsLoading: boolean;
+  minaVariantsError: string | null;
+  onLoadMinaVariants?: () => void;
+  minaSelection?: MinaSelection;
+  onMinaSelectionChange?: (selection: MinaSelection) => void;
+  selectedMinaVariant?: MinaVariant;
+  onApplyMinaVariant?: () => void;
+}
+
+function HeroOverlay({
+  hero,
+  visible,
+  onClose,
+  cardRect,
+  mods,
+  onSelectSkin,
+  isFavorite,
+  onToggleFavorite,
+  minaPresets,
+  activeMinaPreset,
+  minaTextures,
+  onApplyMinaPreset,
+  minaArchivePath,
+  onMinaArchivePathChange,
+  minaVariants,
+  minaVariantsLoading,
+  minaVariantsError,
+  onLoadMinaVariants,
+  minaSelection,
+  onMinaSelectionChange,
+  selectedMinaVariant,
+  onApplyMinaVariant,
+}: HeroOverlayProps) {
+  const [renderSrc, setRenderSrc] = useState('');
+  const [renderFallbackStep, setRenderFallbackStep] = useState(0);
+  const [nameFailed, setNameFailed] = useState(false);
+
+  useEffect(() => {
+    setRenderSrc(getHeroRenderPath(hero.name));
+    setRenderFallbackStep(0);
+    setNameFailed(false);
+  }, [hero]);
+
+  const handleRenderError = () => {
+    if (renderFallbackStep === 0) {
+      setRenderSrc(getHeroWikiUrl(hero.name));
+      setRenderFallbackStep(1);
+      return;
+    }
+    if (renderFallbackStep === 1 && hero.iconUrl) {
+      setRenderSrc(hero.iconUrl);
+      setRenderFallbackStep(2);
+      return;
+    }
+    setRenderSrc('');
+    setRenderFallbackStep(3);
+  };
+
+  // Opening: expand from card. Closing: just fade out.
+  const getImageStyle = (): React.CSSProperties => {
+    if (visible) {
+      // Expanded state
+      return {
+        opacity: 1,
+        transform: 'translate(0, 0) scale(1)',
+        transition: 'transform 500ms cubic-bezier(0.32, 0.72, 0, 1), opacity 400ms ease',
+      };
+    }
+
+    // Closing: just fade, no transform back
+    if (cardRect) {
+      // Starting position (for opening animation)
+      const scaleX = cardRect.width / window.innerWidth;
+      const scaleY = cardRect.height / window.innerHeight;
+      const scale = Math.min(scaleX, scaleY);
+      const cardCenterX = cardRect.left + cardRect.width / 2;
+      const cardCenterY = cardRect.top + cardRect.height / 2;
+      const translateX = cardCenterX - window.innerWidth / 2;
+      const translateY = cardCenterY - window.innerHeight / 2;
+
+      return {
+        opacity: 0,
+        transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
+        transition: 'opacity 500ms ease', // Smooth fade on close
+      };
+    }
+
+    return { opacity: 0, transition: 'opacity 500ms ease' };
+  };
+
+  return (
+    <div
+      className={`fixed inset-0 z-50 ${
+        visible ? 'pointer-events-auto' : 'pointer-events-none'
+      }`}
+    >
+      {/* Background */}
+      <div
+        className={`absolute inset-0 bg-bg-primary will-change-opacity ${
+          visible ? 'opacity-100' : 'opacity-0'
+        }`}
+        style={{ transition: 'opacity 400ms cubic-bezier(0.32, 0.72, 0, 1)' }}
+      />
+
+      {/* Hero Portrait - Expand on open, fade on close */}
+      <div
+        className="fixed inset-0 z-10 overflow-hidden"
+        style={getImageStyle()}
+      >
+        {renderSrc ? (
+          <img
+            src={renderSrc}
+            alt={hero.name}
+            className="h-full w-full object-contain object-right"
+            onError={handleRenderError}
+          />
+        ) : (
+          <div className="h-full w-full flex items-center justify-center text-text-secondary text-4xl">
+            {hero.name}
+          </div>
+        )}
+      </div>
+
+      {/* Hero Name - Fade in/out */}
+      <div
+        className="fixed top-8 left-8 z-20"
+        style={{
+          opacity: visible ? 1 : 0,
+          transition: visible ? 'opacity 400ms ease 200ms' : 'opacity 500ms ease',
+        }}
+      >
+        {nameFailed ? (
+          <h1 className="text-4xl font-bold text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]">
+            {hero.name}
+          </h1>
+        ) : (
+          <img
+            src={getHeroNamePath(hero.name)}
+            alt={hero.name}
+            className="h-12 w-auto object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]"
+            onError={() => setNameFailed(true)}
+          />
+        )}
+        <div
+          className={`mt-2 text-sm text-white/70 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] transition-opacity duration-300 ${
+            visible ? 'opacity-100' : 'opacity-0'
+          }`}
+          style={{ transitionDelay: visible ? '300ms' : '0ms' }}
+        >
+          {mods.length > 0 ? `${mods.length} skin${mods.length !== 1 ? 's' : ''}` : 'No skins installed'}
+        </div>
+      </div>
+
+      {/* Close button */}
+      <button
+        type="button"
+        onClick={onClose}
+        className="fixed top-8 right-8 z-20 p-3 rounded-full bg-black/40 text-white/80 hover:text-white hover:bg-black/60"
+        style={{
+          opacity: visible ? 1 : 0,
+          transition: visible ? 'opacity 400ms ease 250ms' : 'opacity 500ms ease',
+        }}
+      >
+        <X className="w-6 h-6" />
+      </button>
+
+      {/* Favorite button */}
+      <button
+        type="button"
+        onClick={onToggleFavorite}
+        className={`fixed top-8 right-24 z-20 flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${
+          isFavorite
+            ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
+            : 'border-white/30 bg-black/40 text-white/80 hover:text-white hover:bg-black/60'
+        }`}
+        style={{
+          opacity: visible ? 1 : 0,
+          transition: visible ? 'opacity 400ms ease 250ms' : 'opacity 500ms ease',
+        }}
+      >
+        <Star className="w-4 h-4" />
+        {isFavorite ? 'Favorited' : 'Favorite'}
+      </button>
+
+      {/* Floating Skin Selection Card - Center left */}
+      <div
+        className="fixed top-1/2 left-8 z-20 w-[380px] max-h-[70vh] -translate-y-1/2 overflow-y-auto rounded-2xl border border-white/10 bg-black/60 backdrop-blur-xl shadow-2xl"
+        style={{
+          opacity: visible ? 1 : 0,
+          transition: visible ? 'opacity 400ms ease 150ms' : 'opacity 500ms ease',
+        }}
+      >
+        <div className="p-5 space-y-4">
+          <div className="text-xs uppercase tracking-wider text-white/50">Skins</div>
+          <HeroSkinsPanel
+            mods={mods}
+            onSelect={onSelectSkin}
+            minaPresets={minaPresets}
+            activeMinaPreset={activeMinaPreset}
+            minaTextures={minaTextures}
+            onApplyMinaPreset={onApplyMinaPreset}
+            minaArchivePath={minaArchivePath}
+            onMinaArchivePathChange={onMinaArchivePathChange}
+            minaVariants={minaVariants}
+            minaVariantsLoading={minaVariantsLoading}
+            minaVariantsError={minaVariantsError}
+            onLoadMinaVariants={onLoadMinaVariants}
+            minaSelection={minaSelection}
+            onMinaSelectionChange={onMinaSelectionChange}
+            selectedMinaVariant={selectedMinaVariant}
+            onApplyMinaVariant={onApplyMinaVariant}
+          />
+        </div>
+      </div>
+
+      {/* Click anywhere to close (but not on the card) */}
+      <div
+        className={`absolute inset-0 z-10 ${visible ? '' : 'pointer-events-none'}`}
+        onClick={onClose}
+      />
     </div>
   );
 }
@@ -417,7 +718,7 @@ interface HeroGalleryCardProps {
   skinCount: number;
   isFavorite: boolean;
   isActive: boolean;
-  onNavigate: (id: number) => void;
+  onNavigate: (rect: DOMRect) => void;
   onToggleFavorite: () => void;
 }
 
@@ -483,10 +784,16 @@ function HeroGalleryCard({
     setFallbackStep(3);
   };
 
+  const handleClick = () => {
+    if (cardRef.current) {
+      onNavigate(cardRef.current.getBoundingClientRect());
+    }
+  };
+
   return (
     <button
       type="button"
-      onClick={() => onNavigate(hero.id)}
+      onClick={handleClick}
       ref={cardRef}
       className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ${
         isActive ? 'z-10 scale-[1.04] shadow-2xl' : ''
@@ -499,7 +806,7 @@ function HeroGalleryCard({
           <img
             src={renderSrc}
             alt={hero.name}
-            className={`absolute inset-0 h-full w-full object-cover object-right-top transition-transform duration-500 group-hover:scale-[1.06] ${
+            className={`absolute inset-0 h-full w-full object-cover object-right transition-transform duration-500 group-hover:scale-[1.06] ${
               isActive ? 'scale-[1.12]' : ''
             }`}
             loading="lazy"
