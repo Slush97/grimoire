@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Layers, Loader2, Star } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -8,227 +9,40 @@ import {
   setMinaPreset,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
-
-type HeroCategory = {
-  id: number;
-  name: string;
-  iconUrl?: string;
-};
-
-type MinaPreset = {
-  fileName: string;
-  label: string;
-  enabled: boolean;
-};
-
-type MinaVariant = {
-  archiveEntry: string;
-  label: string;
-  futa: 'No' | 'Yes';
-  top: 'None' | 'Sleeveless' | 'Default';
-  skirt: 'None' | 'Default';
-  stockings: 'None' | 'Default';
-  beltSash: 'None' | 'Default';
-  gloves: 'None' | 'Default';
-  garter: 'None' | 'Default';
-  dress: 'None' | 'Default';
-};
-
-type MinaSelection = Omit<MinaVariant, 'archiveEntry' | 'label'>;
-
-const MINA_ARCHIVE_DEFAULT =
-  '/home/esoc/Downloads/sts_midnight_mina_v1_1(1)/extra clothing presets.7z';
-
-function slugifyHeroName(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(/&/g, 'and')
-    .replace(/[^a-z0-9]+/g, '_')
-    .replace(/^_+|_+$/g, '');
-}
-
-function getHeroWikiUrl(name: string): string {
-  const fileName = name.trim().replace(/\s+/g, '_');
-  return `https://deadlock.wiki/File:${fileName}_Render.png`;
-}
-
-function findCategoryByName(
-  nodes: GameBananaCategoryNode[],
-  name: string
-): GameBananaCategoryNode | null {
-  for (const node of nodes) {
-    if (node.name.toLowerCase() === name.toLowerCase()) {
-      return node;
-    }
-    if (node.children) {
-      const match = findCategoryByName(node.children, name);
-      if (match) return match;
-    }
-  }
-  return null;
-}
-
-function buildHeroList(categories: GameBananaCategoryNode[]): HeroCategory[] {
-  const skins = findCategoryByName(categories, 'Skins');
-  if (!skins?.children) return [];
-  return skins.children.map((child) => ({
-    id: child.id,
-    name: child.name,
-    iconUrl: child.iconUrl,
-  }));
-}
-
-function buildMinaPresets(mods: Mod[]): MinaPreset[] {
-  return mods
-    .filter((mod) => {
-      const lower = mod.fileName.toLowerCase();
-      const isMetadataMina = mod.name?.startsWith('Midnight Mina —');
-      if (!lower.endsWith('.vpk')) return false;
-      if (lower.includes('textures')) return false;
-      return (
-        lower.startsWith('clothing_preset_') ||
-        lower.includes('sts_midnight_mina_') ||
-        isMetadataMina
-      );
-    })
-    .map((mod) => {
-      const rawName = mod.name?.trim();
-      const cleanedName = rawName?.startsWith('Midnight Mina — ')
-        ? rawName.replace('Midnight Mina — ', '')
-        : rawName;
-      const raw =
-        cleanedName ||
-        mod.fileName
-          .replace(/^CLOTHING_PRESET_/i, '')
-          .replace(/-pak\\d+_dir\\.vpk$/i, '')
-          .replace(/_/g, ' ');
-      return {
-        fileName: mod.fileName,
-        label: raw.trim(),
-        enabled: mod.enabled,
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
-}
-
-function detectMinaTextures(mods: Mod[]) {
-  return mods.filter((mod) => {
-    const lower = mod.fileName.toLowerCase();
-    if (!lower.endsWith('.vpk')) return false;
-    if (!lower.includes('textures')) return false;
-    if (lower.includes('mina') || lower.includes('midnight')) return true;
-    return lower === 'textures-pak21_dir.vpk';
-  });
-}
-
-function parseMinaVariant(entry: string): MinaVariant | null {
-  if (!entry.toLowerCase().endsWith('.vpk')) return null;
-  const fileName = entry.split('/').pop() || entry;
-  const lowerEntry = entry.toLowerCase();
-  if (!fileName.toLowerCase().includes('sts_midnight_mina')) return null;
-
-  const futa: MinaVariant['futa'] = lowerEntry.includes('non-futa')
-    ? 'No'
-    : lowerEntry.includes('_futa_') || lowerEntry.includes('/futa_') || lowerEntry.includes('/futa/')
-      ? 'Yes'
-      : 'No';
-
-  const topMatch = lowerEntry.match(/_top_(with_sleeves|sleeveless|no)(?:_|-)/);
-  const top: MinaVariant['top'] =
-    topMatch?.[1] === 'with_sleeves'
-      ? 'Default'
-      : topMatch?.[1] === 'sleeveless'
-        ? 'Sleeveless'
-        : 'None';
-
-  const skirtMatch = lowerEntry.match(/_skirt_(yes|no)(?:_|-)/);
-  const skirt: MinaVariant['skirt'] = skirtMatch?.[1] === 'yes' ? 'Default' : 'None';
-
-  const stockings: MinaVariant['stockings'] = lowerEntry.includes('stockings_and_boots')
-    ? 'Default'
-    : 'None';
-
-  const beltMatch = lowerEntry.match(/_belt_sash_(yes|no)(?:_|-)/);
-  const beltSash: MinaVariant['beltSash'] = beltMatch?.[1] === 'yes' ? 'Default' : 'None';
-
-  const dressMatch = lowerEntry.match(/_dress_(yes|no)(?:_|-)/);
-  const dress: MinaVariant['dress'] = dressMatch?.[1] === 'yes' ? 'Default' : 'None';
-
-  const garterMatch = lowerEntry.match(/_garter_(yes|no)(?:_|-)/);
-  const garter: MinaVariant['garter'] = garterMatch?.[1] === 'yes' ? 'Default' : 'None';
-
-  const gloves: MinaVariant['gloves'] = lowerEntry.includes('hands_bare')
-    ? 'None'
-    : lowerEntry.includes('gloves')
-      ? 'Default'
-      : 'None';
-
-  const label = [
-    futa === 'Yes' ? 'Futa' : 'Non-Futa',
-    `Top: ${top}`,
-    `Skirt: ${skirt}`,
-    `Stockings: ${stockings}`,
-    `Belt: ${beltSash}`,
-    `Gloves: ${gloves}`,
-    `Garter: ${garter}`,
-    `Dress: ${dress}`,
-  ].join(' • ');
-
-  return {
-    archiveEntry: entry,
-    label,
-    futa,
-    top,
-    skirt,
-    stockings,
-    beltSash,
-    gloves,
-    garter,
-    dress,
-  };
-}
-
-function findMinaVariant(variants: MinaVariant[], selection: MinaSelection): MinaVariant | undefined {
-  return variants.find(
-    (variant) =>
-      variant.futa === selection.futa &&
-      variant.top === selection.top &&
-      variant.skirt === selection.skirt &&
-      variant.stockings === selection.stockings &&
-      variant.beltSash === selection.beltSash &&
-      variant.gloves === selection.gloves &&
-      variant.garter === selection.garter &&
-      variant.dress === selection.dress
-  );
-}
-
-function groupModsByCategory(mods: Mod[]) {
-  const map = new Map<number, Mod[]>();
-  const unassigned: Mod[] = [];
-
-  for (const mod of mods) {
-    if (!mod.categoryId) {
-      unassigned.push(mod);
-      continue;
-    }
-    if (!map.has(mod.categoryId)) {
-      map.set(mod.categoryId, []);
-    }
-    map.get(mod.categoryId)?.push(mod);
-  }
-
-  return { map, unassigned };
-}
+import {
+  MINA_ARCHIVE_DEFAULT,
+  buildHeroList,
+  buildMinaPresets,
+  detectMinaTextures,
+  findMinaVariant,
+  getHeroNamePath,
+  getHeroRenderPath,
+  getHeroWikiUrl,
+  groupModsByCategory,
+  parseMinaVariant,
+  type HeroCategory,
+  type MinaPreset,
+  type MinaSelection,
+  type MinaVariant,
+} from '../lib/lockerUtils';
 
 export default function Locker() {
   const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod } =
     useAppStore();
+  const navigate = useNavigate();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
+  const [viewMode, setViewMode] = useState<'gallery' | 'list'>(() => {
+    const stored = localStorage.getItem('lockerViewMode');
+    return stored === 'list' ? 'list' : 'gallery';
+  });
+  const [activeHeroId, setActiveHeroId] = useState<number | null>(null);
+  const navigateTimeoutRef = useRef<number | null>(null);
   const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>([]);
   const [minaArchivePath, setMinaArchivePath] = useState(() => {
     return localStorage.getItem('minaArchivePath') || MINA_ARCHIVE_DEFAULT;
@@ -305,6 +119,18 @@ export default function Locker() {
   useEffect(() => {
     localStorage.setItem('minaArchivePath', minaArchivePath);
   }, [minaArchivePath]);
+
+  useEffect(() => {
+    localStorage.setItem('lockerViewMode', viewMode);
+  }, [viewMode]);
+
+  useEffect(() => {
+    return () => {
+      if (navigateTimeoutRef.current) {
+        window.clearTimeout(navigateTimeoutRef.current);
+      }
+    };
+  }, []);
 
   const heroList = useMemo(() => {
     const list = buildHeroList(categories);
@@ -425,15 +251,41 @@ export default function Locker() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold">Hero Locker</h1>
           <p className="text-sm text-text-secondary">
             Pick the active skin per hero. Selecting one disables other skins for that hero.
           </p>
         </div>
-        <div className="text-sm text-text-secondary">
-          {heroList.length} heroes • {mods.length} installed
+        <div className="flex items-center gap-3">
+          <div className="text-sm text-text-secondary">
+            {heroList.length} heroes • {mods.length} installed
+          </div>
+          <div className="flex items-center rounded-full border border-border bg-bg-secondary p-1 text-xs">
+            <button
+              type="button"
+              onClick={() => setViewMode('gallery')}
+              className={`px-3 rounded-full transition-colors ${
+                viewMode === 'gallery'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              Gallery
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('list')}
+              className={`px-3 rounded-full transition-colors ${
+                viewMode === 'list'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              List
+            </button>
+          </div>
         </div>
       </div>
 
@@ -441,6 +293,34 @@ export default function Locker() {
         <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
           <Layers className="w-12 h-12 mb-3 opacity-50" />
           <p>No hero categories found.</p>
+        </div>
+      ) : viewMode === 'gallery' ? (
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+          {heroList.map((hero) => (
+            <HeroGalleryCard
+              key={hero.id}
+              hero={hero}
+              skinCount={heroMods.map.get(hero.id)?.length ?? 0}
+              isFavorite={favoriteHeroes.includes(hero.id)}
+              isActive={activeHeroId === hero.id}
+              onNavigate={(id) => {
+                setActiveHeroId(id);
+                if (navigateTimeoutRef.current) {
+                  window.clearTimeout(navigateTimeoutRef.current);
+                }
+                navigateTimeoutRef.current = window.setTimeout(() => {
+                  navigate(`/locker/hero/${id}`);
+                }, 220);
+              }}
+              onToggleFavorite={() =>
+                setFavoriteHeroes((prev) =>
+                  prev.includes(hero.id)
+                    ? prev.filter((id) => id !== hero.id)
+                    : [...prev, hero.id]
+                )
+              }
+            />
+          ))}
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -477,7 +357,7 @@ export default function Locker() {
         </div>
       )}
 
-      {heroMods.unassigned.length > 0 && (
+      {viewMode === 'list' && heroMods.unassigned.length > 0 && (
         <div className="space-y-3">
           <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
             Unassigned Skins
@@ -532,6 +412,145 @@ interface HeroCardProps {
   onApplyMinaVariant?: () => void;
 }
 
+interface HeroGalleryCardProps {
+  hero: HeroCategory;
+  skinCount: number;
+  isFavorite: boolean;
+  isActive: boolean;
+  onNavigate: (id: number) => void;
+  onToggleFavorite: () => void;
+}
+
+function HeroGalleryCard({
+  hero,
+  skinCount,
+  isFavorite,
+  isActive,
+  onNavigate,
+  onToggleFavorite,
+}: HeroGalleryCardProps) {
+  const renderLocal = getHeroRenderPath(hero.name);
+  const wikiUrl = getHeroWikiUrl(hero.name);
+  const namePath = getHeroNamePath(hero.name);
+  const [renderSrc, setRenderSrc] = useState('');
+  const [fallbackStep, setFallbackStep] = useState(0);
+  const [nameFailed, setNameFailed] = useState(false);
+  const [isVisible, setIsVisible] = useState(false);
+  const cardRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (isActive && !isVisible) {
+      setIsVisible(true);
+    }
+  }, [isActive, isVisible]);
+
+  useEffect(() => {
+    if (isVisible) {
+      setRenderSrc(renderLocal);
+      return;
+    }
+    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
+      setIsVisible(true);
+      return;
+    }
+    const node = cardRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          setIsVisible(true);
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '200px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [isVisible, renderLocal]);
+
+  const handleRenderError = () => {
+    if (fallbackStep === 0) {
+      setRenderSrc(wikiUrl);
+      setFallbackStep(1);
+      return;
+    }
+    if (fallbackStep === 1 && hero.iconUrl) {
+      setRenderSrc(hero.iconUrl);
+      setFallbackStep(2);
+      return;
+    }
+    setRenderSrc('');
+    setFallbackStep(3);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={() => onNavigate(hero.id)}
+      ref={cardRef}
+      className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ${
+        isActive ? 'z-10 scale-[1.04] shadow-2xl' : ''
+      }`}
+    >
+      <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
+      <div className="relative aspect-[3/4] min-h-[18rem] sm:min-h-[20rem] lg:min-h-[24rem]">
+        {renderSrc ? (
+          <img
+            src={renderSrc}
+            alt={hero.name}
+            className={`absolute inset-0 h-full w-full object-cover object-right-top transition-transform duration-500 group-hover:scale-[1.06] ${
+              isActive ? 'scale-[1.12]' : ''
+            }`}
+            loading="lazy"
+            decoding="async"
+            onError={handleRenderError}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-text-secondary">
+            {hero.name}
+          </div>
+        )}
+      </div>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          onToggleFavorite();
+        }}
+        className={`absolute right-3 top-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
+          isFavorite
+            ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
+            : 'border-border/70 bg-black/40 text-text-secondary hover:text-text-primary'
+        }`}
+        title={isFavorite ? 'Unfavorite' : 'Favorite'}
+      >
+        {isFavorite ? 'Fav' : 'Save'}
+      </button>
+      <div className="absolute bottom-0 left-0 right-0 p-5 flex flex-col items-end text-right">
+        {nameFailed ? (
+          <div className="text-lg font-semibold text-white">{hero.name}</div>
+        ) : (
+          <img
+            src={namePath}
+            alt={hero.name}
+            className={`h-7 w-auto object-contain drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-105 ${
+              isActive ? 'scale-110' : ''
+            }`}
+            loading="lazy"
+            decoding="async"
+            onError={() => setNameFailed(true)}
+          />
+        )}
+        <div className="mt-2 text-xs text-white/80">
+          {skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins yet'}
+        </div>
+      </div>
+    </button>
+  );
+}
+
 function HeroCard({
   hero,
   mods,
@@ -553,23 +572,14 @@ function HeroCard({
   selectedMinaVariant,
   onApplyMinaVariant,
 }: HeroCardProps) {
+  const localUrl = getHeroRenderPath(hero.name);
   const wikiUrl = getHeroWikiUrl(hero.name);
-  const localUrl = `/heroes/${slugifyHeroName(hero.name)}.png`;
-  const [iconSrc, setIconSrc] = useState(() => wikiUrl);
+  const [iconSrc, setIconSrc] = useState(() => localUrl);
   const [fallbackStep, setFallbackStep] = useState(0);
-
-  const hasMods = mods.length > 0;
-  const activeMod = mods.find((mod) => mod.enabled);
-  const showMinaVariants =
-    Boolean(onLoadMinaVariants) &&
-    Boolean(onMinaArchivePathChange) &&
-    Boolean(minaSelection) &&
-    Boolean(onMinaSelectionChange) &&
-    Boolean(onApplyMinaVariant);
 
   const handleError = () => {
     if (fallbackStep === 0) {
-      setIconSrc(localUrl);
+      setIconSrc(wikiUrl);
       setFallbackStep(1);
       return;
     }
@@ -595,7 +605,7 @@ function HeroCard({
         <div className="min-w-0">
           <div className="font-semibold truncate">{hero.name}</div>
           <div className="text-xs text-text-secondary">
-            {hasMods ? `${mods.length} skin${mods.length !== 1 ? 's' : ''}` : 'No skins installed'}
+            {mods.length > 0 ? `${mods.length} skin${mods.length !== 1 ? 's' : ''}` : 'No skins installed'}
           </div>
         </div>
         <button
@@ -610,259 +620,25 @@ function HeroCard({
         </button>
       </div>
 
-      <div className="p-3 space-y-2">
-        {minaPresets.length > 0 && onApplyMinaPreset && (
-          <div className="space-y-2">
-            <div className="flex items-center justify-between text-xs text-text-secondary">
-              <span>Midnight Mina Preset</span>
-              {activeMinaPreset ? (
-                <span className="text-accent font-semibold">Active: {activeMinaPreset.label}</span>
-              ) : (
-                <span>No preset enabled</span>
-              )}
-            </div>
-            <div className="grid grid-cols-1 gap-2">
-              {minaPresets.map((preset) => (
-                <button
-                  key={preset.fileName}
-                  onClick={() => onApplyMinaPreset(preset.fileName)}
-                  className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                    preset.enabled
-                      ? 'border-accent bg-bg-tertiary'
-                      : 'border-border hover:border-accent/60'
-                  }`}
-                >
-                  {preset.label}
-                </button>
-              ))}
-            </div>
-            {minaTextures.length === 0 && (
-              <div className="text-xs text-red-400">
-                Missing textures VPK. Install the textures file to enable this preset.
-              </div>
-            )}
-          </div>
-        )}
-
-        {showMinaVariants && minaArchivePath !== undefined && minaSelection && onMinaSelectionChange && (
-          <div className="space-y-2 border-t border-border pt-3">
-            <div className="text-xs text-text-secondary uppercase tracking-wider">Custom Variants</div>
-            <div className="flex items-center gap-2">
-              <input
-                type="text"
-                value={minaArchivePath}
-                onChange={(event) => onMinaArchivePathChange?.(event.target.value)}
-                placeholder="Path to extra clothing presets.7z"
-                className="flex-1 bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs text-text-primary"
-              />
-              <button
-                type="button"
-                onClick={onLoadMinaVariants}
-                disabled={minaVariantsLoading || !minaArchivePath.trim()}
-                className="px-3 py-1 text-xs rounded-md border border-border hover:border-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {minaVariantsLoading ? 'Loading…' : 'Load'}
-              </button>
-            </div>
-            <div className="text-xs text-text-secondary">
-              {minaVariantsLoading
-                ? 'Scanning presets…'
-                : minaVariants.length > 0
-                  ? `${minaVariants.length} presets found`
-                  : 'Load presets to enable variant selection.'}
-            </div>
-            {minaVariantsError && <div className="text-xs text-red-400">{minaVariantsError}</div>}
-            <div className="grid grid-cols-2 gap-2">
-              <label className="text-[11px] text-text-secondary space-y-1">
-                <span>Futa</span>
-                <select
-                  value={minaSelection.futa}
-                  onChange={(event) =>
-                    onMinaSelectionChange({
-                      ...minaSelection,
-                      futa: event.target.value as MinaSelection['futa'],
-                    })
-                  }
-                  className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs"
-                >
-                  <option value="No">No</option>
-                  <option value="Yes">Yes</option>
-                </select>
-              </label>
-              <label className="text-[11px] text-text-secondary space-y-1">
-                <span>Top</span>
-                <select
-                  value={minaSelection.top}
-                  onChange={(event) =>
-                    onMinaSelectionChange({
-                      ...minaSelection,
-                      top: event.target.value as MinaSelection['top'],
-                    })
-                  }
-                  className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs"
-                >
-                  <option value="None">None</option>
-                  <option value="Sleeveless">Sleeveless</option>
-                  <option value="Default">Default</option>
-                </select>
-              </label>
-              <label className="text-[11px] text-text-secondary space-y-1">
-                <span>Skirt</span>
-                <select
-                  value={minaSelection.skirt}
-                  onChange={(event) =>
-                    onMinaSelectionChange({
-                      ...minaSelection,
-                      skirt: event.target.value as MinaSelection['skirt'],
-                    })
-                  }
-                  className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs"
-                >
-                  <option value="None">None</option>
-                  <option value="Default">Default</option>
-                </select>
-              </label>
-              <label className="text-[11px] text-text-secondary space-y-1">
-                <span>Stockings</span>
-                <select
-                  value={minaSelection.stockings}
-                  onChange={(event) =>
-                    onMinaSelectionChange({
-                      ...minaSelection,
-                      stockings: event.target.value as MinaSelection['stockings'],
-                    })
-                  }
-                  className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs"
-                >
-                  <option value="None">None</option>
-                  <option value="Default">Default</option>
-                </select>
-              </label>
-              <label className="text-[11px] text-text-secondary space-y-1">
-                <span>Belt Sash</span>
-                <select
-                  value={minaSelection.beltSash}
-                  onChange={(event) =>
-                    onMinaSelectionChange({
-                      ...minaSelection,
-                      beltSash: event.target.value as MinaSelection['beltSash'],
-                    })
-                  }
-                  className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs"
-                >
-                  <option value="None">None</option>
-                  <option value="Default">Default</option>
-                </select>
-              </label>
-              <label className="text-[11px] text-text-secondary space-y-1">
-                <span>Gloves</span>
-                <select
-                  value={minaSelection.gloves}
-                  onChange={(event) =>
-                    onMinaSelectionChange({
-                      ...minaSelection,
-                      gloves: event.target.value as MinaSelection['gloves'],
-                    })
-                  }
-                  className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs"
-                >
-                  <option value="None">None</option>
-                  <option value="Default">Default</option>
-                </select>
-              </label>
-              <label className="text-[11px] text-text-secondary space-y-1">
-                <span>Garter</span>
-                <select
-                  value={minaSelection.garter}
-                  onChange={(event) =>
-                    onMinaSelectionChange({
-                      ...minaSelection,
-                      garter: event.target.value as MinaSelection['garter'],
-                    })
-                  }
-                  className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs"
-                >
-                  <option value="None">None</option>
-                  <option value="Default">Default</option>
-                </select>
-              </label>
-              <label className="text-[11px] text-text-secondary space-y-1">
-                <span>Dress</span>
-                <select
-                  value={minaSelection.dress}
-                  onChange={(event) =>
-                    onMinaSelectionChange({
-                      ...minaSelection,
-                      dress: event.target.value as MinaSelection['dress'],
-                    })
-                  }
-                  className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs"
-                >
-                  <option value="None">None</option>
-                  <option value="Default">Default</option>
-                </select>
-              </label>
-            </div>
-            <div className="flex items-center justify-between text-xs">
-              {selectedMinaVariant ? (
-                <span className="text-text-secondary truncate">
-                  {selectedMinaVariant.label}
-                </span>
-              ) : (
-                <span className="text-red-400">No preset matches this selection.</span>
-              )}
-              <button
-                type="button"
-                onClick={onApplyMinaVariant}
-                disabled={!selectedMinaVariant}
-                className="ml-2 px-3 py-1 rounded-md border border-border text-xs hover:border-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Apply
-              </button>
-            </div>
-            {minaTextures.length === 0 && (
-              <div className="text-xs text-red-400">
-                Missing textures VPK. Install the textures file to enable this preset.
-              </div>
-            )}
-          </div>
-        )}
-
-        {hasMods ? (
-          mods.map((mod) => (
-            <button
-              key={mod.id}
-              onClick={() => onSelect(mod.id)}
-              className={`w-full flex items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors ${
-                mod.enabled
-                  ? 'border-accent bg-bg-tertiary'
-                  : 'border-border hover:border-accent/60'
-              }`}
-              title={mod.enabled ? 'Active skin' : 'Set active'}
-            >
-              <div className="w-10 h-10 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
-                {mod.thumbnailUrl ? (
-                  <img src={mod.thumbnailUrl} alt={mod.name} className="w-full h-full object-cover" />
-                ) : (
-                  <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
-                    No preview
-                  </div>
-                )}
-              </div>
-              <div className="min-w-0">
-                <div className="font-medium truncate">{mod.name}</div>
-                <div className="text-xs text-text-secondary truncate">{mod.fileName}</div>
-              </div>
-              {activeMod?.id === mod.id && (
-                <span className="ml-auto text-xs text-accent font-semibold">Active</span>
-              )}
-            </button>
-          ))
-        ) : (
-          <div className="text-xs text-text-secondary">
-            Download a skin for this hero to manage it here.
-          </div>
-        )}
+      <div className="p-3">
+        <HeroSkinsPanel
+          mods={mods}
+          onSelect={onSelect}
+          minaPresets={minaPresets}
+          activeMinaPreset={activeMinaPreset}
+          minaTextures={minaTextures}
+          onApplyMinaPreset={onApplyMinaPreset}
+          minaArchivePath={minaArchivePath}
+          onMinaArchivePathChange={onMinaArchivePathChange}
+          minaVariants={minaVariants}
+          minaVariantsLoading={minaVariantsLoading}
+          minaVariantsError={minaVariantsError}
+          onLoadMinaVariants={onLoadMinaVariants}
+          minaSelection={minaSelection}
+          onMinaSelectionChange={onMinaSelectionChange}
+          selectedMinaVariant={selectedMinaVariant}
+          onApplyMinaVariant={onApplyMinaVariant}
+        />
       </div>
     </div>
   );
