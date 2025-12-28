@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Installed from './pages/Installed';
 import Browse from './pages/Browse';
+import Locker from './pages/Locker';
 import Conflicts from './pages/Conflicts';
 import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
@@ -13,6 +14,7 @@ export default function App() {
         <Route path="/" element={<Layout />}>
           <Route index element={<Installed />} />
           <Route path="browse" element={<Browse />} />
+          <Route path="locker" element={<Locker />} />
           <Route path="conflicts" element={<Conflicts />} />
           <Route path="profiles" element={<Profiles />} />
           <Route path="settings" element={<Settings />} />

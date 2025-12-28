@@ -40,6 +40,12 @@ pub fn run() {
             download_mod,
             get_gamebanana_sections,
             get_gamebanana_categories,
+            set_mina_preset,
+            list_mina_variants,
+            apply_mina_variant,
+            cleanup_addons,
+            get_gameinfo_status,
+            fix_gameinfo,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

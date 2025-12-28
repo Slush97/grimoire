@@ -18,6 +18,10 @@ pub struct Mod {
     pub thumbnail_url: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub game_banana_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub category_id: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_section: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -112,13 +112,13 @@ export default function Browse() {
     categoryId === 'all' ? 'all' : String(categoryId),
     heroCategoryId === 'all' ? 'all' : String(heroCategoryId),
   ].join('::');
+
+  const effectiveCategoryId =
+    heroCategoryId === 'all' ? (categoryId === 'all' ? undefined : categoryId) : heroCategoryId;
   const fetchMods = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const effectiveCategoryId =
-        heroCategoryId === 'all' ? (categoryId === 'all' ? undefined : categoryId) : heroCategoryId;
-
       if (
         forceFullFetch ||
         sort !== 'default' ||
@@ -197,6 +197,7 @@ export default function Browse() {
     perPage,
     forceFullFetch,
     cacheKey,
+    effectiveCategoryId,
   ]);
 
   useEffect(() => {
@@ -354,7 +355,7 @@ export default function Browse() {
     setExtracting(false);
 
     try {
-      await downloadMod(selectedMod.id, fileId, fileName, section);
+      await downloadMod(selectedMod.id, fileId, fileName, section, effectiveCategoryId);
     } catch (err) {
       setError(String(err));
       setDownloading(null);

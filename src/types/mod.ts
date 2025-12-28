@@ -10,6 +10,8 @@ export interface Mod {
   description?: string;
   thumbnailUrl?: string;
   gameBananaId?: number;
+  categoryId?: number;
+  sourceSection?: string;
 }
 
 export interface Profile {

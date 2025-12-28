@@ -98,6 +98,15 @@ pub struct GameBananaSubmitter {
 pub struct GameBananaPreviewMedia {
     #[serde(rename(deserialize = "_aImages"))]
     pub images: Option<Vec<GameBananaImage>>,
+    #[serde(rename(deserialize = "_aMetadata"))]
+    pub metadata: Option<GameBananaPreviewMetadata>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameBananaPreviewMetadata {
+    #[serde(rename(deserialize = "_sAudioUrl"))]
+    pub audio_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -116,8 +125,16 @@ pub struct GameBananaImage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameBananaCategory {
+    #[serde(rename(deserialize = "_idRow"))]
+    pub id: Option<u64>,
     #[serde(rename(deserialize = "_sName"))]
     pub name: String,
+    #[serde(rename(deserialize = "_sModelName"))]
+    pub model_name: Option<String>,
+    #[serde(rename(deserialize = "_sProfileUrl"))]
+    pub profile_url: Option<String>,
+    #[serde(rename(deserialize = "_sIconUrl"))]
+    pub icon_url: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -174,6 +191,8 @@ pub struct GameBananaModDetails {
     pub name: String,
     #[serde(rename(deserialize = "_sText"))]
     pub description: Option<String>,
+    #[serde(rename(deserialize = "_aCategory"))]
+    pub category: Option<GameBananaCategory>,
     #[serde(rename(deserialize = "_aFiles"))]
     pub files: Option<Vec<GameBananaFile>>,
     #[serde(rename(deserialize = "_aPreviewMedia"))]
@@ -322,7 +341,7 @@ pub async fn fetch_mod_details(
     let client = reqwest::Client::new();
 
     let url = format!(
-        "{}/{}/{}?_csvProperties=_idRow,_sName,_sText,_aFiles,_aPreviewMedia",
+        "{}/{}/{}?_csvProperties=_idRow,_sName,_sText,_aCategory,_aFiles,_aPreviewMedia",
         GAMEBANANA_API_BASE, model, mod_id
     );
 

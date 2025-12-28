@@ -65,9 +65,10 @@ export async function downloadMod(
   modId: number,
   fileId: number,
   fileName: string,
-  section?: string
+  section?: string,
+  categoryId?: number
 ): Promise<void> {
-  return invoke('download_mod', { args: { modId, fileId, fileName, section } });
+  return invoke('download_mod', { args: { modId, fileId, fileName, section, categoryId } });
 }
 
 export async function getGamebananaSections(): Promise<GameBananaSection[]> {
@@ -78,4 +79,41 @@ export async function getGamebananaCategories(
   categoryModelName: string
 ): Promise<GameBananaCategoryNode[]> {
   return invoke('get_gamebanana_categories', { args: { categoryModelName } });
+}
+
+export async function setMinaPreset(presetFileName: string): Promise<void> {
+  return invoke('set_mina_preset', { args: { presetFileName } });
+}
+
+export async function listMinaVariants(archivePath: string): Promise<string[]> {
+  return invoke('list_mina_variants', { args: { archivePath } });
+}
+
+export async function applyMinaVariant(
+  archivePath: string,
+  archiveEntry: string,
+  presetLabel: string,
+  heroCategoryId?: number
+): Promise<void> {
+  return invoke('apply_mina_variant', {
+    args: { archivePath, archiveEntry, presetLabel, heroCategoryId },
+  });
+}
+
+export async function cleanupAddons(): Promise<{
+  removedArchives: number;
+  renamedMinaPresets: number;
+  renamedMinaTextures: number;
+  skippedMinaPresets: number;
+  skippedMinaTextures: number;
+}> {
+  return invoke('cleanup_addons');
+}
+
+export async function getGameinfoStatus(): Promise<{ configured: boolean; message: string }> {
+  return invoke('get_gameinfo_status');
+}
+
+export async function fixGameinfo(): Promise<{ configured: boolean; message: string }> {
+  return invoke('fix_gameinfo');
 }

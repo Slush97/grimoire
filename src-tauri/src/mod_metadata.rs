@@ -11,6 +11,8 @@ use tauri::{AppHandle, Manager};
 pub struct ModMetadata {
     pub name: String,
     pub game_banana_id: Option<u64>,
+    pub category_id: Option<u64>,
+    pub source_section: Option<String>,
     pub description: Option<String>,
     pub thumbnail_url: Option<String>,
 }
@@ -95,6 +97,8 @@ pub fn apply_metadata_to_mod(mod_item: &mut Mod, metadata: &ModMetadataMap) {
     if let Some(meta) = metadata.get(&mod_item.file_name) {
         mod_item.name = meta.name.clone();
         mod_item.game_banana_id = meta.game_banana_id;
+        mod_item.category_id = meta.category_id;
+        mod_item.source_section = meta.source_section.clone();
         mod_item.description = meta.description.clone();
         mod_item.thumbnail_url = meta.thumbnail_url.clone();
     }

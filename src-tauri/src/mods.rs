@@ -125,6 +125,8 @@ fn scan_folder(folder: &Path, enabled: bool) -> Result<Vec<Mod>, AppError> {
             description: None,
             thumbnail_url: None,
             game_banana_id: None,
+            category_id: None,
+            source_section: None,
         });
     }
 

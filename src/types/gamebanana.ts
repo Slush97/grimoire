@@ -51,7 +51,11 @@ export interface GameBananaImage {
 }
 
 export interface GameBananaCategory {
+  id?: number;
   name: string;
+  modelName?: string;
+  profileUrl?: string;
+  iconUrl?: string;
 }
 
 export interface GameBananaModsResponse {
@@ -74,6 +78,7 @@ export interface GameBananaModDetails {
   id: number;
   name: string;
   description?: string;
+  category?: GameBananaCategory;
   files?: GameBananaFile[];
   previewMedia?: GameBananaPreviewMedia;
 }

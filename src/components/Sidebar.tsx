@@ -2,6 +2,7 @@ import { NavLink } from 'react-router-dom';
 import {
   Package,
   Search,
+  Shield,
   AlertTriangle,
   Layers,
   Settings,
@@ -11,6 +12,7 @@ import {
 const navItems = [
   { to: '/', icon: Package, label: 'Installed' },
   { to: '/browse', icon: Search, label: 'Browse' },
+  { to: '/locker', icon: Shield, label: 'Locker' },
   { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts' },
   { to: '/profiles', icon: Layers, label: 'Profiles' },
   { to: '/settings', icon: Settings, label: 'Settings' },
