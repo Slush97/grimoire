@@ -7,6 +7,51 @@ export type HeroCategory = {
   iconUrl?: string;
 };
 
+/**
+ * Per-hero portrait X positioning (percentage) for gallery cards based on face location.
+ * The value represents where the face is located horizontally in the image.
+ * Default is 55% which works for most heroes.
+ */
+export const HERO_FACE_POSITION: Record<string, number> = {
+  Abrams: 0,
+  Bebop: 81,
+  Billy: 73,
+  Calico: 80,
+  Doorman: 40,
+  Drifter: 93,
+  Dynamo: 68,
+  'Grey Talon': 77,
+  Haze: 78,
+  Holliday: 26,
+  Infernus: 100,
+  Ivy: 72,
+  Kelvin: 47,
+  'Lady Geist': 87,
+  Lash: 54,
+  McGinnis: 22,
+  Mina: 54,
+  Mirage: 65,
+  'Mo & Krill': 100,
+  Paige: 42,
+  Paradox: 59,
+  Pocket: 61,
+  Seven: 57,
+  Shiv: 68,
+  Sinclair: 61,
+  'The Doorman': 40,
+  Victor: 45,
+  Vindicta: 83,
+  Viscous: 72,
+  Vyper: 48,
+  Warden: 55,
+  Wraith: 56,
+  Yamato: 56,
+};
+
+export function getHeroFacePosition(name: string): number {
+  return HERO_FACE_POSITION[name] ?? 55;
+}
+
 export type MinaPreset = {
   fileName: string;
   label: string;

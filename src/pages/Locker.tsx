@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Layers, Loader2, Star, X } from 'lucide-react';
+import { Layers, Loader2, Star, X } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -17,6 +17,7 @@ import {
   buildMinaPresets,
   detectMinaTextures,
   findMinaVariant,
+  getHeroFacePosition,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
@@ -733,6 +734,7 @@ function HeroGalleryCard({
   const renderLocal = getHeroRenderPath(hero.name);
   const wikiUrl = getHeroWikiUrl(hero.name);
   const namePath = getHeroNamePath(hero.name);
+  const facePositionX = getHeroFacePosition(hero.name);
   const [renderSrc, setRenderSrc] = useState('');
   const [fallbackStep, setFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
@@ -806,9 +808,10 @@ function HeroGalleryCard({
           <img
             src={renderSrc}
             alt={hero.name}
-            className={`absolute inset-0 h-full w-full object-cover object-right transition-transform duration-500 group-hover:scale-[1.06] ${
+            className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06] ${
               isActive ? 'scale-[1.12]' : ''
             }`}
+            style={{ objectPosition: `${facePositionX}% 20%` }}
             loading="lazy"
             decoding="async"
             onError={handleRenderError}
@@ -819,30 +822,28 @@ function HeroGalleryCard({
           </div>
         )}
       </div>
-      <button
-        type="button"
-        onClick={(event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          onToggleFavorite();
-        }}
-        className={`absolute right-3 top-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold uppercase tracking-wide transition-colors ${
-          isFavorite
-            ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
-            : 'border-border/70 bg-black/40 text-text-secondary hover:text-text-primary'
-        }`}
-        title={isFavorite ? 'Unfavorite' : 'Favorite'}
-      >
-        {isFavorite ? 'Fav' : 'Save'}
-      </button>
-      <div className="absolute bottom-0 left-0 right-0 p-5 flex flex-col items-end text-right">
+      {isFavorite && (
+        <button
+          type="button"
+          onClick={(event) => {
+            event.preventDefault();
+            event.stopPropagation();
+            onToggleFavorite();
+          }}
+          className="absolute right-3 top-3 flex items-center justify-center rounded-full border border-yellow-400/60 bg-yellow-400/20 p-1.5 text-yellow-300 transition-colors"
+          title="Unfavorite"
+        >
+          <Star className="w-3.5 h-3.5 fill-current" />
+        </button>
+      )}
+      <div className="absolute bottom-0 left-0 right-0 p-4 flex flex-col items-end text-right">
         {nameFailed ? (
-          <div className="text-lg font-semibold text-white">{hero.name}</div>
+          <div className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
         ) : (
           <img
             src={namePath}
             alt={hero.name}
-            className={`h-7 w-auto object-contain drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-105 ${
+            className={`w-[65%] h-auto max-h-9 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-105 ${
               isActive ? 'scale-110' : ''
             }`}
             loading="lazy"
@@ -850,9 +851,11 @@ function HeroGalleryCard({
             onError={() => setNameFailed(true)}
           />
         )}
-        <div className="mt-2 text-xs text-white/80">
-          {skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins yet'}
-        </div>
+        {skinCount > 0 && (
+          <div className="mt-1.5 text-[11px] text-white/70">
+            {skinCount} skin{skinCount !== 1 ? 's' : ''}
+          </div>
+        )}
       </div>
     </button>
   );

@@ -1,5 +1,54 @@
 @import "tailwindcss";
 
+/* Deadlock Fonts */
+@font-face {
+  font-family: 'Radiance';
+  src: url('/fonts/radiance-regular.otf') format('opentype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Radiance';
+  src: url('/fonts/radiance-semibold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Radiance';
+  src: url('/fonts/radiance-bold.otf') format('opentype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Reaver';
+  src: url('/fonts/reaver-semibold.otf') format('opentype');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'ValvePulp';
+  src: url('/fonts/valvepulp-bold.ttf') format('truetype');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'American Captain';
+  src: url('/fonts/american-captain.ttf') format('truetype');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 /* Custom theme for Deadlock Mod Manager */
 @theme {
   --color-bg-primary: #0f0f0f;
@@ -10,12 +59,24 @@
   --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1aa;
   --color-border: #2d2d2d;
+
+  --font-radiance: 'Radiance', system-ui, sans-serif;
+  --font-reaver: 'Reaver', serif;
+  --font-valvepulp: 'ValvePulp', sans-serif;
+  --font-captain: 'American Captain', sans-serif;
 }
 
 /* Base styles */
 body {
-  @apply bg-bg-primary text-text-primary m-0 font-sans antialiased;
+  @apply bg-bg-primary text-text-primary m-0 antialiased;
+  font-family: var(--font-radiance);
 }
+
+/* Font utility classes */
+.font-radiance { font-family: var(--font-radiance); }
+.font-reaver { font-family: var(--font-reaver); }
+.font-valvepulp { font-family: var(--font-valvepulp); }
+.font-captain { font-family: var(--font-captain); }
 
 #root {
   @apply min-h-screen w-full;

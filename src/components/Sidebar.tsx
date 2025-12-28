@@ -6,7 +6,6 @@ import {
   AlertTriangle,
   Layers,
   Settings,
-  Gamepad2,
 } from 'lucide-react';
 
 const navItems = [
@@ -22,10 +21,23 @@ export default function Sidebar() {
   return (
     <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col">
       {/* Logo */}
-      <div className="p-4 border-b border-border">
-        <div className="flex items-center gap-2">
-          <Gamepad2 className="w-6 h-6 text-accent" />
-          <span className="font-bold text-lg">Deadlock Mods</span>
+      <div className="px-4 py-3 border-b border-border">
+        <div className="flex items-center gap-3">
+          <img
+            src="/branding/classic-mark.svg"
+            alt="Deadlock"
+            className="w-8 h-8 flex-shrink-0"
+          />
+          <div className="flex flex-col min-w-0">
+            <img
+              src="/branding/classic-wordmark.svg"
+              alt="Deadlock"
+              className="h-3.5 w-auto opacity-90"
+            />
+            <span className="font-reaver text-[10px] tracking-widest text-text-secondary uppercase">
+              Mod Manager
+            </span>
+          </div>
         </div>
       </div>
 
