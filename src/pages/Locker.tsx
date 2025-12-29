@@ -9,6 +9,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import ModThumbnail from '../components/ModThumbnail';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import {
@@ -366,6 +367,7 @@ export default function Locker() {
                     : [...prev, hero.id]
                 )
               }
+              hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
               minaPresets={hero.name === 'Mina' ? minaPresets : []}
               activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
               minaTextures={hero.name === 'Mina' ? minaTextures : []}
@@ -397,13 +399,18 @@ export default function Locker() {
                 className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3"
               >
                 <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary">
-                  {mod.thumbnailUrl ? (
-                    <img src={mod.thumbnailUrl} alt={mod.name} className="w-full h-full object-cover" />
-                  ) : (
-                    <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
-                      No preview
-                    </div>
-                  )}
+                  <ModThumbnail
+                    src={mod.thumbnailUrl}
+                    alt={mod.name}
+                    nsfw={mod.nsfw}
+                    hideNsfw={settings?.hideNsfwPreviews ?? false}
+                    className="w-full h-full"
+                    fallback={
+                      <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
+                        No preview
+                      </div>
+                    }
+                  />
                 </div>
                 <div className="min-w-0">
                   <div className="font-medium truncate">{mod.name}</div>
@@ -432,6 +439,7 @@ export default function Locker() {
                 : [...prev, selectedHero.id]
             )
           }
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
           minaPresets={selectedHero.name === 'Mina' ? minaPresets : []}
           activeMinaPreset={selectedHero.name === 'Mina' ? activeMinaPreset : undefined}
           minaTextures={selectedHero.name === 'Mina' ? minaTextures : []}
@@ -461,6 +469,7 @@ interface HeroOverlayProps {
   onSelectSkin: (modId: string) => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
+  hideNsfwPreviews: boolean;
   minaPresets: MinaPreset[];
   activeMinaPreset?: MinaPreset;
   minaTextures: Mod[];
@@ -486,6 +495,7 @@ function HeroOverlay({
   onSelectSkin,
   isFavorite,
   onToggleFavorite,
+  hideNsfwPreviews,
   minaPresets,
   activeMinaPreset,
   minaTextures,
@@ -665,6 +675,7 @@ function HeroOverlay({
           <HeroSkinsPanel
             mods={mods}
             onSelect={onSelectSkin}
+            hideNsfwPreviews={hideNsfwPreviews}
             minaPresets={minaPresets}
             activeMinaPreset={activeMinaPreset}
             minaTextures={minaTextures}
@@ -698,6 +709,7 @@ interface HeroCardProps {
   onSelect: (modId: string) => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
+  hideNsfwPreviews: boolean;
   minaPresets: MinaPreset[];
   activeMinaPreset?: MinaPreset;
   minaTextures: Mod[];
@@ -867,6 +879,7 @@ function HeroCard({
   onSelect,
   isFavorite,
   onToggleFavorite,
+  hideNsfwPreviews,
   minaPresets,
   activeMinaPreset,
   minaTextures,
@@ -934,6 +947,7 @@ function HeroCard({
         <HeroSkinsPanel
           mods={mods}
           onSelect={onSelect}
+          hideNsfwPreviews={hideNsfwPreviews}
           minaPresets={minaPresets}
           activeMinaPreset={activeMinaPreset}
           minaTextures={minaTextures}

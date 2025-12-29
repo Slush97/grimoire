@@ -7,6 +7,7 @@ export interface GameBananaMod {
   likeCount: number;
   viewCount: number;
   hasFiles: boolean;
+  nsfw: boolean;
   submitter?: GameBananaSubmitter;
   previewMedia?: GameBananaPreviewMedia;
   rootCategory?: GameBananaCategory;

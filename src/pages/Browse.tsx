@@ -26,6 +26,7 @@ import type {
 import { getModThumbnail, getSoundPreviewUrl } from '../types/gamebanana';
 import { useAppStore } from '../stores/appStore';
 import { listen } from '@tauri-apps/api/event';
+import ModThumbnail from '../components/ModThumbnail';
 
 const DEFAULT_PER_PAGE = 12;
 const FETCH_ALL_PER_PAGE = 50;
@@ -643,6 +644,7 @@ export default function Browse() {
                 installed={installedIds.has(mod.id)}
                 viewMode={viewMode}
                 section={section}
+                hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 onClick={() => handleModClick(mod)}
               />
             ))}
@@ -694,10 +696,11 @@ interface ModCardProps {
   installed: boolean;
   viewMode: ViewMode;
   section: string;
+  hideNsfwPreviews: boolean;
   onClick: () => void;
 }
 
-function ModCard({ mod, installed, viewMode, section, onClick }: ModCardProps) {
+function ModCard({ mod, installed, viewMode, section, hideNsfwPreviews, onClick }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -718,13 +721,13 @@ function ModCard({ mod, installed, viewMode, section, onClick }: ModCardProps) {
             : 'aspect-video'
         }`}
       >
-        {thumbnail ? (
-          <img src={thumbnail} alt={mod.name} className="w-full h-full object-cover" />
-        ) : (
-          <div className="w-full h-full flex items-center justify-center text-text-secondary">
-            No preview
-          </div>
-        )}
+        <ModThumbnail
+          src={thumbnail}
+          alt={mod.name}
+          nsfw={mod.nsfw}
+          hideNsfw={hideNsfwPreviews}
+          className="w-full h-full"
+        />
       </div>
 
       {/* Info */}

@@ -131,6 +131,12 @@ export default function Settings() {
     }
   };
 
+  const handleHideNsfwChange = async (checked: boolean) => {
+    if (settings) {
+      await saveSettings({ ...settings, hideNsfwPreviews: checked });
+    }
+  };
+
   const handleDevModeChange = async (checked: boolean) => {
     if (!settings) return;
     if (checked) {
@@ -301,6 +307,23 @@ export default function Settings() {
               <span className="font-medium">Auto-configure gameinfo.gi</span>
               <p className="text-xs text-text-secondary">
                 Automatically update gameinfo.gi when enabling/disabling mods
+              </p>
+            </div>
+          </label>
+        </div>
+
+        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={settings?.hideNsfwPreviews ?? false}
+              onChange={(e) => handleHideNsfwChange(e.target.checked)}
+              className="w-4 h-4 rounded border-border bg-bg-tertiary accent-accent"
+            />
+            <div>
+              <span className="font-medium">Hide NSFW previews</span>
+              <p className="text-xs text-text-secondary">
+                Blur thumbnail images for mods marked as NSFW
               </p>
             </div>
           </label>

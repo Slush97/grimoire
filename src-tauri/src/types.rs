@@ -22,6 +22,8 @@ pub struct Mod {
     pub category_id: Option<u64>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub source_section: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub nsfw: Option<bool>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -31,6 +33,7 @@ pub struct AppSettings {
     pub auto_configure_game_info: bool,
     pub dev_mode: bool,
     pub dev_deadlock_path: Option<String>,
+    pub hide_nsfw_previews: bool,
 }
 
 impl Default for AppSettings {
@@ -40,6 +43,7 @@ impl Default for AppSettings {
             auto_configure_game_info: true,
             dev_mode: false,
             dev_deadlock_path: None,
+            hide_nsfw_previews: false,
         }
     }
 }

@@ -1,9 +1,11 @@
 import type { Mod } from '../../types/mod';
 import type { MinaPreset, MinaSelection, MinaVariant } from '../../lib/lockerUtils';
+import ModThumbnail from '../ModThumbnail';
 
 interface HeroSkinsPanelProps {
   mods: Mod[];
   onSelect: (modId: string) => void;
+  hideNsfwPreviews?: boolean;
   minaPresets?: MinaPreset[];
   activeMinaPreset?: MinaPreset;
   minaTextures?: Mod[];
@@ -23,6 +25,7 @@ interface HeroSkinsPanelProps {
 export default function HeroSkinsPanel({
   mods,
   onSelect,
+  hideNsfwPreviews = false,
   minaPresets = [],
   activeMinaPreset,
   minaTextures = [],
@@ -273,13 +276,18 @@ export default function HeroSkinsPanel({
             title={mod.enabled ? 'Active skin' : 'Set active'}
           >
             <div className="w-10 h-10 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
-              {mod.thumbnailUrl ? (
-                <img src={mod.thumbnailUrl} alt={mod.name} className="w-full h-full object-cover" />
-              ) : (
-                <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
-                  No preview
-                </div>
-              )}
+              <ModThumbnail
+                src={mod.thumbnailUrl}
+                alt={mod.name}
+                nsfw={mod.nsfw}
+                hideNsfw={hideNsfwPreviews}
+                className="w-full h-full"
+                fallback={
+                  <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
+                    No preview
+                  </div>
+                }
+              />
             </div>
             <div className="min-w-0">
               <div className="font-medium truncate">{mod.name}</div>

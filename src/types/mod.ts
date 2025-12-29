@@ -12,6 +12,7 @@ export interface Mod {
   gameBananaId?: number;
   categoryId?: number;
   sourceSection?: string;
+  nsfw?: boolean;
 }
 
 export interface Profile {
@@ -37,4 +38,5 @@ export interface AppSettings {
   autoConfigureGameInfo: boolean;
   devMode: boolean;
   devDeadlockPath: string | null;
+  hideNsfwPreviews: boolean;
 }

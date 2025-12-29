@@ -3,6 +3,7 @@ import { Package, Loader2, Settings, Trash2, ToggleLeft, ToggleRight } from 'luc
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import ModThumbnail from '../components/ModThumbnail';
 
 type ViewMode = 'grid' | 'list';
 
@@ -148,6 +149,7 @@ export default function Installed() {
                 key={mod.id}
                 mod={mod}
                 viewMode={viewMode}
+                hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => deleteMod(mod.id)}
               />
@@ -174,6 +176,7 @@ export default function Installed() {
                 key={mod.id}
                 mod={mod}
                 viewMode={viewMode}
+                hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => deleteMod(mod.id)}
               />
@@ -194,13 +197,15 @@ interface ModCardProps {
     priority: number;
     size: number;
     thumbnailUrl?: string;
+    nsfw?: boolean;
   };
   viewMode: ViewMode;
+  hideNsfwPreviews: boolean;
   onToggle: () => void;
   onDelete: () => void;
 }
 
-function ModCard({ mod, viewMode, onToggle, onDelete }: ModCardProps) {
+function ModCard({ mod, viewMode, hideNsfwPreviews, onToggle, onDelete }: ModCardProps) {
   return (
     <div
       className={`rounded-lg border transition-colors ${
@@ -211,13 +216,13 @@ function ModCard({ mod, viewMode, onToggle, onDelete }: ModCardProps) {
     >
       {viewMode === 'grid' && (
         <div className="w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden">
-          {mod.thumbnailUrl ? (
-            <img src={mod.thumbnailUrl} alt={mod.name} className="w-full h-full object-cover" />
-          ) : (
-            <div className="w-full h-full flex items-center justify-center text-text-secondary">
-              No preview
-            </div>
-          )}
+          <ModThumbnail
+            src={mod.thumbnailUrl}
+            alt={mod.name}
+            nsfw={mod.nsfw}
+            hideNsfw={hideNsfwPreviews}
+            className="w-full h-full"
+          />
         </div>
       )}
 

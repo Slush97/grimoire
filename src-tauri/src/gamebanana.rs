@@ -2,6 +2,7 @@ use crate::error::AppError;
 use serde::{Deserialize, Serialize};
 
 const GAMEBANANA_API_BASE: &str = "https://gamebanana.com/apiv11";
+
 const DEADLOCK_GAME_ID: u64 = 20948;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -55,31 +56,75 @@ struct GameBananaCategoryNodeRaw {
     children: Option<Vec<GameBananaCategoryNodeRaw>>,
 }
 
+/// Raw struct for deserializing from GameBanana API
+#[derive(Debug, Clone, Deserialize)]
+struct GameBananaModRaw {
+    #[serde(rename = "_idRow")]
+    id: u64,
+    #[serde(rename = "_sName")]
+    name: String,
+    #[serde(rename = "_sProfileUrl")]
+    profile_url: String,
+    #[serde(rename = "_tsDateAdded")]
+    date_added: i64,
+    #[serde(rename = "_tsDateModified")]
+    date_modified: i64,
+    #[serde(rename = "_nLikeCount", default)]
+    like_count: u32,
+    #[serde(rename = "_nViewCount", default)]
+    view_count: u32,
+    #[serde(rename = "_bHasFiles", default)]
+    has_files: bool,
+    #[serde(rename = "_sInitialVisibility", default)]
+    initial_visibility: Option<String>,
+    #[serde(rename = "_bHasContentRatings", default)]
+    has_content_ratings: bool,
+    #[serde(rename = "_aSubmitter")]
+    submitter: Option<GameBananaSubmitter>,
+    #[serde(rename = "_aPreviewMedia")]
+    preview_media: Option<GameBananaPreviewMedia>,
+    #[serde(rename = "_aRootCategory")]
+    root_category: Option<GameBananaCategory>,
+}
+
+/// Clean struct sent to frontend
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameBananaMod {
-    #[serde(rename(deserialize = "_idRow"))]
     pub id: u64,
-    #[serde(rename(deserialize = "_sName"))]
     pub name: String,
-    #[serde(rename(deserialize = "_sProfileUrl"))]
     pub profile_url: String,
-    #[serde(rename(deserialize = "_tsDateAdded"))]
     pub date_added: i64,
-    #[serde(rename(deserialize = "_tsDateModified"))]
     pub date_modified: i64,
-    #[serde(rename(deserialize = "_nLikeCount"), default)]
     pub like_count: u32,
-    #[serde(rename(deserialize = "_nViewCount"), default)]
     pub view_count: u32,
-    #[serde(rename(deserialize = "_bHasFiles"), default)]
     pub has_files: bool,
-    #[serde(rename(deserialize = "_aSubmitter"))]
+    pub nsfw: bool,
     pub submitter: Option<GameBananaSubmitter>,
-    #[serde(rename(deserialize = "_aPreviewMedia"))]
     pub preview_media: Option<GameBananaPreviewMedia>,
-    #[serde(rename(deserialize = "_aRootCategory"))]
     pub root_category: Option<GameBananaCategory>,
+}
+
+impl From<GameBananaModRaw> for GameBananaMod {
+    fn from(raw: GameBananaModRaw) -> Self {
+        // NSFW if visibility is "warn" OR has content ratings
+        let nsfw = raw.initial_visibility.as_deref() == Some("warn") || raw.has_content_ratings;
+
+        GameBananaMod {
+            id: raw.id,
+            name: raw.name,
+            profile_url: raw.profile_url,
+            date_added: raw.date_added,
+            date_modified: raw.date_modified,
+            like_count: raw.like_count,
+            view_count: raw.view_count,
+            has_files: raw.has_files,
+            nsfw,
+            submitter: raw.submitter,
+            preview_media: raw.preview_media,
+            root_category: raw.root_category,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -147,12 +192,13 @@ pub struct GameBananaMetadata {
     pub per_page: u32,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct GameBananaApiResponse {
+/// Raw API response for deserialization
+#[derive(Debug, Clone, Deserialize)]
+struct GameBananaApiResponseRaw {
     #[serde(rename = "_aMetadata")]
-    pub metadata: GameBananaMetadata,
+    metadata: GameBananaMetadata,
     #[serde(rename = "_aRecords")]
-    pub records: Vec<GameBananaMod>,
+    records: Vec<GameBananaModRaw>,
 }
 
 // Response type we send to frontend
@@ -319,14 +365,20 @@ pub async fn fetch_submissions(
         )));
     }
 
-    let api_response: GameBananaApiResponse = response
+    let api_response: GameBananaApiResponseRaw = response
         .json()
         .await
         .map_err(|e| AppError::Settings(format!("Failed to parse response: {}", e)))?;
 
-    // Convert API response to our frontend format
+    // Convert raw records to clean format with computed nsfw field
+    let records: Vec<GameBananaMod> = api_response
+        .records
+        .into_iter()
+        .map(GameBananaMod::from)
+        .collect();
+
     Ok(GameBananaModsResponse {
-        records: api_response.records,
+        records,
         total_count: api_response.metadata.record_count,
         is_complete: api_response.metadata.is_complete,
         per_page: api_response.metadata.per_page,
