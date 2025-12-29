@@ -664,7 +664,7 @@ function HeroOverlay({
 
       {/* Floating Skin Selection Card - Center left */}
       <div
-        className="fixed top-1/2 left-8 z-20 w-[380px] max-h-[70vh] -translate-y-1/2 overflow-y-auto rounded-2xl border border-white/10 bg-black/60 backdrop-blur-xl shadow-2xl"
+        className="fixed top-1/2 left-8 z-20 w-[380px] max-h-[70vh] -translate-y-1/2 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 shadow-2xl"
         style={{
           opacity: visible ? 1 : 0,
           transition: visible ? 'opacity 400ms ease 150ms' : 'opacity 500ms ease',
@@ -812,6 +812,7 @@ function HeroGalleryCard({
       className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ${
         isActive ? 'z-10 scale-[1.04] shadow-2xl' : ''
       }`}
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
