@@ -331,7 +331,7 @@ export default function Locker() {
           <p>No hero categories found.</p>
         </div>
       ) : viewMode === 'gallery' ? (
-        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
+        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           {heroList.map((hero) => (
             <HeroGalleryCard
               key={hero.id}
@@ -803,7 +803,7 @@ function HeroGalleryCard({
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
-      <div className="relative aspect-[3/4] min-h-[18rem] sm:min-h-[20rem] lg:min-h-[24rem]">
+      <div className="relative aspect-[3/4]">
         {renderSrc ? (
           <img
             src={renderSrc}
@@ -830,20 +830,20 @@ function HeroGalleryCard({
             event.stopPropagation();
             onToggleFavorite();
           }}
-          className="absolute right-3 top-3 flex items-center justify-center rounded-full border border-yellow-400/60 bg-yellow-400/20 p-1.5 text-yellow-300 transition-colors"
+          className="absolute right-2 top-2 flex items-center justify-center rounded-full border border-yellow-400/60 bg-yellow-400/20 p-1 text-yellow-300 transition-colors"
           title="Unfavorite"
         >
-          <Star className="w-3.5 h-3.5 fill-current" />
+          <Star className="w-3 h-3 fill-current" />
         </button>
       )}
-      <div className="absolute bottom-0 left-0 right-0 p-4 flex flex-col items-end text-right">
+      <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex flex-col items-end text-right">
         {nameFailed ? (
-          <div className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
+          <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
         ) : (
           <img
             src={namePath}
             alt={hero.name}
-            className={`w-[65%] h-auto max-h-9 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-105 ${
+            className={`w-[70%] h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-105 ${
               isActive ? 'scale-110' : ''
             }`}
             loading="lazy"
@@ -852,7 +852,7 @@ function HeroGalleryCard({
           />
         )}
         {skinCount > 0 && (
-          <div className="mt-1.5 text-[11px] text-white/70">
+          <div className="mt-1 text-[10px] text-white/70">
             {skinCount} skin{skinCount !== 1 ? 's' : ''}
           </div>
         )}
