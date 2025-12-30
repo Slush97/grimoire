@@ -87,6 +87,7 @@ interface Mod {
     description?: string;
     thumbnailUrl?: string;
     gameBananaId?: number;
+    gameBananaFileId?: number;
     categoryId?: number;
     sourceSection?: string;
     nsfw?: boolean;

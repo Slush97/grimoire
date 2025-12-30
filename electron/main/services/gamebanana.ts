@@ -314,36 +314,51 @@ export async function fetchSubmissions(
         views: 'Generic_MostViewed',
     };
 
+    // Fields to request from GameBanana API (including NSFW flag)
+    const fields = '_idRow,_sName,_sProfileUrl,_tsDateAdded,_tsDateUpdated,_nLikeCount,_nViewCount,_bHasFiles,_bIsNsfw,_aSubmitter,_aPreviewMedia,_aRootCategory';
+
     // Use search endpoint when search query is provided
     if (search && search.trim()) {
-        url = `${GAMEBANANA_API_BASE}/Util/Search/Results?_sSearchString=${encodeURIComponent(search)}&_aFilters[Generic_Game]=${DEADLOCK_GAME_ID}&_nPerpage=${perPage}&_nPage=${page}`;
+        // Build search URL with properly encoded filter parameters
+        const params = new URLSearchParams();
+        params.set('_sSearchString', search);
+        params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
+        params.set('_nPerpage', String(perPage));
+        params.set('_nPage', String(page));
+        params.set('_csvProperties', fields);
 
         // Filter by section type
         if (model) {
-            url += `&_aFilters[itemtype]=${model}`;
+            params.set('_aFilters[itemtype]', model);
         }
 
         if (categoryId) {
-            url += `&_aFilters[Generic_Category]=${categoryId}`;
+            params.set('_aFilters[Generic_Category]', String(categoryId));
         }
 
         if (sort && sortMap[sort]) {
-            url += `&_sSort=${sortMap[sort]}`;
+            params.set('_sSort', sortMap[sort]);
         }
+
+        url = `${GAMEBANANA_API_BASE}/Util/Search/Results?${params.toString()}`;
     } else {
-        // Use Index endpoint for browsing without search
-        url = `${GAMEBANANA_API_BASE}/${model}/Index?_nPerpage=${perPage}&_aFilters[Generic_Game]=${DEADLOCK_GAME_ID}&_nPage=${page}`;
+        // Build browse URL with properly encoded filter parameters
+        const params = new URLSearchParams();
+        params.set('_nPerpage', String(perPage));
+        params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
+        params.set('_nPage', String(page));
+        params.set('_csvProperties', fields);
 
         if (categoryId) {
-            url += `&_aFilters[Generic_Category]=${categoryId}`;
+            params.set('_aFilters[Generic_Category]', String(categoryId));
         }
 
         // Sort options: new, updated, likes, views
-        if (sort && sort !== 'default') {
-            if (sortMap[sort]) {
-                url += `&_sSort=${sortMap[sort]}`;
-            }
+        if (sort && sort !== 'default' && sortMap[sort]) {
+            params.set('_sSort', sortMap[sort]);
         }
+
+        url = `${GAMEBANANA_API_BASE}/${model}/Index?${params.toString()}`;
     }
 
     console.log('[fetchSubmissions] URL:', url);
