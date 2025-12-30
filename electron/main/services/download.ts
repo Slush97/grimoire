@@ -183,7 +183,7 @@ export async function downloadMod(
         categoryName: details.category?.name,  // Also store category name for display
         thumbnailUrl,
         sourceSection: section,
-        nsfw: false,
+        nsfw: details.nsfw,  // Use actual NSFW flag from GameBanana
     };
 
     let installedVpks: string[] = [];

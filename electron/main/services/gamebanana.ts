@@ -84,6 +84,7 @@ export interface GameBananaModDetails {
     id: number;
     name: string;
     description?: string;
+    nsfw: boolean;
     category?: GameBananaCategory;
     files?: GameBananaFile[];
     previewMedia?: GameBananaPreviewMedia;
@@ -164,6 +165,7 @@ interface ModDetailsRaw {
     _idRow: number;
     _sName: string;
     _sText?: string;
+    _bIsNsfw?: boolean;
     _aFiles?: FileRaw[];
     _aPreviewMedia?: ModRaw['_aPreviewMedia'];
     _aCategory?: ModRaw['_aRootCategory'];
@@ -384,8 +386,8 @@ export async function fetchModDetails(
     modId: number,
     section = 'Mod'
 ): Promise<GameBananaModDetails> {
-    // Rust: /{model}/{id}?_csvProperties=_idRow,_sName,_sText,_aCategory,_aFiles,_aPreviewMedia
-    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_sName,_sText,_aCategory,_aFiles,_aPreviewMedia`;
+    // Fetch mod details with NSFW flag
+    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_sName,_sText,_bIsNsfw,_aCategory,_aFiles,_aPreviewMedia`;
     console.log('[fetchModDetails] URL:', url);
     const raw = await fetchJson<ModDetailsRaw>(url);
 
@@ -393,6 +395,7 @@ export async function fetchModDetails(
         id: raw._idRow,
         name: raw._sName,
         description: raw._sText,
+        nsfw: raw._bIsNsfw ?? false,
         category: raw._aCategory
             ? {
                 id: raw._aCategory._idRow,

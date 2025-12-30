@@ -24,6 +24,14 @@ export default function Installed() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
+  const [modToDelete, setModToDelete] = useState<{ id: string; name: string } | null>(null);
+
+  const handleDeleteConfirm = async () => {
+    if (modToDelete) {
+      await deleteMod(modToDelete.id);
+      setModToDelete(null);
+    }
+  };
 
   useEffect(() => {
     loadSettings();
@@ -195,7 +203,7 @@ export default function Installed() {
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 conflicts={conflictMap.get(mod.id) || []}
                 onToggle={() => toggleMod(mod.id)}
-                onDelete={() => deleteMod(mod.id)}
+                onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
               />
             ))}
           </div>
@@ -223,9 +231,35 @@ export default function Installed() {
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 conflicts={conflictMap.get(mod.id) || []}
                 onToggle={() => toggleMod(mod.id)}
-                onDelete={() => deleteMod(mod.id)}
+                onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
               />
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {modToDelete && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md mx-4">
+            <h3 className="text-lg font-semibold text-text-primary mb-2">Delete Mod?</h3>
+            <p className="text-text-secondary mb-4">
+              Are you sure you want to delete <span className="font-medium text-text-primary">{modToDelete.name}</span>? This action cannot be undone.
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={() => setModToDelete(null)}
+                className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteConfirm}
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

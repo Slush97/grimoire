@@ -90,7 +90,7 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadMods, mods: installedMods } = useAppStore();
+  const { settings, loadSettings, loadMods, mods: installedMods } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [mods, setMods] = useState<GameBananaMod[]>([]);
   const [loading, setLoading] = useState(false);
@@ -117,6 +117,11 @@ export default function Browse() {
   const [refreshKey, setRefreshKey] = useState(0);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+
+  // Load settings on mount (needed for hideNsfwPreviews)
+  useEffect(() => {
+    loadSettings();
+  }, [loadSettings]);
 
   // Check if local cache is available for search
   const [hasLocalCache, setHasLocalCache] = useState(false);
