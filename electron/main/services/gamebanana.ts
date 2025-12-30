@@ -321,46 +321,34 @@ export async function fetchSubmissions(
 
     // Use search endpoint when search query is provided
     if (search && search.trim()) {
-        // Build search URL with properly encoded filter parameters
-        const params = new URLSearchParams();
-        params.set('_sSearchString', search);
-        params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
-        params.set('_nPerpage', String(perPage));
-        params.set('_nPage', String(page));
-        params.set('_csvProperties', fields);
+        // Note: GameBanana API requires unencoded brackets in filter params
+        url = `${GAMEBANANA_API_BASE}/Util/Search/Results?_sSearchString=${encodeURIComponent(search)}&_aFilters[Generic_Game]=${DEADLOCK_GAME_ID}&_nPerpage=${perPage}&_nPage=${page}&_csvProperties=${encodeURIComponent(fields)}`;
 
         // Filter by section type
         if (model) {
-            params.set('_aFilters[itemtype]', model);
+            url += `&_aFilters[itemtype]=${model}`;
         }
 
         if (categoryId) {
-            params.set('_aFilters[Generic_Category]', String(categoryId));
+            url += `&_aFilters[Generic_Category]=${categoryId}`;
         }
 
         if (sort && sortMap[sort]) {
-            params.set('_sSort', sortMap[sort]);
+            url += `&_sSort=${sortMap[sort]}`;
         }
-
-        url = `${GAMEBANANA_API_BASE}/Util/Search/Results?${params.toString()}`;
     } else {
-        // Build browse URL with properly encoded filter parameters
-        const params = new URLSearchParams();
-        params.set('_nPerpage', String(perPage));
-        params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
-        params.set('_nPage', String(page));
-        params.set('_csvProperties', fields);
+        // Use Index endpoint for browsing without search
+        // Note: GameBanana API requires unencoded brackets in filter params
+        url = `${GAMEBANANA_API_BASE}/${model}/Index?_nPerpage=${perPage}&_aFilters[Generic_Game]=${DEADLOCK_GAME_ID}&_nPage=${page}&_csvProperties=${encodeURIComponent(fields)}`;
 
         if (categoryId) {
-            params.set('_aFilters[Generic_Category]', String(categoryId));
+            url += `&_aFilters[Generic_Category]=${categoryId}`;
         }
 
         // Sort options: new, updated, likes, views
         if (sort && sort !== 'default' && sortMap[sort]) {
-            params.set('_sSort', sortMap[sort]);
+            url += `&_sSort=${sortMap[sort]}`;
         }
-
-        url = `${GAMEBANANA_API_BASE}/${model}/Index?${params.toString()}`;
     }
 
     console.log('[fetchSubmissions] URL:', url);
