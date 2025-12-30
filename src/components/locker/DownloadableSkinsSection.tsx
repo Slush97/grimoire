@@ -88,13 +88,29 @@ export default function DownloadableSkinsSection({
       const loadMods = async () => {
         setLoading(true);
         setError(null);
+        setMods([]);
+        setHasLoaded(false);
+        const appendMods = (incoming: GameBananaMod[]) => {
+          if (incoming.length === 0) return;
+          setMods((prev) => {
+            const seen = new Set(prev.map((mod) => mod.id));
+            const next = [...prev];
+            for (const mod of incoming) {
+              if (installedModIds.has(mod.id)) continue;
+              if (seen.has(mod.id)) continue;
+              seen.add(mod.id);
+              next.push(mod);
+            }
+            return next;
+          });
+        };
         try {
-          const all: GameBananaMod[] = [];
-          if (useLocalCache) {
+          const fetchFromLocal = async () => {
             const limit = 100;
             let offset = 0;
             let totalCount = Number.POSITIVE_INFINITY;
             let page = 0;
+            let didAppend = false;
 
             while (offset < totalCount) {
               const result = await window.electronAPI.searchLocalMods({
@@ -105,36 +121,62 @@ export default function DownloadableSkinsSection({
                 offset,
               });
               totalCount = result.totalCount ?? totalCount;
-              all.push(...result.mods.map(mapCachedMod));
+              const mapped = result.mods.map(mapCachedMod);
+              if (active) {
+                appendMods(mapped);
+                if (!didAppend && mapped.length > 0) {
+                  setHasLoaded(true);
+                  didAppend = true;
+                }
+              }
               offset += result.limit;
               page += 1;
               if (result.mods.length === 0 || offset >= totalCount || page > 200) {
                 break;
               }
             }
-          } else {
+
+            return { totalCount, didAppend };
+          };
+
+          const fetchFromApi = async () => {
             const perPage = 50;
             let page = 1;
             let done = false;
             let totalCount = Number.POSITIVE_INFINITY;
+            let didAppend = false;
 
             while (!done) {
               const response = await browseMods(page, perPage, undefined, 'Mod', categoryId, 'popular');
-              all.push(...response.records);
+              if (active) {
+                appendMods(response.records);
+                if (!didAppend && response.records.length > 0) {
+                  setHasLoaded(true);
+                  didAppend = true;
+                }
+              }
               totalCount = response.totalCount ?? totalCount;
               page += 1;
               done =
                 response.isComplete ||
                 response.records.length === 0 ||
-                all.length >= totalCount ||
-                page > 100;
+                page > 100 ||
+                (page - 1) * perPage >= totalCount;
             }
+
+            return didAppend;
+          };
+
+          if (useLocalCache) {
+            const local = await fetchFromLocal();
+            if (!local.didAppend && local.totalCount === 0) {
+              await fetchFromApi();
+            }
+          } else {
+            await fetchFromApi();
           }
 
           if (!active) return;
-          // Filter out already installed mods
-          const available = all.filter((mod) => !installedModIds.has(mod.id));
-          setMods(available);
           setHasLoaded(true);
         } catch (err) {
           if (active) {
