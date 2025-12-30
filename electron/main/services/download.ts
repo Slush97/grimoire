@@ -1,7 +1,7 @@
 import { createWriteStream, unlinkSync, existsSync, readdirSync, renameSync } from 'fs';
 import { join, basename } from 'path';
 import { BrowserWindow } from 'electron';
-import { getAddonsPath } from './deadlock';
+import { getAddonsPath, getDisabledPath } from './deadlock';
 import { extractArchive, isArchive } from './extract';
 import { setModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
@@ -82,47 +82,55 @@ async function downloadFile(
  */
 function renameVpksToAvoidConflicts(
     deadlockPath: string,
-    extractedVpks: string[],
-    modName: string
+    targetPath: string,
+    extractedVpks: string[]
 ): string[] {
-    const addonsPath = getAddonsPath(deadlockPath);
-
     // Get used priorities from BOTH addons and disabled folders
     const usedPriorities = getUsedPriorities(deadlockPath);
     const renamedFiles: string[] = [];
+    const getNextAvailablePriority = () => {
+        let newPriority = 1;
+        while (usedPriorities.has(newPriority) && newPriority < 99) {
+            newPriority++;
+        }
+        if (newPriority >= 99 && usedPriorities.has(99)) {
+            throw new Error('No available priority slots (all 1-99 are used)');
+        }
+        return newPriority;
+    };
 
     for (const vpkPath of extractedVpks) {
         const fileName = basename(vpkPath);
-
         // Check if this VPK has a priority that conflicts
         const match = fileName.match(/^pak(\d{2})_/);
         if (match) {
             const currentPriority = parseInt(match[1], 10);
 
             if (usedPriorities.has(currentPriority)) {
-                // Find next available priority starting from 1
-                let newPriority = 1;
-                while (usedPriorities.has(newPriority) && newPriority < 99) {
-                    newPriority++;
-                }
+                const newPriority = getNextAvailablePriority();
+                const newFileName = `pak${String(newPriority).padStart(2, '0')}_dir.vpk`;
+                const newPath = join(targetPath, newFileName);
 
-                if (newPriority <= 99 && !usedPriorities.has(newPriority)) {
-                    // Rename to new priority
-                    const newFileName = fileName.replace(/^pak\d{2}_/, `pak${String(newPriority).padStart(2, '0')}_`);
-                    const newPath = join(addonsPath, newFileName);
-
-                    console.log(`[renameVpks] Renaming ${fileName} to ${newFileName} to avoid conflict`);
-                    renameSync(vpkPath, newPath);
-                    usedPriorities.add(newPriority);
-                    renamedFiles.push(newFileName);
-                    continue;
-                }
+                console.log(`[renameVpks] Renaming ${fileName} to ${newFileName} to avoid conflict`);
+                renameSync(vpkPath, newPath);
+                usedPriorities.add(newPriority);
+                renamedFiles.push(newFileName);
+                continue;
             }
 
             usedPriorities.add(currentPriority);
+            renamedFiles.push(fileName);
+            continue;
         }
 
-        renamedFiles.push(fileName);
+        const newPriority = getNextAvailablePriority();
+        const newFileName = `pak${String(newPriority).padStart(2, '0')}_dir.vpk`;
+        const newPath = join(targetPath, newFileName);
+
+        console.log(`[renameVpks] Renaming ${fileName} to ${newFileName} to add priority`);
+        renameSync(vpkPath, newPath);
+        usedPriorities.add(newPriority);
+        renamedFiles.push(newFileName);
     }
 
     return renamedFiles;
@@ -152,8 +160,9 @@ export async function downloadMod(
         throw new Error(`File ${fileId} not found in mod ${modId}`);
     }
 
-    const addonsPath = getAddonsPath(deadlockPath);
-    const downloadPath = join(addonsPath, fileName);
+    // Download to disabled folder by default so it doesn't auto-apply
+    const targetPath = getDisabledPath(deadlockPath);
+    const downloadPath = join(targetPath, fileName);
 
     console.log(`[downloadMod] Downloading to: ${downloadPath}`);
 
@@ -193,11 +202,21 @@ export async function downloadMod(
         console.log(`[downloadMod] Extracting archive...`);
         mainWindow?.webContents.send('download-extracting', { modId, fileId });
 
-        const extractedVpks = await extractArchive(downloadPath, addonsPath);
+        const extractedVpks = await extractArchive(downloadPath, targetPath);
         console.log(`[downloadMod] Extracted ${extractedVpks.length} VPK files:`, extractedVpks);
 
         // Rename VPKs to avoid conflicts
-        installedVpks = renameVpksToAvoidConflicts(deadlockPath, extractedVpks, details.name);
+        installedVpks = renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks);
+        // Keep only the first VPK from archives to match single-install behavior.
+        installedVpks.sort((a, b) => a.localeCompare(b));
+        const [primaryVpk, ...extraVpks] = installedVpks;
+        installedVpks = primaryVpk ? [primaryVpk] : [];
+        for (const extraVpk of extraVpks) {
+            const extraPath = join(targetPath, extraVpk);
+            if (existsSync(extraPath)) {
+                unlinkSync(extraPath);
+            }
+        }
 
         // Clean up archive
         if (existsSync(downloadPath)) {
@@ -205,7 +224,7 @@ export async function downloadMod(
         }
     } else if (downloadPath.endsWith('.vpk')) {
         // Direct VPK download
-        installedVpks = [fileName];
+        installedVpks = renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath]);
     }
 
     // Save metadata for each installed VPK

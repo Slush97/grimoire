@@ -21,7 +21,7 @@ import type {
   GameBananaSection,
   GameBananaCategoryNode,
 } from '../types/gamebanana';
-import { getModThumbnail, getSoundPreviewUrl } from '../types/gamebanana';
+import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile } from '../types/gamebanana';
 import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 
@@ -34,7 +34,7 @@ const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
 const SOUL_CONTAINERS_SEARCH_ID = -999;
 
 // Categories to hide from the dropdown (covered by Soul Containers search or not useful)
-const HIDDEN_CATEGORIES = new Set(['soul container', 'model replacement']);
+const HIDDEN_CATEGORIES = new Set(['soul container', 'model replacement', 'skins']);
 
 type CategoryOption = {
   id: number;
@@ -481,7 +481,7 @@ export default function Browse() {
         return;
       }
 
-      const file = details.files[0];
+      const file = getPrimaryFile(details.files);
       setDownloading({ modId: mod.id, fileId: file.id });
       setDownloadProgress({ downloaded: 0, total: 0 });
       setExtracting(false);
@@ -799,9 +799,9 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
   const isList = viewMode === 'list';
 
   return (
-    <button
+    <div
       onClick={onClick}
-      className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left ${isList ? 'flex items-center gap-4 p-3' : ''
+      className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer ${isList ? 'flex items-center gap-4 p-3' : ''
         }`}
     >
       {/* Thumbnail */}
@@ -872,7 +872,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
           />
         )}
       </div>
-    </button>
+    </div>
   );
 }
 

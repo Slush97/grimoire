@@ -72,9 +72,8 @@ export default function HeroSkinsPanel({
               <button
                 key={preset.fileName}
                 onClick={() => onApplyMinaPreset(preset.fileName)}
-                className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${
-                  preset.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
-                }`}
+                className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${preset.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
+                  }`}
               >
                 {preset.label}
               </button>
@@ -275,9 +274,8 @@ export default function HeroSkinsPanel({
           <button
             key={mod.id}
             onClick={() => onSelect(mod.id)}
-            className={`w-full flex items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors ${
-              mod.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
-            }`}
+            className={`w-full flex items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors ${mod.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
+              }`}
             title={mod.enabled ? 'Active skin' : 'Set active'}
           >
             <div className="w-10 h-10 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
@@ -312,7 +310,7 @@ export default function HeroSkinsPanel({
       {categoryId && onRefreshMods && (
         <DownloadableSkinsSection
           categoryId={categoryId}
-          installedModIds={new Set(mods.map((m) => m.gameBananaId).filter((id): id is number => id !== undefined))}
+          installedModIds={mods.map((m) => m.gameBananaId).filter((id): id is number => id !== undefined)}
           hideNsfwPreviews={hideNsfwPreviews}
           onDownloadComplete={onRefreshMods}
         />

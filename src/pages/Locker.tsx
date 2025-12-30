@@ -798,11 +798,10 @@ function HeroGalleryCard({
   };
 
   return (
-    <button
-      type="button"
+    <div
       onClick={handleClick}
       ref={cardRef}
-      className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ${isActive ? 'z-10 scale-[1.04] shadow-2xl' : ''
+      className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer ${isActive ? 'z-10 scale-[1.04] shadow-2xl' : ''
         }`}
       style={{ contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
     >
@@ -860,7 +859,7 @@ function HeroGalleryCard({
           </div>
         )}
       </div>
-    </button>
+    </div>
   );
 }
 

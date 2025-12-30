@@ -1,16 +1,45 @@
-import { useState, useEffect, useCallback } from 'react';
-import { ChevronDown, Download, Loader2 } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import { ChevronDown, Download, Loader2, RefreshCw } from 'lucide-react';
 import { browseMods, getModDetails, downloadMod } from '../../lib/api';
-import { getModThumbnail } from '../../types/gamebanana';
+import { getModThumbnail, getPrimaryFile } from '../../types/gamebanana';
 import type { CachedMod } from '../../types/electron';
 import type { GameBananaMod } from '../../types/gamebanana';
 import ModThumbnail from '../ModThumbnail';
 
 interface DownloadableSkinsSectionProps {
   categoryId: number;
-  installedModIds: Set<number>;
+  installedModIds: number[];
   hideNsfwPreviews: boolean;
   onDownloadComplete: () => void;
+}
+
+type LoadState = 'idle' | 'loading' | 'loaded' | 'error';
+
+function mapCachedMod(mod: CachedMod): GameBananaMod {
+  const thumbnailUrl = mod.thumbnailUrl ?? undefined;
+  const lastSlash = thumbnailUrl ? thumbnailUrl.lastIndexOf('/') : -1;
+  const baseUrl = lastSlash > 0 ? thumbnailUrl?.slice(0, lastSlash) : undefined;
+  const file = lastSlash > 0 ? thumbnailUrl?.slice(lastSlash + 1) : undefined;
+
+  return {
+    id: mod.id,
+    name: mod.name,
+    profileUrl: mod.profileUrl,
+    dateAdded: mod.dateAdded,
+    dateModified: mod.dateModified,
+    hasFiles: mod.hasFiles,
+    likeCount: mod.likeCount,
+    viewCount: mod.viewCount,
+    nsfw: mod.isNsfw,
+    rootCategory: mod.categoryId ? { id: mod.categoryId, name: mod.categoryName || '' } : undefined,
+    submitter: mod.submitterName
+      ? { id: mod.submitterId || 0, name: mod.submitterName }
+      : undefined,
+    previewMedia:
+      baseUrl && file
+        ? { images: [{ baseUrl, file, file530: file }] }
+        : undefined,
+  };
 }
 
 export default function DownloadableSkinsSection({
@@ -21,179 +50,122 @@ export default function DownloadableSkinsSection({
 }: DownloadableSkinsSectionProps) {
   const [expanded, setExpanded] = useState(false);
   const [mods, setMods] = useState<GameBananaMod[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [loadState, setLoadState] = useState<LoadState>('idle');
   const [error, setError] = useState<string | null>(null);
   const [downloading, setDownloading] = useState<{ modId: number; fileId: number } | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [extracting, setExtracting] = useState(false);
-  const [hasLoaded, setHasLoaded] = useState(false);
-  const [useLocalCache, setUseLocalCache] = useState<boolean | null>(null);
 
+
+  // Track categoryId to reset on change
+  const prevCategoryRef = useRef(categoryId);
+
+  // Reset when category changes
   useEffect(() => {
-    let active = true;
-    const checkLocalCache = async () => {
-      try {
-        const count = await window.electronAPI.getLocalModCount('Mod');
-        if (active) {
-          setUseLocalCache(count > 0);
-        }
-      } catch {
-        if (active) {
-          setUseLocalCache(false);
+    if (prevCategoryRef.current !== categoryId) {
+      prevCategoryRef.current = categoryId;
+      setExpanded(false);
+      setMods([]);
+      setLoadState('idle');
+      setError(null);
+
+    }
+  }, [categoryId]);
+
+  // Filter out installed mods from display (use Set internally for O(1) lookup)
+  const installedSet = new Set(installedModIds);
+  const availableMods = mods.filter((mod) => !installedSet.has(mod.id));
+
+  const loadMods = useCallback(async () => {
+    setLoadState('loading');
+    setError(null);
+    setMods([]);
+
+    const seenIds = new Set<number>();
+    const collectedMods: GameBananaMod[] = [];
+
+    const addMods = (incoming: GameBananaMod[]) => {
+      for (const mod of incoming) {
+        if (!seenIds.has(mod.id)) {
+          seenIds.add(mod.id);
+          collectedMods.push(mod);
         }
       }
     };
-    checkLocalCache();
-    return () => {
-      active = false;
-    };
-  }, []);
 
-  const mapCachedMod = useCallback(
-    (mod: CachedMod): GameBananaMod => {
-      const thumbnailUrl = mod.thumbnailUrl ?? undefined;
-      const lastSlash = thumbnailUrl ? thumbnailUrl.lastIndexOf('/') : -1;
-      const baseUrl = lastSlash > 0 ? thumbnailUrl?.slice(0, lastSlash) : undefined;
-      const file = lastSlash > 0 ? thumbnailUrl?.slice(lastSlash + 1) : undefined;
+    try {
+      // Check if we should use local cache
+      let useLocalCache = false;
+      try {
+        const count = await window.electronAPI.getLocalModCount('Mod');
+        useLocalCache = count > 0;
+      } catch {
+        // Fall back to API
+      }
 
-      return {
-        id: mod.id,
-        name: mod.name,
-        profileUrl: mod.profileUrl,
-        dateAdded: mod.dateAdded,
-        dateModified: mod.dateModified,
-        hasFiles: mod.hasFiles,
-        likeCount: mod.likeCount,
-        viewCount: mod.viewCount,
-        nsfw: mod.isNsfw,
-        rootCategory: mod.categoryId ? { id: mod.categoryId, name: mod.categoryName || '' } : undefined,
-        submitter: mod.submitterName
-          ? { id: mod.submitterId || 0, name: mod.submitterName }
-          : undefined,
-        previewMedia:
-          baseUrl && file
-            ? {
-                images: [{ baseUrl, file, file530: file }],
-              }
-            : undefined,
-      };
-    },
-    []
-  );
+      if (useLocalCache) {
+        // Fetch from local cache
+        const limit = 100;
+        let offset = 0;
+        let totalCount = Infinity;
+        let pages = 0;
 
-  // Load mods when first expanded
-  useEffect(() => {
-    if (expanded && !hasLoaded && !loading && useLocalCache !== null) {
-      let active = true;
-      const loadMods = async () => {
-        setLoading(true);
-        setError(null);
-        setMods([]);
-        setHasLoaded(false);
-        const appendMods = (incoming: GameBananaMod[]) => {
-          if (incoming.length === 0) return;
-          setMods((prev) => {
-            const seen = new Set(prev.map((mod) => mod.id));
-            const next = [...prev];
-            for (const mod of incoming) {
-              if (installedModIds.has(mod.id)) continue;
-              if (seen.has(mod.id)) continue;
-              seen.add(mod.id);
-              next.push(mod);
-            }
-            return next;
+        while (offset < totalCount && pages < 200) {
+          const result = await window.electronAPI.searchLocalMods({
+            section: 'Mod',
+            categoryId,
+            sortBy: 'likes',
+            limit,
+            offset,
           });
-        };
-        try {
-          const fetchFromLocal = async () => {
-            const limit = 100;
-            let offset = 0;
-            let totalCount = Number.POSITIVE_INFINITY;
-            let page = 0;
-            let didAppend = false;
 
-            while (offset < totalCount) {
-              const result = await window.electronAPI.searchLocalMods({
-                section: 'Mod',
-                categoryId,
-                sortBy: 'likes',
-                limit,
-                offset,
-              });
-              totalCount = result.totalCount ?? totalCount;
-              const mapped = result.mods.map(mapCachedMod);
-              if (active) {
-                appendMods(mapped);
-                if (!didAppend && mapped.length > 0) {
-                  setHasLoaded(true);
-                  didAppend = true;
-                }
-              }
-              offset += result.limit;
-              page += 1;
-              if (result.mods.length === 0 || offset >= totalCount || page > 200) {
-                break;
-              }
-            }
+          totalCount = result.totalCount ?? Infinity;
+          addMods(result.mods.map(mapCachedMod));
 
-            return { totalCount, didAppend };
-          };
+          offset += limit;
+          pages++;
 
-          const fetchFromApi = async () => {
-            const perPage = 50;
-            let page = 1;
-            let done = false;
-            let totalCount = Number.POSITIVE_INFINITY;
-            let didAppend = false;
-
-            while (!done) {
-              const response = await browseMods(page, perPage, undefined, 'Mod', categoryId, 'popular');
-              if (active) {
-                appendMods(response.records);
-                if (!didAppend && response.records.length > 0) {
-                  setHasLoaded(true);
-                  didAppend = true;
-                }
-              }
-              totalCount = response.totalCount ?? totalCount;
-              page += 1;
-              done =
-                response.isComplete ||
-                response.records.length === 0 ||
-                page > 100 ||
-                (page - 1) * perPage >= totalCount;
-            }
-
-            return didAppend;
-          };
-
-          if (useLocalCache) {
-            const local = await fetchFromLocal();
-            if (!local.didAppend && local.totalCount === 0) {
-              await fetchFromApi();
-            }
-          } else {
-            await fetchFromApi();
-          }
-
-          if (!active) return;
-          setHasLoaded(true);
-        } catch (err) {
-          if (active) {
-            setError(String(err));
-          }
-        } finally {
-          if (active) {
-            setLoading(false);
-          }
+          if (result.mods.length === 0) break;
         }
-      };
-      loadMods();
-      return () => {
-        active = false;
-      };
+
+        // If local cache returned nothing, fall back to API
+        if (collectedMods.length === 0) {
+          await fetchFromApi();
+        }
+      } else {
+        await fetchFromApi();
+      }
+
+      async function fetchFromApi() {
+        const perPage = 50;
+        let page = 1;
+        let totalCount = Infinity;
+
+        while (page <= 100 && (page - 1) * perPage < totalCount) {
+          const response = await browseMods(page, perPage, undefined, 'Mod', categoryId, 'popular');
+          totalCount = response.totalCount ?? Infinity;
+          addMods(response.records);
+
+          if (response.isComplete || response.records.length === 0) break;
+          page++;
+        }
+      }
+
+      setMods(collectedMods);
+      setLoadState('loaded');
+    } catch (err) {
+      console.error('Failed to load mods:', err);
+      setError(err instanceof Error ? err.message : String(err));
+      setLoadState('error');
     }
-  }, [expanded, hasLoaded, loading, categoryId, installedModIds, useLocalCache, mapCachedMod]);
+  }, [categoryId]);
+
+  // Load when first expanded
+  useEffect(() => {
+    if (expanded && loadState === 'idle') {
+      loadMods();
+    }
+  }, [expanded, loadState, loadMods]);
 
   // Download event listeners
   useEffect(() => {
@@ -212,7 +184,6 @@ export default function DownloadableSkinsSection({
 
     const completeUnsub = window.electronAPI.onDownloadComplete((data) => {
       if (downloading && data.modId === downloading.modId && data.fileId === downloading.fileId) {
-        // Remove from available list
         setMods((prev) => prev.filter((m) => m.id !== downloading.modId));
         setDownloading(null);
         setDownloadProgress(null);
@@ -228,36 +199,62 @@ export default function DownloadableSkinsSection({
     };
   }, [downloading, onDownloadComplete]);
 
-  const handleDownload = useCallback(
+  const initiateDownload = useCallback(
     async (mod: GameBananaMod) => {
       if (downloading) return;
 
       try {
         setError(null);
+        // Set a temp loading state for this mod if needed, but for now we rely on the button being disabled
+        // actually we can't easily show loading on the specific button during fetch without new state
+        // but it's usually fast.
+
+        console.log('[initiateDownload] Fetching details for mod:', mod.id);
         const details = await getModDetails(mod.id, 'Mod');
+        console.log('[initiateDownload] Files found:', details.files?.length);
+        
         if (!details.files || details.files.length === 0) {
           setError('No downloadable files');
           return;
         }
 
-        const file = details.files[0];
-        setDownloading({ modId: mod.id, fileId: file.id });
+        const file = getPrimaryFile(details.files);
+        console.log('[initiateDownload] Downloading primary file:', file.id);
+        startDownload(mod.id, file);
+      } catch (err) {
+        console.error('[initiateDownload] Error:', err);
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [downloading]
+  );
+
+  const startDownload = useCallback(
+    async (modId: number, file: { id: number; fileName: string }) => {
+      try {
+        setDownloading({ modId, fileId: file.id });
         setDownloadProgress(0);
         setExtracting(false);
 
-        await downloadMod(mod.id, file.id, file.fileName, 'Mod', categoryId);
+        await downloadMod(modId, file.id, file.fileName, 'Mod', categoryId);
       } catch (err) {
-        setError(String(err));
+        setError(err instanceof Error ? err.message : String(err));
         setDownloading(null);
         setDownloadProgress(null);
         setExtracting(false);
       }
     },
-    [downloading, categoryId]
+    [categoryId]
   );
 
+  const handleRetry = () => {
+    setLoadState('idle');
+    setError(null);
+    loadMods();
+  };
+
   return (
-    <div className="border-t border-border pt-3 mt-3">
+    <div className="border-t border-border pt-3 mt-3 relative">
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
@@ -271,23 +268,35 @@ export default function DownloadableSkinsSection({
 
       {expanded && (
         <div className="mt-3 space-y-2">
-          {loading && (
+          {loadState === 'loading' && (
             <div className="flex items-center justify-center py-4">
               <Loader2 className="w-5 h-5 animate-spin text-accent" />
             </div>
           )}
 
-          {error && <div className="text-xs text-red-400">{error}</div>}
+          {loadState === 'error' && (
+            <div className="flex items-center justify-between text-xs text-red-400">
+              <span>{error || 'Failed to load'}</span>
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="flex items-center gap-1 px-2 py-1 hover:bg-bg-tertiary rounded transition-colors"
+              >
+                <RefreshCw className="w-3 h-3" />
+                Retry
+              </button>
+            </div>
+          )}
 
-          {!loading && !error && mods.length === 0 && hasLoaded && (
+          {loadState === 'loaded' && availableMods.length === 0 && (
             <div className="text-xs text-text-secondary text-center py-2">
               No additional skins available
             </div>
           )}
 
-          {!loading && mods.length > 0 && (
+          {loadState === 'loaded' && availableMods.length > 0 && (
             <div className="grid grid-cols-2 gap-2">
-              {mods.map((mod) => {
+              {availableMods.map((mod) => {
                 const isDownloading = downloading?.modId === mod.id;
                 return (
                   <div
@@ -308,7 +317,7 @@ export default function DownloadableSkinsSection({
                     </div>
                     <button
                       type="button"
-                      onClick={() => handleDownload(mod)}
+                      onClick={() => initiateDownload(mod)}
                       disabled={downloading !== null}
                       className="flex items-center justify-center gap-1 px-2 py-1 text-xs bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded transition-colors"
                     >

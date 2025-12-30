@@ -97,6 +97,16 @@ export function getSoundPreviewUrl(mod: GameBananaMod): string | undefined {
   return mod.previewMedia?.metadata?.audioUrl;
 }
 
+export function getPrimaryFile(files: GameBananaFile[]): GameBananaFile {
+  let primary = files[0];
+  for (const file of files) {
+    if (file.downloadCount > primary.downloadCount) {
+      primary = file;
+    }
+  }
+  return primary;
+}
+
 export function formatDate(timestamp: number): string {
   return new Date(timestamp * 1000).toLocaleDateString();
 }

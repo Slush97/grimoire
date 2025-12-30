@@ -31,7 +31,10 @@ export interface Mod {
  * Parse VPK filename to extract priority (pak##_dir.vpk format)
  */
 function parseVpkPriority(filename: string): number | null {
-    if (!filename.startsWith('pak') || !filename.endsWith('_dir.vpk')) {
+    if (
+        !filename.startsWith('pak') ||
+        (!filename.endsWith('_dir.vpk') && !filename.endsWith('.vpk'))
+    ) {
         return null;
     }
     const numberPart = filename.slice(3, 5);

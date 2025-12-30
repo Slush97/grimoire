@@ -307,6 +307,8 @@ export default function LockerHero() {
             <HeroSkinsPanel
               mods={list}
               onSelect={setActiveSkin}
+              categoryId={hero.id}
+              onRefreshMods={loadMods}
               minaPresets={hero.name === 'Mina' ? minaPresets : []}
               activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
               minaTextures={hero.name === 'Mina' ? minaTextures : []}
