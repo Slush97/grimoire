@@ -229,7 +229,7 @@ function mapMod(raw: ModRaw): GameBananaMod {
         likeCount: raw._nLikeCount,
         viewCount: raw._nViewCount,
         hasFiles: raw._bHasFiles,
-        nsfw: raw._bIsNsfw,
+        nsfw: raw._bIsNsfw ?? false,
         submitter: raw._aSubmitter
             ? {
                 id: raw._aSubmitter._idRow,
@@ -321,34 +321,39 @@ export async function fetchSubmissions(
 
     // Use search endpoint when search query is provided
     if (search && search.trim()) {
-        // Note: GameBanana API requires unencoded brackets in filter params
-        url = `${GAMEBANANA_API_BASE}/Util/Search/Results?_sSearchString=${encodeURIComponent(search)}&_aFilters[Generic_Game]=${DEADLOCK_GAME_ID}&_nPerpage=${perPage}&_nPage=${page}&_csvProperties=${encodeURIComponent(fields)}`;
-
-        // Filter by section type
-        if (model) {
-            url += `&_aFilters[itemtype]=${model}`;
-        }
+        const params = new URLSearchParams();
+        params.set('_sSearchString', search);
+        params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
+        params.set('_aFilters[itemtype]', model);
+        params.set('_nPerpage', String(perPage));
+        params.set('_nPage', String(page));
+        params.set('_csvProperties', fields);
 
         if (categoryId) {
-            url += `&_aFilters[Generic_Category]=${categoryId}`;
+            params.set('_aFilters[Generic_Category]', String(categoryId));
         }
 
         if (sort && sortMap[sort]) {
-            url += `&_sSort=${sortMap[sort]}`;
+            params.set('_sSort', sortMap[sort]);
         }
+
+        url = `${GAMEBANANA_API_BASE}/Util/Search/Results?${params.toString()}`;
     } else {
-        // Use Index endpoint for browsing without search
-        // Note: GameBanana API requires unencoded brackets in filter params
-        url = `${GAMEBANANA_API_BASE}/${model}/Index?_nPerpage=${perPage}&_aFilters[Generic_Game]=${DEADLOCK_GAME_ID}&_nPage=${page}&_csvProperties=${encodeURIComponent(fields)}`;
+        const params = new URLSearchParams();
+        params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
+        params.set('_nPerpage', String(perPage));
+        params.set('_nPage', String(page));
+        params.set('_csvProperties', fields);
 
         if (categoryId) {
-            url += `&_aFilters[Generic_Category]=${categoryId}`;
+            params.set('_aFilters[Generic_Category]', String(categoryId));
         }
 
-        // Sort options: new, updated, likes, views
         if (sort && sort !== 'default' && sortMap[sort]) {
-            url += `&_sSort=${sortMap[sort]}`;
+            params.set('_sSort', sortMap[sort]);
         }
+
+        url = `${GAMEBANANA_API_BASE}/${model}/Index?${params.toString()}`;
     }
 
     console.log('[fetchSubmissions] URL:', url);

@@ -772,6 +772,7 @@ export default function Browse() {
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
           extracting={extracting}
           progress={downloadProgress}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
           onClose={() => setSelectedMod(null)}
           onDownload={handleDownload}
         />
@@ -882,6 +883,7 @@ interface ModDetailsModalProps {
   downloadingFileId: number | null;
   extracting: boolean;
   progress: { downloaded: number; total: number } | null;
+  hideNsfwPreviews: boolean;
   onClose: () => void;
   onDownload: (fileId: number, fileName: string) => void;
 }
@@ -893,6 +895,7 @@ function ModDetailsModal({
   downloadingFileId,
   extracting,
   progress,
+  hideNsfwPreviews,
   onClose,
   onDownload,
 }: ModDetailsModalProps) {
@@ -926,11 +929,15 @@ function ModDetailsModal({
         <div className="p-4 space-y-4">
           {/* Preview */}
           {thumbnailUrl && (
-            <img
-              src={thumbnailUrl}
-              alt={mod.name}
-              className="w-full rounded-lg object-cover max-h-64"
-            />
+            <div className="w-full rounded-lg overflow-hidden max-h-64">
+              <ModThumbnail
+                src={thumbnailUrl}
+                alt={mod.name}
+                nsfw={mod.nsfw}
+                hideNsfw={hideNsfwPreviews}
+                className="w-full h-full max-h-64 object-cover"
+              />
+            </div>
           )}
 
           {/* Description */}
