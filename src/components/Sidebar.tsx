@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Package,
@@ -7,17 +8,37 @@ import {
   Layers,
   Settings,
 } from 'lucide-react';
-
-const navItems = [
-  { to: '/', icon: Package, label: 'Installed' },
-  { to: '/browse', icon: Search, label: 'Browse' },
-  { to: '/locker', icon: Shield, label: 'Locker' },
-  { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts' },
-  { to: '/profiles', icon: Layers, label: 'Profiles' },
-  { to: '/settings', icon: Settings, label: 'Settings' },
-];
+import { getConflicts } from '../lib/api';
 
 export default function Sidebar() {
+  const [conflictCount, setConflictCount] = useState(0);
+
+  useEffect(() => {
+    const loadConflicts = async () => {
+      try {
+        const conflicts = await getConflicts();
+        setConflictCount(conflicts.length);
+      } catch {
+        setConflictCount(0);
+      }
+    };
+
+    loadConflicts();
+
+    // Refresh conflict count every 10 seconds
+    const interval = setInterval(loadConflicts, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const navItems = [
+    { to: '/', icon: Package, label: 'Installed' },
+    { to: '/browse', icon: Search, label: 'Browse' },
+    { to: '/locker', icon: Shield, label: 'Locker' },
+    { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', badge: conflictCount },
+    { to: '/profiles', icon: Layers, label: 'Profiles' },
+    { to: '/settings', icon: Settings, label: 'Settings' },
+  ];
+
   return (
     <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col">
       {/* Logo */}
@@ -44,20 +65,24 @@ export default function Sidebar() {
       {/* Navigation */}
       <nav className="flex-1 p-2">
         <ul className="space-y-1">
-          {navItems.map(({ to, icon: Icon, label }) => (
+          {navItems.map(({ to, icon: Icon, label, badge }) => (
             <li key={to}>
               <NavLink
                 to={to}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
-                    isActive
-                      ? 'bg-accent text-white'
-                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+                  `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${isActive
+                    ? 'bg-accent text-white'
+                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
                   }`
                 }
               >
                 <Icon className="w-5 h-5" />
-                <span>{label}</span>
+                <span className="flex-1">{label}</span>
+                {badge !== undefined && badge > 0 && (
+                  <span className="px-1.5 py-0.5 text-xs font-medium bg-yellow-500 text-black rounded-full min-w-[20px] text-center">
+                    {badge}
+                  </span>
+                )}
               </NavLink>
             </li>
           ))}

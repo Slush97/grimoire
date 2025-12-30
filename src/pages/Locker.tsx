@@ -142,12 +142,12 @@ export default function Locker() {
   // Close hero overlay
   const closeHeroOverlay = useCallback(() => {
     setOverlayVisible(false);
-    // Unmount after fade completes (500ms)
+    // Unmount after fade completes (600ms + small buffer)
     setTimeout(() => {
       setSelectedHero(null);
       setActiveHeroId(null);
       setCardRect(null);
-    }, 550);
+    }, 700);
   }, []);
 
   // Escape key to close overlay
@@ -303,22 +303,20 @@ export default function Locker() {
             <button
               type="button"
               onClick={() => setViewMode('gallery')}
-              className={`px-3 rounded-full transition-colors ${
-                viewMode === 'gallery'
-                  ? 'bg-accent text-white'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
+              className={`px-3 rounded-full transition-colors ${viewMode === 'gallery'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary'
+                }`}
             >
               Gallery
             </button>
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`px-3 rounded-full transition-colors ${
-                viewMode === 'list'
-                  ? 'bg-accent text-white'
-                  : 'text-text-secondary hover:text-text-primary'
-              }`}
+              className={`px-3 rounded-full transition-colors ${viewMode === 'list'
+                ? 'bg-accent text-white'
+                : 'text-text-secondary hover:text-text-primary'
+                }`}
             >
               List
             </button>
@@ -332,7 +330,7 @@ export default function Locker() {
           <p>No hero categories found.</p>
         </div>
       ) : viewMode === 'gallery' ? (
-        <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
           {heroList.map((hero) => (
             <HeroGalleryCard
               key={hero.id}
@@ -536,55 +534,39 @@ function HeroOverlay({
     setRenderFallbackStep(3);
   };
 
-  // Opening: expand from card. Closing: just fade out.
+  // Opening: expand from card. Closing: simple fade out (no shrink).
   const getImageStyle = (): React.CSSProperties => {
     if (visible) {
       // Expanded state
       return {
         opacity: 1,
         transform: 'translate(0, 0) scale(1)',
-        transition: 'transform 500ms cubic-bezier(0.32, 0.72, 0, 1), opacity 400ms ease',
+        transition: 'transform 600ms cubic-bezier(0.16, 1, 0.3, 1), opacity 500ms ease',
       };
     }
 
-    // Closing: just fade, no transform back
-    if (cardRect) {
-      // Starting position (for opening animation)
-      const scaleX = cardRect.width / window.innerWidth;
-      const scaleY = cardRect.height / window.innerHeight;
-      const scale = Math.min(scaleX, scaleY);
-      const cardCenterX = cardRect.left + cardRect.width / 2;
-      const cardCenterY = cardRect.top + cardRect.height / 2;
-      const translateX = cardCenterX - window.innerWidth / 2;
-      const translateY = cardCenterY - window.innerHeight / 2;
-
-      return {
-        opacity: 0,
-        transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`,
-        transition: 'opacity 500ms ease', // Smooth fade on close
-      };
-    }
-
-    return { opacity: 0, transition: 'opacity 500ms ease' };
+    // Closing: just fade out smoothly, no transform back to card
+    return {
+      opacity: 0,
+      transform: 'translate(0, 0) scale(1)', // Keep in place
+      transition: 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)',
+    };
   };
 
   return (
     <div
-      className={`fixed inset-0 z-50 ${
-        visible ? 'pointer-events-auto' : 'pointer-events-none'
-      }`}
+      className={`fixed inset-0 z-50 ${visible ? 'pointer-events-auto' : 'pointer-events-none'
+        }`}
     >
       {/* Background */}
       <div
-        className={`absolute inset-0 bg-bg-primary will-change-opacity ${
-          visible ? 'opacity-100' : 'opacity-0'
-        }`}
-        style={{ transition: 'opacity 400ms cubic-bezier(0.32, 0.72, 0, 1)' }}
+        className={`absolute inset-0 bg-bg-primary ${visible ? 'opacity-100' : 'opacity-0'}`}
+        style={{ transition: 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)' }}
       />
 
       {/* Hero Portrait - Expand on open, fade on close */}
       <div
-        className="fixed inset-0 z-10 overflow-hidden"
+        className="fixed inset-0 z-10 overflow-hidden will-change-transform will-change-[opacity]"
         style={getImageStyle()}
       >
         {renderSrc ? (
@@ -603,29 +585,29 @@ function HeroOverlay({
 
       {/* Hero Name - Fade in/out */}
       <div
-        className="fixed top-8 left-8 z-20"
+        className="fixed z-20"
         style={{
+          top: 'clamp(1.5rem, 4vh, 3rem)',
+          left: 'clamp(1.5rem, 4vw, 3rem)',
           opacity: visible ? 1 : 0,
-          transition: visible ? 'opacity 400ms ease 200ms' : 'opacity 500ms ease',
+          transition: visible ? 'opacity 500ms ease 200ms' : 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
         {nameFailed ? (
-          <h1 className="text-4xl font-bold text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]">
+          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-bold text-white drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]">
             {hero.name}
           </h1>
         ) : (
           <img
             src={getHeroNamePath(hero.name)}
             alt={hero.name}
-            className="h-12 w-auto object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]"
+            className="h-10 sm:h-14 lg:h-16 w-auto object-contain drop-shadow-[0_4px_24px_rgba(0,0,0,0.8)]"
             onError={() => setNameFailed(true)}
           />
         )}
         <div
-          className={`mt-2 text-sm text-white/70 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] transition-opacity duration-300 ${
-            visible ? 'opacity-100' : 'opacity-0'
-          }`}
-          style={{ transitionDelay: visible ? '300ms' : '0ms' }}
+          className={`mt-2 text-sm sm:text-base lg:text-lg text-white/70 drop-shadow-[0_2px_8px_rgba(0,0,0,0.8)] ${visible ? 'opacity-100' : 'opacity-0'}`}
+          style={{ transition: 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)', transitionDelay: visible ? '300ms' : '0ms' }}
         >
           {mods.length > 0 ? `${mods.length} skin${mods.length !== 1 ? 's' : ''}` : 'No skins installed'}
         </div>
@@ -635,43 +617,49 @@ function HeroOverlay({
       <button
         type="button"
         onClick={onClose}
-        className="fixed top-8 right-8 z-20 p-3 rounded-full bg-black/40 text-white/80 hover:text-white hover:bg-black/60"
+        className="fixed z-20 p-3 sm:p-4 rounded-full bg-black/40 text-white/80 hover:text-white hover:bg-black/60 backdrop-blur-sm"
         style={{
+          top: 'clamp(1.5rem, 4vh, 3rem)',
+          right: 'clamp(1.5rem, 4vw, 3rem)',
           opacity: visible ? 1 : 0,
-          transition: visible ? 'opacity 400ms ease 250ms' : 'opacity 500ms ease',
+          transition: visible ? 'opacity 500ms ease 250ms' : 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
-        <X className="w-6 h-6" />
+        <X className="w-5 h-5 sm:w-6 sm:h-6" />
       </button>
 
       {/* Favorite button */}
       <button
         type="button"
         onClick={onToggleFavorite}
-        className={`fixed top-8 right-24 z-20 flex items-center gap-2 rounded-full border px-4 py-2 text-sm font-semibold ${
-          isFavorite
-            ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
-            : 'border-white/30 bg-black/40 text-white/80 hover:text-white hover:bg-black/60'
-        }`}
+        className={`fixed z-20 flex items-center gap-2 rounded-full border px-3 sm:px-4 py-2 text-sm sm:text-base font-semibold backdrop-blur-sm ${isFavorite
+          ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
+          : 'border-white/30 bg-black/40 text-white/80 hover:text-white hover:bg-black/60'
+          }`}
         style={{
+          top: 'clamp(1.5rem, 4vh, 3rem)',
+          right: 'clamp(5rem, 10vw, 7rem)',
           opacity: visible ? 1 : 0,
-          transition: visible ? 'opacity 400ms ease 250ms' : 'opacity 500ms ease',
+          transition: visible ? 'opacity 500ms ease 250ms' : 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
-        <Star className="w-4 h-4" />
+        <Star className="w-4 h-4 sm:w-5 sm:h-5" />
         {isFavorite ? 'Favorited' : 'Favorite'}
       </button>
 
       {/* Floating Skin Selection Card - Center left */}
       <div
-        className="fixed top-1/2 left-8 z-20 w-[380px] max-h-[70vh] -translate-y-1/2 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 shadow-2xl"
+        className="fixed top-1/2 z-20 -translate-y-1/2 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 shadow-2xl backdrop-blur-md"
         style={{
+          left: 'clamp(1rem, 3vw, 2rem)',
+          width: 'clamp(320px, 28vw, 420px)',
+          maxHeight: '75vh',
           opacity: visible ? 1 : 0,
-          transition: visible ? 'opacity 400ms ease 150ms' : 'opacity 500ms ease',
+          transition: visible ? 'opacity 500ms ease 150ms' : 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)',
         }}
       >
-        <div className="p-5 space-y-4">
-          <div className="text-xs uppercase tracking-wider text-white/50">Skins</div>
+        <div className="p-4 sm:p-5 lg:p-6 space-y-4">
+          <div className="text-xs sm:text-sm uppercase tracking-wider text-white/50">Skins</div>
           <HeroSkinsPanel
             mods={mods}
             onSelect={onSelectSkin}
@@ -809,9 +797,8 @@ function HeroGalleryCard({
       type="button"
       onClick={handleClick}
       ref={cardRef}
-      className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ${
-        isActive ? 'z-10 scale-[1.04] shadow-2xl' : ''
-      }`}
+      className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ${isActive ? 'z-10 scale-[1.04] shadow-2xl' : ''
+        }`}
       style={{ contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
@@ -821,9 +808,8 @@ function HeroGalleryCard({
           <img
             src={renderSrc}
             alt={hero.name}
-            className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06] ${
-              isActive ? 'scale-[1.12]' : ''
-            }`}
+            className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : ''
+              }`}
             style={{ objectPosition: `${facePositionX}% 20%` }}
             loading="lazy"
             decoding="async"
@@ -856,9 +842,8 @@ function HeroGalleryCard({
           <img
             src={namePath}
             alt={hero.name}
-            className={`w-[70%] h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-105 ${
-              isActive ? 'scale-110' : ''
-            }`}
+            className={`w-[70%] h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-105 ${isActive ? 'scale-110' : ''
+              }`}
             loading="lazy"
             decoding="async"
             onError={() => setNameFailed(true)}
@@ -935,9 +920,8 @@ function HeroCard({
         <button
           type="button"
           onClick={onToggleFavorite}
-          className={`ml-auto p-2 rounded-md transition-colors ${
-            isFavorite ? 'text-yellow-400' : 'text-text-secondary hover:text-text-primary'
-          }`}
+          className={`ml-auto p-2 rounded-md transition-colors ${isFavorite ? 'text-yellow-400' : 'text-text-secondary hover:text-text-primary'
+            }`}
           title={isFavorite ? 'Unfavorite' : 'Favorite'}
         >
           <Star className="w-4 h-4" />

@@ -5,8 +5,6 @@ import {
   Download,
   Eye,
   ThumbsUp,
-  ChevronLeft,
-  ChevronRight,
   ExternalLink,
 } from 'lucide-react';
 import {
@@ -25,15 +23,18 @@ import type {
 } from '../types/gamebanana';
 import { getModThumbnail, getSoundPreviewUrl } from '../types/gamebanana';
 import { useAppStore } from '../stores/appStore';
-import { listen } from '@tauri-apps/api/event';
 import ModThumbnail from '../components/ModThumbnail';
 
-const DEFAULT_PER_PAGE = 12;
-const FETCH_ALL_PER_PAGE = 50;
-const CACHE_TTL_MS = 10 * 60 * 1000;
+const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 type ViewMode = 'grid' | 'compact' | 'list';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
+
+// Special category ID for "Soul Containers" database search
+const SOUL_CONTAINERS_SEARCH_ID = -999;
+
+// Categories to hide from the dropdown (covered by Soul Containers search or not useful)
+const HIDDEN_CATEGORIES = new Set(['soul container', 'model replacement']);
 
 type CategoryOption = {
   id: number;
@@ -97,7 +98,7 @@ export default function Browse() {
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
-  const [perPage, setPerPage] = useState(DEFAULT_PER_PAGE);
+  const perPage = DEFAULT_PER_PAGE; // Fixed value for infinite scroll
   const [sort, setSort] = useState<SortOption>('default');
   const [sections, setSections] = useState<GameBananaSection[]>([]);
   const [section, setSection] = useState('Mod');
@@ -105,113 +106,175 @@ export default function Browse() {
   const [heroCategoryId, setHeroCategoryId] = useState<number | 'all'>('all');
   const [categoryId, setCategoryId] = useState<number | 'all'>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
-  const [forceFullFetch, setForceFullFetch] = useState(true);
   const [selectedMod, setSelectedMod] = useState<GameBananaModDetails | null>(null);
   const [downloading, setDownloading] = useState<{ modId: number; fileId: number } | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ downloaded: number; total: number } | null>(null);
   const [extracting, setExtracting] = useState(false);
-  const [isFullResult, setIsFullResult] = useState(false);
-  const cacheRef = useRef<
-    Map<string, { records: GameBananaMod[]; totalCount: number; timestamp: number }>
-  >(new Map());
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(true);
+  const [useLocalSearch, setUseLocalSearch] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const observerRef = useRef<IntersectionObserver | null>(null);
+  const loadMoreRef = useRef<HTMLDivElement>(null);
 
-  const cacheKey = [
-    section,
-    search.trim().toLowerCase() || '__all__',
-    categoryId === 'all' ? 'all' : String(categoryId),
-    heroCategoryId === 'all' ? 'all' : String(heroCategoryId),
-  ].join('::');
+  // Check if local cache is available for search
+  const [hasLocalCache, setHasLocalCache] = useState(false);
+  useEffect(() => {
+    const checkLocalCache = async () => {
+      try {
+        const count = await window.electronAPI.getLocalModCount();
+        setHasLocalCache(count > 100);
+      } catch {
+        setHasLocalCache(false);
+      }
+    };
+    checkLocalCache();
+  }, []);
+
+  // Check if Soul Containers search is active
+  const isSoulContainersSearch = categoryId === SOUL_CONTAINERS_SEARCH_ID;
 
   const effectiveCategoryId =
-    heroCategoryId === 'all' ? (categoryId === 'all' ? undefined : categoryId) : heroCategoryId;
+    heroCategoryId === 'all'
+      ? (categoryId === 'all' || isSoulContainersSearch ? undefined : categoryId)
+      : heroCategoryId;
+
+  // Effective search query - append "soul container" when that category is selected
+  const effectiveSearch = isSoulContainersSearch
+    ? (search.trim() ? `${search.trim()} soul container` : 'soul container')
+    : search;
+
+  // Only use local search when there's an active search query AND we have cache
+  // For default browsing (no search), always fetch fresh from API
+  // Also use local search for special Soul Containers category
+  useEffect(() => {
+    const hasSearchQuery = search.trim().length > 0 || isSoulContainersSearch;
+    setUseLocalSearch(hasSearchQuery && hasLocalCache);
+  }, [search, hasLocalCache, isSoulContainersSearch]);
+
   const fetchMods = useCallback(async () => {
-    setLoading(true);
+    // Show loading spinner on first page, loading indicator otherwise
+    if (page === 1) {
+      setLoading(true);
+      setMods([]);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
     setError(null);
+
     try {
-      if (
-        forceFullFetch ||
-        sort !== 'default' ||
-        heroCategoryId !== 'all' ||
-        categoryId !== 'all'
-      ) {
-        if (page !== 1) {
-          setLoading(false);
-          return;
-        }
+      const response = await browseMods(
+        page,
+        perPage,
+        effectiveSearch || undefined,
+        section,
+        effectiveCategoryId,
+        sort !== 'default' ? sort : undefined
+      );
 
-        const cached = cacheRef.current.get(cacheKey);
-        if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-          setMods(cached.records);
-          setTotalCount(cached.totalCount);
-          setIsFullResult(true);
-          setLoading(false);
-          return;
-        }
-
-        const first = await browseMods(
-          1,
-          FETCH_ALL_PER_PAGE,
-          search || undefined,
-          section,
-          effectiveCategoryId
-        );
-        const allRecords = [...first.records];
-        const totalPages = Math.ceil(first.totalCount / FETCH_ALL_PER_PAGE);
-
-        if (totalPages > 1) {
-          const requests = [];
-          for (let i = 2; i <= totalPages; i += 1) {
-            requests.push(
-              browseMods(i, FETCH_ALL_PER_PAGE, search || undefined, section, effectiveCategoryId)
-            );
-          }
-          const results = await Promise.all(requests);
-          results.forEach((result) => {
-            allRecords.push(...result.records);
-          });
-        }
-
-        setMods(allRecords);
-        setTotalCount(first.totalCount);
-        cacheRef.current.set(cacheKey, {
-          records: allRecords,
-          totalCount: first.totalCount,
-          timestamp: Date.now(),
-        });
-        setIsFullResult(true);
-      } else {
-        const response = await browseMods(
-          page,
-          perPage,
-          search || undefined,
-          section,
-          effectiveCategoryId
-        );
+      // Append results for infinite scroll
+      if (page === 1) {
         setMods(response.records);
-        setTotalCount(response.totalCount);
-        setIsFullResult(false);
+      } else {
+        setMods(prev => [...prev, ...response.records]);
       }
+      setTotalCount(response.totalCount);
+      setHasMore(response.records.length === perPage && page * perPage < response.totalCount);
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
+      setLoadingMore(false);
     }
   }, [
     page,
-    search,
+    effectiveSearch,
     sort,
     section,
-    categoryId,
-    heroCategoryId,
     perPage,
-    forceFullFetch,
-    cacheKey,
     effectiveCategoryId,
   ]);
 
+  // Local search function using SQLite cache
+  const searchLocal = useCallback(async () => {
+    // Show loading spinner on first page, loading indicator otherwise
+    if (page === 1) {
+      setLoading(true);
+      setMods([]);
+      setHasMore(true);
+    } else {
+      setLoadingMore(true);
+    }
+    setError(null);
+
+    try {
+      const sortMap: Record<SortOption, 'relevance' | 'likes' | 'date' | 'views' | 'name'> = {
+        default: 'relevance',
+        popular: 'likes',
+        recent: 'date',
+        updated: 'date',
+        views: 'views',
+        name: 'name',
+      };
+
+      const result = await window.electronAPI.searchLocalMods({
+        query: effectiveSearch.trim() || undefined,
+        section: section,
+        categoryId: effectiveCategoryId,
+        sortBy: sortMap[sort] || 'relevance',
+        limit: perPage,
+        offset: (page - 1) * perPage,
+      });
+
+      // Convert CachedMod to GameBananaMod format
+      const convertedMods: GameBananaMod[] = result.mods.map(m => ({
+        id: m.id,
+        name: m.name,
+        profileUrl: m.profileUrl,
+        dateAdded: m.dateAdded,
+        dateModified: m.dateModified,
+        hasFiles: m.hasFiles,
+        likeCount: m.likeCount,
+        viewCount: m.viewCount,
+        nsfw: m.isNsfw,
+        rootCategory: m.categoryId ? { id: m.categoryId, name: m.categoryName || '' } : undefined,
+        submitter: m.submitterName ? { id: m.submitterId || 0, name: m.submitterName } : undefined,
+        previewMedia: (() => {
+          if (!m.thumbnailUrl) return undefined;
+          const lastSlash = m.thumbnailUrl.lastIndexOf('/');
+          if (lastSlash === -1) return undefined;
+          const baseUrl = m.thumbnailUrl.substring(0, lastSlash);
+          const file = m.thumbnailUrl.substring(lastSlash + 1);
+          if (!baseUrl || !file) return undefined;
+          return {
+            images: [{ baseUrl, file, file530: file }]
+          };
+        })(),
+      }));
+
+      if (page === 1) {
+        setMods(convertedMods);
+      } else {
+        setMods(prev => [...prev, ...convertedMods]);
+      }
+      setTotalCount(result.totalCount);
+      setHasMore(convertedMods.length === perPage && page * perPage < result.totalCount);
+    } catch (err) {
+      console.error('Local search failed, falling back to API:', err);
+      // Setting useLocalSearch to false will trigger the effect to call fetchMods
+      setUseLocalSearch(false);
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
+    }
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId]);
+
   useEffect(() => {
     setPage(1);
-  }, [search, sort, section, categoryId, heroCategoryId, perPage, forceFullFetch]);
+    setHasMore(true);
+  }, [search, sort, section, effectiveCategoryId, isSoulContainersSearch, perPage]);
 
   useEffect(() => {
     let active = true;
@@ -275,8 +338,12 @@ export default function Browse() {
   }, [sections, section]);
 
   useEffect(() => {
-    fetchMods();
-  }, [fetchMods]);
+    if (useLocalSearch) {
+      searchLocal();
+    } else {
+      fetchMods();
+    }
+  }, [fetchMods, searchLocal, useLocalSearch, refreshKey]);
 
   useEffect(() => {
     if (activeDeadlockPath) {
@@ -285,71 +352,91 @@ export default function Browse() {
   }, [activeDeadlockPath, loadMods]);
 
   useEffect(() => {
-    const unlistenProgress = listen<{ modId: number; fileId: number; downloaded: number; total: number }>(
-      'download-progress',
-      (event) => {
-        if (
-          downloading &&
-          event.payload.modId === downloading.modId &&
-          event.payload.fileId === downloading.fileId
-        ) {
-          setDownloadProgress({
-            downloaded: event.payload.downloaded,
-            total: event.payload.total,
-          });
-        }
+    const progressUnsub = window.electronAPI.onDownloadProgress((data) => {
+      if (
+        downloading &&
+        data.modId === downloading.modId &&
+        data.fileId === downloading.fileId
+      ) {
+        setDownloadProgress({
+          downloaded: data.downloaded,
+          total: data.total,
+        });
       }
-    );
+    });
 
-    const unlistenExtracting = listen<{ modId: number; fileId: number }>(
-      'download-extracting',
-      (event) => {
-        if (
-          downloading &&
-          event.payload.modId === downloading.modId &&
-          event.payload.fileId === downloading.fileId
-        ) {
-          setExtracting(true);
-        }
+    const extractingUnsub = window.electronAPI.onDownloadExtracting((data) => {
+      if (
+        downloading &&
+        data.modId === downloading.modId &&
+        data.fileId === downloading.fileId
+      ) {
+        setExtracting(true);
       }
-    );
+    });
 
-    const unlistenComplete = listen<{ modId: number; fileId: number }>(
-      'download-complete',
-      (event) => {
-        if (
-          downloading &&
-          event.payload.modId === downloading.modId &&
-          event.payload.fileId === downloading.fileId
-        ) {
-          setDownloading(null);
-          setDownloadProgress(null);
-          setExtracting(false);
-          loadMods(); // Refresh installed mods
-        }
+    const completeUnsub = window.electronAPI.onDownloadComplete((data) => {
+      if (
+        downloading &&
+        data.modId === downloading.modId &&
+        data.fileId === downloading.fileId
+      ) {
+        setDownloading(null);
+        setDownloadProgress(null);
+        setExtracting(false);
+        loadMods(); // Refresh installed mods
       }
-    );
+    });
 
     return () => {
-      unlistenProgress.then((fn) => fn());
-      unlistenExtracting.then((fn) => fn());
-      unlistenComplete.then((fn) => fn());
+      progressUnsub();
+      extractingUnsub();
+      completeUnsub();
     };
   }, [downloading, loadMods]);
+
+  // Infinite scroll observer
+  // Infinite scroll observer
+  useEffect(() => {
+    if (observerRef.current) observerRef.current.disconnect();
+
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        // Load more when reaching bottom and not already loading
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+          setPage(prev => prev + 1);
+        }
+      },
+      { threshold: 0.1, rootMargin: '100px' }
+    );
+
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current);
+    }
+
+    return () => observerRef.current?.disconnect();
+  }, [hasMore, loading, loadingMore]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
   };
-  const handleRefresh = () => {
-    cacheRef.current.delete(cacheKey);
-    setPage(1);
-    fetchMods();
-  };
-  const handleFullFetchToggle = () => {
-    cacheRef.current.delete(cacheKey);
-    setForceFullFetch((value) => !value);
-    setPage(1);
+
+  const handleRefresh = async () => {
+    setSyncing(true);
+    try {
+      // Sync current section from GameBanana API to local DB
+      await window.electronAPI.syncSection(section);
+      // Reset state and force re-fetch
+      setMods([]);
+      setHasMore(true);
+      setPage(1);
+      setRefreshKey(k => k + 1);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setSyncing(false);
+    }
   };
 
   const handleModClick = async (mod: GameBananaMod) => {
@@ -378,6 +465,31 @@ export default function Browse() {
     }
   };
 
+  const handleQuickDownload = async (mod: GameBananaMod) => {
+    if (!activeDeadlockPath || downloading) return;
+
+    try {
+      // Fetch mod details to get the first file
+      const details = await getModDetails(mod.id, section);
+      if (!details.files || details.files.length === 0) {
+        setError('No downloadable files found');
+        return;
+      }
+
+      const file = details.files[0];
+      setDownloading({ modId: mod.id, fileId: file.id });
+      setDownloadProgress({ downloaded: 0, total: 0 });
+      setExtracting(false);
+
+      await downloadMod(mod.id, file.id, file.fileName, section, effectiveCategoryId);
+    } catch (err) {
+      setError(String(err));
+      setDownloading(null);
+      setDownloadProgress(null);
+      setExtracting(false);
+    }
+  };
+
   const heroOptions = useMemo(() => {
     if (section !== 'Mod') return [];
     const skins = findCategoryByName(categories, 'Skins');
@@ -392,37 +504,31 @@ export default function Browse() {
 
   const categoryOptions = useMemo(() => {
     const heroIds = new Set(heroOptions.map((hero) => hero.id));
-    return flattenCategories(categories, '', { excludeIds: heroIds, includeEmpty: false });
-  }, [categories, heroOptions]);
 
-  const sortedMods = useMemo(() => {
-    const filtered = mods.filter((mod) => {
-      const searchMatch =
-        search.trim() === '' ? true : mod.name.toLowerCase().includes(search.trim().toLowerCase());
-      return searchMatch;
+    // Get all flattened categories
+    let options = flattenCategories(categories, '', { excludeIds: heroIds, includeEmpty: false });
+
+    // Filter out hidden categories and their subcategories
+    options = options.filter(opt => {
+      const lowerLabel = opt.label.toLowerCase();
+      for (const hidden of HIDDEN_CATEGORIES) {
+        if (lowerLabel === hidden || lowerLabel.startsWith(hidden + ' / ')) {
+          return false;
+        }
+      }
+      return true;
     });
-    const sorted = [...filtered];
-    switch (sort) {
-      case 'popular':
-        sorted.sort((a, b) => b.likeCount - a.likeCount);
-        break;
-      case 'recent':
-        sorted.sort((a, b) => b.dateAdded - a.dateAdded);
-        break;
-      case 'updated':
-        sorted.sort((a, b) => b.dateModified - a.dateModified);
-        break;
-      case 'views':
-        sorted.sort((a, b) => b.viewCount - a.viewCount);
-        break;
-      case 'name':
-        sorted.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-      default:
-        break;
+
+    // Add special "Soul Containers" search category at the top (only for Mod section)
+    if (section === 'Mod') {
+      options = [
+        { id: SOUL_CONTAINERS_SEARCH_ID, label: 'Soul Containers' },
+        ...options,
+      ];
     }
-    return sorted;
-  }, [mods, sort, search]);
+
+    return options;
+  }, [categories, heroOptions, section]);
 
   const installedIds = useMemo(() => {
     const ids = new Set<number>();
@@ -434,13 +540,19 @@ export default function Browse() {
     return ids;
   }, [installedMods]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil((isFullResult ? sortedMods.length : totalCount) / perPage)
-  );
-  const displayMods = isFullResult
-    ? sortedMods.slice((page - 1) * perPage, page * perPage)
-    : sortedMods;
+  // Track installed file IDs for per-file "Reinstall" button state
+  const installedFileIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const mod of installedMods) {
+      if (typeof mod.gameBananaFileId === 'number') {
+        ids.add(mod.gameBananaFileId);
+      }
+    }
+    return ids;
+  }, [installedMods]);
+
+  // Just use all loaded mods - infinite scroll handles pagination
+  const displayMods = mods;
 
   if (!activeDeadlockPath) {
     return (
@@ -479,42 +591,47 @@ export default function Browse() {
             <button
               type="button"
               onClick={handleRefresh}
-              className="px-4 py-2 bg-bg-tertiary hover:bg-bg-secondary border border-border text-text-primary rounded-lg transition-colors"
-              title="Refresh results"
+              disabled={syncing}
+              className="px-4 py-2 bg-bg-tertiary hover:bg-bg-secondary border border-border text-text-primary rounded-lg transition-colors disabled:opacity-50"
+              title="Sync fresh data from GameBanana"
             >
-              Refresh
+              {syncing ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Syncing...
+                </span>
+              ) : (
+                'Refresh'
+              )}
             </button>
             <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary p-1">
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  viewMode === 'grid'
-                    ? 'bg-bg-tertiary text-text-primary'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
+                className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'grid'
+                  ? 'bg-bg-tertiary text-text-primary'
+                  : 'text-text-secondary hover:text-text-primary'
+                  }`}
               >
                 Grid
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('compact')}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  viewMode === 'compact'
-                    ? 'bg-bg-tertiary text-text-primary'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
+                className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'compact'
+                  ? 'bg-bg-tertiary text-text-primary'
+                  : 'text-text-secondary hover:text-text-primary'
+                  }`}
               >
                 Compact
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 rounded-md transition-colors ${
-                  viewMode === 'list'
-                    ? 'bg-bg-tertiary text-text-primary'
-                    : 'text-text-secondary hover:text-text-primary'
-                }`}
+                className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'list'
+                  ? 'bg-bg-tertiary text-text-primary'
+                  : 'text-text-secondary hover:text-text-primary'
+                  }`}
               >
                 List
               </button>
@@ -580,34 +697,12 @@ export default function Browse() {
                 </option>
               ))}
             </select>
-            <select
-              value={perPage}
-              onChange={(e) => setPerPage(Number(e.target.value))}
-              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent appearance-none"
-            >
-              <option value={12}>12 / page</option>
-              <option value={24}>24 / page</option>
-              <option value={36}>36 / page</option>
-              <option value={48}>48 / page</option>
-            </select>
-            <button
-              type="button"
-              onClick={handleFullFetchToggle}
-              className={`px-4 py-2 rounded-lg border transition-colors ${
-                forceFullFetch
-                  ? 'bg-bg-tertiary border-accent text-text-primary'
-                  : 'bg-bg-secondary border-border text-text-secondary hover:text-text-primary'
-              }`}
-              title="Load all pages to improve category coverage"
-            >
-              {forceFullFetch ? 'Use Paging' : 'Load All'}
-            </button>
           </div>
         </form>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 overflow-auto p-4">
+      <div className="flex-1 p-4">
         {loading ? (
           <div className="flex items-center justify-center h-full">
             <Loader2 className="w-8 h-8 animate-spin text-accent" />
@@ -642,44 +737,33 @@ export default function Browse() {
                 key={mod.id}
                 mod={mod}
                 installed={installedIds.has(mod.id)}
+                downloading={downloading?.modId === mod.id}
                 viewMode={viewMode}
                 section={section}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 onClick={() => handleModClick(mod)}
+                onQuickDownload={() => handleQuickDownload(mod)}
               />
             ))}
           </div>
         )}
-      </div>
-
-      {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-center gap-4 p-4 border-t border-border">
-          <button
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-            disabled={page === 1}
-            className="p-2 rounded-lg bg-bg-secondary hover:bg-bg-tertiary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronLeft className="w-5 h-5" />
-          </button>
-          <span className="text-sm text-text-secondary">
-            Page {page} of {totalPages}
-          </span>
-          <button
-            onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-            disabled={page === totalPages}
-            className="p-2 rounded-lg bg-bg-secondary hover:bg-bg-tertiary disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            <ChevronRight className="w-5 h-5" />
-          </button>
+        {/* Infinite Scroll Trigger */}
+        <div ref={loadMoreRef} className="flex items-center justify-center p-4">
+          {loadingMore && (
+            <div className="flex items-center gap-2 text-text-secondary">
+              <Loader2 className="w-5 h-5 animate-spin" />
+              <span className="text-sm">Loading more...</span>
+            </div>
+          )}
         </div>
-      )}
+      </div>
 
       {/* Mod Details Modal */}
       {selectedMod && (
         <ModDetailsModal
           mod={selectedMod}
           installed={installedIds.has(selectedMod.id)}
+          installedFileIds={installedFileIds}
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
           extracting={extracting}
           progress={downloadProgress}
@@ -694,13 +778,15 @@ export default function Browse() {
 interface ModCardProps {
   mod: GameBananaMod;
   installed: boolean;
+  downloading: boolean;
   viewMode: ViewMode;
   section: string;
   hideNsfwPreviews: boolean;
   onClick: () => void;
+  onQuickDownload: () => void;
 }
 
-function ModCard({ mod, installed, viewMode, section, hideNsfwPreviews, onClick }: ModCardProps) {
+function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -709,17 +795,15 @@ function ModCard({ mod, installed, viewMode, section, hideNsfwPreviews, onClick 
   return (
     <button
       onClick={onClick}
-      className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left ${
-        isList ? 'flex items-center gap-4 p-3' : ''
-      }`}
+      className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left ${isList ? 'flex items-center gap-4 p-3' : ''
+        }`}
     >
       {/* Thumbnail */}
       <div
-        className={`bg-bg-tertiary ${
-          isList
-            ? 'w-32 h-20 flex-shrink-0 rounded-md overflow-hidden'
-            : 'aspect-video'
-        }`}
+        className={`bg-bg-tertiary ${isList
+          ? 'w-32 h-20 flex-shrink-0 rounded-md overflow-hidden'
+          : 'aspect-video'
+          }`}
       >
         <ModThumbnail
           src={thumbnail}
@@ -734,14 +818,28 @@ function ModCard({ mod, installed, viewMode, section, hideNsfwPreviews, onClick 
       <div className={isList ? 'min-w-0 flex-1' : isCompact ? 'p-2' : 'p-3'}>
         <div className="flex items-center gap-2">
           <h3 className={`font-medium truncate ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
-          {installed && (
+          {installed ? (
             <span
-              className={`rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 ${
-                isCompact ? 'text-[9px]' : ''
-              }`}
+              className={`rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 ${isCompact ? 'text-[9px]' : ''
+                }`}
             >
               Installed
             </span>
+          ) : downloading ? (
+            <span className="flex items-center gap-1 text-xs text-accent">
+              <Loader2 className="w-3 h-3 animate-spin" />
+            </span>
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuickDownload();
+              }}
+              className={`flex items-center gap-1 px-2 py-1 bg-accent hover:bg-accent-secondary text-white rounded transition-colors ${isCompact ? 'text-[10px]' : 'text-xs'}`}
+            >
+              <Download className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+              {!isCompact && 'Install'}
+            </button>
           )}
         </div>
         <div className={`flex items-center gap-3 text-text-secondary mt-1 ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
@@ -775,6 +873,7 @@ function ModCard({ mod, installed, viewMode, section, hideNsfwPreviews, onClick 
 interface ModDetailsModalProps {
   mod: GameBananaModDetails;
   installed: boolean;
+  installedFileIds: Set<number>;
   downloadingFileId: number | null;
   extracting: boolean;
   progress: { downloaded: number; total: number } | null;
@@ -785,6 +884,7 @@ interface ModDetailsModalProps {
 function ModDetailsModal({
   mod,
   installed,
+  installedFileIds,
   downloadingFileId,
   extracting,
   progress,
@@ -868,7 +968,7 @@ function ModDetailsModal({
                     ) : (
                       <>
                         <Download className="w-4 h-4" />
-                        {installed ? 'Reinstall' : 'Install'}
+                        {installedFileIds.has(file.id) ? 'Reinstall' : 'Install'}
                       </>
                     )}
                   </button>

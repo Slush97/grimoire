@@ -1,0 +1,33 @@
+appId: com.deadlock.modmanager
+productName: Deadlock Mod Manager
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**/*
+  - "!node_modules/**/*"
+  - node_modules/adm-zip/**/*
+  - node_modules/node-7z/**/*
+  - node_modules/node-unrar-js/**/*
+asarUnpack:
+  - node_modules/node-unrar-js/**/*
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Game
+  icon: resources/icon.png
+win:
+  target:
+    - nsis
+    - portable
+  icon: resources/icon.ico
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.games
+  icon: resources/icon.icns
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true

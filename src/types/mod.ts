@@ -10,6 +10,7 @@ export interface Mod {
   description?: string;
   thumbnailUrl?: string;
   gameBananaId?: number;
+  gameBananaFileId?: number;
   categoryId?: number;
   sourceSection?: string;
   nsfw?: boolean;
@@ -39,4 +40,6 @@ export interface AppSettings {
   devMode: boolean;
   devDeadlockPath: string | null;
   hideNsfwPreviews: boolean;
+  activeProfileId: string | null;
+  autoSaveProfile: boolean;
 }

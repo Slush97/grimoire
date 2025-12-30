@@ -1,6 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2 } from 'lucide-react';
-import { open } from '@tauri-apps/plugin-dialog';
+import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2, RefreshCw, Database } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   cleanupAddons,
@@ -8,6 +7,7 @@ import {
   fixGameinfo,
   getGameinfoStatus,
   validateDeadlockPath,
+  showOpenDialog,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 
@@ -22,6 +22,9 @@ export default function Settings() {
   const [gameinfoStatus, setGameinfoStatus] = useState<string | null>(null);
   const [gameinfoConfigured, setGameinfoConfigured] = useState<boolean | null>(null);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<Record<string, { lastSync: number; count: number } | null> | null>(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState<{ section: string; modsProcessed: number; totalMods: number } | null>(null);
 
   const isDevMode = settings?.devMode ?? false;
   const activeDeadlockPath = getActiveDeadlockPath(settings);
@@ -74,7 +77,7 @@ export default function Settings() {
 
   const handleBrowse = async () => {
     if (isDevMode) return;
-    const selected = await open({
+    const selected = await showOpenDialog({
       directory: true,
       title: 'Select Deadlock Installation Folder',
     });
@@ -199,6 +202,54 @@ export default function Settings() {
       setIsFixingGameinfo(false);
     }
   };
+
+  // Load sync status
+  useEffect(() => {
+    const loadSyncStatus = async () => {
+      try {
+        const status = await window.electronAPI.getSyncStatus();
+        setSyncStatus(status);
+      } catch (err) {
+        console.error('Failed to load sync status:', err);
+      }
+    };
+    loadSyncStatus();
+  }, []);
+
+  // Listen for sync progress
+  useEffect(() => {
+    const unsub = window.electronAPI.onSyncProgress((data) => {
+      if (data.phase === 'fetching') {
+        setSyncProgress({ section: data.section, modsProcessed: data.modsProcessed, totalMods: data.totalMods });
+      } else if (data.phase === 'complete') {
+        setSyncProgress(null);
+        // Reload sync status after completion
+        window.electronAPI.getSyncStatus().then(setSyncStatus);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleSyncDatabase = async () => {
+    setIsSyncing(true);
+    setSyncProgress(null);
+    try {
+      await window.electronAPI.syncAllMods();
+    } catch (err) {
+      console.error('Sync failed:', err);
+    } finally {
+      setIsSyncing(false);
+      setSyncProgress(null);
+    }
+  };
+
+  const totalCachedMods = syncStatus
+    ? Object.values(syncStatus).reduce((sum, s) => sum + (s?.count ?? 0), 0)
+    : 0;
+
+  const lastSyncTime = syncStatus
+    ? Math.max(...Object.values(syncStatus).filter(Boolean).map(s => s!.lastSync))
+    : 0;
 
   if (settingsLoading && !settings) {
     return (
@@ -371,6 +422,62 @@ export default function Settings() {
               {isCleaning ? 'Cleaning…' : 'Clean'}
             </button>
           </div>
+        </div>
+
+        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
+          <div className="flex items-center gap-2 mb-2">
+            <Database className="w-4 h-4 text-accent" />
+            <div className="font-medium">Mod Database Cache</div>
+          </div>
+          <p className="text-xs text-text-secondary mb-3">
+            Cache all GameBanana mods locally for lightning-fast search and browsing.
+          </p>
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-sm">
+              {syncStatus ? (
+                <>
+                  <span className="text-text-primary">{totalCachedMods.toLocaleString()} mods cached</span>
+                  {lastSyncTime > 0 && (
+                    <span className="text-text-secondary ml-2">
+                      (last sync: {new Date(lastSyncTime * 1000).toLocaleDateString()})
+                    </span>
+                  )}
+                </>
+              ) : (
+                <span className="text-text-secondary">Checking cache status...</span>
+              )}
+            </div>
+            <button
+              onClick={handleSyncDatabase}
+              disabled={isSyncing}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-50 transition-colors"
+            >
+              {isSyncing ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4" />
+                  Sync Database
+                </>
+              )}
+            </button>
+          </div>
+          {syncProgress && (
+            <div className="mt-3">
+              <div className="text-xs text-text-secondary mb-1">
+                Syncing {syncProgress.section}: {syncProgress.modsProcessed.toLocaleString()} / {syncProgress.totalMods.toLocaleString()}
+              </div>
+              <div className="w-full bg-bg-tertiary rounded-full h-2">
+                <div
+                  className="bg-accent h-2 rounded-full transition-all"
+                  style={{ width: `${Math.min(100, (syncProgress.modsProcessed / syncProgress.totalMods) * 100)}%` }}
+                />
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
-import { Package, Loader2, Settings, Trash2, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Package, Loader2, Settings, Trash2, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getConflicts } from '../lib/api';
+import type { ModConflict } from '../lib/api';
 import ModThumbnail from '../components/ModThumbnail';
 
 type ViewMode = 'grid' | 'list';
@@ -21,6 +23,7 @@ export default function Installed() {
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
 
   useEffect(() => {
     loadSettings();
@@ -31,6 +34,36 @@ export default function Installed() {
       loadMods();
     }
   }, [activeDeadlockPath, loadMods]);
+
+  // Load conflicts and build a map of mod ID -> conflicts
+  useEffect(() => {
+    const loadConflictData = async () => {
+      try {
+        const conflicts = await getConflicts();
+        const map = new Map<string, ModConflict[]>();
+
+        for (const conflict of conflicts) {
+          // Add to modA's conflicts
+          const existingA = map.get(conflict.modA) || [];
+          existingA.push(conflict);
+          map.set(conflict.modA, existingA);
+
+          // Add to modB's conflicts
+          const existingB = map.get(conflict.modB) || [];
+          existingB.push(conflict);
+          map.set(conflict.modB, existingB);
+        }
+
+        setConflictMap(map);
+      } catch {
+        setConflictMap(new Map());
+      }
+    };
+
+    if (mods.length > 0) {
+      loadConflictData();
+    }
+  }, [mods]);
 
   // No path configured
   if (!activeDeadlockPath) {
@@ -95,11 +128,23 @@ export default function Installed() {
   // Mod list
   const enabledMods = mods.filter((m) => m.enabled);
   const disabledMods = mods.filter((m) => !m.enabled);
+  const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
 
   return (
     <div className="p-6">
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold">Installed Mods</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Installed Mods</h1>
+          {conflictCount > 0 && (
+            <button
+              onClick={() => navigate('/conflicts')}
+              className="flex items-center gap-1.5 px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm hover:bg-yellow-500/30 transition-colors"
+            >
+              <AlertTriangle className="w-4 h-4" />
+              {conflictMap.size / 2} conflicts
+            </button>
+          )}
+        </div>
         <div className="flex items-center gap-3">
           <div className="text-sm text-text-secondary">
             {enabledMods.length} enabled / {mods.length} total
@@ -108,22 +153,20 @@ export default function Installed() {
             <button
               type="button"
               onClick={() => setViewMode('grid')}
-              className={`px-3 py-2 rounded-lg border transition-colors ${
-                viewMode === 'grid'
+              className={`px-3 py-2 rounded-lg border transition-colors ${viewMode === 'grid'
                   ? 'bg-bg-tertiary border-accent text-text-primary'
                   : 'bg-bg-secondary border-border text-text-secondary hover:text-text-primary'
-              }`}
+                }`}
             >
               Cards
             </button>
             <button
               type="button"
               onClick={() => setViewMode('list')}
-              className={`px-3 py-2 rounded-lg border transition-colors ${
-                viewMode === 'list'
+              className={`px-3 py-2 rounded-lg border transition-colors ${viewMode === 'list'
                   ? 'bg-bg-tertiary border-accent text-text-primary'
                   : 'bg-bg-secondary border-border text-text-secondary hover:text-text-primary'
-              }`}
+                }`}
             >
               List
             </button>
@@ -150,6 +193,7 @@ export default function Installed() {
                 mod={mod}
                 viewMode={viewMode}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+                conflicts={conflictMap.get(mod.id) || []}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => deleteMod(mod.id)}
               />
@@ -177,6 +221,7 @@ export default function Installed() {
                 mod={mod}
                 viewMode={viewMode}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+                conflicts={conflictMap.get(mod.id) || []}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => deleteMod(mod.id)}
               />
@@ -201,21 +246,25 @@ interface ModCardProps {
   };
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
+  conflicts: ModConflict[];
   onToggle: () => void;
   onDelete: () => void;
 }
 
-function ModCard({ mod, viewMode, hideNsfwPreviews, onToggle, onDelete }: ModCardProps) {
+function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelete }: ModCardProps) {
+  const hasConflicts = conflicts.length > 0;
+
   return (
     <div
-      className={`rounded-lg border transition-colors ${
-        mod.enabled
-          ? 'bg-bg-secondary border-accent/30'
-          : 'bg-bg-tertiary border-border opacity-75'
-      } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'}`}
+      className={`rounded-lg border transition-colors ${hasConflicts
+          ? 'bg-yellow-500/5 border-yellow-500/50'
+          : mod.enabled
+            ? 'bg-bg-secondary border-accent/30'
+            : 'bg-bg-tertiary border-border opacity-75'
+        } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'}`}
     >
       {viewMode === 'grid' && (
-        <div className="w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden">
+        <div className="relative w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden">
           <ModThumbnail
             src={mod.thumbnailUrl}
             alt={mod.name}
@@ -223,6 +272,11 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, onToggle, onDelete }: ModCar
             hideNsfw={hideNsfwPreviews}
             className="w-full h-full"
           />
+          {hasConflicts && (
+            <div className="absolute top-2 right-2 p-1.5 bg-yellow-500 rounded-full" title={conflicts.map(c => c.details).join(', ')}>
+              <AlertTriangle className="w-3 h-3 text-black" />
+            </div>
+          )}
         </div>
       )}
 
@@ -230,9 +284,8 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, onToggle, onDelete }: ModCar
         {/* Toggle */}
         <button
           onClick={onToggle}
-          className={`transition-colors ${
-            mod.enabled ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
-          }`}
+          className={`transition-colors ${mod.enabled ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
+            }`}
           title={mod.enabled ? 'Disable mod' : 'Enable mod'}
         >
           {mod.enabled ? (
@@ -244,7 +297,15 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, onToggle, onDelete }: ModCar
 
         {/* Info */}
         <div className="flex-1 min-w-0">
-          <h3 className="font-medium truncate">{mod.name}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-medium truncate">{mod.name}</h3>
+            {hasConflicts && viewMode === 'list' && (
+              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
+                <AlertTriangle className="w-3 h-3" />
+                Conflict
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-3 text-xs text-text-secondary mt-1">
             <span className="font-mono">{mod.fileName}</span>
             <span>{formatBytes(mod.size)}</span>

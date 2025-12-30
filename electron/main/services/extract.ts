@@ -1,0 +1,270 @@
+import { existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync } from 'fs';
+import { join, extname, basename } from 'path';
+import AdmZip from 'adm-zip';
+import { spawn } from 'child_process';
+
+/**
+ * Check if a file is an archive that needs extraction
+ */
+export function isArchive(filePath: string): boolean {
+    const ext = extname(filePath).toLowerCase();
+    return ext === '.zip' || ext === '.7z' || ext === '.rar';
+}
+
+/**
+ * Extract an archive to a destination directory
+ * Returns the list of extracted VPK files
+ */
+export async function extractArchive(
+    archivePath: string,
+    destDir: string
+): Promise<string[]> {
+    const ext = extname(archivePath).toLowerCase();
+
+    switch (ext) {
+        case '.zip':
+            return extractZip(archivePath, destDir);
+        case '.7z':
+            return extract7z(archivePath, destDir);
+        case '.rar':
+            return extractRar(archivePath, destDir);
+        default:
+            throw new Error(`Unknown archive format: ${ext}`);
+    }
+}
+
+/**
+ * Extract a ZIP archive
+ */
+function extractZip(archivePath: string, destDir: string): string[] {
+    const zip = new AdmZip(archivePath);
+    const entries = zip.getEntries();
+    const extractedVpks: string[] = [];
+
+    for (const entry of entries) {
+        if (entry.isDirectory) continue;
+
+        const fileName = basename(entry.entryName);
+        const ext = extname(fileName).toLowerCase();
+
+        // Only extract VPK files
+        if (ext !== '.vpk') continue;
+
+        // Flatten to dest directory
+        const destPath = join(destDir, fileName);
+        zip.extractEntryTo(entry, destDir, false, true);
+        extractedVpks.push(destPath);
+    }
+
+    return extractedVpks;
+}
+
+/**
+ * Extract a 7z archive using system 7z command
+ */
+async function extract7z(archivePath: string, destDir: string): Promise<string[]> {
+    // Create temp directory for extraction
+    const tempDir = createTempDir('modmanager-7z');
+
+    try {
+        // Try 7z, then 7za
+        for (const tool of ['7z', '7za']) {
+            try {
+                await runCommand(tool, ['x', '-y', `-o${tempDir}`, archivePath]);
+                const vpks = collectVpks(tempDir);
+                const copied = copyVpksToDest(vpks, destDir);
+                return copied;
+            } catch {
+                // Try next tool
+            }
+        }
+
+        throw new Error(
+            "Failed to extract 7z. Install '7z' (p7zip-full) or '7za' and try again."
+        );
+    } finally {
+        // Cleanup temp directory
+        try {
+            rmDirRecursive(tempDir);
+        } catch {
+            // Ignore cleanup errors
+        }
+    }
+}
+
+/**
+ * Extract a RAR archive using system unrar or 7z command
+ */
+async function extractRar(archivePath: string, destDir: string): Promise<string[]> {
+    const tempDir = createTempDir('modmanager-rar');
+
+    try {
+        // Try 7z, 7za, then unrar
+        for (const tool of ['7z', '7za', 'unrar']) {
+            try {
+                if (tool === 'unrar') {
+                    await runCommand(tool, ['x', '-y', archivePath, tempDir]);
+                } else {
+                    await runCommand(tool, ['x', '-y', `-o${tempDir}`, archivePath]);
+                }
+                const vpks = collectVpks(tempDir);
+                const copied = copyVpksToDest(vpks, destDir);
+                return copied;
+            } catch {
+                // Try next tool
+            }
+        }
+
+        throw new Error(
+            "RAR extraction failed. Install '7z' or 'unrar' and try again."
+        );
+    } finally {
+        try {
+            rmDirRecursive(tempDir);
+        } catch {
+            // Ignore cleanup errors
+        }
+    }
+}
+
+/**
+ * Run a command and wait for it to complete
+ */
+function runCommand(cmd: string, args: string[]): Promise<void> {
+    return new Promise((resolve, reject) => {
+        const proc = spawn(cmd, args, { stdio: 'pipe' });
+
+        let stderr = '';
+        proc.stderr?.on('data', (data) => {
+            stderr += data.toString();
+        });
+
+        proc.on('close', (code) => {
+            if (code === 0) {
+                resolve();
+            } else {
+                reject(new Error(`${cmd} failed with code ${code}: ${stderr}`));
+            }
+        });
+
+        proc.on('error', (err) => {
+            reject(new Error(`${cmd} failed to run: ${err.message}`));
+        });
+    });
+}
+
+/**
+ * Recursively collect VPK files from a directory
+ */
+function collectVpks(dir: string): string[] {
+    const vpks: string[] = [];
+
+    function walk(currentDir: string): void {
+        if (!existsSync(currentDir)) return;
+
+        const entries = readdirSync(currentDir, { withFileTypes: true });
+        for (const entry of entries) {
+            const fullPath = join(currentDir, entry.name);
+            if (entry.isDirectory()) {
+                walk(fullPath);
+            } else if (extname(entry.name).toLowerCase() === '.vpk') {
+                vpks.push(fullPath);
+            }
+        }
+    }
+
+    walk(dir);
+    return vpks;
+}
+
+/**
+ * Copy VPK files to destination directory (flattening structure)
+ */
+function copyVpksToDest(vpks: string[], destDir: string): string[] {
+    const copied: string[] = [];
+
+    for (const vpk of vpks) {
+        const fileName = basename(vpk);
+        const destPath = join(destDir, fileName);
+        copyFileSync(vpk, destPath);
+        copied.push(destPath);
+    }
+
+    return copied;
+}
+
+/**
+ * Create a temporary directory
+ */
+function createTempDir(prefix: string): string {
+    const tmpDir = join(
+        process.env.TMPDIR || process.env.TMP || '/tmp',
+        `${prefix}-${Date.now()}`
+    );
+    mkdirSync(tmpDir, { recursive: true });
+    return tmpDir;
+}
+
+/**
+ * Recursively remove a directory
+ */
+function rmDirRecursive(dir: string): void {
+    if (!existsSync(dir)) return;
+
+    const entries = readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+        const fullPath = join(dir, entry.name);
+        if (entry.isDirectory()) {
+            rmDirRecursive(fullPath);
+        } else {
+            unlinkSync(fullPath);
+        }
+    }
+
+    // Remove the directory itself
+    const { rmdirSync } = require('fs');
+    rmdirSync(dir);
+}
+
+/**
+ * List contents of an archive (for Mina variants)
+ */
+export async function listArchiveContents(archivePath: string): Promise<string[]> {
+    const ext = extname(archivePath).toLowerCase();
+
+    if (ext === '.zip') {
+        const zip = new AdmZip(archivePath);
+        return zip.getEntries().map((e) => e.entryName);
+    }
+
+    // For 7z/rar, use 7z to list
+    return new Promise((resolve, reject) => {
+        const proc = spawn('7z', ['l', '-ba', archivePath], { stdio: 'pipe' });
+        let stdout = '';
+
+        proc.stdout?.on('data', (data) => {
+            stdout += data.toString();
+        });
+
+        proc.on('close', (code) => {
+            if (code === 0) {
+                // Parse 7z output - extract filenames
+                const lines = stdout.split('\n').filter((l) => l.trim());
+                const files = lines
+                    .map((line) => {
+                        // 7z -ba output format: date time attr size compressed name
+                        const parts = line.trim().split(/\s+/);
+                        return parts.slice(5).join(' ');
+                    })
+                    .filter((f) => f);
+                resolve(files);
+            } else {
+                reject(new Error(`Failed to list archive contents`));
+            }
+        });
+
+        proc.on('error', (err) => {
+            reject(err);
+        });
+    });
+}
