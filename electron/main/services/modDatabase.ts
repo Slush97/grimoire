@@ -138,6 +138,23 @@ export function closeDatabase(): void {
 }
 
 /**
+ * Wipe the local cache database (mods + FTS + sync state).
+ */
+export function wipeDatabase(): void {
+    const dbPath = getDbPath();
+    closeDatabase();
+
+    const filesToRemove = [dbPath, `${dbPath}-wal`, `${dbPath}-shm`];
+    for (const file of filesToRemove) {
+        if (fs.existsSync(file)) {
+            fs.unlinkSync(file);
+        }
+    }
+
+    initDatabase();
+}
+
+/**
  * Upsert a mod into the database
  */
 export function upsertMod(mod: CachedMod): void {

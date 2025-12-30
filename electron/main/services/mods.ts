@@ -285,7 +285,10 @@ export function setModPriority(
 
     const parentDir = join(targetMod.path, '..');
     const priorityStr = String(Math.min(99, newPriority)).padStart(2, '0');
-    const newFileName = `pak${priorityStr}_dir.vpk`;
+
+    // Preserve the mod name by only replacing the priority prefix
+    // e.g., pak05_cool_skin_dir.vpk -> pak10_cool_skin_dir.vpk
+    const newFileName = targetMod.fileName.replace(/^pak\d{2}_/, `pak${priorityStr}_`);
     const destPath = join(parentDir, newFileName);
 
     // Check if destination already exists

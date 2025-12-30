@@ -323,6 +323,9 @@ export async function fetchSubmissions(
     if (search && search.trim()) {
         const params = new URLSearchParams();
         params.set('_sSearchString', search);
+        // Util/Search/Results does not reliably honor Generic_Game; add explicit game/model scoping.
+        params.set('_idGameRow', String(DEADLOCK_GAME_ID));
+        params.set('_sModelName', model);
         params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
         params.set('_aFilters[itemtype]', model);
         params.set('_nPerpage', String(perPage));
@@ -340,6 +343,8 @@ export async function fetchSubmissions(
         url = `${GAMEBANANA_API_BASE}/Util/Search/Results?${params.toString()}`;
     } else {
         const params = new URLSearchParams();
+        // Some endpoints ignore Generic_Game without an explicit game id.
+        params.set('_idGameRow', String(DEADLOCK_GAME_ID));
         params.set('_aFilters[Generic_Game]', String(DEADLOCK_GAME_ID));
         params.set('_nPerpage', String(perPage));
         params.set('_nPage', String(page));

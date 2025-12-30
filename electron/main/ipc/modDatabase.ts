@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { initDatabase, getModById, getModCount } from '../services/modDatabase';
+import { initDatabase, getModById, getModCount, wipeDatabase } from '../services/modDatabase';
 import { searchMods, getCategories, getSectionStats, SearchOptions } from '../services/searchService';
 import { syncAllSections, syncSingleSection, getSyncStatus, needsSync, isSyncInProgress } from '../services/syncService';
 
@@ -14,6 +14,14 @@ ipcMain.handle('sync-all-mods', async () => {
 
 ipcMain.handle('sync-section', async (_, section: string) => {
     await syncSingleSection(section);
+    return { success: true };
+});
+
+ipcMain.handle('wipe-mod-cache', () => {
+    if (isSyncInProgress()) {
+        throw new Error('Cannot wipe cache while sync is in progress.');
+    }
+    wipeDatabase();
     return { success: true };
 });
 

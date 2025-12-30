@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2, RefreshCw, Database } from 'lucide-react';
+import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   cleanupAddons,
@@ -25,6 +25,8 @@ export default function Settings() {
   const [syncStatus, setSyncStatus] = useState<Record<string, { lastSync: number; count: number } | null> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ section: string; modsProcessed: number; totalMods: number } | null>(null);
+  const [isWipingCache, setIsWipingCache] = useState(false);
+  const [wipeResult, setWipeResult] = useState<string | null>(null);
 
   const isDevMode = settings?.devMode ?? false;
   const activeDeadlockPath = getActiveDeadlockPath(settings);
@@ -243,6 +245,24 @@ export default function Settings() {
     }
   };
 
+  const handleWipeCache = async () => {
+    if (!confirm('Wipe the local mod cache? This will remove all cached mods and sync state.')) {
+      return;
+    }
+    setIsWipingCache(true);
+    setWipeResult(null);
+    try {
+      await window.electronAPI.wipeModCache();
+      const status = await window.electronAPI.getSyncStatus();
+      setSyncStatus(status);
+      setWipeResult('Cache cleared.');
+    } catch (err) {
+      setWipeResult(String(err));
+    } finally {
+      setIsWipingCache(false);
+    }
+  };
+
   const totalCachedMods = syncStatus
     ? Object.values(syncStatus).reduce((sum, s) => sum + (s?.count ?? 0), 0)
     : 0;
@@ -447,24 +467,46 @@ export default function Settings() {
                 <span className="text-text-secondary">Checking cache status...</span>
               )}
             </div>
-            <button
-              onClick={handleSyncDatabase}
-              disabled={isSyncing}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-50 transition-colors"
-            >
-              {isSyncing ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Syncing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4" />
-                  Sync Database
-                </>
-              )}
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleWipeCache}
+                disabled={isWipingCache || isSyncing}
+                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-tertiary border border-border hover:border-red-400 text-sm text-red-300 disabled:opacity-50"
+              >
+                {isWipingCache ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Wiping...
+                  </>
+                ) : (
+                  <>
+                    <Trash2 className="w-4 h-4" />
+                    Wipe Cache
+                  </>
+                )}
+              </button>
+              <button
+                onClick={handleSyncDatabase}
+                disabled={isSyncing || isWipingCache}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-50 transition-colors"
+              >
+                {isSyncing ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Syncing...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="w-4 h-4" />
+                    Sync Database
+                  </>
+                )}
+              </button>
+            </div>
           </div>
+          {wipeResult && (
+            <div className="mt-2 text-xs text-text-secondary">{wipeResult}</div>
+          )}
           {syncProgress && (
             <div className="mt-3">
               <div className="text-xs text-text-secondary mb-1">
