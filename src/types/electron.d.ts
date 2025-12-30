@@ -177,6 +177,7 @@ export interface ElectronAPI {
     // Mod Database (Local Cache)
     syncAllMods: () => Promise<{ success: boolean }>;
     syncSection: (section: string) => Promise<{ success: boolean }>;
+    wipeModCache: () => Promise<{ success: boolean }>;
     getSyncStatus: () => Promise<Record<string, { lastSync: number; count: number } | null>>;
     needsSync: () => Promise<boolean>;
     isSyncInProgress: () => Promise<boolean>;

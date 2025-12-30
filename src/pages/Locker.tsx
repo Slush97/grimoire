@@ -438,6 +438,7 @@ export default function Locker() {
             )
           }
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          onRefreshMods={loadMods}
           minaPresets={selectedHero.name === 'Mina' ? minaPresets : []}
           activeMinaPreset={selectedHero.name === 'Mina' ? activeMinaPreset : undefined}
           minaTextures={selectedHero.name === 'Mina' ? minaTextures : []}
@@ -468,6 +469,7 @@ interface HeroOverlayProps {
   isFavorite: boolean;
   onToggleFavorite: () => void;
   hideNsfwPreviews: boolean;
+  onRefreshMods: () => void;
   minaPresets: MinaPreset[];
   activeMinaPreset?: MinaPreset;
   minaTextures: Mod[];
@@ -494,6 +496,7 @@ function HeroOverlay({
   isFavorite,
   onToggleFavorite,
   hideNsfwPreviews,
+  onRefreshMods,
   minaPresets,
   activeMinaPreset,
   minaTextures,
@@ -664,6 +667,8 @@ function HeroOverlay({
             mods={mods}
             onSelect={onSelectSkin}
             hideNsfwPreviews={hideNsfwPreviews}
+            categoryId={hero.id}
+            onRefreshMods={onRefreshMods}
             minaPresets={minaPresets}
             activeMinaPreset={activeMinaPreset}
             minaTextures={minaTextures}

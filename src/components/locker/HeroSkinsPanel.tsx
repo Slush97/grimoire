@@ -1,11 +1,14 @@
 import type { Mod } from '../../types/mod';
 import type { MinaPreset, MinaSelection, MinaVariant } from '../../lib/lockerUtils';
 import ModThumbnail from '../ModThumbnail';
+import DownloadableSkinsSection from './DownloadableSkinsSection';
 
 interface HeroSkinsPanelProps {
   mods: Mod[];
   onSelect: (modId: string) => void;
   hideNsfwPreviews?: boolean;
+  categoryId?: number;
+  onRefreshMods?: () => void;
   minaPresets?: MinaPreset[];
   activeMinaPreset?: MinaPreset;
   minaTextures?: Mod[];
@@ -26,6 +29,8 @@ export default function HeroSkinsPanel({
   mods,
   onSelect,
   hideNsfwPreviews = false,
+  categoryId,
+  onRefreshMods,
   minaPresets = [],
   activeMinaPreset,
   minaTextures = [],
@@ -302,6 +307,15 @@ export default function HeroSkinsPanel({
         <div className="text-xs text-text-secondary">
           Download a skin for this hero to manage it here.
         </div>
+      )}
+
+      {categoryId && onRefreshMods && (
+        <DownloadableSkinsSection
+          categoryId={categoryId}
+          installedModIds={new Set(mods.map((m) => m.gameBananaId).filter((id): id is number => id !== undefined))}
+          hideNsfwPreviews={hideNsfwPreviews}
+          onDownloadComplete={onRefreshMods}
+        />
       )}
     </div>
   );
