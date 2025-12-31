@@ -123,6 +123,27 @@ export interface CachedMod {
     cachedAt: number;
 }
 
+export interface CrosshairSettings {
+    pipGap: number;
+    pipHeight: number;
+    pipWidth: number;
+    pipOpacity: number;
+    pipBorder: boolean;
+    dotOpacity: number;
+    dotOutlineOpacity: number;
+    colorR: number;
+    colorG: number;
+    colorB: number;
+}
+
+export interface CrosshairPreset {
+    id: string;
+    name: string;
+    settings: CrosshairSettings;
+    thumbnail: string;
+    createdAt: string;
+}
+
 export interface ElectronAPI {
     // Settings
     detectDeadlock: () => Promise<string | null>;
@@ -187,6 +208,17 @@ export interface ElectronAPI {
     getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
+
+    // Crosshair Presets
+    getCrosshairPresets: () => Promise<{ presets: CrosshairPreset[]; activePresetId: string | null }>;
+    saveCrosshairPreset: (name: string, settings: CrosshairSettings, thumbnail: string) => Promise<CrosshairPreset>;
+    deleteCrosshairPreset: (id: string) => Promise<boolean>;
+    applyCrosshairPreset: (presetId: string, gamePath: string) => Promise<{ success: boolean; path: string }>;
+    clearCrosshairAutoexec: (gamePath: string) => Promise<{ success: boolean }>;
+    getAutoexecStatus: (gamePath: string) => Promise<{ exists: boolean; path: string | null; hasCrosshairSettings: boolean }>;
+    createAutoexec: (gamePath: string) => Promise<{ success: boolean; path: string }>;
+    getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
+    saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 }
 
 export interface ModConflict {

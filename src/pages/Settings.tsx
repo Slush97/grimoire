@@ -444,6 +444,8 @@ export default function Settings() {
           </div>
         </div>
 
+        <AutoexecSection gamePath={activeDeadlockPath} />
+
         <div className="bg-bg-secondary rounded-lg p-4 border border-border">
           <div className="flex items-center gap-2 mb-2">
             <Database className="w-4 h-4 text-accent" />
@@ -521,6 +523,94 @@ export default function Settings() {
             </div>
           )}
         </div>
+      </div>
+    </div>
+  );
+}
+
+// Autoexec.cfg helper section
+function AutoexecSection({ gamePath }: { gamePath: string | null }) {
+  const [status, setStatus] = useState<{
+    exists: boolean;
+    path: string | null;
+    hasCrosshairSettings: boolean;
+  } | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
+  const [result, setResult] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!gamePath) {
+      setStatus(null);
+      return;
+    }
+    window.electronAPI.getAutoexecStatus(gamePath).then(setStatus);
+  }, [gamePath]);
+
+  const handleCreate = async () => {
+    if (!gamePath) return;
+    setIsCreating(true);
+    setResult(null);
+    try {
+      const res = await window.electronAPI.createAutoexec(gamePath);
+      setResult(`Created: ${res.path}`);
+      const newStatus = await window.electronAPI.getAutoexecStatus(gamePath);
+      setStatus(newStatus);
+    } catch (err) {
+      setResult(String(err));
+    } finally {
+      setIsCreating(false);
+    }
+  };
+
+  if (!gamePath) {
+    return null;
+  }
+
+  return (
+    <div className="bg-bg-secondary rounded-lg p-4 border border-border">
+      <div className="font-medium mb-2">Autoexec Configuration</div>
+      <p className="text-xs text-text-secondary mb-3">
+        autoexec.cfg runs commands automatically when the game starts.
+        This is required for crosshair presets to auto-load.
+      </p>
+
+      <div className="flex items-center justify-between gap-4 mb-3">
+        <div className="text-sm">
+          {status === null ? (
+            <span className="text-text-secondary">Checking...</span>
+          ) : status.exists ? (
+            <span className="text-green-400">
+              ✓ autoexec.cfg exists
+              {status.hasCrosshairSettings && ' (has crosshair settings)'}
+            </span>
+          ) : (
+            <span className="text-yellow-400">✗ autoexec.cfg not found</span>
+          )}
+        </div>
+        {status && !status.exists && (
+          <button
+            onClick={handleCreate}
+            disabled={isCreating}
+            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-50"
+          >
+            {isCreating ? 'Creating...' : 'Create autoexec.cfg'}
+          </button>
+        )}
+      </div>
+
+      {result && <p className="text-xs text-text-secondary mb-3">{result}</p>}
+
+      <div className="bg-black/30 rounded-lg p-3 text-xs">
+        <div className="font-medium text-text-primary mb-1">Steam Launch Options:</div>
+        <p className="text-text-secondary mb-2">
+          To enable autoexec, add this to your Steam launch options:
+        </p>
+        <code className="bg-bg-tertiary px-2 py-1 rounded text-accent select-all">
+          +exec autoexec
+        </code>
+        <p className="text-text-secondary mt-2">
+          Right-click Deadlock in Steam → Properties → Launch Options
+        </p>
       </div>
     </div>
   );

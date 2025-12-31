@@ -7,6 +7,8 @@ import {
   AlertTriangle,
   Layers,
   Settings,
+  Crosshair,
+  Terminal,
 } from 'lucide-react';
 import { getConflicts } from '../lib/api';
 import { getAssetPath } from '../lib/assetPath';
@@ -35,6 +37,8 @@ export default function Sidebar() {
     { to: '/', icon: Package, label: 'Installed' },
     { to: '/browse', icon: Search, label: 'Browse' },
     { to: '/locker', icon: Shield, label: 'Locker' },
+    { to: '/crosshair', icon: Crosshair, label: 'Crosshair' },
+    { to: '/autoexec', icon: Terminal, label: 'Autoexec' },
     { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', badge: conflictCount },
     { to: '/profiles', icon: Layers, label: 'Profiles' },
     { to: '/settings', icon: Settings, label: 'Settings' },

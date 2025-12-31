@@ -10,6 +10,7 @@ import './ipc/system';
 import './ipc/conflicts';
 import './ipc/profiles';
 import './ipc/modDatabase';
+import './ipc/crosshairPresets';
 
 let mainWindow: BrowserWindow | null = null;
 

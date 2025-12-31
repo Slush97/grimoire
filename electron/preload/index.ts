@@ -64,6 +64,17 @@ export interface ElectronAPI {
     getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
+
+    // Crosshair Presets
+    getCrosshairPresets: () => Promise<{ presets: CrosshairPreset[]; activePresetId: string | null }>;
+    saveCrosshairPreset: (name: string, settings: CrosshairSettings, thumbnail: string) => Promise<CrosshairPreset>;
+    deleteCrosshairPreset: (id: string) => Promise<boolean>;
+    applyCrosshairPreset: (presetId: string, gamePath: string) => Promise<{ success: boolean; path: string }>;
+    clearCrosshairAutoexec: (gamePath: string) => Promise<{ success: boolean }>;
+    getAutoexecStatus: (gamePath: string) => Promise<{ exists: boolean; path: string | null; hasCrosshairSettings: boolean }>;
+    createAutoexec: (gamePath: string) => Promise<{ success: boolean; path: string }>;
+    getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
+    saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 }
 
 // Minimal type stubs (full types are in renderer)
@@ -256,6 +267,27 @@ interface CachedMod {
     cachedAt: number;
 }
 
+interface CrosshairSettings {
+    pipGap: number;
+    pipHeight: number;
+    pipWidth: number;
+    pipOpacity: number;
+    pipBorder: boolean;
+    dotOpacity: number;
+    dotOutlineOpacity: number;
+    colorR: number;
+    colorG: number;
+    colorB: number;
+}
+
+interface CrosshairPreset {
+    id: string;
+    name: string;
+    settings: CrosshairSettings;
+    thumbnail: string;
+    createdAt: string;
+}
+
 interface SyncProgressData {
     section: string;
     currentPage: number;
@@ -350,4 +382,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('sync-progress', handler);
         return () => ipcRenderer.removeListener('sync-progress', handler);
     },
+
+    // Crosshair Presets
+    getCrosshairPresets: () => ipcRenderer.invoke('crosshair:getPresets'),
+    saveCrosshairPreset: (name: string, settings: CrosshairSettings, thumbnail: string) =>
+        ipcRenderer.invoke('crosshair:savePreset', name, settings, thumbnail),
+    deleteCrosshairPreset: (id: string) => ipcRenderer.invoke('crosshair:deletePreset', id),
+    applyCrosshairPreset: (presetId: string, gamePath: string) =>
+        ipcRenderer.invoke('crosshair:applyPreset', presetId, gamePath),
+    clearCrosshairAutoexec: (gamePath: string) => ipcRenderer.invoke('crosshair:clearAutoexec', gamePath),
+    getAutoexecStatus: (gamePath: string) => ipcRenderer.invoke('crosshair:getAutoexecStatus', gamePath),
+    createAutoexec: (gamePath: string) => ipcRenderer.invoke('crosshair:createAutoexec', gamePath),
+    getAutoexecCommands: (gamePath: string) => ipcRenderer.invoke('autoexec:getCommands', gamePath),
+    saveAutoexecCommands: (gamePath: string, commands: string[]) => ipcRenderer.invoke('autoexec:saveCommands', gamePath, commands),
 } satisfies ElectronAPI);

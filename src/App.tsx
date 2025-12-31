@@ -7,6 +7,8 @@ import LockerHero from './pages/LockerHero';
 import Conflicts from './pages/Conflicts';
 import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
+import Crosshair from './pages/Crosshair';
+import Autoexec from './pages/Autoexec';
 
 export default function App() {
   return (
@@ -19,6 +21,8 @@ export default function App() {
           <Route path="locker/hero/:heroId" element={<LockerHero />} />
           <Route path="conflicts" element={<Conflicts />} />
           <Route path="profiles" element={<Profiles />} />
+          <Route path="crosshair" element={<Crosshair />} />
+          <Route path="autoexec" element={<Autoexec />} />
           <Route path="settings" element={<Settings />} />
         </Route>
       </Routes>
