@@ -652,7 +652,7 @@ function HeroOverlay({
 
       {/* Floating Skin Selection Card - Center left */}
       <div
-        className="fixed top-1/2 z-20 -translate-y-1/2 overflow-y-auto rounded-2xl border border-white/10 bg-black/85 shadow-2xl backdrop-blur-md"
+        className="fixed top-1/2 z-20 -translate-y-1/2 overflow-y-auto rounded-2xl border border-white/10 bg-black/95 shadow-2xl"
         style={{
           left: 'clamp(1rem, 3vw, 2rem)',
           width: 'clamp(320px, 28vw, 420px)',

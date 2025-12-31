@@ -1,5 +1,6 @@
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
+import { getAssetPath } from './assetPath';
 
 export type HeroCategory = {
   id: number;
@@ -81,11 +82,11 @@ export function heroAssetBaseName(name: string): string {
 }
 
 export function getHeroRenderPath(name: string): string {
-  return `/locker/heroes/${heroAssetBaseName(name)}_Render.png`;
+  return getAssetPath(`/locker/heroes/${heroAssetBaseName(name)}_Render.png`);
 }
 
 export function getHeroNamePath(name: string): string {
-  return `/locker/names/${heroAssetBaseName(name)}_name.png`;
+  return getAssetPath(`/locker/names/${heroAssetBaseName(name)}_name.png`);
 }
 
 export function getHeroWikiUrl(name: string): string {

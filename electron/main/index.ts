@@ -20,18 +20,14 @@ function createWindow(): void {
         minWidth: 600,
         minHeight: 400,
         title: 'Deadlock Mod Manager',
-        show: false,
+        show: true,
         autoHideMenuBar: true,
         webPreferences: {
             preload: join(__dirname, '../preload/index.cjs'),
             contextIsolation: true,
             nodeIntegration: false,
-            sandbox: true,
+            sandbox: false,
         },
-    });
-
-    mainWindow.on('ready-to-show', () => {
-        mainWindow?.show();
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -39,14 +35,21 @@ function createWindow(): void {
         return { action: 'deny' };
     });
 
+    // Debug: log renderer errors
+    mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
+        console.error('[Main] Renderer failed to load:', errorCode, errorDescription);
+    });
+
     // Load the renderer
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
         mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
     } else {
-        mainWindow.loadFile(join(__dirname, '../renderer/index.html'));
+        const rendererPath = join(__dirname, '../renderer/index.html');
+        console.log('[Main] Loading renderer from:', rendererPath);
+        mainWindow.loadFile(rendererPath);
     }
 
-    // Open DevTools in development
+    // Open DevTools in development only
     if (is.dev) {
         mainWindow.webContents.openDevTools();
     }

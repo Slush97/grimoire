@@ -9,6 +9,7 @@ import {
   Settings,
 } from 'lucide-react';
 import { getConflicts } from '../lib/api';
+import { getAssetPath } from '../lib/assetPath';
 
 export default function Sidebar() {
   const [conflictCount, setConflictCount] = useState(0);
@@ -45,13 +46,13 @@ export default function Sidebar() {
       <div className="px-4 py-3 border-b border-border">
         <div className="flex items-center gap-3">
           <img
-            src="/branding/classic-mark.svg"
+            src={getAssetPath('/branding/classic-mark.svg')}
             alt="Deadlock"
             className="w-8 h-8 flex-shrink-0"
           />
           <div className="flex flex-col min-w-0">
             <img
-              src="/branding/classic-wordmark.svg"
+              src={getAssetPath('/branding/classic-wordmark.svg')}
               alt="Deadlock"
               className="h-3.5 w-auto opacity-90"
             />

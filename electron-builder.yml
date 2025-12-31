@@ -6,10 +6,21 @@ directories:
 files:
   - dist/**/*
   - "!node_modules/**/*"
+  # Include required runtime dependencies
   - node_modules/adm-zip/**/*
+  - node_modules/better-sqlite3/**/*
+  - node_modules/bindings/**/*
+  - node_modules/file-uri-to-path/**/*
   - node_modules/node-7z/**/*
   - node_modules/node-unrar-js/**/*
+  - node_modules/cross-spawn/**/*
+  - node_modules/shebang-command/**/*
+  - node_modules/shebang-regex/**/*
+  - node_modules/which/**/*
+  - node_modules/isexe/**/*
+  - node_modules/path-key/**/*
 asarUnpack:
+  - node_modules/better-sqlite3/**/*
   - node_modules/node-unrar-js/**/*
 linux:
   target:
