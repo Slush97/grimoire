@@ -5,6 +5,8 @@ interface CrosshairPreviewProps {
     scale?: number;
 }
 
+// Based on https://github.com/mcipenuks/deadlock-crosshair with adjusted gap formula
+
 export default function CrosshairPreview({ size = 200, scale = 1 }: CrosshairPreviewProps) {
     const {
         pipGap,
@@ -19,55 +21,31 @@ export default function CrosshairPreview({ size = 200, scale = 1 }: CrosshairPre
         colorB,
     } = useCrosshairStore();
 
-    const center = size / 2;
-    const color = `rgb(${colorR}, ${colorG}, ${colorB})`;
-    const borderColor = 'black';
-    const borderWidth = pipBorder ? 1 : 0;
+    const crosshairColor = `rgba(${colorR}, ${colorG}, ${colorB}, ${pipOpacity})`;
+    const dotColor = `rgba(${colorR}, ${colorG}, ${colorB}, ${dotOpacity})`;
 
-    // Scale factor for preview - calibrated to match in-game at 1.3x on 1080p
-    // Width multiplier to make lines slightly thinner (matches in-game better)
-    // Gap multiplier to make gaps slightly larger (matches in-game better)
-    const widthMultiplier = 0.7;
-    const gapMultiplier = 1.6;
-    const scaledGap = pipGap * scale * gapMultiplier;
-    const scaledHeight = pipHeight * scale;
-    const scaledWidth = pipWidth * scale * widthMultiplier;
+    // Gap formula - calibrated to match in-game behavior
+    const baseGap = 9;
+    const gapMultiplier = 2.5;
+    const lineGap = (baseGap + pipGap * gapMultiplier) * scale;
+    const lineWidth = pipWidth * scale;
+    const lineHeight = pipHeight * scale;
+    const noWidthOrHeight = pipWidth === 0 || pipHeight === 0;
 
-    // Pip positions (4 lines: top, bottom, left, right)
-    const pips = [
-        // Top pip
-        {
-            x: center - scaledWidth / 2,
-            y: center - scaledGap - scaledHeight,
-            width: scaledWidth,
-            height: scaledHeight,
-        },
-        // Bottom pip
-        {
-            x: center - scaledWidth / 2,
-            y: center + scaledGap,
-            width: scaledWidth,
-            height: scaledHeight,
-        },
-        // Left pip
-        {
-            x: center - scaledGap - scaledHeight,
-            y: center - scaledWidth / 2,
-            width: scaledHeight,
-            height: scaledWidth,
-        },
-        // Right pip
-        {
-            x: center + scaledGap,
-            y: center - scaledWidth / 2,
-            width: scaledHeight,
-            height: scaledWidth,
-        },
-    ];
+    // Pip style with box-sizing: border-box so border is INSIDE the dimensions
+    const pipStyle = (width: number, height: number): React.CSSProperties => ({
+        display: noWidthOrHeight ? 'none' : 'block',
+        boxSizing: 'border-box',
+        width,
+        height,
+        background: crosshairColor,
+        border: pipBorder ? '1px solid black' : 'none',
+    });
 
-    // Dot settings
-    const dotRadius = 3 * scale;
-    const dotOutlineWidth = 1;
+    // Dot dimensions - in-game dot is about 2x2px (smaller than before)
+    const dotSize = 2 * scale;
+    // Outline is about 7x7 in-game - renders BEHIND the pips
+    const outlineSize = 7 * scale;
 
     return (
         <div
@@ -75,66 +53,68 @@ export default function CrosshairPreview({ size = 200, scale = 1 }: CrosshairPre
             style={{
                 width: size,
                 height: size,
-                backgroundColor: '#1a1a1a',
-                backgroundImage: `
-                    linear-gradient(45deg, #222 25%, transparent 25%),
-                    linear-gradient(-45deg, #222 25%, transparent 25%),
-                    linear-gradient(45deg, transparent 75%, #222 75%),
-                    linear-gradient(-45deg, transparent 75%, #222 75%)
-                `,
-                backgroundSize: '20px 20px',
-                backgroundPosition: '0 0, 0 10px, 10px -10px, -10px 0px',
+                backgroundColor: '#555',
             }}
         >
-            <svg width={size} height={size} className="absolute inset-0">
-                {/* Pips with optional border */}
-                {pips.map((pip, i) => (
-                    <g key={i}>
-                        {/* Border (rendered first, slightly larger) */}
-                        {pipBorder && (
-                            <rect
-                                x={pip.x - borderWidth}
-                                y={pip.y - borderWidth}
-                                width={pip.width + borderWidth * 2}
-                                height={pip.height + borderWidth * 2}
-                                fill={borderColor}
-                                opacity={pipOpacity}
-                            />
-                        )}
-                        {/* Main pip */}
-                        <rect
-                            x={pip.x}
-                            y={pip.y}
-                            width={pip.width}
-                            height={pip.height}
-                            fill={color}
-                            opacity={pipOpacity}
-                        />
-                    </g>
-                ))}
-
-                {/* Dot outline */}
+            {/* Center container for crosshair */}
+            <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                {/* Dot outline - BOTTOM LAYER (behind pips) - z-index 0 */}
                 {dotOutlineOpacity > 0 && (
-                    <circle
-                        cx={center}
-                        cy={center}
-                        r={dotRadius + dotOutlineWidth}
-                        fill={borderColor}
-                        opacity={dotOutlineOpacity}
+                    <div
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                        style={{
+                            zIndex: 0,
+                            width: outlineSize,
+                            height: outlineSize,
+                            background: `rgba(0,0,0,${dotOutlineOpacity})`,
+                        }}
                     />
                 )}
 
-                {/* Center dot */}
+                {/* Pip container - MIDDLE LAYER - z-index 1 */}
+                <div
+                    className="relative flex justify-center items-center"
+                    style={{
+                        zIndex: 1,
+                        height: lineGap,
+                        width: lineGap,
+                    }}
+                >
+                    {/* Bottom pip */}
+                    <div
+                        className="absolute top-full left-1/2 -translate-x-1/2 -translate-y-1/2"
+                        style={pipStyle(lineWidth, lineHeight)}
+                    />
+                    {/* Right pip */}
+                    <div
+                        className="absolute left-full top-1/2 -translate-y-1/2 -translate-x-1/2"
+                        style={pipStyle(lineHeight, lineWidth)}
+                    />
+                    {/* Left pip */}
+                    <div
+                        className="absolute right-full top-1/2 -translate-y-1/2 translate-x-1/2"
+                        style={pipStyle(lineHeight, lineWidth)}
+                    />
+                    {/* Top pip */}
+                    <div
+                        className="absolute bottom-full left-1/2 -translate-x-1/2 translate-y-1/2"
+                        style={pipStyle(lineWidth, lineHeight)}
+                    />
+                </div>
+
+                {/* Center dot - TOP LAYER - z-index 2 */}
                 {dotOpacity > 0 && (
-                    <circle
-                        cx={center}
-                        cy={center}
-                        r={dotRadius}
-                        fill={color}
-                        opacity={dotOpacity}
+                    <div
+                        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full"
+                        style={{
+                            zIndex: 2,
+                            width: dotSize,
+                            height: dotSize,
+                            background: dotColor,
+                        }}
                     />
                 )}
-            </svg>
+            </div>
         </div>
     );
 }
