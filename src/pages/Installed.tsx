@@ -6,8 +6,8 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { getConflicts } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import ModThumbnail from '../components/ModThumbnail';
-
-type ViewMode = 'grid' | 'list';
+import { Button } from '../components/common/ui';
+import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -76,20 +76,16 @@ export default function Installed() {
   // No path configured
   if (!activeDeadlockPath) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <Package className="w-16 h-16 mb-4 opacity-50" />
-        <h2 className="text-xl font-semibold text-text-primary mb-2">No Game Path Set</h2>
-        <p className="text-center max-w-md mb-4">
-          Configure your Deadlock installation path or enable dev mode to start managing mods.
-        </p>
-        <button
-          onClick={() => navigate('/settings')}
-          className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
-        >
-          <Settings className="w-4 h-4" />
-          Open Settings
-        </button>
-      </div>
+      <EmptyState
+        icon={Package}
+        title="No Game Path Set"
+        description="Configure your Deadlock installation path or enable dev mode to start managing mods."
+        action={
+          <Button onClick={() => navigate('/settings')} icon={Settings}>
+            Open Settings
+          </Button>
+        }
+      />
     );
   }
 
@@ -105,31 +101,26 @@ export default function Installed() {
   // Error
   if (modsError) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <Package className="w-16 h-16 mb-4 opacity-50 text-red-500" />
-        <h2 className="text-xl font-semibold text-text-primary mb-2">Error Loading Mods</h2>
-        <p className="text-center max-w-md text-red-400">{modsError}</p>
-        <button
-          onClick={() => loadMods()}
-          className="mt-4 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
-        >
-          Retry
-        </button>
-      </div>
+      <EmptyState
+        icon={Package}
+        title="Error Loading Mods"
+        description={modsError ?? undefined}
+        variant="error"
+        action={
+          <Button onClick={() => loadMods()}>Retry</Button>
+        }
+      />
     );
   }
 
   // No mods found
   if (mods.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <Package className="w-16 h-16 mb-4 opacity-50" />
-        <h2 className="text-xl font-semibold text-text-primary mb-2">No Mods Found</h2>
-        <p className="text-center max-w-md">
-          No mods installed yet. Download mods from the Browse tab or manually place VPK files in
-          your addons folder.
-        </p>
-      </div>
+      <EmptyState
+        icon={Package}
+        title="No Mods Found"
+        description="No mods installed yet. Download mods from the Browse tab or manually place VPK files in your addons folder."
+      />
     );
   }
 
@@ -140,54 +131,39 @@ export default function Installed() {
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold">Installed Mods</h1>
-          {conflictCount > 0 && (
-            <button
-              onClick={() => navigate('/conflicts')}
-              className="flex items-center gap-1.5 px-2 py-1 bg-yellow-500/20 text-yellow-400 rounded-lg text-sm hover:bg-yellow-500/30 transition-colors"
-            >
-              <AlertTriangle className="w-4 h-4" />
-              {conflictMap.size / 2} conflicts
-            </button>
-          )}
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-sm text-text-secondary">
-            {enabledMods.length} enabled / {mods.length} total
+      <PageHeader
+        icon={Package}
+        title="Installed Mods"
+        description={`${enabledMods.length} enabled / ${mods.length} total`}
+        action={
+          <div className="flex items-center gap-3">
+            {conflictCount > 0 && (
+              <Button
+                variant="warning"
+                size="sm"
+                onClick={() => navigate('/conflicts')}
+                icon={AlertTriangle}
+              >
+                {conflictMap.size / 2} conflicts
+              </Button>
+            )}
+            <ViewModeToggle
+              value={viewMode}
+              options={[
+                { value: 'grid', label: 'Cards' },
+                { value: 'list', label: 'List' },
+              ]}
+              onChange={(mode) => setViewMode(mode as 'grid' | 'list')}
+            />
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setViewMode('grid')}
-              className={`px-3 py-2 rounded-lg border transition-colors ${viewMode === 'grid'
-                  ? 'bg-bg-tertiary border-accent text-text-primary'
-                  : 'bg-bg-secondary border-border text-text-secondary hover:text-text-primary'
-                }`}
-            >
-              Cards
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={`px-3 py-2 rounded-lg border transition-colors ${viewMode === 'list'
-                  ? 'bg-bg-tertiary border-accent text-text-primary'
-                  : 'bg-bg-secondary border-border text-text-secondary hover:text-text-primary'
-                }`}
-            >
-              List
-            </button>
-          </div>
-        </div>
-      </div>
+        }
+        className="mb-6"
+      />
 
       {/* Enabled Mods */}
       {enabledMods.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-sm font-medium text-text-secondary mb-3 uppercase tracking-wider">
-            Enabled ({enabledMods.length})
-          </h2>
+          <SectionHeader count={enabledMods.length}>Enabled</SectionHeader>
           <div
             className={
               viewMode === 'grid'
@@ -213,9 +189,7 @@ export default function Installed() {
       {/* Disabled Mods */}
       {disabledMods.length > 0 && (
         <div>
-          <h2 className="text-sm font-medium text-text-secondary mb-3 uppercase tracking-wider">
-            Disabled ({disabledMods.length})
-          </h2>
+          <SectionHeader count={disabledMods.length}>Disabled</SectionHeader>
           <div
             className={
               viewMode === 'grid'
@@ -239,30 +213,19 @@ export default function Installed() {
       )}
 
       {/* Delete Confirmation Modal */}
-      {modToDelete && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-          <div className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md mx-4">
-            <h3 className="text-lg font-semibold text-text-primary mb-2">Delete Mod?</h3>
-            <p className="text-text-secondary mb-4">
-              Are you sure you want to delete <span className="font-medium text-text-primary">{modToDelete.name}</span>? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-3">
-              <button
-                onClick={() => setModToDelete(null)}
-                className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteConfirm}
-                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg transition-colors"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmModal
+        isOpen={!!modToDelete}
+        title="Delete Mod?"
+        message={
+          <>
+            Are you sure you want to delete <span className="font-medium text-text-primary">{modToDelete?.name}</span>? This action cannot be undone.
+          </>
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setModToDelete(null)}
+      />
     </div>
   );
 }
@@ -291,10 +254,10 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelet
   return (
     <div
       className={`rounded-lg border transition-colors ${hasConflicts
-          ? 'bg-yellow-500/5 border-yellow-500/50'
-          : mod.enabled
-            ? 'bg-bg-secondary border-accent/30'
-            : 'bg-bg-tertiary border-border opacity-75'
+        ? 'bg-yellow-500/5 border-yellow-500/50'
+        : mod.enabled
+          ? 'bg-bg-secondary border-accent/30'
+          : 'bg-bg-tertiary border-border opacity-75'
         } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'}`}
     >
       {viewMode === 'grid' && (

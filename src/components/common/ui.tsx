@@ -148,7 +148,7 @@ export function Toggle({ checked, onChange, label, description, className = '', 
 }
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-    variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'success';
+    variant?: 'primary' | 'secondary' | 'danger' | 'ghost' | 'success' | 'warning';
     size?: 'sm' | 'md' | 'lg';
     icon?: LucideIcon;
     isLoading?: boolean;
@@ -171,6 +171,7 @@ export function Button({
         secondary: 'bg-bg-tertiary hover:bg-white/10 text-text-primary border border-white/5 focus:ring-white/20',
         danger: 'bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 focus:ring-red-500',
         success: 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 focus:ring-green-500',
+        warning: 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/20 focus:ring-yellow-500',
         ghost: 'hover:bg-white/5 text-text-secondary hover:text-text-primary',
     };
 

@@ -27,6 +27,7 @@ export interface GameBananaMod {
     dateModified: number;
     likeCount: number;
     viewCount: number;
+    downloadCount?: number;
     hasFiles: boolean;
     nsfw: boolean;
     submitter?: GameBananaSubmitter;
@@ -116,6 +117,7 @@ interface ModRaw {
     _tsDateUpdated: number;
     _nLikeCount: number;
     _nViewCount: number;
+    _nDownloadCount?: number;
     _bHasFiles: boolean;
     _bIsNsfw: boolean;
     _bHasContentRatings?: boolean; // Used as NSFW signal from list API (list API doesn't return _bIsNsfw)
@@ -240,6 +242,7 @@ function mapMod(raw: ModRaw): GameBananaMod {
         dateModified: raw._tsDateUpdated,
         likeCount: raw._nLikeCount,
         viewCount: raw._nViewCount,
+        downloadCount: raw._nDownloadCount,
         hasFiles: raw._bHasFiles,
         // _bIsNsfw is only returned by detail API, but _bHasContentRatings is returned by list API
         // and correlates with NSFW status, so use it as fallback
@@ -331,7 +334,7 @@ export async function fetchSubmissions(
     };
 
     // Fields to request from GameBanana API (including NSFW flag)
-    const fields = '_idRow,_sName,_sProfileUrl,_tsDateAdded,_tsDateUpdated,_nLikeCount,_nViewCount,_bHasFiles,_bIsNsfw,_aSubmitter,_aPreviewMedia,_aRootCategory';
+    const fields = '_idRow,_sName,_sProfileUrl,_tsDateAdded,_tsDateUpdated,_nLikeCount,_nViewCount,_nDownloadCount,_bHasFiles,_bIsNsfw,_aSubmitter,_aPreviewMedia,_aRootCategory';
 
     // Use search endpoint when search query is provided
     if (search && search.trim()) {

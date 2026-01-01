@@ -90,7 +90,7 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadSettings, loadMods, mods: installedMods } = useAppStore();
+  const { settings, loadSettings, loadMods, mods: installedMods, getDownloadCount, setDownloadCount } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [mods, setMods] = useState<GameBananaMod[]>([]);
   const [loading, setLoading] = useState(false);
@@ -439,6 +439,41 @@ export default function Browse() {
     return () => observerRef.current?.disconnect();
   }, [hasMore, loading, loadingMore]);
 
+  // Background fetch download counts for visible mods (using global cache with TTL)
+  useEffect(() => {
+    if (mods.length === 0) return;
+    let cancelled = false;
+
+    // Find mods that don't have download counts cached (or are stale)
+    const missingMods = mods.filter((mod) => getDownloadCount(mod.id) === undefined);
+    if (missingMods.length === 0) return;
+
+    // Fetch in batches to avoid rate limiting
+    const fetchBatch = async (batch: typeof missingMods) => {
+      for (const mod of batch) {
+        if (cancelled) return;
+        try {
+          const details = await getModDetails(mod.id, section);
+          if (cancelled) return;
+          // Sum download counts across all files
+          const totalDownloads = details.files?.reduce((sum, f) => sum + (f.downloadCount || 0), 0) ?? 0;
+          setDownloadCount(mod.id, totalDownloads);
+        } catch {
+          // Ignore errors silently
+        }
+        // Small delay to avoid rate limiting
+        await new Promise((r) => setTimeout(r, 100));
+      }
+    };
+
+    // Fetch up to first 10 mods immediately
+    fetchBatch(missingMods.slice(0, 10));
+
+    return () => {
+      cancelled = true;
+    };
+  }, [mods, section, getDownloadCount, setDownloadCount]);
+
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
     setPage(1);
@@ -778,6 +813,7 @@ export default function Browse() {
                 viewMode={viewMode}
                 section={section}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+                downloadCount={getDownloadCount(mod.id)}
                 onClick={() => handleModClick(mod)}
                 onQuickDownload={() => handleQuickDownload(mod)}
               />
@@ -820,11 +856,12 @@ interface ModCardProps {
   viewMode: ViewMode;
   section: string;
   hideNsfwPreviews: boolean;
+  downloadCount?: number;
   onClick: () => void;
   onQuickDownload: () => void;
 }
 
-function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
+function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPreviews, downloadCount, onClick, onQuickDownload }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -837,9 +874,9 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
       className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer ${isList ? 'flex items-center gap-4 p-3' : ''
         }`}
     >
-      {/* Thumbnail */}
+      {/* Thumbnail with install button overlay */}
       <div
-        className={`bg-bg-tertiary ${isList
+        className={`relative bg-bg-tertiary ${isList
           ? 'w-32 h-20 flex-shrink-0 rounded-md overflow-hidden'
           : 'aspect-video'
           }`}
@@ -851,22 +888,17 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
           hideNsfw={hideNsfwPreviews}
           className="w-full h-full"
         />
-      </div>
-
-      {/* Info */}
-      <div className={isList ? 'min-w-0 flex-1' : isCompact ? 'p-2' : 'p-3'}>
-        <div className="flex items-center gap-2">
-          <h3 className={`font-medium truncate ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
+        {/* Install button positioned in top-right corner */}
+        <div className="absolute top-2 right-2">
           {installed ? (
             <span
-              className={`rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 ${isCompact ? 'text-[9px]' : ''
-                }`}
+              className={`rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white ${isCompact ? 'text-[9px] px-1.5' : ''}`}
             >
-              Installed
+              ✓
             </span>
           ) : downloading ? (
-            <span className="flex items-center gap-1 text-xs text-accent">
-              <Loader2 className="w-3 h-3 animate-spin" />
+            <span className="flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
+              <Loader2 className="w-4 h-4 animate-spin text-accent" />
             </span>
           ) : (
             <button
@@ -874,13 +906,18 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
                 e.stopPropagation();
                 onQuickDownload();
               }}
-              className={`flex items-center gap-1 px-2 py-1 bg-accent hover:bg-accent-secondary text-white rounded transition-colors ${isCompact ? 'text-[10px]' : 'text-xs'}`}
+              className={`flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-secondary text-white rounded-full shadow-lg transition-colors ${isCompact ? 'w-6 h-6' : ''}`}
+              title="Install"
             >
               <Download className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-              {!isCompact && 'Install'}
             </button>
           )}
         </div>
+      </div>
+
+      {/* Info */}
+      <div className={isList ? 'min-w-0 flex-1' : isCompact ? 'p-2' : 'p-3'}>
+        <h3 className={`font-medium truncate ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
         <div className={`flex items-center gap-3 text-text-secondary mt-1 ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
           <span className="flex items-center gap-1">
             <ThumbsUp className="w-3 h-3" />
@@ -889,6 +926,10 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
           <span className="flex items-center gap-1">
             <Eye className="w-3 h-3" />
             {mod.viewCount}
+          </span>
+          <span className="flex items-center gap-1">
+            <Download className="w-3 h-3" />
+            {downloadCount !== undefined ? downloadCount.toLocaleString() : '—'}
           </span>
         </div>
         {mod.submitter && (
@@ -949,8 +990,14 @@ function ModDetailsModal({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-      <div className="bg-bg-secondary rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-bg-secondary rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="sticky top-0 bg-bg-secondary border-b border-border p-4 flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
@@ -973,7 +1020,7 @@ function ModDetailsModal({
         <div className="p-4 space-y-4">
           {/* Image Carousel */}
           {images.length > 0 && (
-            <div className="relative w-full rounded-lg overflow-hidden">
+            <div className="relative w-full rounded-lg overflow-hidden border border-border">
               {/* Current Image */}
               <div className="relative">
                 <ModThumbnail

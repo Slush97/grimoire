@@ -176,6 +176,10 @@ export interface ElectronAPI {
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
 
+    // Window control
+    setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
+    getAlwaysOnTop: () => Promise<boolean>;
+
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => Promise<string | null>;
 
@@ -189,9 +193,9 @@ export interface ElectronAPI {
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;
-    createProfile: (name: string) => Promise<Profile>;
-    updateProfile: (profileId: string) => Promise<Profile>;
-    applyProfile: (profileId: string) => Promise<void>;
+    createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
+    updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
+    applyProfile: (profileId: string) => Promise<Profile>;
     deleteProfile: (profileId: string) => Promise<void>;
     renameProfile: (profileId: string, newName: string) => Promise<Profile>;
 
@@ -238,10 +242,25 @@ export interface ProfileMod {
     priority: number;
 }
 
+export interface ProfileCrosshairSettings {
+    pipGap: number;
+    pipHeight: number;
+    pipWidth: number;
+    pipOpacity: number;
+    pipBorder: boolean;
+    dotOpacity: number;
+    dotOutlineOpacity: number;
+    colorR: number;
+    colorG: number;
+    colorB: number;
+}
+
 export interface Profile {
     id: string;
     name: string;
     mods: ProfileMod[];
+    crosshair?: ProfileCrosshairSettings;
+    autoexecCommands?: string[];
     createdAt: string;
     updatedAt: string;
 }

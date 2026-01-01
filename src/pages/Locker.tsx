@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Layers, Loader2, Star, X } from 'lucide-react';
+import { Layers, Loader2, Shield, Star, X } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -12,6 +12,7 @@ import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import ModThumbnail from '../components/ModThumbnail';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
+import { PageHeader, ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
 import {
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
@@ -259,13 +260,11 @@ export default function Locker() {
 
   if (!activeDeadlockPath) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <Layers className="w-16 h-16 mb-4 opacity-50" />
-        <h2 className="text-xl font-semibold text-text-primary mb-2">No Game Path Set</h2>
-        <p className="text-center max-w-md">
-          Configure your Deadlock installation path or enable dev mode to manage hero skins.
-        </p>
-      </div>
+      <EmptyState
+        icon={Shield}
+        title="No Game Path Set"
+        description="Configure your Deadlock installation path or enable dev mode to manage hero skins."
+      />
     );
   }
 
@@ -279,51 +278,33 @@ export default function Locker() {
 
   if (modsError || categoriesError) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <Layers className="w-16 h-16 mb-4 opacity-50 text-red-500" />
-        <h2 className="text-xl font-semibold text-text-primary mb-2">Error Loading Locker</h2>
-        <p className="text-center max-w-md text-red-400">{modsError || categoriesError}</p>
-      </div>
+      <EmptyState
+        icon={Shield}
+        title="Error Loading Locker"
+        description={(modsError || categoriesError) ?? undefined}
+        variant="error"
+      />
     );
   }
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Hero Locker</h1>
-          <p className="text-sm text-text-secondary">
-            Pick the active skin per hero. Selecting one disables other skins for that hero.
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className="text-sm text-text-secondary">
-            {heroList.length} heroes • {mods.length} installed
-          </div>
-          <div className="flex items-center rounded-full border border-border bg-bg-secondary p-1 text-xs">
-            <button
-              type="button"
-              onClick={() => setViewMode('gallery')}
-              className={`px-3 rounded-full transition-colors ${viewMode === 'gallery'
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary'
-                }`}
-            >
-              Gallery
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('list')}
-              className={`px-3 rounded-full transition-colors ${viewMode === 'list'
-                ? 'bg-accent text-white'
-                : 'text-text-secondary hover:text-text-primary'
-                }`}
-            >
-              List
-            </button>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        icon={Shield}
+        title="Hero Locker"
+        description="Pick the active skin per hero. Selecting one disables other skins for that hero."
+        stats={`${heroList.length} heroes • ${mods.length} installed`}
+        action={
+          <ViewModeToggle
+            value={viewMode}
+            options={[
+              { value: 'gallery', label: 'Gallery' },
+              { value: 'list', label: 'List' },
+            ]}
+            onChange={(mode) => setViewMode(mode as 'gallery' | 'list')}
+          />
+        }
+      />
 
       {heroList.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
@@ -388,9 +369,7 @@ export default function Locker() {
 
       {viewMode === 'list' && heroMods.unassigned.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-sm font-medium text-text-secondary uppercase tracking-wider">
-            Unassigned Skins
-          </h2>
+          <SectionHeader>Unassigned Skins</SectionHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {heroMods.unassigned.map((mod) => (
               <div

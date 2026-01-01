@@ -34,6 +34,10 @@ export interface ElectronAPI {
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
 
+    // Window control
+    setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
+    getAlwaysOnTop: () => Promise<boolean>;
+
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => Promise<string | null>;
 
@@ -47,9 +51,9 @@ export interface ElectronAPI {
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;
-    createProfile: (name: string) => Promise<Profile>;
-    updateProfile: (profileId: string) => Promise<Profile>;
-    applyProfile: (profileId: string) => Promise<void>;
+    createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
+    updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
+    applyProfile: (profileId: string) => Promise<Profile>;
     deleteProfile: (profileId: string) => Promise<void>;
     renameProfile: (profileId: string, newName: string) => Promise<Profile>;
 
@@ -222,10 +226,25 @@ interface ModConflict {
     details: string;
 }
 
+interface ProfileCrosshairSettings {
+    pipGap: number;
+    pipHeight: number;
+    pipWidth: number;
+    pipOpacity: number;
+    pipBorder: boolean;
+    dotOpacity: number;
+    dotOutlineOpacity: number;
+    colorR: number;
+    colorG: number;
+    colorB: number;
+}
+
 interface Profile {
     id: string;
     name: string;
     mods: ProfileMod[];
+    crosshair?: ProfileCrosshairSettings;
+    autoexecCommands?: string[];
     createdAt: string;
     updatedAt: string;
 }
@@ -338,6 +357,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getGameinfoStatus: () => ipcRenderer.invoke('get-gameinfo-status'),
     fixGameinfo: () => ipcRenderer.invoke('fix-gameinfo'),
 
+    // Window control
+    setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('set-always-on-top', enabled),
+    getAlwaysOnTop: () => ipcRenderer.invoke('get-always-on-top'),
+
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => ipcRenderer.invoke('show-open-dialog', options),
 
@@ -364,8 +387,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Profiles
     getProfiles: () => ipcRenderer.invoke('get-profiles'),
-    createProfile: (name: string) => ipcRenderer.invoke('create-profile', name),
-    updateProfile: (profileId: string) => ipcRenderer.invoke('update-profile', profileId),
+    createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => ipcRenderer.invoke('create-profile', name, crosshairSettings),
+    updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => ipcRenderer.invoke('update-profile', profileId, crosshairSettings),
     applyProfile: (profileId: string) => ipcRenderer.invoke('apply-profile', profileId),
     deleteProfile: (profileId: string) => ipcRenderer.invoke('delete-profile', profileId),
     renameProfile: (profileId: string, newName: string) => ipcRenderer.invoke('rename-profile', profileId, newName),

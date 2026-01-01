@@ -91,16 +91,36 @@ export default function Crosshair() {
     };
 
     const generateThumbnail = (): string => {
-        // Create a simple thumbnail using SVG data URL
-        const color = `rgb(${colorR}, ${colorG}, ${colorB})`;
+        // Create thumbnail using same formula as CrosshairPreview
+        // Scale proportionally: preview is 400px, thumbnail viewBox is 100
+        const baseGap = 9;
+        const gapMultiplier = 2.5;
+        const scale = 1.3;
+        const scaleFactor = 100 / 400; // Match proportions of 400px preview
+
+        const lineGap = (baseGap + pipGap * gapMultiplier) * scale * scaleFactor;
+        const lineWidth = pipWidth * scale * scaleFactor;
+        const lineHeight = pipHeight * scale * scaleFactor;
+        const halfGap = lineGap / 2;
+        const center = 50;
+
+        // Use rgba like CrosshairPreview does
+        const pipColor = `rgba(${colorR}, ${colorG}, ${colorB}, ${pipOpacity})`;
+        const dotFillColor = `rgba(${colorR}, ${colorG}, ${colorB}, ${dotOpacity})`;
+
         const svg = `
             <svg xmlns="http://www.w3.org/2000/svg" width="100" height="100" viewBox="0 0 100 100">
-                <rect width="100" height="100" fill="#1a1a1a"/>
-                <rect x="${50 - pipWidth}" y="${50 - pipGap * 0.5 - pipHeight}" width="${pipWidth * 2}" height="${pipHeight}" fill="${color}" opacity="${pipOpacity}"/>
-                <rect x="${50 - pipWidth}" y="${50 + pipGap * 0.5}" width="${pipWidth * 2}" height="${pipHeight}" fill="${color}" opacity="${pipOpacity}"/>
-                <rect x="${50 - pipGap * 0.5 - pipHeight}" y="${50 - pipWidth}" width="${pipHeight}" height="${pipWidth * 2}" fill="${color}" opacity="${pipOpacity}"/>
-                <rect x="${50 + pipGap * 0.5}" y="${50 - pipWidth}" width="${pipHeight}" height="${pipWidth * 2}" fill="${color}" opacity="${pipOpacity}"/>
-                ${dotOpacity > 0 ? `<circle cx="50" cy="50" r="3" fill="${color}" opacity="${dotOpacity}"/>` : ''}
+                <rect width="100" height="100" fill="#555"/>
+                <!-- Top pip - centered at (center, center - halfGap) -->
+                <rect x="${center - lineWidth / 2}" y="${center - halfGap - lineHeight / 2}" width="${lineWidth}" height="${lineHeight}" fill="${pipColor}"${pipBorder ? ' stroke="black" stroke-width="0.25"' : ''}/>
+                <!-- Bottom pip - centered at (center, center + halfGap) -->
+                <rect x="${center - lineWidth / 2}" y="${center + halfGap - lineHeight / 2}" width="${lineWidth}" height="${lineHeight}" fill="${pipColor}"${pipBorder ? ' stroke="black" stroke-width="0.25"' : ''}/>
+                <!-- Left pip - centered at (center - halfGap, center) -->
+                <rect x="${center - halfGap - lineHeight / 2}" y="${center - lineWidth / 2}" width="${lineHeight}" height="${lineWidth}" fill="${pipColor}"${pipBorder ? ' stroke="black" stroke-width="0.25"' : ''}/>
+                <!-- Right pip - centered at (center + halfGap, center) -->
+                <rect x="${center + halfGap - lineHeight / 2}" y="${center - lineWidth / 2}" width="${lineHeight}" height="${lineWidth}" fill="${pipColor}"${pipBorder ? ' stroke="black" stroke-width="0.25"' : ''}/>
+                ${dotOpacity > 0 ? `<circle cx="${center}" cy="${center}" r="${2 * scale * scaleFactor}" fill="${dotFillColor}"/>` : ''}
+                ${dotOutlineOpacity > 0 ? `<circle cx="${center}" cy="${center}" r="${7 * scale * scaleFactor / 2}" fill="rgba(0,0,0,${dotOutlineOpacity})"/>` : ''}
             </svg>
         `;
         return `data:image/svg+xml;base64,${btoa(svg)}`;
@@ -141,7 +161,7 @@ export default function Crosshair() {
     };
 
     return (
-        <div className="p-4 md:p-8 max-w-7xl mx-auto space-y-6">
+        <div className="p-6 space-y-6">
             <div className="flex items-center gap-3">
                 <div className="p-3 bg-accent/10 rounded-xl">
                     <CrosshairIcon className="w-8 h-8 text-accent" />
@@ -252,17 +272,29 @@ export default function Crosshair() {
 
                     {/* Preview Area */}
                     <Card className="relative w-full" contentClassName="p-0">
-                        <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-black/40 backdrop-blur-md rounded-full px-3 py-1 border border-white/5">
+                        <div className="absolute top-4 right-4 z-10 flex items-center gap-3 bg-black/40 backdrop-blur-md rounded-full px-3 py-1.5 border border-white/5">
                             <span className="text-xs text-text-secondary">Scale:</span>
-                            <input
-                                type="range"
-                                min={0.5}
-                                max={3}
-                                step={0.1}
-                                value={previewScale}
-                                onChange={(e) => setPreviewScale(parseFloat(e.target.value))}
-                                className="w-16 md:w-20 accent-accent"
-                            />
+                            <div className="relative w-20 h-4 flex items-center">
+                                <div className="absolute w-full h-1 bg-bg-tertiary rounded-full overflow-hidden">
+                                    <div
+                                        className="h-full bg-accent"
+                                        style={{ width: `${((previewScale - 0.5) / 2.5) * 100}%` }}
+                                    />
+                                </div>
+                                <input
+                                    type="range"
+                                    min={0.5}
+                                    max={3}
+                                    step={0.1}
+                                    value={previewScale}
+                                    onChange={(e) => setPreviewScale(parseFloat(e.target.value))}
+                                    className="absolute w-full h-full opacity-0 cursor-pointer"
+                                />
+                                <div
+                                    className="absolute h-3 w-3 bg-white rounded-full shadow-lg border border-accent pointer-events-none"
+                                    style={{ left: `calc(${((previewScale - 0.5) / 2.5) * 100}% - 6px)` }}
+                                />
+                            </div>
                             <span className="font-mono text-xs w-8">{previewScale.toFixed(1)}x</span>
                         </div>
 
@@ -273,17 +305,14 @@ export default function Crosshair() {
                         {/* Pin Window Control */}
                         <div className="p-4 border-t border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
                             <p className="text-[10px] text-text-secondary italic">Using verified formula from deadlock-crosshair project</p>
-                            <button
+                            <Button
+                                variant={alwaysOnTop ? 'primary' : 'secondary'}
+                                size="sm"
                                 onClick={() => handleAlwaysOnTop(!alwaysOnTop)}
-                                className={`flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-medium transition-colors w-full sm:w-auto justify-center ${alwaysOnTop
-                                    ? 'bg-accent text-white'
-                                    : 'bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                                    }`}
-                                title="Keep window on top of fullscreen game for comparison"
+                                icon={Pin}
                             >
-                                <Pin className="w-3.5 h-3.5" />
                                 {alwaysOnTop ? 'Pinned' : 'Pin Window'}
-                            </button>
+                            </Button>
                         </div>
                     </Card>
 
@@ -294,23 +323,19 @@ export default function Crosshair() {
                                 {presets.map((preset) => (
                                     <div
                                         key={preset.id}
-                                        className={`group relative aspect-square rounded-lg border overflow-hidden transition-all bg-bg-tertiary ${preset.id === activePresetId ? 'border-accent ring-1 ring-accent' : 'border-white/5 hover:border-white/20'
+                                        onClick={() => loadSettingsFromPreset(preset)}
+                                        className={`group relative aspect-square rounded-lg border overflow-hidden transition-all bg-bg-tertiary cursor-pointer ${preset.id === activePresetId ? 'border-accent ring-1 ring-accent' : 'border-white/5 hover:border-white/20'
                                             }`}
                                     >
-                                        <img src={preset.thumbnail} alt={preset.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
+                                        <div className="w-full h-full flex items-center justify-center">
+                                            <CrosshairPreview size={80} scale={1.3} settings={preset.settings} transparent />
+                                        </div>
 
                                         <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
                                             <div className="text-xs font-bold text-center truncate w-full">{preset.name}</div>
                                             <div className="flex gap-1">
                                                 <button
-                                                    onClick={() => loadSettingsFromPreset(preset)}
-                                                    className="p-1.5 bg-white/10 hover:bg-white/20 rounded-md text-white"
-                                                    title="Load"
-                                                >
-                                                    <RotateCcw className="w-3 h-3" />
-                                                </button>
-                                                <button
-                                                    onClick={() => handleApplyPreset(preset.id)}
+                                                    onClick={(e) => { e.stopPropagation(); handleApplyPreset(preset.id); }}
                                                     className="p-1.5 bg-accent hover:bg-accent-hover rounded-md text-white"
                                                     title="Apply to Game"
                                                 >

@@ -3,6 +3,15 @@ import type { Mod, AppSettings } from '../types/mod';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import * as api from '../lib/api';
 
+// Cache entry with timestamp for TTL support
+interface CacheEntry<T> {
+  value: T;
+  timestamp: number;
+}
+
+// TTL for download counts cache (1 hour in ms)
+const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
+
 interface AppState {
   // Settings
   settings: AppSettings | null;
@@ -14,6 +23,9 @@ interface AppState {
   modsLoading: boolean;
   modsError: string | null;
 
+  // Download counts cache (mod id -> { downloadCount, timestamp })
+  downloadCountsCache: Map<number, CacheEntry<number>>;
+
   // Actions
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -22,6 +34,11 @@ interface AppState {
   toggleMod: (modId: string) => Promise<void>;
   deleteMod: (modId: string) => Promise<void>;
   setModPriority: (modId: string, priority: number) => Promise<void>;
+
+  // Download counts cache actions
+  getDownloadCount: (modId: number) => number | undefined;
+  setDownloadCount: (modId: number, count: number) => void;
+  isDownloadCountStale: (modId: number) => boolean;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -32,6 +49,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   mods: [],
   modsLoading: false,
   modsError: null,
+  downloadCountsCache: new Map(),
 
   // Load settings from backend
   loadSettings: async () => {
@@ -120,4 +138,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ modsError: String(err) });
     }
   },
+
+  // Get download count from cache (returns undefined if not cached or stale)
+  getDownloadCount: (modId: number) => {
+    const entry = get().downloadCountsCache.get(modId);
+    if (!entry) return undefined;
+    // Return undefined if stale (will trigger refetch)
+    if (Date.now() - entry.timestamp > DOWNLOAD_COUNTS_TTL) return undefined;
+    return entry.value;
+  },
+
+  // Set download count in cache with current timestamp
+  setDownloadCount: (modId: number, count: number) => {
+    const newCache = new Map(get().downloadCountsCache);
+    newCache.set(modId, { value: count, timestamp: Date.now() });
+    set({ downloadCountsCache: newCache });
+  },
+
+  // Check if a cached download count is stale
+  isDownloadCountStale: (modId: number) => {
+    const entry = get().downloadCountsCache.get(modId);
+    if (!entry) return true;
+    return Date.now() - entry.timestamp > DOWNLOAD_COUNTS_TTL;
+  },
 }));
+

@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, RefreshCw, X } from 'lucide-react';
+import { AlertTriangle, CheckCircle, RefreshCw, X } from 'lucide-react';
 import { getConflicts, disableMod, getMods } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
-
+import { Button } from '../components/common/ui';
+import { PageHeader, EmptyState } from '../components/common/PageComponents';
 interface ModWithThumbnail {
   id: string;
   name: string;
@@ -67,7 +68,7 @@ export default function Conflicts() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <RefreshCw className="w-8 h-8 animate-spin mb-4" />
+        <RefreshCw className="w-8 h-8 animate-spin mb-4 text-accent" />
         <p>Scanning for conflicts...</p>
       </div>
     );
@@ -75,56 +76,42 @@ export default function Conflicts() {
 
   if (error) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-red-400">
-        <AlertTriangle className="w-16 h-16 mb-4" />
-        <p>{error}</p>
-        <button
-          onClick={loadConflicts}
-          className="mt-4 px-4 py-2 bg-accent-primary rounded hover:bg-accent-secondary transition-colors"
-        >
-          Retry
-        </button>
-      </div>
+      <EmptyState
+        icon={AlertTriangle}
+        title="Error Loading Conflicts"
+        description={error ?? undefined}
+        variant="error"
+        action={
+          <Button onClick={loadConflicts}>Retry</Button>
+        }
+      />
     );
   }
 
   if (conflicts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <div className="w-16 h-16 mb-4 rounded-full bg-green-500/20 flex items-center justify-center">
-          <AlertTriangle className="w-8 h-8 text-green-400" />
-        </div>
-        <h2 className="text-xl font-semibold text-text-primary mb-2">
-          No Conflicts Detected
-        </h2>
-        <p className="text-center max-w-md">
-          Your installed mods don't have any conflicts. Great!
-        </p>
-        <button
-          onClick={loadConflicts}
-          className="mt-4 px-4 py-2 bg-bg-tertiary rounded hover:bg-bg-secondary transition-colors flex items-center gap-2"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
-      </div>
+      <EmptyState
+        icon={CheckCircle}
+        title="No Conflicts Detected"
+        description="Your installed mods don't have any conflicts. Great!"
+        action={
+          <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
+        }
+      />
     );
   }
 
   return (
     <div className="p-6">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-text-primary">
-          Conflicts ({conflicts.length})
-        </h1>
-        <button
-          onClick={loadConflicts}
-          className="px-3 py-1.5 bg-bg-tertiary rounded hover:bg-bg-secondary transition-colors flex items-center gap-2 text-sm"
-        >
-          <RefreshCw className="w-4 h-4" />
-          Refresh
-        </button>
-      </div>
+      <PageHeader
+        icon={AlertTriangle}
+        title={`Conflicts (${conflicts.length})`}
+        description="Resolve conflicts between installed mods"
+        action={
+          <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
+        }
+        className="mb-6"
+      />
 
       {/* Grid of conflict cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

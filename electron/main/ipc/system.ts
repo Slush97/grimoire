@@ -1,4 +1,5 @@
-import { ipcMain, dialog } from 'electron';
+import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { getMainWindow } from '../index';
 import { loadSettings } from '../services/settings';
 import {
     getGameinfoStatus,
@@ -76,6 +77,21 @@ ipcMain.handle('get-gameinfo-status', (): GameinfoStatus => {
         };
     }
     return getGameinfoStatus(deadlockPath);
+});
+
+// Always on top
+ipcMain.handle('set-always-on-top', (_, enabled: boolean): boolean => {
+    const win = getMainWindow();
+    if (win) {
+        win.setAlwaysOnTop(enabled, 'floating');
+        return win.isAlwaysOnTop();
+    }
+    return false;
+});
+
+ipcMain.handle('get-always-on-top', (): boolean => {
+    const win = getMainWindow();
+    return win ? win.isAlwaysOnTop() : false;
 });
 
 // fix-gameinfo

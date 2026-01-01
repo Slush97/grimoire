@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layers, Plus, Trash2, Play, Save, RefreshCw, AlertTriangle, User, ChevronDown, ChevronUp, Crosshair, Terminal, Check } from 'lucide-react';
+import { Layers, Plus, Trash2, Play, Save, RefreshCw, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check } from 'lucide-react';
 import {
   getProfiles,
   createProfile,
@@ -12,6 +12,7 @@ import type { Profile, ProfileCrosshairSettings } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { Card, Badge, Button } from '../components/common/ui';
+import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 
 export default function Profiles() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -24,8 +25,11 @@ export default function Profiles() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [expandedProfiles, setExpandedProfiles] = useState<Set<string>>(new Set());
   
-  const { loadMods } = useAppStore();
+  const { mods, loadMods } = useAppStore();
   const { getSettings: getCrosshairSettings, loadSettingsFromPreset } = useCrosshairStore();
+
+  // Create lookup map for mod display names
+  const modNameMap = new Map(mods.map(m => [m.fileName, m.name]));
 
   const loadProfileList = async () => {
     setLoading(true);
@@ -134,7 +138,7 @@ export default function Profiles() {
   return (
     <div className="p-6 h-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-8 shrink-0 max-w-7xl mx-auto w-full">
+      <div className="flex items-center justify-between mb-8 shrink-0">
         <div className="flex items-center gap-3">
           <div className="p-3 bg-accent/10 rounded-xl">
             <Layers className="w-8 h-8 text-accent" />
@@ -146,8 +150,8 @@ export default function Profiles() {
         </div>
       </div>
 
-      <div className="flex flex-col gap-6 flex-1 overflow-auto pr-2 custom-scrollbar">
-        <div className="max-w-7xl mx-auto w-full space-y-6">
+      <div className="flex flex-col gap-6 flex-1 overflow-auto px-1 custom-scrollbar">
+        <div className="space-y-6 pr-1">
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-red-400">
               <AlertTriangle className="w-5 h-5" />
@@ -178,7 +182,7 @@ export default function Profiles() {
           </Card>
 
           {/* Profile List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 pb-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6">
             {profiles.length === 0 ? (
               <div className="col-span-full flex flex-col items-center justify-center py-16 text-text-secondary border border-dashed border-white/10 rounded-xl bg-bg-secondary/30">
                 <div className="w-20 h-20 mb-4 rounded-full bg-bg-tertiary flex items-center justify-center">
@@ -191,7 +195,6 @@ export default function Profiles() {
               </div>
             ) : (
               profiles.map((profile) => {
-                const enabledCount = profile.mods.filter((m) => m.enabled).length;
                 const isApplying = applyingId === profile.id;
                 const isUpdating = updatingId === profile.id;
                 const isActive = activeProfileId === profile.id;
@@ -214,38 +217,28 @@ export default function Profiles() {
                     }
                   >
                     <div className="flex flex-col gap-4">
-                      <div className="flex items-center gap-4 text-sm text-text-secondary bg-black/20 p-3 rounded-lg border border-white/5">
-                        <div className="flex flex-col items-center px-4 border-r border-white/5">
-                          <span className="text-2xl font-bold text-text-primary mb-1">{profile.mods.length}</span>
+                      <div className="flex items-center justify-between text-sm text-text-secondary bg-black/20 p-4 rounded-lg border border-white/5">
+                        <div className="flex flex-col items-center">
+                          <span className="text-2xl font-bold text-text-primary">{profile.mods.length}</span>
                           <span className="text-xs uppercase tracking-wider opacity-70">Mods</span>
                         </div>
-                        <div className="flex flex-col items-center px-4 border-r border-white/5">
-                          <span className="text-2xl font-bold text-green-400 mb-1">{enabledCount}</span>
-                          <span className="text-xs uppercase tracking-wider opacity-70">Enabled</span>
-                        </div>
-                        <div className="flex-1 text-right text-xs">
-                          <div className="mb-1">Last Updated</div>
+                        <div className="text-right text-xs">
+                          <div className="mb-1 opacity-70">Updated</div>
                           <div className="text-text-primary font-mono">{new Date(profile.updatedAt).toLocaleDateString()}</div>
                         </div>
                       </div>
                       
                       {/* Capabilities Indicators */}
-                      <div className="flex gap-2">
-                        {profile.crosshair && (
-                           <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-md text-xs text-text-secondary" title="Includes Crosshair Settings">
-                             <Crosshair className="w-3 h-3 text-accent" />
-                             <span>Crosshair</span>
-                           </div>
-                        )}
-                        {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
+                      {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
+                        <div className="flex gap-2">
                            <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-md text-xs text-text-secondary" title="Includes Autoexec Commands">
                              <Terminal className="w-3 h-3 text-blue-400" />
-                             <span>Autoexec</span>
+                             <span>Autoexec ({profile.autoexecCommands.length})</span>
                            </div>
-                        )}
-                      </div>
+                        </div>
+                      )}
 
-                      <div className="flex items-center gap-2 pt-2 border-t border-white/5 mt-2">
+                      <div className="flex items-center gap-2 pt-3 border-t border-white/5">
                         {!isActive && (
                           <Button
                             className="flex-1"
@@ -285,19 +278,63 @@ export default function Profiles() {
                       
                       {/* Expanded Content */}
                       {isExpanded && (
-                        <div className="mt-2 pt-4 border-t border-white/5 animate-fade-in">
-                          <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">Content Preview</div>
-                          <div className="max-h-48 overflow-y-auto pr-2 custom-scrollbar space-y-1">
-                             {profile.mods.map((mod, idx) => (
-                               <div key={idx} className="flex items-center justify-between text-xs py-1 px-2 hover:bg-white/5 rounded">
-                                 <span className="truncate flex-1" title={mod.fileName}>{mod.fileName}</span>
-                                 {mod.enabled && <Check className="w-3 h-3 text-green-400 shrink-0" />}
-                               </div>
-                             ))}
-                             {profile.mods.length === 0 && (
-                               <div className="text-xs text-text-secondary italic">No mods in profile</div>
-                             )}
+                        <div className="mt-2 pt-4 border-t border-white/5 animate-fade-in space-y-4">
+                          {/* Mods List */}
+                          <div>
+                            <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
+                              Mods ({profile.mods.length})
+                            </div>
+                            <div className="max-h-32 overflow-y-auto pr-2 custom-scrollbar space-y-1">
+                               {profile.mods.map((mod, idx) => {
+                                 const displayName = modNameMap.get(mod.fileName) || mod.fileName;
+                                 return (
+                                   <div key={idx} className="flex items-center justify-between text-xs py-1.5 px-2 hover:bg-white/5 rounded">
+                                     <span className="truncate flex-1" title={mod.fileName}>{displayName}</span>
+                                     {mod.enabled && <Check className="w-3 h-3 text-green-400 shrink-0 ml-2" />}
+                                   </div>
+                                 );
+                               })}
+                               {profile.mods.length === 0 && (
+                                 <div className="text-xs text-text-secondary italic">No mods in profile</div>
+                               )}
+                            </div>
                           </div>
+
+                          {/* Crosshair Preview */}
+                          {profile.crosshair && (
+                            <div className="pt-3 border-t border-white/5">
+                              <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">Crosshair</div>
+                              <div className="flex items-center gap-4">
+                                <CrosshairPreview size={56} scale={1.3} settings={profile.crosshair} />
+                                <div className="text-xs text-text-secondary space-y-1">
+                                  <div>Gap: {profile.crosshair.pipGap} | Height: {profile.crosshair.pipHeight} | Width: {profile.crosshair.pipWidth}</div>
+                                  <div className="flex items-center gap-2">
+                                    <div
+                                      className="w-3 h-3 rounded-sm border border-white/20"
+                                      style={{ backgroundColor: `rgb(${profile.crosshair.colorR}, ${profile.crosshair.colorG}, ${profile.crosshair.colorB})` }}
+                                    />
+                                    <span>RGB({profile.crosshair.colorR}, {profile.crosshair.colorG}, {profile.crosshair.colorB})</span>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Autoexec Commands */}
+                          {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
+                            <div className="pt-3 border-t border-white/5">
+                              <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
+                                Autoexec ({profile.autoexecCommands.length} commands)
+                              </div>
+                              <div className="space-y-1 max-h-24 overflow-y-auto custom-scrollbar">
+                                {profile.autoexecCommands.map((cmd, idx) => (
+                                  <div key={idx} className="text-xs font-mono bg-white/5 rounded px-2 py-1 truncate" title={cmd}>
+                                    {cmd}
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>

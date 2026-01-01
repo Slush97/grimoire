@@ -1,13 +1,33 @@
 import { useCrosshairStore } from '../../stores/crosshairStore';
 
+export interface CrosshairSettings {
+    pipGap: number;
+    pipHeight: number;
+    pipWidth: number;
+    pipOpacity: number;
+    pipBorder: boolean;
+    dotOpacity: number;
+    dotOutlineOpacity: number;
+    colorR: number;
+    colorG: number;
+    colorB: number;
+}
+
 interface CrosshairPreviewProps {
     size?: number;
     scale?: number;
+    // Optional override settings (for displaying saved profiles)
+    settings?: CrosshairSettings;
+    // Render with transparent background instead of gray
+    transparent?: boolean;
 }
 
 // Based on https://github.com/mcipenuks/deadlock-crosshair with adjusted gap formula
 
-export default function CrosshairPreview({ size = 200, scale = 1 }: CrosshairPreviewProps) {
+export default function CrosshairPreview({ size = 200, scale = 1, settings, transparent }: CrosshairPreviewProps) {
+    const storeSettings = useCrosshairStore();
+
+    // Use provided settings or fall back to store
     const {
         pipGap,
         pipHeight,
@@ -19,7 +39,7 @@ export default function CrosshairPreview({ size = 200, scale = 1 }: CrosshairPre
         colorR,
         colorG,
         colorB,
-    } = useCrosshairStore();
+    } = settings || storeSettings;
 
     const crosshairColor = `rgba(${colorR}, ${colorG}, ${colorB}, ${pipOpacity})`;
     const dotColor = `rgba(${colorR}, ${colorG}, ${colorB}, ${dotOpacity})`;
@@ -53,7 +73,7 @@ export default function CrosshairPreview({ size = 200, scale = 1 }: CrosshairPre
             style={{
                 width: size,
                 height: size,
-                backgroundColor: '#555',
+                backgroundColor: transparent ? 'transparent' : '#555',
             }}
         >
             {/* Center container for crosshair */}

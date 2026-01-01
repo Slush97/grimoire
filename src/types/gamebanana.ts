@@ -6,6 +6,7 @@ export interface GameBananaMod {
   dateModified: number;
   likeCount: number;
   viewCount: number;
+  downloadCount?: number;
   hasFiles: boolean;
   nsfw: boolean;
   submitter?: GameBananaSubmitter;
