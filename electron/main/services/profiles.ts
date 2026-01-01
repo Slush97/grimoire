@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
 import { scanMods, enableMod, disableMod, setModPriority, Mod } from './mods';
+import { readAutoexec, writeAutoexec } from './autoexec';
 
 export interface ProfileMod {
     fileName: string;   // Use fileName as the stable identifier
@@ -9,10 +10,25 @@ export interface ProfileMod {
     priority: number;
 }
 
+export interface ProfileCrosshairSettings {
+    pipGap: number;
+    pipHeight: number;
+    pipWidth: number;
+    pipOpacity: number;
+    pipBorder: boolean;
+    dotOpacity: number;
+    dotOutlineOpacity: number;
+    colorR: number;
+    colorG: number;
+    colorB: number;
+}
+
 export interface Profile {
     id: string;
     name: string;
     mods: ProfileMod[];
+    crosshair?: ProfileCrosshairSettings;
+    autoexecCommands?: string[];
     createdAt: string;
     updatedAt: string;
 }
@@ -64,12 +80,15 @@ function saveProfiles(profiles: Profile[]): void {
 }
 
 /**
- * Create a new profile from current mod state
- * Only saves enabled mods - disabled mods are not included
+ * Create a new profile from current mod state and provided crosshair settings
  */
-export function createProfile(deadlockPath: string, name: string): Profile {
+export function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings): Profile {
     const mods = scanMods(deadlockPath);
     const enabledMods = mods.filter(mod => mod.enabled);  // Only save enabled mods
+    
+    // Read current autoexec commands
+    const autoexecData = readAutoexec(deadlockPath);
+    
     const now = new Date().toISOString();
 
     const profile: Profile = {
@@ -80,6 +99,8 @@ export function createProfile(deadlockPath: string, name: string): Profile {
             enabled: true,  // Always true since we only save enabled mods
             priority: mod.priority,
         })),
+        crosshair: crosshairSettings,
+        autoexecCommands: autoexecData.commands,
         createdAt: now,
         updatedAt: now,
     };
@@ -95,7 +116,7 @@ export function createProfile(deadlockPath: string, name: string): Profile {
  * Update an existing profile with current mod state
  * Only saves enabled mods - disabled mods are not included
  */
-export function updateProfile(deadlockPath: string, profileId: string): Profile {
+export function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Profile {
     const profiles = loadProfiles();
     const index = profiles.findIndex(p => p.id === profileId);
 
@@ -105,6 +126,9 @@ export function updateProfile(deadlockPath: string, profileId: string): Profile 
 
     const mods = scanMods(deadlockPath);
     const enabledMods = mods.filter(mod => mod.enabled);  // Only save enabled mods
+    
+    // Read current autoexec commands
+    const autoexecData = readAutoexec(deadlockPath);
 
     profiles[index] = {
         ...profiles[index],
@@ -113,6 +137,9 @@ export function updateProfile(deadlockPath: string, profileId: string): Profile 
             enabled: true,
             priority: mod.priority,
         })),
+        crosshair: crosshairSettings || profiles[index].crosshair, // Update if provided, else keep existing? Or maybe undefined to remove? 
+        // Logic: if updating from UI, we likely want to snapshot current state. If crosshairSettings is passed, use it.
+        autoexecCommands: autoexecData.commands,
         updatedAt: new Date().toISOString(),
     };
 
@@ -120,10 +147,26 @@ export function updateProfile(deadlockPath: string, profileId: string): Profile 
     return profiles[index];
 }
 
+function generateCrosshairCommands(settings: ProfileCrosshairSettings): string {
+    const commands = [
+        `citadel_crosshair_pip_gap ${settings.pipGap}`,
+        `citadel_crosshair_pip_height ${settings.pipHeight}`,
+        `citadel_crosshair_pip_width ${settings.pipWidth}`,
+        `citadel_crosshair_pip_opacity ${settings.pipOpacity.toFixed(2)}`,
+        `citadel_crosshair_pip_border ${settings.pipBorder}`,
+        `citadel_crosshair_dot_opacity ${settings.dotOpacity.toFixed(2)}`,
+        `citadel_crosshair_dot_outline_opacity ${settings.dotOutlineOpacity.toFixed(2)}`,
+        `citadel_crosshair_color_r ${settings.colorR}`,
+        `citadel_crosshair_color_g ${settings.colorG}`,
+        `citadel_crosshair_color_b ${settings.colorB}`,
+    ];
+    return commands.join('\n');
+}
+
 /**
- * Apply a profile - enable/disable mods to match the profile state
+ * Apply a profile - enable/disable mods, restore autoexec and crosshair
  */
-export function applyProfile(deadlockPath: string, profileId: string): void {
+export function applyProfile(deadlockPath: string, profileId: string): Profile {
     const profiles = loadProfiles();
     const profile = profiles.find(p => p.id === profileId);
 
@@ -131,20 +174,17 @@ export function applyProfile(deadlockPath: string, profileId: string): void {
         throw new Error(`Profile not found: ${profileId}`);
     }
 
+    // 1. Apply Mods
     const currentMods = scanMods(deadlockPath);
-
-    // Create a map of profile mod states by fileName
     const profileModMap = new Map<string, ProfileMod>();
     for (const profileMod of profile.mods) {
         profileModMap.set(profileMod.fileName, profileMod);
     }
 
-    // Apply the profile state to each mod
     for (const mod of currentMods) {
         const profileMod = profileModMap.get(mod.fileName);
 
         if (profileMod) {
-            // Match the enabled state
             if (profileMod.enabled !== mod.enabled) {
                 if (profileMod.enabled) {
                     enableMod(deadlockPath, mod.id);
@@ -152,9 +192,6 @@ export function applyProfile(deadlockPath: string, profileId: string): void {
                     disableMod(deadlockPath, mod.id);
                 }
             }
-
-            // TODO: Priority changes would require rescanning after each change
-            // For now, we just sync enabled/disabled state
         } else {
             // Mod wasn't in the profile - disable it
             if (mod.enabled) {
@@ -162,6 +199,23 @@ export function applyProfile(deadlockPath: string, profileId: string): void {
             }
         }
     }
+
+    // 2. Apply Autoexec & Crosshair
+    const currentAutoexec = readAutoexec(deadlockPath);
+    
+    // Update commands if present in profile
+    if (profile.autoexecCommands) {
+        currentAutoexec.commands = profile.autoexecCommands;
+    }
+    
+    // Update crosshair if present in profile
+    if (profile.crosshair) {
+        currentAutoexec.crosshair = generateCrosshairCommands(profile.crosshair);
+    }
+    
+    writeAutoexec(deadlockPath, currentAutoexec);
+
+    return profile;
 }
 
 /**

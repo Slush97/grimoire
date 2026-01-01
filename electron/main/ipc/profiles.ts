@@ -8,6 +8,7 @@ import {
     deleteProfile,
     renameProfile,
     Profile,
+    ProfileCrosshairSettings,
 } from '../services/profiles';
 
 /**
@@ -27,12 +28,12 @@ ipcMain.handle('get-profiles', (): Profile[] => {
 });
 
 // create-profile
-ipcMain.handle('create-profile', (_, name: string): Profile => {
+ipcMain.handle('create-profile', (_, name: string, crosshairSettings?: ProfileCrosshairSettings): Profile => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    const profile = createProfile(deadlockPath, name);
+    const profile = createProfile(deadlockPath, name, crosshairSettings);
 
     // Set as active profile
     const settings = loadSettings();
@@ -43,26 +44,28 @@ ipcMain.handle('create-profile', (_, name: string): Profile => {
 });
 
 // update-profile
-ipcMain.handle('update-profile', (_, profileId: string): Profile => {
+ipcMain.handle('update-profile', (_, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Profile => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    return updateProfile(deadlockPath, profileId);
+    return updateProfile(deadlockPath, profileId, crosshairSettings);
 });
 
 // apply-profile
-ipcMain.handle('apply-profile', (_, profileId: string): void => {
+ipcMain.handle('apply-profile', (_, profileId: string): Profile => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    applyProfile(deadlockPath, profileId);
+    const profile = applyProfile(deadlockPath, profileId);
 
     // Save as active profile
     const settings = loadSettings();
     settings.activeProfileId = profileId;
     saveSettings(settings);
+
+    return profile;
 });
 
 // delete-profile

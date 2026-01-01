@@ -170,10 +170,25 @@ export interface ProfileMod {
   priority: number;
 }
 
+export interface ProfileCrosshairSettings {
+  pipGap: number;
+  pipHeight: number;
+  pipWidth: number;
+  pipOpacity: number;
+  pipBorder: boolean;
+  dotOpacity: number;
+  dotOutlineOpacity: number;
+  colorR: number;
+  colorG: number;
+  colorB: number;
+}
+
 export interface Profile {
   id: string;
   name: string;
   mods: ProfileMod[];
+  crosshair?: ProfileCrosshairSettings;
+  autoexecCommands?: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -182,15 +197,15 @@ export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();
 }
 
-export async function createProfile(name: string): Promise<Profile> {
-  return window.electronAPI.createProfile(name);
+export async function createProfile(name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
+  return window.electronAPI.createProfile(name, crosshairSettings);
 }
 
-export async function updateProfile(profileId: string): Promise<Profile> {
-  return window.electronAPI.updateProfile(profileId);
+export async function updateProfile(profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
+  return window.electronAPI.updateProfile(profileId, crosshairSettings);
 }
 
-export async function applyProfile(profileId: string): Promise<void> {
+export async function applyProfile(profileId: string): Promise<Profile> {
   return window.electronAPI.applyProfile(profileId);
 }
 
