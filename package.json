@@ -1,11 +1,11 @@
 {
   "name": "deadlock-mod-manager",
   "private": true,
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "A mod manager for Deadlock (Source 2 engine game)",
+  "license": "MIT",
   "author": {
-    "name": "esoc",
-    "email": "esoc@deadlock-mods.local"
+    "name": "esoc"
   },
   "type": "module",
   "main": "dist/main/index.js",
@@ -29,6 +29,7 @@
   "dependencies": {
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.5.0",
+    "dompurify": "^3.3.1",
     "lucide-react": "^0.562.0",
     "node-7z": "^3.0.0",
     "node-unrar-js": "^2.0.0",
@@ -44,6 +45,7 @@
     "@tailwindcss/vite": "^4.1.18",
     "@types/adm-zip": "^0.5.7",
     "@types/better-sqlite3": "^7.6.13",
+    "@types/dompurify": "^3.2.0",
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",

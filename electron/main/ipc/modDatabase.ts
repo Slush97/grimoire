@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { initDatabase, getModById, getModCount, wipeDatabase, getModsNsfwStatus, updateModNsfw } from '../services/modDatabase';
+import { initDatabase, getModById, getModCount, wipeDatabase, getModsNsfwStatus, updateModNsfw, getModsDownloadCounts, updateModDownloadCount } from '../services/modDatabase';
 import { searchMods, getCategories, getSectionStats, SearchOptions } from '../services/searchService';
 import { syncAllSections, syncSingleSection, getSyncStatus, needsSync, isSyncInProgress } from '../services/syncService';
 
@@ -67,4 +67,14 @@ ipcMain.handle('update-mod-nsfw', (_, modId: number, isNsfw: boolean) => {
     updateModNsfw(modId, isNsfw);
 });
 
+// Download count handlers
+ipcMain.handle('get-mods-download-counts', (_, ids: number[]) => {
+    return getModsDownloadCounts(ids);
+});
+
+ipcMain.handle('update-mod-download-count', (_, modId: number, downloadCount: number) => {
+    updateModDownloadCount(modId, downloadCount);
+});
+
 console.log('[ModDatabase] IPC handlers registered');
+

@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, session } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 
@@ -78,6 +78,26 @@ if (!gotTheLock) {
         app.on('browser-window-created', (_, window) => {
             optimizer.watchWindowShortcuts(window);
         });
+
+        // Set Content Security Policy (production only - Vite needs inline scripts for HMR in dev)
+        if (!is.dev) {
+            session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+                callback({
+                    responseHeaders: {
+                        ...details.responseHeaders,
+                        'Content-Security-Policy': [
+                            "default-src 'self'; " +
+                            "script-src 'self'; " +
+                            "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+                            "font-src 'self' https://fonts.gstatic.com; " +
+                            "img-src 'self' data: https: blob:; " +
+                            "media-src 'self' https:; " +
+                            "connect-src 'self' https://gamebanana.com https://*.gamebanana.com"
+                        ]
+                    }
+                });
+            });
+        }
 
         createWindow();
 

@@ -7,6 +7,7 @@ import {
   ThumbsUp,
   ExternalLink,
 } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import {
   browseMods,
   getModDetails,
@@ -90,7 +91,7 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadSettings, loadMods, mods: installedMods, getDownloadCount, setDownloadCount } = useAppStore();
+  const { settings, loadSettings, loadMods, mods: installedMods } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [mods, setMods] = useState<GameBananaMod[]>([]);
   const [loading, setLoading] = useState(false);
@@ -440,6 +441,10 @@ export default function Browse() {
   }, [hasMore, loading, loadingMore]);
 
   // Background fetch download counts for visible mods (using global cache with TTL)
+  // DISABLED: This makes N API calls per page load which is very slow and risks rate limiting.
+  // Download counts are now only fetched when the modal is opened (via handleModClick).
+  // To re-enable, uncomment the useEffect below.
+  /*
   useEffect(() => {
     if (mods.length === 0) return;
     let cancelled = false;
@@ -473,6 +478,7 @@ export default function Browse() {
       cancelled = true;
     };
   }, [mods, section, getDownloadCount, setDownloadCount]);
+  */
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -513,6 +519,20 @@ export default function Browse() {
           await window.electronAPI.updateModNsfw(mod.id, details.nsfw);
         } catch (cacheErr) {
           console.warn('Failed to update NSFW cache:', cacheErr);
+        }
+      }
+
+      // Cache the download count from mod details (sum across all files)
+      if (details.files && details.files.length > 0) {
+        const totalDownloads = details.files.reduce((sum, f) => sum + (f.downloadCount || 0), 0);
+        try {
+          await window.electronAPI.updateModDownloadCount(mod.id, totalDownloads);
+          // Update local state so the card shows the count immediately
+          setMods(prev => prev.map(m =>
+            m.id === mod.id ? { ...m, downloadCount: totalDownloads } : m
+          ));
+        } catch (cacheErr) {
+          console.warn('Failed to cache download count:', cacheErr);
         }
       }
     } catch (err) {
@@ -813,7 +833,6 @@ export default function Browse() {
                 viewMode={viewMode}
                 section={section}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
-                downloadCount={getDownloadCount(mod.id)}
                 onClick={() => handleModClick(mod)}
                 onQuickDownload={() => handleQuickDownload(mod)}
               />
@@ -856,12 +875,11 @@ interface ModCardProps {
   viewMode: ViewMode;
   section: string;
   hideNsfwPreviews: boolean;
-  downloadCount?: number;
   onClick: () => void;
   onQuickDownload: () => void;
 }
 
-function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPreviews, downloadCount, onClick, onQuickDownload }: ModCardProps) {
+function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -929,7 +947,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
           </span>
           <span className="flex items-center gap-1">
             <Download className="w-3 h-3" />
-            {downloadCount !== undefined ? downloadCount.toLocaleString() : '—'}
+            {mod.downloadCount !== undefined ? mod.downloadCount.toLocaleString() : '—'}
           </span>
         </div>
         {mod.submitter && (
@@ -1081,7 +1099,7 @@ function ModDetailsModal({
           {/* Description */}
           {mod.description && (
             <div className="text-sm text-text-secondary">
-              <div dangerouslySetInnerHTML={{ __html: mod.description }} />
+              <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mod.description) }} />
             </div>
           )}
 

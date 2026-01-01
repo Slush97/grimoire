@@ -28,6 +28,7 @@ linux:
     - deb
   category: Game
   icon: resources/icon.png
+  maintainer: esoc
 win:
   target:
     - nsis

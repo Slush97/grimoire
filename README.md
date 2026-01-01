@@ -1,73 +1,53 @@
-# React + TypeScript + Vite
+# Deadlock Mod Manager
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A modern mod manager for **Deadlock** (Valve's Source 2 game). Browse GameBanana, manage VPK mods, customize crosshairs, and organize your setup with profiles.
 
-Currently, two official plugins are available:
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
+![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Features
 
-## React Compiler
+- 🎮 **Browse & Download** — Search GameBanana mods with local caching
+- 📦 **Mod Management** — Enable/disable mods, set priorities, resolve conflicts
+- 🎯 **Crosshair Designer** — Create custom crosshairs with live preview
+- 🦸 **Hero Locker** — View and organize skins by hero
+- 📝 **Autoexec Manager** — Configure console commands
+- 💾 **Profiles** — Save and restore mod configurations
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Installation
 
-## Expanding the ESLint configuration
+### Pre-built Releases
+Download from [Releases](../../releases) for your platform:
+- **Windows**: `.exe` installer or portable
+- **Linux**: `.AppImage` or `.deb`
+- **macOS**: `.dmg`
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+### Build from Source
+```bash
+# Clone and install
+git clone https://github.com/yourusername/deadlock-mod-manager.git
+cd deadlock-mod-manager
+pnpm install
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+# Development
+pnpm dev
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+# Build for your platform
+pnpm package:linux  # or package:win, package:mac
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Usage
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+1. Launch and set your Deadlock installation path (auto-detected on most systems)
+2. Browse mods from GameBanana or manage installed VPKs
+3. Enable/disable mods with a single click
+4. Use Profiles to save different mod configurations
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Requirements
+
+- Deadlock installed via Steam
+- 7-Zip installed for extracting `.7z` archives (Linux/macOS)
+
+## License
+
+[MIT](LICENSE)

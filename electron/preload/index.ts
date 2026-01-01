@@ -71,6 +71,8 @@ export interface ElectronAPI {
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
     getModsNsfwStatus: (ids: number[]) => Promise<Record<number, boolean>>;
     updateModNsfw: (modId: number, isNsfw: boolean) => Promise<void>;
+    getModsDownloadCounts: (ids: number[]) => Promise<Record<number, number>>;
+    updateModDownloadCount: (modId: number, downloadCount: number) => Promise<void>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
 
     // Crosshair Presets
@@ -407,6 +409,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getSectionStats: () => ipcRenderer.invoke('get-section-stats'),
     getModsNsfwStatus: (ids: number[]) => ipcRenderer.invoke('get-mods-nsfw-status', ids),
     updateModNsfw: (modId: number, isNsfw: boolean) => ipcRenderer.invoke('update-mod-nsfw', modId, isNsfw),
+    getModsDownloadCounts: (ids: number[]) => ipcRenderer.invoke('get-mods-download-counts', ids),
+    updateModDownloadCount: (modId: number, downloadCount: number) => ipcRenderer.invoke('update-mod-download-count', modId, downloadCount),
     onSyncProgress: (callback: (data: SyncProgressData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: SyncProgressData) => callback(data);
         ipcRenderer.on('sync-progress', handler);

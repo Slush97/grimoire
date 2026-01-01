@@ -39,7 +39,6 @@ export const HERO_FACE_POSITION: Record<string, number> = {
   Seven: 57,
   Shiv: 68,
   Sinclair: 61,
-  'The Doorman': 40,
   Victor: 45,
   Vindicta: 83,
   Viscous: 72,

@@ -9,6 +9,13 @@ import { join, basename } from 'path';
 import { createHash } from 'crypto';
 import { getAddonsPath, getDisabledPath } from './deadlock';
 
+/** Minimum VPK priority number */
+const MIN_VPK_PRIORITY = 1;
+/** Maximum VPK priority number (Source 2 limit) */
+const MAX_VPK_PRIORITY = 99;
+/** Default priority for mods without pak## prefix */
+const DEFAULT_MOD_PRIORITY = 50;
+
 export interface Mod {
     id: string;
     name: string;

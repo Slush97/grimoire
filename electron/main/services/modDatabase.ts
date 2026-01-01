@@ -13,6 +13,7 @@ export interface CachedMod {
     submitterId: number | null;
     likeCount: number;
     viewCount: number;
+    downloadCount: number | null;
     dateAdded: number;
     dateModified: number;
     hasFiles: boolean;
@@ -71,6 +72,7 @@ export function initDatabase(): Database.Database {
             submitter_id INTEGER,
             like_count INTEGER DEFAULT 0,
             view_count INTEGER DEFAULT 0,
+            download_count INTEGER,
             date_added INTEGER,
             date_modified INTEGER,
             has_files INTEGER DEFAULT 1,
@@ -122,6 +124,9 @@ export function initDatabase(): Database.Database {
             pages_synced INTEGER
         );
     `);
+
+    // Run migrations for existing databases
+    runMigrations(db);
 
     console.log('[ModDatabase] Database initialized successfully');
     return db;
@@ -315,6 +320,7 @@ export function mapRowToMod(row: Record<string, unknown>): CachedMod {
         submitterId: row.submitter_id as number | null,
         likeCount: (row.like_count as number) ?? 0,
         viewCount: (row.view_count as number) ?? 0,
+        downloadCount: row.download_count as number | null,
         dateAdded: (row.date_added as number) ?? 0,
         dateModified: (row.date_modified as number) ?? 0,
         hasFiles: row.has_files != null ? (row.has_files as number) === 1 : true,
@@ -335,6 +341,36 @@ export function updateModNsfw(modId: number, isNsfw: boolean): void {
 }
 
 /**
+ * Update the download count for a mod (used to enrich cache from detail fetches)
+ */
+export function updateModDownloadCount(modId: number, downloadCount: number): void {
+    const database = initDatabase();
+    const stmt = database.prepare('UPDATE mods SET download_count = ? WHERE id = ?');
+    stmt.run(downloadCount, modId);
+}
+
+/**
+ * Get download counts for multiple mods by their IDs
+ * Returns a map of modId -> downloadCount (only includes mods that have cached counts)
+ */
+export function getModsDownloadCounts(ids: number[]): Record<number, number> {
+    if (ids.length === 0) return {};
+
+    const database = initDatabase();
+    const placeholders = ids.map(() => '?').join(',');
+    const stmt = database.prepare(
+        `SELECT id, download_count FROM mods WHERE id IN (${placeholders}) AND download_count IS NOT NULL`
+    );
+    const rows = stmt.all(...ids) as Array<{ id: number; download_count: number }>;
+
+    const result: Record<number, number> = {};
+    for (const row of rows) {
+        result[row.id] = row.download_count;
+    }
+    return result;
+}
+
+/**
  * Get NSFW status for multiple mods by their IDs
  * Returns a map of modId -> isNsfw (only includes mods that exist in cache)
  */
@@ -351,4 +387,18 @@ export function getModsNsfwStatus(ids: number[]): Record<number, boolean> {
         result[row.id] = row.is_nsfw === 1;
     }
     return result;
+}
+
+/**
+ * Run database migrations for schema updates
+ */
+function runMigrations(database: Database.Database): void {
+    // Check if download_count column exists
+    const tableInfo = database.prepare("PRAGMA table_info(mods)").all() as Array<{ name: string }>;
+    const hasDownloadCount = tableInfo.some(col => col.name === 'download_count');
+
+    if (!hasDownloadCount) {
+        console.log('[ModDatabase] Running migration: adding download_count column');
+        database.exec('ALTER TABLE mods ADD COLUMN download_count INTEGER');
+    }
 }
