@@ -44,50 +44,54 @@ function enrichMod(mod: Mod): Mod {
 }
 
 // get-mods
-ipcMain.handle('get-mods', (): Mod[] => {
+ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         return [];
     }
-    const mods = scanMods(deadlockPath);
+    const mods = await scanMods(deadlockPath);
     return mods.map(enrichMod);
 });
 
 // enable-mod
-ipcMain.handle('enable-mod', (_, modId: string): Mod => {
+ipcMain.handle('enable-mod', async (_, modId: string): Promise<Mod> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    return enrichMod(enableMod(deadlockPath, modId));
+    const mod = await enableMod(deadlockPath, modId);
+    return enrichMod(mod);
 });
 
 // disable-mod
-ipcMain.handle('disable-mod', (_, modId: string): Mod => {
+ipcMain.handle('disable-mod', async (_, modId: string): Promise<Mod> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    return enrichMod(disableMod(deadlockPath, modId));
+    const mod = await disableMod(deadlockPath, modId);
+    return enrichMod(mod);
 });
 
 // delete-mod
-ipcMain.handle('delete-mod', (_, modId: string): void => {
+ipcMain.handle('delete-mod', async (_, modId: string): Promise<void> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    deleteMod(deadlockPath, modId);
+    await deleteMod(deadlockPath, modId);
 });
 
 // set-mod-priority
 ipcMain.handle(
     'set-mod-priority',
-    (_, modId: string, priority: number): Mod => {
+    async (_, modId: string, priority: number): Promise<Mod> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
-        return enrichMod(setModPriority(deadlockPath, modId, priority));
+        const mod = await setModPriority(deadlockPath, modId, priority);
+        return enrichMod(mod);
     }
 );
+

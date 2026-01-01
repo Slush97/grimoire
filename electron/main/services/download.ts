@@ -1,4 +1,5 @@
-import { createWriteStream, unlinkSync, existsSync, readdirSync, renameSync } from 'fs';
+import { createWriteStream, existsSync } from 'fs';
+import { promises as fs } from 'fs';
 import { join, basename } from 'path';
 import { BrowserWindow } from 'electron';
 import { getAddonsPath, getDisabledPath } from './deadlock';
@@ -15,6 +16,55 @@ export interface DownloadModArgs {
     fileName: string;
     section?: string;
     categoryId?: number;
+}
+
+// Download queue to prevent race conditions with VPK priority assignment
+interface QueuedDownload {
+    deadlockPath: string;
+    args: DownloadModArgs;
+    mainWindow: BrowserWindow | null;
+    resolve: () => void;
+    reject: (error: Error) => void;
+}
+
+const downloadQueue: QueuedDownload[] = [];
+let isProcessingQueue = false;
+
+/**
+ * Add a download to the queue (public API)
+ */
+export function downloadMod(
+    deadlockPath: string,
+    args: DownloadModArgs,
+    mainWindow: BrowserWindow | null
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        downloadQueue.push({ deadlockPath, args, mainWindow, resolve, reject });
+        processQueue();
+    });
+}
+
+/**
+ * Process the download queue one at a time
+ */
+async function processQueue(): Promise<void> {
+    if (isProcessingQueue || downloadQueue.length === 0) {
+        return;
+    }
+
+    isProcessingQueue = true;
+
+    while (downloadQueue.length > 0) {
+        const item = downloadQueue.shift()!;
+        try {
+            await executeDownload(item.deadlockPath, item.args, item.mainWindow);
+            item.resolve();
+        } catch (error) {
+            item.reject(error instanceof Error ? error : new Error(String(error)));
+        }
+    }
+
+    isProcessingQueue = false;
 }
 
 /**
@@ -60,10 +110,10 @@ async function downloadFile(
                 resolve();
             });
 
-            fileStream.on('error', (err) => {
+            fileStream.on('error', async (err) => {
                 fileStream.close();
                 if (existsSync(destPath)) {
-                    unlinkSync(destPath);
+                    await fs.unlink(destPath).catch(() => { });
                 }
                 reject(err);
             });
@@ -76,18 +126,19 @@ async function downloadFile(
 }
 
 /**
- * Rename VPK files to avoid priority conflicts
+ * Rename VPK files to avoid priority conflicts (async)
  * Checks BOTH addons AND disabled folders to avoid overwriting disabled mods
  * Returns the list of renamed VPK filenames
  */
-function renameVpksToAvoidConflicts(
+async function renameVpksToAvoidConflicts(
     deadlockPath: string,
     targetPath: string,
     extractedVpks: string[]
-): string[] {
+): Promise<string[]> {
     // Get used priorities from BOTH addons and disabled folders
-    const usedPriorities = getUsedPriorities(deadlockPath);
+    const usedPriorities = await getUsedPriorities(deadlockPath);
     const renamedFiles: string[] = [];
+
     const getNextAvailablePriority = () => {
         let newPriority = 1;
         while (usedPriorities.has(newPriority) && newPriority < 99) {
@@ -112,7 +163,7 @@ function renameVpksToAvoidConflicts(
                 const newPath = join(targetPath, newFileName);
 
                 console.log(`[renameVpks] Renaming ${fileName} to ${newFileName} to avoid conflict`);
-                renameSync(vpkPath, newPath);
+                await fs.rename(vpkPath, newPath);
                 usedPriorities.add(newPriority);
                 renamedFiles.push(newFileName);
                 continue;
@@ -128,7 +179,7 @@ function renameVpksToAvoidConflicts(
         const newPath = join(targetPath, newFileName);
 
         console.log(`[renameVpks] Renaming ${fileName} to ${newFileName} to add priority`);
-        renameSync(vpkPath, newPath);
+        await fs.rename(vpkPath, newPath);
         usedPriorities.add(newPriority);
         renamedFiles.push(newFileName);
     }
@@ -137,9 +188,9 @@ function renameVpksToAvoidConflicts(
 }
 
 /**
- * Download and install a mod from GameBanana
+ * Execute the actual download (internal, called from queue)
  */
-export async function downloadMod(
+async function executeDownload(
     deadlockPath: string,
     args: DownloadModArgs,
     mainWindow: BrowserWindow | null
@@ -212,7 +263,7 @@ export async function downloadMod(
         console.log(`[downloadMod] Extracted ${extractedVpks.length} VPK files:`, extractedVpks);
 
         // Rename VPKs to avoid conflicts
-        installedVpks = renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks);
+        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks);
 
         if (isMidnightMina && installedVpks.length > 1) {
             // Special handling for Midnight Mina:
@@ -245,7 +296,7 @@ export async function downloadMod(
                 const extraPath = join(targetPath, extraVpk);
                 if (existsSync(extraPath)) {
                     console.log(`[downloadMod] Removing extra preset: ${extraVpk}`);
-                    unlinkSync(extraPath);
+                    await fs.unlink(extraPath);
                 }
             }
         } else if (!isMidnightMina) {
@@ -256,18 +307,18 @@ export async function downloadMod(
             for (const extraVpk of extraVpks) {
                 const extraPath = join(targetPath, extraVpk);
                 if (existsSync(extraPath)) {
-                    unlinkSync(extraPath);
+                    await fs.unlink(extraPath);
                 }
             }
         }
 
         // Clean up archive
         if (existsSync(downloadPath)) {
-            unlinkSync(downloadPath);
+            await fs.unlink(downloadPath);
         }
     } else if (downloadPath.endsWith('.vpk')) {
         // Direct VPK download
-        installedVpks = renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath]);
+        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath]);
     }
 
     // Save metadata for each installed VPK

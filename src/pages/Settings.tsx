@@ -548,11 +548,8 @@ function AutoexecSection({ gamePath }: { gamePath: string | null }) {
     <div>
       <div className="flex justify-between items-start gap-4">
         <div>
-          <h4 className="font-medium text-sm">Autoexec Configuration</h4>
-          <p className="text-xs text-text-secondary mt-1">
-            Ensure autoexec.cfg exists for crosshairs and commands.
-          </p>
-          <div className="mt-2">
+          <h4 className="font-medium text-sm flex items-center gap-2">
+            Autoexec Configuration
             {status === null ? (
               <span className="text-xs text-text-secondary">Checking...</span>
             ) : status.exists ? (
@@ -560,7 +557,10 @@ function AutoexecSection({ gamePath }: { gamePath: string | null }) {
             ) : (
               <Badge variant="warning">Missing</Badge>
             )}
-          </div>
+          </h4>
+          <p className="text-xs text-text-secondary mt-1">
+            Ensure autoexec.cfg exists for crosshairs and commands.
+          </p>
           {result && <p className="text-xs text-accent mt-2">{result}</p>}
         </div>
         {status && !status.exists && (

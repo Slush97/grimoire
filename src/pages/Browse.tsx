@@ -892,7 +892,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
       className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer ${isList ? 'flex items-center gap-4 p-3' : ''
         }`}
     >
-      {/* Thumbnail with install button overlay */}
+      {/* Thumbnail */}
       <div
         className={`relative bg-bg-tertiary ${isList
           ? 'w-32 h-20 flex-shrink-0 rounded-md overflow-hidden'
@@ -906,16 +906,21 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
           hideNsfw={hideNsfwPreviews}
           className="w-full h-full"
         />
-        {/* Install button positioned in top-right corner */}
-        <div className="absolute top-2 right-2">
+      </div>
+
+      {/* Info */}
+      <div className={isList ? 'min-w-0 flex-1' : isCompact ? 'p-2' : 'p-3'}>
+        <div className="flex items-start justify-between gap-2">
+          <h3 className={`font-medium truncate flex-1 ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
+          {/* Install button */}
           {installed ? (
             <span
-              className={`rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white ${isCompact ? 'text-[9px] px-1.5' : ''}`}
+              className={`flex-shrink-0 rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white ${isCompact ? 'text-[9px] px-1.5' : ''}`}
             >
               ✓
             </span>
           ) : downloading ? (
-            <span className="flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
+            <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
             </span>
           ) : (
@@ -924,18 +929,13 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
                 e.stopPropagation();
                 onQuickDownload();
               }}
-              className={`flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-secondary text-white rounded-full shadow-lg transition-colors ${isCompact ? 'w-6 h-6' : ''}`}
+              className={`flex-shrink-0 flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-secondary text-white rounded-full shadow-lg transition-colors ${isCompact ? 'w-6 h-6' : ''}`}
               title="Install"
             >
               <Download className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
             </button>
           )}
         </div>
-      </div>
-
-      {/* Info */}
-      <div className={isList ? 'min-w-0 flex-1' : isCompact ? 'p-2' : 'p-3'}>
-        <h3 className={`font-medium truncate ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
         <div className={`flex items-center gap-3 text-text-secondary mt-1 ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
           <span className="flex items-center gap-1">
             <ThumbsUp className="w-3 h-3" />

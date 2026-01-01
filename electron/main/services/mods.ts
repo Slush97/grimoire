@@ -1,11 +1,6 @@
-import {
-    readdirSync,
-    statSync,
-    renameSync,
-    unlinkSync,
-    existsSync,
-} from 'fs';
-import { join, basename } from 'path';
+import { promises as fs } from 'fs';
+import { existsSync } from 'fs';
+import { join } from 'path';
 import { createHash } from 'crypto';
 import { getAddonsPath, getDisabledPath } from './deadlock';
 
@@ -81,28 +76,28 @@ function extractModName(filename: string): string {
 }
 
 /**
- * Scan a folder for VPK mods
+ * Scan a folder for VPK mods (async)
  */
-function scanFolder(folder: string, enabled: boolean): Mod[] {
+async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
     const mods: Mod[] = [];
 
     if (!existsSync(folder)) {
         return mods;
     }
 
-    const entries = readdirSync(folder);
+    const entries = await fs.readdir(folder);
 
     for (const entry of entries) {
         const fullPath = join(folder, entry);
 
         try {
-            const stats = statSync(fullPath);
+            const stats = await fs.stat(fullPath);
             if (!stats.isFile()) continue;
 
             // Only process VPK files
             if (!entry.endsWith('_dir.vpk') && !entry.endsWith('.vpk')) continue;
 
-            const priority = parseVpkPriority(entry) ?? 50;
+            const priority = parseVpkPriority(entry) ?? DEFAULT_MOD_PRIORITY;
 
             mods.push({
                 id: generateModId(entry),
@@ -123,16 +118,18 @@ function scanFolder(folder: string, enabled: boolean): Mod[] {
 }
 
 /**
- * Scan for all mods in both enabled and disabled folders
+ * Scan for all mods in both enabled and disabled folders (async)
  */
-export function scanMods(deadlockPath: string): Mod[] {
+export async function scanMods(deadlockPath: string): Promise<Mod[]> {
     const addonsPath = getAddonsPath(deadlockPath);
     const disabledPath = getDisabledPath(deadlockPath);
 
-    const mods: Mod[] = [
-        ...scanFolder(addonsPath, true),
-        ...scanFolder(disabledPath, false),
-    ];
+    const [enabledMods, disabledMods] = await Promise.all([
+        scanFolder(addonsPath, true),
+        scanFolder(disabledPath, false),
+    ]);
+
+    const mods = [...enabledMods, ...disabledMods];
 
     // Sort by priority
     mods.sort((a, b) => a.priority - b.priority);
@@ -141,20 +138,48 @@ export function scanMods(deadlockPath: string): Mod[] {
 }
 
 /**
- * Find the next available priority number that doesn't conflict
+ * Get the set of used priorities in BOTH addons AND disabled folders (async)
+ * This prevents conflicts when downloading new mods
+ */
+export async function getUsedPriorities(deadlockPath: string): Promise<Set<number>> {
+    const addonsPath = getAddonsPath(deadlockPath);
+    const disabledPath = getDisabledPath(deadlockPath);
+    const usedPriorities = new Set<number>();
+
+    const scanPriorities = async (folder: string) => {
+        if (!existsSync(folder)) return;
+        const entries = await fs.readdir(folder);
+        for (const entry of entries) {
+            const priority = parseVpkPriority(entry);
+            if (priority !== null) {
+                usedPriorities.add(priority);
+            }
+        }
+    };
+
+    await Promise.all([
+        scanPriorities(addonsPath),
+        scanPriorities(disabledPath),
+    ]);
+
+    return usedPriorities;
+}
+
+/**
+ * Find the next available priority number that doesn't conflict (async)
  * Checks BOTH addons and disabled folders to avoid overwriting disabled mods
  */
-export function findNextAvailablePriority(deadlockPath: string, startFrom = 1): number {
-    const usedPriorities = getUsedPriorities(deadlockPath);
+export async function findNextAvailablePriority(deadlockPath: string, startFrom = MIN_VPK_PRIORITY): Promise<number> {
+    const usedPriorities = await getUsedPriorities(deadlockPath);
 
     // Find next available starting from startFrom (default 1)
     let priority = startFrom;
-    while (usedPriorities.has(priority) && priority < 99) {
+    while (usedPriorities.has(priority) && priority < MAX_VPK_PRIORITY) {
         priority++;
     }
 
     // If all numbers up to 99 are taken, this is an error
-    if (priority >= 99 && usedPriorities.has(99)) {
+    if (priority >= MAX_VPK_PRIORITY && usedPriorities.has(MAX_VPK_PRIORITY)) {
         throw new Error('No available priority slots (all 1-99 are used)');
     }
 
@@ -162,44 +187,10 @@ export function findNextAvailablePriority(deadlockPath: string, startFrom = 1): 
 }
 
 /**
- * Get the set of used priorities in BOTH addons AND disabled folders
- * This prevents conflicts when downloading new mods
+ * Enable a mod by moving it from disabled to addons folder (async)
  */
-export function getUsedPriorities(deadlockPath: string): Set<number> {
-    const addonsPath = getAddonsPath(deadlockPath);
-    const disabledPath = getDisabledPath(deadlockPath);
-    const usedPriorities = new Set<number>();
-
-    // Check addons folder
-    if (existsSync(addonsPath)) {
-        const entries = readdirSync(addonsPath);
-        for (const entry of entries) {
-            const priority = parseVpkPriority(entry);
-            if (priority !== null) {
-                usedPriorities.add(priority);
-            }
-        }
-    }
-
-    // Also check disabled folder
-    if (existsSync(disabledPath)) {
-        const entries = readdirSync(disabledPath);
-        for (const entry of entries) {
-            const priority = parseVpkPriority(entry);
-            if (priority !== null) {
-                usedPriorities.add(priority);
-            }
-        }
-    }
-
-    return usedPriorities;
-}
-
-/**
- * Enable a mod by moving it from disabled to addons folder
- */
-export function enableMod(deadlockPath: string, modId: string): Mod {
-    const mods = scanMods(deadlockPath);
+export async function enableMod(deadlockPath: string, modId: string): Promise<Mod> {
+    const mods = await scanMods(deadlockPath);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
@@ -213,7 +204,7 @@ export function enableMod(deadlockPath: string, modId: string): Mod {
     const addonsPath = getAddonsPath(deadlockPath);
     const destPath = join(addonsPath, targetMod.fileName);
 
-    renameSync(targetMod.path, destPath);
+    await fs.rename(targetMod.path, destPath);
 
     return {
         ...targetMod,
@@ -223,10 +214,10 @@ export function enableMod(deadlockPath: string, modId: string): Mod {
 }
 
 /**
- * Disable a mod by moving it to the disabled folder
+ * Disable a mod by moving it to the disabled folder (async)
  */
-export function disableMod(deadlockPath: string, modId: string): Mod {
-    const mods = scanMods(deadlockPath);
+export async function disableMod(deadlockPath: string, modId: string): Promise<Mod> {
+    const mods = await scanMods(deadlockPath);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
@@ -240,7 +231,7 @@ export function disableMod(deadlockPath: string, modId: string): Mod {
     const disabledPath = getDisabledPath(deadlockPath);
     const destPath = join(disabledPath, targetMod.fileName);
 
-    renameSync(targetMod.path, destPath);
+    await fs.rename(targetMod.path, destPath);
 
     return {
         ...targetMod,
@@ -250,10 +241,10 @@ export function disableMod(deadlockPath: string, modId: string): Mod {
 }
 
 /**
- * Delete a mod completely (including related VPK files)
+ * Delete a mod completely (including related VPK files) (async)
  */
-export function deleteMod(deadlockPath: string, modId: string): void {
-    const mods = scanMods(deadlockPath);
+export async function deleteMod(deadlockPath: string, modId: string): Promise<void> {
+    const mods = await scanMods(deadlockPath);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
@@ -261,33 +252,32 @@ export function deleteMod(deadlockPath: string, modId: string): void {
     }
 
     // Delete the main file
-    unlinkSync(targetMod.path);
+    await fs.unlink(targetMod.path);
 
     // Also remove related VPK files (pak##_000.vpk, pak##_001.vpk, etc.)
     const baseName = targetMod.fileName.replace(/_dir\.vpk$/, '');
     const parentDir = join(targetMod.path, '..');
 
     try {
-        const siblings = readdirSync(parentDir);
-        for (const sibling of siblings) {
-            if (sibling.startsWith(baseName) && sibling.endsWith('.vpk')) {
-                unlinkSync(join(parentDir, sibling));
-            }
-        }
+        const siblings = await fs.readdir(parentDir);
+        const deletePromises = siblings
+            .filter(sibling => sibling.startsWith(baseName) && sibling.endsWith('.vpk'))
+            .map(sibling => fs.unlink(join(parentDir, sibling)));
+        await Promise.all(deletePromises);
     } catch {
         // Ignore errors when cleaning up related files
     }
 }
 
 /**
- * Set the priority of a mod by renaming it
+ * Set the priority of a mod by renaming it (async)
  */
-export function setModPriority(
+export async function setModPriority(
     deadlockPath: string,
     modId: string,
     newPriority: number
-): Mod {
-    const mods = scanMods(deadlockPath);
+): Promise<Mod> {
+    const mods = await scanMods(deadlockPath);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
@@ -295,7 +285,7 @@ export function setModPriority(
     }
 
     const parentDir = join(targetMod.path, '..');
-    const priorityStr = String(Math.min(99, newPriority)).padStart(2, '0');
+    const priorityStr = String(Math.min(MAX_VPK_PRIORITY, newPriority)).padStart(2, '0');
 
     // Preserve the mod name by only replacing the priority prefix
     // e.g., pak05_cool_skin_dir.vpk -> pak10_cool_skin_dir.vpk
@@ -307,7 +297,7 @@ export function setModPriority(
         throw new Error(`Priority ${newPriority} is already in use`);
     }
 
-    renameSync(targetMod.path, destPath);
+    await fs.rename(targetMod.path, destPath);
 
     return {
         ...targetMod,
