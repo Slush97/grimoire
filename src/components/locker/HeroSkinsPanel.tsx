@@ -48,7 +48,11 @@ export default function HeroSkinsPanel({
 }: HeroSkinsPanelProps) {
   const hasMods = mods.length > 0;
   const activeMod = mods.find((mod) => mod.enabled);
+
+  // Show variant selector when Midnight Mina textures are enabled OR a preset is active
+  const hasEnabledMinaTextures = minaTextures.some((mod) => mod.enabled);
   const showMinaVariants =
+    (Boolean(activeMinaPreset) || hasEnabledMinaTextures) &&
     Boolean(onLoadMinaVariants) &&
     Boolean(onMinaArchivePathChange) &&
     Boolean(minaSelection) &&
@@ -90,30 +94,64 @@ export default function HeroSkinsPanel({
       {showMinaVariants && minaArchivePath !== undefined && minaSelection && onMinaSelectionChange && (
         <div className="space-y-2 border-t border-border pt-3">
           <div className="text-xs text-text-secondary uppercase tracking-wider">Custom Variants</div>
-          <div className="flex items-center gap-2">
-            <input
-              type="text"
-              value={minaArchivePath}
-              onChange={(event) => onMinaArchivePathChange?.(event.target.value)}
-              placeholder="Path to extra clothing presets.7z"
-              className="flex-1 bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs text-text-primary"
-            />
-            <button
-              type="button"
-              onClick={onLoadMinaVariants}
-              disabled={minaVariantsLoading || !minaArchivePath.trim()}
-              className="px-3 py-1 text-xs rounded-md border border-border hover:border-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {minaVariantsLoading ? 'Loading…' : 'Load'}
-            </button>
-          </div>
-          <div className="text-xs text-text-secondary">
-            {minaVariantsLoading
-              ? 'Scanning presets…'
-              : minaVariants.length > 0
-                ? `${minaVariants.length} presets found`
-                : 'Load presets to enable variant selection.'}
-          </div>
+
+          {/* Show download button or file path input */}
+          {!minaArchivePath ? (
+            <div className="space-y-2">
+              <div className="text-xs text-text-secondary">
+                Download the variations archive to unlock custom outfit options (252MB).
+              </div>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    onMinaArchivePathChange?.('Downloading...');
+                    const path = await window.api.downloadMinaVariations();
+                    onMinaArchivePathChange?.(path);
+                    onLoadMinaVariants?.();
+                  } catch (err) {
+                    console.error('Download failed:', err);
+                    onMinaArchivePathChange?.('');
+                  }
+                }}
+                className="w-full px-3 py-2 text-xs rounded-md bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
+              >
+                Download Outfit Presets (252MB)
+              </button>
+            </div>
+          ) : minaArchivePath === 'Downloading...' ? (
+            <div className="flex items-center gap-2 text-xs text-text-secondary">
+              <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <span>Downloading variations archive... (this may take a few minutes)</span>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={minaArchivePath}
+                  onChange={(event) => onMinaArchivePathChange?.(event.target.value)}
+                  placeholder="Path to variations.7z"
+                  className="flex-1 bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs text-text-primary"
+                />
+                <button
+                  type="button"
+                  onClick={onLoadMinaVariants}
+                  disabled={minaVariantsLoading || !minaArchivePath.trim()}
+                  className="px-3 py-1 text-xs rounded-md border border-border hover:border-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {minaVariantsLoading ? 'Loading…' : 'Load'}
+                </button>
+              </div>
+              <div className="text-xs text-text-secondary">
+                {minaVariantsLoading
+                  ? 'Scanning presets…'
+                  : minaVariants.length > 0
+                    ? `${minaVariants.length} presets found`
+                    : 'Click Load to scan for presets.'}
+              </div>
+            </>
+          )}
           {minaVariantsError && <div className="text-xs text-red-400">{minaVariantsError}</div>}
           <div className="grid grid-cols-2 gap-2">
             <label className="text-[11px] text-text-secondary space-y-1">

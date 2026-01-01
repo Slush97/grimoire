@@ -1,11 +1,13 @@
-import { useState, useEffect } from 'react';
-import { Terminal, Copy, Check, Plus, Trash2, RefreshCw } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle } from 'lucide-react';
 import { getSettings } from '../lib/api';
+import { Card, Badge, Button } from '../components/common/ui';
 
 // Popular Deadlock autoexec command presets
 const COMMAND_PRESETS = [
     {
         category: 'Performance',
+        icon: Zap,
         commands: [
             { name: 'Uncap FPS', command: 'fps_max 0', description: 'Remove framerate limit' },
             { name: 'Cap FPS 144', command: 'fps_max 144', description: 'Cap to 144 FPS' },
@@ -16,12 +18,14 @@ const COMMAND_PRESETS = [
     },
     {
         category: 'Network',
+        icon: Globe,
         commands: [
             { name: 'Max Network Rate', command: 'rate 1000000', description: 'Maximum network update rate' },
         ],
     },
     {
         category: 'HUD & UI',
+        icon: Layout,
         commands: [
             { name: 'New Health Bars', command: 'citadel_unit_status_use_new true', description: 'Enable new-style health bars' },
             { name: 'Hide HUD', command: 'citadel_hud_visible false', description: 'Hide the entire HUD' },
@@ -31,6 +35,7 @@ const COMMAND_PRESETS = [
     },
     {
         category: 'Minimap',
+        icon: Map,
         commands: [
             { name: 'Faster Minimap', command: 'minimap_update_rate_hz 60', description: 'Update minimap at 60Hz' },
             { name: 'Larger Click Radius', command: 'citadel_minimap_unit_click_radius 200', description: 'Easier to click units on minimap' },
@@ -40,6 +45,7 @@ const COMMAND_PRESETS = [
     },
     {
         category: 'Matchmaking',
+        icon: Users,
         commands: [
             { name: 'Solo Queue Only', command: 'mm_prefer_solo_only 1', description: 'Prefer matches with solo players' },
             { name: 'NA Region', command: 'citadel_region_override 0', description: 'Force North America servers' },
@@ -50,6 +56,7 @@ const COMMAND_PRESETS = [
     },
     {
         category: 'Mouse & Sensitivity',
+        icon: MousePointer2,
         commands: [
             { name: '1:1 ADS Sensitivity', command: 'zoom_sensitivity_ratio 0.818933027098955175', description: 'Match ADS to hip-fire sensitivity' },
         ],
@@ -67,6 +74,7 @@ export default function Autoexec() {
     const [status, setStatus] = useState<AutoexecStatus | null>(null);
     const [commands, setCommands] = useState<string[]>([]);
     const [customCommand, setCustomCommand] = useState('');
+    const [searchTerm, setSearchTerm] = useState('');
     const [copied, setCopied] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -89,6 +97,20 @@ export default function Autoexec() {
         };
         load();
     }, []);
+
+    const filteredPresets = useMemo(() => {
+        if (!searchTerm) return COMMAND_PRESETS;
+        const lowerSearch = searchTerm.toLowerCase();
+
+        return COMMAND_PRESETS.map(cat => ({
+            ...cat,
+            commands: cat.commands.filter(cmd =>
+                cmd.name.toLowerCase().includes(lowerSearch) ||
+                cmd.command.toLowerCase().includes(lowerSearch) ||
+                cmd.description.toLowerCase().includes(lowerSearch)
+            )
+        })).filter(cat => cat.commands.length > 0);
+    }, [searchTerm]);
 
     const handleAddCommand = (command: string) => {
         if (commands.includes(command)) return;
@@ -141,164 +163,182 @@ export default function Autoexec() {
     };
 
     return (
-        <div className="flex flex-1 gap-6 p-6 overflow-auto">
-            {/* Left Panel - Command Presets */}
-            <div className="flex-1 space-y-4 max-w-md overflow-auto">
-                <div className="flex items-center gap-3">
-                    <Terminal className="w-6 h-6 text-accent" />
-                    <h1 className="text-2xl font-bold text-text-primary">Autoexec Commands</h1>
+        <div className="flex flex-col h-full p-6 space-y-6 overflow-hidden">
+            <div className="flex items-center gap-3 shrink-0">
+                <div className="p-3 bg-accent/10 rounded-xl">
+                    <Terminal className="w-8 h-8 text-accent" />
                 </div>
-
-                <p className="text-sm text-text-secondary">
-                    Click on commands to add them to your autoexec.cfg
-                </p>
-
-                {COMMAND_PRESETS.map((category) => (
-                    <section key={category.category} className="bg-bg-secondary rounded-xl p-4 border border-border">
-                        <h2 className="text-sm font-semibold text-text-primary mb-3">{category.category}</h2>
-                        <div className="space-y-2">
-                            {category.commands.map((cmd) => (
-                                <button
-                                    key={cmd.command}
-                                    onClick={() => handleAddCommand(cmd.command)}
-                                    className={`w-full text-left p-2 rounded-lg transition-colors ${commands.includes(cmd.command)
-                                        ? 'bg-accent/20 border border-accent/50'
-                                        : 'bg-bg-tertiary hover:bg-bg-tertiary/80 border border-transparent'
-                                        }`}
-                                >
-                                    <div className="flex items-center justify-between">
-                                        <span className="text-sm text-text-primary">{cmd.name}</span>
-                                        {commands.includes(cmd.command) && (
-                                            <Check className="w-4 h-4 text-accent" />
-                                        )}
-                                    </div>
-                                    <code className="text-xs text-text-secondary font-mono">{cmd.command}</code>
-                                </button>
-                            ))}
-                        </div>
-                    </section>
-                ))}
-
-                {/* Custom Command Input */}
-                <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                    <h2 className="text-sm font-semibold text-text-primary mb-3">Custom Command</h2>
-                    <div className="flex gap-2">
-                        <input
-                            type="text"
-                            value={customCommand}
-                            onChange={(e) => setCustomCommand(e.target.value)}
-                            placeholder="Enter custom command..."
-                            className="flex-1 px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
-                            onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
-                        />
-                        <button
-                            onClick={handleAddCustomCommand}
-                            disabled={!customCommand.trim()}
-                            className="px-3 py-2 bg-accent hover:bg-accent/80 disabled:opacity-50 text-white rounded-lg transition-colors"
-                        >
-                            <Plus className="w-4 h-4" />
-                        </button>
-                    </div>
-                </section>
+                <div>
+                    <h1 className="text-3xl font-bold font-reaver tracking-wide">Autoexec Commands</h1>
+                    <p className="text-text-secondary">Manage startup commands and game configuration</p>
+                </div>
             </div>
 
-            {/* Right Panel - Current Commands */}
-            <div className="flex-1 space-y-4 max-w-lg">
-                <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                    <div className="flex items-center justify-between mb-4">
-                        <h2 className="text-lg font-semibold text-text-primary">
-                            Your Commands ({commands.length})
-                            {hasUnsaved && <span className="ml-2 text-xs text-yellow-400">• unsaved</span>}
-                        </h2>
-                        <div className="flex gap-2">
-                            <button
-                                onClick={handleClear}
-                                disabled={commands.length === 0}
-                                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-secondary rounded-lg transition-colors disabled:opacity-50"
-                            >
-                                <RefreshCw className="w-4 h-4" />
-                                Clear
-                            </button>
-                            <button
-                                onClick={handleCopy}
-                                disabled={commands.length === 0}
-                                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-secondary rounded-lg transition-colors disabled:opacity-50"
-                            >
-                                {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                {copied ? 'Copied!' : 'Copy'}
-                            </button>
-                            <button
-                                onClick={handleSave}
-                                disabled={isSaving || !gamePath}
-                                className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent hover:bg-accent/80 disabled:opacity-50 text-white rounded-lg transition-colors"
-                            >
-                                {isSaving ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                                {isSaving ? 'Saving...' : 'Save'}
-                            </button>
-                        </div>
+            <div className="flex flex-1 gap-6 min-h-0">
+                {/* Left Panel - Command Presets */}
+                <div className="w-1/2 flex flex-col gap-4 overflow-hidden">
+                    <div className="relative shrink-0">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+                        <input
+                            type="text"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                            placeholder="Search commands..."
+                            className="w-full pl-10 pr-4 py-2.5 bg-bg-secondary border border-white/5 rounded-xl text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-text-secondary/50"
+                        />
                     </div>
 
-                    {saveMessage && (
-                        <div className={`mb-3 text-sm ${saveMessage.includes('Error') ? 'text-red-400' : 'text-green-400'}`}>
-                            {saveMessage}
-                        </div>
-                    )}
+                    <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+                        {/* Custom Command Input */}
+                        <Card title="Custom Command">
+                            <div className="flex gap-2">
+                                <input
+                                    type="text"
+                                    value={customCommand}
+                                    onChange={(e) => setCustomCommand(e.target.value)}
+                                    placeholder="e.g. fps_max 0"
+                                    className="flex-1 px-3 py-2 bg-bg-tertiary border border-white/10 rounded-lg text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
+                                    onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
+                                />
+                                <Button onClick={handleAddCustomCommand} disabled={!customCommand.trim()} icon={Plus} />
+                            </div>
+                        </Card>
 
-                    {commands.length > 0 ? (
-                        <div className="space-y-1">
-                            {commands.map((cmd, i) => (
-                                <div
-                                    key={i}
-                                    className="flex items-center justify-between gap-2 p-2 bg-black/30 rounded-lg group"
-                                >
-                                    <code className="text-sm text-text-secondary font-mono flex-1 truncate">
-                                        {cmd}
-                                    </code>
-                                    <button
-                                        onClick={() => handleRemoveCommand(i)}
-                                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all"
-                                    >
-                                        <Trash2 className="w-4 h-4 text-red-400" />
-                                    </button>
+                        {filteredPresets.map((category) => (
+                            <Card key={category.category} title={category.category} icon={category.icon}>
+                                <div className="space-y-1">
+                                    {category.commands.map((cmd) => {
+                                        const isAdded = commands.includes(cmd.command);
+                                        return (
+                                            <button
+                                                key={cmd.command}
+                                                onClick={() => handleAddCommand(cmd.command)}
+                                                disabled={isAdded}
+                                                className={`w-full text-left p-3 rounded-lg transition-all group ${isAdded
+                                                    ? 'bg-accent/10 border border-accent/20 cursor-default opacity-60'
+                                                    : 'bg-bg-tertiary/50 hover:bg-bg-tertiary border border-transparent hover:border-white/5'
+                                                    }`}
+                                            >
+                                                <div className="flex items-center justify-between mb-1">
+                                                    <span className={`text-sm font-medium ${isAdded ? 'text-accent' : 'text-text-primary'}`}>
+                                                        {cmd.name}
+                                                    </span>
+                                                    {isAdded && <Check className="w-3 h-3 text-accent" />}
+                                                </div>
+                                                <div className="flex items-center justify-between text-xs text-text-secondary">
+                                                    <span>{cmd.description}</span>
+                                                    <code className="bg-black/20 px-1.5 py-0.5 rounded font-mono opacity-60 group-hover:opacity-100 transition-opacity">
+                                                        {cmd.command}
+                                                    </code>
+                                                </div>
+                                            </button>
+                                        );
+                                    })}
                                 </div>
-                            ))}
-                        </div>
-                    ) : (
-                        <div className="text-center py-8 text-text-secondary">
-                            <Terminal className="w-12 h-12 mx-auto mb-2 opacity-30" />
-                            <p className="text-sm">No commands added yet</p>
-                            <p className="text-xs">Click on commands from the left to add them</p>
-                        </div>
-                    )}
-                </section>
+                            </Card>
+                        ))}
+                    </div>
+                </div>
 
-                {/* Status and Instructions */}
-                <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                    <h2 className="text-sm font-semibold text-text-primary mb-3">How to Use</h2>
-                    <ol className="text-xs text-text-secondary space-y-2 list-decimal list-inside">
-                        <li>Select commands from the presets on the left</li>
-                        <li>Click "Copy" to copy all commands</li>
-                        <li>Open your game folder: <code className="bg-bg-tertiary px-1 rounded">game/citadel/cfg/autoexec.cfg</code></li>
-                        <li>Paste the commands into the file</li>
-                        <li>Add <code className="bg-bg-tertiary px-1 rounded text-accent">+exec autoexec</code> to Steam launch options</li>
-                    </ol>
+                {/* Right Panel - Active Commands */}
+                <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+                    <Card
+                        className="flex flex-col"
+                        title={`Your Commands (${commands.length})`}
+                        icon={Terminal}
+                        action={
+                            <div className="flex gap-2">
+                                <Button size="sm" variant="secondary" onClick={handleClear} disabled={commands.length === 0} icon={RefreshCw}>
+                                    Clear
+                                </Button>
+                                <Button size="sm" variant="secondary" onClick={handleCopy} disabled={commands.length === 0} icon={copied ? Check : Copy}>
+                                    {copied ? 'Copied' : 'Copy'}
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={handleSave}
+                                    disabled={isSaving || !gamePath}
+                                    isLoading={isSaving}
+                                    icon={Save}
+                                >
+                                    Save
+                                </Button>
+                            </div>
+                        }
+                    >
+                        {(saveMessage || hasUnsaved) && (
+                            <div className="mb-3">
+                                {saveMessage && (
+                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessage.includes('Error') ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
+                                        {saveMessage.includes('Error') ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                        {saveMessage}
+                                    </div>
+                                )}
+                                {hasUnsaved && !saveMessage && (
+                                    <div className="text-xs text-yellow-400 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                                        You have unsaved changes
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
-                    {!gamePath && (
-                        <p className="mt-3 text-xs text-yellow-500">
-                            ⚠️ Configure your Deadlock game path in Settings first.
-                        </p>
-                    )}
-
-                    {status && (
-                        <p className="mt-3 text-xs text-text-secondary">
-                            {status.exists ? (
-                                <span className="text-green-400">✓ autoexec.cfg found</span>
+                        <div className="overflow-y-auto space-y-2 pr-1 custom-scrollbar max-h-[50vh]">
+                            {commands.length > 0 ? (
+                                commands.map((cmd, i) => (
+                                    <div
+                                        key={i}
+                                        className="flex items-center gap-3 p-3 bg-bg-tertiary/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors animate-fade-in"
+                                    >
+                                        <div className="flex-1 font-mono text-sm text-text-primary truncate">
+                                            {cmd}
+                                        </div>
+                                        <button
+                                            onClick={() => handleRemoveCommand(i)}
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded transition-all"
+                                            title="Remove"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))
                             ) : (
-                                <span className="text-yellow-400">✗ autoexec.cfg not found (will be created)</span>
+                                <div className="flex items-center gap-3 py-6 text-text-secondary opacity-50">
+                                    <Terminal className="w-6 h-6" />
+                                    <div>
+                                        <p className="text-sm font-medium">No commands added</p>
+                                        <p className="text-xs">Select from presets on the left</p>
+                                    </div>
+                                </div>
                             )}
-                        </p>
-                    )}
-                </section>
+                        </div>
+                    </Card>
+
+                    <Card title="Status" className="shrink-0">
+                        <div className="flex justify-between items-center text-sm">
+                            <div className="space-y-1">
+                                <p className="text-text-secondary">File Status</p>
+                                <div className="flex items-center gap-2">
+                                    {status ? (
+                                        status.exists ? (
+                                            <Badge variant="success">Active</Badge>
+                                        ) : (
+                                            <Badge variant="warning">Missing</Badge>
+                                        )
+                                    ) : (
+                                        <span className="text-text-secondary">Checking...</span>
+                                    )}
+                                </div>
+                            </div>
+                            {!gamePath && (
+                                <div className="text-xs text-yellow-500 flex items-center gap-1 bg-yellow-500/10 px-3 py-2 rounded-lg">
+                                    <AlertTriangle className="w-3 h-3" />
+                                    Game path not configured
+                                </div>
+                            )}
+                        </div>
+                    </Card>
+                </div>
             </div>
         </div>
     );

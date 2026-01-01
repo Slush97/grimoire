@@ -179,11 +179,28 @@ export default function Browse() {
         sort !== 'default' ? sort : undefined
       );
 
+      // Enrich results with cached NSFW status from local database
+      // The API doesn't reliably return NSFW flags in list responses
+      let enrichedRecords = response.records;
+      if (response.records.length > 0) {
+        try {
+          const ids = response.records.map(m => m.id);
+          const nsfwStatus = await window.electronAPI.getModsNsfwStatus(ids);
+          enrichedRecords = response.records.map(mod => ({
+            ...mod,
+            nsfw: nsfwStatus[mod.id] ?? mod.nsfw ?? false,
+          }));
+        } catch (enrichErr) {
+          // If enrichment fails, continue with original data
+          console.warn('Failed to enrich NSFW status from cache:', enrichErr);
+        }
+      }
+
       // Append results for infinite scroll
       if (page === 1) {
-        setMods(response.records);
+        setMods(enrichedRecords);
       } else {
-        setMods(prev => [...prev, ...response.records]);
+        setMods(prev => [...prev, ...enrichedRecords]);
       }
       setTotalCount(response.totalCount);
       setHasMore(response.records.length === perPage && page * perPage < response.totalCount);
@@ -448,6 +465,21 @@ export default function Browse() {
     try {
       const details = await getModDetails(mod.id, section);
       setSelectedMod(details);
+
+      // Update the mods array with the correct nsfw flag from details
+      // This ensures grid cards show blur after clicking once
+      if (details.nsfw !== mod.nsfw) {
+        setMods(prev => prev.map(m =>
+          m.id === mod.id ? { ...m, nsfw: details.nsfw } : m
+        ));
+
+        // Also update the local cache so future browses show correct status
+        try {
+          await window.electronAPI.updateModNsfw(mod.id, details.nsfw);
+        } catch (cacheErr) {
+          console.warn('Failed to update NSFW cache:', cacheErr);
+        }
+      }
     } catch (err) {
       setError(String(err));
     }
@@ -798,6 +830,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
   const isCompact = viewMode === 'compact';
   const isList = viewMode === 'list';
 
+
   return (
     <div
       onClick={onClick}
@@ -899,10 +932,21 @@ function ModDetailsModal({
   onClose,
   onDownload,
 }: ModDetailsModalProps) {
-  const thumbnail = mod.previewMedia?.images?.[0];
-  const thumbnailUrl = thumbnail
-    ? `${thumbnail.baseUrl}/${thumbnail.file530 || thumbnail.file}`
+  const images = mod.previewMedia?.images ?? [];
+  const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  const currentImage = images[currentImageIndex];
+  const currentImageUrl = currentImage
+    ? `${currentImage.baseUrl}/${currentImage.file530 || currentImage.file}`
     : undefined;
+
+  const goToPrevious = () => {
+    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
+  };
+
+  const goToNext = () => {
+    setCurrentImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
+  };
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
@@ -927,16 +971,63 @@ function ModDetailsModal({
 
         {/* Content */}
         <div className="p-4 space-y-4">
-          {/* Preview */}
-          {thumbnailUrl && (
-            <div className="w-full rounded-lg overflow-hidden max-h-64">
-              <ModThumbnail
-                src={thumbnailUrl}
-                alt={mod.name}
-                nsfw={mod.nsfw}
-                hideNsfw={hideNsfwPreviews}
-                className="w-full h-full max-h-64 object-cover"
-              />
+          {/* Image Carousel */}
+          {images.length > 0 && (
+            <div className="relative w-full rounded-lg overflow-hidden">
+              {/* Current Image */}
+              <div className="relative">
+                <ModThumbnail
+                  src={currentImageUrl}
+                  alt={`${mod.name} - Image ${currentImageIndex + 1}`}
+                  nsfw={mod.nsfw}
+                  hideNsfw={hideNsfwPreviews}
+                  className="w-full max-h-[60vh] object-contain bg-bg-tertiary"
+                />
+              </div>
+
+              {/* Navigation Arrows (only if more than 1 image) */}
+              {images.length > 1 && (
+                <>
+                  <button
+                    onClick={goToPrevious}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-colors"
+                    aria-label="Previous image"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                    </svg>
+                  </button>
+                  <button
+                    onClick={goToNext}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-colors"
+                    aria-label="Next image"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+
+                  {/* Dot Indicators */}
+                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
+                    {images.map((_, index) => (
+                      <button
+                        key={index}
+                        onClick={() => setCurrentImageIndex(index)}
+                        className={`w-2 h-2 rounded-full transition-colors ${index === currentImageIndex
+                          ? 'bg-white'
+                          : 'bg-white/40 hover:bg-white/60'
+                          }`}
+                        aria-label={`Go to image ${index + 1}`}
+                      />
+                    ))}
+                  </div>
+
+                  {/* Image Counter */}
+                  <div className="absolute top-2 right-2 px-2 py-1 rounded bg-black/50 text-white/80 text-xs">
+                    {currentImageIndex + 1} / {images.length}
+                  </div>
+                </>
+              )}
             </div>
           )}
 

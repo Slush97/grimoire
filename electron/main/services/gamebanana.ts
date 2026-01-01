@@ -118,6 +118,7 @@ interface ModRaw {
     _nViewCount: number;
     _bHasFiles: boolean;
     _bIsNsfw: boolean;
+    _bHasContentRatings?: boolean; // Used as NSFW signal from list API (list API doesn't return _bIsNsfw)
     _aSubmitter?: {
         _idRow: number;
         _sName: string;
@@ -186,7 +187,18 @@ async function fetchJson<T>(url: string): Promise<T> {
         throw new Error(`GameBanana API error: ${response.status} ${response.statusText}`);
     }
 
-    return response.json() as Promise<T>;
+    // Check for empty response body
+    const text = await response.text();
+    if (!text || text.trim() === '') {
+        throw new Error('GameBanana API returned empty response');
+    }
+
+    try {
+        return JSON.parse(text) as T;
+    } catch (err) {
+        console.error('[fetchJson] Failed to parse JSON:', text.slice(0, 200));
+        throw new Error(`GameBanana API returned invalid JSON: ${err}`);
+    }
 }
 
 /**
@@ -229,7 +241,9 @@ function mapMod(raw: ModRaw): GameBananaMod {
         likeCount: raw._nLikeCount,
         viewCount: raw._nViewCount,
         hasFiles: raw._bHasFiles,
-        nsfw: raw._bIsNsfw ?? false,
+        // _bIsNsfw is only returned by detail API, but _bHasContentRatings is returned by list API
+        // and correlates with NSFW status, so use it as fallback
+        nsfw: raw._bIsNsfw ?? raw._bHasContentRatings ?? false,
         submitter: raw._aSubmitter
             ? {
                 id: raw._aSubmitter._idRow,

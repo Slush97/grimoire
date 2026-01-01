@@ -35,6 +35,7 @@ function enrichMod(mod: Mod): Mod {
             gameBananaId: metadata.gameBananaId,
             gameBananaFileId: metadata.gameBananaFileId,
             categoryId: metadata.categoryId,
+            categoryName: metadata.categoryName,
             sourceSection: metadata.sourceSection,
             nsfw: metadata.nsfw,
         };

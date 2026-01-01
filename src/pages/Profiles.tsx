@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Layers, Plus, Trash2, Play, Save, RefreshCw, Check } from 'lucide-react';
+import { Layers, Plus, Trash2, Play, Save, RefreshCw, AlertTriangle, User } from 'lucide-react';
 import {
   getProfiles,
   createProfile,
@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import type { Profile } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
+import { Card, Badge, Button } from '../components/common/ui';
 
 export default function Profiles() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -101,148 +102,146 @@ export default function Profiles() {
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <RefreshCw className="w-8 h-8 animate-spin mb-4" />
+        <RefreshCw className="w-8 h-8 animate-spin mb-4 text-accent" />
         <p>Loading profiles...</p>
       </div>
     );
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
+    <div className="p-6 h-full flex flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-bold text-text-primary">Profiles</h1>
-          <p className="text-sm text-text-secondary mt-1">
-            Save and restore your mod configurations
-          </p>
-        </div>
-      </div>
-
-      {/* Create new profile card */}
-      <div className="bg-gradient-to-r from-accent-primary/20 to-accent-secondary/20 border border-accent-primary/30 rounded-xl p-5 mb-6">
-        <h2 className="text-sm font-semibold text-accent-primary mb-3 uppercase tracking-wide">
-          New Profile
-        </h2>
-        <div className="flex gap-3">
-          <input
-            type="text"
-            value={newProfileName}
-            onChange={(e) => setNewProfileName(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleCreateProfile()}
-            placeholder="Enter profile name..."
-            className="flex-1 px-4 py-2.5 bg-bg-primary border border-border-primary rounded-lg text-text-primary placeholder-text-tertiary focus:outline-none focus:border-accent-primary focus:ring-1 focus:ring-accent-primary transition-all"
-          />
-          <button
-            onClick={handleCreateProfile}
-            disabled={!newProfileName.trim() || isCreating}
-            className="px-5 py-2.5 bg-accent-primary text-white font-medium rounded-lg transition-all flex items-center gap-2 hover:bg-accent-secondary hover:scale-[1.02] active:scale-[0.98] disabled:bg-bg-tertiary disabled:text-text-tertiary disabled:hover:scale-100 disabled:cursor-not-allowed"
-          >
-            <Plus className="w-4 h-4" />
-            {isCreating ? 'Saving...' : 'Save Current'}
-          </button>
-        </div>
-      </div>
-
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 mb-6">
-          <p className="text-red-400 text-sm">{error}</p>
-        </div>
-      )}
-
-      {/* Profile list */}
-      {profiles.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
-          <div className="w-20 h-20 mb-4 rounded-full bg-bg-tertiary flex items-center justify-center">
-            <Layers className="w-10 h-10 opacity-40" />
+      <div className="flex items-center justify-between mb-8 shrink-0">
+        <div className="flex items-center gap-3">
+          <div className="p-3 bg-accent/10 rounded-xl">
+            <Layers className="w-8 h-8 text-accent" />
           </div>
-          <h3 className="text-lg font-medium text-text-primary mb-2">No Profiles Yet</h3>
-          <p className="text-center max-w-sm">
-            Create your first profile to save your current mod configuration.
-          </p>
+          <div>
+            <h1 className="text-3xl font-bold font-reaver tracking-wide">Profiles</h1>
+            <p className="text-text-secondary">Save and restore your mod configurations</p>
+          </div>
         </div>
-      ) : (
-        <div className="grid gap-4">
-          {profiles.map((profile) => {
-            const enabledCount = profile.mods.filter((m) => m.enabled).length;
-            const isApplying = applyingId === profile.id;
-            const isUpdating = updatingId === profile.id;
-            const isActive = activeProfileId === profile.id;
+      </div>
 
-            return (
-              <div
-                key={profile.id}
-                className={`bg-bg-secondary border rounded-xl p-5 transition-all ${isActive
-                    ? 'border-green-500/50 ring-1 ring-green-500/20'
-                    : 'border-border-primary hover:border-border-secondary'
-                  }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  {/* Profile info */}
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-semibold text-text-primary">
-                        {profile.name}
-                      </h3>
-                      {isActive && (
-                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded-full">
-                          <Check className="w-3 h-3" />
-                          Active
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex items-center gap-4 mt-2 text-sm text-text-secondary">
-                      <span>{profile.mods.length} mods</span>
-                      <span className="text-green-400">{enabledCount} enabled</span>
-                      <span className="text-text-tertiary">
-                        {new Date(profile.updatedAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                  </div>
+      <div className="flex flex-col gap-6 flex-1 overflow-auto pr-2 custom-scrollbar">
+        {error && (
+          <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-red-400">
+            <AlertTriangle className="w-5 h-5" />
+            <p>{error}</p>
+          </div>
+        )}
 
-                  {/* Actions */}
-                  <div className="flex items-center gap-2">
-                    {!isActive && (
-                      <button
-                        onClick={() => handleApplyProfile(profile.id)}
-                        disabled={isApplying}
-                        className="px-4 py-2 bg-accent-primary text-white font-medium rounded-lg transition-all flex items-center gap-2 hover:bg-accent-secondary hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:hover:scale-100"
-                      >
-                        {isApplying ? (
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                        ) : (
-                          <Play className="w-4 h-4" />
-                        )}
-                        Apply
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleUpdateProfile(profile.id)}
-                      disabled={isUpdating}
-                      className="px-4 py-2 bg-bg-tertiary text-text-primary rounded-lg transition-all flex items-center gap-2 hover:bg-bg-primary hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
-                      title="Update with current configuration"
-                    >
-                      {isUpdating ? (
-                        <RefreshCw className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <Save className="w-4 h-4" />
-                      )}
-                      Update
-                    </button>
-                    <button
-                      onClick={() => handleDeleteProfile(profile.id)}
-                      className="p-2 text-text-tertiary rounded-lg transition-all hover:text-red-400 hover:bg-red-500/10 hover:scale-[1.05] active:scale-[0.95]"
-                      title="Delete profile"
-                    >
-                      <Trash2 className="w-5 h-5" />
-                    </button>
-                  </div>
-                </div>
+        {/* Create New Profile */}
+        <Card title="Create New Profile" icon={Plus}>
+          <div className="flex gap-3">
+            <input
+              type="text"
+              value={newProfileName}
+              onChange={(e) => setNewProfileName(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleCreateProfile()}
+              placeholder="Enter profile name (e.g. Competitive, Casual, Testing)..."
+              className="flex-1 px-4 py-2.5 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+            />
+            <Button
+              onClick={handleCreateProfile}
+              disabled={!newProfileName.trim() || isCreating}
+              isLoading={isCreating}
+              icon={Save}
+            >
+              Create Profile
+            </Button>
+          </div>
+        </Card>
+
+        {/* Profile List */}
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 pb-6">
+          {profiles.length === 0 ? (
+            <div className="col-span-full flex flex-col items-center justify-center py-16 text-text-secondary border border-dashed border-white/10 rounded-xl bg-bg-secondary/30">
+              <div className="w-20 h-20 mb-4 rounded-full bg-bg-tertiary flex items-center justify-center">
+                <User className="w-8 h-8 opacity-40" />
               </div>
-            );
-          })}
+              <h3 className="text-lg font-medium text-text-primary mb-2">No Profiles Yet</h3>
+              <p className="text-center max-w-sm">
+                Create your first profile above to save your current mod configuration.
+              </p>
+            </div>
+          ) : (
+            profiles.map((profile) => {
+              const enabledCount = profile.mods.filter((m) => m.enabled).length;
+              const isApplying = applyingId === profile.id;
+              const isUpdating = updatingId === profile.id;
+              const isActive = activeProfileId === profile.id;
+
+              return (
+                <Card
+                  key={profile.id}
+                  title={profile.name}
+                  icon={Layers}
+                  className={`transition-all duration-300 ${isActive ? 'ring-1 ring-accent border-accent/50 shadow-[0_0_20px_rgba(249,115,22,0.1)]' : 'hover:border-white/10'}`}
+                  action={
+                    <div className="flex items-center gap-2">
+                      {isActive ? (
+                        <Badge variant="success" className="animate-pulse">Active</Badge>
+                      ) : (
+                        <Badge variant="neutral">Inactive</Badge>
+                      )}
+                    </div>
+                  }
+                >
+                  <div className="flex flex-col gap-4">
+                    <div className="flex items-center gap-4 text-sm text-text-secondary bg-black/20 p-3 rounded-lg border border-white/5">
+                      <div className="flex flex-col items-center px-4 border-r border-white/5">
+                        <span className="text-2xl font-bold text-text-primary mb-1">{profile.mods.length}</span>
+                        <span className="text-xs uppercase tracking-wider opacity-70">Mods</span>
+                      </div>
+                      <div className="flex flex-col items-center px-4 border-r border-white/5">
+                        <span className="text-2xl font-bold text-green-400 mb-1">{enabledCount}</span>
+                        <span className="text-xs uppercase tracking-wider opacity-70">Enabled</span>
+                      </div>
+                      <div className="flex-1 text-right text-xs">
+                        <div className="mb-1">Last Updated</div>
+                        <div className="text-text-primary font-mono">{new Date(profile.updatedAt).toLocaleDateString()}</div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 pt-2">
+                      {!isActive && (
+                        <Button
+                          className="flex-1"
+                          onClick={() => handleApplyProfile(profile.id)}
+                          disabled={isApplying || isUpdating}
+                          isLoading={isApplying}
+                          icon={Play}
+                        >
+                          Apply
+                        </Button>
+                      )}
+                      <Button
+                        className={isActive ? "flex-1" : ""}
+                        variant="secondary"
+                        onClick={() => handleUpdateProfile(profile.id)}
+                        disabled={isUpdating || isApplying}
+                        isLoading={isUpdating}
+                        icon={Save}
+                        title="Overwrite with current mods"
+                      >
+                        Update
+                      </Button>
+                      <Button
+                        variant="danger"
+                        onClick={() => handleDeleteProfile(profile.id)}
+                        disabled={isApplying || isUpdating}
+                        icon={Trash2}
+                        title="Delete Profile"
+                      />
+                    </div>
+                  </div>
+                </Card>
+              );
+            })
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }

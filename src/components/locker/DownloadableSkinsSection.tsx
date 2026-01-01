@@ -199,36 +199,6 @@ export default function DownloadableSkinsSection({
     };
   }, [downloading, onDownloadComplete]);
 
-  const initiateDownload = useCallback(
-    async (mod: GameBananaMod) => {
-      if (downloading) return;
-
-      try {
-        setError(null);
-        // Set a temp loading state for this mod if needed, but for now we rely on the button being disabled
-        // actually we can't easily show loading on the specific button during fetch without new state
-        // but it's usually fast.
-
-        console.log('[initiateDownload] Fetching details for mod:', mod.id);
-        const details = await getModDetails(mod.id, 'Mod');
-        console.log('[initiateDownload] Files found:', details.files?.length);
-        
-        if (!details.files || details.files.length === 0) {
-          setError('No downloadable files');
-          return;
-        }
-
-        const file = getPrimaryFile(details.files);
-        console.log('[initiateDownload] Downloading primary file:', file.id);
-        startDownload(mod.id, file);
-      } catch (err) {
-        console.error('[initiateDownload] Error:', err);
-        setError(err instanceof Error ? err.message : String(err));
-      }
-    },
-    [downloading]
-  );
-
   const startDownload = useCallback(
     async (modId: number, file: { id: number; fileName: string }) => {
       try {
@@ -245,6 +215,36 @@ export default function DownloadableSkinsSection({
       }
     },
     [categoryId]
+  );
+
+  const initiateDownload = useCallback(
+    async (mod: GameBananaMod) => {
+      if (downloading) return;
+
+      try {
+        setError(null);
+        // Set a temp loading state for this mod if needed, but for now we rely on the button being disabled
+        // actually we can't easily show loading on the specific button during fetch without new state
+        // but it's usually fast.
+
+        console.log('[initiateDownload] Fetching details for mod:', mod.id);
+        const details = await getModDetails(mod.id, 'Mod');
+        console.log('[initiateDownload] Files found:', details.files?.length);
+
+        if (!details.files || details.files.length === 0) {
+          setError('No downloadable files');
+          return;
+        }
+
+        const file = getPrimaryFile(details.files);
+        console.log('[initiateDownload] Downloading primary file:', file.id);
+        startDownload(mod.id, file);
+      } catch (err) {
+        console.error('[initiateDownload] Error:', err);
+        setError(err instanceof Error ? err.message : String(err));
+      }
+    },
+    [downloading, startDownload]
   );
 
   const handleRetry = () => {

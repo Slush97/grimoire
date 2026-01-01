@@ -10,6 +10,7 @@ export interface ModMetadata {
     categoryName?: string; // Hero/category name from GameBanana
     sourceSection?: string;
     nsfw?: boolean;
+    isMinaPreset?: boolean; // Flag for Mina presets we extracted from the 7z
 }
 
 export type ModMetadataMap = Record<string, ModMetadata>;
@@ -65,3 +66,6 @@ export function removeModMetadata(fileName: string): void {
     delete metadata[fileName];
     saveMetadata(metadata);
 }
+
+// Alias for removeModMetadata
+export const deleteModMetadata = removeModMetadata;

@@ -74,8 +74,7 @@ export type MinaVariant = {
 
 export type MinaSelection = Omit<MinaVariant, 'archiveEntry' | 'label'>;
 
-export const MINA_ARCHIVE_DEFAULT =
-  '/home/esoc/Downloads/sts_midnight_mina_v1_1(1)/extra clothing presets.7z';
+export const MINA_ARCHIVE_DEFAULT = '';
 
 export function heroAssetBaseName(name: string): string {
   return name.trim().replace(/\s+/g, '_');
@@ -123,9 +122,12 @@ export function buildMinaPresets(mods: Mod[]): MinaPreset[] {
   return mods
     .filter((mod) => {
       const lower = mod.fileName.toLowerCase();
-      const isMetadataMina = mod.name?.startsWith('Midnight Mina —');
+      const nameLower = mod.name?.toLowerCase() || '';
+      // Check metadata name for Midnight Mina (handles '"Midnight" Mina' format)
+      const isMetadataMina = nameLower.includes('midnight') && nameLower.includes('mina');
       if (!lower.endsWith('.vpk')) return false;
-      if (lower.includes('textures')) return false;
+      // Exclude textures VPKs from presets list
+      if (lower.includes('textures') || nameLower.includes('textures')) return false;
       return (
         lower.startsWith('clothing_preset_') ||
         lower.includes('sts_midnight_mina_') ||
@@ -134,8 +136,8 @@ export function buildMinaPresets(mods: Mod[]): MinaPreset[] {
     })
     .map((mod) => {
       const rawName = mod.name?.trim();
-      const cleanedName = rawName?.startsWith('Midnight Mina — ')
-        ? rawName.replace('Midnight Mina — ', '')
+      const cleanedName = (rawName?.toLowerCase().includes('midnight') && rawName?.toLowerCase().includes('mina'))
+        ? rawName.replace(/midnight mina[^a-z]*/i, '').trim()
         : rawName;
       const raw =
         cleanedName ||
@@ -145,7 +147,7 @@ export function buildMinaPresets(mods: Mod[]): MinaPreset[] {
           .replace(/_/g, ' ');
       return {
         fileName: mod.fileName,
-        label: raw.trim(),
+        label: raw.trim() || 'Default Preset',
         enabled: mod.enabled,
       };
     })
@@ -155,10 +157,37 @@ export function buildMinaPresets(mods: Mod[]): MinaPreset[] {
 export function detectMinaTextures(mods: Mod[]) {
   return mods.filter((mod) => {
     const lower = mod.fileName.toLowerCase();
+    const nameLower = mod.name?.toLowerCase() || '';
     if (!lower.endsWith('.vpk')) return false;
-    if (!lower.includes('textures')) return false;
-    if (lower.includes('mina') || lower.includes('midnight')) return true;
+    // Check if it's a textures file via filename or has Midnight Mina in metadata
+    const hasTexturesInName = lower.includes('textures');
+    // Check for Midnight Mina in name (handles variations like '"Midnight" Mina')
+    const isMidnightMina = nameLower.includes('midnight') && nameLower.includes('mina');
+    // If it's Midnight Mina and NOT a preset (no clothing_preset), it's the textures
+    if (isMidnightMina && !lower.startsWith('clothing_preset_')) {
+      return true;
+    }
+    if (hasTexturesInName && (lower.includes('mina') || lower.includes('midnight'))) {
+      return true;
+    }
     return lower === 'textures-pak21_dir.vpk';
+  });
+}
+
+/**
+ * Check if any Midnight Mina mod is currently enabled
+ */
+export function hasActiveMinaMod(mods: Mod[]): boolean {
+  return mods.some((mod) => {
+    if (!mod.enabled) return false;
+    const lower = mod.fileName.toLowerCase();
+    const nameLower = mod.name?.toLowerCase() || '';
+    return (
+      nameLower.includes('midnight mina') ||
+      lower.includes('midnight_mina') ||
+      lower.startsWith('clothing_preset_') ||
+      lower.includes('sts_midnight_mina')
+    );
   });
 }
 
@@ -246,19 +275,41 @@ export function findMinaVariant(
   );
 }
 
-export function groupModsByCategory(mods: Mod[]) {
+export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: string }[]) {
   const map = new Map<number, Mod[]>();
   const unassigned: Mod[] = [];
 
+  // Build a lookup for hero names to IDs
+  const heroNameToId = new Map<string, number>();
+  if (heroList) {
+    for (const hero of heroList) {
+      heroNameToId.set(hero.name.toLowerCase(), hero.id);
+    }
+  }
+
   for (const mod of mods) {
-    if (!mod.categoryId) {
+    let categoryId = mod.categoryId;
+
+    // If mod has a generic category (like "Skins" parent), try to infer from mod name
+    if (!categoryId || mod.categoryName?.toLowerCase() === 'skins') {
+      const nameLower = mod.name?.toLowerCase() || '';
+      // Check for hero names in the mod name
+      for (const [heroName, heroId] of heroNameToId) {
+        if (nameLower.includes(heroName)) {
+          categoryId = heroId;
+          break;
+        }
+      }
+    }
+
+    if (!categoryId) {
       unassigned.push(mod);
       continue;
     }
-    if (!map.has(mod.categoryId)) {
-      map.set(mod.categoryId, []);
+    if (!map.has(categoryId)) {
+      map.set(categoryId, []);
     }
-    map.get(mod.categoryId)?.push(mod);
+    map.get(categoryId)?.push(mod);
   }
 
   return { map, unassigned };

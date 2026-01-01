@@ -1,13 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, RotateCcw, Crosshair as CrosshairIcon, Save, Loader2 } from 'lucide-react';
-import { useCrosshairStore, type CrosshairPreset } from '../stores/crosshairStore';
+import { Copy, Check, RotateCcw, Crosshair as CrosshairIcon, Save, Trash2, Play } from 'lucide-react';
+import { useCrosshairStore } from '../stores/crosshairStore';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
-import CrosshairPresetCard from '../components/crosshair/CrosshairPresetCard';
 import { getSettings } from '../lib/api';
+import { Card, Slider, Toggle, Button } from '../components/common/ui';
 
 export default function Crosshair() {
     const [copied, setCopied] = useState(false);
-    const [previewScale, setPreviewScale] = useState(1.3);
+    const [previewScale, setPreviewScale] = useState(1.5);
     const [presetName, setPresetName] = useState('');
     const [isSaving, setIsSaving] = useState(false);
     const [showSaveInput, setShowSaveInput] = useState(false);
@@ -126,10 +126,6 @@ export default function Crosshair() {
         }
     };
 
-    const handleLoadPreset = (preset: CrosshairPreset) => {
-        loadSettingsFromPreset(preset);
-    };
-
     const handleDeletePreset = async (presetId: string) => {
         if (confirm('Delete this crosshair preset?')) {
             await deletePreset(presetId);
@@ -137,309 +133,181 @@ export default function Crosshair() {
     };
 
     return (
-        <div className="flex flex-col flex-1 gap-6 p-6 overflow-auto">
-            <div className="flex gap-6">
+        <div className="flex flex-col h-full p-6 space-y-6 overflow-hidden">
+            <div className="flex items-center gap-3 shrink-0">
+                <div className="p-3 bg-accent/10 rounded-xl">
+                    <CrosshairIcon className="w-8 h-8 text-accent" />
+                </div>
+                <div>
+                    <h1 className="text-3xl font-bold font-reaver tracking-wide">Crosshair Designer</h1>
+                    <p className="text-text-secondary">Customize your in-game crosshair appearance</p>
+                </div>
+            </div>
+
+            <div className="flex flex-1 gap-6 min-h-0">
                 {/* Left Panel - Settings */}
-                <div className="flex-1 space-y-6 max-w-md">
-                    {/* Header */}
-                    <div className="flex items-center gap-3">
-                        <CrosshairIcon className="w-6 h-6 text-accent" />
-                        <h1 className="text-2xl font-bold text-text-primary">Crosshair Designer</h1>
-                    </div>
-
-                    {/* Crosshair/Pip Settings */}
-                    <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                        <h2 className="text-lg font-semibold text-text-primary mb-4">Crosshair</h2>
-                        <div className="space-y-4">
-                            <SliderControl
-                                label="Gap"
-                                value={pipGap}
-                                min={-10}
-                                max={50}
-                                step={1}
-                                onChange={setPipGap}
-                            />
-                            <SliderControl
-                                label="Height"
-                                value={pipHeight}
-                                min={0}
-                                max={50}
-                                step={1}
-                                onChange={setPipHeight}
-                            />
-                            <SliderControl
-                                label="Width"
-                                value={pipWidth}
-                                min={0}
-                                max={10}
-                                step={0.5}
-                                onChange={setPipWidth}
-                            />
-                            <SliderControl
-                                label="Opacity"
-                                value={pipOpacity}
-                                min={0}
-                                max={1}
-                                step={0.05}
-                                onChange={setPipOpacity}
-                            />
-                            <ToggleControl
-                                label="Border"
-                                checked={pipBorder}
-                                onChange={setPipBorder}
-                            />
+                <div className="w-1/3 flex flex-col gap-6 overflow-y-auto pr-2">
+                    <Card title="Crosshair Shape">
+                        <div className="space-y-6">
+                            <Slider label="Gap" value={pipGap} min={-10} max={50} onChange={setPipGap} />
+                            <Slider label="Height" value={pipHeight} min={0} max={50} onChange={setPipHeight} />
+                            <Slider label="Width" value={pipWidth} min={0} max={10} step={0.5} onChange={setPipWidth} />
+                            <Slider label="Opacity" value={pipOpacity} min={0} max={1} step={0.05} onChange={setPipOpacity} />
+                            <Toggle label="Outline Border" checked={pipBorder} onChange={setPipBorder} />
                         </div>
-                    </section>
+                    </Card>
 
-                    {/* Dot Settings */}
-                    <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                        <h2 className="text-lg font-semibold text-text-primary mb-4">Dot</h2>
-                        <div className="space-y-4">
-                            <SliderControl
-                                label="Opacity"
-                                value={dotOpacity}
-                                min={0}
-                                max={1}
-                                step={0.05}
-                                onChange={setDotOpacity}
-                            />
-                            <SliderControl
-                                label="Outline Opacity"
-                                value={dotOutlineOpacity}
-                                min={0}
-                                max={1}
-                                step={0.05}
-                                onChange={setDotOutlineOpacity}
-                            />
+                    <Card title="Center Dot">
+                        <div className="space-y-6">
+                            <Slider label="Opacity" value={dotOpacity} min={0} max={1} step={0.05} onChange={setDotOpacity} />
+                            <Slider label="Outline Opacity" value={dotOutlineOpacity} min={0} max={1} step={0.05} onChange={setDotOutlineOpacity} />
                         </div>
-                    </section>
+                    </Card>
 
-                    {/* Color Settings */}
-                    <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                        <h2 className="text-lg font-semibold text-text-primary mb-4">Color</h2>
-                        <div className="space-y-4">
-                            <div className="flex items-center gap-4">
-                                <label className="text-sm text-text-secondary w-20">Color</label>
+                    <Card title="Color">
+                        <div className="space-y-6">
+                            <div className="flex items-center gap-4 p-3 bg-black/20 rounded-lg">
                                 <input
                                     type="color"
                                     value={rgbToHex(colorR, colorG, colorB)}
                                     onChange={handleColorChange}
-                                    className="w-12 h-8 rounded border border-border cursor-pointer"
+                                    className="w-12 h-12 rounded cursor-pointer bg-transparent border-none"
                                 />
-                                <span className="text-sm text-text-secondary font-mono">
+                                <div className="font-mono text-xs text-text-secondary">
                                     RGB({colorR}, {colorG}, {colorB})
-                                </span>
+                                </div>
                             </div>
-                            <SliderControl
-                                label="Red"
-                                value={colorR}
-                                min={0}
-                                max={255}
-                                step={1}
-                                onChange={setColorR}
-                            />
-                            <SliderControl
-                                label="Green"
-                                value={colorG}
-                                min={0}
-                                max={255}
-                                step={1}
-                                onChange={setColorG}
-                            />
-                            <SliderControl
-                                label="Blue"
-                                value={colorB}
-                                min={0}
-                                max={255}
-                                step={1}
-                                onChange={setColorB}
-                            />
+                            <Slider label="Red" value={colorR} min={0} max={255} onChange={setColorR} className="accent-red-500" />
+                            <Slider label="Green" value={colorG} min={0} max={255} onChange={setColorG} className="accent-green-500" />
+                            <Slider label="Blue" value={colorB} min={0} max={255} onChange={setColorB} className="accent-blue-500" />
                         </div>
-                    </section>
+                    </Card>
                 </div>
 
-                {/* Right Panel - Preview & Output */}
-                <div className="flex-1 space-y-6 max-w-lg">
-                    {/* Preview */}
-                    <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-text-primary">Preview</h2>
-                            <div className="flex items-center gap-2 text-xs text-text-secondary">
-                                <span>Scale:</span>
-                                <input
-                                    type="range"
-                                    min={0.5}
-                                    max={3}
-                                    step={0.1}
-                                    value={previewScale}
-                                    onChange={(e) => setPreviewScale(parseFloat(e.target.value))}
-                                    className="w-20 accent-accent"
-                                />
-                                <span className="font-mono w-8">{previewScale.toFixed(1)}x</span>
+                {/* Right Panel - Preview & Actions */}
+                <div className="flex-1 flex flex-col gap-6 overflow-y-auto">
+                    {/* Top Actions Bar */}
+                    <div className="flex gap-4">
+                        <Card className="flex-1" contentClassName="p-3">
+                            <div className="flex items-center justify-between gap-3 h-full">
+                                <div className="flex items-center gap-2">
+                                    <Button variant="secondary" onClick={reset} icon={RotateCcw} size="sm">Reset</Button>
+                                    <Button
+                                        variant={copied ? 'success' : 'primary'}
+                                        onClick={handleCopy}
+                                        icon={copied ? Check : Copy}
+                                        size="sm"
+                                    >
+                                        {copied ? 'Copied code' : 'Copy Code'}
+                                    </Button>
+                                </div>
+                                <div className="text-xs text-text-secondary">
+                                    Press F7 in-game
+                                </div>
                             </div>
-                        </div>
-                        <div className="flex justify-center" ref={previewRef}>
-                            <CrosshairPreview size={250} scale={previewScale} />
-                        </div>
-                        <p className="mt-3 text-xs text-text-secondary text-center">
-                            Adjust scale to match your in-game view
-                        </p>
-                    </section>
+                        </Card>
 
-                    {/* Save Preset */}
-                    <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-text-primary">Save Preset</h2>
-                        </div>
-                        {showSaveInput ? (
-                            <div className="flex gap-2">
-                                <input
-                                    type="text"
-                                    value={presetName}
-                                    onChange={(e) => setPresetName(e.target.value)}
-                                    placeholder="Preset name..."
-                                    className="flex-1 px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent"
-                                    onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
-                                    autoFocus
-                                />
-                                <button
-                                    onClick={handleSavePreset}
-                                    disabled={isSaving || !presetName.trim()}
-                                    className="flex items-center gap-1 px-3 py-2 text-sm bg-accent hover:bg-accent/80 disabled:opacity-50 text-white rounded-lg transition-colors"
-                                >
-                                    {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
-                                    Save
-                                </button>
-                                <button
-                                    onClick={() => setShowSaveInput(false)}
-                                    className="px-3 py-2 text-sm bg-bg-tertiary text-text-secondary rounded-lg hover:bg-bg-tertiary/80"
-                                >
-                                    Cancel
-                                </button>
+                        <Card className="flex-1" contentClassName="p-3">
+                            <div className="flex items-center gap-2 h-full">
+                                {showSaveInput ? (
+                                    <>
+                                        <input
+                                            type="text"
+                                            value={presetName}
+                                            onChange={(e) => setPresetName(e.target.value)}
+                                            placeholder="Name..."
+                                            className="flex-1 px-3 py-1.5 bg-bg-tertiary border border-white/10 rounded-lg text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-0"
+                                            onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
+                                            autoFocus
+                                        />
+                                        <Button
+                                            onClick={handleSavePreset}
+                                            disabled={!presetName.trim()}
+                                            isLoading={isSaving}
+                                            icon={Save}
+                                            size="sm"
+                                        >
+                                            Save
+                                        </Button>
+                                        <button onClick={() => setShowSaveInput(false)} className="text-text-secondary hover:text-text-primary">
+                                            <RotateCcw className="w-4 h-4" />
+                                        </button>
+                                    </>
+                                ) : (
+                                    <Button className="w-full" variant="secondary" onClick={() => setShowSaveInput(true)} icon={Save} size="sm">
+                                        Save as New Preset
+                                    </Button>
+                                )}
                             </div>
-                        ) : (
-                            <button
-                                onClick={() => setShowSaveInput(true)}
-                                className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-accent hover:bg-accent/80 text-white rounded-lg transition-colors"
-                            >
-                                <Save className="w-5 h-5" />
-                                Save as Preset
-                            </button>
-                        )}
-                    </section>
+                        </Card>
+                    </div>
 
-                    {/* Generated Commands */}
-                    <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                        <div className="flex items-center justify-between mb-4">
-                            <h2 className="text-lg font-semibold text-text-primary">Console Commands</h2>
-                            <div className="flex gap-2">
-                                <button
-                                    onClick={reset}
-                                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-bg-tertiary hover:bg-bg-tertiary/80 text-text-secondary rounded-lg transition-colors"
-                                >
-                                    <RotateCcw className="w-4 h-4" />
-                                    Reset
-                                </button>
-                                <button
-                                    onClick={handleCopy}
-                                    className="flex items-center gap-1 px-3 py-1.5 text-sm bg-accent hover:bg-accent/80 text-white rounded-lg transition-colors"
-                                >
-                                    {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                                    {copied ? 'Copied!' : 'Copy'}
-                                </button>
+                    {/* Preview Area */}
+                    <Card className="relative" contentClassName="p-0">
+                        <div className="absolute top-4 right-4 z-10 flex items-center gap-2 bg-black/40 backdrop-blur-md rounded-full px-3 py-1 border border-white/5">
+                            <span className="text-xs text-text-secondary">Scale:</span>
+                            <input
+                                type="range"
+                                min={0.5}
+                                max={3}
+                                step={0.1}
+                                value={previewScale}
+                                onChange={(e) => setPreviewScale(parseFloat(e.target.value))}
+                                className="w-20 accent-accent"
+                            />
+                            <span className="font-mono text-xs w-8">{previewScale.toFixed(1)}x</span>
+                        </div>
+
+                        <div className="flex items-center justify-center bg-gradient-to-br from-bg-tertiary/50 to-bg-secondary/50 rounded-xl h-[420px]" ref={previewRef}>
+                            <CrosshairPreview size={400} scale={previewScale} />
+                        </div>
+                    </Card>
+
+                    {/* Presets Gallery */}
+                    {presets.length > 0 && (
+                        <Card title={`Saved Presets (${presets.length})`}>
+                            <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 gap-3">
+                                {presets.map((preset) => (
+                                    <div
+                                        key={preset.id}
+                                        className={`group relative aspect-square rounded-lg border overflow-hidden transition-all bg-bg-tertiary ${preset.id === activePresetId ? 'border-accent ring-1 ring-accent' : 'border-white/5 hover:border-white/20'
+                                            }`}
+                                    >
+                                        <img src={preset.thumbnail} alt={preset.name} className="w-full h-full object-cover opacity-60 group-hover:opacity-100 transition-opacity" />
+
+                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
+                                            <div className="text-xs font-bold text-center truncate w-full">{preset.name}</div>
+                                            <div className="flex gap-1">
+                                                <button
+                                                    onClick={() => loadSettingsFromPreset(preset)}
+                                                    className="p-1.5 bg-white/10 hover:bg-white/20 rounded-md text-white"
+                                                    title="Load"
+                                                >
+                                                    <RotateCcw className="w-3 h-3" />
+                                                </button>
+                                                <button
+                                                    onClick={() => handleApplyPreset(preset.id)}
+                                                    className="p-1.5 bg-accent hover:bg-accent-hover rounded-md text-white"
+                                                    title="Apply to Game"
+                                                >
+                                                    <Play className="w-3 h-3" />
+                                                </button>
+                                                <button
+                                                    onClick={(e) => { e.stopPropagation(); handleDeletePreset(preset.id); }}
+                                                    className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-md"
+                                                    title="Delete"
+                                                >
+                                                    <Trash2 className="w-3 h-3" />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
                             </div>
-                        </div>
-                        <div className="bg-black/50 rounded-lg p-3 font-mono text-sm text-text-secondary break-all">
-                            {generateCommands()}
-                        </div>
-                        <p className="mt-3 text-xs text-text-secondary">
-                            Paste this code in the game console (Default Key: F7)
-                        </p>
-                    </section>
+                        </Card>
+                    )}
                 </div>
             </div>
-
-            {/* Saved Presets Gallery */}
-            {presets.length > 0 && (
-                <section className="bg-bg-secondary rounded-xl p-4 border border-border">
-                    <h2 className="text-lg font-semibold text-text-primary mb-4">
-                        Saved Presets ({presets.length})
-                    </h2>
-                    <div className="grid grid-cols-4 sm:grid-cols-5 md:grid-cols-6 lg:grid-cols-8 gap-3">
-                        {presets.map((preset) => (
-                            <CrosshairPresetCard
-                                key={preset.id}
-                                preset={preset}
-                                isActive={preset.id === activePresetId}
-                                onLoad={handleLoadPreset}
-                                onApply={handleApplyPreset}
-                                onDelete={handleDeletePreset}
-                            />
-                        ))}
-                    </div>
-                    {!gamePath && (
-                        <p className="mt-3 text-xs text-yellow-500">
-                            ⚠️ Configure your Deadlock game path in Settings to enable "Apply to game" functionality.
-                        </p>
-                    )}
-                </section>
-            )}
-        </div>
-    );
-}
-
-// Slider Control Component
-interface SliderControlProps {
-    label: string;
-    value: number;
-    min: number;
-    max: number;
-    step: number;
-    onChange: (value: number) => void;
-}
-
-function SliderControl({ label, value, min, max, step, onChange }: SliderControlProps) {
-    return (
-        <div className="flex items-center gap-4">
-            <label className="text-sm text-text-secondary w-20">{label}</label>
-            <input
-                type="range"
-                min={min}
-                max={max}
-                step={step}
-                value={value}
-                onChange={(e) => onChange(parseFloat(e.target.value))}
-                className="flex-1 accent-accent"
-            />
-            <span className="text-sm text-text-primary w-12 text-right font-mono">
-                {typeof value === 'number' && value % 1 !== 0 ? value.toFixed(2) : value}
-            </span>
-        </div>
-    );
-}
-
-// Toggle Control Component
-interface ToggleControlProps {
-    label: string;
-    checked: boolean;
-    onChange: (checked: boolean) => void;
-}
-
-function ToggleControl({ label, checked, onChange }: ToggleControlProps) {
-    return (
-        <div className="flex items-center gap-4">
-            <label className="text-sm text-text-secondary w-20">{label}</label>
-            <button
-                onClick={() => onChange(!checked)}
-                className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-accent' : 'bg-bg-tertiary'
-                    }`}
-            >
-                <span
-                    className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-transform ${checked ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                />
-            </button>
-            <span className="text-sm text-text-primary">{checked ? 'On' : 'Off'}</span>
         </div>
     );
 }

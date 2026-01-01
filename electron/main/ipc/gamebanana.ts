@@ -12,6 +12,7 @@ import {
 } from '../services/gamebanana';
 import { downloadMod, DownloadModArgs } from '../services/download';
 import { getMainWindow } from '../index';
+import { updateModNsfw } from '../services/modDatabase';
 
 interface BrowseModsArgs {
     page: number;
@@ -51,12 +52,22 @@ ipcMain.handle(
     }
 );
 
-// get-mod-details
+// get-mod-details (enriches local cache with NSFW flag)
 ipcMain.handle(
     'get-mod-details',
     async (_, args: GetModDetailsArgs): Promise<GameBananaModDetails> => {
         const { modId, section = 'Mod' } = args;
-        return fetchModDetails(modId, section);
+        const details = await fetchModDetails(modId, section);
+
+        // Enrich local cache with the NSFW flag from detail response
+        try {
+            updateModNsfw(modId, details.nsfw);
+        } catch (err) {
+            // Don't fail the request if cache update fails
+            console.warn('[get-mod-details] Failed to update NSFW cache:', err);
+        }
+
+        return details;
     }
 );
 

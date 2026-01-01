@@ -1,5 +1,5 @@
 import { ipcMain } from 'electron';
-import { initDatabase, getModById, getModCount, wipeDatabase } from '../services/modDatabase';
+import { initDatabase, getModById, getModCount, wipeDatabase, getModsNsfwStatus, updateModNsfw } from '../services/modDatabase';
 import { searchMods, getCategories, getSectionStats, SearchOptions } from '../services/searchService';
 import { syncAllSections, syncSingleSection, getSyncStatus, needsSync, isSyncInProgress } from '../services/syncService';
 
@@ -56,6 +56,15 @@ ipcMain.handle('get-local-categories', (_, section?: string) => {
 
 ipcMain.handle('get-section-stats', () => {
     return getSectionStats();
+});
+
+// NSFW status handlers
+ipcMain.handle('get-mods-nsfw-status', (_, ids: number[]) => {
+    return getModsNsfwStatus(ids);
+});
+
+ipcMain.handle('update-mod-nsfw', (_, modId: number, isNsfw: boolean) => {
+    updateModNsfw(modId, isNsfw);
 });
 
 console.log('[ModDatabase] IPC handlers registered');

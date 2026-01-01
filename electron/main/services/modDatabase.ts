@@ -324,3 +324,31 @@ export function mapRowToMod(row: Record<string, unknown>): CachedMod {
         cachedAt: (row.cached_at as number) ?? 0,
     };
 }
+
+/**
+ * Update just the NSFW flag for a mod (used to enrich cache from detail fetches)
+ */
+export function updateModNsfw(modId: number, isNsfw: boolean): void {
+    const database = initDatabase();
+    const stmt = database.prepare('UPDATE mods SET is_nsfw = ? WHERE id = ?');
+    stmt.run(isNsfw ? 1 : 0, modId);
+}
+
+/**
+ * Get NSFW status for multiple mods by their IDs
+ * Returns a map of modId -> isNsfw (only includes mods that exist in cache)
+ */
+export function getModsNsfwStatus(ids: number[]): Record<number, boolean> {
+    if (ids.length === 0) return {};
+
+    const database = initDatabase();
+    const placeholders = ids.map(() => '?').join(',');
+    const stmt = database.prepare(`SELECT id, is_nsfw FROM mods WHERE id IN (${placeholders})`);
+    const rows = stmt.all(...ids) as Array<{ id: number; is_nsfw: number }>;
+
+    const result: Record<number, boolean> = {};
+    for (const row of rows) {
+        result[row.id] = row.is_nsfw === 1;
+    }
+    return result;
+}

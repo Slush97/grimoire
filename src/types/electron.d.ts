@@ -207,6 +207,8 @@ export interface ElectronAPI {
     getLocalModCount: (section?: string) => Promise<number>;
     getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
+    getModsNsfwStatus: (ids: number[]) => Promise<Record<number, boolean>>;
+    updateModNsfw: (modId: number, isNsfw: boolean) => Promise<void>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
 
     // Crosshair Presets

@@ -183,7 +183,12 @@ export async function syncAllSections(): Promise<void> {
 
     try {
         for (const section of SECTIONS) {
-            await syncSection(section);
+            try {
+                await syncSection(section);
+            } catch (err) {
+                // Log error but continue with other sections
+                console.error(`[SyncService] Failed to sync ${section}, continuing with others:`, err);
+            }
         }
         console.log('[SyncService] Full sync complete');
     } finally {

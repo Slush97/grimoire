@@ -79,6 +79,7 @@ export interface GameBananaModDetails {
   id: number;
   name: string;
   description?: string;
+  nsfw: boolean;
   category?: GameBananaCategory;
   files?: GameBananaFile[];
   previewMedia?: GameBananaPreviewMedia;

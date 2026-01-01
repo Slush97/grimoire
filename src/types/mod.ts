@@ -12,6 +12,7 @@ export interface Mod {
   gameBananaId?: number;
   gameBananaFileId?: number;
   categoryId?: number;
+  categoryName?: string;
   sourceSection?: string;
   nsfw?: boolean;
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2 } from 'lucide-react';
+import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   cleanupAddons,
@@ -10,6 +10,7 @@ import {
   showOpenDialog,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import { Card, Badge, Toggle, Button } from '../components/common/ui';
 
 export default function Settings() {
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
@@ -280,249 +281,228 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-6 max-w-2xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <SettingsIcon className="w-6 h-6 text-accent" />
-        <h1 className="text-2xl font-bold">Settings</h1>
+    <div className="p-8 max-w-5xl mx-auto space-y-8">
+      <div className="flex items-center gap-3">
+        <div className="p-3 bg-accent/10 rounded-xl">
+          <SettingsIcon className="w-8 h-8 text-accent" />
+        </div>
+        <div>
+          <h1 className="text-3xl font-bold font-reaver tracking-wide">Settings</h1>
+          <p className="text-text-secondary">Configure game paths, preferences, and maintenance tasks</p>
+        </div>
       </div>
 
-      <div className="space-y-6">
-        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-          <label className="block text-sm font-medium text-text-secondary mb-2">
-            Deadlock Installation Path
-          </label>
-          <div className="flex gap-2">
-            <div className="relative flex-1">
-              <input
-                type="text"
-                value={displayPath}
-                onChange={(e) => handlePathChange(e.target.value)}
-                placeholder="/path/to/Deadlock"
-                disabled={isDevMode}
-                className="w-full bg-bg-tertiary border border-border rounded-lg px-3 py-2 pr-10 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed"
-              />
-              {isValidPath !== null && (
-                <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                  {isValidPath ? (
-                    <Check className="w-5 h-5 text-green-500" />
-                  ) : (
-                    <X className="w-5 h-5 text-red-500" />
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Game Configuration Section - Full Width */}
+        <Card title="Game Configuration" icon={HardDrive} className="lg:col-span-2">
+          <div className="space-y-6">
+            <div>
+              <div className="flex justify-between items-center mb-2">
+                <label className="text-sm font-medium text-text-primary">Deadlock Installation Path</label>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-text-secondary">
+                    {isValidPath === true && <span className="text-green-400 flex items-center gap-1"><Check className="w-3 h-3" /> Valid</span>}
+                    {isValidPath === false && <span className="text-red-400 flex items-center gap-1"><X className="w-3 h-3" /> Invalid</span>}
+                  </span>
+                  {!isDevMode && (
+                    <button
+                      onClick={handleAutoDetect}
+                      disabled={isDetecting}
+                      className="text-xs text-accent hover:text-accent-hover transition-colors disabled:opacity-50"
+                    >
+                      {isDetecting ? 'Detecting...' : 'Auto-detect'}
+                    </button>
                   )}
+                </div>
+              </div>
+
+              <div className="flex gap-2">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={displayPath}
+                    onChange={(e) => handlePathChange(e.target.value)}
+                    placeholder="/path/to/Deadlock"
+                    disabled={isDevMode}
+                    className="w-full bg-bg-tertiary border border-white/5 rounded-lg px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed font-mono text-sm"
+                  />
+                </div>
+                <Button
+                  onClick={handleBrowse}
+                  disabled={isDevMode}
+                  variant="secondary"
+                  icon={FolderOpen}
+                >
+                  Browse
+                </Button>
+              </div>
+
+              <p className="text-xs text-text-secondary mt-2 pl-1">
+                {isDevMode
+                  ? 'Dev mode is active. Deadlock path selection is disabled.'
+                  : "Select your Deadlock game folder (contains the 'game' directory)"}
+              </p>
+            </div>
+
+            <div className="h-px bg-white/5" />
+
+            <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+              <div>
+                <div className="font-medium flex items-center gap-2">
+                  gameinfo.gi Status
+                  {gameinfoConfigured ? (
+                    <Badge variant="success">Configured</Badge>
+                  ) : gameinfoConfigured === false ? (
+                    <Badge variant="error" className="animate-pulse">Issues Found</Badge>
+                  ) : (
+                    <Badge variant="neutral">Checking...</Badge>
+                  )}
+                </div>
+                <p className="text-xs text-text-secondary mt-1 max-w-md">
+                  {gameinfoStatus ?? 'Checking gameinfo.gi status...'}
+                </p>
+              </div>
+              <Button
+                onClick={handleFixGameinfo}
+                disabled={isFixingGameinfo || !activeDeadlockPath}
+                isLoading={isFixingGameinfo}
+                variant={gameinfoConfigured ? 'secondary' : 'primary'}
+                icon={Wrench}
+              >
+                Fix Configuration
+              </Button>
+            </div>
+          </div>
+        </Card>
+
+        {/* Preferences */}
+        <Card title="Preferences" icon={Shield}>
+          <div className="space-y-6">
+            <Toggle
+              checked={settings?.autoConfigureGameInfo ?? true}
+              onChange={handleAutoConfigChange}
+              label="Auto-configure gameinfo.gi"
+              description="Automatically fix gameinfo.gi when launching or changing mods."
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.hideNsfwPreviews ?? false}
+              onChange={handleHideNsfwChange}
+              label="Hide NSFW Content"
+              description="Blur thumbnail images for mods marked as NSFW."
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <div>
+              <Toggle
+                checked={isDevMode}
+                onChange={handleDevModeChange}
+                disabled={isCreatingDevPath}
+                label="Developer Mode"
+                description="Use a dummy Deadlock directory for local testing without game files."
+              />
+              {isDevMode && settings?.devDeadlockPath && (
+                <div className="mt-2 text-xs font-mono bg-black/30 p-2 rounded text-text-secondary break-all">
+                  {settings.devDeadlockPath}
                 </div>
               )}
             </div>
-            <button
-              onClick={handleBrowse}
-              disabled={isDevMode}
-              className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
-            >
-              <FolderOpen className="w-4 h-4" />
-              Browse
-            </button>
           </div>
-          <div className="flex items-center justify-between mt-2">
-            <p className="text-xs text-text-secondary">
-              {isDevMode
-                ? 'Dev mode is active. Deadlock path selection is disabled.'
-                : "Select your Deadlock game folder (contains the 'game' directory)"}
-            </p>
-            <button
-              onClick={handleAutoDetect}
-              disabled={isDetecting || isDevMode}
-              className="text-xs text-accent hover:text-accent-hover transition-colors disabled:opacity-50"
-            >
-              {isDetecting ? 'Detecting...' : 'Auto-detect'}
-            </button>
-          </div>
-          {isValidPath === false && (
-            <p className="text-xs text-red-500 mt-2">
-              Invalid Deadlock path. Make sure the folder contains a 'game/citadel' directory.
-            </p>
-          )}
-        </div>
+        </Card>
 
-        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={isDevMode}
-              onChange={(e) => handleDevModeChange(e.target.checked)}
-              disabled={isCreatingDevPath}
-              className="w-4 h-4 rounded border-border bg-bg-tertiary accent-accent disabled:opacity-50"
-            />
-            <div>
-              <span className="font-medium">
-                {isCreatingDevPath ? 'Creating dev folder…' : 'Dev mode'}
-              </span>
-              <p className="text-xs text-text-secondary">
-                Use a dummy Deadlock directory for local testing.
-              </p>
-            </div>
-          </label>
-          {isDevMode && settings?.devDeadlockPath && (
-            <p className="text-xs text-text-secondary mt-2">
-              Using dummy path: {settings.devDeadlockPath}
-            </p>
-          )}
-        </div>
-
-        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings?.autoConfigureGameInfo ?? true}
-              onChange={(e) => handleAutoConfigChange(e.target.checked)}
-              className="w-4 h-4 rounded border-border bg-bg-tertiary accent-accent"
-            />
-            <div>
-              <span className="font-medium">Auto-configure gameinfo.gi</span>
-              <p className="text-xs text-text-secondary">
-                Automatically update gameinfo.gi when enabling/disabling mods
-              </p>
-            </div>
-          </label>
-        </div>
-
-        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-          <label className="flex items-center gap-3 cursor-pointer">
-            <input
-              type="checkbox"
-              checked={settings?.hideNsfwPreviews ?? false}
-              onChange={(e) => handleHideNsfwChange(e.target.checked)}
-              className="w-4 h-4 rounded border-border bg-bg-tertiary accent-accent"
-            />
-            <div>
-              <span className="font-medium">Hide NSFW previews</span>
-              <p className="text-xs text-text-secondary">
-                Blur thumbnail images for mods marked as NSFW
-              </p>
-            </div>
-          </label>
-        </div>
-
-        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="font-medium">gameinfo.gi Status</div>
-              <p className="text-xs text-text-secondary">
-                {gameinfoStatus ?? 'Checking gameinfo.gi…'}
-              </p>
-              {gameinfoConfigured === false && (
-                <p className="text-xs text-red-400 mt-2">
-                  Addon search paths are missing. Mods may not load.
+        {/* Maintenance */}
+        <Card title="Maintenance" icon={Wrench}>
+          <div className="space-y-6">
+            <div className="flex justify-between items-start gap-4">
+              <div>
+                <h4 className="font-medium text-sm">Cleanup Addons Folder</h4>
+                <p className="text-xs text-text-secondary mt-1">
+                  Remove leftover archive downloads (zip, 7z) and normalize Mina files.
                 </p>
-              )}
+                {cleanupResult && (
+                  <p className="text-xs text-accent mt-2 animate-fade-in">{cleanupResult}</p>
+                )}
+              </div>
+              <Button
+                onClick={handleCleanup}
+                disabled={isCleaning || !activeDeadlockPath}
+                isLoading={isCleaning}
+                variant="secondary"
+                size="sm"
+                icon={Trash2}
+              >
+                Cleanup
+              </Button>
             </div>
-            <button
-              onClick={handleFixGameinfo}
-              disabled={isFixingGameinfo || !activeDeadlockPath}
-              className="px-4 py-2 rounded-lg bg-bg-tertiary border border-border hover:border-accent/60 text-sm disabled:opacity-50"
-            >
-              {isFixingGameinfo ? 'Fixing…' : 'Fix gameinfo.gi'}
-            </button>
-          </div>
-        </div>
 
-        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="font-medium">Cleanup Addons Folder</div>
+            <div className="h-px bg-white/5" />
+
+            <AutoexecSection gamePath={activeDeadlockPath} />
+          </div>
+        </Card>
+
+        {/* Mod Database Cache - Full Width */}
+        <Card title="Mod Database Cache" icon={Database} className="lg:col-span-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-4 mb-2">
+                <div className="text-2xl font-bold font-valvepulp text-text-primary">
+                  {syncStatus ? totalCachedMods.toLocaleString() : '---'}
+                </div>
+                <Badge variant="info">Cached Mods</Badge>
+              </div>
               <p className="text-xs text-text-secondary">
-                Removes leftover archive downloads (zip, 7z, rar) from addons and disabled folders.
+                {lastSyncTime > 0
+                  ? `Last synchronized: ${new Date(lastSyncTime * 1000).toLocaleString()}`
+                  : 'Never synchronized'}
               </p>
-              {cleanupResult && (
-                <p className="text-xs mt-2 text-text-secondary">{cleanupResult}</p>
+
+              {syncProgress && (
+                <div className="mt-4 animate-fade-in">
+                  <div className="flex justify-between text-xs text-text-secondary mb-1">
+                    <span>Syncing {syncProgress.section}...</span>
+                    <span>{Math.round((syncProgress.modsProcessed / syncProgress.totalMods) * 100)}%</span>
+                  </div>
+                  <div className="w-full bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
+                    <div
+                      className="bg-accent h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden"
+                      style={{ width: `${Math.min(100, (syncProgress.modsProcessed / syncProgress.totalMods) * 100)}%` }}
+                    >
+                      <div className="absolute inset-0 bg-white/20 animate-[shimmer_1s_infinite]" />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {wipeResult && (
+                <p className="text-xs text-text-secondary mt-2 animate-fade-in">{wipeResult}</p>
               )}
             </div>
-            <button
-              onClick={handleCleanup}
-              disabled={isCleaning || !activeDeadlockPath}
-              className="px-4 py-2 rounded-lg bg-bg-tertiary border border-border hover:border-accent/60 text-sm disabled:opacity-50"
-            >
-              {isCleaning ? 'Cleaning…' : 'Clean'}
-            </button>
-          </div>
-        </div>
 
-        <AutoexecSection gamePath={activeDeadlockPath} />
-
-        <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-          <div className="flex items-center gap-2 mb-2">
-            <Database className="w-4 h-4 text-accent" />
-            <div className="font-medium">Mod Database Cache</div>
-          </div>
-          <p className="text-xs text-text-secondary mb-3">
-            Cache all GameBanana mods locally for lightning-fast search and browsing.
-          </p>
-          <div className="flex items-center justify-between gap-4">
-            <div className="text-sm">
-              {syncStatus ? (
-                <>
-                  <span className="text-text-primary">{totalCachedMods.toLocaleString()} mods cached</span>
-                  {lastSyncTime > 0 && (
-                    <span className="text-text-secondary ml-2">
-                      (last sync: {new Date(lastSyncTime * 1000).toLocaleDateString()})
-                    </span>
-                  )}
-                </>
-              ) : (
-                <span className="text-text-secondary">Checking cache status...</span>
-              )}
-            </div>
-            <div className="flex items-center gap-2">
-              <button
+            <div className="flex gap-3 shrink-0">
+              <Button
                 onClick={handleWipeCache}
                 disabled={isWipingCache || isSyncing}
-                className="flex items-center gap-2 px-3 py-2 rounded-lg bg-bg-tertiary border border-border hover:border-red-400 text-sm text-red-300 disabled:opacity-50"
+                isLoading={isWipingCache}
+                variant="danger"
+                icon={Trash2}
               >
-                {isWipingCache ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Wiping...
-                  </>
-                ) : (
-                  <>
-                    <Trash2 className="w-4 h-4" />
-                    Wipe Cache
-                  </>
-                )}
-              </button>
-              <button
+                Wipe Cache
+              </Button>
+              <Button
                 onClick={handleSyncDatabase}
                 disabled={isSyncing || isWipingCache}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-50 transition-colors"
+                isLoading={isSyncing}
+                icon={RefreshCw}
               >
-                {isSyncing ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Syncing...
-                  </>
-                ) : (
-                  <>
-                    <RefreshCw className="w-4 h-4" />
-                    Sync Database
-                  </>
-                )}
-              </button>
+                Sync Database
+              </Button>
             </div>
           </div>
-          {wipeResult && (
-            <div className="mt-2 text-xs text-text-secondary">{wipeResult}</div>
-          )}
-          {syncProgress && (
-            <div className="mt-3">
-              <div className="text-xs text-text-secondary mb-1">
-                Syncing {syncProgress.section}: {syncProgress.modsProcessed.toLocaleString()} / {syncProgress.totalMods.toLocaleString()}
-              </div>
-              <div className="w-full bg-bg-tertiary rounded-full h-2">
-                <div
-                  className="bg-accent h-2 rounded-full transition-all"
-                  style={{ width: `${Math.min(100, (syncProgress.modsProcessed / syncProgress.totalMods) * 100)}%` }}
-                />
-              </div>
-            </div>
-          )}
-        </div>
+        </Card>
       </div>
     </div>
   );
@@ -562,55 +542,39 @@ function AutoexecSection({ gamePath }: { gamePath: string | null }) {
     }
   };
 
-  if (!gamePath) {
-    return null;
-  }
+  if (!gamePath) return null;
 
   return (
-    <div className="bg-bg-secondary rounded-lg p-4 border border-border">
-      <div className="font-medium mb-2">Autoexec Configuration</div>
-      <p className="text-xs text-text-secondary mb-3">
-        autoexec.cfg runs commands automatically when the game starts.
-        This is required for crosshair presets to auto-load.
-      </p>
-
-      <div className="flex items-center justify-between gap-4 mb-3">
-        <div className="text-sm">
-          {status === null ? (
-            <span className="text-text-secondary">Checking...</span>
-          ) : status.exists ? (
-            <span className="text-green-400">
-              ✓ autoexec.cfg exists
-              {status.hasCrosshairSettings && ' (has crosshair settings)'}
-            </span>
-          ) : (
-            <span className="text-yellow-400">✗ autoexec.cfg not found</span>
-          )}
+    <div>
+      <div className="flex justify-between items-start gap-4">
+        <div>
+          <h4 className="font-medium text-sm">Autoexec Configuration</h4>
+          <p className="text-xs text-text-secondary mt-1">
+            Ensure autoexec.cfg exists for crosshairs and commands.
+          </p>
+          <div className="mt-2">
+            {status === null ? (
+              <span className="text-xs text-text-secondary">Checking...</span>
+            ) : status.exists ? (
+              <Badge variant="success">Active</Badge>
+            ) : (
+              <Badge variant="warning">Missing</Badge>
+            )}
+          </div>
+          {result && <p className="text-xs text-accent mt-2">{result}</p>}
         </div>
         {status && !status.exists && (
-          <button
+          <Button
             onClick={handleCreate}
             disabled={isCreating}
-            className="px-4 py-2 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm disabled:opacity-50"
+            isLoading={isCreating}
+            variant="primary"
+            size="sm"
+            icon={Loader2}
           >
-            {isCreating ? 'Creating...' : 'Create autoexec.cfg'}
-          </button>
+            Create File
+          </Button>
         )}
-      </div>
-
-      {result && <p className="text-xs text-text-secondary mb-3">{result}</p>}
-
-      <div className="bg-black/30 rounded-lg p-3 text-xs">
-        <div className="font-medium text-text-primary mb-1">Steam Launch Options:</div>
-        <p className="text-text-secondary mb-2">
-          To enable autoexec, add this to your Steam launch options:
-        </p>
-        <code className="bg-bg-tertiary px-2 py-1 rounded text-accent select-all">
-          +exec autoexec
-        </code>
-        <p className="text-text-secondary mt-2">
-          Right-click Deadlock in Steam → Properties → Launch Options
-        </p>
       </div>
     </div>
   );

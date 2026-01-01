@@ -161,26 +161,27 @@ export default function Locker() {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [selectedHero, closeHeroOverlay]);
 
-  // Calculate heroMods first so we can use it for sorting
+  // Build basic hero list first (needed for mod categorization)
+  const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
+
+  // Calculate heroMods, passing heroList for name-based category inference
   const heroMods = useMemo(() => {
     const modSkins = mods.filter((mod) => {
       if (mod.sourceSection !== 'Mod') return false;
       const lower = mod.fileName.toLowerCase();
+
+      // Exclude internal preset files (these are managed by the Custom Variants UI)
       if (lower.startsWith('clothing_preset_')) return false;
-      if (
-        lower.includes('textures') &&
-        (lower.includes('mina') || lower.includes('midnight') || lower === 'textures-pak21_dir.vpk')
-      ) {
-        return false;
-      }
+      if (lower.includes('sts_midnight_mina_') && !lower.includes('textures')) return false;
+
       return true;
     });
-    return groupModsByCategory(modSkins);
-  }, [mods]);
+    return groupModsByCategory(modSkins, baseHeroList);
+  }, [mods, baseHeroList]);
 
+  // Sorted hero list for display
   const heroList = useMemo(() => {
-    const list = buildHeroList(categories);
-    return list.sort((a, b) => {
+    return [...baseHeroList].sort((a, b) => {
       const aFav = favoriteHeroes.includes(a.id);
       const bFav = favoriteHeroes.includes(b.id);
       // Favorites first
@@ -192,7 +193,7 @@ export default function Locker() {
       // Then alphabetically
       return a.name.localeCompare(b.name);
     });
-  }, [categories, favoriteHeroes, heroMods]);
+  }, [baseHeroList, favoriteHeroes, heroMods]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -812,9 +813,13 @@ function HeroGalleryCard({
           <img
             src={renderSrc}
             alt={hero.name}
-            className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : ''
+            className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : 'scale-100'
               }`}
-            style={{ objectPosition: `${facePositionX}% 20%` }}
+            style={{
+              objectPosition: `${facePositionX}% 20%`,
+              imageRendering: 'auto',
+              transform: isActive ? undefined : 'translateZ(0)',
+            }}
             loading="lazy"
             decoding="async"
             onError={handleRenderError}
@@ -846,8 +851,9 @@ function HeroGalleryCard({
           <img
             src={namePath}
             alt={hero.name}
-            className={`w-[70%] h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 group-hover:scale-105 ${isActive ? 'scale-110' : ''
+            className={`w-[70%] h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-105 ${isActive ? 'scale-110' : 'scale-100'
               }`}
+            style={{ transform: isActive ? undefined : 'translateZ(0)' }}
             loading="lazy"
             decoding="async"
             onError={() => setNameFailed(true)}

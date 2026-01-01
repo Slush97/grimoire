@@ -27,6 +27,7 @@ export interface ElectronAPI {
     setMinaPreset: (args: SetMinaPresetArgs) => Promise<void>;
     listMinaVariants: (args: ListMinaVariantsArgs) => Promise<string[]>;
     applyMinaVariant: (args: ApplyMinaVariantArgs) => Promise<void>;
+    downloadMinaVariations: () => Promise<string>;
 
     // Maintenance
     cleanupAddons: () => Promise<CleanupResult>;
@@ -55,6 +56,7 @@ export interface ElectronAPI {
     // Mod Database (Local Cache)
     syncAllMods: () => Promise<{ success: boolean }>;
     syncSection: (section: string) => Promise<{ success: boolean }>;
+    wipeModCache: () => Promise<{ success: boolean }>;
     getSyncStatus: () => Promise<Record<string, { lastSync: number; count: number } | null>>;
     needsSync: () => Promise<boolean>;
     isSyncInProgress: () => Promise<boolean>;
@@ -63,6 +65,8 @@ export interface ElectronAPI {
     getLocalModCount: (section?: string) => Promise<number>;
     getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
+    getModsNsfwStatus: (ids: number[]) => Promise<Record<number, boolean>>;
+    updateModNsfw: (modId: number, isNsfw: boolean) => Promise<void>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
 
     // Crosshair Presets
@@ -327,6 +331,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     setMinaPreset: (args: SetMinaPresetArgs) => ipcRenderer.invoke('set-mina-preset', args),
     listMinaVariants: (args: ListMinaVariantsArgs) => ipcRenderer.invoke('list-mina-variants', args),
     applyMinaVariant: (args: ApplyMinaVariantArgs) => ipcRenderer.invoke('apply-mina-variant', args),
+    downloadMinaVariations: () => ipcRenderer.invoke('download-mina-variations'),
 
     // Maintenance
     cleanupAddons: () => ipcRenderer.invoke('cleanup-addons'),
@@ -377,6 +382,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getLocalModCount: (section?: string) => ipcRenderer.invoke('get-local-mod-count', section),
     getLocalCategories: (section?: string) => ipcRenderer.invoke('get-local-categories', section),
     getSectionStats: () => ipcRenderer.invoke('get-section-stats'),
+    getModsNsfwStatus: (ids: number[]) => ipcRenderer.invoke('get-mods-nsfw-status', ids),
+    updateModNsfw: (modId: number, isNsfw: boolean) => ipcRenderer.invoke('update-mod-nsfw', modId, isNsfw),
     onSyncProgress: (callback: (data: SyncProgressData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: SyncProgressData) => callback(data);
         ipcRenderer.on('sync-progress', handler);
