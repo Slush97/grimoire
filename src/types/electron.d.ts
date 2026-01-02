@@ -213,6 +213,7 @@ export interface ElectronAPI {
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
     getModsNsfwStatus: (ids: number[]) => Promise<Record<number, boolean>>;
     updateModNsfw: (modId: number, isNsfw: boolean) => Promise<void>;
+    updateModDownloadCount: (modId: number, downloadCount: number) => Promise<void>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
 
     // Crosshair Presets

@@ -254,10 +254,10 @@ function mapMod(raw: ModRaw): GameBananaMod {
                 avatarUrl: raw._aSubmitter._sAvatarUrl,
             }
             : undefined,
-        previewMedia: raw._aPreviewMedia?._aImages
+        previewMedia: (raw._aPreviewMedia?._aImages || raw._aPreviewMedia?._aMetadata)
             ? {
                 images: raw._aPreviewMedia._aImages
-                    .filter((img) => img && img._sBaseUrl) // Filter out null/invalid images
+                    ?.filter((img) => img && img._sBaseUrl) // Filter out null/invalid images
                     .map((img) => ({
                         baseUrl: img._sBaseUrl,
                         file: img._sFile,

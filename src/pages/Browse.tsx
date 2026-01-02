@@ -25,6 +25,7 @@ import type {
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile } from '../types/gamebanana';
 import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
+import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 
 const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
@@ -884,7 +885,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
   const isList = viewMode === 'list';
-
+  const isSound = section === 'Sound' && audioPreview;
 
   return (
     <div
@@ -892,20 +893,42 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
       className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer ${isList ? 'flex items-center gap-4 p-3' : ''
         }`}
     >
-      {/* Thumbnail */}
+      {/* Thumbnail area - shows audio player for Sound mods */}
       <div
         className={`relative bg-bg-tertiary ${isList
           ? 'w-32 h-20 flex-shrink-0 rounded-md overflow-hidden'
           : 'aspect-video'
           }`}
       >
-        <ModThumbnail
-          src={thumbnail}
-          alt={mod.name}
-          nsfw={mod.nsfw}
-          hideNsfw={hideNsfwPreviews}
-          className="w-full h-full"
-        />
+        {isSound ? (
+          /* Audio Preview Card - replaces thumbnail for Sound mods */
+          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary p-3">
+            {/* Waveform visualization graphic */}
+            <div className="flex items-end gap-0.5 mb-2 h-8">
+              {[3, 5, 8, 12, 16, 12, 8, 14, 10, 6, 9, 14, 11, 7, 4, 6, 10, 8, 5, 3].map((h, i) => (
+                <div
+                  key={i}
+                  className="w-1 bg-accent/60 rounded-full transition-all"
+                  style={{ height: `${h * 2}px` }}
+                />
+              ))}
+            </div>
+            {/* Audio Player */}
+            <AudioPreviewPlayer
+              src={audioPreview}
+              compact={isCompact || isList}
+              className="w-full"
+            />
+          </div>
+        ) : (
+          <ModThumbnail
+            src={thumbnail}
+            alt={mod.name}
+            nsfw={mod.nsfw}
+            hideNsfw={hideNsfwPreviews}
+            className="w-full h-full"
+          />
+        )}
       </div>
 
       {/* Info */}
@@ -954,14 +977,6 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
           <p className={`text-text-secondary mt-1 truncate ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
             by {mod.submitter.name}
           </p>
-        )}
-        {audioPreview && (
-          <audio
-            className={`mt-2 w-full ${isCompact ? 'h-7' : ''}`}
-            controls
-            preload="none"
-            src={audioPreview}
-          />
         )}
       </div>
     </div>
