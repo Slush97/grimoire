@@ -28,12 +28,12 @@ ipcMain.handle('get-profiles', (): Profile[] => {
 });
 
 // create-profile
-ipcMain.handle('create-profile', (_, name: string, crosshairSettings?: ProfileCrosshairSettings): Profile => {
+ipcMain.handle('create-profile', async (_, name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    const profile = createProfile(deadlockPath, name, crosshairSettings);
+    const profile = await createProfile(deadlockPath, name, crosshairSettings);
 
     // Set as active profile
     const settings = loadSettings();
@@ -44,21 +44,21 @@ ipcMain.handle('create-profile', (_, name: string, crosshairSettings?: ProfileCr
 });
 
 // update-profile
-ipcMain.handle('update-profile', (_, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Profile => {
+ipcMain.handle('update-profile', async (_, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    return updateProfile(deadlockPath, profileId, crosshairSettings);
+    return await updateProfile(deadlockPath, profileId, crosshairSettings);
 });
 
 // apply-profile
-ipcMain.handle('apply-profile', (_, profileId: string): Profile => {
+ipcMain.handle('apply-profile', async (_, profileId: string): Promise<Profile> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    const profile = applyProfile(deadlockPath, profileId);
+    const profile = await applyProfile(deadlockPath, profileId);
 
     // Save as active profile
     const settings = loadSettings();

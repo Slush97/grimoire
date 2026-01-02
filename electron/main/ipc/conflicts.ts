@@ -14,10 +14,10 @@ function getActiveDeadlockPath(): string | null {
 }
 
 // get-conflicts
-ipcMain.handle('get-conflicts', (): ModConflict[] => {
+ipcMain.handle('get-conflicts', async (): Promise<ModConflict[]> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         return [];
     }
-    return detectConflicts(deadlockPath);
+    return await detectConflicts(deadlockPath);
 });

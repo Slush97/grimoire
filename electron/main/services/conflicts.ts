@@ -20,8 +20,8 @@ interface ModWithCategory {
  * Detect conflicts between installed mods
  * Uses categoryId from metadata (GameBanana hero category) for hero conflicts.
  */
-export function detectConflicts(deadlockPath: string): ModConflict[] {
-    const mods = scanMods(deadlockPath);
+export async function detectConflicts(deadlockPath: string): Promise<ModConflict[]> {
+    const mods = await scanMods(deadlockPath);
     const enabledMods = mods.filter(m => m.enabled);
     const conflicts: ModConflict[] = [];
     const metadata = loadMetadata();

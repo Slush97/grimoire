@@ -2,7 +2,19 @@ import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renam
 import { join, extname, basename } from 'path';
 import { getGameinfoPath, getAddonsPath, getDisabledPath } from './deadlock';
 
-const SEARCH_PATH_ENTRY = '\t\t\tGame\t\t\t\tcitadel/addons';
+// The canonical SearchPaths block for Deadlock with mod support
+const SEARCH_PATHS_BLOCK = `SearchPaths
+	{
+		Game				citadel/addons
+		Mod				citadel
+		Write				citadel
+		Game				citadel
+		Write				core
+		Mod				core
+		Game				core
+		AddonRoot			citadel_addons
+		OfficialAddonRoot		citadel_community_addons
+	}`;
 
 export interface GameinfoStatus {
     configured: boolean;
@@ -53,7 +65,8 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
 }
 
 /**
- * Add the required SearchPaths entry to gameinfo.gi
+ * Replace the SearchPaths section in gameinfo.gi with the canonical block
+ * This ensures consistent mod loading regardless of the original file state
  */
 export function fixGameinfo(deadlockPath: string): GameinfoStatus {
     const gameinfoPath = getGameinfoPath(deadlockPath);
@@ -76,57 +89,25 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
             };
         }
 
-        // Find the SearchPaths section and add our entry
-        // Look for a line like: Game				citadel
-        const citadelGameLine = /(\t*Game\s+citadel\s*\n)/;
-        const match = content.match(citadelGameLine);
+        // Find the SearchPaths section using regex to match the entire block
+        // Matches: SearchPaths followed by whitespace, {, any content, and closing }
+        const searchPathsRegex = /SearchPaths\s*\{[^}]*\}/s;
 
-        if (match) {
-            // Insert our entry after the citadel Game entry
-            content = content.replace(
-                citadelGameLine,
-                `$1${SEARCH_PATH_ENTRY}\n`
-            );
-
-            writeFileSync(gameinfoPath, content, 'utf-8');
-
-            return {
-                configured: true,
-                message: 'Successfully added addon search paths',
-            };
-        }
-
-        // Fallback: try to find SearchPaths section
-        const searchPathsStart = content.indexOf('SearchPaths');
-        if (searchPathsStart === -1) {
+        if (!searchPathsRegex.test(content)) {
             return {
                 configured: false,
                 message: 'Could not find SearchPaths section in gameinfo.gi',
             };
         }
 
-        // Find the opening brace after SearchPaths
-        const bracePos = content.indexOf('{', searchPathsStart);
-        if (bracePos === -1) {
-            return {
-                configured: false,
-                message: 'Malformed SearchPaths section',
-            };
-        }
-
-        // Insert after the opening brace
-        const insertPos = bracePos + 1;
-        content =
-            content.slice(0, insertPos) +
-            '\n' +
-            SEARCH_PATH_ENTRY +
-            content.slice(insertPos);
+        // Replace the entire SearchPaths block with our canonical version
+        content = content.replace(searchPathsRegex, SEARCH_PATHS_BLOCK);
 
         writeFileSync(gameinfoPath, content, 'utf-8');
 
         return {
             configured: true,
-            message: 'Successfully added addon search paths',
+            message: 'Successfully configured addon search paths',
         };
     } catch (err) {
         return {

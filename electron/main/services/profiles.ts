@@ -82,13 +82,13 @@ function saveProfiles(profiles: Profile[]): void {
 /**
  * Create a new profile from current mod state and provided crosshair settings
  */
-export function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings): Profile {
-    const mods = scanMods(deadlockPath);
+export async function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
+    const mods = await scanMods(deadlockPath);
     const enabledMods = mods.filter(mod => mod.enabled);  // Only save enabled mods
-    
+
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
-    
+
     const now = new Date().toISOString();
 
     const profile: Profile = {
@@ -116,7 +116,7 @@ export function createProfile(deadlockPath: string, name: string, crosshairSetti
  * Update an existing profile with current mod state
  * Only saves enabled mods - disabled mods are not included
  */
-export function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Profile {
+export async function updateProfile(deadlockPath: string, profileId: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
     const profiles = loadProfiles();
     const index = profiles.findIndex(p => p.id === profileId);
 
@@ -124,9 +124,9 @@ export function updateProfile(deadlockPath: string, profileId: string, crosshair
         throw new Error(`Profile not found: ${profileId}`);
     }
 
-    const mods = scanMods(deadlockPath);
+    const mods = await scanMods(deadlockPath);
     const enabledMods = mods.filter(mod => mod.enabled);  // Only save enabled mods
-    
+
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
 
@@ -166,7 +166,7 @@ function generateCrosshairCommands(settings: ProfileCrosshairSettings): string {
 /**
  * Apply a profile - enable/disable mods, restore autoexec and crosshair
  */
-export function applyProfile(deadlockPath: string, profileId: string): Profile {
+export async function applyProfile(deadlockPath: string, profileId: string): Promise<Profile> {
     const profiles = loadProfiles();
     const profile = profiles.find(p => p.id === profileId);
 
@@ -175,7 +175,7 @@ export function applyProfile(deadlockPath: string, profileId: string): Profile {
     }
 
     // 1. Apply Mods
-    const currentMods = scanMods(deadlockPath);
+    const currentMods = await scanMods(deadlockPath);
     const profileModMap = new Map<string, ProfileMod>();
     for (const profileMod of profile.mods) {
         profileModMap.set(profileMod.fileName, profileMod);
@@ -187,32 +187,32 @@ export function applyProfile(deadlockPath: string, profileId: string): Profile {
         if (profileMod) {
             if (profileMod.enabled !== mod.enabled) {
                 if (profileMod.enabled) {
-                    enableMod(deadlockPath, mod.id);
+                    await enableMod(deadlockPath, mod.id);
                 } else {
-                    disableMod(deadlockPath, mod.id);
+                    await disableMod(deadlockPath, mod.id);
                 }
             }
         } else {
             // Mod wasn't in the profile - disable it
             if (mod.enabled) {
-                disableMod(deadlockPath, mod.id);
+                await disableMod(deadlockPath, mod.id);
             }
         }
     }
 
     // 2. Apply Autoexec & Crosshair
     const currentAutoexec = readAutoexec(deadlockPath);
-    
+
     // Update commands if present in profile
     if (profile.autoexecCommands) {
         currentAutoexec.commands = profile.autoexecCommands;
     }
-    
+
     // Update crosshair if present in profile
     if (profile.crosshair) {
         currentAutoexec.crosshair = generateCrosshairCommands(profile.crosshair);
     }
-    
+
     writeAutoexec(deadlockPath, currentAutoexec);
 
     return profile;
