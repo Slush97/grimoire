@@ -11,6 +11,7 @@ import './ipc/conflicts';
 import './ipc/profiles';
 import './ipc/modDatabase';
 import './ipc/crosshairPresets';
+import './ipc/stats';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -92,7 +93,7 @@ if (!gotTheLock) {
                             "font-src 'self' https://fonts.gstatic.com; " +
                             "img-src 'self' data: https: blob:; " +
                             "media-src 'self' https:; " +
-                            "connect-src 'self' https://gamebanana.com https://*.gamebanana.com"
+                            "connect-src 'self' https://gamebanana.com https://*.gamebanana.com https://api.deadlock-api.com"
                         ]
                     }
                 });

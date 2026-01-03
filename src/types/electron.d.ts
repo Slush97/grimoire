@@ -226,6 +226,102 @@ export interface ElectronAPI {
     createAutoexec: (gamePath: string) => Promise<{ success: boolean; path: string }>;
     getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
+
+    // Stats API
+    stats: {
+        // Steam Detection
+        detectSteamUsers: () => Promise<Array<{ steamId64: string; accountId: number; personaName: string; mostRecent: boolean }>>;
+        getMostRecentSteamUser: () => Promise<{ steamId64: string; accountId: number; personaName: string } | null>;
+        parseSteamId: (input: string) => Promise<number | null>;
+
+        // Player Management
+        addTrackedPlayer: (accountId: number, isPrimary?: boolean) => Promise<unknown>;
+        removeTrackedPlayer: (accountId: number) => Promise<void>;
+        getTrackedPlayers: () => Promise<unknown[]>;
+        getPrimaryPlayer: () => Promise<unknown | null>;
+        setPrimaryPlayer: (accountId: number) => Promise<void>;
+
+        // Player Data (API)
+        getPlayerMMR: (accountIds: number[]) => Promise<unknown[]>;
+        getPlayerMMRHistory: (accountId: number) => Promise<unknown>;
+        getPlayerHeroStats: (accountId: number) => Promise<unknown>;
+        getPlayerMatchHistory: (accountId: number, limit?: number, minMatchId?: number) => Promise<unknown>;
+        getPlayerSteamProfiles: (accountIds: number[]) => Promise<unknown[]>;
+
+        // Local Database
+        getLocalMMRHistory: (accountId: number, limit?: number) => Promise<unknown[]>;
+        getLocalMatchHistory: (accountId: number, limit?: number, offset?: number) => Promise<unknown[]>;
+        getLocalMatchCount: (accountId: number) => Promise<number>;
+        getLocalHeroStats: (accountId: number, heroId?: number) => Promise<unknown[]>;
+        getAggregatedStats: (accountId: number) => Promise<unknown | null>;
+
+        // Match Data (API)
+        getMatchMetadata: (matchId: number) => Promise<unknown>;
+        getActiveMatches: () => Promise<unknown[]>;
+
+        // Leaderboards
+        getLeaderboard: (region: string) => Promise<unknown[]>;
+        getHeroLeaderboard: (region: string, heroId: number) => Promise<unknown[]>;
+
+        // Analytics
+        getHeroAnalytics: (params?: unknown) => Promise<unknown[]>;
+        getHeroCounters: (heroId?: number) => Promise<unknown[]>;
+        getHeroSynergies: (heroId?: number) => Promise<unknown[]>;
+        getItemAnalytics: () => Promise<unknown[]>;
+        getBadgeDistribution: () => Promise<unknown[]>;
+        getMMRDistribution: () => Promise<unknown>;
+
+        // Extended MMR
+        getHeroMMR: (accountIds: number[], heroId: number) => Promise<unknown[]>;
+        getHeroMMRHistory: (accountId: number, heroId: number) => Promise<unknown[]>;
+        getMMRDistributionGlobal: (filters?: unknown) => Promise<unknown[]>;
+        getHeroMMRDistribution: (heroId: number, filters?: unknown) => Promise<unknown[]>;
+
+        // Player Social Stats
+        getEnemyStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
+        getMateStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
+        getPartyStats: (accountId: number, filters?: unknown) => Promise<unknown[]>;
+        searchSteamProfiles: (query: string) => Promise<unknown[]>;
+
+        // Advanced Analytics
+        getAbilityOrderStats: (heroId: number, filters?: unknown) => Promise<unknown[]>;
+        getItemPermutationStats: (heroId?: number, combSize?: number, filters?: unknown) => Promise<unknown[]>;
+        getHeroCombStats: (combSize?: number, filters?: unknown) => Promise<unknown[]>;
+        getKillDeathStats: (filters?: unknown) => Promise<unknown[]>;
+        getHeroScoreboard: (sortBy: string, sortDirection?: string, filters?: unknown) => Promise<unknown[]>;
+        getPlayerScoreboard: (sortBy: string, heroId?: number, sortDirection?: string, filters?: unknown) => Promise<unknown[]>;
+        getPlayerStatsMetrics: (filters?: unknown) => Promise<unknown>;
+        getBuildItemStats: (heroId?: number, filters?: unknown) => Promise<unknown[]>;
+
+        // Match Replay
+        getMatchSalts: (matchId: number) => Promise<unknown>;
+        getMatchLiveUrl: (matchId: number) => Promise<unknown>;
+        getRecentlyFetchedMatches: (playerIngestedOnly?: boolean) => Promise<unknown[]>;
+
+        // Patches
+        getPatchNotes: () => Promise<unknown>;
+        getMajorPatchDates: () => Promise<unknown[]>;
+
+        // SQL Access
+        executeSQLQuery: (query: string) => Promise<string>;
+        listSQLTables: () => Promise<string[]>;
+        getTableSchema: (tableName: string) => Promise<Record<string, string>>;
+
+        // Builds
+        searchBuilds: (params: unknown) => Promise<unknown[]>;
+
+        // Settings
+        getSetting: (key: string) => Promise<string | null>;
+        setSetting: (key: string, value: string) => Promise<void>;
+        getAllSettings: () => Promise<Record<string, string>>;
+
+        // Data Sync
+        syncPlayerData: (accountId: number) => Promise<unknown>;
+
+        // Utility
+        checkApiHealth: () => Promise<unknown>;
+        getApiInfo: () => Promise<unknown>;
+    };
 }
 
 export interface ModConflict {

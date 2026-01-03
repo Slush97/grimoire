@@ -85,7 +85,132 @@ export interface ElectronAPI {
     createAutoexec: (gamePath: string) => Promise<{ success: boolean; path: string }>;
     getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
+
+    // Stats
+    stats: {
+        // Steam Detection
+        detectSteamUsers: () => Promise<SteamUser[]>;
+        getMostRecentSteamUser: () => Promise<SteamUser | null>;
+        parseSteamId: (input: string) => Promise<number | null>;
+
+        // Player Management
+        addTrackedPlayer: (accountId: number, isPrimary?: boolean) => Promise<unknown>;
+        removeTrackedPlayer: (accountId: number) => Promise<void>;
+        getTrackedPlayers: () => Promise<unknown[]>;
+        getPrimaryPlayer: () => Promise<unknown | null>;
+        setPrimaryPlayer: (accountId: number) => Promise<void>;
+
+        // Player Data (API)
+        getPlayerMMR: (accountIds: number[]) => Promise<unknown[]>;
+        getPlayerMMRHistory: (accountId: number) => Promise<unknown>;
+        getPlayerHeroStats: (accountId: number) => Promise<unknown>;
+        getPlayerMatchHistory: (accountId: number, limit?: number, minMatchId?: number) => Promise<unknown>;
+        getPlayerSteamProfiles: (accountIds: number[]) => Promise<unknown[]>;
+
+        // Local Database
+        getLocalMMRHistory: (accountId: number, limit?: number) => Promise<unknown[]>;
+        getLocalMatchHistory: (accountId: number, limit?: number, offset?: number) => Promise<unknown[]>;
+        getLocalMatchCount: (accountId: number) => Promise<number>;
+        getLocalHeroStats: (accountId: number, heroId?: number) => Promise<unknown[]>;
+        getAggregatedStats: (accountId: number) => Promise<unknown | null>;
+
+        // Match Data
+        getMatchMetadata: (matchId: number) => Promise<unknown>;
+        getActiveMatches: () => Promise<unknown[]>;
+
+        // Leaderboards
+        getLeaderboard: (region: LeaderboardRegion) => Promise<unknown[]>;
+        getHeroLeaderboard: (region: LeaderboardRegion, heroId: number) => Promise<unknown[]>;
+
+        // Analytics
+        getHeroAnalytics: (params?: HeroStatsParams) => Promise<unknown[]>;
+        getHeroCounters: (heroId?: number) => Promise<unknown[]>;
+        getHeroSynergies: (heroId?: number) => Promise<unknown[]>;
+        getItemAnalytics: () => Promise<unknown[]>;
+        getBadgeDistribution: () => Promise<unknown[]>;
+        getMMRDistribution: () => Promise<unknown>;
+
+        // Extended MMR
+        getHeroMMR: (accountIds: number[], heroId: number) => Promise<unknown[]>;
+        getHeroMMRHistory: (accountId: number, heroId: number) => Promise<unknown[]>;
+        getMMRDistributionGlobal: (filters?: AnalyticsFilter) => Promise<unknown[]>;
+        getHeroMMRDistribution: (heroId: number, filters?: AnalyticsFilter) => Promise<unknown[]>;
+
+        // Player Social Stats
+        getEnemyStats: (accountId: number, filters?: PlayerStatsFilter) => Promise<unknown[]>;
+        getMateStats: (accountId: number, filters?: PlayerStatsFilter & { same_party?: boolean }) => Promise<unknown[]>;
+        getPartyStats: (accountId: number, filters?: PlayerStatsFilter) => Promise<unknown[]>;
+        searchSteamProfiles: (query: string) => Promise<unknown[]>;
+
+        // Advanced Analytics
+        getAbilityOrderStats: (heroId: number, filters?: AnalyticsFilter & { min_matches?: number }) => Promise<unknown[]>;
+        getItemPermutationStats: (heroId?: number, combSize?: number, filters?: AnalyticsFilter) => Promise<unknown[]>;
+        getHeroCombStats: (combSize?: number, filters?: AnalyticsFilter) => Promise<unknown[]>;
+        getKillDeathStats: (filters?: AnalyticsFilter) => Promise<unknown[]>;
+        getHeroScoreboard: (sortBy: ScoreboardSortBy, sortDirection?: 'asc' | 'desc', filters?: AnalyticsFilter) => Promise<unknown[]>;
+        getPlayerScoreboard: (sortBy: ScoreboardSortBy, heroId?: number, sortDirection?: 'asc' | 'desc', filters?: AnalyticsFilter) => Promise<unknown[]>;
+        getPlayerStatsMetrics: (filters?: AnalyticsFilter) => Promise<unknown>;
+        getBuildItemStats: (heroId?: number, filters?: { min_last_updated_unix_timestamp?: number; max_last_updated_unix_timestamp?: number }) => Promise<unknown[]>;
+
+        // Match Replay
+        getMatchSalts: (matchId: number) => Promise<unknown>;
+        getMatchLiveUrl: (matchId: number) => Promise<unknown>;
+        getRecentlyFetchedMatches: (playerIngestedOnly?: boolean) => Promise<unknown[]>;
+
+        // Patches
+        getPatchNotes: () => Promise<unknown>;
+        getMajorPatchDates: () => Promise<unknown[]>;
+
+        // SQL Access
+        executeSQLQuery: (query: string) => Promise<string>;
+        listSQLTables: () => Promise<string[]>;
+        getTableSchema: (tableName: string) => Promise<Record<string, string>>;
+
+        // Builds
+        searchBuilds: (params: BuildSearchParams) => Promise<unknown[]>;
+
+        // Settings
+        getSetting: (key: string) => Promise<string | null>;
+        setSetting: (key: string, value: string) => Promise<void>;
+        getAllSettings: () => Promise<Record<string, string>>;
+
+        // Sync
+        syncPlayerData: (accountId: number) => Promise<unknown>;
+
+        // Utility
+        checkApiHealth: () => Promise<unknown>;
+        getApiInfo: () => Promise<unknown>;
+    };
 }
+
+// Filter types for analytics
+interface AnalyticsFilter {
+    min_unix_timestamp?: number;
+    max_unix_timestamp?: number;
+    min_duration_s?: number;
+    max_duration_s?: number;
+    min_average_badge?: number;
+    max_average_badge?: number;
+    min_match_id?: number;
+    max_match_id?: number;
+    account_ids?: number[];
+    hero_ids?: number[];
+}
+
+interface PlayerStatsFilter {
+    min_unix_timestamp?: number;
+    max_unix_timestamp?: number;
+    min_matches_played?: number;
+    max_matches_played?: number;
+}
+
+type ScoreboardSortBy =
+    | 'matches' | 'wins' | 'losses' | 'winrate'
+    | 'max_kills_per_match' | 'avg_kills_per_match' | 'kills'
+    | 'max_deaths_per_match' | 'avg_deaths_per_match' | 'deaths'
+    | 'max_assists_per_match' | 'avg_assists_per_match' | 'assists'
+    | 'max_net_worth_per_match' | 'avg_net_worth_per_match' | 'net_worth'
+    | 'max_player_damage_per_match' | 'avg_player_damage_per_match' | 'player_damage';
 
 // Minimal type stubs (full types are in renderer)
 interface AppSettings {
@@ -323,6 +448,36 @@ interface SyncProgressData {
     error?: string;
 }
 
+// Stats types
+interface SteamUser {
+    steamId64: string;
+    accountId: number;
+    personaName: string;
+    mostRecent: boolean;
+}
+
+type LeaderboardRegion = 'Europe' | 'NAmerica' | 'SAmerica' | 'Asia' | 'Oceania';
+
+interface HeroStatsParams {
+    min_badge?: number;
+    max_badge?: number;
+    match_mode?: string;
+    min_unix_timestamp?: number;
+    max_unix_timestamp?: number;
+}
+
+interface BuildSearchParams {
+    hero_id?: number;
+    search?: string;
+    author_id?: number;
+    tags?: string[];
+    language?: string;
+    sort_by?: 'favorites' | 'updated' | 'published' | 'version';
+    sort_direction?: 'asc' | 'desc';
+    limit?: number;
+    offset?: number;
+}
+
 // Expose the API to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
     // Settings
@@ -429,4 +584,143 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createAutoexec: (gamePath: string) => ipcRenderer.invoke('crosshair:createAutoexec', gamePath),
     getAutoexecCommands: (gamePath: string) => ipcRenderer.invoke('autoexec:getCommands', gamePath),
     saveAutoexecCommands: (gamePath: string, commands: string[]) => ipcRenderer.invoke('autoexec:saveCommands', gamePath, commands),
+
+    // Stats
+    stats: {
+        // Steam Detection
+        detectSteamUsers: () => ipcRenderer.invoke('stats:detectSteamUsers'),
+        getMostRecentSteamUser: () => ipcRenderer.invoke('stats:getMostRecentSteamUser'),
+        parseSteamId: (input: string) => ipcRenderer.invoke('stats:parseSteamId', input),
+
+        // Player Management
+        addTrackedPlayer: (accountId: number, isPrimary?: boolean) =>
+            ipcRenderer.invoke('stats:addTrackedPlayer', accountId, isPrimary),
+        removeTrackedPlayer: (accountId: number) =>
+            ipcRenderer.invoke('stats:removeTrackedPlayer', accountId),
+        getTrackedPlayers: () => ipcRenderer.invoke('stats:getTrackedPlayers'),
+        getPrimaryPlayer: () => ipcRenderer.invoke('stats:getPrimaryPlayer'),
+        setPrimaryPlayer: (accountId: number) =>
+            ipcRenderer.invoke('stats:setPrimaryPlayer', accountId),
+
+        // Player Data (API)
+        getPlayerMMR: (accountIds: number[]) =>
+            ipcRenderer.invoke('stats:getPlayerMMR', accountIds),
+        getPlayerMMRHistory: (accountId: number) =>
+            ipcRenderer.invoke('stats:getPlayerMMRHistory', accountId),
+        getPlayerHeroStats: (accountId: number) =>
+            ipcRenderer.invoke('stats:getPlayerHeroStats', accountId),
+        getPlayerMatchHistory: (accountId: number, limit?: number, minMatchId?: number) =>
+            ipcRenderer.invoke('stats:getPlayerMatchHistory', accountId, limit, minMatchId),
+        getPlayerSteamProfiles: (accountIds: number[]) =>
+            ipcRenderer.invoke('stats:getPlayerSteamProfiles', accountIds),
+
+        // Local Database
+        getLocalMMRHistory: (accountId: number, limit?: number) =>
+            ipcRenderer.invoke('stats:getLocalMMRHistory', accountId, limit),
+        getLocalMatchHistory: (accountId: number, limit?: number, offset?: number) =>
+            ipcRenderer.invoke('stats:getLocalMatchHistory', accountId, limit, offset),
+        getLocalMatchCount: (accountId: number) =>
+            ipcRenderer.invoke('stats:getLocalMatchCount', accountId),
+        getLocalHeroStats: (accountId: number, heroId?: number) =>
+            ipcRenderer.invoke('stats:getLocalHeroStats', accountId, heroId),
+        getAggregatedStats: (accountId: number) =>
+            ipcRenderer.invoke('stats:getAggregatedStats', accountId),
+
+        // Match Data
+        getMatchMetadata: (matchId: number) =>
+            ipcRenderer.invoke('stats:getMatchMetadata', matchId),
+        getActiveMatches: () => ipcRenderer.invoke('stats:getActiveMatches'),
+
+        // Leaderboards
+        getLeaderboard: (region: LeaderboardRegion) =>
+            ipcRenderer.invoke('stats:getLeaderboard', region),
+        getHeroLeaderboard: (region: LeaderboardRegion, heroId: number) =>
+            ipcRenderer.invoke('stats:getHeroLeaderboard', region, heroId),
+
+        // Analytics
+        getHeroAnalytics: (params?: HeroStatsParams) =>
+            ipcRenderer.invoke('stats:getHeroAnalytics', params),
+        getHeroCounters: (heroId?: number) =>
+            ipcRenderer.invoke('stats:getHeroCounters', heroId),
+        getHeroSynergies: (heroId?: number) =>
+            ipcRenderer.invoke('stats:getHeroSynergies', heroId),
+        getItemAnalytics: () => ipcRenderer.invoke('stats:getItemAnalytics'),
+        getBadgeDistribution: () => ipcRenderer.invoke('stats:getBadgeDistribution'),
+        getMMRDistribution: () => ipcRenderer.invoke('stats:getMMRDistribution'),
+
+        // Extended MMR
+        getHeroMMR: (accountIds: number[], heroId: number) =>
+            ipcRenderer.invoke('stats:getHeroMMR', accountIds, heroId),
+        getHeroMMRHistory: (accountId: number, heroId: number) =>
+            ipcRenderer.invoke('stats:getHeroMMRHistory', accountId, heroId),
+        getMMRDistributionGlobal: (filters?: AnalyticsFilter) =>
+            ipcRenderer.invoke('stats:getMMRDistributionGlobal', filters),
+        getHeroMMRDistribution: (heroId: number, filters?: AnalyticsFilter) =>
+            ipcRenderer.invoke('stats:getHeroMMRDistribution', heroId, filters),
+
+        // Player Social Stats
+        getEnemyStats: (accountId: number, filters?: PlayerStatsFilter) =>
+            ipcRenderer.invoke('stats:getEnemyStats', accountId, filters),
+        getMateStats: (accountId: number, filters?: PlayerStatsFilter & { same_party?: boolean }) =>
+            ipcRenderer.invoke('stats:getMateStats', accountId, filters),
+        getPartyStats: (accountId: number, filters?: PlayerStatsFilter) =>
+            ipcRenderer.invoke('stats:getPartyStats', accountId, filters),
+        searchSteamProfiles: (query: string) =>
+            ipcRenderer.invoke('stats:searchSteamProfiles', query),
+
+        // Advanced Analytics
+        getAbilityOrderStats: (heroId: number, filters?: AnalyticsFilter & { min_matches?: number }) =>
+            ipcRenderer.invoke('stats:getAbilityOrderStats', heroId, filters),
+        getItemPermutationStats: (heroId?: number, combSize?: number, filters?: AnalyticsFilter) =>
+            ipcRenderer.invoke('stats:getItemPermutationStats', heroId, combSize, filters),
+        getHeroCombStats: (combSize?: number, filters?: AnalyticsFilter) =>
+            ipcRenderer.invoke('stats:getHeroCombStats', combSize, filters),
+        getKillDeathStats: (filters?: AnalyticsFilter) =>
+            ipcRenderer.invoke('stats:getKillDeathStats', filters),
+        getHeroScoreboard: (sortBy: ScoreboardSortBy, sortDirection?: 'asc' | 'desc', filters?: AnalyticsFilter) =>
+            ipcRenderer.invoke('stats:getHeroScoreboard', sortBy, sortDirection, filters),
+        getPlayerScoreboard: (sortBy: ScoreboardSortBy, heroId?: number, sortDirection?: 'asc' | 'desc', filters?: AnalyticsFilter) =>
+            ipcRenderer.invoke('stats:getPlayerScoreboard', sortBy, heroId, sortDirection, filters),
+        getPlayerStatsMetrics: (filters?: AnalyticsFilter) =>
+            ipcRenderer.invoke('stats:getPlayerStatsMetrics', filters),
+        getBuildItemStats: (heroId?: number, filters?: { min_last_updated_unix_timestamp?: number; max_last_updated_unix_timestamp?: number }) =>
+            ipcRenderer.invoke('stats:getBuildItemStats', heroId, filters),
+
+        // Match Replay
+        getMatchSalts: (matchId: number) =>
+            ipcRenderer.invoke('stats:getMatchSalts', matchId),
+        getMatchLiveUrl: (matchId: number) =>
+            ipcRenderer.invoke('stats:getMatchLiveUrl', matchId),
+        getRecentlyFetchedMatches: (playerIngestedOnly?: boolean) =>
+            ipcRenderer.invoke('stats:getRecentlyFetchedMatches', playerIngestedOnly),
+
+        // Patches
+        getPatchNotes: () => ipcRenderer.invoke('stats:getPatchNotes'),
+        getMajorPatchDates: () => ipcRenderer.invoke('stats:getMajorPatchDates'),
+
+        // SQL Access
+        executeSQLQuery: (query: string) =>
+            ipcRenderer.invoke('stats:executeSQLQuery', query),
+        listSQLTables: () => ipcRenderer.invoke('stats:listSQLTables'),
+        getTableSchema: (tableName: string) =>
+            ipcRenderer.invoke('stats:getTableSchema', tableName),
+
+        // Builds
+        searchBuilds: (params: BuildSearchParams) =>
+            ipcRenderer.invoke('stats:searchBuilds', params),
+
+        // Settings
+        getSetting: (key: string) => ipcRenderer.invoke('stats:getSetting', key),
+        setSetting: (key: string, value: string) =>
+            ipcRenderer.invoke('stats:setSetting', key, value),
+        getAllSettings: () => ipcRenderer.invoke('stats:getAllSettings'),
+
+        // Sync
+        syncPlayerData: (accountId: number) =>
+            ipcRenderer.invoke('stats:syncPlayerData', accountId),
+
+        // Utility
+        checkApiHealth: () => ipcRenderer.invoke('stats:checkApiHealth'),
+        getApiInfo: () => ipcRenderer.invoke('stats:getApiInfo'),
+    },
 } satisfies ElectronAPI);

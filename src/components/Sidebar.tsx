@@ -9,6 +9,7 @@ import {
   Settings,
   Crosshair,
   Terminal,
+  BarChart3,
 } from 'lucide-react';
 import { getConflicts } from '../lib/api';
 import { getAssetPath } from '../lib/assetPath';
@@ -39,6 +40,7 @@ export default function Sidebar() {
     { to: '/locker', icon: Shield, label: 'Locker' },
     { to: '/crosshair', icon: Crosshair, label: 'Crosshair' },
     { to: '/autoexec', icon: Terminal, label: 'Autoexec' },
+    { to: '/stats', icon: BarChart3, label: 'Stats' },
     { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', badge: conflictCount },
     { to: '/profiles', icon: Layers, label: 'Profiles' },
     { to: '/settings', icon: Settings, label: 'Settings' },

@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "WebFetch(domain:gamebanana.com)"
+      "WebFetch(domain:gamebanana.com)",
+      "WebFetch(domain:api.deadlock-api.com)"
     ]
   }
 }
