@@ -27,3 +27,7 @@ bin/
 *.njsproj
 *.sln
 *.sw?
+
+# LLM scratch notes
+suggestions.md
+.suggestions.md.*
