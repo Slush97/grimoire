@@ -4,7 +4,7 @@ productName: Grimoire
 publish:
   provider: github
   owner: Slush97
-  repo: modmanager
+  repo: grimoire
 directories:
   output: release
   buildResources: resources

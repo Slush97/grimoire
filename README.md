@@ -1,136 +1,46 @@
 <div align="center">
-  <h1>📗 Grimoire</h1>
+  <img src="resources/icon.png" width="128" height="128" alt="Grimoire">
+  <h1>Grimoire</h1>
+  <p>Mod manager for Deadlock</p>
   
-  <p><strong>A modern mod manager for Deadlock</strong></p>
-  
-  <p>
-    <img src="https://img.shields.io/badge/Electron-35-47848F?logo=electron&logoColor=white" alt="Electron">
-    <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React">
-    <img src="https://img.shields.io/badge/TypeScript-5.9-3178C6?logo=typescript&logoColor=white" alt="TypeScript">
-    <img src="https://img.shields.io/badge/SQLite-3-003B57?logo=sqlite&logoColor=white" alt="SQLite">
-  </p>
-  <p>
-    <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
-    <img src="https://img.shields.io/badge/license-MIT-blue" alt="License">
-  </p>
+  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/Slush97/grimoire?style=flat-square" alt="Release"></a>
+  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-333?style=flat-square" alt="Platform">
+  <img src="https://img.shields.io/github/license/Slush97/grimoire?style=flat-square" alt="License">
 </div>
 
----
-
-Browse GameBanana, manage VPK mods, customize crosshairs, track your stats, and organize your setup with profiles — all from one app.
-
-## Table of Contents
-
-- [Features](#features)
-- [Installation](#installation)
-- [Development](#development)
-- [Project Structure](#project-structure)
-- [Contributing](#contributing)
-- [License](#license)
-- [Acknowledgments](#acknowledgments)
+<br>
 
 ## Features
 
-### 🎮 Browse & Download
-Search and download mods directly from GameBanana with intelligent caching. Preview images, read descriptions, and install with one click.
+- **Browse & Install** — Search GameBanana and install mods with one click
+- **Mod Management** — Enable, disable, reorder priority, detect conflicts
+- **Hero Locker** — Organize skins by character
+- **Crosshair Editor** — Design crosshairs with live preview
+- **Autoexec Manager** — Configure console commands without editing files
+- **Profiles** — Save and switch between mod configurations
 
-### 📦 Mod Management
-Enable, disable, and prioritize your mods. Automatic conflict detection shows when mods override the same files, letting you choose which takes priority.
+## Download
 
-### 🦸 Hero Locker
-View and organize skins by hero. See all available skins for each character and manage your collection visually.
+Get the latest release for your platform:
 
-### 🎯 Crosshair Designer
-Create custom crosshairs with a live preview that matches in-game rendering. Save presets and export to your autoexec.
+| Platform | Download |
+|----------|----------|
+| Windows | [Installer (.exe)](../../releases/latest) |
+| Linux | [AppImage](../../releases/latest), [.deb](../../releases/latest) |
 
-### 📊 Stats Dashboard
-Track your performance with data from the Deadlock Stats API. View hero analytics, leaderboards, and meta insights.
-
-### 📝 Autoexec Manager
-Configure console commands with categorized presets. Manage launch options without editing files manually.
-
-### 💾 Profiles
-Save and restore complete mod configurations. Switch between different setups for ranked, casual, or streaming.
-
-## Installation
-
-### Pre-built Releases
-
-Download the latest release for your platform from [Releases](../../releases):
-
-| Platform | Formats |
-|----------|---------|
-| **Windows** | `.exe` installer, portable |
-| **Linux** | `.AppImage`, `.deb` |
-| **macOS** | `.dmg` |
-
-### Requirements
-
-- **Deadlock** installed via Steam
-- **7-Zip** installed for extracting archives (Linux/macOS)
+**Requirements:** Deadlock installed via Steam
 
 ## Development
 
-### Prerequisites
-
-- [Node.js](https://nodejs.org/) 20+
-- [pnpm](https://pnpm.io/) 9+
-
-### Setup
-
 ```bash
-# Clone the repository
-git clone https://github.com/Slush97/modmanager.git
-cd modmanager
-
-# Install dependencies
+git clone https://github.com/Slush97/grimoire.git
+cd grimoire
 pnpm install
-
-# Start development server
 pnpm dev
 ```
 
-### Build
-
-```bash
-# Build for your platform
-pnpm package:linux   # Linux: AppImage, deb
-pnpm package:win     # Windows: NSIS installer, portable
-pnpm package:mac     # macOS: DMG
-```
-
-## Project Structure
-
-```
-├── electron/           # Electron main process
-│   ├── main/
-│   │   ├── ipc/        # IPC handlers
-│   │   └── services/   # Backend services (mods, downloads, stats)
-│   └── preload/        # Preload scripts
-├── src/                # React frontend
-│   ├── components/     # UI components
-│   ├── pages/          # Page components
-│   ├── hooks/          # Custom React hooks
-│   └── stores/         # Zustand state stores
-├── public/             # Static assets
-│   ├── fonts/          # Custom fonts
-│   ├── heroes/         # Hero images
-│   └── locker/         # Locker assets
-└── docs/               # Documentation
-    └── database/       # Database schema docs
-```
-
-## Contributing
-
-Contributions are welcome! Please read the [Contributing Guide](CONTRIBUTING.md) for details on the development process and how to submit pull requests.
+Build: `pnpm package:linux` or `pnpm package:win`
 
 ## License
 
-This project is licensed under the MIT License — see the [LICENSE](LICENSE) file for details.
-
-## Acknowledgments
-
-- [GameBanana](https://gamebanana.com/) for the mod hosting platform and API
-- [Deadlock Stats API](https://docs.deadlock-api.com/) for player statistics
-- [Valve](https://www.valvesoftware.com/) for Deadlock
-- The modding community for creating amazing content
+MIT
