@@ -2,6 +2,15 @@ import { app, BrowserWindow, shell, session } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 
+// Enable HiDPI support on Linux (fixes blurry rendering on Wayland/fractional scaling)
+if (process.platform === 'linux') {
+    // Detect if running under Wayland or X11
+    const isWayland = !!process.env['WAYLAND_DISPLAY'];
+
+    app.commandLine.appendSwitch('enable-features', 'UseOzonePlatform');
+    app.commandLine.appendSwitch('ozone-platform', isWayland ? 'wayland' : 'x11');
+}
+
 // Import IPC handlers
 import './ipc/settings';
 import './ipc/mods';
@@ -24,7 +33,7 @@ function createWindow(): void {
         height: 600,
         minWidth: 600,
         minHeight: 400,
-        title: 'Deadlock Mod Manager',
+        title: 'Grimoire',
         show: false, // Don't show until ready to prevent white flash
         backgroundColor: '#1e1e2e', // Dark background matching app theme
         autoHideMenuBar: true,
