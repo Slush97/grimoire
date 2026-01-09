@@ -359,13 +359,16 @@ export default function Settings() {
                     {isValidPath === false && <span className="text-red-400 flex items-center gap-1"><X className="w-3 h-3" /> Invalid</span>}
                   </span>
                   {!isDevMode && (
-                    <button
+                    <Button
                       onClick={handleAutoDetect}
                       disabled={isDetecting}
-                      className="text-xs text-accent hover:text-accent-hover transition-colors disabled:opacity-50"
+                      isLoading={isDetecting}
+                      variant="secondary"
+                      size="sm"
+                      icon={RefreshCw}
                     >
-                      {isDetecting ? 'Detecting...' : 'Auto-detect'}
-                    </button>
+                      Auto-detect
+                    </Button>
                   )}
                 </div>
               </div>
