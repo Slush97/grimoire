@@ -108,14 +108,28 @@ export function readAutoexec(gamePath: string): AutoexecData {
     return parseAutoexec(content);
 }
 
+/**
+ * Write autoexec atomically (P1 fix #8)
+ * Uses write-to-temp-then-rename pattern to prevent corruption on crash
+ */
 export function writeAutoexec(gamePath: string, data: AutoexecData): void {
     const autoexecPath = getAutoexecPath(gamePath);
+    const tempPath = `${autoexecPath}.tmp`;
     const cfgDir = path.dirname(autoexecPath);
-    
+
     if (!fs.existsSync(cfgDir)) {
         fs.mkdirSync(cfgDir, { recursive: true });
     }
 
     const content = buildAutoexec(data.header, data.crosshair, data.commands);
-    fs.writeFileSync(autoexecPath, content);
+
+    try {
+        fs.writeFileSync(tempPath, content);
+        fs.renameSync(tempPath, autoexecPath);
+    } catch (error) {
+        try {
+            if (fs.existsSync(tempPath)) fs.unlinkSync(tempPath);
+        } catch { /* ignore */ }
+        throw error;
+    }
 }

@@ -49,9 +49,14 @@ export default function HeroSkinsPanel({
   const hasMods = mods.length > 0;
   const activeMod = mods.find((mod) => mod.enabled);
 
+  // TEMPORARY: Hide Mina variant customization UI until feature is stable
+  const HIDE_MINA_VARIANTS = true;
+
   // Show variant selector when Midnight Mina textures are enabled OR a preset is active
   const hasEnabledMinaTextures = minaTextures.some((mod) => mod.enabled);
+  const showMinaPresets = !HIDE_MINA_VARIANTS && minaPresets.length > 0 && Boolean(onApplyMinaPreset);
   const showMinaVariants =
+    !HIDE_MINA_VARIANTS &&
     (Boolean(activeMinaPreset) || hasEnabledMinaTextures) &&
     Boolean(onLoadMinaVariants) &&
     Boolean(onMinaArchivePathChange) &&
@@ -61,7 +66,7 @@ export default function HeroSkinsPanel({
 
   return (
     <div className="space-y-2">
-      {minaPresets.length > 0 && onApplyMinaPreset && (
+      {showMinaPresets && onApplyMinaPreset && (
         <div className="space-y-2">
           <div className="flex items-center justify-between text-xs text-text-secondary">
             <span>Midnight Mina Preset</span>

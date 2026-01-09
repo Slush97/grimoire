@@ -205,6 +205,25 @@ export default function Crosshair() {
                                     RGB({colorR}, {colorG}, {colorB})
                                 </div>
                             </div>
+                            {/* Quick color presets */}
+                            <div className="flex gap-2">
+                                {[
+                                    { label: 'White', r: 255, g: 255, b: 255 },
+                                    { label: 'Green', r: 0, g: 255, b: 0 },
+                                    { label: 'Cyan', r: 0, g: 255, b: 255 },
+                                    { label: 'Yellow', r: 255, g: 255, b: 0 },
+                                    { label: 'Red', r: 255, g: 0, b: 0 },
+                                    { label: 'Magenta', r: 255, g: 0, b: 255 },
+                                ].map((color) => (
+                                    <button
+                                        key={color.label}
+                                        onClick={() => { setColorR(color.r); setColorG(color.g); setColorB(color.b); }}
+                                        className="w-6 h-6 rounded-md border border-white/20 hover:border-white/50 transition-colors"
+                                        style={{ backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})` }}
+                                        title={color.label}
+                                    />
+                                ))}
+                            </div>
                             <Slider label="Red" value={colorR} min={0} max={255} onChange={setColorR} className="accent-red-500" />
                             <Slider label="Green" value={colorG} min={0} max={255} onChange={setColorG} className="accent-green-500" />
                             <Slider label="Blue" value={colorB} min={0} max={255} onChange={setColorB} className="accent-blue-500" />
@@ -298,7 +317,15 @@ export default function Crosshair() {
                             <span className="font-mono text-xs w-8">{previewScale.toFixed(1)}x</span>
                         </div>
 
-                        <div className="flex items-center justify-center bg-gradient-to-br from-bg-tertiary/50 to-bg-secondary/50 rounded-xl aspect-video lg:h-[420px] w-full overflow-hidden" ref={previewRef}>
+                        <div
+                            className="flex items-center justify-center bg-gradient-to-br from-bg-tertiary/50 to-bg-secondary/50 rounded-xl aspect-video lg:h-[420px] w-full overflow-hidden"
+                            ref={previewRef}
+                            onWheel={(e) => {
+                                e.preventDefault();
+                                const delta = e.deltaY > 0 ? -0.1 : 0.1;
+                                setPreviewScale((prev) => Math.min(3, Math.max(0.5, prev + delta)));
+                            }}
+                        >
                             <CrosshairPreview size={400} scale={previewScale} />
                         </div>
 
@@ -310,6 +337,7 @@ export default function Crosshair() {
                                 size="sm"
                                 onClick={() => handleAlwaysOnTop(!alwaysOnTop)}
                                 icon={Pin}
+                                title="Keep the mod manager window on top of the game for quick adjustments"
                             >
                                 {alwaysOnTop ? 'Pinned' : 'Pin Window'}
                             </Button>

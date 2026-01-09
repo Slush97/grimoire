@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from 'fs';
 import { getMetadataPath } from '../utils/paths';
 
 export interface ModMetadata {
@@ -28,17 +28,29 @@ export function loadMetadata(): ModMetadataMap {
     try {
         const content = readFileSync(path, 'utf-8');
         return JSON.parse(content) as ModMetadataMap;
-    } catch {
+    } catch (error) {
+        console.warn('[Metadata] Failed to load metadata, returning empty:', error);
         return {};
     }
 }
 
 /**
- * Save mod metadata to disk
+ * Save mod metadata to disk atomically (P1 fix #8)
+ * Uses write-to-temp-then-rename pattern to prevent corruption on crash
  */
 export function saveMetadata(metadata: ModMetadataMap): void {
     const path = getMetadataPath();
-    writeFileSync(path, JSON.stringify(metadata, null, 2), 'utf-8');
+    const tempPath = `${path}.tmp`;
+
+    try {
+        writeFileSync(tempPath, JSON.stringify(metadata, null, 2), 'utf-8');
+        renameSync(tempPath, path);
+    } catch (error) {
+        try {
+            if (existsSync(tempPath)) unlinkSync(tempPath);
+        } catch { /* ignore */ }
+        throw error;
+    }
 }
 
 /**

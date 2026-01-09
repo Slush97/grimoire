@@ -42,6 +42,7 @@ function getDbPath(): string {
 
 /**
  * Initialize the database connection and create tables
+ * Includes error handling to prevent app crashes (P1 fix #7)
  */
 export function initDatabase(): Database.Database {
     if (db) return db;
@@ -49,87 +50,124 @@ export function initDatabase(): Database.Database {
     const dbPath = getDbPath();
     console.log('[ModDatabase] Initializing database at:', dbPath);
 
-    // Ensure directory exists
-    const dir = path.dirname(dbPath);
-    if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+    try {
+        // Ensure directory exists
+        const dir = path.dirname(dbPath);
+        if (!fs.existsSync(dir)) {
+            fs.mkdirSync(dir, { recursive: true });
+        }
+
+        db = new Database(dbPath);
+        db.pragma('journal_mode = WAL');
+        db.pragma('foreign_keys = ON');
+
+        // Create tables
+        db.exec(`
+            -- Core mod data
+            CREATE TABLE IF NOT EXISTS mods (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                section TEXT NOT NULL,
+                category_id INTEGER,
+                category_name TEXT,
+                submitter_name TEXT,
+                submitter_id INTEGER,
+                like_count INTEGER DEFAULT 0,
+                view_count INTEGER DEFAULT 0,
+                download_count INTEGER,
+                date_added INTEGER,
+                date_modified INTEGER,
+                has_files INTEGER DEFAULT 1,
+                is_nsfw INTEGER DEFAULT 0,
+                thumbnail_url TEXT,
+                profile_url TEXT,
+                cached_at INTEGER DEFAULT (strftime('%s', 'now'))
+            );
+
+            -- Create indexes for common queries
+            CREATE INDEX IF NOT EXISTS idx_mods_section ON mods(section);
+            CREATE INDEX IF NOT EXISTS idx_mods_category_id ON mods(category_id);
+            CREATE INDEX IF NOT EXISTS idx_mods_date_modified ON mods(date_modified);
+            CREATE INDEX IF NOT EXISTS idx_mods_like_count ON mods(like_count);
+
+            -- Full-text search virtual table
+            CREATE VIRTUAL TABLE IF NOT EXISTS mods_fts USING fts5(
+                name,
+                category_name,
+                submitter_name,
+                content='mods',
+                content_rowid='id',
+                tokenize='porter unicode61'
+            );
+
+            -- Triggers to keep FTS in sync
+            CREATE TRIGGER IF NOT EXISTS mods_ai AFTER INSERT ON mods BEGIN
+                INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
+                VALUES (new.id, new.name, new.category_name, new.submitter_name);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS mods_ad AFTER DELETE ON mods BEGIN
+                INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
+                VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
+            END;
+
+            CREATE TRIGGER IF NOT EXISTS mods_au AFTER UPDATE ON mods BEGIN
+                INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
+                VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
+                INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
+                VALUES (new.id, new.name, new.category_name, new.submitter_name);
+            END;
+
+            -- Sync state tracking
+            CREATE TABLE IF NOT EXISTS sync_state (
+                section TEXT PRIMARY KEY,
+                last_sync INTEGER,
+                total_count INTEGER,
+                pages_synced INTEGER
+            );
+        `);
+
+        // Run migrations for existing databases
+        runMigrations(db);
+
+        console.log('[ModDatabase] Database initialized successfully');
+        return db;
+    } catch (error) {
+        console.error('[ModDatabase] Failed to initialize database:', error);
+
+        // If database is corrupted, try to recover by deleting and recreating
+        if (error instanceof Error && (
+            error.message.includes('database disk image is malformed') ||
+            error.message.includes('SQLITE_CORRUPT') ||
+            error.message.includes('file is not a database')
+        )) {
+            console.warn('[ModDatabase] Database appears corrupted, attempting recovery...');
+            try {
+                // Close any existing connection
+                if (db) {
+                    try { db.close(); } catch { /* ignore */ }
+                    db = null;
+                }
+
+                // Delete corrupted database files
+                const filesToRemove = [dbPath, `${dbPath}-wal`, `${dbPath}-shm`];
+                for (const file of filesToRemove) {
+                    if (fs.existsSync(file)) {
+                        fs.unlinkSync(file);
+                    }
+                }
+
+                // Retry initialization
+                console.log('[ModDatabase] Retrying database initialization...');
+                return initDatabase();
+            } catch (recoveryError) {
+                console.error('[ModDatabase] Recovery failed:', recoveryError);
+                throw new Error(`Database initialization failed and recovery was unsuccessful: ${error.message}`);
+            }
+        }
+
+        throw new Error(`Failed to initialize mod database: ${error instanceof Error ? error.message : String(error)}`);
     }
-
-    db = new Database(dbPath);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-
-    // Create tables
-    db.exec(`
-        -- Core mod data
-        CREATE TABLE IF NOT EXISTS mods (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            section TEXT NOT NULL,
-            category_id INTEGER,
-            category_name TEXT,
-            submitter_name TEXT,
-            submitter_id INTEGER,
-            like_count INTEGER DEFAULT 0,
-            view_count INTEGER DEFAULT 0,
-            download_count INTEGER,
-            date_added INTEGER,
-            date_modified INTEGER,
-            has_files INTEGER DEFAULT 1,
-            is_nsfw INTEGER DEFAULT 0,
-            thumbnail_url TEXT,
-            profile_url TEXT,
-            cached_at INTEGER DEFAULT (strftime('%s', 'now'))
-        );
-
-        -- Create indexes for common queries
-        CREATE INDEX IF NOT EXISTS idx_mods_section ON mods(section);
-        CREATE INDEX IF NOT EXISTS idx_mods_category_id ON mods(category_id);
-        CREATE INDEX IF NOT EXISTS idx_mods_date_modified ON mods(date_modified);
-        CREATE INDEX IF NOT EXISTS idx_mods_like_count ON mods(like_count);
-
-        -- Full-text search virtual table
-        CREATE VIRTUAL TABLE IF NOT EXISTS mods_fts USING fts5(
-            name,
-            category_name,
-            submitter_name,
-            content='mods',
-            content_rowid='id',
-            tokenize='porter unicode61'
-        );
-
-        -- Triggers to keep FTS in sync
-        CREATE TRIGGER IF NOT EXISTS mods_ai AFTER INSERT ON mods BEGIN
-            INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
-            VALUES (new.id, new.name, new.category_name, new.submitter_name);
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS mods_ad AFTER DELETE ON mods BEGIN
-            INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
-            VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
-        END;
-
-        CREATE TRIGGER IF NOT EXISTS mods_au AFTER UPDATE ON mods BEGIN
-            INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
-            VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
-            INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
-            VALUES (new.id, new.name, new.category_name, new.submitter_name);
-        END;
-
-        -- Sync state tracking
-        CREATE TABLE IF NOT EXISTS sync_state (
-            section TEXT PRIMARY KEY,
-            last_sync INTEGER,
-            total_count INTEGER,
-            pages_synced INTEGER
-        );
-    `);
-
-    // Run migrations for existing databases
-    runMigrations(db);
-
-    console.log('[ModDatabase] Database initialized successfully');
-    return db;
 }
 
 /**

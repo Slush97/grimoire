@@ -295,14 +295,26 @@ export default function Locker() {
         description="Pick the active skin per hero. Selecting one disables other skins for that hero."
         stats={`${heroList.length} heroes • ${mods.length} installed`}
         action={
-          <ViewModeToggle
-            value={viewMode}
-            options={[
-              { value: 'gallery', label: 'Gallery' },
-              { value: 'list', label: 'List' },
-            ]}
-            onChange={(mode) => setViewMode(mode as 'gallery' | 'list')}
-          />
+          <div className="flex items-center gap-3">
+            {viewMode === 'gallery' && heroMods.unassigned.length > 0 && (
+              <button
+                onClick={() => setViewMode('list')}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
+                title="Switch to List view to see unassigned mods"
+              >
+                <Layers className="w-3 h-3" />
+                {heroMods.unassigned.length} unassigned
+              </button>
+            )}
+            <ViewModeToggle
+              value={viewMode}
+              options={[
+                { value: 'gallery', label: 'Gallery' },
+                { value: 'list', label: 'List' },
+              ]}
+              onChange={(mode) => setViewMode(mode as 'gallery' | 'list')}
+            />
+          </div>
         }
       />
 
@@ -518,13 +530,17 @@ function HeroOverlay({
   };
 
   // Opening: expand from card. Closing: simple fade out (no shrink).
+  // Respects prefers-reduced-motion for accessibility
+  const prefersReducedMotion = typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const getImageStyle = (): React.CSSProperties => {
     if (visible) {
       // Expanded state
       return {
         opacity: 1,
         transform: 'translate(0, 0) scale(1)',
-        transition: 'transform 600ms cubic-bezier(0.16, 1, 0.3, 1), opacity 500ms ease',
+        transition: prefersReducedMotion
+          ? 'opacity 150ms ease'
+          : 'transform 600ms cubic-bezier(0.16, 1, 0.3, 1), opacity 500ms ease',
       };
     }
 
@@ -532,7 +548,9 @@ function HeroOverlay({
     return {
       opacity: 0,
       transform: 'translate(0, 0) scale(1)', // Keep in place
-      transition: 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)',
+      transition: prefersReducedMotion
+        ? 'opacity 150ms ease'
+        : 'opacity 600ms cubic-bezier(0.4, 0, 0.2, 1)',
     };
   };
 

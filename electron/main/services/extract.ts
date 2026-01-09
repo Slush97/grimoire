@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync } from 'fs';
 import { join, extname, basename } from 'path';
+import { randomBytes } from 'crypto';
 import AdmZip from 'adm-zip';
 import { spawn } from 'child_process';
 
@@ -129,17 +130,34 @@ async function extractRar(archivePath: string, destDir: string): Promise<string[
 
 /**
  * Run a command and wait for it to complete
+ * Includes timeout to prevent indefinite hangs (P1 fix #6)
  */
-function runCommand(cmd: string, args: string[]): Promise<void> {
+function runCommand(cmd: string, args: string[], timeoutMs = 300000): Promise<void> {
     return new Promise((resolve, reject) => {
         const proc = spawn(cmd, args, { stdio: 'pipe' });
-
         let stderr = '';
+        let killed = false;
+
+        // Set timeout to prevent indefinite hangs (5 minutes default)
+        const timeoutId = setTimeout(() => {
+            killed = true;
+            proc.kill('SIGTERM');
+            // Force kill after 5 seconds if still running
+            setTimeout(() => {
+                if (!proc.killed) {
+                    proc.kill('SIGKILL');
+                }
+            }, 5000);
+            reject(new Error(`${cmd} timed out after ${timeoutMs / 1000} seconds`));
+        }, timeoutMs);
+
         proc.stderr?.on('data', (data) => {
             stderr += data.toString();
         });
 
         proc.on('close', (code) => {
+            clearTimeout(timeoutId);
+            if (killed) return; // Already rejected by timeout
             if (code === 0) {
                 resolve();
             } else {
@@ -148,6 +166,8 @@ function runCommand(cmd: string, args: string[]): Promise<void> {
         });
 
         proc.on('error', (err) => {
+            clearTimeout(timeoutId);
+            if (killed) return;
             reject(new Error(`${cmd} failed to run: ${err.message}`));
         });
     });
@@ -194,14 +214,16 @@ function copyVpksToDest(vpks: string[], destDir: string): string[] {
 }
 
 /**
- * Create a temporary directory
+ * Create a temporary directory with cryptographically secure random name
+ * (P0 security fix #3 - prevents race condition attacks)
  */
 function createTempDir(prefix: string): string {
+    const randomSuffix = randomBytes(16).toString('hex');
     const tmpDir = join(
         process.env.TMPDIR || process.env.TMP || '/tmp',
-        `${prefix}-${Date.now()}`
+        `${prefix}-${randomSuffix}`
     );
-    mkdirSync(tmpDir, { recursive: true });
+    mkdirSync(tmpDir, { recursive: true, mode: 0o700 }); // Restrict permissions
     return tmpDir;
 }
 

@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
 import { scanMods, enableMod, disableMod, setModPriority, Mod } from './mods';
@@ -60,23 +60,34 @@ export function loadProfiles(): Profile[] {
     try {
         const content = readFileSync(path, 'utf-8');
         return JSON.parse(content) as Profile[];
-    } catch {
+    } catch (error) {
+        console.warn('[Profiles] Failed to load profiles, returning empty:', error);
         return [];
     }
 }
 
 /**
- * Save profiles to disk
+ * Save profiles to disk atomically (P1 fix #8, #10)
+ * Uses write-to-temp-then-rename pattern to prevent corruption on crash
  */
 function saveProfiles(profiles: Profile[]): void {
     const path = getProfilesPath();
+    const tempPath = `${path}.tmp`;
     const dir = dirname(path);
 
     if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
     }
 
-    writeFileSync(path, JSON.stringify(profiles, null, 2), 'utf-8');
+    try {
+        writeFileSync(tempPath, JSON.stringify(profiles, null, 2), 'utf-8');
+        renameSync(tempPath, path);
+    } catch (error) {
+        try {
+            if (existsSync(tempPath)) unlinkSync(tempPath);
+        } catch { /* ignore */ }
+        throw error;
+    }
 }
 
 /**

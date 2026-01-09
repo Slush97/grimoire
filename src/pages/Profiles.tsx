@@ -12,6 +12,7 @@ import type { Profile, ProfileCrosshairSettings } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { Card, Badge, Button } from '../components/common/ui';
+import { ConfirmModal } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 
 export default function Profiles() {
@@ -24,7 +25,8 @@ export default function Profiles() {
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [expandedProfiles, setExpandedProfiles] = useState<Set<string>>(new Set());
-  
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+
   const { mods, loadMods } = useAppStore();
   const { getSettings: getCrosshairSettings, loadSettingsFromPreset } = useCrosshairStore();
 
@@ -67,7 +69,7 @@ export default function Profiles() {
       const crosshair = getCrosshairSettings();
       // Map CrosshairSettings to ProfileCrosshairSettings (types are compatible)
       const newProfile = await createProfile(newProfileName.trim(), crosshair as unknown as ProfileCrosshairSettings);
-      
+
       setNewProfileName('');
       setActiveProfileId(newProfile.id);
       await loadProfileList();
@@ -82,14 +84,14 @@ export default function Profiles() {
     setApplyingId(profileId);
     try {
       const profile = await applyProfile(profileId);
-      
+
       // Update local crosshair store if profile has settings
       if (profile.crosshair) {
         // We cast to any to satisfy the Preset type since loadSettingsFromPreset only uses the .settings property
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         loadSettingsFromPreset({ settings: profile.crosshair } as any);
       }
-      
+
       setActiveProfileId(profileId);
       await loadMods();
     } catch (err) {
@@ -113,8 +115,6 @@ export default function Profiles() {
   };
 
   const handleDeleteProfile = async (profileId: string) => {
-    if (!confirm('Delete this profile?')) return;
-
     try {
       await deleteProfile(profileId);
       if (activeProfileId === profileId) {
@@ -123,6 +123,8 @@ export default function Profiles() {
       await loadProfileList();
     } catch (err) {
       setError(String(err));
+    } finally {
+      setDeleteConfirmId(null);
     }
   };
 
@@ -168,6 +170,7 @@ export default function Profiles() {
                 onChange={(e) => setNewProfileName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateProfile()}
                 placeholder="Enter profile name (e.g. Competitive, Casual, Testing)..."
+                aria-label="Profile name"
                 className="flex-1 px-4 py-2.5 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
               />
               <Button
@@ -205,7 +208,7 @@ export default function Profiles() {
                     key={profile.id}
                     title={profile.name}
                     icon={Layers}
-                    className={`transition-all duration-300 ${isActive ? 'ring-1 ring-accent border-accent/50 shadow-[0_0_20px_rgba(249,115,22,0.1)]' : 'hover:border-white/10'}`}
+                    className={`transition-all duration-300 ${isActive ? 'ring-1 ring-accent border-accent/50 shadow-[0_0_20px_rgba(203,166,247,0.15)]' : 'hover:border-white/10'}`}
                     action={
                       <div className="flex items-center gap-2">
                         {isActive ? (
@@ -227,14 +230,14 @@ export default function Profiles() {
                           <div className="text-text-primary font-mono">{new Date(profile.updatedAt).toLocaleDateString()}</div>
                         </div>
                       </div>
-                      
+
                       {/* Capabilities Indicators */}
                       {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
                         <div className="flex gap-2">
-                           <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-md text-xs text-text-secondary" title="Includes Autoexec Commands">
-                             <Terminal className="w-3 h-3 text-blue-400" />
-                             <span>Autoexec ({profile.autoexecCommands.length})</span>
-                           </div>
+                          <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-md text-xs text-text-secondary" title="Includes Autoexec Commands">
+                            <Terminal className="w-3 h-3 text-blue-400" />
+                            <span>Autoexec ({profile.autoexecCommands.length})</span>
+                          </div>
                         </div>
                       )}
 
@@ -269,13 +272,13 @@ export default function Profiles() {
                         />
                         <Button
                           variant="danger"
-                          onClick={() => handleDeleteProfile(profile.id)}
+                          onClick={() => setDeleteConfirmId(profile.id)}
                           disabled={isApplying || isUpdating}
                           icon={Trash2}
                           title="Delete Profile"
                         />
                       </div>
-                      
+
                       {/* Expanded Content */}
                       {isExpanded && (
                         <div className="mt-2 pt-4 border-t border-white/5 animate-fade-in space-y-4">
@@ -285,18 +288,18 @@ export default function Profiles() {
                               Mods ({profile.mods.length})
                             </div>
                             <div className="max-h-32 overflow-y-auto pr-2 custom-scrollbar space-y-1">
-                               {profile.mods.map((mod, idx) => {
-                                 const displayName = modNameMap.get(mod.fileName) || mod.fileName;
-                                 return (
-                                   <div key={idx} className="flex items-center justify-between text-xs py-1.5 px-2 hover:bg-white/5 rounded">
-                                     <span className="truncate flex-1" title={mod.fileName}>{displayName}</span>
-                                     {mod.enabled && <Check className="w-3 h-3 text-green-400 shrink-0 ml-2" />}
-                                   </div>
-                                 );
-                               })}
-                               {profile.mods.length === 0 && (
-                                 <div className="text-xs text-text-secondary italic">No mods in profile</div>
-                               )}
+                              {profile.mods.map((mod, idx) => {
+                                const displayName = modNameMap.get(mod.fileName) || mod.fileName;
+                                return (
+                                  <div key={idx} className="flex items-center justify-between text-xs py-1.5 px-2 hover:bg-white/5 rounded">
+                                    <span className="truncate flex-1" title={mod.fileName}>{displayName}</span>
+                                    {mod.enabled && <Check className="w-3 h-3 text-green-400 shrink-0 ml-2" />}
+                                  </div>
+                                );
+                              })}
+                              {profile.mods.length === 0 && (
+                                <div className="text-xs text-text-secondary italic">No mods in profile</div>
+                              )}
                             </div>
                           </div>
 
@@ -345,6 +348,17 @@ export default function Profiles() {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      <ConfirmModal
+        isOpen={deleteConfirmId !== null}
+        onCancel={() => setDeleteConfirmId(null)}
+        onConfirm={() => deleteConfirmId && handleDeleteProfile(deleteConfirmId)}
+        title="Delete Profile"
+        message="Are you sure you want to delete this profile? This action cannot be undone."
+        confirmLabel="Delete"
+        variant="danger"
+      />
     </div>
   );
 }

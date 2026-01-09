@@ -1,3 +1,5 @@
+import { gamebananaRateLimiter } from './rateLimiter';
+
 const GAMEBANANA_API_BASE = 'https://gamebanana.com/apiv11';
 const DEADLOCK_GAME_ID = 20948;
 
@@ -176,30 +178,48 @@ interface ModDetailsRaw {
 
 /**
  * Helper to fetch JSON from GameBanana API
+ * Includes timeout (P1 fix #5) and rate limiting (P2 fix #13)
  */
-async function fetchJson<T>(url: string): Promise<T> {
-    const response = await fetch(url, {
-        headers: {
-            Accept: 'application/json',
-            'User-Agent': 'DeadlockModManager/1.0',
-        },
-    });
+async function fetchJson<T>(url: string, timeoutMs = 30000): Promise<T> {
+    // Apply rate limiting before making request
+    await gamebananaRateLimiter.acquire();
 
-    if (!response.ok) {
-        throw new Error(`GameBanana API error: ${response.status} ${response.statusText}`);
-    }
-
-    // Check for empty response body
-    const text = await response.text();
-    if (!text || text.trim() === '') {
-        throw new Error('GameBanana API returned empty response');
-    }
+    // Create abort controller for timeout
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-        return JSON.parse(text) as T;
+        const response = await fetch(url, {
+            headers: {
+                Accept: 'application/json',
+                'User-Agent': 'DeadlockModManager/1.0',
+            },
+            signal: controller.signal,
+        });
+
+        if (!response.ok) {
+            throw new Error(`GameBanana API error: ${response.status} ${response.statusText}`);
+        }
+
+        // Check for empty response body
+        const text = await response.text();
+        if (!text || text.trim() === '') {
+            throw new Error('GameBanana API returned empty response');
+        }
+
+        try {
+            return JSON.parse(text) as T;
+        } catch (err) {
+            console.error('[fetchJson] Failed to parse JSON:', text.slice(0, 200));
+            throw new Error(`GameBanana API returned invalid JSON: ${err}`);
+        }
     } catch (err) {
-        console.error('[fetchJson] Failed to parse JSON:', text.slice(0, 200));
-        throw new Error(`GameBanana API returned invalid JSON: ${err}`);
+        if (err instanceof Error && err.name === 'AbortError') {
+            throw new Error(`GameBanana API request timed out after ${timeoutMs / 1000} seconds`);
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
     }
 }
 
@@ -324,10 +344,9 @@ export async function fetchSubmissions(
     sort?: string
 ): Promise<GameBananaModsResponse> {
     let url: string;
+    // GameBanana v11 API only reliably supports likes/views sorting
+    // Default API order is already sorted by recent submissions, so 'new', 'recent', 'updated' don't need explicit sort
     const sortMap: Record<string, string> = {
-        new: 'Generic_LatestSubmission',
-        recent: 'Generic_LatestSubmission',
-        updated: 'Generic_LatestUpdates',
         likes: 'Generic_MostLiked',
         popular: 'Generic_MostLiked',
         views: 'Generic_MostViewed',
@@ -436,6 +455,9 @@ export async function fetchModDetails(
                     file220: img._sFile220,
                     file530: img._sFile530,
                 })),
+                metadata: raw._aPreviewMedia._aMetadata
+                    ? { audioUrl: raw._aPreviewMedia._aMetadata._sAudioUrl }
+                    : undefined,
             }
             : undefined,
     };

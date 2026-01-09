@@ -43,4 +43,6 @@ export interface AppSettings {
   hideNsfwPreviews: boolean;
   activeProfileId: string | null;
   autoSaveProfile: boolean;
+  experimentalStats: boolean;
+  experimentalCrosshair: boolean;
 }

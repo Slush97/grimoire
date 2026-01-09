@@ -14,7 +14,7 @@ export interface SearchOptions {
     query?: string;
     section?: string;
     categoryId?: number;
-    sortBy?: 'relevance' | 'likes' | 'date' | 'views' | 'name';
+    sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     limit?: number;
     offset?: number;
 }
@@ -49,11 +49,15 @@ export function searchMods(options: SearchOptions): SearchResult {
     let fromClause = 'FROM mods';
     let rankSelect = '0 as rank';
     if (query && query.trim()) {
+        // P2 fix #15: Limit query length to prevent ReDoS/expensive queries
+        const truncatedQuery = query.slice(0, 500);
+
         // Escape special FTS5 characters and use prefix matching
-        const escapedQuery = escapeFts5Term(query);
+        const escapedQuery = escapeFts5Term(truncatedQuery);
         if (escapedQuery) {
             const searchTerms = escapedQuery.split(/\s+/)
                 .filter(term => term.length > 0)
+                .slice(0, 20) // Limit number of search terms
                 .map(term => `${term}*`)
                 .join(' ');
             if (searchTerms) {
@@ -91,6 +95,9 @@ export function searchMods(options: SearchOptions): SearchResult {
             break;
         case 'date':
             orderBy = 'date_modified DESC';
+            break;
+        case 'date_added':
+            orderBy = 'date_added DESC';
             break;
         case 'views':
             orderBy = 'view_count DESC';

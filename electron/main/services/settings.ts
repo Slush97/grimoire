@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { dirname } from 'path';
 import { getSettingsPath } from '../utils/paths';
 
@@ -10,6 +10,8 @@ export interface AppSettings {
     hideNsfwPreviews: boolean;
     activeProfileId: string | null;  // Currently active profile
     autoSaveProfile: boolean;        // Auto-save when mods change
+    experimentalStats: boolean;
+    experimentalCrosshair: boolean;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -20,10 +22,13 @@ const DEFAULT_SETTINGS: AppSettings = {
     hideNsfwPreviews: false,
     activeProfileId: null,
     autoSaveProfile: false,
+    experimentalStats: false,
+    experimentalCrosshair: false,
 };
 
 /**
  * Load settings from disk
+ * If settings are corrupted, resets to defaults and logs warning (P2 fix #21)
  */
 export function loadSettings(): AppSettings {
     const path = getSettingsPath();
@@ -36,21 +41,39 @@ export function loadSettings(): AppSettings {
         const content = readFileSync(path, 'utf-8');
         const settings = JSON.parse(content) as Partial<AppSettings>;
         return { ...DEFAULT_SETTINGS, ...settings };
-    } catch {
+    } catch (error) {
+        console.warn('[Settings] Failed to load settings, resetting to defaults:', error);
         return { ...DEFAULT_SETTINGS };
     }
 }
 
 /**
- * Save settings to disk
+ * Save settings to disk atomically (P1 fix #8)
+ * Uses write-to-temp-then-rename pattern to prevent corruption on crash
  */
 export function saveSettings(settings: AppSettings): void {
     const path = getSettingsPath();
+    const tempPath = `${path}.tmp`;
     const dir = dirname(path);
 
     if (!existsSync(dir)) {
         mkdirSync(dir, { recursive: true });
     }
 
-    writeFileSync(path, JSON.stringify(settings, null, 2), 'utf-8');
+    try {
+        // Write to temp file first
+        writeFileSync(tempPath, JSON.stringify(settings, null, 2), 'utf-8');
+
+        // Atomic rename (on most filesystems, rename is atomic)
+        renameSync(tempPath, path);
+    } catch (error) {
+        // Clean up temp file if rename failed
+        try {
+            if (existsSync(tempPath)) {
+                unlinkSync(tempPath);
+            }
+        } catch { /* ignore cleanup errors */ }
+
+        throw error;
+    }
 }

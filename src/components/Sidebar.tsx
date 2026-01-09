@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { NavLink } from 'react-router-dom';
 import {
   Package,
@@ -13,9 +13,11 @@ import {
 } from 'lucide-react';
 import { getConflicts } from '../lib/api';
 import { getAssetPath } from '../lib/assetPath';
+import { useAppStore } from '../stores/appStore';
 
 export default function Sidebar() {
   const [conflictCount, setConflictCount] = useState(0);
+  const settings = useAppStore((state) => state.settings);
 
   useEffect(() => {
     const loadConflicts = async () => {
@@ -34,17 +36,25 @@ export default function Sidebar() {
     return () => clearInterval(interval);
   }, []);
 
-  const navItems = [
-    { to: '/', icon: Package, label: 'Installed' },
-    { to: '/browse', icon: Search, label: 'Browse' },
-    { to: '/locker', icon: Shield, label: 'Locker' },
-    { to: '/crosshair', icon: Crosshair, label: 'Crosshair' },
-    { to: '/autoexec', icon: Terminal, label: 'Autoexec' },
-    { to: '/stats', icon: BarChart3, label: 'Stats' },
-    { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', badge: conflictCount },
-    { to: '/profiles', icon: Layers, label: 'Profiles' },
-    { to: '/settings', icon: Settings, label: 'Settings' },
-  ];
+  const navItems = useMemo(() => {
+    const items = [
+      { to: '/', icon: Package, label: 'Installed' },
+      { to: '/browse', icon: Search, label: 'Browse' },
+      { to: '/locker', icon: Shield, label: 'Locker' },
+      { to: '/crosshair', icon: Crosshair, label: 'Crosshair', experimental: 'crosshair' as const },
+      { to: '/autoexec', icon: Terminal, label: 'Autoexec' },
+      { to: '/stats', icon: BarChart3, label: 'Stats', experimental: 'stats' as const },
+      { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', badge: conflictCount },
+      { to: '/profiles', icon: Layers, label: 'Profiles' },
+      { to: '/settings', icon: Settings, label: 'Settings' },
+    ];
+
+    return items.filter((item) => {
+      if (item.experimental === 'stats') return settings?.experimentalStats;
+      if (item.experimental === 'crosshair') return settings?.experimentalCrosshair;
+      return true;
+    });
+  }, [settings?.experimentalStats, settings?.experimentalCrosshair, conflictCount]);
 
   return (
     <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col">

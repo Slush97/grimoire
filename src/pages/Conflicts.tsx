@@ -67,7 +67,7 @@ export default function Conflicts() {
 
   if (loading) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
+      <div className="flex flex-col items-center justify-center h-full text-text-secondary" role="status" aria-live="polite">
         <RefreshCw className="w-8 h-8 animate-spin mb-4 text-accent" />
         <p>Scanning for conflicts...</p>
       </div>
@@ -148,9 +148,10 @@ export default function Conflicts() {
                     )}
                     <button
                       onClick={() => handleDisableMod(modA.id)}
-                      className="absolute inset-0 bg-red-500/0 hover:bg-red-500/70 flex items-center justify-center opacity-0 hover:opacity-100 transition-all"
+                      aria-label={`Disable ${modA.name}`}
+                      className="absolute inset-x-0 bottom-0 bg-red-500/80 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
-                      <span className="text-white font-medium flex items-center gap-1">
+                      <span className="text-white text-sm font-medium flex items-center gap-1">
                         <X className="w-4 h-4" /> Disable
                       </span>
                     </button>
@@ -186,9 +187,10 @@ export default function Conflicts() {
                     )}
                     <button
                       onClick={() => handleDisableMod(modB.id)}
-                      className="absolute inset-0 bg-red-500/0 hover:bg-red-500/70 flex items-center justify-center opacity-0 hover:opacity-100 transition-all"
+                      aria-label={`Disable ${modB.name}`}
+                      className="absolute inset-x-0 bottom-0 bg-red-500/80 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
                     >
-                      <span className="text-white font-medium flex items-center gap-1">
+                      <span className="text-white text-sm font-medium flex items-center gap-1">
                         <X className="w-4 h-4" /> Disable
                       </span>
                     </button>

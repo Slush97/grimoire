@@ -6,6 +6,8 @@ import {
   Eye,
   ThumbsUp,
   ExternalLink,
+  X,
+  Volume2,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import {
@@ -32,11 +34,8 @@ type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name
 type ViewMode = 'grid' | 'compact' | 'list';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
 
-// Special category ID for "Soul Containers" database search
-const SOUL_CONTAINERS_SEARCH_ID = -999;
-
-// Categories to hide from the dropdown (covered by Soul Containers search or not useful)
-const HIDDEN_CATEGORIES = new Set(['soul container', 'model replacement', 'skins']);
+// Only show these categories in the dropdown (lowercase for matching)
+const ALLOWED_CATEGORIES = new Set(['hud', 'other/misc', 'maps']);
 
 type CategoryOption = {
   id: number;
@@ -139,26 +138,19 @@ export default function Browse() {
     checkLocalCache();
   }, []);
 
-  // Check if Soul Containers search is active
-  const isSoulContainersSearch = categoryId === SOUL_CONTAINERS_SEARCH_ID;
-
   const effectiveCategoryId =
     heroCategoryId === 'all'
-      ? (categoryId === 'all' || isSoulContainersSearch ? undefined : categoryId)
+      ? (categoryId === 'all' ? undefined : categoryId)
       : heroCategoryId;
 
-  // Effective search query - append "soul container" when that category is selected
-  const effectiveSearch = isSoulContainersSearch
-    ? (search.trim() ? `${search.trim()} soul container` : 'soul container')
-    : search;
+  const effectiveSearch = search;
 
   // Only use local search when there's an active search query AND we have cache
   // For default browsing (no search), always fetch fresh from API
-  // Also use local search for special Soul Containers category
   useEffect(() => {
-    const hasSearchQuery = search.trim().length > 0 || isSoulContainersSearch;
+    const hasSearchQuery = search.trim().length > 0;
     setUseLocalSearch(hasSearchQuery && hasLocalCache);
-  }, [search, hasLocalCache, isSoulContainersSearch]);
+  }, [search, hasLocalCache]);
 
   const fetchMods = useCallback(async () => {
     // Show loading spinner on first page, loading indicator otherwise
@@ -234,10 +226,10 @@ export default function Browse() {
     setError(null);
 
     try {
-      const sortMap: Record<SortOption, 'relevance' | 'likes' | 'date' | 'views' | 'name'> = {
+      const sortMap: Record<SortOption, 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name'> = {
         default: 'relevance',
         popular: 'likes',
-        recent: 'date',
+        recent: 'date_added',
         updated: 'date',
         views: 'views',
         name: 'name',
@@ -298,7 +290,7 @@ export default function Browse() {
   useEffect(() => {
     setPage(1);
     setHasMore(true);
-  }, [search, sort, section, effectiveCategoryId, isSoulContainersSearch, perPage]);
+  }, [search, sort, section, effectiveCategoryId, perPage]);
 
   useEffect(() => {
     let active = true;
@@ -601,27 +593,14 @@ export default function Browse() {
     // Get all flattened categories
     let options = flattenCategories(categories, '', { excludeIds: heroIds, includeEmpty: false });
 
-    // Filter out hidden categories and their subcategories
+    // Only keep allowed categories (HUD, Other/Misc, Maps)
     options = options.filter(opt => {
       const lowerLabel = opt.label.toLowerCase();
-      for (const hidden of HIDDEN_CATEGORIES) {
-        if (lowerLabel === hidden || lowerLabel.startsWith(hidden + ' / ')) {
-          return false;
-        }
-      }
-      return true;
+      return ALLOWED_CATEGORIES.has(lowerLabel);
     });
 
-    // Add special "Soul Containers" search category at the top (only for Mod section)
-    if (section === 'Mod') {
-      options = [
-        { id: SOUL_CONTAINERS_SEARCH_ID, label: 'Soul Containers' },
-        ...options,
-      ];
-    }
-
     return options;
-  }, [categories, heroOptions, section]);
+  }, [categories, heroOptions]);
 
   const installedIds = useMemo(() => {
     const ids = new Set<number>();
@@ -672,8 +651,18 @@ export default function Browse() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search mods..."
-                className="w-full bg-bg-secondary border border-border rounded-lg pl-10 pr-4 py-2 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-full bg-bg-secondary border border-border rounded-lg pl-10 pr-10 py-2 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
               />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => { setSearch(''); handleSearch(new Event('submit') as unknown as React.FormEvent); }}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-text-secondary hover:text-text-primary transition-colors"
+                  title="Clear search"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
             </div>
             <button
               type="submit"
@@ -735,7 +724,7 @@ export default function Browse() {
             <select
               value={section}
               onChange={(e) => setSection(e.target.value)}
-              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent appearance-none"
+              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
             >
               {sections.map((entry) => (
                 <option key={entry.modelName} value={entry.modelName}>
@@ -746,7 +735,7 @@ export default function Browse() {
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortOption)}
-              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent appearance-none"
+              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
             >
               <option value="default">Default</option>
               <option value="popular">Popularity</option>
@@ -763,7 +752,7 @@ export default function Browse() {
                     e.target.value === 'all' ? 'all' : Number(e.target.value)
                   )
                 }
-                className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent appearance-none"
+                className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
               >
                 <option value="all">All Heroes</option>
                 {heroOptions.map((hero) => (
@@ -781,7 +770,7 @@ export default function Browse() {
                 )
               }
               disabled={heroCategoryId !== 'all'}
-              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent appearance-none disabled:opacity-60"
+              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
             >
               <option value="all">All Categories</option>
               {categoryOptions.map((category) => (
@@ -848,6 +837,9 @@ export default function Browse() {
               <span className="text-sm">Loading more...</span>
             </div>
           )}
+          {!hasMore && mods.length > 0 && !loadingMore && (
+            <span className="text-sm text-text-secondary">No more mods to load</span>
+          )}
         </div>
       </div>
 
@@ -855,6 +847,7 @@ export default function Browse() {
       {selectedMod && (
         <ModDetailsModal
           mod={selectedMod}
+          section={section}
           installed={installedIds.has(selectedMod.id)}
           installedFileIds={installedFileIds}
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
@@ -885,7 +878,8 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
   const isList = viewMode === 'list';
-  const isSound = section === 'Sound' && audioPreview;
+  const isSoundSection = section === 'Sound';
+  const hasAudioPreview = Boolean(audioPreview);
 
   return (
     <div
@@ -893,32 +887,69 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
       className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer ${isList ? 'flex items-center gap-4 p-3' : ''
         }`}
     >
-      {/* Thumbnail area - shows audio player for Sound mods */}
+      {/* Thumbnail area - enhanced for Sound mods */}
       <div
         className={`relative bg-bg-tertiary ${isList
           ? 'w-32 h-20 flex-shrink-0 rounded-md overflow-hidden'
           : 'aspect-video'
           }`}
       >
-        {isSound ? (
-          /* Audio Preview Card - replaces thumbnail for Sound mods */
-          <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary p-3">
-            {/* Waveform visualization graphic */}
-            <div className="flex items-end gap-0.5 mb-2 h-8">
-              {[3, 5, 8, 12, 16, 12, 8, 14, 10, 6, 9, 14, 11, 7, 4, 6, 10, 8, 5, 3].map((h, i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-accent/60 rounded-full transition-all"
-                  style={{ height: `${h * 2}px` }}
+        {isSoundSection ? (
+          /* Sound Mod Card - shows audio player overlaid on image or standalone */
+          <div className="w-full h-full relative">
+            {/* Background: show thumbnail if available, otherwise gradient */}
+            {thumbnail ? (
+              <>
+                <ModThumbnail
+                  src={thumbnail}
+                  alt={mod.name}
+                  nsfw={mod.nsfw}
+                  hideNsfw={hideNsfwPreviews}
+                  className="w-full h-full"
                 />
-              ))}
+                {/* Dark overlay for better audio player visibility */}
+                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+              </>
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
+            )}
+
+            {/* Audio controls overlay */}
+            <div className="absolute inset-0 flex flex-col items-center justify-end p-3">
+              {hasAudioPreview ? (
+                /* Full audio player when preview exists */
+                <>
+                  {/* Waveform visualization graphic */}
+                  {!thumbnail && (
+                    <div className="flex items-end gap-0.5 mb-2 h-8">
+                      {[3, 5, 8, 12, 16, 12, 8, 14, 10, 6, 9, 14, 11, 7, 4, 6, 10, 8, 5, 3].map((h, i) => (
+                        <div
+                          key={i}
+                          className="w-1 bg-accent/60 rounded-full transition-all"
+                          style={{ height: `${h * 2}px` }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                  {/* Audio Player with glassmorphism effect */}
+                  <div className="w-full backdrop-blur-md bg-black/30 rounded-lg border border-white/10">
+                    <AudioPreviewPlayer
+                      src={audioPreview!}
+                      compact={isCompact || isList}
+                      className="w-full"
+                    />
+                  </div>
+                </>
+              ) : (
+                /* Sound badge when no audio preview available */
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/90 text-white font-medium shadow-lg ${isCompact ? 'text-xs px-2 py-1' : 'text-sm'}`}>
+                    <Volume2 className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
+                    <span>SOUND</span>
+                  </div>
+                </div>
+              )}
             </div>
-            {/* Audio Player */}
-            <AudioPreviewPlayer
-              src={audioPreview}
-              compact={isCompact || isList}
-              className="w-full"
-            />
           </div>
         ) : (
           <ModThumbnail
@@ -985,6 +1016,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
 
 interface ModDetailsModalProps {
   mod: GameBananaModDetails;
+  section: string;
   installed: boolean;
   installedFileIds: Set<number>;
   downloadingFileId: number | null;
@@ -997,6 +1029,7 @@ interface ModDetailsModalProps {
 
 function ModDetailsModal({
   mod,
+  section,
   installed,
   installedFileIds,
   downloadingFileId,
@@ -1007,7 +1040,17 @@ function ModDetailsModal({
   onDownload,
 }: ModDetailsModalProps) {
   const images = mod.previewMedia?.images ?? [];
+  const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+
+  // Close on Escape key
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
 
   const currentImage = images[currentImageIndex];
   const currentImageUrl = currentImage
@@ -1108,6 +1151,44 @@ function ModDetailsModal({
                   </div>
                 </>
               )}
+            </div>
+          )}
+
+          {/* Audio Preview - for Sound mods or any mod with audio */}
+          {audioPreviewUrl && (
+            <div className="relative rounded-lg overflow-hidden border border-border bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary p-4">
+              <div className="flex items-center gap-3 mb-3">
+                <Volume2 className="w-5 h-5 text-accent" />
+                <h3 className="font-medium text-text-primary">Audio Preview</h3>
+              </div>
+              {/* Waveform visualization */}
+              <div className="flex items-end justify-center gap-0.5 mb-3 h-12">
+                {[3, 5, 8, 12, 16, 20, 16, 12, 18, 14, 10, 6, 9, 14, 18, 14, 11, 7, 4, 6, 10, 14, 18, 14, 8, 5, 3].map((h, i) => (
+                  <div
+                    key={i}
+                    className="w-1.5 bg-accent/50 rounded-full transition-all"
+                    style={{ height: `${h * 2}px` }}
+                  />
+                ))}
+              </div>
+              {/* Audio Player with enhanced styling */}
+              <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-white/10 p-1">
+                <AudioPreviewPlayer
+                  src={audioPreviewUrl}
+                  className="w-full"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Sound Indicator - for Sound section without audio preview */}
+          {section === 'Sound' && !audioPreviewUrl && images.length === 0 && (
+            <div className="flex items-center justify-center p-8 rounded-lg border border-border bg-bg-tertiary">
+              <div className="flex flex-col items-center gap-2 text-text-secondary">
+                <Volume2 className="w-12 h-12 text-accent/60" />
+                <span className="text-sm">Sound Mod</span>
+                <span className="text-xs opacity-60">No audio preview available</span>
+              </div>
             </div>
           )}
 

@@ -8,6 +8,7 @@ import type { ModConflict } from '../lib/api';
 import ModThumbnail from '../components/ModThumbnail';
 import { Button } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
+import { Search } from 'lucide-react';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -120,6 +121,11 @@ export default function Installed() {
         icon={Package}
         title="No Mods Found"
         description="No mods installed yet. Download mods from the Browse tab or manually place VPK files in your addons folder."
+        action={
+          <Button onClick={() => navigate('/browse')} icon={Search}>
+            Browse Mods
+          </Button>
+        }
       />
     );
   }
@@ -257,7 +263,7 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelet
         ? 'bg-yellow-500/5 border-yellow-500/50'
         : mod.enabled
           ? 'bg-bg-secondary border-accent/30'
-          : 'bg-bg-tertiary border-border opacity-75'
+          : 'bg-bg-tertiary border-border grayscale-[50%]'
         } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'}`}
     >
       {viewMode === 'grid' && (
@@ -281,6 +287,8 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelet
         {/* Toggle */}
         <button
           onClick={onToggle}
+          aria-pressed={mod.enabled}
+          aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
           className={`transition-colors ${mod.enabled ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
             }`}
           title={mod.enabled ? 'Disable mod' : 'Enable mod'}

@@ -214,7 +214,7 @@ export default function Autoexec() {
                                                 key={cmd.command}
                                                 onClick={() => handleAddCommand(cmd.command)}
                                                 disabled={isAdded}
-                                                className={`w-full text-left p-3 rounded-lg transition-all group ${isAdded
+                                                className={`w-full text-left p-3 rounded-lg transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isAdded
                                                     ? 'bg-accent/10 border border-accent/20 cursor-default opacity-60'
                                                     : 'bg-bg-tertiary/50 hover:bg-bg-tertiary border border-transparent hover:border-white/5'
                                                     }`}
@@ -227,7 +227,7 @@ export default function Autoexec() {
                                                 </div>
                                                 <div className="flex items-center justify-between text-xs text-text-secondary">
                                                     <span>{cmd.description}</span>
-                                                    <code className="bg-black/20 px-1.5 py-0.5 rounded font-mono opacity-60 group-hover:opacity-100 transition-opacity">
+                                                    <code className="bg-black/30 px-1.5 py-0.5 rounded font-mono text-text-primary/80">
                                                         {cmd.command}
                                                     </code>
                                                 </div>
@@ -267,7 +267,7 @@ export default function Autoexec() {
                         }
                     >
                         {(saveMessage || hasUnsaved) && (
-                            <div className="mb-3">
+                            <div className="mb-3" role="status" aria-live="polite">
                                 {saveMessage && (
                                     <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessage.includes('Error') ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
                                         {saveMessage.includes('Error') ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}

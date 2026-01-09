@@ -1,5 +1,5 @@
 import { createWriteStream, existsSync } from 'fs';
-import { promises as fs } from 'fs';
+import { promises as fs, statSync } from 'fs';
 import { join, basename } from 'path';
 import { BrowserWindow } from 'electron';
 import { getAddonsPath, getDisabledPath } from './deadlock';
@@ -7,6 +7,7 @@ import { extractArchive, isArchive } from './extract';
 import { setModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
 import { findNextAvailablePriority, getUsedPriorities } from './mods';
+import { validateDownloadUrl, validateFileSize } from './security';
 import https from 'https';
 import http from 'http';
 
@@ -69,21 +70,42 @@ async function processQueue(): Promise<void> {
 
 /**
  * Download a file with progress reporting
+ * Includes timeouts to prevent indefinite hangs (P1 fix #5)
  */
 async function downloadFile(
     url: string,
     destPath: string,
-    onProgress: (downloaded: number, total: number) => void
+    onProgress: (downloaded: number, total: number) => void,
+    connectionTimeoutMs = 30000,
+    responseTimeoutMs = 600000 // 10 minutes for large files
 ): Promise<void> {
     return new Promise((resolve, reject) => {
         const protocol = url.startsWith('https') ? https : http;
+        let connectionTimedOut = false;
+        let responseTimedOut = false;
 
         const request = protocol.get(url, (response) => {
-            // Handle redirects
+            // Clear connection timeout once we get a response
+            clearTimeout(connectionTimeoutId);
+
+            // Handle redirects - validate redirect URL too
             if (response.statusCode === 301 || response.statusCode === 302) {
                 const redirectUrl = response.headers.location;
                 if (redirectUrl) {
-                    downloadFile(redirectUrl, destPath, onProgress).then(resolve).catch(reject);
+                    // Validate redirect URL (security: must be HTTPS and trusted domain)
+                    try {
+                        validateDownloadUrl(redirectUrl);
+                    } catch {
+                        // Allow game banana subdomains in redirects
+                        const parsed = new URL(redirectUrl);
+                        if (!parsed.hostname.endsWith('gamebanana.com')) {
+                            reject(new Error(`Redirect to untrusted domain: ${parsed.hostname}`));
+                            return;
+                        }
+                    }
+                    downloadFile(redirectUrl, destPath, onProgress, connectionTimeoutMs, responseTimeoutMs)
+                        .then(resolve)
+                        .catch(reject);
                     return;
                 }
             }
@@ -95,22 +117,37 @@ async function downloadFile(
 
             const totalSize = parseInt(response.headers['content-length'] || '0', 10);
             let downloadedSize = 0;
+            let lastProgressTime = Date.now();
 
             const fileStream = createWriteStream(destPath);
 
+            // Set up response timeout - reset on each data chunk
+            const checkStall = setInterval(() => {
+                if (Date.now() - lastProgressTime > 60000) { // 1 minute without data
+                    responseTimedOut = true;
+                    request.destroy();
+                    fileStream.close();
+                    clearInterval(checkStall);
+                    reject(new Error('Download stalled - no data received for 60 seconds'));
+                }
+            }, 10000);
+
             response.on('data', (chunk: Buffer) => {
                 downloadedSize += chunk.length;
+                lastProgressTime = Date.now();
                 onProgress(downloadedSize, totalSize);
             });
 
             response.pipe(fileStream);
 
             fileStream.on('finish', () => {
+                clearInterval(checkStall);
                 fileStream.close();
                 resolve();
             });
 
             fileStream.on('error', async (err) => {
+                clearInterval(checkStall);
                 fileStream.close();
                 if (existsSync(destPath)) {
                     await fs.unlink(destPath).catch(() => { });
@@ -119,7 +156,16 @@ async function downloadFile(
             });
         });
 
+        // Connection timeout - waiting for initial response
+        const connectionTimeoutId = setTimeout(() => {
+            connectionTimedOut = true;
+            request.destroy();
+            reject(new Error(`Download connection timed out after ${connectionTimeoutMs / 1000} seconds`));
+        }, connectionTimeoutMs);
+
         request.on('error', (err) => {
+            clearTimeout(connectionTimeoutId);
+            if (connectionTimedOut || responseTimedOut) return;
             reject(err);
         });
     });
@@ -211,6 +257,9 @@ async function executeDownload(
         throw new Error(`File ${fileId} not found in mod ${modId}`);
     }
 
+    // Validate download URL before proceeding (P0 security fix)
+    validateDownloadUrl(file.downloadUrl);
+
     // Download to disabled folder by default so it doesn't auto-apply
     const targetPath = getDisabledPath(deadlockPath);
     const downloadPath = join(targetPath, fileName);
@@ -218,6 +267,7 @@ async function executeDownload(
     console.log(`[downloadMod] Downloading to: ${downloadPath}`);
 
     // Download with progress
+    const expectedSize = file.fileSize || 0;
     await downloadFile(file.downloadUrl, downloadPath, (downloaded, total) => {
         mainWindow?.webContents.send('download-progress', {
             modId,
@@ -226,6 +276,18 @@ async function executeDownload(
             total,
         });
     });
+
+    // Verify file size after download (P0 security fix)
+    try {
+        const actualSize = statSync(downloadPath).size;
+        validateFileSize(expectedSize, actualSize);
+    } catch (sizeError) {
+        // Clean up failed download
+        if (existsSync(downloadPath)) {
+            await fs.unlink(downloadPath).catch(() => { });
+        }
+        throw sizeError;
+    }
 
     console.log(`[downloadMod] Download complete, checking for archive...`);
 

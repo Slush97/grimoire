@@ -424,18 +424,10 @@ ipcMain.handle('stats:getMajorPatchDates', async () => {
 })
 
 // ============================================
-// SQL Access (Advanced)
+// SQL Access - REMOVED FOR SECURITY
 // ============================================
-
-ipcMain.handle('stats:executeSQLQuery', async (_, query: string) => {
-    return statsApi.executeSQLQuery(query)
-})
-
-ipcMain.handle('stats:listSQLTables', async () => {
-    return statsApi.listSQLTables()
-})
-
-ipcMain.handle('stats:getTableSchema', async (_, tableName: string) => {
-    return statsApi.getTableSchema(tableName)
-})
-
+// The following endpoints were removed as they pose SQL injection risks:
+// - stats:executeSQLQuery - allowed arbitrary SQL execution
+// - stats:listSQLTables - exposed database schema
+// - stats:getTableSchema - exposed table structures
+// If SQL access is needed, use specific parameterized endpoints instead.
