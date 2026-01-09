@@ -663,7 +663,7 @@ export default function Browse() {
                   <button
                     type="button"
                     onClick={() => { setSearch(''); handleSearch(new Event('submit') as unknown as React.FormEvent); }}
-                    className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded-md hover:bg-bg-tertiary"
+                    className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded-md hover:bg-bg-tertiary cursor-pointer"
                     title="Clear search"
                   >
                     <X className="w-4 h-4" />
@@ -671,7 +671,7 @@ export default function Browse() {
                 )}
                 <button
                   type="submit"
-                  className="p-1.5 text-text-secondary hover:text-accent transition-colors rounded-md hover:bg-bg-tertiary"
+                  className="p-1.5 text-text-secondary hover:text-accent transition-colors rounded-md hover:bg-bg-tertiary cursor-pointer"
                   title="Search"
                 >
                   <Search className="w-4 h-4" />
@@ -684,7 +684,7 @@ export default function Browse() {
               type="button"
               onClick={handleRefresh}
               disabled={syncing}
-              className="p-2.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors disabled:opacity-50"
+              className="p-2.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
               title="Refresh from GameBanana"
             >
               {syncing ? (
@@ -699,7 +699,7 @@ export default function Browse() {
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md transition-colors ${viewMode === 'grid'
+                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'grid'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -710,7 +710,7 @@ export default function Browse() {
               <button
                 type="button"
                 onClick={() => setViewMode('compact')}
-                className={`p-2 rounded-md transition-colors ${viewMode === 'compact'
+                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'compact'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -721,7 +721,7 @@ export default function Browse() {
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-colors ${viewMode === 'list'
+                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'list'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -802,7 +802,7 @@ export default function Browse() {
             <p className="text-red-400">{error}</p>
             <button
               onClick={fetchMods}
-              className="mt-4 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
+              className="mt-4 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer"
             >
               Retry
             </button>
@@ -996,7 +996,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, volume, hideN
                     e.stopPropagation();
                     onQuickDownload();
                   }}
-                  className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-secondary text-white rounded-full shadow-lg transition-colors"
+                  className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-secondary text-white rounded-full shadow-lg transition-colors cursor-pointer"
                   title="Install"
                 >
                   <Download className="w-3.5 h-3.5" />
@@ -1040,7 +1040,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, volume, hideN
                 e.stopPropagation();
                 onQuickDownload();
               }}
-              className={`text-accent hover:text-accent-secondary drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] transition-all hover:scale-110 ${isCompact ? '' : ''}`}
+              className={`text-accent hover:text-accent-secondary drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] transition-all hover:scale-110 cursor-pointer ${isCompact ? '' : ''}`}
               title="Install"
             >
               <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
@@ -1124,7 +1124,7 @@ function ModDetailsModal({
           </div>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-bg-tertiary rounded-lg transition-colors"
+            className="p-2 hover:bg-bg-tertiary rounded-lg transition-colors cursor-pointer"
           >
             ✕
           </button>
@@ -1151,7 +1151,7 @@ function ModDetailsModal({
                 <>
                   <button
                     onClick={goToPrevious}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-colors"
+                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-colors cursor-pointer"
                     aria-label="Previous image"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1160,7 +1160,7 @@ function ModDetailsModal({
                   </button>
                   <button
                     onClick={goToNext}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-colors"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-colors cursor-pointer"
                     aria-label="Next image"
                   >
                     <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1174,7 +1174,7 @@ function ModDetailsModal({
                       <button
                         key={index}
                         onClick={() => setCurrentImageIndex(index)}
-                        className={`w-2 h-2 rounded-full transition-colors ${index === currentImageIndex
+                        className={`w-2 h-2 rounded-full transition-colors cursor-pointer ${index === currentImageIndex
                           ? 'bg-white'
                           : 'bg-white/40 hover:bg-white/60'
                           }`}
@@ -1256,7 +1256,7 @@ function ModDetailsModal({
                   <button
                     onClick={() => onDownload(file.id, file.fileName)}
                     disabled={downloadingFileId !== null}
-                    className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded-lg transition-colors ml-4"
+                    className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors ml-4 cursor-pointer"
                   >
                     {downloadingFileId === file.id ? (
                       <>

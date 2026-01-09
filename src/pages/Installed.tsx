@@ -289,7 +289,7 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelet
           onClick={onToggle}
           aria-pressed={mod.enabled}
           aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
-          className={`transition-colors ${mod.enabled ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
+          className={`transition-colors cursor-pointer ${mod.enabled ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
             }`}
           title={mod.enabled ? 'Disable mod' : 'Enable mod'}
         >
@@ -323,7 +323,7 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelet
         {/* Delete */}
         <button
           onClick={onDelete}
-          className="p-2 text-text-secondary hover:text-red-500 transition-colors"
+          className="p-2 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"
           title="Delete mod"
         >
           <Trash2 className="w-5 h-5" />

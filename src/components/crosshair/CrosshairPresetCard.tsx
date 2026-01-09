@@ -48,21 +48,21 @@ export default function CrosshairPresetCard({
                 <div className="absolute inset-0 bg-black/70 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
                     <button
                         onClick={() => onLoad(preset)}
-                        className="p-2 rounded-full bg-bg-tertiary hover:bg-accent text-text-primary hover:text-white transition-colors"
+                        className="p-2 rounded-full bg-bg-tertiary hover:bg-accent text-text-primary hover:text-white transition-colors cursor-pointer"
                         title="Load into editor"
                     >
                         <Edit3 className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => onApply(preset.id)}
-                        className="p-2 rounded-full bg-accent hover:bg-accent/80 text-white transition-colors"
+                        className="p-2 rounded-full bg-accent hover:bg-accent/80 text-white transition-colors cursor-pointer"
                         title="Apply to game"
                     >
                         <Play className="w-4 h-4" />
                     </button>
                     <button
                         onClick={() => onDelete(preset.id)}
-                        className="p-2 rounded-full bg-bg-tertiary hover:bg-red-500 text-text-primary hover:text-white transition-colors"
+                        className="p-2 rounded-full bg-bg-tertiary hover:bg-red-500 text-text-primary hover:text-white transition-colors cursor-pointer"
                         title="Delete"
                     >
                         <Trash2 className="w-4 h-4" />

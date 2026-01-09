@@ -45,7 +45,7 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
                     key={option.value}
                     type="button"
                     onClick={() => onChange(option.value)}
-                    className={`px-3 py-1.5 rounded-md transition-colors ${value === option.value
+                    className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${value === option.value
                         ? 'bg-accent text-white'
                         : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
                         }`}
@@ -159,13 +159,13 @@ export function ConfirmModal({
                 <div className="flex justify-end gap-3">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors"
+                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer"
                     >
                         {cancelLabel}
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`px-4 py-2 rounded-lg transition-colors ${confirmClass}`}
+                        className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${confirmClass}`}
                     >
                         {confirmLabel}
                     </button>

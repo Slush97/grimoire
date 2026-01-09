@@ -218,7 +218,7 @@ export default function Crosshair() {
                                     <button
                                         key={color.label}
                                         onClick={() => { setColorR(color.r); setColorG(color.g); setColorB(color.b); }}
-                                        className="w-6 h-6 rounded-md border border-white/20 hover:border-white/50 transition-colors"
+                                        className="w-6 h-6 rounded-md border border-white/20 hover:border-white/50 transition-colors cursor-pointer"
                                         style={{ backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})` }}
                                         title={color.label}
                                     />
@@ -276,7 +276,7 @@ export default function Crosshair() {
                                         >
                                             Save
                                         </Button>
-                                        <button onClick={() => setShowSaveInput(false)} className="text-text-secondary hover:text-text-primary">
+                                        <button onClick={() => setShowSaveInput(false)} className="text-text-secondary hover:text-text-primary cursor-pointer">
                                             <RotateCcw className="w-4 h-4" />
                                         </button>
                                     </>
@@ -364,14 +364,14 @@ export default function Crosshair() {
                                             <div className="flex gap-1">
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleApplyPreset(preset.id); }}
-                                                    className="p-1.5 bg-accent hover:bg-accent-hover rounded-md text-white"
+                                                    className="p-1.5 bg-accent hover:bg-accent-hover rounded-md text-white cursor-pointer"
                                                     title="Apply to Game"
                                                 >
                                                     <Play className="w-3 h-3" />
                                                 </button>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleDeletePreset(preset.id); }}
-                                                    className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-md"
+                                                    className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-md cursor-pointer"
                                                     title="Delete"
                                                 >
                                                     <Trash2 className="w-3 h-3" />

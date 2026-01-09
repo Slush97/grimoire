@@ -216,7 +216,7 @@ export default function Autoexec() {
                                                 disabled={isAdded}
                                                 className={`w-full text-left p-3 rounded-lg transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isAdded
                                                     ? 'bg-accent/10 border border-accent/20 cursor-default opacity-60'
-                                                    : 'bg-bg-tertiary/50 hover:bg-bg-tertiary border border-transparent hover:border-white/5'
+                                                    : 'bg-bg-tertiary/50 hover:bg-bg-tertiary border border-transparent hover:border-white/5 cursor-pointer'
                                                     }`}
                                             >
                                                 <div className="flex items-center justify-between mb-1">
@@ -295,7 +295,7 @@ export default function Autoexec() {
                                         </div>
                                         <button
                                             onClick={() => handleRemoveCommand(i)}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded transition-all"
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded transition-all cursor-pointer"
                                             title="Remove"
                                         >
                                             <Trash2 className="w-4 h-4" />

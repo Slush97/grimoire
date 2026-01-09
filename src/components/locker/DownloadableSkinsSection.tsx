@@ -258,7 +258,7 @@ export default function DownloadableSkinsSection({
       <button
         type="button"
         onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 w-full text-xs text-text-secondary hover:text-text-primary transition-colors"
+        className="flex items-center gap-2 w-full text-xs text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
       >
         <ChevronDown
           className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
@@ -280,7 +280,7 @@ export default function DownloadableSkinsSection({
               <button
                 type="button"
                 onClick={handleRetry}
-                className="flex items-center gap-1 px-2 py-1 hover:bg-bg-tertiary rounded transition-colors"
+                className="flex items-center gap-1 px-2 py-1 hover:bg-bg-tertiary rounded transition-colors cursor-pointer"
               >
                 <RefreshCw className="w-3 h-3" />
                 Retry
@@ -319,7 +319,7 @@ export default function DownloadableSkinsSection({
                       type="button"
                       onClick={() => initiateDownload(mod)}
                       disabled={downloading !== null}
-                      className="flex items-center justify-center gap-1 px-2 py-1 text-xs bg-accent hover:bg-accent-hover disabled:opacity-50 text-white rounded transition-colors"
+                      className="flex items-center justify-center gap-1 px-2 py-1 text-xs bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors cursor-pointer"
                     >
                       {isDownloading ? (
                         <>

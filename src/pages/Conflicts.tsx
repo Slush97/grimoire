@@ -149,7 +149,7 @@ export default function Conflicts() {
                     <button
                       onClick={() => handleDisableMod(modA.id)}
                       aria-label={`Disable ${modA.name}`}
-                      className="absolute inset-x-0 bottom-0 bg-red-500/80 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                      className="absolute inset-x-0 bottom-0 bg-red-500/80 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
                     >
                       <span className="text-white text-sm font-medium flex items-center gap-1">
                         <X className="w-4 h-4" /> Disable
@@ -188,7 +188,7 @@ export default function Conflicts() {
                     <button
                       onClick={() => handleDisableMod(modB.id)}
                       aria-label={`Disable ${modB.name}`}
-                      className="absolute inset-x-0 bottom-0 bg-red-500/80 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                      className="absolute inset-x-0 bottom-0 bg-red-500/80 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
                     >
                       <span className="text-white text-sm font-medium flex items-center gap-1">
                         <X className="w-4 h-4" /> Disable

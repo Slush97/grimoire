@@ -81,7 +81,7 @@ export default function HeroSkinsPanel({
               <button
                 key={preset.fileName}
                 onClick={() => onApplyMinaPreset(preset.fileName)}
-                className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors ${preset.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
+                className={`w-full rounded-md border px-3 py-2 text-left text-sm transition-colors cursor-pointer ${preset.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
                   }`}
               >
                 {preset.label}
@@ -119,7 +119,7 @@ export default function HeroSkinsPanel({
                     onMinaArchivePathChange?.('');
                   }
                 }}
-                className="w-full px-3 py-2 text-xs rounded-md bg-accent hover:bg-accent-hover text-white font-medium transition-colors"
+                className="w-full px-3 py-2 text-xs rounded-md bg-accent hover:bg-accent-hover text-white font-medium transition-colors cursor-pointer"
               >
                 Download Outfit Presets (252MB)
               </button>
@@ -143,7 +143,7 @@ export default function HeroSkinsPanel({
                   type="button"
                   onClick={onLoadMinaVariants}
                   disabled={minaVariantsLoading || !minaArchivePath.trim()}
-                  className="px-3 py-1 text-xs rounded-md border border-border hover:border-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="px-3 py-1 text-xs rounded-md border border-border hover:border-accent/60 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                 >
                   {minaVariantsLoading ? 'Loading…' : 'Load'}
                 </button>
@@ -299,7 +299,7 @@ export default function HeroSkinsPanel({
               type="button"
               onClick={onApplyMinaVariant}
               disabled={!selectedMinaVariant}
-              className="ml-2 px-3 py-1 rounded-md border border-border text-xs hover:border-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ml-2 px-3 py-1 rounded-md border border-border text-xs hover:border-accent/60 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               Apply
             </button>
@@ -317,7 +317,7 @@ export default function HeroSkinsPanel({
           <button
             key={mod.id}
             onClick={() => onSelect(mod.id)}
-            className={`w-full flex items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors ${mod.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
+            className={`w-full flex items-center gap-2 rounded-md border px-2 py-2 text-left transition-colors cursor-pointer ${mod.enabled ? 'border-accent bg-bg-tertiary' : 'border-border hover:border-accent/60'
               }`}
             title={mod.enabled ? 'Active skin' : 'Set active'}
           >
