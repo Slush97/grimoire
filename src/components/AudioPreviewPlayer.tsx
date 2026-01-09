@@ -5,6 +5,7 @@ interface AudioPreviewPlayerProps {
     src: string;
     className?: string;
     compact?: boolean;
+    volume?: number; // 0-1, externally controlled volume
     onPlay?: () => void; // Called when playback starts (to pause others)
 }
 
@@ -15,6 +16,7 @@ export default function AudioPreviewPlayer({
     src,
     className = '',
     compact = false,
+    volume = 1,
     onPlay
 }: AudioPreviewPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
@@ -24,6 +26,13 @@ export default function AudioPreviewPlayer({
     const [isMuted, setIsMuted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(false);
+
+    // Apply external volume to audio element
+    useEffect(() => {
+        if (audioRef.current) {
+            audioRef.current.volume = volume;
+        }
+    }, [volume]);
 
     // Format time as m:ss
     const formatTime = (seconds: number): string => {
@@ -85,6 +94,9 @@ export default function AudioPreviewPlayer({
     useEffect(() => {
         const audio = audioRef.current;
         if (!audio) return;
+
+        // Set initial volume
+        audio.volume = volume;
 
         const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
         const handleDurationChange = () => setDuration(audio.duration);

@@ -17,7 +17,13 @@ import { useAppStore } from '../stores/appStore';
 
 export default function Sidebar() {
   const [conflictCount, setConflictCount] = useState(0);
+  const [appVersion, setAppVersion] = useState('');
   const settings = useAppStore((state) => state.settings);
+
+  // Load app version on mount
+  useEffect(() => {
+    window.electronAPI.updater.getVersion().then(v => setAppVersion(`v${v}`)).catch(() => setAppVersion('v???'));
+  }, []);
 
   useEffect(() => {
     const loadConflicts = async () => {
@@ -108,7 +114,7 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-border text-xs text-text-secondary">
-        <p>v0.1.0</p>
+        <p>{appVersion || 'v...'}</p>
       </div>
     </aside>
   );

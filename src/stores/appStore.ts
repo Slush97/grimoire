@@ -26,6 +26,9 @@ interface AppState {
   // Download counts cache (mod id -> { downloadCount, timestamp })
   downloadCountsCache: Map<number, CacheEntry<number>>;
 
+  // Global sound preview volume (0-1)
+  soundVolume: number;
+
   // Actions
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -39,6 +42,9 @@ interface AppState {
   getDownloadCount: (modId: number) => number | undefined;
   setDownloadCount: (modId: number, count: number) => void;
   isDownloadCountStale: (modId: number) => boolean;
+
+  // Sound volume
+  setSoundVolume: (volume: number) => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -50,6 +56,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   modsLoading: false,
   modsError: null,
   downloadCountsCache: new Map(),
+  soundVolume: 0.7,
 
   // Load settings from backend
   loadSettings: async () => {
@@ -160,6 +167,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     const entry = get().downloadCountsCache.get(modId);
     if (!entry) return true;
     return Date.now() - entry.timestamp > DOWNLOAD_COUNTS_TTL;
+  },
+
+  // Set global sound preview volume
+  setSoundVolume: (volume: number) => {
+    set({ soundVolume: Math.max(0, Math.min(1, volume)) });
   },
 }));
 

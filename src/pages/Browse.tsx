@@ -28,6 +28,7 @@ import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile } from '../types/ga
 import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
+import { DynamicSelect } from '../components/common/DynamicSelect';
 
 const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
@@ -91,7 +92,7 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadSettings, loadMods, mods: installedMods } = useAppStore();
+  const { settings, loadSettings, loadMods, mods: installedMods, soundVolume, setSoundVolume } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [mods, setMods] = useState<GameBananaMod[]>([]);
   const [loading, setLoading] = useState(false);
@@ -721,64 +722,58 @@ export default function Browse() {
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
-            <select
+            <DynamicSelect
               value={section}
-              onChange={(e) => setSection(e.target.value)}
-              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              {sections.map((entry) => (
-                <option key={entry.modelName} value={entry.modelName}>
-                  {entry.pluralTitle}
-                </option>
-              ))}
-            </select>
-            <select
-              value={sort}
-              onChange={(e) => setSort(e.target.value as SortOption)}
-              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-            >
-              <option value="default">Default</option>
-              <option value="popular">Popularity</option>
-              <option value="recent">Recently Added</option>
-              <option value="updated">Recently Updated</option>
-              <option value="views">Most Viewed</option>
-              <option value="name">Name (A–Z)</option>
-            </select>
-            {heroOptions.length > 0 && (
-              <select
-                value={heroCategoryId}
-                onChange={(e) =>
-                  setHeroCategoryId(
-                    e.target.value === 'all' ? 'all' : Number(e.target.value)
-                  )
-                }
-                className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-              >
-                <option value="all">All Heroes</option>
-                {heroOptions.map((hero) => (
-                  <option key={hero.id} value={hero.id}>
-                    {hero.label}
-                  </option>
-                ))}
-              </select>
+              onChange={(val) => setSection(val)}
+              options={sections.map((entry) => ({ value: entry.modelName, label: entry.pluralTitle }))}
+            />
+            {/* Global Volume Slider - visible when Sound section is selected */}
+            {section === 'Sound' && (
+              <div className="flex items-center gap-2 px-3 py-2 bg-bg-secondary border border-border rounded-lg">
+                <Volume2 className="w-4 h-4 text-text-secondary flex-shrink-0" />
+                <input
+                  type="range"
+                  min="0"
+                  max="100"
+                  value={Math.round(soundVolume * 100)}
+                  onChange={(e) => setSoundVolume(parseInt(e.target.value) / 100)}
+                  className="w-24 h-1.5 bg-bg-primary rounded-full appearance-none cursor-pointer accent-accent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
+                  title={`Volume: ${Math.round(soundVolume * 100)}%`}
+                />
+                <span className="text-xs text-text-secondary tabular-nums w-8">{Math.round(soundVolume * 100)}%</span>
+              </div>
             )}
-            <select
-              value={categoryId}
-              onChange={(e) =>
-                setCategoryId(
-                  e.target.value === 'all' ? 'all' : Number(e.target.value)
-                )
-              }
+            <DynamicSelect
+              value={sort}
+              onChange={(val) => setSort(val as SortOption)}
+              options={[
+                { value: 'default', label: 'Default' },
+                { value: 'popular', label: 'Popularity' },
+                { value: 'recent', label: 'Recently Added' },
+                { value: 'updated', label: 'Recently Updated' },
+                { value: 'views', label: 'Most Viewed' },
+                { value: 'name', label: 'Name (A–Z)' },
+              ]}
+            />
+            {heroOptions.length > 0 && (
+              <DynamicSelect
+                value={String(heroCategoryId)}
+                onChange={(val) => setHeroCategoryId(val === 'all' ? 'all' : Number(val))}
+                options={[
+                  { value: 'all', label: 'All Heroes' },
+                  ...heroOptions.map((hero) => ({ value: String(hero.id), label: hero.label })),
+                ]}
+              />
+            )}
+            <DynamicSelect
+              value={String(categoryId)}
+              onChange={(val) => setCategoryId(val === 'all' ? 'all' : Number(val))}
+              options={[
+                { value: 'all', label: 'All Categories' },
+                ...categoryOptions.map((cat) => ({ value: String(cat.id), label: cat.label })),
+              ]}
               disabled={heroCategoryId !== 'all'}
-              className="px-3 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
-            >
-              <option value="all">All Categories</option>
-              {categoryOptions.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.label}
-                </option>
-              ))}
-            </select>
+            />
           </div>
         </form>
       </div>
@@ -822,6 +817,7 @@ export default function Browse() {
                 downloading={downloading?.modId === mod.id}
                 viewMode={viewMode}
                 section={section}
+                volume={soundVolume}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 onClick={() => handleModClick(mod)}
                 onQuickDownload={() => handleQuickDownload(mod)}
@@ -868,12 +864,13 @@ interface ModCardProps {
   downloading: boolean;
   viewMode: ViewMode;
   section: string;
+  volume: number;
   hideNsfwPreviews: boolean;
   onClick: () => void;
   onQuickDownload: () => void;
 }
 
-function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
+function ModCard({ mod, installed, downloading, viewMode, section, volume, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -936,6 +933,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, hideNsfwPrevi
                     <AudioPreviewPlayer
                       src={audioPreview!}
                       compact={isCompact || isList}
+                      volume={volume}
                       className="w-full"
                     />
                   </div>
