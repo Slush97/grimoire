@@ -12,6 +12,9 @@ import './ipc/profiles';
 import './ipc/modDatabase';
 import './ipc/crosshairPresets';
 import './ipc/stats';
+import './ipc/updater';
+
+import { initUpdater, checkForUpdates } from './services/updater';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -22,7 +25,8 @@ function createWindow(): void {
         minWidth: 600,
         minHeight: 400,
         title: 'Deadlock Mod Manager',
-        show: true,
+        show: false, // Don't show until ready to prevent white flash
+        backgroundColor: '#1e1e2e', // Dark background matching app theme
         autoHideMenuBar: true,
         webPreferences: {
             preload: join(__dirname, '../preload/index.cjs'),
@@ -30,6 +34,11 @@ function createWindow(): void {
             nodeIntegration: false,
             sandbox: false,
         },
+    });
+
+    // Show window when ready to prevent white screen flash
+    mainWindow.once('ready-to-show', () => {
+        mainWindow?.show();
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -101,6 +110,17 @@ if (!gotTheLock) {
         }
 
         createWindow();
+
+        // Initialize auto-updater (production only)
+        if (!is.dev && mainWindow) {
+            initUpdater(mainWindow);
+            // Auto-check for updates after a short delay
+            setTimeout(() => {
+                checkForUpdates().catch((err) => {
+                    console.log('[Updater] Auto-check failed:', err.message);
+                });
+            }, 5000);
+        }
 
         app.on('activate', () => {
             // On macOS re-create window when dock icon is clicked

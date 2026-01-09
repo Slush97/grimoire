@@ -1,5 +1,10 @@
 appId: com.deadlock.modmanager
 productName: Deadlock Mod Manager
+# GitHub auto-update configuration
+publish:
+  provider: github
+  owner: slush97
+  repo: modmanager
 directories:
   output: release
   buildResources: resources

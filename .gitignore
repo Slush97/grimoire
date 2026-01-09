@@ -31,3 +31,4 @@ bin/
 # LLM scratch notes
 suggestions.md
 .suggestions.md.*
+docs/RELEASE.md

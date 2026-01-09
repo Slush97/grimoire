@@ -86,6 +86,16 @@ export interface ElectronAPI {
     getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 
+    // Updater
+    updater: {
+        getVersion: () => Promise<string>;
+        getStatus: () => Promise<UpdateStatus>;
+        checkForUpdates: () => Promise<UpdateInfo | null>;
+        downloadUpdate: () => Promise<void>;
+        installUpdate: () => void;
+        onStatus: (callback: (status: UpdateStatus) => void) => () => void;
+    };
+
     // Stats
     stats: {
         // Steam Detection
@@ -161,10 +171,8 @@ export interface ElectronAPI {
         getPatchNotes: () => Promise<unknown>;
         getMajorPatchDates: () => Promise<unknown[]>;
 
-        // SQL Access
-        executeSQLQuery: (query: string) => Promise<string>;
-        listSQLTables: () => Promise<string[]>;
-        getTableSchema: (tableName: string) => Promise<Record<string, string>>;
+        // SQL Access - REMOVED FOR SECURITY
+        // executeSQLQuery, listSQLTables, getTableSchema removed
 
         // Builds
         searchBuilds: (params: BuildSearchParams) => Promise<unknown[]>;
@@ -386,7 +394,7 @@ interface SearchLocalModsOptions {
     query?: string;
     section?: string;
     categoryId?: number;
-    sortBy?: 'relevance' | 'likes' | 'date' | 'views' | 'name';
+    sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     limit?: number;
     offset?: number;
 }
@@ -436,6 +444,27 @@ interface CrosshairPreset {
     settings: CrosshairSettings;
     thumbnail: string;
     createdAt: string;
+}
+
+interface UpdateStatus {
+    checking: boolean;
+    available: boolean;
+    downloading: boolean;
+    downloaded: boolean;
+    error: string | null;
+    progress: number;
+    updateInfo: UpdateInfo | null;
+}
+
+interface UpdateInfo {
+    version: string;
+    releaseDate?: string;
+    releaseNotes?: string | ReleaseNoteInfo[] | null;
+}
+
+interface ReleaseNoteInfo {
+    version: string;
+    note: string | null;
 }
 
 interface SyncProgressData {
@@ -585,6 +614,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getAutoexecCommands: (gamePath: string) => ipcRenderer.invoke('autoexec:getCommands', gamePath),
     saveAutoexecCommands: (gamePath: string, commands: string[]) => ipcRenderer.invoke('autoexec:saveCommands', gamePath, commands),
 
+    // Updater
+    updater: {
+        getVersion: () => ipcRenderer.invoke('updater:getVersion'),
+        getStatus: () => ipcRenderer.invoke('updater:getStatus'),
+        checkForUpdates: () => ipcRenderer.invoke('updater:check'),
+        downloadUpdate: () => ipcRenderer.invoke('updater:download'),
+        installUpdate: () => ipcRenderer.invoke('updater:install'),
+        onStatus: (callback: (status: UpdateStatus) => void) => {
+            const handler = (_event: Electron.IpcRendererEvent, status: UpdateStatus) => callback(status);
+            ipcRenderer.on('updater:status', handler);
+            return () => ipcRenderer.removeListener('updater:status', handler);
+        },
+    },
+
     // Stats
     stats: {
         // Steam Detection
@@ -698,12 +741,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getPatchNotes: () => ipcRenderer.invoke('stats:getPatchNotes'),
         getMajorPatchDates: () => ipcRenderer.invoke('stats:getMajorPatchDates'),
 
-        // SQL Access
-        executeSQLQuery: (query: string) =>
-            ipcRenderer.invoke('stats:executeSQLQuery', query),
-        listSQLTables: () => ipcRenderer.invoke('stats:listSQLTables'),
-        getTableSchema: (tableName: string) =>
-            ipcRenderer.invoke('stats:getTableSchema', tableName),
+        // SQL Access - REMOVED FOR SECURITY
+        // executeSQLQuery, listSQLTables, getTableSchema removed
 
         // Builds
         searchBuilds: (params: BuildSearchParams) =>

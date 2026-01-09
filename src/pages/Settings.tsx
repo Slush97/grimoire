@@ -1,5 +1,5 @@
-import { useEffect, useState, useMemo } from 'react';
-import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive } from 'lucide-react';
+import { useEffect, useState, useMemo, useCallback } from 'react';
+import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   cleanupAddons,
@@ -28,6 +28,23 @@ export default function Settings() {
   const [syncProgress, setSyncProgress] = useState<{ section: string; modsProcessed: number; totalMods: number } | null>(null);
   const [isWipingCache, setIsWipingCache] = useState(false);
   const [wipeResult, setWipeResult] = useState<string | null>(null);
+
+  // Updater state
+  const [appVersion, setAppVersion] = useState<string>('');
+  const [updateStatus, setUpdateStatus] = useState<{
+    checking: boolean;
+    available: boolean;
+    downloading: boolean;
+    downloaded: boolean;
+    error: string | null;
+    progress: number;
+    updateInfo: {
+      version: string;
+      releaseDate?: string;
+      releaseNotes?: string | { version: string; note: string | null }[] | null;
+    } | null;
+  } | null>(null);
+  const [showChangelog, setShowChangelog] = useState(false);
 
   const isDevMode = settings?.devMode ?? false;
   const activeDeadlockPath = getActiveDeadlockPath(settings);
@@ -219,6 +236,34 @@ export default function Settings() {
     loadSyncStatus();
   }, []);
 
+  // Load app version and updater status
+  useEffect(() => {
+    window.electronAPI.updater.getVersion().then(setAppVersion);
+    window.electronAPI.updater.getStatus().then(setUpdateStatus);
+    const unsub = window.electronAPI.updater.onStatus(setUpdateStatus);
+    return unsub;
+  }, []);
+
+  const handleCheckForUpdates = useCallback(async () => {
+    try {
+      await window.electronAPI.updater.checkForUpdates();
+    } catch (err) {
+      console.error('Update check failed:', err);
+    }
+  }, []);
+
+  const handleDownloadUpdate = useCallback(async () => {
+    try {
+      await window.electronAPI.updater.downloadUpdate();
+    } catch (err) {
+      console.error('Update download failed:', err);
+    }
+  }, []);
+
+  const handleInstallUpdate = useCallback(() => {
+    window.electronAPI.updater.installUpdate();
+  }, []);
+
   // Listen for sync progress
   useEffect(() => {
     const unsub = window.electronAPI.onSyncProgress((data) => {
@@ -375,6 +420,86 @@ export default function Settings() {
           </div>
         </Card>
 
+        {/* Updates */}
+        <Card title="Updates" icon={Download}>
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-medium">Current Version</span>
+                  <Badge variant="info">v{appVersion || '...'}</Badge>
+                </div>
+                {updateStatus?.error && (
+                  <p className="text-xs text-red-400 mt-1">{updateStatus.error}</p>
+                )}
+                {updateStatus?.available && !updateStatus.downloaded && (
+                  <p className="text-xs text-accent mt-1">
+                    v{updateStatus.updateInfo?.version} available!
+                  </p>
+                )}
+                {updateStatus?.downloaded && (
+                  <p className="text-xs text-green-400 mt-1 flex items-center gap-1">
+                    <Sparkles className="w-3 h-3" />
+                    v{updateStatus.updateInfo?.version} ready to install
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2">
+                {updateStatus?.downloaded ? (
+                  <Button
+                    onClick={handleInstallUpdate}
+                    icon={ArrowDownCircle}
+                  >
+                    Install & Restart
+                  </Button>
+                ) : updateStatus?.available && !updateStatus.downloading ? (
+                  <>
+                    {updateStatus.updateInfo?.releaseNotes && (
+                      <Button
+                        onClick={() => setShowChangelog(true)}
+                        variant="secondary"
+                      >
+                        View Changelog
+                      </Button>
+                    )}
+                    <Button
+                      onClick={handleDownloadUpdate}
+                      icon={Download}
+                    >
+                      Download Update
+                    </Button>
+                  </>
+                ) : (
+                  <Button
+                    onClick={handleCheckForUpdates}
+                    disabled={updateStatus?.checking || updateStatus?.downloading}
+                    isLoading={updateStatus?.checking}
+                    variant="secondary"
+                    icon={RefreshCw}
+                  >
+                    {updateStatus?.checking ? 'Checking...' : 'Check for Updates'}
+                  </Button>
+                )}
+              </div>
+            </div>
+
+            {updateStatus?.downloading && (
+              <div className="animate-fade-in">
+                <div className="flex justify-between text-xs text-text-secondary mb-1">
+                  <span>Downloading update...</span>
+                  <span>{Math.round(updateStatus.progress)}%</span>
+                </div>
+                <div className="w-full bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
+                  <div
+                    className="bg-accent h-full rounded-full transition-all duration-300 ease-out"
+                    style={{ width: `${updateStatus.progress}%` }}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        </Card>
+
         {/* Preferences */}
         <Card title="Preferences" icon={Shield}>
           <div className="space-y-6">
@@ -410,6 +535,31 @@ export default function Settings() {
                 </div>
               )}
             </div>
+          </div>
+        </Card>
+
+        {/* Experimental Features */}
+        <Card title="Experimental Features" icon={Beaker}>
+          <div className="space-y-6">
+            <p className="text-xs text-text-secondary -mt-2">
+              These features are still in development and may be incomplete or buggy.
+            </p>
+
+            <Toggle
+              checked={settings?.experimentalStats ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalStats: checked })}
+              label="Stats Dashboard"
+              description="Track your performance with data from the Deadlock Stats API."
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.experimentalCrosshair ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalCrosshair: checked })}
+              label="Crosshair Designer"
+              description="Create custom crosshairs with a live preview."
+            />
           </div>
         </Card>
 
@@ -504,6 +654,71 @@ export default function Settings() {
           </div>
         </Card>
       </div>
+
+      {/* Changelog Modal */}
+      {showChangelog && updateStatus?.updateInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-scale-in">
+            <div className="flex items-center justify-between p-6 border-b border-white/10">
+              <div>
+                <h2 className="text-xl font-bold">What's New in v{updateStatus.updateInfo.version}</h2>
+                {updateStatus.updateInfo.releaseDate && (
+                  <p className="text-sm text-text-secondary mt-1">
+                    Released {new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString()}
+                  </p>
+                )}
+              </div>
+              <button
+                onClick={() => setShowChangelog(false)}
+                className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="p-6 overflow-y-auto max-h-[50vh]">
+              {typeof updateStatus.updateInfo.releaseNotes === 'string' ? (
+                <div
+                  className="prose prose-invert prose-sm max-w-none"
+                  dangerouslySetInnerHTML={{ __html: updateStatus.updateInfo.releaseNotes }}
+                />
+              ) : Array.isArray(updateStatus.updateInfo.releaseNotes) ? (
+                <div className="space-y-4">
+                  {updateStatus.updateInfo.releaseNotes.map((note, idx) => (
+                    <div key={idx}>
+                      <h3 className="font-semibold text-accent">v{note.version}</h3>
+                      {note.note && (
+                        <div
+                          className="prose prose-invert prose-sm max-w-none mt-1"
+                          dangerouslySetInnerHTML={{ __html: note.note }}
+                        />
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-text-secondary">No release notes available.</p>
+              )}
+            </div>
+            <div className="flex justify-end gap-3 p-6 border-t border-white/10">
+              <Button
+                onClick={() => setShowChangelog(false)}
+                variant="secondary"
+              >
+                Close
+              </Button>
+              <Button
+                onClick={() => {
+                  setShowChangelog(false);
+                  handleDownloadUpdate();
+                }}
+                icon={Download}
+              >
+                Download Update
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

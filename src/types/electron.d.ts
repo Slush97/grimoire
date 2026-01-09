@@ -144,6 +144,27 @@ export interface CrosshairPreset {
     createdAt: string;
 }
 
+export interface UpdateStatus {
+    checking: boolean;
+    available: boolean;
+    downloading: boolean;
+    downloaded: boolean;
+    error: string | null;
+    progress: number;
+    updateInfo: UpdateInfo | null;
+}
+
+export interface UpdateInfo {
+    version: string;
+    releaseDate?: string;
+    releaseNotes?: string | ReleaseNoteInfo[] | null;
+}
+
+export interface ReleaseNoteInfo {
+    version: string;
+    note: string | null;
+}
+
 export interface ElectronAPI {
     // Settings
     detectDeadlock: () => Promise<string | null>;
@@ -227,6 +248,16 @@ export interface ElectronAPI {
     getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 
+    // Updater
+    updater: {
+        getVersion: () => Promise<string>;
+        getStatus: () => Promise<UpdateStatus>;
+        checkForUpdates: () => Promise<UpdateInfo | null>;
+        downloadUpdate: () => Promise<void>;
+        installUpdate: () => void;
+        onStatus: (callback: (status: UpdateStatus) => void) => () => void;
+    };
+
     // Stats API
     stats: {
         // Steam Detection
@@ -302,10 +333,8 @@ export interface ElectronAPI {
         getPatchNotes: () => Promise<unknown>;
         getMajorPatchDates: () => Promise<unknown[]>;
 
-        // SQL Access
-        executeSQLQuery: (query: string) => Promise<string>;
-        listSQLTables: () => Promise<string[]>;
-        getTableSchema: (tableName: string) => Promise<Record<string, string>>;
+        // SQL Access - REMOVED FOR SECURITY
+        // executeSQLQuery, listSQLTables, getTableSchema removed
 
         // Builds
         searchBuilds: (params: unknown) => Promise<unknown[]>;
