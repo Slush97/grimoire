@@ -45,6 +45,7 @@ export default function Settings() {
     } | null;
   } | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
+  const [upToDate, setUpToDate] = useState(false);
 
   const isDevMode = settings?.devMode ?? false;
   const activeDeadlockPath = getActiveDeadlockPath(settings);
@@ -244,7 +245,15 @@ export default function Settings() {
     return unsub;
   }, []);
 
+  // Show "up to date" message when check completes with no update
+  useEffect(() => {
+    if (updateStatus && !updateStatus.checking && !updateStatus.available && !updateStatus.error) {
+      setUpToDate(true);
+    }
+  }, [updateStatus]);
+
   const handleCheckForUpdates = useCallback(async () => {
+    setUpToDate(false);
     try {
       await window.electronAPI.updater.checkForUpdates();
     } catch (err) {
@@ -442,6 +451,9 @@ export default function Settings() {
                     <Sparkles className="w-3 h-3" />
                     v{updateStatus.updateInfo?.version} ready to install
                   </p>
+                )}
+                {upToDate && !updateStatus?.available && !updateStatus?.checking && (
+                  <p className="text-xs text-green-400 mt-1">✓ You're up to date!</p>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
