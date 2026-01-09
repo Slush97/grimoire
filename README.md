@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="public/branding/wordmark-classic.png" alt="Deadlock Mod Manager" width="400">
+  <h1>📗 Grimoire</h1>
   
   <p><strong>A modern mod manager for Deadlock</strong></p>
   
@@ -113,7 +113,9 @@ pnpm package:mac     # macOS: DMG
 │   ├── hooks/          # Custom React hooks
 │   └── stores/         # Zustand state stores
 ├── public/             # Static assets
-│   └── branding/       # Logo and wordmarks
+│   ├── fonts/          # Custom fonts
+│   ├── heroes/         # Hero images
+│   └── locker/         # Locker assets
 └── docs/               # Documentation
     └── database/       # Database schema docs
 ```
