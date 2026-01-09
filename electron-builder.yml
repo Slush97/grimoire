@@ -1,9 +1,9 @@
-appId: com.deadlock.modmanager
-productName: Deadlock Mod Manager
+appId: com.grimoire.modmanager
+productName: Grimoire
 # GitHub auto-update configuration
 publish:
   provider: github
-  owner: slush97
+  owner: Slush97
   repo: modmanager
 directories:
   output: release

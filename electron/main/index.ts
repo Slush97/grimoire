@@ -91,7 +91,7 @@ if (!gotTheLock) {
 
     app.whenReady().then(() => {
         // Set app user model id for windows
-        electronApp.setAppUserModelId('com.deadlock.modmanager');
+        electronApp.setAppUserModelId('com.grimoire.modmanager');
 
         // Default open or close DevTools by F12 in development
         app.on('browser-window-created', (_, window) => {
