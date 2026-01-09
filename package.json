@@ -1,8 +1,8 @@
 {
-  "name": "deadlock-mod-manager",
+  "name": "grimoire",
   "private": true,
   "version": "1.0.0",
-  "description": "A mod manager for Deadlock (Source 2 engine game)",
+  "description": "Grimoire - A mod manager for Deadlock",
   "license": "MIT",
   "author": {
     "name": "esoc"
@@ -27,6 +27,7 @@
     "package:mac": "electron-vite build && electron-builder --mac"
   },
   "dependencies": {
+    "@compai/font-unifraktur-maguntia": "^0.0.3",
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.5.0",
     "dompurify": "^3.3.1",

@@ -8,6 +8,10 @@ import {
   ExternalLink,
   X,
   Volume2,
+  RefreshCw,
+  LayoutGrid,
+  Grid3x3,
+  List,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import {
@@ -643,85 +647,94 @@ export default function Browse() {
     <div className="flex flex-col h-full">
       {/* Header with Search */}
       <div className="p-4 border-b border-border">
-        <form onSubmit={handleSearch} className="space-y-3">
+        <form onSubmit={handleSearch}>
           <div className="flex flex-wrap items-center gap-2">
-            <div className="relative flex-1 min-w-[220px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
+            {/* Search Input with integrated submit */}
+            <div className="relative flex-1 min-w-[200px]">
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search mods..."
-                className="w-full bg-bg-secondary border border-border rounded-lg pl-10 pr-10 py-2 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
+                className="w-full bg-bg-secondary border border-border rounded-lg pl-3 pr-16 py-2 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
               />
-              {search && (
+              <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => { setSearch(''); handleSearch(new Event('submit') as unknown as React.FormEvent); }}
+                    className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded-md hover:bg-bg-tertiary"
+                    title="Clear search"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
                 <button
-                  type="button"
-                  onClick={() => { setSearch(''); handleSearch(new Event('submit') as unknown as React.FormEvent); }}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 p-0.5 text-text-secondary hover:text-text-primary transition-colors"
-                  title="Clear search"
+                  type="submit"
+                  className="p-1.5 text-text-secondary hover:text-accent transition-colors rounded-md hover:bg-bg-tertiary"
+                  title="Search"
                 >
-                  <X className="w-4 h-4" />
+                  <Search className="w-4 h-4" />
                 </button>
-              )}
+              </div>
             </div>
-            <button
-              type="submit"
-              className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors"
-            >
-              Search
-            </button>
+
+            {/* Refresh Icon Button */}
             <button
               type="button"
               onClick={handleRefresh}
               disabled={syncing}
-              className="px-4 py-2 bg-bg-tertiary hover:bg-bg-secondary border border-border text-text-primary rounded-lg transition-colors disabled:opacity-50"
-              title="Sync fresh data from GameBanana"
+              className="p-2.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors disabled:opacity-50"
+              title="Refresh from GameBanana"
             >
               {syncing ? (
-                <span className="flex items-center gap-2">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Syncing...
-                </span>
+                <Loader2 className="w-5 h-5 animate-spin" />
               ) : (
-                'Refresh'
+                <RefreshCw className="w-5 h-5" />
               )}
             </button>
-            <div className="flex items-center gap-1 rounded-lg border border-border bg-bg-secondary p-1">
+
+            {/* View Mode Toggle - Icon Only */}
+            <div className="flex items-center rounded-lg border border-border bg-bg-secondary p-1">
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
-                className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'grid'
+                className={`p-2 rounded-md transition-colors ${viewMode === 'grid'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
+                title="Grid view"
               >
-                Grid
+                <LayoutGrid className="w-5 h-5" />
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('compact')}
-                className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'compact'
+                className={`p-2 rounded-md transition-colors ${viewMode === 'compact'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
+                title="Compact view"
               >
-                Compact
+                <Grid3x3 className="w-5 h-5" />
               </button>
               <button
                 type="button"
                 onClick={() => setViewMode('list')}
-                className={`px-3 py-1.5 rounded-md transition-colors ${viewMode === 'list'
+                className={`p-2 rounded-md transition-colors ${viewMode === 'list'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
+                title="List view"
               >
-                List
+                <List className="w-5 h-5" />
               </button>
             </div>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+            {/* Divider */}
+            <div className="w-px h-6 bg-border" />
+
+            {/* Filters */}
             <DynamicSelect
               value={section}
               onChange={(val) => setSection(val)}
@@ -806,7 +819,7 @@ export default function Browse() {
                 ? 'flex flex-col gap-3'
                 : viewMode === 'compact'
                   ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
-                  : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+                  : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3'
             }
           >
             {displayMods.map((mod) => (
@@ -881,7 +894,7 @@ function ModCard({ mod, installed, downloading, viewMode, section, volume, hideN
   return (
     <div
       onClick={onClick}
-      className={`bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer ${isList ? 'flex items-center gap-4 p-3' : ''
+      className={`relative bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer ${isList ? 'flex items-center gap-4 p-3' : ''
         }`}
     >
       {/* Thumbnail area - enhanced for Sound mods */}
@@ -964,28 +977,32 @@ function ModCard({ mod, installed, downloading, viewMode, section, volume, hideN
       <div className={isList ? 'min-w-0 flex-1' : isCompact ? 'p-2' : 'p-3'}>
         <div className="flex items-start justify-between gap-2">
           <h3 className={`font-medium truncate flex-1 ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
-          {/* Install button */}
-          {installed ? (
-            <span
-              className={`flex-shrink-0 rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white ${isCompact ? 'text-[9px] px-1.5' : ''}`}
-            >
-              ✓
-            </span>
-          ) : downloading ? (
-            <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
-              <Loader2 className="w-4 h-4 animate-spin text-accent" />
-            </span>
-          ) : (
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                onQuickDownload();
-              }}
-              className={`flex-shrink-0 flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-secondary text-white rounded-full shadow-lg transition-colors ${isCompact ? 'w-6 h-6' : ''}`}
-              title="Install"
-            >
-              <Download className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
-            </button>
+          {/* Install button for list view only */}
+          {isList && (
+            <>
+              {installed ? (
+                <span
+                  className="flex-shrink-0 rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white"
+                >
+                  ✓
+                </span>
+              ) : downloading ? (
+                <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
+                  <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                </span>
+              ) : (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onQuickDownload();
+                  }}
+                  className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-secondary text-white rounded-full shadow-lg transition-colors"
+                  title="Install"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </>
           )}
         </div>
         <div className={`flex items-center gap-3 text-text-secondary mt-1 ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
@@ -997,10 +1014,6 @@ function ModCard({ mod, installed, downloading, viewMode, section, volume, hideN
             <Eye className="w-3 h-3" />
             {mod.viewCount}
           </span>
-          <span className="flex items-center gap-1">
-            <Download className="w-3 h-3" />
-            {mod.downloadCount !== undefined ? mod.downloadCount.toLocaleString() : '—'}
-          </span>
         </div>
         {mod.submitter && (
           <p className={`text-text-secondary mt-1 truncate ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
@@ -1008,6 +1021,33 @@ function ModCard({ mod, installed, downloading, viewMode, section, volume, hideN
           </p>
         )}
       </div>
+
+      {/* Download button - positioned at bottom right of card */}
+      {!isList && (
+        <div className="absolute bottom-2 right-2">
+          {installed ? (
+            <span
+              className={`text-green-500 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${isCompact ? 'text-base' : 'text-lg'}`}
+              title="Installed"
+            >
+              ✓
+            </span>
+          ) : downloading ? (
+            <Loader2 className={`animate-spin text-accent drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+          ) : (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onQuickDownload();
+              }}
+              className={`text-accent hover:text-accent-secondary drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] transition-all hover:scale-110 ${isCompact ? '' : ''}`}
+              title="Install"
+            >
+              <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }

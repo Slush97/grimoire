@@ -423,7 +423,7 @@ export default function Settings() {
         {/* Updates */}
         <Card title="Updates" icon={Download}>
           <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="text-sm font-medium">Current Version</span>
@@ -444,7 +444,7 @@ export default function Settings() {
                   </p>
                 )}
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap gap-2">
                 {updateStatus?.downloaded ? (
                   <Button
                     onClick={handleInstallUpdate}

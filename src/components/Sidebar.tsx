@@ -12,7 +12,7 @@ import {
   BarChart3,
 } from 'lucide-react';
 import { getConflicts } from '../lib/api';
-import { getAssetPath } from '../lib/assetPath';
+
 import { useAppStore } from '../stores/appStore';
 
 export default function Sidebar() {
@@ -65,24 +65,16 @@ export default function Sidebar() {
   return (
     <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col">
       {/* Logo */}
-      <div className="px-4 py-3 border-b border-border">
-        <div className="flex items-center gap-3">
-          <img
-            src={getAssetPath('/branding/classic-mark.svg')}
-            alt="Deadlock"
-            className="w-8 h-8 flex-shrink-0"
-          />
-          <div className="flex flex-col min-w-0">
-            <img
-              src={getAssetPath('/branding/classic-wordmark.svg')}
-              alt="Deadlock"
-              className="h-3.5 w-auto opacity-90"
-            />
-            <span className="font-reaver text-[10px] tracking-widest text-text-secondary uppercase">
-              Mod Manager
-            </span>
-          </div>
-        </div>
+      <div className="px-3 pt-4 pb-3 border-b border-border text-center">
+        <span
+          className="text-4xl text-accent block leading-none"
+          style={{ fontFamily: "'IM Fell English', serif" }}
+        >
+          Grimoire
+        </span>
+        <span className="text-xs text-text-secondary tracking-widest uppercase mt-1 block">
+          Mod Manager
+        </span>
       </div>
 
       {/* Navigation */}

@@ -1,5 +1,8 @@
 @import "tailwindcss";
 
+/* Gothic Font for Grimoire branding - loaded via Google Fonts in index.html */
+/* Grenze Gotisch: https://fonts.google.com/specimen/Grenze+Gotisch */
+
 /* Deadlock Fonts */
 @font-face {
   font-family: 'Radiance';

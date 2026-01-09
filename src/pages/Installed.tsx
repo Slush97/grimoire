@@ -311,7 +311,7 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelet
               </span>
             )}
           </div>
-          <div className="flex items-center gap-3 text-xs text-text-secondary mt-1">
+          <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary mt-1">
             <span className="font-mono">{mod.fileName}</span>
             <span>{formatBytes(mod.size)}</span>
             <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">

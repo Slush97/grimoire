@@ -163,7 +163,7 @@ export default function Autoexec() {
     };
 
     return (
-        <div className="flex flex-col h-full p-6 space-y-6 overflow-hidden">
+        <div className="flex flex-col min-h-0 flex-1 p-6 space-y-6 overflow-auto">
             <div className="flex items-center gap-3 shrink-0">
                 <div className="p-3 bg-accent/10 rounded-xl">
                     <Terminal className="w-8 h-8 text-accent" />
@@ -174,9 +174,9 @@ export default function Autoexec() {
                 </div>
             </div>
 
-            <div className="flex flex-1 gap-6 min-h-0">
+            <div className="flex flex-col lg:flex-row flex-1 gap-6 min-h-0 overflow-auto">
                 {/* Left Panel - Command Presets */}
-                <div className="w-1/2 flex flex-col gap-4 overflow-hidden">
+                <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-hidden order-2 lg:order-1">
                     <div className="relative shrink-0">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
                         <input
@@ -241,7 +241,7 @@ export default function Autoexec() {
                 </div>
 
                 {/* Right Panel - Active Commands */}
-                <div className="flex-1 flex flex-col gap-4 overflow-hidden">
+                <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-hidden order-1 lg:order-2">
                     <Card
                         className="flex flex-col"
                         title={`Your Commands (${commands.length})`}
@@ -283,7 +283,7 @@ export default function Autoexec() {
                             </div>
                         )}
 
-                        <div className="overflow-y-auto space-y-2 pr-1 custom-scrollbar max-h-[50vh]">
+                        <div className="overflow-y-auto space-y-2 pr-1 custom-scrollbar flex-1 min-h-0">
                             {commands.length > 0 ? (
                                 commands.map((cmd, i) => (
                                     <div

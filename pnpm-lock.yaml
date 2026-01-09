@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@compai/font-unifraktur-maguntia':
+        specifier: ^0.0.3
+        version: 0.0.3
       adm-zip:
         specifier: ^0.5.16
         version: 0.5.16
@@ -208,6 +211,9 @@ packages:
   '@babel/types@7.28.5':
     resolution: {integrity: sha512-qQ5m48eI/MFLQ5PxQj4PFaprjyCTLI37ElWMmNs0K8Lk3dVeOdNpB3ks8jc7yM5CDmVC73eMVk/trk3fgmrUpA==}
     engines: {node: '>=6.9.0'}
+
+  '@compai/font-unifraktur-maguntia@0.0.3':
+    resolution: {integrity: sha512-AsxdSmRrPm+u5Ld/ThfOdUIwlGl355Dt6gD+UZDsbavVjA5zcDa7RRv1uN2bGcrXeaB9+kdazIYcYzsgCk1tlQ==}
 
   '@develar/schema-utils@2.6.5':
     resolution: {integrity: sha512-0cp4PsWQ/9avqTVMCtZ+GirikIA36ikvjtHweU4/j8yLtgObI0+JUPhYFScgwlteveGB1rt3Cm8UhN04XayDig==}
@@ -2867,6 +2873,8 @@ snapshots:
     dependencies:
       '@babel/helper-string-parser': 7.27.1
       '@babel/helper-validator-identifier': 7.28.5
+
+  '@compai/font-unifraktur-maguntia@0.0.3': {}
 
   '@develar/schema-utils@2.6.5':
     dependencies:

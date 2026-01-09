@@ -52,7 +52,7 @@ export function DynamicSelect({
                 onChange={(e) => onChange(e.target.value)}
                 disabled={disabled}
                 style={width ? { width: `${width}px` } : undefined}
-                className={`appearance-none pl-3 pr-8 py-2 bg-bg-secondary border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent transition-[width] duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+                className={`appearance-none pl-3 pr-8 py-2.5 bg-bg-secondary border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent transition-[width] duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
                 {...props}
             >
                 {options.map((opt) => (
@@ -63,7 +63,7 @@ export function DynamicSelect({
             </select>
             {/* Custom dropdown arrow */}
             <ChevronDown
-                className={`absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 pointer-events-none ${disabled ? 'text-text-secondary/50' : 'text-text-secondary'}`}
+                className={`absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none ${disabled ? 'text-text-secondary/50' : 'text-text-secondary'}`}
             />
         </div>
     );

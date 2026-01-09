@@ -163,7 +163,7 @@ export default function Profiles() {
 
           {/* Create New Profile */}
           <Card title="Create New Profile" icon={Plus}>
-            <div className="flex gap-3">
+            <div className="flex flex-wrap gap-3">
               <input
                 type="text"
                 value={newProfileName}

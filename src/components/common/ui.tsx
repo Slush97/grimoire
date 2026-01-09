@@ -15,7 +15,7 @@ export function Card({ children, className = '', contentClassName = '', title, i
     return (
         <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-white/5 rounded-xl overflow-hidden ${className}`}>
             {(title || action) && (
-                <div className="px-5 py-4 border-b border-white/5 flex items-center justify-between gap-4">
+                <div className="px-5 py-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-4">
                     <div className="min-w-0">
                         {title && (
                             <div className="flex items-center gap-2 mb-1">
