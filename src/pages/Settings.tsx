@@ -605,6 +605,30 @@ export default function Settings() {
 
             <div className="h-px bg-white/5" />
 
+            <div className="flex justify-between items-start gap-4">
+              <div>
+                <h4 className="font-medium text-sm">Reset Setup Wizard</h4>
+                <p className="text-xs text-text-secondary mt-1">
+                  Show the first-run setup wizard again on next app launch.
+                </p>
+              </div>
+              <Button
+                onClick={async () => {
+                  if (settings) {
+                    await saveSettings({ ...settings, hasCompletedSetup: false });
+                    alert('Setup wizard will appear on next app restart.');
+                  }
+                }}
+                variant="secondary"
+                size="sm"
+                icon={RefreshCw}
+              >
+                Reset
+              </Button>
+            </div>
+
+            <div className="h-px bg-white/5" />
+
             <AutoexecSection gamePath={activeDeadlockPath} />
           </div>
         </Card>

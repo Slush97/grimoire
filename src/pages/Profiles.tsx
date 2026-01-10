@@ -18,6 +18,7 @@ import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 export default function Profiles() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [crosshairEnabled, setCrosshairEnabled] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
@@ -43,6 +44,7 @@ export default function Profiles() {
       ]);
       setProfiles(profilesResult);
       setActiveProfileId(settings.activeProfileId || null);
+      setCrosshairEnabled(settings.experimentalCrosshair ?? false);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -66,9 +68,9 @@ export default function Profiles() {
 
     setIsCreating(true);
     try {
-      const crosshair = getCrosshairSettings();
-      // Map CrosshairSettings to ProfileCrosshairSettings (types are compatible)
-      const newProfile = await createProfile(newProfileName.trim(), crosshair as unknown as ProfileCrosshairSettings);
+      // Only include crosshair settings if the experimental crosshair feature is enabled
+      const crosshair = crosshairEnabled ? getCrosshairSettings() : undefined;
+      const newProfile = await createProfile(newProfileName.trim(), crosshair as unknown as ProfileCrosshairSettings | undefined);
 
       setNewProfileName('');
       setActiveProfileId(newProfile.id);
@@ -104,8 +106,9 @@ export default function Profiles() {
   const handleUpdateProfile = async (profileId: string) => {
     setUpdatingId(profileId);
     try {
-      const crosshair = getCrosshairSettings();
-      await updateProfile(profileId, crosshair as unknown as ProfileCrosshairSettings);
+      // Only include crosshair settings if the experimental crosshair feature is enabled
+      const crosshair = crosshairEnabled ? getCrosshairSettings() : undefined;
+      await updateProfile(profileId, crosshair as unknown as ProfileCrosshairSettings | undefined);
       await loadProfileList();
     } catch (err) {
       setError(String(err));

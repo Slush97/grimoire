@@ -148,8 +148,9 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
             enabled: true,
             priority: mod.priority,
         })),
-        crosshair: crosshairSettings || profiles[index].crosshair, // Update if provided, else keep existing? Or maybe undefined to remove? 
-        // Logic: if updating from UI, we likely want to snapshot current state. If crosshairSettings is passed, use it.
+        // If crosshairSettings is passed, use it. If undefined/null, remove crosshair from profile.
+        // This allows the frontend to explicitly control whether crosshair is included based on feature toggle.
+        crosshair: crosshairSettings,
         autoexecCommands: autoexecData.commands,
         updatedAt: new Date().toISOString(),
     };

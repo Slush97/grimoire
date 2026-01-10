@@ -12,6 +12,7 @@ export interface AppSettings {
     autoSaveProfile: boolean;        // Auto-save when mods change
     experimentalStats: boolean;
     experimentalCrosshair: boolean;
+    hasCompletedSetup: boolean;      // First-run setup completed
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -24,6 +25,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     autoSaveProfile: false,
     experimentalStats: false,
     experimentalCrosshair: false,
+    hasCompletedSetup: false,
 };
 
 /**

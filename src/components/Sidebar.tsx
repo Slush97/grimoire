@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Package,
   Search,
@@ -10,6 +10,7 @@ import {
   Crosshair,
   Terminal,
   BarChart3,
+  Download,
 } from 'lucide-react';
 import { getConflicts } from '../lib/api';
 
@@ -18,11 +19,29 @@ import { useAppStore } from '../stores/appStore';
 export default function Sidebar() {
   const [conflictCount, setConflictCount] = useState(0);
   const [appVersion, setAppVersion] = useState('');
+  const [updateAvailable, setUpdateAvailable] = useState(false);
   const settings = useAppStore((state) => state.settings);
+  const navigate = useNavigate();
 
-  // Load app version on mount
+  // Load app version and check for updates on mount
   useEffect(() => {
     window.electronAPI.updater.getVersion().then(v => setAppVersion(`v${v}`)).catch(() => setAppVersion('v???'));
+
+    // Check for updates silently on app start
+    window.electronAPI.updater.checkForUpdates().catch(() => { });
+
+    // Get initial status
+    window.electronAPI.updater.getStatus().then(status => {
+      if (status) {
+        setUpdateAvailable(status.available || status.downloaded);
+      }
+    });
+
+    // Listen for update status changes
+    const unsub = window.electronAPI.updater.onStatus((status) => {
+      setUpdateAvailable(status.available || status.downloaded);
+    });
+    return unsub;
   }, []);
 
   useEffect(() => {
@@ -106,8 +125,18 @@ export default function Sidebar() {
 
       {/* Footer */}
       <div className="p-4 border-t border-border text-xs text-text-secondary">
-        <p>{appVersion || 'v...'}</p>
+        <button
+          onClick={() => updateAvailable && navigate('/settings')}
+          className={`flex items-center gap-2 w-full ${updateAvailable ? 'cursor-pointer hover:text-accent transition-colors' : 'cursor-default'}`}
+          title={updateAvailable ? 'Update available! Click to view' : ''}
+        >
+          <span>{appVersion || 'v...'}</span>
+          {updateAvailable && (
+            <Download className="w-4 h-4 text-accent animate-pulse" />
+          )}
+        </button>
       </div>
     </aside>
   );
 }
+

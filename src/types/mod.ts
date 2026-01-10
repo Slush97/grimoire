@@ -45,4 +45,5 @@ export interface AppSettings {
   autoSaveProfile: boolean;
   experimentalStats: boolean;
   experimentalCrosshair: boolean;
+  hasCompletedSetup: boolean;
 }
