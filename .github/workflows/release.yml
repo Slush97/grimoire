@@ -61,14 +61,20 @@ jobs:
 
       - name: List release directory
         shell: bash
-        run: ls -la release/ || echo "No release directory"
+        run: |
+          echo "Contents of release directory:"
+          ls -la release/ 2>/dev/null || echo "release/ does not exist"
+          echo "Contents of current directory:"
+          ls -la
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
-          path: release/
+          path: |
+            release/*
           if-no-files-found: warn
+          retention-days: 1
 
   release:
     needs: build
@@ -84,6 +90,9 @@ jobs:
         with:
           path: artifacts
           merge-multiple: true
+
+      - name: List downloaded artifacts
+        run: ls -la artifacts/ 2>/dev/null || echo "No artifacts"
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
