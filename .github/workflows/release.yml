@@ -54,6 +54,10 @@ jobs:
       - name: Install dependencies
         run: pnpm install
 
+      - name: Clean previous builds
+        shell: bash
+        run: rm -rf dist release
+
       - name: Build and package
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
