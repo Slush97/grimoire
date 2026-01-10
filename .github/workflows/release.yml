@@ -56,31 +56,36 @@ jobs:
 
       - name: Clean previous builds
         shell: bash
-        run: rm -rf dist release
+        run: |
+          rm -rf dist release
+          mkdir -p release
 
       - name: Build and package
+        id: build
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: pnpm package:${{ matrix.platform }}
 
       - name: List release directory
+        if: always()
         shell: bash
         run: |
-          echo "Contents of release directory:"
-          ls -la release/ 2>/dev/null || echo "release/ does not exist"
-          echo "Contents of current directory:"
-          ls -la
-
-      - name: Ensure release directory exists
-        shell: bash
-        run: mkdir -p release && touch release/.gitkeep
+          echo "=== Release directory contents ==="
+          if [ -d "release" ]; then
+            ls -la release/
+            echo "=== File count ==="
+            find release -type f | wc -l
+          else
+            echo "ERROR: release/ does not exist"
+            exit 1
+          fi
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
-          path: release
-          if-no-files-found: warn
+          path: release/*
+          if-no-files-found: error
           retention-days: 1
 
   release:
