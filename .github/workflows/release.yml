@@ -50,9 +50,13 @@ jobs:
 
       - name: Build and package
         id: build
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: pnpm package:${{ matrix.platform }}
+        shell: bash
+        run: |
+          if [ "${{ matrix.platform }}" = "linux" ]; then
+            pnpm exec electron-vite build && pnpm exec electron-builder --linux --publish never
+          else
+            pnpm exec electron-vite build && pnpm exec electron-builder --win --publish never
+          fi
 
       - name: List release directory
         if: always()
