@@ -48,23 +48,34 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
     try {
         const fd = openSync(vpkPath, 'r');
 
-        // Read header (12 bytes for version 2)
+        // Read basic header first (12 bytes) to check signature and version
         const headerBuffer = Buffer.alloc(12);
         readSync(fd, headerBuffer, 0, 12, 0);
 
         const signature = headerBuffer.readUInt32LE(0);
+        console.log(`[parseVpkDirectory] Signature: 0x${signature.toString(16)}, expected: 0x${VPK_SIGNATURE.toString(16)}`);
+
         if (signature !== VPK_SIGNATURE) {
             closeSync(fd);
+            console.log(`[parseVpkDirectory] Invalid signature, not a VPK file`);
             return null;
         }
 
         const version = headerBuffer.readUInt32LE(4);
         const treeSize = headerBuffer.readUInt32LE(8);
+        console.log(`[parseVpkDirectory] Version: ${version}, TreeSize: ${treeSize}`);
 
-        // Read the directory tree
+        // VPK v2 has an extended header (28 bytes total vs 12 for v1)
+        // After the first 12 bytes, v2 has: FileDataSectionSize(4) + ArchiveMD5SectionSize(4) + OtherMD5SectionSize(4) + SignatureSectionSize(4)
+        const headerSize = version === 2 ? 28 : 12;
+        console.log(`[parseVpkDirectory] Using header size: ${headerSize} for version ${version}`);
+
+        // Read the directory tree (starts after the full header)
         const treeBuffer = Buffer.alloc(treeSize);
-        readSync(fd, treeBuffer, 0, treeSize, 12);
+        readSync(fd, treeBuffer, 0, treeSize, headerSize);
         closeSync(fd);
+
+        console.log(`[parseVpkDirectory] First 100 bytes of tree:`, treeBuffer.slice(0, 100).toString('utf-8').replace(/\0/g, '|'));
 
         const paths: string[] = [];
         let offset = 0;
@@ -76,8 +87,8 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
             const extResult = readNullTerminatedString(treeBuffer, offset);
             offset += extResult.bytesRead;
 
-            if (extResult.str === '' || extResult.str === ' ') {
-                break; // End of extensions
+            if (extResult.str === '') {
+                break; // End of extensions (empty string only)
             }
 
             const extension = extResult.str;
@@ -87,10 +98,11 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
                 const pathResult = readNullTerminatedString(treeBuffer, offset);
                 offset += pathResult.bytesRead;
 
-                if (pathResult.str === '' || pathResult.str === ' ') {
-                    break; // End of paths for this extension
+                if (pathResult.str === '') {
+                    break; // End of paths for this extension (empty string only)
                 }
 
+                // Space means root directory in VPK format
                 const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
 
                 // Read filenames for this path
@@ -98,8 +110,8 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
                     const nameResult = readNullTerminatedString(treeBuffer, offset);
                     offset += nameResult.bytesRead;
 
-                    if (nameResult.str === '' || nameResult.str === ' ') {
-                        break; // End of filenames for this path
+                    if (nameResult.str === '') {
+                        break; // End of filenames for this path (empty string only)
                     }
 
                     const filename = nameResult.str;
@@ -116,8 +128,9 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
                     offset += 18;
 
                     // Skip preload data if any
-                    if (offset - 2 < treeBuffer.length) {
-                        const preloadBytes = treeBuffer.readUInt16LE(offset - 16);
+                    // PreloadBytes is at offset 4 in the entry (after CRC), so offset - 14 after skipping 18
+                    if (offset - 14 >= 0 && offset - 14 < treeBuffer.length - 1) {
+                        const preloadBytes = treeBuffer.readUInt16LE(offset - 14);
                         offset += preloadBytes;
                     }
                 }
@@ -136,13 +149,21 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
  * Returns null if not a hero file
  */
 export function extractHeroFromPath(filePath: string): string | null {
-    // Common hero path patterns in Source 2 games
+    // Hero path patterns for Source 2 games (including Deadlock which uses heroes_wip)
     const patterns = [
+        // Standard Source 2 patterns
         /models\/heroes\/([^\/]+)\//i,
         /materials\/models\/heroes\/([^\/]+)\//i,
         /particles\/heroes\/([^\/]+)\//i,
         /sounds\/heroes\/([^\/]+)\//i,
         /scripts\/heroes\/([^\/]+)/i,
+        // Deadlock-specific patterns (uses heroes_wip instead of heroes)
+        /models\/heroes_wip\/([^\/]+)\//i,
+        /materials\/models\/heroes_wip\/([^\/]+)\//i,
+        /materials\/heroes_wip\/([^\/]+)\//i,
+        /particles\/heroes_wip\/([^\/]+)\//i,
+        /sounds\/heroes_wip\/([^\/]+)\//i,
+        /scripts\/heroes_wip\/([^\/]+)/i,
     ];
 
     for (const pattern of patterns) {
@@ -166,8 +187,12 @@ export function getVpkContentSummary(vpkPath: string): {
     const paths = parseVpkDirectory(vpkPath);
 
     if (!paths) {
+        console.log(`[getVpkContentSummary] Failed to parse VPK: ${vpkPath}`);
         return { heroes: new Set(), fileCount: 0, samplePaths: [] };
     }
+
+    console.log(`[getVpkContentSummary] Parsed ${paths.length} paths from ${vpkPath}`);
+    console.log(`[getVpkContentSummary] Sample paths:`, paths.slice(0, 10));
 
     const heroes = new Set<string>();
 
@@ -177,6 +202,8 @@ export function getVpkContentSummary(vpkPath: string): {
             heroes.add(hero);
         }
     }
+
+    console.log(`[getVpkContentSummary] Detected heroes: ${[...heroes].join(', ') || 'none'}`);
 
     return {
         heroes,

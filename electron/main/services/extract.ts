@@ -5,6 +5,30 @@ import AdmZip from 'adm-zip';
 import { spawn } from 'child_process';
 
 /**
+ * Find 7z executable path on Windows, checking common installation paths
+ */
+function find7zPath(): string[] {
+    const candidates: string[] = [];
+
+    // Check common Windows installation paths first
+    const windowsPaths = [
+        'C:\\Program Files\\7-Zip\\7z.exe',
+        'C:\\Program Files (x86)\\7-Zip\\7z.exe',
+    ];
+
+    for (const p of windowsPaths) {
+        if (existsSync(p)) {
+            candidates.push(p);
+        }
+    }
+
+    // Also try PATH-based commands as fallback
+    candidates.push('7z', '7za');
+
+    return candidates;
+}
+
+/**
  * Check if a file is an archive that needs extraction
  */
 export function isArchive(filePath: string): boolean {
@@ -68,8 +92,8 @@ async function extract7z(archivePath: string, destDir: string): Promise<string[]
     const tempDir = createTempDir('modmanager-7z');
 
     try {
-        // Try 7z, then 7za
-        for (const tool of ['7z', '7za']) {
+        // Try common 7z paths (Windows install dirs + PATH fallback)
+        for (const tool of find7zPath()) {
             try {
                 await runCommand(tool, ['x', '-y', `-o${tempDir}`, archivePath]);
                 const vpks = collectVpks(tempDir);
@@ -100,8 +124,8 @@ async function extractRar(archivePath: string, destDir: string): Promise<string[
     const tempDir = createTempDir('modmanager-rar');
 
     try {
-        // Try 7z, 7za, then unrar
-        for (const tool of ['7z', '7za', 'unrar']) {
+        // Try common 7z paths, then unrar as fallback
+        for (const tool of [...find7zPath(), 'unrar']) {
             try {
                 if (tool === 'unrar') {
                     await runCommand(tool, ['x', '-y', archivePath, tempDir]);
@@ -259,34 +283,46 @@ export async function listArchiveContents(archivePath: string): Promise<string[]
         return zip.getEntries().map((e) => e.entryName);
     }
 
-    // For 7z/rar, use 7z to list
-    return new Promise((resolve, reject) => {
-        const proc = spawn('7z', ['l', '-ba', archivePath], { stdio: 'pipe' });
-        let stdout = '';
+    // For 7z/rar, use 7z to list - try all candidates
+    const candidates = find7zPath();
 
-        proc.stdout?.on('data', (data) => {
-            stdout += data.toString();
-        });
+    const tryCandidate = (index: number): Promise<string[]> => {
+        if (index >= candidates.length) {
+            return Promise.reject(new Error('Failed to list archive contents. Install 7-Zip and try again.'));
+        }
 
-        proc.on('close', (code) => {
-            if (code === 0) {
-                // Parse 7z output - extract filenames
-                const lines = stdout.split('\n').filter((l) => l.trim());
-                const files = lines
-                    .map((line) => {
-                        // 7z -ba output format: date time attr size compressed name
-                        const parts = line.trim().split(/\s+/);
-                        return parts.slice(5).join(' ');
-                    })
-                    .filter((f) => f);
-                resolve(files);
-            } else {
-                reject(new Error(`Failed to list archive contents`));
-            }
-        });
+        return new Promise((resolve, reject) => {
+            const proc = spawn(candidates[index], ['l', '-ba', archivePath], { stdio: 'pipe' });
+            let stdout = '';
 
-        proc.on('error', (err) => {
-            reject(err);
+            proc.stdout?.on('data', (data) => {
+                stdout += data.toString();
+            });
+
+            proc.on('close', (code) => {
+                if (code === 0) {
+                    // Parse 7z output - extract filenames
+                    const lines = stdout.split('\n').filter((l) => l.trim());
+                    const files = lines
+                        .map((line) => {
+                            // 7z -ba output format: date time attr size compressed name
+                            const parts = line.trim().split(/\s+/);
+                            return parts.slice(5).join(' ');
+                        })
+                        .filter((f) => f);
+                    resolve(files);
+                } else {
+                    // Try next candidate
+                    tryCandidate(index + 1).then(resolve).catch(reject);
+                }
+            });
+
+            proc.on('error', () => {
+                // Try next candidate
+                tryCandidate(index + 1).then(resolve).catch(reject);
+            });
         });
-    });
+    };
+
+    return tryCandidate(0);
 }

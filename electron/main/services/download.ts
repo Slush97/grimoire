@@ -321,7 +321,35 @@ async function executeDownload(
         console.log(`[downloadMod] Extracting archive...`);
         mainWindow?.webContents.send('download-extracting', { modId, fileId });
 
-        const extractedVpks = await extractArchive(downloadPath, targetPath);
+        let extractedVpks: string[];
+        try {
+            extractedVpks = await extractArchive(downloadPath, targetPath);
+        } catch (extractError) {
+            const errorMsg = extractError instanceof Error ? extractError.message : String(extractError);
+
+            // Check if this is a 7-Zip related error
+            const is7zError = errorMsg.includes("7z") ||
+                errorMsg.includes("7-Zip") ||
+                errorMsg.includes("p7zip") ||
+                errorMsg.includes("unrar");
+
+            // Emit download-error event with structured info
+            mainWindow?.webContents.send('download-error', {
+                modId,
+                fileId,
+                errorCode: is7zError ? 'MISSING_7ZIP' : 'EXTRACTION_FAILED',
+                message: is7zError
+                    ? '7-Zip is required to extract this mod. Please install it from https://7-zip.org and restart the app.'
+                    : `Failed to extract mod: ${errorMsg}`,
+            });
+
+            // Clean up failed download
+            if (existsSync(downloadPath)) {
+                await fs.unlink(downloadPath).catch(() => { });
+            }
+
+            throw extractError;
+        }
         console.log(`[downloadMod] Extracted ${extractedVpks.length} VPK files:`, extractedVpks);
 
         // Rename VPKs to avoid conflicts

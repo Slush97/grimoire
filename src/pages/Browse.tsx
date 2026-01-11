@@ -409,10 +409,25 @@ export default function Browse() {
       }
     });
 
+    const errorUnsub = window.electronAPI.onDownloadError((data) => {
+      if (
+        downloading &&
+        data.modId === downloading.modId &&
+        data.fileId === downloading.fileId
+      ) {
+        setDownloading(null);
+        setDownloadProgress(null);
+        setExtracting(false);
+        // Show user-friendly error message
+        setError(data.message);
+      }
+    });
+
     return () => {
       progressUnsub();
       extractingUnsub();
       completeUnsub();
+      errorUnsub();
     };
   }, [downloading, loadMods]);
 

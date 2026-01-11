@@ -1,11 +1,12 @@
 import { useEffect, useState } from 'react';
-import { Outlet } from 'react-router-dom';
+import { Outlet, useNavigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import WelcomeModal from './WelcomeModal';
 import { getSettings, setSettings } from '../lib/api';
 
 export default function Layout() {
+  const navigate = useNavigate();
   const [showWelcome, setShowWelcome] = useState(false);
   const [loading, setLoading] = useState(true);
 
@@ -31,6 +32,8 @@ export default function Layout() {
       const settings = await getSettings();
       await setSettings({ ...settings, hasCompletedSetup: true });
       setShowWelcome(false);
+      // Navigate to Browse tab after first-time setup
+      navigate('/browse');
     } catch (err) {
       console.error('Failed to save setup completion:', err);
     }

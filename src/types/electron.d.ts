@@ -358,7 +358,7 @@ export interface ModConflict {
     modAName: string;
     modB: string;
     modBName: string;
-    conflictType: 'priority' | 'samefile';
+    conflictType: 'priority' | 'file';
     details: string;
 }
 

@@ -45,6 +45,7 @@ export interface ElectronAPI {
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
+    onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
@@ -319,6 +320,13 @@ interface DownloadEventData {
     fileId: number;
 }
 
+interface DownloadErrorData {
+    modId: number;
+    fileId: number;
+    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
+    message: string;
+}
+
 interface GameBananaModsResponse {
     records: unknown[];
     totalCount: number;
@@ -566,6 +574,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadEventData) => callback(data);
         ipcRenderer.on('download-complete', handler);
         return () => ipcRenderer.removeListener('download-complete', handler);
+    },
+    onDownloadError: (callback: (data: DownloadErrorData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: DownloadErrorData) => callback(data);
+        ipcRenderer.on('download-error', handler);
+        return () => ipcRenderer.removeListener('download-error', handler);
     },
 
     // Conflicts
