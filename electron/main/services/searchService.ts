@@ -10,10 +10,14 @@ function escapeFts5Term(term: string): string {
     return term.replace(/["\-*^:()]/g, ' ').trim();
 }
 
+
 export interface SearchOptions {
     query?: string;
     section?: string;
     categoryId?: number;
+    // Enhanced hero search: also match mods in parent Skins category with hero name in title
+    heroName?: string;
+    skinsCategoryId?: number;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     limit?: number;
     offset?: number;
@@ -35,6 +39,8 @@ export function searchMods(options: SearchOptions): SearchResult {
         query,
         section,
         categoryId,
+        heroName,
+        skinsCategoryId,
         sortBy = 'relevance',
     } = options;
 
@@ -75,14 +81,29 @@ export function searchMods(options: SearchOptions): SearchResult {
         params.section = section;
     }
 
-    // Filter by category/hero
+    // Filter by category/hero with name-based search for hero filtering
     if (categoryId !== undefined) {
-        conditions.push('mods.category_id = @categoryId');
-        params.categoryId = categoryId;
+        if (heroName && skinsCategoryId !== undefined) {
+            // Hero search: Find ALL mods with hero name in title, regardless of category.
+            // This catches mods in Skins, Skins/Mina, and even mods in other categories.
+            params.heroNamePattern = `%${heroName.toLowerCase()}%`;
+            conditions.push('LOWER(mods.name) LIKE @heroNamePattern');
+            console.log(`[searchMods] Hero search: heroName="${heroName}" (searching all categories)`);
+        } else {
+            // Standard category filter
+            conditions.push('mods.category_id = @categoryId');
+            params.categoryId = categoryId;
+        }
     }
 
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+
+    // Debug logging for hero search issues
+    if (heroName && skinsCategoryId !== undefined) {
+        console.log(`[searchMods] WHERE clause: ${whereClause}`);
+        console.log(`[searchMods] Params:`, JSON.stringify(params));
+    }
 
     // Determine ORDER BY
     let orderBy: string;
@@ -114,6 +135,10 @@ export function searchMods(options: SearchOptions): SearchResult {
     const countStmt = database.prepare(countQuery);
     const countRow = countStmt.get(params) as { count: number };
     const totalCount = countRow.count;
+
+    if (heroName && skinsCategoryId !== undefined) {
+        console.log(`[searchMods] Result count: ${totalCount}`);
+    }
 
     // Main query with pagination
     const mainQuery = `SELECT mods.*, ${rankSelect} ${fromClause} ${whereClause} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`;

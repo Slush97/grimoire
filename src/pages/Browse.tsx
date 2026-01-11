@@ -121,6 +121,7 @@ export default function Browse() {
   const [useLocalSearch, setUseLocalSearch] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [downloadQueue, setDownloadQueue] = useState<Array<{ modId: number; fileId: number; fileName: string }>>([]);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -143,6 +144,25 @@ export default function Browse() {
     checkLocalCache();
   }, []);
 
+  // Fetch initial download queue state on mount
+  useEffect(() => {
+    const fetchInitialQueueState = async () => {
+      try {
+        const [queue, currentDownload] = await Promise.all([
+          window.electronAPI.getDownloadQueue(),
+          window.electronAPI.getCurrentDownload(),
+        ]);
+        setDownloadQueue(queue);
+        if (currentDownload) {
+          setDownloading({ modId: currentDownload.modId, fileId: currentDownload.fileId });
+        }
+      } catch (err) {
+        console.error('Failed to fetch initial queue state:', err);
+      }
+    };
+    fetchInitialQueueState();
+  }, []);
+
   const effectiveCategoryId =
     heroCategoryId === 'all'
       ? (categoryId === 'all' ? undefined : categoryId)
@@ -150,14 +170,19 @@ export default function Browse() {
 
   const effectiveSearch = search;
 
-  // Only use local search when there's an active search query AND we have cache
-  // For default browsing (no search), always fetch fresh from API
+  // Use local search when:
+  // 1. There's an active search query AND we have cache, OR
+  // 2. A hero filter is selected (to enable enhanced OR search)
   useEffect(() => {
     const hasSearchQuery = search.trim().length > 0;
-    setUseLocalSearch(hasSearchQuery && hasLocalCache);
-  }, [search, hasLocalCache]);
+    const hasHeroFilter = heroCategoryId !== 'all';
+    setUseLocalSearch((hasSearchQuery || hasHeroFilter) && hasLocalCache);
+  }, [search, hasLocalCache, heroCategoryId]);
 
   const fetchMods = useCallback(async () => {
+    // Don't fetch from API if we're using local search
+    if (useLocalSearch) return;
+
     // Show loading spinner on first page, loading indicator otherwise
     if (page === 1) {
       setLoading(true);
@@ -216,6 +241,7 @@ export default function Browse() {
     section,
     perPage,
     effectiveCategoryId,
+    useLocalSearch,
   ]);
 
   // Local search function using SQLite cache
@@ -240,10 +266,20 @@ export default function Browse() {
         name: 'name',
       };
 
+      // Get hero name and skins category ID for enhanced hero search
+      // Look up hero name directly from Skins children to avoid circular dependency
+      const skinsCat = findCategoryByName(categories, 'Skins');
+      const selectedHeroName = heroCategoryId !== 'all' && skinsCat?.children
+        ? skinsCat.children.find(c => c.id === heroCategoryId)?.name
+        : undefined;
+
       const result = await window.electronAPI.searchLocalMods({
         query: effectiveSearch.trim() || undefined,
         section: section,
         categoryId: effectiveCategoryId,
+        // Enhanced hero search: pass hero name and skins parent ID
+        heroName: selectedHeroName,
+        skinsCategoryId: skinsCat?.id,
         sortBy: sortMap[sort] || 'relevance',
         limit: perPage,
         offset: (page - 1) * perPage,
@@ -290,7 +326,7 @@ export default function Browse() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, categories]);
 
   useEffect(() => {
     setPage(1);
@@ -423,11 +459,23 @@ export default function Browse() {
       }
     });
 
+    const queueUnsub = window.electronAPI.onDownloadQueueUpdated((data) => {
+      setDownloadQueue(data.queue);
+      // Sync local downloading state with backend - this is the source of truth
+      if (data.currentDownload) {
+        setDownloading({ modId: data.currentDownload.modId, fileId: data.currentDownload.fileId });
+      } else {
+        // Only clear if we don't have a current download from backend
+        // Don't clear during race conditions - let the complete event handle that
+      }
+    });
+
     return () => {
       progressUnsub();
       extractingUnsub();
       completeUnsub();
       errorUnsub();
+      queueUnsub();
     };
   }, [downloading, loadMods]);
 
@@ -571,7 +619,11 @@ export default function Browse() {
   };
 
   const handleQuickDownload = async (mod: GameBananaMod) => {
-    if (!activeDeadlockPath || downloading) return;
+    if (!activeDeadlockPath) return;
+
+    // Check if already downloading or in queue
+    if (downloading?.modId === mod.id) return;
+    if (downloadQueue.some(q => q.modId === mod.id)) return;
 
     try {
       // Fetch mod details to get the first file
@@ -582,16 +634,23 @@ export default function Browse() {
       }
 
       const file = getPrimaryFile(details.files);
-      setDownloading({ modId: mod.id, fileId: file.id });
-      setDownloadProgress({ downloaded: 0, total: 0 });
-      setExtracting(false);
+
+      // If nothing is currently downloading, set this as the active download
+      if (!downloading) {
+        setDownloading({ modId: mod.id, fileId: file.id });
+        setDownloadProgress({ downloaded: 0, total: 0 });
+        setExtracting(false);
+      }
 
       await downloadMod(mod.id, file.id, file.fileName, section, effectiveCategoryId);
     } catch (err) {
       setError(String(err));
-      setDownloading(null);
-      setDownloadProgress(null);
-      setExtracting(false);
+      // Only clear downloading state if this was the active download
+      if (downloading?.modId === mod.id) {
+        setDownloading(null);
+        setDownloadProgress(null);
+        setExtracting(false);
+      }
     }
   };
 
@@ -837,20 +896,25 @@ export default function Browse() {
                   : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3'
             }
           >
-            {displayMods.map((mod) => (
-              <ModCard
-                key={mod.id}
-                mod={mod}
-                installed={installedIds.has(mod.id)}
-                downloading={downloading?.modId === mod.id}
-                viewMode={viewMode}
-                section={section}
-                volume={soundVolume}
-                hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
-                onClick={() => handleModClick(mod)}
-                onQuickDownload={() => handleQuickDownload(mod)}
-              />
-            ))}
+            {displayMods.map((mod) => {
+              const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
+              const isQueued = queueIndex >= 0;
+              return (
+                <ModCard
+                  key={mod.id}
+                  mod={mod}
+                  installed={installedIds.has(mod.id)}
+                  downloading={downloading?.modId === mod.id}
+                  queuePosition={isQueued ? queueIndex + 1 : undefined}
+                  viewMode={viewMode}
+                  section={section}
+                  volume={soundVolume}
+                  hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+                  onClick={() => handleModClick(mod)}
+                  onQuickDownload={() => handleQuickDownload(mod)}
+                />
+              );
+            })}
           </div>
         )}
         {/* Infinite Scroll Trigger */}
@@ -890,6 +954,7 @@ interface ModCardProps {
   mod: GameBananaMod;
   installed: boolean;
   downloading: boolean;
+  queuePosition?: number;
   viewMode: ViewMode;
   section: string;
   volume: number;
@@ -898,7 +963,7 @@ interface ModCardProps {
   onQuickDownload: () => void;
 }
 
-function ModCard({ mod, installed, downloading, viewMode, section, volume, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
+function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -1048,7 +1113,16 @@ function ModCard({ mod, installed, downloading, viewMode, section, volume, hideN
               ✓
             </span>
           ) : downloading ? (
-            <Loader2 className={`animate-spin text-accent drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+            <div className="flex items-center gap-1" title="Downloading...">
+              <Loader2 className={`animate-spin text-accent drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+            </div>
+          ) : queuePosition ? (
+            <div
+              className={`flex items-center justify-center bg-accent/90 text-white rounded-full font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)] ${isCompact ? 'w-5 h-5 text-[10px]' : 'w-6 h-6 text-xs'}`}
+              title={`Queued #${queuePosition}`}
+            >
+              {queuePosition}
+            </div>
           ) : (
             <button
               onClick={(e) => {

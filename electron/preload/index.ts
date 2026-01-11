@@ -47,6 +47,12 @@ export interface ElectronAPI {
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;
 
+    // Download Queue
+    getDownloadQueue: () => Promise<DownloadQueueItem[]>;
+    getCurrentDownload: () => Promise<DownloadQueueItem | null>;
+    removeFromQueue: (modId: number) => Promise<boolean>;
+    onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
+
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
 
@@ -327,6 +333,18 @@ interface DownloadErrorData {
     message: string;
 }
 
+interface DownloadQueueItem {
+    modId: number;
+    fileId: number;
+    fileName: string;
+}
+
+interface DownloadQueueData {
+    queue: DownloadQueueItem[];
+    count: number;
+    currentDownload: DownloadQueueItem | null;
+}
+
 interface GameBananaModsResponse {
     records: unknown[];
     totalCount: number;
@@ -402,6 +420,9 @@ interface SearchLocalModsOptions {
     query?: string;
     section?: string;
     categoryId?: number;
+    // Enhanced hero search
+    heroName?: string;
+    skinsCategoryId?: number;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     limit?: number;
     offset?: number;
@@ -579,6 +600,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadErrorData) => callback(data);
         ipcRenderer.on('download-error', handler);
         return () => ipcRenderer.removeListener('download-error', handler);
+    },
+
+    // Download Queue
+    getDownloadQueue: () => ipcRenderer.invoke('get-download-queue'),
+    getCurrentDownload: () => ipcRenderer.invoke('get-current-download'),
+    removeFromQueue: (modId: number) => ipcRenderer.invoke('remove-from-queue', modId),
+    onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: DownloadQueueData) => callback(data);
+        ipcRenderer.on('download-queue-updated', handler);
+        return () => ipcRenderer.removeListener('download-queue-updated', handler);
     },
 
     // Conflicts

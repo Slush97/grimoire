@@ -30,17 +30,74 @@ interface QueuedDownload {
 
 const downloadQueue: QueuedDownload[] = [];
 let isProcessingQueue = false;
+let currentDownloadInfo: { modId: number; fileId: number; fileName: string } | null = null;
+
+/**
+ * Get the current download queue state for UI display
+ */
+export function getDownloadQueue(): Array<{ modId: number; fileId: number; fileName: string }> {
+    return downloadQueue.map(item => ({
+        modId: item.args.modId,
+        fileId: item.args.fileId,
+        fileName: item.args.fileName,
+    }));
+}
+
+/**
+ * Get the currently downloading item
+ */
+export function getCurrentDownload(): { modId: number; fileId: number; fileName: string } | null {
+    return currentDownloadInfo;
+}
+
+/**
+ * Remove a mod from the queue (cancel before download starts)
+ */
+export function removeFromQueue(modId: number): boolean {
+    const index = downloadQueue.findIndex(item => item.args.modId === modId);
+    if (index !== -1) {
+        const removed = downloadQueue.splice(index, 1)[0];
+        removed.reject(new Error('Cancelled by user'));
+        emitQueueUpdate();
+        return true;
+    }
+    return false;
+}
+
+/**
+ * Emit queue update event to all windows
+ */
+function emitQueueUpdate(): void {
+    const windows = BrowserWindow.getAllWindows();
+    const queueState = getDownloadQueue();
+    for (const win of windows) {
+        win.webContents.send('download-queue-updated', {
+            queue: queueState,
+            count: queueState.length,
+            currentDownload: currentDownloadInfo,
+        });
+    }
+}
 
 /**
  * Add a download to the queue (public API)
+ * Prevents duplicate mods from being queued
  */
 export function downloadMod(
     deadlockPath: string,
     args: DownloadModArgs,
     mainWindow: BrowserWindow | null
 ): Promise<void> {
+    // Check if this mod is already in the queue (prevent duplicates)
+    const alreadyQueued = downloadQueue.some(q => q.args.modId === args.modId);
+    if (alreadyQueued) {
+        console.log(`[downloadMod] Mod ${args.modId} already in queue, skipping`);
+        return Promise.resolve();
+    }
+
     return new Promise((resolve, reject) => {
         downloadQueue.push({ deadlockPath, args, mainWindow, resolve, reject });
+        emitQueueUpdate();
         processQueue();
     });
 }
@@ -57,15 +114,24 @@ async function processQueue(): Promise<void> {
 
     while (downloadQueue.length > 0) {
         const item = downloadQueue.shift()!;
+        // Track what's currently downloading
+        currentDownloadInfo = {
+            modId: item.args.modId,
+            fileId: item.args.fileId,
+            fileName: item.args.fileName,
+        };
+        emitQueueUpdate(); // Notify UI that queue changed and current download started
         try {
             await executeDownload(item.deadlockPath, item.args, item.mainWindow);
             item.resolve();
         } catch (error) {
             item.reject(error instanceof Error ? error : new Error(String(error)));
         }
+        currentDownloadInfo = null;
     }
 
     isProcessingQueue = false;
+    emitQueueUpdate(); // Final update when queue is empty
 }
 
 /**

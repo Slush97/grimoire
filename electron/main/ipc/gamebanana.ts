@@ -10,7 +10,7 @@ import {
     GameBananaModsResponse,
     GameBananaModDetails,
 } from '../services/gamebanana';
-import { downloadMod, DownloadModArgs } from '../services/download';
+import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, DownloadModArgs } from '../services/download';
 import { getMainWindow } from '../index';
 import { updateModNsfw } from '../services/modDatabase';
 
@@ -79,6 +79,21 @@ ipcMain.handle('download-mod', async (_, args: DownloadModArgs): Promise<void> =
     }
     const mainWindow = getMainWindow();
     await downloadMod(deadlockPath, args, mainWindow);
+});
+
+// get-download-queue
+ipcMain.handle('get-download-queue', () => {
+    return getDownloadQueue();
+});
+
+// get-current-download
+ipcMain.handle('get-current-download', () => {
+    return getCurrentDownload();
+});
+
+// remove-from-queue (cancel a queued download)
+ipcMain.handle('remove-from-queue', (_, modId: number): boolean => {
+    return removeFromQueue(modId);
 });
 
 // get-gamebanana-sections

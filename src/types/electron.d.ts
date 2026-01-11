@@ -78,6 +78,25 @@ export interface DownloadEventData {
     fileId: number;
 }
 
+export interface DownloadErrorData {
+    modId: number;
+    fileId: number;
+    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
+    message: string;
+}
+
+export interface DownloadQueueItem {
+    modId: number;
+    fileId: number;
+    fileName: string;
+}
+
+export interface DownloadQueueData {
+    queue: DownloadQueueItem[];
+    count: number;
+    currentDownload: DownloadQueueItem | null;
+}
+
 export interface SyncProgressData {
     section: string;
     currentPage: number;
@@ -92,7 +111,10 @@ export interface SearchLocalModsOptions {
     query?: string;
     section?: string;
     categoryId?: number;
-    sortBy?: 'relevance' | 'likes' | 'date' | 'views' | 'name';
+    // Enhanced hero search
+    heroName?: string;
+    skinsCategoryId?: number;
+    sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     limit?: number;
     offset?: number;
 }
@@ -208,6 +230,13 @@ export interface ElectronAPI {
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
+    onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;
+
+    // Download Queue
+    getDownloadQueue: () => Promise<DownloadQueueItem[]>;
+    getCurrentDownload: () => Promise<DownloadQueueItem | null>;
+    removeFromQueue: (modId: number) => Promise<boolean>;
+    onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
