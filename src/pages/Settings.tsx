@@ -187,21 +187,7 @@ export default function Settings() {
     setCleanupResult(null);
     try {
       const result = await cleanupAddons();
-      setCleanupResult(
-        [
-          `${result.removedArchives} archive file(s) removed.`,
-          `${result.renamedMinaTextures} Mina texture file(s) normalized to pak21.`,
-          `${result.renamedMinaPresets} Mina preset file(s) normalized to pak format.`,
-          result.skippedMinaTextures > 0
-            ? `${result.skippedMinaTextures} Mina texture file(s) skipped due to conflicts.`
-            : null,
-          result.skippedMinaPresets > 0
-            ? `${result.skippedMinaPresets} Mina preset file(s) skipped due to conflicts.`
-            : null,
-        ]
-          .filter(Boolean)
-          .join(' ')
-      );
+      setCleanupResult(`${result.removedArchives} archive file(s) removed.`);
     } catch (err) {
       setCleanupResult(String(err));
     } finally {
@@ -585,7 +571,7 @@ export default function Settings() {
               <div>
                 <h4 className="font-medium text-sm">Cleanup Addons Folder</h4>
                 <p className="text-xs text-text-secondary mt-1">
-                  Remove leftover archive downloads (zip, 7z) and normalize Mina files.
+                  Remove leftover archive downloads (zip, 7z).
                 </p>
                 {cleanupResult && (
                   <p className="text-xs text-accent mt-2 animate-fade-in">{cleanupResult}</p>
