@@ -79,6 +79,7 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
 
         const paths: string[] = [];
         let offset = 0;
+        let properlyTerminated = false;
 
         // Parse directory tree
         // Structure: extension\0 (path\0 (filename\0 entry_data)*)* until empty extension
@@ -88,10 +89,12 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
             offset += extResult.bytesRead;
 
             if (extResult.str === '') {
-                break; // End of extensions (empty string only)
+                properlyTerminated = true;
+                break; // End of tree (empty extension = proper termination)
             }
 
             const extension = extResult.str;
+            let extensionProperlyTerminated = false;
 
             // Read paths for this extension
             while (offset < treeBuffer.length) {
@@ -99,11 +102,13 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
                 offset += pathResult.bytesRead;
 
                 if (pathResult.str === '') {
-                    break; // End of paths for this extension (empty string only)
+                    extensionProperlyTerminated = true;
+                    break; // End of paths for this extension
                 }
 
                 // Space means root directory in VPK format
                 const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
+                let pathProperlyTerminated = false;
 
                 // Read filenames for this path
                 while (offset < treeBuffer.length) {
@@ -111,7 +116,8 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
                     offset += nameResult.bytesRead;
 
                     if (nameResult.str === '') {
-                        break; // End of filenames for this path (empty string only)
+                        pathProperlyTerminated = true;
+                        break; // End of filenames for this path
                     }
 
                     const filename = nameResult.str;
@@ -134,8 +140,34 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
                         offset += preloadBytes;
                     }
                 }
+
+                // Warn if filename loop exited due to buffer exhaustion instead of proper termination
+                if (!pathProperlyTerminated) {
+                    console.warn(`[parseVpkDirectory] Warning: Filename section for path "${dirPath}" (ext: ${extension}) did not terminate properly - buffer exhausted at offset ${offset}/${treeBuffer.length}`);
+                }
+            }
+
+            // Warn if path loop exited due to buffer exhaustion instead of proper termination
+            if (!extensionProperlyTerminated) {
+                console.warn(`[parseVpkDirectory] Warning: Path section for extension "${extension}" did not terminate properly - buffer exhausted at offset ${offset}/${treeBuffer.length}`);
             }
         }
+
+        // Validate tree was properly terminated
+        if (!properlyTerminated) {
+            console.warn(`[parseVpkDirectory] Warning: VPK tree did not terminate properly - buffer exhausted at offset ${offset}/${treeBuffer.length}. Some files may be missing from conflict detection.`);
+        }
+
+        // Check if there's unexpected data after tree termination
+        if (properlyTerminated && offset < treeBuffer.length) {
+            const remainingBytes = treeBuffer.length - offset;
+            // Small amount of padding is acceptable, but large amounts suggest parsing error
+            if (remainingBytes > 16) {
+                console.warn(`[parseVpkDirectory] Warning: ${remainingBytes} bytes remaining after tree termination. Tree may have been parsed incorrectly.`);
+            }
+        }
+
+        console.log(`[parseVpkDirectory] Parsed ${paths.length} files, properly terminated: ${properlyTerminated}, final offset: ${offset}/${treeBuffer.length}`);
 
         return paths;
     } catch (error) {

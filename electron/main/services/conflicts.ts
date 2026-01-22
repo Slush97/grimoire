@@ -1,6 +1,26 @@
 import { scanMods, Mod } from './mods';
 import { parseVpkDirectory } from './vpk';
 
+// Files to ignore when checking for conflicts (non-game metadata files)
+const IGNORED_CONFLICT_FILES = new Set([
+    'readme.txt',
+    'readme.md',
+    'license.txt',
+    'license.md',
+    'credits.txt',
+    'changelog.txt',
+    'info.txt',
+]);
+
+/**
+ * Check if a file path should be ignored for conflict detection
+ */
+function shouldIgnoreFile(filePath: string): boolean {
+    const normalizedPath = filePath.toLowerCase();
+    const fileName = normalizedPath.split('/').pop() || normalizedPath;
+    return IGNORED_CONFLICT_FILES.has(fileName);
+}
+
 export interface ModConflict {
     modA: string;      // mod ID
     modAName: string;  // mod display name
@@ -57,6 +77,8 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
         if (files && files.length > 0) {
             modFileLists.set(mod.id, new Set(files));
             console.log(`[detectConflicts] ${mod.fileName}: ${files.length} files`);
+            // Log sample paths for debugging
+            console.log(`[detectConflicts]   Sample paths: ${files.slice(0, 5).join(', ')}`);
         } else {
             console.log(`[detectConflicts] ${mod.fileName}: failed to parse or empty`);
         }
@@ -72,10 +94,10 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
             const filesA = modFileLists.get(modA.id)!;
             const filesB = modFileLists.get(modB.id)!;
 
-            // Find overlapping files
+            // Find overlapping files (excluding metadata files)
             const overlapping: string[] = [];
             for (const file of filesA) {
-                if (filesB.has(file)) {
+                if (filesB.has(file) && !shouldIgnoreFile(file)) {
                     overlapping.push(file);
                 }
             }
@@ -88,15 +110,24 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
                 );
 
                 if (!alreadyReported) {
+                    // Log the actual conflicting files for debugging
+                    console.log(`[detectConflicts] File conflict: ${modA.fileName} vs ${modB.fileName}`);
+                    console.log(`[detectConflicts] Overlapping files (${overlapping.length}):`);
+                    for (const file of overlapping.slice(0, 20)) { // Log first 20
+                        console.log(`[detectConflicts]   - ${file}`);
+                    }
+                    if (overlapping.length > 20) {
+                        console.log(`[detectConflicts]   ... and ${overlapping.length - 20} more`);
+                    }
+
                     conflicts.push({
                         modA: modA.id,
                         modAName: modA.name,
                         modB: modB.id,
                         modBName: modB.name,
                         conflictType: 'file',
-                        details: `${overlapping.length} shared file(s)`,
+                        details: `${overlapping.length} shared file(s): ${overlapping.slice(0, 3).join(', ')}${overlapping.length > 3 ? '...' : ''}`,
                     });
-                    console.log(`[detectConflicts] File conflict: ${modA.fileName} vs ${modB.fileName} (${overlapping.length} files)`);
                 }
             }
         }
