@@ -36,6 +36,7 @@ Get the latest release for your platform:
 git clone https://github.com/Slush97/grimoire.git
 cd grimoire
 pnpm install
+pnpm exec electron-rebuild -f -w better-sqlite3
 pnpm dev
 ```
 
