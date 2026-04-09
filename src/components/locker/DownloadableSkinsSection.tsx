@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronDown, Download, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronDown, Download, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
 import { browseMods, getModDetails, downloadMod } from '../../lib/api';
-import { getModThumbnail, getPrimaryFile } from '../../types/gamebanana';
+import { getModThumbnail, getPrimaryFile, formatDate, isModOutdated } from '../../types/gamebanana';
 import type { CachedMod } from '../../types/electron';
 import type { GameBananaMod } from '../../types/gamebanana';
 import ModThumbnail from '../ModThumbnail';
@@ -315,6 +315,12 @@ export default function DownloadableSkinsSection({
                     <div className="text-xs font-medium truncate" title={mod.name}>
                       {mod.name}
                     </div>
+                    {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
+                      <div className="flex items-center gap-1 text-[10px] text-yellow-400">
+                        <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0" />
+                        <span>Outdated · {formatDate(mod.dateModified)}</span>
+                      </div>
+                    )}
                     <button
                       type="button"
                       onClick={() => initiateDownload(mod)}

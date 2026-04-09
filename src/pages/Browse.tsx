@@ -12,6 +12,8 @@ import {
   LayoutGrid,
   Grid3x3,
   List,
+  AlertTriangle,
+  Clock,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import {
@@ -28,7 +30,7 @@ import type {
   GameBananaSection,
   GameBananaCategoryNode,
 } from '../types/gamebanana';
-import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile } from '../types/gamebanana';
+import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
 import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
@@ -113,6 +115,7 @@ export default function Browse() {
   const [categoryId, setCategoryId] = useState<number | 'all'>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedMod, setSelectedMod] = useState<GameBananaModDetails | null>(null);
+  const [selectedModDates, setSelectedModDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
   const [downloading, setDownloading] = useState<{ modId: number; fileId: number } | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ downloaded: number; total: number } | null>(null);
   const [extracting, setExtracting] = useState(false);
@@ -567,6 +570,7 @@ export default function Browse() {
     try {
       const details = await getModDetails(mod.id, section);
       setSelectedMod(details);
+      setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
 
       // Update the mods array with the correct nsfw flag from details
       // This ensures grid cards show blur after clicking once
@@ -942,6 +946,8 @@ export default function Browse() {
           extracting={extracting}
           progress={downloadProgress}
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          dateAdded={selectedModDates?.dateAdded}
+          dateModified={selectedModDates?.dateModified}
           onClose={() => setSelectedMod(null)}
           onDownload={handleDownload}
         />
@@ -1100,6 +1106,18 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
             by {mod.submitter.name}
           </p>
         )}
+        {mod.dateModified > 0 && (
+          <div className={`flex items-center gap-1 mt-1 ${isCompact ? 'text-[11px]' : 'text-xs'} ${isModOutdated(mod.dateModified) ? 'text-yellow-400' : 'text-text-secondary'}`}>
+            {isModOutdated(mod.dateModified) ? (
+              <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+            ) : (
+              <Clock className="w-3 h-3 flex-shrink-0" />
+            )}
+            <span className="truncate">
+              {isModOutdated(mod.dateModified) ? 'Outdated · ' : ''}{formatDate(mod.dateModified)}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Download button - positioned at bottom right of card */}
@@ -1150,6 +1168,8 @@ interface ModDetailsModalProps {
   extracting: boolean;
   progress: { downloaded: number; total: number } | null;
   hideNsfwPreviews: boolean;
+  dateAdded?: number;
+  dateModified?: number;
   onClose: () => void;
   onDownload: (fileId: number, fileName: string) => void;
 }
@@ -1163,6 +1183,8 @@ function ModDetailsModal({
   extracting,
   progress,
   hideNsfwPreviews,
+  dateAdded,
+  dateModified,
   onClose,
   onDownload,
 }: ModDetailsModalProps) {
@@ -1219,8 +1241,34 @@ function ModDetailsModal({
           </button>
         </div>
 
+        {/* Outdated Warning */}
+        {dateModified && isModOutdated(dateModified) && (
+          <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-200 text-sm">
+            <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
+            <span>This mod was last updated on {formatDate(dateModified)} and may not be compatible with the current version of Deadlock.</span>
+          </div>
+        )}
+
         {/* Content */}
         <div className="p-4 space-y-4">
+          {/* Dates */}
+          {(dateAdded || dateModified) && (
+            <div className="flex items-center gap-4 text-xs text-text-secondary">
+              {dateAdded && dateAdded > 0 && (
+                <span className="flex items-center gap-1">
+                  <Clock className="w-3 h-3" />
+                  Added: {formatDate(dateAdded)}
+                </span>
+              )}
+              {dateModified && dateModified > 0 && (
+                <span className={`flex items-center gap-1 ${isModOutdated(dateModified) ? 'text-yellow-400' : ''}`}>
+                  <Clock className="w-3 h-3" />
+                  Updated: {formatDate(dateModified)}
+                </span>
+              )}
+            </div>
+          )}
+
           {/* Image Carousel */}
           {images.length > 0 && (
             <div className="relative w-full rounded-lg overflow-hidden border border-border">

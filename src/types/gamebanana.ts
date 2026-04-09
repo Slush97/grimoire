@@ -112,3 +112,10 @@ export function getPrimaryFile(files: GameBananaFile[]): GameBananaFile {
 export function formatDate(timestamp: number): string {
   return new Date(timestamp * 1000).toLocaleDateString();
 }
+
+// Mods updated before this date may be incompatible with the current game version
+export const MOD_SAFETY_CUTOFF = Math.floor(new Date('2026-01-22T00:00:00Z').getTime() / 1000);
+
+export function isModOutdated(dateModified: number): boolean {
+  return dateModified < MOD_SAFETY_CUTOFF;
+}
