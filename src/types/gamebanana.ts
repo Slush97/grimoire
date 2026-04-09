@@ -86,6 +86,22 @@ export interface GameBananaModDetails {
   previewMedia?: GameBananaPreviewMedia;
 }
 
+export interface GameBananaComment {
+  id: number;
+  text: string;
+  dateAdded: number;
+  poster: {
+    id: number;
+    name: string;
+    avatarUrl?: string;
+  };
+}
+
+export interface GameBananaCommentsResponse {
+  comments: GameBananaComment[];
+  totalCount: number;
+}
+
 export function getModThumbnail(mod: GameBananaMod): string | undefined {
   const images = mod.previewMedia?.images;
   if (!images || images.length === 0) return undefined;

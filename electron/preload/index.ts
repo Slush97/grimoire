@@ -19,6 +19,7 @@ export interface ElectronAPI {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
+    getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
@@ -266,6 +267,26 @@ interface BrowseModsArgs {
 interface GetModDetailsArgs {
     modId: number;
     section?: string;
+}
+
+interface GetModCommentsArgs {
+    modId: number;
+    section?: string;
+    page?: number;
+}
+
+interface GameBananaCommentsResponse {
+    comments: Array<{
+        id: number;
+        text: string;
+        dateAdded: number;
+        poster: {
+            id: number;
+            name: string;
+            avatarUrl?: string;
+        };
+    }>;
+    totalCount: number;
 }
 
 interface DownloadModArgs {
@@ -556,6 +577,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),
     getModDetails: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-details', args),
+    getModComments: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-comments', args),
     downloadMod: (args: DownloadModArgs) => ipcRenderer.invoke('download-mod', args),
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
     getGameBananaCategories: (args: GetCategoriesArgs) =>

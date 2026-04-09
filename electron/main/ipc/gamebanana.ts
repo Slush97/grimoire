@@ -5,6 +5,7 @@ import {
     fetchCategoryTree,
     fetchSubmissions,
     fetchModDetails,
+    fetchModComments,
     GameBananaSection,
     GameBananaCategoryNode,
     GameBananaModsResponse,
@@ -26,6 +27,12 @@ interface BrowseModsArgs {
 interface GetModDetailsArgs {
     modId: number;
     section?: string;
+}
+
+interface GetModCommentsArgs {
+    modId: number;
+    section?: string;
+    page?: number;
 }
 
 interface GetCategoriesArgs {
@@ -95,6 +102,15 @@ ipcMain.handle('get-current-download', () => {
 ipcMain.handle('remove-from-queue', (_, modId: number): boolean => {
     return removeFromQueue(modId);
 });
+
+// get-mod-comments
+ipcMain.handle(
+    'get-mod-comments',
+    async (_, args: GetModCommentsArgs) => {
+        const { modId, section = 'Mod', page = 1 } = args;
+        return fetchModComments(modId, section, page);
+    }
+);
 
 // get-gamebanana-sections
 ipcMain.handle(

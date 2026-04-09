@@ -83,6 +83,17 @@ export interface GameBananaFile {
     description?: string;
 }
 
+export interface GameBananaComment {
+    id: number;
+    text: string;
+    dateAdded: number;
+    poster: {
+        id: number;
+        name: string;
+        avatarUrl?: string;
+    };
+}
+
 export interface GameBananaModDetails {
     id: number;
     name: string;
@@ -165,6 +176,26 @@ interface FileRaw {
     _sDownloadUrl: string;
     _nDownloadCount: number;
     _sDescription?: string;
+}
+
+interface PostRaw {
+    _idRow: number;
+    _sText: string;
+    _tsDateAdded: number;
+    _aPoster?: {
+        _idRow: number;
+        _sName: string;
+        _sAvatarUrl?: string;
+    };
+}
+
+interface PostsResponseRaw {
+    _aRecords: PostRaw[];
+    _aMetadata: {
+        _nRecordCount: number;
+        _nPerpage: number;
+        _bIsComplete: boolean;
+    };
 }
 
 interface ModDetailsRaw {
@@ -299,6 +330,33 @@ function mapMod(raw: ModRaw): GameBananaMod {
                 iconUrl: raw._aRootCategory._sIconUrl,
             }
             : undefined,
+    };
+}
+
+/**
+ * Fetch comments/posts for a mod
+ */
+export async function fetchModComments(
+    modId: number,
+    section = 'Mod',
+    page = 1,
+    perPage = 15
+): Promise<{ comments: GameBananaComment[]; totalCount: number }> {
+    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}/Posts?_nPerpage=${perPage}&_nPage=${page}`;
+    const raw = await fetchJson<PostsResponseRaw>(url);
+
+    return {
+        comments: raw._aRecords.map((post) => ({
+            id: post._idRow,
+            text: post._sText,
+            dateAdded: post._tsDateAdded,
+            poster: {
+                id: post._aPoster?._idRow ?? 0,
+                name: post._aPoster?._sName ?? 'Unknown',
+                avatarUrl: post._aPoster?._sAvatarUrl,
+            },
+        })),
+        totalCount: raw._aMetadata._nRecordCount,
     };
 }
 

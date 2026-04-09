@@ -5,6 +5,7 @@ import type {
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaMod,
+  GameBananaCommentsResponse,
 } from '../types/gamebanana';
 
 // Re-export types for convenience
@@ -72,6 +73,10 @@ export async function browseMods(
 
 export async function getModDetails(modId: number, section?: string): Promise<GameBananaModDetails> {
   return window.electronAPI.getModDetails({ modId, section });
+}
+
+export async function getModComments(modId: number, section?: string, page = 1): Promise<GameBananaCommentsResponse> {
+  return window.electronAPI.getModComments({ modId, section, page });
 }
 
 export async function downloadMod(
