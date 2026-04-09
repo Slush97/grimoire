@@ -116,7 +116,8 @@ interface ModRaw {
     _sName: string;
     _sProfileUrl: string;
     _tsDateAdded: number;
-    _tsDateUpdated: number;
+    _tsDateUpdated?: number;
+    _tsDateModified?: number;
     _nLikeCount: number;
     _nViewCount: number;
     _nDownloadCount?: number;
@@ -259,7 +260,7 @@ function mapMod(raw: ModRaw): GameBananaMod {
         name: raw._sName,
         profileUrl: raw._sProfileUrl,
         dateAdded: raw._tsDateAdded,
-        dateModified: raw._tsDateUpdated,
+        dateModified: raw._tsDateModified ?? raw._tsDateUpdated ?? 0,
         likeCount: raw._nLikeCount,
         viewCount: raw._nViewCount,
         downloadCount: raw._nDownloadCount,
@@ -353,7 +354,7 @@ export async function fetchSubmissions(
     };
 
     // Fields to request from GameBanana API (including NSFW flag)
-    const fields = '_idRow,_sName,_sProfileUrl,_tsDateAdded,_tsDateUpdated,_nLikeCount,_nViewCount,_nDownloadCount,_bHasFiles,_bIsNsfw,_aSubmitter,_aPreviewMedia,_aRootCategory';
+    const fields = '_idRow,_sName,_sProfileUrl,_tsDateAdded,_tsDateModified,_nLikeCount,_nViewCount,_nDownloadCount,_bHasFiles,_bIsNsfw,_aSubmitter,_aPreviewMedia,_aRootCategory';
 
     // Use search endpoint when search query is provided
     if (search && search.trim()) {
