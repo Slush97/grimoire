@@ -37,7 +37,6 @@ export interface ModConflict {
 
 export interface AppSettings {
   deadlockPath: string | null;
-  autoConfigureGameInfo: boolean;
   devMode: boolean;
   devDeadlockPath: string | null;
   hideNsfwPreviews: boolean;

@@ -231,7 +231,6 @@ type ScoreboardSortBy =
 // Minimal type stubs (full types are in renderer)
 interface AppSettings {
     deadlockPath: string | null;
-    autoConfigureGameInfo: boolean;
     devMode: boolean;
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;

@@ -149,11 +149,6 @@ export default function Settings() {
     }
   };
 
-  const handleAutoConfigChange = async (checked: boolean) => {
-    if (settings) {
-      await saveSettings({ ...settings, autoConfigureGameInfo: checked });
-    }
-  };
 
   const handleHideNsfwChange = async (checked: boolean) => {
     if (settings) {
@@ -504,15 +499,6 @@ export default function Settings() {
         {/* Preferences */}
         <Card title="Preferences" icon={Shield}>
           <div className="space-y-6">
-            <Toggle
-              checked={settings?.autoConfigureGameInfo ?? true}
-              onChange={handleAutoConfigChange}
-              label="Auto-configure gameinfo.gi"
-              description="Automatically fix gameinfo.gi when launching or changing mods."
-            />
-
-            <div className="h-px bg-white/5" />
-
             <Toggle
               checked={settings?.hideNsfwPreviews ?? false}
               onChange={handleHideNsfwChange}

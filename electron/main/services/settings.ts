@@ -4,7 +4,6 @@ import { getSettingsPath } from '../utils/paths';
 
 export interface AppSettings {
     deadlockPath: string | null;
-    autoConfigureGameInfo: boolean;
     devMode: boolean;
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
@@ -17,7 +16,6 @@ export interface AppSettings {
 
 const DEFAULT_SETTINGS: AppSettings = {
     deadlockPath: null,
-    autoConfigureGameInfo: true,
     devMode: false,
     devDeadlockPath: null,
     hideNsfwPreviews: false,

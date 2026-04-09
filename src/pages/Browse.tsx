@@ -725,9 +725,9 @@ export default function Browse() {
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="h-full overflow-y-auto">
       {/* Header with Search */}
-      <div className="p-4 border-b border-border">
+      <div className="sticky top-0 z-10 p-4 border-b border-border bg-bg-primary">
         <form onSubmit={handleSearch}>
           <div className="flex flex-wrap items-center gap-2">
             {/* Search Input with integrated submit */}
@@ -1103,37 +1103,37 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
       <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
 
       {/* Info overlaid at bottom */}
-      <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2' : 'p-3'}`}>
-        <h3 className={`font-medium truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] ${isCompact ? 'text-sm' : ''}`}>{mod.name}</h3>
-        <div className={`flex items-center gap-3 text-white/70 mt-0.5 ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
-          <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{mod.likeCount}</span>
-          <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{mod.viewCount}</span>
+      <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
+        <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+        <div className={`flex items-center gap-3 text-white/80 mt-1 ${isCompact ? 'text-xs' : 'text-sm'}`}>
+          <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{mod.likeCount}</span>
+          <span className="flex items-center gap-1"><Eye className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{mod.viewCount}</span>
           {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
         </div>
         {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
-          <div className={`flex items-center gap-1 mt-0.5 text-yellow-400 ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
-            <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+          <div className={`flex items-center gap-1 mt-1 text-yellow-400 ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <AlertTriangle className={isCompact ? 'w-3 h-3 flex-shrink-0' : 'w-3.5 h-3.5 flex-shrink-0'} />
             <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
           </div>
         )}
       </div>
 
-      {/* Download button overlay — top right */}
+      {/* Download button overlay — top right with backdrop */}
       <div className="absolute top-2 right-2">
         {installed ? (
           <span
-            className={`text-green-400 drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${isCompact ? 'text-base' : 'text-lg'}`}
+            className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm text-green-400 ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
             title="Installed"
           >
             ✓
           </span>
         ) : downloading ? (
-          <div className="flex items-center gap-1" title="Downloading...">
-            <Loader2 className={`animate-spin text-accent drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
+          <div className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
+            <Loader2 className={`animate-spin text-accent ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent/90 text-white rounded-full font-bold drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] ${isCompact ? 'w-5 h-5 text-[10px]' : 'w-6 h-6 text-xs'}`}
+            className={`flex items-center justify-center bg-accent/90 text-white rounded-full font-bold ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}
@@ -1141,7 +1141,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
-            className={`text-accent hover:text-accent-secondary drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] transition-all hover:scale-110 cursor-pointer`}
+            className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm text-accent hover:bg-accent hover:text-white transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
             title="Install"
           >
             <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
