@@ -212,7 +212,6 @@ export default function Installed() {
             )}
             <Button
               variant="secondary"
-              size="sm"
               onClick={() => setImportOpen(true)}
               icon={FilePlus}
               title="Import a VPK from disk with a custom name and thumbnail"
@@ -221,7 +220,6 @@ export default function Installed() {
             </Button>
             <Button
               variant="secondary"
-              size="sm"
               onClick={() => openModsFolder().catch(() => {})}
               icon={FolderOpen}
               title="Open mods folder"
