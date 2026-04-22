@@ -59,6 +59,65 @@ export async function setModPriority(modId: string, priority: number): Promise<M
   return window.electronAPI.setModPriority(modId, priority);
 }
 
+export async function reorderMods(orderedFileNames: string[]): Promise<Mod[]> {
+  return window.electronAPI.reorderMods(orderedFileNames);
+}
+
+export async function swapModPriority(modIdA: string, modIdB: string): Promise<Mod[]> {
+  return window.electronAPI.swapModPriority(modIdA, modIdB);
+}
+
+export async function importCustomMod(args: {
+  vpkPath: string;
+  name: string;
+  thumbnailDataUrl?: string;
+  nsfw?: boolean;
+}): Promise<Mod[]> {
+  return window.electronAPI.importCustomMod(args);
+}
+
+export async function readImageDataUrl(imagePath: string): Promise<string> {
+  return window.electronAPI.readImageDataUrl(imagePath);
+}
+
+// =====================
+// Launch API
+// =====================
+
+export interface VanillaStashStatus {
+  active: boolean;
+  startedAt?: string;
+  modCount?: number;
+}
+
+export interface VanillaRestoreResult {
+  restored: number;
+  skipped: number;
+  failed: string[];
+}
+
+export async function launchModded(): Promise<void> {
+  return window.electronAPI.launchModded();
+}
+
+export async function launchVanilla(): Promise<void> {
+  return window.electronAPI.launchVanilla();
+}
+
+export async function getVanillaStashStatus(): Promise<VanillaStashStatus> {
+  return window.electronAPI.getVanillaStashStatus();
+}
+
+export async function restoreVanillaStash(): Promise<VanillaRestoreResult> {
+  return window.electronAPI.restoreVanillaStash();
+}
+
+export function onVanillaRestoreComplete(
+  callback: (result: VanillaRestoreResult) => void
+): () => void {
+  return window.electronAPI.onVanillaRestoreComplete(callback);
+}
+
 // GameBanana
 export async function browseMods(
   page: number,
@@ -139,11 +198,16 @@ export async function fixGameinfo(): Promise<{ configured: boolean; message: str
   return window.electronAPI.fixGameinfo();
 }
 
+export async function openModsFolder(): Promise<void> {
+  return window.electronAPI.openModsFolder();
+}
+
 // Dialog helper for Settings page
 export async function showOpenDialog(options: {
   directory?: boolean;
   title?: string;
   defaultPath?: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
 }): Promise<string | null> {
   return window.electronAPI.showOpenDialog(options);
 }

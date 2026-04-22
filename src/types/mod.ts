@@ -40,6 +40,7 @@ export interface AppSettings {
   devMode: boolean;
   devDeadlockPath: string | null;
   hideNsfwPreviews: boolean;
+  hideOutdatedMods: boolean;
   activeProfileId: string | null;
   autoSaveProfile: boolean;
   experimentalStats: boolean;

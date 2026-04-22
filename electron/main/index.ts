@@ -13,8 +13,10 @@ import './ipc/modDatabase';
 import './ipc/crosshairPresets';
 import './ipc/stats';
 import './ipc/updater';
+import './ipc/launch';
 
 import { initUpdater, checkForUpdates } from './services/updater';
+import { runStartupRecovery } from './ipc/launch';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -110,6 +112,10 @@ if (!gotTheLock) {
         }
 
         createWindow();
+
+        // Recover from any half-finished vanilla launch (app was closed mid-session,
+        // or grimoire crashed while the user was playing vanilla). Runs in background.
+        void runStartupRecovery();
 
         // Initialize auto-updater (production only)
         if (!is.dev && mainWindow) {

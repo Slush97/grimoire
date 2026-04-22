@@ -156,6 +156,12 @@ export default function Settings() {
     }
   };
 
+  const handleHideOutdatedChange = async (checked: boolean) => {
+    if (settings) {
+      await saveSettings({ ...settings, hideOutdatedMods: checked });
+    }
+  };
+
   const handleDevModeChange = async (checked: boolean) => {
     if (!settings) return;
     if (checked) {
@@ -504,6 +510,15 @@ export default function Settings() {
               onChange={handleHideNsfwChange}
               label="Hide NSFW Content"
               description="Blur thumbnail images for mods marked as NSFW."
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.hideOutdatedMods ?? false}
+              onChange={handleHideOutdatedChange}
+              label="Hide Outdated Mods"
+              description="Hide mods in Browse that haven't been updated since the current game version cutoff."
             />
 
             <div className="h-px bg-white/5" />

@@ -64,6 +64,26 @@ export interface OpenDialogOptions {
     directory?: boolean;
     title?: string;
     defaultPath?: string;
+    filters?: Array<{ name: string; extensions: string[] }>;
+}
+
+export interface ImportCustomModArgs {
+    vpkPath: string;
+    name: string;
+    thumbnailDataUrl?: string;
+    nsfw?: boolean;
+}
+
+export interface VanillaStashStatus {
+    active: boolean;
+    startedAt?: string;
+    modCount?: number;
+}
+
+export interface VanillaRestoreResult {
+    restored: number;
+    skipped: number;
+    failed: string[];
 }
 
 export interface DownloadProgressData {
@@ -201,6 +221,17 @@ export interface ElectronAPI {
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
+    reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
+    swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
+    importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
+    readImageDataUrl: (imagePath: string) => Promise<string>;
+
+    // Launch
+    launchModded: () => Promise<void>;
+    launchVanilla: () => Promise<void>;
+    getVanillaStashStatus: () => Promise<VanillaStashStatus>;
+    restoreVanillaStash: () => Promise<VanillaRestoreResult>;
+    onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
@@ -219,6 +250,7 @@ export interface ElectronAPI {
     cleanupAddons: () => Promise<CleanupResult>;
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
+    openModsFolder: () => Promise<void>;
 
     // Window control
     setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;

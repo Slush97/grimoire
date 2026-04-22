@@ -709,8 +709,11 @@ export default function Browse() {
     return ids;
   }, [installedMods]);
 
-  // Just use all loaded mods - infinite scroll handles pagination
-  const displayMods = mods;
+  // Just use all loaded mods - infinite scroll handles pagination.
+  // Hide outdated mods if the user has opted in.
+  const displayMods = settings?.hideOutdatedMods
+    ? mods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified))
+    : mods;
 
   if (!activeDeadlockPath) {
     return (
@@ -1099,13 +1102,19 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         )}
       </div>
 
-      {/* Gradient overlay for text readability */}
-      <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/30 to-transparent pointer-events-none" />
+      {/* Single gradient: transparent at top, strongest darkness at the label band */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 22%, rgba(0,0,0,0.25) 55%, transparent 80%)',
+        }}
+      />
 
       {/* Info overlaid at bottom */}
       <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
-        <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.8)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-        <div className={`flex items-center gap-3 text-white/80 mt-1 ${isCompact ? 'text-xs' : 'text-sm'}`}>
+        <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+        <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
           <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{mod.likeCount}</span>
           <span className="flex items-center gap-1"><Eye className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{mod.viewCount}</span>
           {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}

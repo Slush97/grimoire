@@ -15,6 +15,17 @@ export interface ElectronAPI {
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
+    reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
+    swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
+    importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
+    readImageDataUrl: (imagePath: string) => Promise<string>;
+
+    // Launch
+    launchModded: () => Promise<void>;
+    launchVanilla: () => Promise<void>;
+    getVanillaStashStatus: () => Promise<VanillaStashStatus>;
+    restoreVanillaStash: () => Promise<VanillaRestoreResult>;
+    onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
@@ -34,6 +45,7 @@ export interface ElectronAPI {
     cleanupAddons: () => Promise<CleanupResult>;
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
+    openModsFolder: () => Promise<void>;
 
     // Window control
     setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
@@ -234,6 +246,12 @@ interface AppSettings {
     devMode: boolean;
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
+    hideOutdatedMods: boolean;
+    activeProfileId: string | null;
+    autoSaveProfile: boolean;
+    experimentalStats: boolean;
+    experimentalCrosshair: boolean;
+    hasCompletedSetup: boolean;
 }
 
 interface Mod {
@@ -332,6 +350,26 @@ interface OpenDialogOptions {
     directory?: boolean;
     title?: string;
     defaultPath?: string;
+    filters?: Array<{ name: string; extensions: string[] }>;
+}
+
+interface ImportCustomModArgs {
+    vpkPath: string;
+    name: string;
+    thumbnailDataUrl?: string;
+    nsfw?: boolean;
+}
+
+interface VanillaStashStatus {
+    active: boolean;
+    startedAt?: string;
+    modCount?: number;
+}
+
+interface VanillaRestoreResult {
+    restored: number;
+    skipped: number;
+    failed: string[];
 }
 
 interface DownloadProgressData {
@@ -572,6 +610,26 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteMod: (modId: string) => ipcRenderer.invoke('delete-mod', modId),
     setModPriority: (modId: string, priority: number) =>
         ipcRenderer.invoke('set-mod-priority', modId, priority),
+    reorderMods: (orderedFileNames: string[]) =>
+        ipcRenderer.invoke('reorder-mods', orderedFileNames),
+    swapModPriority: (modIdA: string, modIdB: string) =>
+        ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
+    importCustomMod: (args: ImportCustomModArgs) =>
+        ipcRenderer.invoke('import-custom-mod', args),
+    readImageDataUrl: (imagePath: string) =>
+        ipcRenderer.invoke('read-image-data-url', imagePath),
+
+    // Launch
+    launchModded: () => ipcRenderer.invoke('launch-modded'),
+    launchVanilla: () => ipcRenderer.invoke('launch-vanilla'),
+    getVanillaStashStatus: () => ipcRenderer.invoke('get-vanilla-stash-status'),
+    restoreVanillaStash: () => ipcRenderer.invoke('restore-vanilla-stash'),
+    onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, result: VanillaRestoreResult) =>
+            callback(result);
+        ipcRenderer.on('vanilla-restore-complete', handler);
+        return () => ipcRenderer.removeListener('vanilla-restore-complete', handler);
+    },
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),
@@ -592,6 +650,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     cleanupAddons: () => ipcRenderer.invoke('cleanup-addons'),
     getGameinfoStatus: () => ipcRenderer.invoke('get-gameinfo-status'),
     fixGameinfo: () => ipcRenderer.invoke('fix-gameinfo'),
+    openModsFolder: () => ipcRenderer.invoke('open-mods-folder'),
 
     // Window control
     setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('set-always-on-top', enabled),

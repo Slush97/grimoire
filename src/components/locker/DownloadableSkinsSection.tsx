@@ -1,10 +1,12 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { ChevronDown, Download, Loader2, RefreshCw, AlertTriangle } from 'lucide-react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
+import { Download, Loader2, RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
 import { browseMods, getModDetails, downloadMod } from '../../lib/api';
 import { getModThumbnail, getPrimaryFile, formatDate, isModOutdated } from '../../types/gamebanana';
 import type { CachedMod } from '../../types/electron';
 import type { GameBananaMod } from '../../types/gamebanana';
 import ModThumbnail from '../ModThumbnail';
+import { useAppStore } from '../../stores/appStore';
 
 interface DownloadableSkinsSectionProps {
   categoryId: number;
@@ -55,7 +57,9 @@ export default function DownloadableSkinsSection({
   const [downloading, setDownloading] = useState<{ modId: number; fileId: number } | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<number | null>(null);
   const [extracting, setExtracting] = useState(false);
+  const [query, setQuery] = useState('');
 
+  const hideOutdated = useAppStore((s) => s.settings?.hideOutdatedMods) ?? false;
 
   // Track categoryId to reset on change
   const prevCategoryRef = useRef(categoryId);
@@ -68,13 +72,27 @@ export default function DownloadableSkinsSection({
       setMods([]);
       setLoadState('idle');
       setError(null);
-
+      setQuery('');
     }
   }, [categoryId]);
 
-  // Filter out installed mods from display (use Set internally for O(1) lookup)
-  const installedSet = new Set(installedModIds);
-  const availableMods = mods.filter((mod) => !installedSet.has(mod.id));
+  const installedSet = useMemo(() => new Set(installedModIds), [installedModIds]);
+
+  const availableMods = useMemo(() => {
+    const trimmedQuery = query.trim().toLowerCase();
+    return mods.filter((mod) => {
+      if (installedSet.has(mod.id)) return false;
+      if (hideOutdated && mod.dateModified && isModOutdated(mod.dateModified)) return false;
+      if (trimmedQuery && !mod.name.toLowerCase().includes(trimmedQuery)) return false;
+      return true;
+    });
+  }, [mods, installedSet, hideOutdated, query]);
+
+  const rawAvailableCount = useMemo(
+    () => mods.filter((m) => !installedSet.has(m.id)).length,
+    [mods, installedSet]
+  );
+  const filteredOutCount = rawAvailableCount - availableMods.length;
 
   const loadMods = useCallback(async () => {
     setLoadState('loading');
@@ -254,102 +272,179 @@ export default function DownloadableSkinsSection({
   };
 
   return (
-    <div className="border-t border-border pt-3 mt-3 relative">
-      <button
-        type="button"
-        onClick={() => setExpanded(!expanded)}
-        className="flex items-center gap-2 w-full text-xs text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-      >
-        <ChevronDown
-          className={`w-4 h-4 transition-transform ${expanded ? 'rotate-180' : ''}`}
-        />
-        <span>Download More</span>
-      </button>
+    <>
+      <div className="border-t border-border pt-3 mt-3">
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-semibold transition-colors cursor-pointer"
+        >
+          <Download className="w-4 h-4" />
+          Download More
+        </button>
+      </div>
 
-      {expanded && (
-        <div className="mt-3 space-y-2">
-          {loadState === 'loading' && (
-            <div className="flex items-center justify-center py-4">
-              <Loader2 className="w-5 h-5 animate-spin text-accent" />
-            </div>
-          )}
-
-          {loadState === 'error' && (
-            <div className="flex items-center justify-between text-xs text-red-400">
-              <span>{error || 'Failed to load'}</span>
+      {expanded && createPortal(
+        <div
+          className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4"
+          onClick={() => setExpanded(false)}
+        >
+          <div
+            className="w-full max-w-5xl max-h-[90vh] flex flex-col bg-bg-secondary border border-border rounded-xl shadow-2xl overflow-hidden"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-border">
+              <div className="flex items-center gap-2">
+                <Download className="w-5 h-5 text-accent" />
+                <h2 className="text-lg font-semibold text-text-primary">Download More Skins</h2>
+                {loadState === 'loaded' && (
+                  <span className="text-xs text-text-secondary ml-2">
+                    {availableMods.length}
+                    {filteredOutCount > 0 ? ` of ${rawAvailableCount}` : ''}
+                  </span>
+                )}
+              </div>
               <button
                 type="button"
-                onClick={handleRetry}
-                className="flex items-center gap-1 px-2 py-1 hover:bg-bg-tertiary rounded transition-colors cursor-pointer"
+                onClick={() => setExpanded(false)}
+                className="p-1.5 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
+                aria-label="Close"
               >
-                <RefreshCw className="w-3 h-3" />
-                Retry
+                <X className="w-5 h-5" />
               </button>
             </div>
-          )}
 
-          {loadState === 'loaded' && availableMods.length === 0 && (
-            <div className="text-xs text-text-secondary text-center py-2">
-              No additional skins available
-            </div>
-          )}
-
-          {loadState === 'loaded' && availableMods.length > 0 && (
-            <div className="grid grid-cols-2 gap-2">
-              {availableMods.map((mod) => {
-                const isDownloading = downloading?.modId === mod.id;
-                return (
-                  <div
-                    key={mod.id}
-                    className="flex flex-col gap-1.5 p-2 bg-bg-tertiary rounded-lg"
+            <div className="px-5 py-3 border-b border-border">
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
+                <input
+                  type="text"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                  placeholder="Search skins…"
+                  autoFocus
+                  className="w-full pl-9 pr-9 py-2 text-sm bg-bg-tertiary border border-border rounded-lg text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent/60"
+                />
+                {query && (
+                  <button
+                    type="button"
+                    onClick={() => setQuery('')}
+                    aria-label="Clear search"
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 text-text-secondary hover:text-text-primary cursor-pointer"
                   >
-                    <div className="aspect-video rounded overflow-hidden bg-black/20">
-                      <ModThumbnail
-                        src={getModThumbnail(mod)}
-                        alt={mod.name}
-                        nsfw={mod.nsfw}
-                        hideNsfw={hideNsfwPreviews}
-                        className="w-full h-full"
-                      />
-                    </div>
-                    <div className="text-xs font-medium truncate" title={mod.name}>
-                      {mod.name}
-                    </div>
-                    {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
-                      <div className="flex items-center gap-1 text-[10px] text-yellow-400">
-                        <AlertTriangle className="w-2.5 h-2.5 flex-shrink-0" />
-                        <span>Outdated · {formatDate(mod.dateModified)}</span>
-                      </div>
-                    )}
-                    <button
-                      type="button"
-                      onClick={() => initiateDownload(mod)}
-                      disabled={downloading !== null}
-                      className="flex items-center justify-center gap-1 px-2 py-1 text-xs bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded transition-colors cursor-pointer"
-                    >
-                      {isDownloading ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" />
-                          {extracting
-                            ? 'Extracting'
-                            : downloadProgress !== null
-                              ? `${downloadProgress}%`
-                              : 'Starting'}
-                        </>
-                      ) : (
-                        <>
-                          <Download className="w-3 h-3" />
-                          Install
-                        </>
-                      )}
-                    </button>
-                  </div>
-                );
-              })}
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
+              </div>
+              {hideOutdated && filteredOutCount > 0 && (
+                <div className="mt-1.5 text-[11px] text-text-secondary">
+                  {filteredOutCount} outdated skin{filteredOutCount === 1 ? '' : 's'} hidden by your Settings preference.
+                </div>
+              )}
             </div>
-          )}
-        </div>
+
+            <div className="flex-1 overflow-y-auto p-5">
+              {loadState === 'loading' && (
+                <div className="flex flex-col items-center justify-center py-16 gap-3">
+                  <Loader2 className="w-8 h-8 animate-spin text-accent" />
+                  <span className="text-sm text-text-secondary">Loading skins…</span>
+                </div>
+              )}
+
+              {loadState === 'error' && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3 text-center">
+                  <div className="text-sm text-red-400 max-w-md">{error || 'Failed to load'}</div>
+                  <button
+                    type="button"
+                    onClick={handleRetry}
+                    className="flex items-center gap-2 px-4 py-2 rounded-md bg-bg-tertiary hover:bg-bg-secondary text-sm transition-colors cursor-pointer"
+                  >
+                    <RefreshCw className="w-4 h-4" />
+                    Retry
+                  </button>
+                </div>
+              )}
+
+              {loadState === 'loaded' && availableMods.length === 0 && (
+                <div className="text-sm text-text-secondary text-center py-12">
+                  {rawAvailableCount === 0
+                    ? 'No additional skins available for this hero.'
+                    : query.trim()
+                      ? `No matches for "${query.trim()}"${filteredOutCount > 0 ? ` (${filteredOutCount} hidden by filters)` : ''}.`
+                      : `All ${rawAvailableCount} available skins are hidden by your filters.`}
+                </div>
+              )}
+
+              {loadState === 'loaded' && availableMods.length > 0 && (
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4">
+                  {availableMods.map((mod) => {
+                    const isDownloading = downloading?.modId === mod.id;
+                    return (
+                      <div
+                        key={mod.id}
+                        className="flex flex-col gap-2 p-2 bg-bg-tertiary rounded-lg border border-transparent hover:border-accent/40 transition-colors"
+                      >
+                        <div className="aspect-video rounded-md overflow-hidden bg-black/30">
+                          <ModThumbnail
+                            src={getModThumbnail(mod)}
+                            alt={mod.name}
+                            nsfw={mod.nsfw}
+                            hideNsfw={hideNsfwPreviews}
+                            className="w-full h-full"
+                          />
+                        </div>
+                        <div className="text-sm font-medium leading-tight line-clamp-2 min-h-[2.5rem]" title={mod.name}>
+                          {mod.name}
+                        </div>
+                        <div className="flex items-center justify-between text-[11px] text-text-secondary">
+                          <span>{mod.submitter?.name ?? ''}</span>
+                          {mod.dateModified > 0 && (
+                            <span
+                              className={
+                                isModOutdated(mod.dateModified)
+                                  ? 'text-yellow-400 flex items-center gap-1'
+                                  : ''
+                              }
+                            >
+                              {isModOutdated(mod.dateModified) && (
+                                <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                              )}
+                              {formatDate(mod.dateModified)}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => initiateDownload(mod)}
+                          disabled={downloading !== null}
+                          className="flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-md transition-colors cursor-pointer"
+                        >
+                          {isDownloading ? (
+                            <>
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              {extracting
+                                ? 'Extracting'
+                                : downloadProgress !== null
+                                  ? `${downloadProgress}%`
+                                  : 'Starting'}
+                            </>
+                          ) : (
+                            <>
+                              <Download className="w-3.5 h-3.5" />
+                              Install
+                            </>
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
       )}
-    </div>
+    </>
   );
 }

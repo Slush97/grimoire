@@ -37,6 +37,9 @@ interface AppState {
   toggleMod: (modId: string) => Promise<void>;
   deleteMod: (modId: string) => Promise<void>;
   setModPriority: (modId: string, priority: number) => Promise<void>;
+  swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
+  reorderMods: (orderedFileNames: string[]) => Promise<void>;
+  importCustomMod: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
 
   // Download counts cache actions
   getDownloadCount: (modId: number) => number | undefined;
@@ -143,6 +146,38 @@ export const useAppStore = create<AppState>((set, get) => ({
       });
     } catch (err) {
       set({ modsError: String(err) });
+    }
+  },
+
+  // Swap the priority of two mods (mod IDs change after rename, so we replace the full list)
+  swapModPriority: async (modIdA: string, modIdB: string) => {
+    try {
+      const updated = await api.swapModPriority(modIdA, modIdB);
+      set({ mods: updated });
+    } catch (err) {
+      set({ modsError: String(err) });
+    }
+  },
+
+  // Reorder mods via drag-and-drop. Accepts the target enabled-list order as filenames.
+  // Rolls back to a fresh scan on error so the UI can't desync from disk.
+  reorderMods: async (orderedFileNames: string[]) => {
+    try {
+      const updated = await api.reorderMods(orderedFileNames);
+      set({ mods: updated });
+    } catch (err) {
+      set({ modsError: String(err) });
+      get().loadMods();
+    }
+  },
+
+  importCustomMod: async (args) => {
+    try {
+      const updated = await api.importCustomMod(args);
+      set({ mods: updated });
+    } catch (err) {
+      set({ modsError: String(err) });
+      throw err;
     }
   },
 
