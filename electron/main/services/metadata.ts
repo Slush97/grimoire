@@ -81,3 +81,38 @@ export function removeModMetadata(fileName: string): void {
 
 // Alias for removeModMetadata
 export const deleteModMetadata = removeModMetadata;
+
+/**
+ * Atomically migrate metadata for a batch of rename operations.
+ *
+ * Why batched: when several mods are renamed in one operation (e.g. reorder),
+ * a naive loop of setModMetadata(new) + removeModMetadata(old) can clobber
+ * values whenever one mod's new name equals another mod's old name. This
+ * happens whenever priorities compact (pak03 → pak01 while pak01 → pak02).
+ *
+ * Snapshot all source values first, delete all old keys, then write all new
+ * keys in one load/save cycle.
+ */
+export function migrateModMetadata(
+    migrations: Array<{ from: string; to: string }>
+): void {
+    if (migrations.length === 0) return;
+
+    const metadata = loadMetadata();
+
+    const pending = migrations
+        .filter((m) => m.from !== m.to)
+        .map((m) => ({ from: m.from, to: m.to, data: metadata[m.from] }))
+        .filter((m) => m.data !== undefined);
+
+    if (pending.length === 0) return;
+
+    for (const m of pending) {
+        delete metadata[m.from];
+    }
+    for (const m of pending) {
+        metadata[m.to] = m.data!;
+    }
+
+    saveMetadata(metadata);
+}

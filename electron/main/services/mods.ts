@@ -3,7 +3,7 @@ import { existsSync } from 'fs';
 import { join, dirname } from 'path';
 import { createHash, randomBytes } from 'crypto';
 import { getAddonsPath, getDisabledPath } from './deadlock';
-import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
+import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
 
 /** Minimum VPK priority number */
 const MIN_VPK_PRIORITY = 1;
@@ -439,14 +439,12 @@ export async function reorderMods(
         throw err;
     }
 
-    for (const { mod, newFileName } of assignments) {
-        if (newFileName === mod.fileName) continue;
-        const oldMeta = getModMetadata(mod.fileName);
-        if (oldMeta) {
-            setModMetadata(newFileName, oldMeta);
-            removeModMetadata(mod.fileName);
-        }
-    }
+    migrateModMetadata(
+        assignments.map(({ mod, newFileName }) => ({
+            from: mod.fileName,
+            to: newFileName,
+        }))
+    );
 }
 
 /**
@@ -516,17 +514,8 @@ async function directSwap(a: Mod, b: Mod): Promise<void> {
     for (const step of steps) await fs.rename(step.from, step.tmp);
     for (const step of steps) await fs.rename(step.tmp, step.final);
 
-    const aMeta = getModMetadata(a.fileName);
-    const bMeta = getModMetadata(b.fileName);
-    const aNew = renameWithPriority(a.fileName, b.priority);
-    const bNew = renameWithPriority(b.fileName, a.priority);
-
-    if (aMeta) {
-        setModMetadata(aNew, aMeta);
-        if (aNew !== a.fileName) removeModMetadata(a.fileName);
-    }
-    if (bMeta) {
-        setModMetadata(bNew, bMeta);
-        if (bNew !== b.fileName) removeModMetadata(b.fileName);
-    }
+    migrateModMetadata([
+        { from: a.fileName, to: renameWithPriority(a.fileName, b.priority) },
+        { from: b.fileName, to: renameWithPriority(b.fileName, a.priority) },
+    ]);
 }
