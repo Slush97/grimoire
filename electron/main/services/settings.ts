@@ -7,6 +7,7 @@ export interface AppSettings {
     devMode: boolean;
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
+    hideOutdatedMods: boolean;       // Hide GameBanana mods flagged as outdated in Browse
     activeProfileId: string | null;  // Currently active profile
     autoSaveProfile: boolean;        // Auto-save when mods change
     experimentalStats: boolean;
@@ -19,6 +20,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     devMode: false,
     devDeadlockPath: null,
     hideNsfwPreviews: false,
+    hideOutdatedMods: false,
     activeProfileId: null,
     autoSaveProfile: false,
     experimentalStats: false,

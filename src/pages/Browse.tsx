@@ -709,8 +709,11 @@ export default function Browse() {
     return ids;
   }, [installedMods]);
 
-  // Just use all loaded mods - infinite scroll handles pagination
-  const displayMods = mods;
+  // Just use all loaded mods - infinite scroll handles pagination.
+  // Hide outdated mods if the user has opted in.
+  const displayMods = settings?.hideOutdatedMods
+    ? mods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified))
+    : mods;
 
   if (!activeDeadlockPath) {
     return (

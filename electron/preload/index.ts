@@ -15,6 +15,8 @@ export interface ElectronAPI {
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
+    reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
+    swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
@@ -235,6 +237,12 @@ interface AppSettings {
     devMode: boolean;
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
+    hideOutdatedMods: boolean;
+    activeProfileId: string | null;
+    autoSaveProfile: boolean;
+    experimentalStats: boolean;
+    experimentalCrosshair: boolean;
+    hasCompletedSetup: boolean;
 }
 
 interface Mod {
@@ -573,6 +581,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteMod: (modId: string) => ipcRenderer.invoke('delete-mod', modId),
     setModPriority: (modId: string, priority: number) =>
         ipcRenderer.invoke('set-mod-priority', modId, priority),
+    reorderMods: (orderedFileNames: string[]) =>
+        ipcRenderer.invoke('reorder-mods', orderedFileNames),
+    swapModPriority: (modIdA: string, modIdB: string) =>
+        ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),

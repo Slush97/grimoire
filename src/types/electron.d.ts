@@ -201,6 +201,8 @@ export interface ElectronAPI {
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
+    reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
+    swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;

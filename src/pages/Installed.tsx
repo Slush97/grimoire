@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Package, Loader2, Settings, Trash2, ToggleLeft, ToggleRight, AlertTriangle, FolderOpen } from 'lucide-react';
+import { Package, Loader2, Settings, Trash2, ToggleLeft, ToggleRight, AlertTriangle, FolderOpen, ChevronUp, ChevronDown } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
@@ -20,7 +20,7 @@ function formatBytes(bytes: number): string {
 
 export default function Installed() {
   const navigate = useNavigate();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, deleteMod } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, deleteMod, swapModPriority } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -130,8 +130,8 @@ export default function Installed() {
     );
   }
 
-  // Mod list
-  const enabledMods = mods.filter((m) => m.enabled);
+  // Mod list (enabled sorted by priority so chevron-reorder matches visual order)
+  const enabledMods = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
   const disabledMods = mods.filter((m) => !m.enabled);
   const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
 
@@ -186,7 +186,7 @@ export default function Installed() {
                 : 'space-y-2'
             }
           >
-            {enabledMods.map((mod) => (
+            {enabledMods.map((mod, index) => (
               <ModCard
                 key={mod.id}
                 mod={mod}
@@ -195,6 +195,8 @@ export default function Installed() {
                 conflicts={conflictMap.get(mod.id) || []}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
+                onMoveUp={index > 0 ? () => swapModPriority(mod.id, enabledMods[index - 1].id) : undefined}
+                onMoveDown={index < enabledMods.length - 1 ? () => swapModPriority(mod.id, enabledMods[index + 1].id) : undefined}
               />
             ))}
           </div>
@@ -261,9 +263,11 @@ interface ModCardProps {
   conflicts: ModConflict[];
   onToggle: () => void;
   onDelete: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
 }
 
-function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelete }: ModCardProps) {
+function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelete, onMoveUp, onMoveDown }: ModCardProps) {
   const hasConflicts = conflicts.length > 0;
 
   return (
@@ -328,6 +332,30 @@ function ModCard({ mod, viewMode, hideNsfwPreviews, conflicts, onToggle, onDelet
             </span>
           </div>
         </div>
+
+        {/* Reorder (enabled mods only) */}
+        {(onMoveUp || onMoveDown) && (
+          <div className="flex flex-col">
+            <button
+              onClick={onMoveUp}
+              disabled={!onMoveUp}
+              className="p-0.5 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:hover:text-text-secondary transition-colors cursor-pointer disabled:cursor-not-allowed"
+              title="Move up (higher priority)"
+              aria-label="Move up"
+            >
+              <ChevronUp className="w-5 h-5" />
+            </button>
+            <button
+              onClick={onMoveDown}
+              disabled={!onMoveDown}
+              className="p-0.5 text-text-secondary hover:text-text-primary disabled:opacity-30 disabled:hover:text-text-secondary transition-colors cursor-pointer disabled:cursor-not-allowed"
+              title="Move down (lower priority)"
+              aria-label="Move down"
+            >
+              <ChevronDown className="w-5 h-5" />
+            </button>
+          </div>
+        )}
 
         {/* Delete */}
         <button

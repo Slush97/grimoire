@@ -37,6 +37,7 @@ interface AppState {
   toggleMod: (modId: string) => Promise<void>;
   deleteMod: (modId: string) => Promise<void>;
   setModPriority: (modId: string, priority: number) => Promise<void>;
+  swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
 
   // Download counts cache actions
   getDownloadCount: (modId: number) => number | undefined;
@@ -141,6 +142,16 @@ export const useAppStore = create<AppState>((set, get) => ({
           .mods.map((m) => (m.id === modId ? updatedMod : m))
           .sort((a, b) => a.priority - b.priority),
       });
+    } catch (err) {
+      set({ modsError: String(err) });
+    }
+  },
+
+  // Swap the priority of two mods (mod IDs change after rename, so we replace the full list)
+  swapModPriority: async (modIdA: string, modIdB: string) => {
+    try {
+      const updated = await api.swapModPriority(modIdA, modIdB);
+      set({ mods: updated });
     } catch (err) {
       set({ modsError: String(err) });
     }

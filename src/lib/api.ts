@@ -59,6 +59,14 @@ export async function setModPriority(modId: string, priority: number): Promise<M
   return window.electronAPI.setModPriority(modId, priority);
 }
 
+export async function reorderMods(orderedFileNames: string[]): Promise<Mod[]> {
+  return window.electronAPI.reorderMods(orderedFileNames);
+}
+
+export async function swapModPriority(modIdA: string, modIdB: string): Promise<Mod[]> {
+  return window.electronAPI.swapModPriority(modIdA, modIdB);
+}
+
 // GameBanana
 export async function browseMods(
   page: number,

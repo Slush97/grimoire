@@ -186,7 +186,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         throw new Error(`Profile not found: ${profileId}`);
     }
 
-    // 1. Apply Mods
+    // 1. Apply Mods (enable/disable state)
     const currentMods = await scanMods(deadlockPath);
     const profileModMap = new Map<string, ProfileMod>();
     for (const profileMod of profile.mods) {
@@ -208,6 +208,21 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
             // Mod wasn't in the profile - disable it
             if (mod.enabled) {
                 await disableMod(deadlockPath, mod.id);
+            }
+        }
+    }
+
+    // 1b. Apply priority order - rescan so we have up-to-date IDs/paths after enable/disable
+    const refreshedMods = await scanMods(deadlockPath);
+    const byFileName = new Map(refreshedMods.map((m) => [m.fileName, m]));
+    const orderedProfileMods = [...profile.mods].sort((a, b) => a.priority - b.priority);
+    for (const profileMod of orderedProfileMods) {
+        const current = byFileName.get(profileMod.fileName);
+        if (current && current.priority !== profileMod.priority) {
+            try {
+                await setModPriority(deadlockPath, current.id, profileMod.priority);
+            } catch (err) {
+                console.warn(`[applyProfile] Could not restore priority for ${profileMod.fileName}:`, err);
             }
         }
     }

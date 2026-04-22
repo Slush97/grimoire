@@ -6,6 +6,8 @@ import {
     disableMod,
     deleteMod,
     setModPriority,
+    reorderMods,
+    swapModPriority,
     Mod,
 } from '../services/mods';
 import { getModMetadata, loadMetadata } from '../services/metadata';
@@ -92,6 +94,34 @@ ipcMain.handle(
         }
         const mod = await setModPriority(deadlockPath, modId, priority);
         return enrichMod(mod);
+    }
+);
+
+// reorder-mods
+ipcMain.handle(
+    'reorder-mods',
+    async (_, orderedFileNames: string[]): Promise<Mod[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        await reorderMods(deadlockPath, orderedFileNames);
+        const mods = await scanMods(deadlockPath);
+        return mods.map(enrichMod);
+    }
+);
+
+// swap-mod-priority
+ipcMain.handle(
+    'swap-mod-priority',
+    async (_, modIdA: string, modIdB: string): Promise<Mod[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        await swapModPriority(deadlockPath, modIdA, modIdB);
+        const mods = await scanMods(deadlockPath);
+        return mods.map(enrichMod);
     }
 );
 
