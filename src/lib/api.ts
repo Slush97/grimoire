@@ -80,6 +80,44 @@ export async function readImageDataUrl(imagePath: string): Promise<string> {
   return window.electronAPI.readImageDataUrl(imagePath);
 }
 
+// =====================
+// Launch API
+// =====================
+
+export interface VanillaStashStatus {
+  active: boolean;
+  startedAt?: string;
+  modCount?: number;
+}
+
+export interface VanillaRestoreResult {
+  restored: number;
+  skipped: number;
+  failed: string[];
+}
+
+export async function launchModded(): Promise<void> {
+  return window.electronAPI.launchModded();
+}
+
+export async function launchVanilla(): Promise<void> {
+  return window.electronAPI.launchVanilla();
+}
+
+export async function getVanillaStashStatus(): Promise<VanillaStashStatus> {
+  return window.electronAPI.getVanillaStashStatus();
+}
+
+export async function restoreVanillaStash(): Promise<VanillaRestoreResult> {
+  return window.electronAPI.restoreVanillaStash();
+}
+
+export function onVanillaRestoreComplete(
+  callback: (result: VanillaRestoreResult) => void
+): () => void {
+  return window.electronAPI.onVanillaRestoreComplete(callback);
+}
+
 // GameBanana
 export async function browseMods(
   page: number,

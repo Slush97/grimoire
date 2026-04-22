@@ -20,6 +20,13 @@ export interface ElectronAPI {
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
 
+    // Launch
+    launchModded: () => Promise<void>;
+    launchVanilla: () => Promise<void>;
+    getVanillaStashStatus: () => Promise<VanillaStashStatus>;
+    restoreVanillaStash: () => Promise<VanillaRestoreResult>;
+    onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
+
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
@@ -353,6 +360,18 @@ interface ImportCustomModArgs {
     nsfw?: boolean;
 }
 
+interface VanillaStashStatus {
+    active: boolean;
+    startedAt?: string;
+    modCount?: number;
+}
+
+interface VanillaRestoreResult {
+    restored: number;
+    skipped: number;
+    failed: string[];
+}
+
 interface DownloadProgressData {
     modId: number;
     fileId: number;
@@ -599,6 +618,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('import-custom-mod', args),
     readImageDataUrl: (imagePath: string) =>
         ipcRenderer.invoke('read-image-data-url', imagePath),
+
+    // Launch
+    launchModded: () => ipcRenderer.invoke('launch-modded'),
+    launchVanilla: () => ipcRenderer.invoke('launch-vanilla'),
+    getVanillaStashStatus: () => ipcRenderer.invoke('get-vanilla-stash-status'),
+    restoreVanillaStash: () => ipcRenderer.invoke('restore-vanilla-stash'),
+    onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, result: VanillaRestoreResult) =>
+            callback(result);
+        ipcRenderer.on('vanilla-restore-complete', handler);
+        return () => ipcRenderer.removeListener('vanilla-restore-complete', handler);
+    },
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),

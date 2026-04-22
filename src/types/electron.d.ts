@@ -74,6 +74,18 @@ export interface ImportCustomModArgs {
     nsfw?: boolean;
 }
 
+export interface VanillaStashStatus {
+    active: boolean;
+    startedAt?: string;
+    modCount?: number;
+}
+
+export interface VanillaRestoreResult {
+    restored: number;
+    skipped: number;
+    failed: string[];
+}
+
 export interface DownloadProgressData {
     modId: number;
     fileId: number;
@@ -213,6 +225,13 @@ export interface ElectronAPI {
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
+
+    // Launch
+    launchModded: () => Promise<void>;
+    launchVanilla: () => Promise<void>;
+    getVanillaStashStatus: () => Promise<VanillaStashStatus>;
+    restoreVanillaStash: () => Promise<VanillaRestoreResult>;
+    onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
