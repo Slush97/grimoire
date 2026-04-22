@@ -17,6 +17,8 @@ export interface ElectronAPI {
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
+    importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
+    readImageDataUrl: (imagePath: string) => Promise<string>;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
@@ -341,6 +343,14 @@ interface OpenDialogOptions {
     directory?: boolean;
     title?: string;
     defaultPath?: string;
+    filters?: Array<{ name: string; extensions: string[] }>;
+}
+
+interface ImportCustomModArgs {
+    vpkPath: string;
+    name: string;
+    thumbnailDataUrl?: string;
+    nsfw?: boolean;
 }
 
 interface DownloadProgressData {
@@ -585,6 +595,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('reorder-mods', orderedFileNames),
     swapModPriority: (modIdA: string, modIdB: string) =>
         ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
+    importCustomMod: (args: ImportCustomModArgs) =>
+        ipcRenderer.invoke('import-custom-mod', args),
+    readImageDataUrl: (imagePath: string) =>
+        ipcRenderer.invoke('read-image-data-url', imagePath),
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),

@@ -17,6 +17,7 @@ interface OpenDialogOptions {
     directory?: boolean;
     title?: string;
     defaultPath?: string;
+    filters?: Array<{ name: string; extensions: string[] }>;
 }
 
 interface SetMinaPresetArgs {
@@ -53,6 +54,7 @@ ipcMain.handle(
             properties: options.directory ? ['openDirectory'] : ['openFile'],
             title: options.title,
             defaultPath: options.defaultPath,
+            filters: options.filters,
         });
         return result.canceled ? null : result.filePaths[0] || null;
     }

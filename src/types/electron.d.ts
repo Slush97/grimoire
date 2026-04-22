@@ -64,6 +64,14 @@ export interface OpenDialogOptions {
     directory?: boolean;
     title?: string;
     defaultPath?: string;
+    filters?: Array<{ name: string; extensions: string[] }>;
+}
+
+export interface ImportCustomModArgs {
+    vpkPath: string;
+    name: string;
+    thumbnailDataUrl?: string;
+    nsfw?: boolean;
 }
 
 export interface DownloadProgressData {
@@ -203,6 +211,8 @@ export interface ElectronAPI {
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
+    importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
+    readImageDataUrl: (imagePath: string) => Promise<string>;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;

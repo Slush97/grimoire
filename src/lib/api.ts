@@ -67,6 +67,19 @@ export async function swapModPriority(modIdA: string, modIdB: string): Promise<M
   return window.electronAPI.swapModPriority(modIdA, modIdB);
 }
 
+export async function importCustomMod(args: {
+  vpkPath: string;
+  name: string;
+  thumbnailDataUrl?: string;
+  nsfw?: boolean;
+}): Promise<Mod[]> {
+  return window.electronAPI.importCustomMod(args);
+}
+
+export async function readImageDataUrl(imagePath: string): Promise<string> {
+  return window.electronAPI.readImageDataUrl(imagePath);
+}
+
 // GameBanana
 export async function browseMods(
   page: number,
@@ -156,6 +169,7 @@ export async function showOpenDialog(options: {
   directory?: boolean;
   title?: string;
   defaultPath?: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
 }): Promise<string | null> {
   return window.electronAPI.showOpenDialog(options);
 }
