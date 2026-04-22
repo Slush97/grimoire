@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow } from 'electron';
+import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
 import { getMainWindow } from '../index';
 import { loadSettings } from '../services/settings';
 import {
@@ -57,6 +57,19 @@ ipcMain.handle(
         return result.canceled ? null : result.filePaths[0] || null;
     }
 );
+
+// open-mods-folder
+ipcMain.handle('open-mods-folder', async (): Promise<void> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const addonsPath = getAddonsPath(deadlockPath);
+    const error = await shell.openPath(addonsPath);
+    if (error) {
+        throw new Error(error);
+    }
+});
 
 // cleanup-addons
 ipcMain.handle('cleanup-addons', (): CleanupResult => {

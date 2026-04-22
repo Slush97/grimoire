@@ -139,6 +139,10 @@ export async function fixGameinfo(): Promise<{ configured: boolean; message: str
   return window.electronAPI.fixGameinfo();
 }
 
+export async function openModsFolder(): Promise<void> {
+  return window.electronAPI.openModsFolder();
+}
+
 // Dialog helper for Settings page
 export async function showOpenDialog(options: {
   directory?: boolean;

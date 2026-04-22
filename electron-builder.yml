@@ -37,7 +37,6 @@ linux:
 win:
   target:
     - nsis
-    - portable
   icon: resources/icon.ico
 mac:
   target:
@@ -47,7 +46,11 @@ mac:
   icon: resources/icon.icns
 nsis:
   oneClick: false
+  perMachine: false
   allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  menuCategory: true
+  shortcutName: Grimoire
+  uninstallDisplayName: Grimoire Mod Manager
   artifactName: "${productName}-Setup-${version}.${ext}"
-portable:
-  artifactName: "${productName}-${version}.${ext}"

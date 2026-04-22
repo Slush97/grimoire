@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Package, Loader2, Settings, Trash2, ToggleLeft, ToggleRight, AlertTriangle } from 'lucide-react';
+import { Package, Loader2, Settings, Trash2, ToggleLeft, ToggleRight, AlertTriangle, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts } from '../lib/api';
+import { getConflicts, openModsFolder } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import ModThumbnail from '../components/ModThumbnail';
 import { Button } from '../components/common/ui';
@@ -153,6 +153,15 @@ export default function Installed() {
                 {conflictMap.size / 2} conflicts
               </Button>
             )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => openModsFolder().catch(() => {})}
+              icon={FolderOpen}
+              title="Open mods folder"
+            >
+              Open Folder
+            </Button>
             <ViewModeToggle
               value={viewMode}
               options={[

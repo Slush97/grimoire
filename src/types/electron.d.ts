@@ -219,6 +219,7 @@ export interface ElectronAPI {
     cleanupAddons: () => Promise<CleanupResult>;
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
+    openModsFolder: () => Promise<void>;
 
     // Window control
     setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
