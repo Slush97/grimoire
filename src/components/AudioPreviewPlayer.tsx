@@ -13,6 +13,7 @@ interface AudioPreviewPlayerProps {
     variant?: 'default' | 'inline';
     volume?: number; // 0-1, externally controlled volume
     onPlay?: () => void; // Called when playback starts (to pause others)
+    onPlayingChange?: (playing: boolean) => void; // Fires on play/pause/ended
 }
 
 // Global reference to currently playing audio for single-audio playback
@@ -24,7 +25,8 @@ export default function AudioPreviewPlayer({
     compact = false,
     variant = 'default',
     volume = 1,
-    onPlay
+    onPlay,
+    onPlayingChange,
 }: AudioPreviewPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -110,11 +112,16 @@ export default function AudioPreviewPlayer({
         const handlePlay = () => {
             setIsPlaying(true);
             setIsLoading(false);
+            onPlayingChange?.(true);
         };
-        const handlePause = () => setIsPlaying(false);
+        const handlePause = () => {
+            setIsPlaying(false);
+            onPlayingChange?.(false);
+        };
         const handleEnded = () => {
             setIsPlaying(false);
             setCurrentTime(0);
+            onPlayingChange?.(false);
         };
         const handleError = () => {
             setError(true);

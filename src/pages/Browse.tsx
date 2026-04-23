@@ -166,6 +166,7 @@ export default function Browse() {
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadQueue, setDownloadQueue] = useState<Array<{ modId: number; fileId: number; fileName: string }>>([]);
+  const [playingModId, setPlayingModId] = useState<number | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -990,6 +991,13 @@ export default function Browse() {
                     volume={soundVolume}
                     onVolumeChange={setSoundVolume}
                     hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+                    isPlaying={playingModId === mod.id}
+                    onPlayingChange={(playing) => {
+                      setPlayingModId((prev) => {
+                        if (playing) return mod.id;
+                        return prev === mod.id ? null : prev;
+                      });
+                    }}
                     onClick={() => handleModClick(mod)}
                     onQuickDownload={() => handleQuickDownload(mod)}
                   />
@@ -1043,6 +1051,8 @@ interface ModCardProps {
   volume: number;
   onVolumeChange: (v: number) => void;
   hideNsfwPreviews: boolean;
+  isPlaying: boolean;
+  onPlayingChange: (playing: boolean) => void;
   onClick: () => void;
   onQuickDownload: () => void;
 }
@@ -1071,7 +1081,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
-function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
+function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -1093,7 +1103,11 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
-        className="relative bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3"
+        className={`relative bg-bg-secondary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
+          isPlaying
+            ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
+            : 'border-border hover:border-accent/50'
+        }`}
       >
         <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-md overflow-hidden">
           {isSoundSection ? (
@@ -1166,7 +1180,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex-1 min-w-0">
-              <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} />
+              <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} onPlayingChange={onPlayingChange} />
             </div>
             <div className="w-px h-4 bg-border flex-shrink-0" />
             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -1198,11 +1212,13 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
       className={`relative bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
-        downloading
-          ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
-          : installed
-            ? 'border-state-success/40 hover:border-state-success/70'
-            : 'border-border hover:border-accent/50'
+        isPlaying
+          ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
+          : downloading
+            ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
+            : installed
+              ? 'border-state-success/40 hover:border-state-success/70'
+              : 'border-border hover:border-accent/50'
       }`}
     >
       {/* Full-bleed image */}
@@ -1336,6 +1352,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
                 compact
                 variant="inline"
                 volume={volume}
+                onPlayingChange={onPlayingChange}
               />
             </div>
             <div className="w-px h-5 bg-white/20 flex-shrink-0" />
