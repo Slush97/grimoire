@@ -722,58 +722,108 @@ function ModCard({
     >
       {indicatorClasses && <div className={indicatorClasses} />}
 
-      {viewMode === 'grid' && (
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onOpenDetails?.();
-          }}
-          disabled={!onOpenDetails}
-          className="group relative w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden block focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
-          title={onOpenDetails ? 'View mod details' : undefined}
-          aria-label={onOpenDetails ? `View details for ${mod.name}` : undefined}
-        >
-          <ModThumbnail
-            src={mod.thumbnailUrl}
-            alt={mod.name}
-            nsfw={mod.nsfw}
-            hideNsfw={hideNsfwPreviews}
-            className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
-          />
-          {onOpenDetails && (
-            <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/20" />
-          )}
-          {mod.enabled && (
-            <div
-              className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 bg-accent text-white rounded-full text-[10px] font-bold uppercase tracking-wide shadow-lg"
-              title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
-            >
-              Load #{mod.priority}
+      {viewMode === 'grid' && (() => {
+        const isSoundCard = mod.sourceSection === 'Sound' && !!mod.audioUrl;
+        const overlayBadges = (
+          <>
+            {mod.enabled && (
+              <div
+                className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-accent text-white rounded-full text-[10px] font-bold uppercase tracking-wide shadow-lg"
+                title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
+              >
+                Load #{mod.priority}
+              </div>
+            )}
+            <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
+              {hasConflicts && (
+                <span
+                  className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
+                  title={conflicts.map((c) => c.details).join(', ')}
+                >
+                  <AlertTriangle className="w-3 h-3" />
+                  Conflict
+                </span>
+              )}
+              {updateAvailable && (
+                <span
+                  className="flex items-center gap-1 px-1.5 py-0.5 bg-state-info/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
+                  title="A newer version is available on GameBanana"
+                >
+                  <Download className="w-3 h-3" />
+                  Update
+                </span>
+              )}
             </div>
-          )}
-          <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
-            {hasConflicts && (
-              <span
-                className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
-                title={conflicts.map((c) => c.details).join(', ')}
+          </>
+        );
+
+        if (isSoundCard) {
+          return (
+            <div className="relative w-full aspect-video rounded-md overflow-hidden bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary border border-border">
+              {overlayBadges}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenDetails?.();
+                }}
+                disabled={!onOpenDetails}
+                className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-text-secondary hover:text-accent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+                title={onOpenDetails ? 'View mod details' : undefined}
+                aria-label={onOpenDetails ? `View details for ${mod.name}` : undefined}
               >
-                <AlertTriangle className="w-3 h-3" />
-                Conflict
-              </span>
-            )}
-            {updateAvailable && (
-              <span
-                className="flex items-center gap-1 px-1.5 py-0.5 bg-state-info/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
-                title="A newer version is available on GameBanana"
+                <div className="flex items-end gap-0.5 h-6 opacity-60">
+                  {[4, 7, 12, 16, 20, 14, 8, 12, 18, 10, 6, 14, 9].map((h, i) => (
+                    <span
+                      key={i}
+                      className="w-1 rounded-full bg-accent/70"
+                      style={{ height: `${h}px` }}
+                    />
+                  ))}
+                </div>
+                <span className="text-[10px] font-semibold uppercase tracking-wider">Sound preview</span>
+              </button>
+              <div
+                className="absolute inset-x-2 bottom-2 z-20"
+                onClick={(e) => e.stopPropagation()}
               >
-                <Download className="w-3 h-3" />
-                Update
-              </span>
+                <AudioPreviewPlayer
+                  src={mod.audioUrl!}
+                  compact
+                  volume={soundVolume}
+                  className="w-full backdrop-blur-md bg-bg-primary/70 border border-white/10 rounded-md"
+                />
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetails?.();
+            }}
+            disabled={!onOpenDetails}
+            className="group relative w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden block focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+            title={onOpenDetails ? 'View mod details' : undefined}
+            aria-label={onOpenDetails ? `View details for ${mod.name}` : undefined}
+          >
+            <ModThumbnail
+              src={mod.thumbnailUrl}
+              alt={mod.name}
+              nsfw={mod.nsfw}
+              hideNsfw={hideNsfwPreviews}
+              className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            />
+            {onOpenDetails && (
+              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/20" />
             )}
-          </div>
-        </button>
-      )}
+            {overlayBadges}
+          </button>
+        );
+      })()}
 
       <div className={viewMode === 'grid' ? 'flex items-center gap-3' : 'contents'}>
         {draggable && (
@@ -900,16 +950,6 @@ function ModCard({
         </div>
       </div>
 
-      {viewMode === 'grid' && mod.sourceSection === 'Sound' && mod.audioUrl && (
-        <div className="w-full" onClick={(e) => e.stopPropagation()}>
-          <AudioPreviewPlayer
-            src={mod.audioUrl}
-            compact
-            volume={soundVolume}
-            className="w-full"
-          />
-        </div>
-      )}
     </div>
   );
 }
