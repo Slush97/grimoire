@@ -629,30 +629,31 @@ function ModCard({
           </div>
         )}
 
-        <button
-          onClick={onToggle}
-          aria-pressed={mod.enabled}
-          aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
-          title={mod.enabled ? 'Disable mod' : 'Enable mod'}
-          className={`relative flex-shrink-0 w-10 h-6 rounded-full transition-colors cursor-pointer ${
-            mod.enabled ? 'bg-accent' : 'bg-bg-tertiary border border-border'
-          }`}
-        >
-          <span
-            className={`absolute top-[3px] left-[3px] w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
-              mod.enabled ? 'translate-x-4' : 'translate-x-0'
+        <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+          <button
+            onClick={onDelete}
+            className="p-1 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"
+            title="Delete mod"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onToggle}
+            aria-pressed={mod.enabled}
+            aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
+            title={mod.enabled ? 'Disable mod' : 'Enable mod'}
+            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
+              mod.enabled ? 'bg-accent' : 'bg-bg-tertiary border border-border'
             }`}
-            aria-hidden
-          />
-        </button>
-
-        <button
-          onClick={onDelete}
-          className="p-2 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"
-          title="Delete mod"
-        >
-          <Trash2 className="w-5 h-5" />
-        </button>
+          >
+            <span
+              className={`absolute top-[2px] left-[2px] w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                mod.enabled ? 'translate-x-4' : 'translate-x-0'
+              }`}
+              aria-hidden
+            />
+          </button>
+        </div>
       </div>
 
       {viewMode === 'grid' && mod.sourceSection === 'Sound' && mod.audioUrl && (
