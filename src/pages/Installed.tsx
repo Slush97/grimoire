@@ -210,7 +210,6 @@ export default function Installed() {
   return (
     <div className="p-6">
       <PageHeader
-        icon={Package}
         title="Installed Mods"
         description={
           <span className="flex items-center gap-2 flex-wrap">

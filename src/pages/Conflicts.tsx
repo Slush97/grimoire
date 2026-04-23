@@ -104,7 +104,6 @@ export default function Conflicts() {
   return (
     <div className="p-6">
       <PageHeader
-        icon={AlertTriangle}
         title={`Conflicts (${conflicts.length})`}
         description="Resolve conflicts between installed mods"
         action={

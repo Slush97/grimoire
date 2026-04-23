@@ -272,7 +272,6 @@ export default function Locker() {
     return (
       <div className="p-6 space-y-6">
         <PageHeader
-          icon={Shield}
           title="Hero Locker"
           description="Pick the active skin per hero. Selecting one disables other skins for that hero."
         />
@@ -303,7 +302,6 @@ export default function Locker() {
   return (
     <div className="p-6 space-y-6">
       <PageHeader
-        icon={Shield}
         title="Hero Locker"
         description="Pick the active skin per hero. Selecting one disables other skins for that hero."
         stats={`${heroList.length} heroes • ${mods.length} installed`}

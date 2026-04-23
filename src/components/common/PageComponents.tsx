@@ -64,27 +64,19 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
 interface PageHeaderProps {
     title: string;
     description?: ReactNode;
-    icon: LucideIcon;
     action?: ReactNode;
     stats?: ReactNode;
     className?: string;
 }
 
-export function PageHeader({ title, description, icon: Icon, action, stats, className = '' }: PageHeaderProps) {
+export function PageHeader({ title, description, action, stats, className = '' }: PageHeaderProps) {
     return (
         <div className={`flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-border ${className}`}>
-            <div className="min-w-0 flex items-start gap-3">
-                <Icon
-                    className="w-7 h-7 text-accent flex-shrink-0 mt-1.5"
-                    strokeWidth={1.5}
-                    aria-hidden
-                />
-                <div className="min-w-0">
-                    <h1 className="text-3xl md:text-4xl font-reaver tracking-wide text-text-primary leading-tight">
-                        {title}
-                    </h1>
-                    {description && <div className="text-text-secondary text-sm mt-1">{description}</div>}
-                </div>
+            <div className="min-w-0">
+                <h1 className="text-3xl md:text-4xl font-reaver tracking-wide text-text-primary leading-tight">
+                    {title}
+                </h1>
+                {description && <div className="text-text-secondary text-sm mt-1">{description}</div>}
             </div>
             <div className="flex items-center gap-3 flex-wrap">
                 {stats && <div className="text-sm text-text-secondary">{stats}</div>}
