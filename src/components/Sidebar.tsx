@@ -202,35 +202,35 @@ export default function Sidebar() {
   const canLaunch = !!settings?.deadlockPath || !!settings?.devDeadlockPath;
 
   return (
-    <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col">
-      <div className="px-3 pt-4 pb-3 border-b border-border text-center">
+    <aside className="w-56 bg-bg-secondary border-r border-border flex flex-col h-full min-h-0">
+      <div className="px-3 pt-3 pb-2 border-b border-border text-center flex-shrink-0">
         <span
-          className="text-4xl text-accent block leading-none"
+          className="text-2xl text-accent block leading-none"
           style={{ fontFamily: "'IM Fell English', serif" }}
         >
           Grimoire
         </span>
-        <span className="text-xs text-text-secondary tracking-widest uppercase mt-1 block">
+        <span className="text-[10px] text-text-secondary tracking-[0.2em] uppercase mt-1 block">
           Mod Manager
         </span>
       </div>
 
-      <nav className="flex-1 p-2 overflow-y-auto">
-        <ul className="space-y-1">
+      <nav className="flex-1 min-h-0 p-2 overflow-y-auto">
+        <ul className="space-y-0.5">
           {navItems.map(({ to, icon: Icon, label, tooltip, badge, badgeTone }) => (
             <li key={to}>
               <NavLink
                 to={to}
                 title={tooltip}
                 className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
+                  `relative flex items-center gap-3 pl-4 pr-3 py-3 rounded-lg font-medium text-sm transition-colors ${
                     isActive
-                      ? 'bg-accent text-white'
-                      : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
+                      ? 'bg-accent/10 text-text-primary before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-accent'
+                      : 'text-text-primary/70 hover:bg-bg-tertiary hover:text-text-primary'
                   }`
                 }
               >
-                <Icon className="w-5 h-5" />
+                <Icon className="w-5 h-5 flex-shrink-0" />
                 <span className="flex-1">{label}</span>
                 {badge !== undefined && badge > 0 && (
                   <span
@@ -249,7 +249,7 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      <div className="border-t border-border p-3 space-y-2.5">
+      <div className="flex-shrink-0 border-t border-border p-3 space-y-2.5">
         {stashStatus.active && (
           <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-[11px] text-yellow-200 flex items-center gap-2">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -327,11 +327,9 @@ export default function Sidebar() {
         </div>
 
         <button
-          onClick={() => updateAvailable && navigate('/settings')}
-          className={`flex items-center justify-center gap-2 w-full pt-1 text-[11px] text-text-secondary ${
-            updateAvailable ? 'cursor-pointer hover:text-accent transition-colors' : 'cursor-default'
-          }`}
-          title={updateAvailable ? 'Update available! Click to view' : ''}
+          onClick={() => navigate('/settings')}
+          className="flex items-center justify-center gap-2 w-full pt-1 text-[11px] text-text-secondary cursor-pointer hover:text-accent transition-colors"
+          title={updateAvailable ? 'Update available! Click to view' : 'Open Settings'}
         >
           <span>{appVersion || 'v...'}</span>
           {updateAvailable && <Download className="w-3 h-3 text-accent animate-pulse" />}
