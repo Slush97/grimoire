@@ -105,7 +105,7 @@ export function Tag({
     return (
         <span
             title={title}
-            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-[3px] text-[11px] font-semibold leading-none ${surface} ${className}`}
+            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-[2px] text-[10.5px] font-semibold leading-none ${surface} ${className}`}
         >
             {Icon && <Icon className="w-3 h-3" />}
             {children}
