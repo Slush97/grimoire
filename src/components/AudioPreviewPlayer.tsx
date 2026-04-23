@@ -170,16 +170,15 @@ export default function AudioPreviewPlayer({
             {/* Play/Pause Button */}
             <button
                 onClick={togglePlay}
-                className={`flex-shrink-0 flex items-center justify-center rounded-full bg-accent hover:bg-accent-hover text-white transition-colors ${compact ? 'w-6 h-6' : 'w-8 h-8'
-                    }`}
+                className={`flex-shrink-0 flex items-center justify-center rounded-full bg-accent hover:bg-accent-hover active:scale-95 text-white ring-1 ring-white/20 shadow-sm transition-all ${compact ? 'w-8 h-8' : 'w-10 h-10'}`}
                 title={isPlaying ? 'Pause' : 'Play'}
             >
                 {isLoading ? (
-                    <div className={`animate-spin rounded-full border-2 border-white border-t-transparent ${compact ? 'w-3 h-3' : 'w-4 h-4'}`} />
+                    <div className={`animate-spin rounded-full border-2 border-white border-t-transparent ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
                 ) : isPlaying ? (
-                    <Pause className={compact ? 'w-3 h-3' : 'w-4 h-4'} />
+                    <Pause className={compact ? 'w-4 h-4' : 'w-5 h-5'} fill="currentColor" />
                 ) : (
-                    <Play className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} ml-0.5`} />
+                    <Play className={`${compact ? 'w-4 h-4' : 'w-5 h-5'} ml-0.5`} fill="currentColor" />
                 )}
             </button>
 
