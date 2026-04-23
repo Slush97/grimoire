@@ -52,7 +52,8 @@ export default function Installed() {
     soundVolume,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [search, setSearch] = useState('');
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   const [modToDelete, setModToDelete] = useState<{ id: string; name: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -141,6 +142,16 @@ export default function Installed() {
   const disabledMods = mods.filter((m) => !m.enabled);
   const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
 
+  // Filter by search query (case-insensitive substring on name). Drag-and-drop
+  // reorder is still correct because it targets the full enabled list order,
+  // not the filtered view.
+  const searchNeedle = search.trim().toLowerCase();
+  const matchesSearch = (m: typeof mods[number]) =>
+    !searchNeedle || m.name.toLowerCase().includes(searchNeedle);
+  const visibleEnabled = enabledMods.filter(matchesSearch);
+  const visibleDisabled = disabledMods.filter(matchesSearch);
+  const totalMatches = visibleEnabled.length + visibleDisabled.length;
+
   const resetDragState = () => {
     setDraggingId(null);
     setDropTargetId(null);
@@ -216,7 +227,27 @@ export default function Installed() {
           </span>
         }
         action={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search installed..."
+                className="bg-bg-secondary border border-border rounded-lg pl-8 pr-8 py-2 text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent w-56"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  title="Clear search"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
             {conflictCount > 0 && (
               <Button
                 variant="warning"
@@ -246,8 +277,8 @@ export default function Installed() {
             <ViewModeToggle
               value={viewMode}
               options={[
-                { value: 'grid', label: 'Cards' },
                 { value: 'list', label: 'List' },
+                { value: 'grid', label: 'Cards' },
               ]}
               onChange={(mode) => setViewMode(mode as 'grid' | 'list')}
             />
@@ -256,9 +287,22 @@ export default function Installed() {
         className="mb-6"
       />
 
-      {enabledMods.length > 0 && (
+      {searchNeedle && totalMatches === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
+          <Search className="w-12 h-12 mb-3 opacity-50" />
+          <p className="mb-2">No installed mods match &ldquo;{search}&rdquo;</p>
+          <button
+            onClick={() => setSearch('')}
+            className="mt-1 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer text-sm"
+          >
+            Clear search
+          </button>
+        </div>
+      )}
+
+      {visibleEnabled.length > 0 && (
         <div className="mb-6">
-          <SectionHeader count={enabledMods.length}>Enabled</SectionHeader>
+          <SectionHeader count={visibleEnabled.length}>Enabled</SectionHeader>
           <div
             className={
               viewMode === 'grid'
@@ -266,7 +310,7 @@ export default function Installed() {
                 : 'space-y-2'
             }
           >
-            {enabledMods.map((mod) => (
+            {visibleEnabled.map((mod) => (
               <ModCard
                 key={mod.id}
                 mod={mod}
@@ -276,7 +320,7 @@ export default function Installed() {
                 soundVolume={soundVolume}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
-                draggable
+                draggable={!searchNeedle}
                 isDragging={draggingId === mod.id}
                 isDropTarget={dropTargetId === mod.id}
                 dropPosition={dropTargetId === mod.id ? dropPosition : null}
@@ -287,7 +331,6 @@ export default function Installed() {
                   setDropPosition(pos);
                 }}
                 onDragLeaveCard={() => {
-                  // Only clear if we're still targeting this card
                   if (dropTargetId === mod.id) {
                     setDropTargetId(null);
                     setDropPosition(null);
@@ -306,9 +349,9 @@ export default function Installed() {
         </div>
       )}
 
-      {disabledMods.length > 0 && (
+      {visibleDisabled.length > 0 && (
         <div>
-          <SectionHeader count={disabledMods.length}>Disabled</SectionHeader>
+          <SectionHeader count={visibleDisabled.length}>Disabled</SectionHeader>
           <div
             className={
               viewMode === 'grid'
@@ -316,7 +359,7 @@ export default function Installed() {
                 : 'space-y-2'
             }
           >
-            {disabledMods.map((mod) => (
+            {visibleDisabled.map((mod) => (
               <ModCard
                 key={mod.id}
                 mod={mod}
@@ -430,10 +473,10 @@ function ModCard({
     <div
       className={`relative rounded-lg border transition-colors ${
         hasConflicts
-          ? 'bg-yellow-500/5 border-yellow-500/50'
+          ? 'bg-state-warning/5 border-state-warning/50'
           : mod.enabled
-            ? 'bg-bg-secondary border-accent/30'
-            : 'bg-bg-tertiary border-border grayscale-[50%]'
+            ? 'bg-bg-secondary border-accent/40 border-l-4 border-l-accent'
+            : 'bg-bg-tertiary border-border opacity-60 hover:opacity-90'
       } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'} ${
         isDragging ? 'opacity-40' : ''
       }`}
@@ -561,10 +604,20 @@ function ModCard({
             {mod.categoryName && (
               <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
             )}
-            <span className="font-mono truncate">{mod.fileName}</span>
             <span>{formatBytes(mod.size)}</span>
-            <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">
-              Priority: {mod.priority}
+            {mod.enabled && (
+              <span
+                className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs"
+                title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
+              >
+                Load Order: {mod.priority}
+              </span>
+            )}
+            <span
+              className="font-mono truncate opacity-60 hover:opacity-100 cursor-help"
+              title={mod.fileName}
+            >
+              {mod.fileName.length > 20 ? `${mod.fileName.slice(0, 17)}…` : mod.fileName}
             </span>
           </div>
         </div>
