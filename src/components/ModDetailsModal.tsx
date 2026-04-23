@@ -49,9 +49,16 @@ export default function ModDetailsModal({
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
+  const [imageLoading, setImageLoading] = useState(true);
   const [comments, setComments] = useState<GameBananaComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
+
+  // Flip to loading whenever the active image slot changes. The spinner
+  // overlay clears when the hidden probe img fires onLoad/onError below.
+  useEffect(() => {
+    setImageLoading(true);
+  }, [currentImageIndex, mod.id]);
 
   useEffect(() => {
     let cancelled = false;
@@ -165,8 +172,29 @@ export default function ModDetailsModal({
                   alt={`${mod.name} - Image ${currentImageIndex + 1}`}
                   nsfw={mod.nsfw}
                   hideNsfw={hideNsfwPreviews}
-                  className="w-full max-h-[60vh] object-contain bg-bg-tertiary"
+                  className={`w-full max-h-[60vh] object-contain bg-bg-tertiary transition-opacity duration-200 ${imageLoading ? 'opacity-40' : 'opacity-100'}`}
                 />
+                {/* Hidden probe img drives the load/error signal without
+                    requiring ModThumbnail to expose onLoad. */}
+                {currentImageUrl && (
+                  <img
+                    key={currentImageUrl}
+                    src={currentImageUrl}
+                    alt=""
+                    aria-hidden
+                    className="hidden"
+                    onLoad={() => setImageLoading(false)}
+                    onError={() => setImageLoading(false)}
+                  />
+                )}
+                {imageLoading && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                    <div className="flex items-center gap-2 rounded-full bg-black/60 backdrop-blur-sm px-3 py-1.5 text-xs text-white/90 border border-white/10 shadow animate-fade-in">
+                      <Loader2 className="w-4 h-4 animate-spin text-accent" />
+                      Loading image…
+                    </div>
+                  </div>
+                )}
               </div>
 
               {images.length > 1 && (
