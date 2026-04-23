@@ -175,10 +175,17 @@ export default function ModDetailsModal({
                   className={`w-full max-h-[60vh] object-contain bg-bg-tertiary transition-opacity duration-200 ${imageLoading ? 'opacity-40' : 'opacity-100'}`}
                 />
                 {/* Hidden probe img drives the load/error signal without
-                    requiring ModThumbnail to expose onLoad. */}
+                    requiring ModThumbnail to expose onLoad. The ref callback
+                    checks img.complete on attach so already-cached images
+                    never flash the loading overlay. */}
                 {currentImageUrl && (
                   <img
                     key={currentImageUrl}
+                    ref={(el) => {
+                      if (el && el.complete && el.naturalWidth > 0) {
+                        setImageLoading(false);
+                      }
+                    }}
                     src={currentImageUrl}
                     alt=""
                     aria-hidden
