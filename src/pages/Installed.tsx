@@ -604,20 +604,20 @@ function ModCard({
                 18+
               </span>
             )}
+            {mod.enabled && (
+              <span
+                className="ml-auto px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px] font-semibold uppercase tracking-wide"
+                title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
+              >
+                Load #{mod.priority}
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary mt-1">
             {mod.categoryName && (
               <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
             )}
             <span>{formatBytes(mod.size)}</span>
-            {mod.enabled && (
-              <span
-                className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs"
-                title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
-              >
-                Load Order: {mod.priority}
-              </span>
-            )}
             <span
               className="font-mono truncate opacity-60 hover:opacity-100 cursor-help"
               title={mod.fileName}
