@@ -24,6 +24,7 @@ import type { GameBananaModDetails } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import ModDetailsModal from '../components/ModDetailsModal';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
 import { Button } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -758,7 +759,12 @@ function ModCard({
         );
 
         if (isSoundCard) {
-          const hasThumb = !!mod.thumbnailUrl;
+          // Match Browse's Sound section: infer the hero from the mod title
+          // and reuse the locker render so the card carries the same hero
+          // art the user saw when they downloaded it.
+          const inferredHero = inferHeroFromTitle(mod.name);
+          const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : null;
+          const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 50;
           return (
             <div className="group relative w-full aspect-video rounded-md overflow-hidden bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary border border-border">
               {overlayBadges}
@@ -773,14 +779,13 @@ function ModCard({
                 title={onOpenDetails ? 'View mod details' : undefined}
                 aria-label={onOpenDetails ? `View details for ${mod.name}` : undefined}
               >
-                {hasThumb ? (
+                {heroRenderUrl ? (
                   <>
-                    <ModThumbnail
-                      src={mod.thumbnailUrl}
-                      alt={mod.name}
-                      nsfw={mod.nsfw}
-                      hideNsfw={hideNsfwPreviews}
-                      className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+                    <img
+                      src={heroRenderUrl}
+                      alt={inferredHero ?? mod.name}
+                      className="w-full h-full object-cover transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+                      style={{ objectPosition: `${heroFacePos}% 25%` }}
                     />
                     {/* Gradient so the overlaid player stays legible */}
                     <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
