@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Layers, Loader2, Shield, Star, X } from 'lucide-react';
+import { Layers, Shield, Star, X } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
