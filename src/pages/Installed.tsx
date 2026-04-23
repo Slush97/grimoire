@@ -52,7 +52,13 @@ export default function Installed() {
     soundVolume,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
-  const [viewMode, setViewMode] = useState<ViewMode>('list');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const stored = localStorage.getItem('installedViewMode');
+    return stored === 'grid' ? 'grid' : 'list';
+  });
+  useEffect(() => {
+    localStorage.setItem('installedViewMode', viewMode);
+  }, [viewMode]);
   const [search, setSearch] = useState('');
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   const [modToDelete, setModToDelete] = useState<{ id: string; name: string } | null>(null);
