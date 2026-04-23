@@ -18,10 +18,12 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod } from '../lib/api';
 import type { ModConflict } from '../lib/api';
+import type { GameBananaModDetails } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
+import ModDetailsModal from '../components/ModDetailsModal';
 import { Button } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -67,6 +69,56 @@ export default function Installed() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
+
+  // Details overlay state
+  const [detailsMod, setDetailsMod] = useState<GameBananaModDetails | null>(null);
+  const [detailsSection, setDetailsSection] = useState<string>('Mod');
+  const [detailsCategoryId, setDetailsCategoryId] = useState<number>(0);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
+  const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
+
+  // Map of mod id → true if a newer version exists on GameBanana.
+  const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
+
+  const openModDetails = async (m: typeof mods[number]) => {
+    if (!m.gameBananaId) return;
+    const section = m.sourceSection ?? 'Mod';
+    const categoryId = m.categoryId ?? 0;
+    setDetailsLoading(true);
+    setDetailsError(null);
+    setDetailsSection(section);
+    setDetailsCategoryId(categoryId);
+    setDetailsInstalledFileIds(m.gameBananaFileId ? new Set([m.gameBananaFileId]) : new Set());
+    setDetailsUpdateAvailable(updatesAvailable.has(m.id));
+    try {
+      const details = await getModDetails(m.gameBananaId, section);
+      setDetailsMod(details);
+    } catch (err) {
+      setDetailsError(String(err));
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const closeModDetails = () => {
+    setDetailsMod(null);
+    setDetailsError(null);
+    setDetailsUpdateAvailable(false);
+  };
+
+  const handleDetailsDownload = async (fileId: number, fileName: string) => {
+    if (!detailsMod) return;
+    try {
+      // Queue the download — the global DownloadQueueIndicator shows progress.
+      await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
+      closeModDetails();
+      loadMods();
+    } catch (err) {
+      setDetailsError(String(err));
+    }
+  };
 
   const handleDeleteConfirm = async () => {
     if (modToDelete) {
@@ -318,6 +370,8 @@ export default function Installed() {
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 conflicts={conflictMap.get(mod.id) || []}
                 soundVolume={soundVolume}
+                updateAvailable={updatesAvailable.has(mod.id)}
+                onOpenDetails={mod.gameBananaId ? () => openModDetails(mod) : undefined}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
                 draggable={!searchNeedle}
@@ -367,6 +421,8 @@ export default function Installed() {
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 conflicts={conflictMap.get(mod.id) || []}
                 soundVolume={soundVolume}
+                updateAvailable={updatesAvailable.has(mod.id)}
+                onOpenDetails={mod.gameBananaId ? () => openModDetails(mod) : undefined}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
                 draggable={false}
@@ -398,6 +454,55 @@ export default function Installed() {
           onImport={async (args) => {
             await importCustomMod(args);
           }}
+        />
+      )}
+
+      {detailsLoading && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in"
+          onClick={closeModDetails}
+        >
+          <div
+            className="bg-bg-secondary border border-border rounded-xl p-6 flex items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Loader2 className="w-5 h-5 animate-spin text-accent" />
+            <span className="text-sm text-text-secondary">Loading mod details...</span>
+          </div>
+        </div>
+      )}
+
+      {detailsError && !detailsMod && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={closeModDetails}
+        >
+          <div
+            className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-red-400 mb-2">Couldn't load mod details</h3>
+            <p className="text-sm text-text-secondary mb-4">{detailsError}</p>
+            <div className="flex justify-end">
+              <Button onClick={closeModDetails}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailsMod && (
+        <ModDetailsModal
+          mod={detailsMod}
+          section={detailsSection}
+          installed={true}
+          installedFileIds={detailsInstalledFileIds}
+          downloadingFileId={null}
+          extracting={false}
+          progress={null}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          updateAvailable={detailsUpdateAvailable}
+          onClose={closeModDetails}
+          onDownload={handleDetailsDownload}
         />
       )}
     </div>
