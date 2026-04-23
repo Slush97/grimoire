@@ -79,6 +79,10 @@ export default function Installed() {
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
   const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
+  // Local id of the installed mod that triggered the overlay. On download we
+  // delete this entry first so Update/Reinstall replaces the old VPK instead
+  // of installing a second copy alongside it.
+  const [detailsSourceModId, setDetailsSourceModId] = useState<string | null>(null);
 
   // Map of mod id → true if a newer version exists on GameBanana.
   const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
@@ -91,6 +95,7 @@ export default function Installed() {
     setDetailsError(null);
     setDetailsSection(section);
     setDetailsCategoryId(categoryId);
+    setDetailsSourceModId(m.id);
     setDetailsInstalledFileIds(m.gameBananaFileId ? new Set([m.gameBananaFileId]) : new Set());
     setDetailsUpdateAvailable(updatesAvailable.has(m.id));
     try {
@@ -107,11 +112,18 @@ export default function Installed() {
     setDetailsMod(null);
     setDetailsError(null);
     setDetailsUpdateAvailable(false);
+    setDetailsSourceModId(null);
   };
 
   const handleDetailsDownload = async (fileId: number, fileName: string) => {
     if (!detailsMod) return;
     try {
+      // Remove the existing install first so Update/Reinstall replaces the old
+      // VPK instead of the backend's conflict-avoidance renaming it to a
+      // second copy alongside it.
+      if (detailsSourceModId) {
+        await deleteMod(detailsSourceModId);
+      }
       // Queue the download — the global DownloadQueueIndicator shows progress.
       await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
       closeModDetails();
