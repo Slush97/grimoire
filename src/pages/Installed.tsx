@@ -471,11 +471,11 @@ function ModCard({
 
   return (
     <div
-      className={`relative rounded-lg border transition-colors ${
+      className={`relative rounded-lg border transition-colors overflow-hidden ${
         hasConflicts
           ? 'bg-state-warning/5 border-state-warning/50'
           : mod.enabled
-            ? 'bg-bg-secondary border-accent/40 border-l-4 border-l-accent'
+            ? 'bg-bg-secondary border-accent/40 before:content-[""] before:absolute before:left-0 before:top-0 before:bottom-0 before:w-1 before:bg-accent'
             : 'bg-bg-tertiary border-border opacity-60 hover:opacity-90'
       } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'} ${
         isDragging ? 'opacity-40' : ''
