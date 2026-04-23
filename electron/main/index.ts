@@ -2,6 +2,15 @@ import { app, BrowserWindow, shell, session } from 'electron';
 import { join } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 
+// Stop Electron from registering with the Windows media session / hardware
+// media key stack. We never use transport controls, but opting in makes Win11
+// play the audio-focus chime every time an <audio> element initializes — very
+// noticeable now that sound-mod cards each mount their own player.
+app.commandLine.appendSwitch(
+    'disable-features',
+    'HardwareMediaKeyHandling,MediaSessionService'
+);
+
 // Import IPC handlers
 import './ipc/settings';
 import './ipc/mods';

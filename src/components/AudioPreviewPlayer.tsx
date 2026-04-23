@@ -172,7 +172,13 @@ export default function AudioPreviewPlayer({
             className={`${surfaceClass} ${className}`}
             onClick={(e) => e.stopPropagation()}
         >
-            <audio ref={audioRef} src={src} preload="metadata" />
+            {/*
+              preload="none" keeps the element from opening a Windows audio
+              session until the user hits play. With preload="metadata" every
+              sound card on Browse/Installed grabs WASAPI on mount, which fires
+              the Win11 device-connect chime on every list render.
+            */}
+            <audio ref={audioRef} src={src} preload="none" />
 
             {/* Play/Pause Button */}
             <button
