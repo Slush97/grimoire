@@ -103,6 +103,7 @@ export interface DownloadErrorData {
     fileId: number;
     errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
     message: string;
+    helpUrl?: string;
 }
 
 export interface DownloadQueueItem {

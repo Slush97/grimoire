@@ -27,6 +27,7 @@
     "package:mac": "electron-vite build && electron-builder --mac"
   },
   "dependencies": {
+    "7zip-bin": "^5.2.0",
     "@compai/font-unifraktur-maguntia": "^0.0.3",
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.5.0",

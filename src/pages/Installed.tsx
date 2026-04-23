@@ -4,8 +4,6 @@ import {
   Loader2,
   Settings,
   Trash2,
-  ToggleLeft,
-  ToggleRight,
   AlertTriangle,
   FolderOpen,
   GripVertical,
@@ -13,14 +11,21 @@ import {
   X,
   ImagePlus,
   Search,
+  Volume2,
+  Info,
+  Download,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod } from '../lib/api';
 import type { ModConflict } from '../lib/api';
+import type { GameBananaModDetails } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
-import { Button } from '../components/common/ui';
+import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
+import ModDetailsModal from '../components/ModDetailsModal';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
+import { Button, Tag } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
 function formatBytes(bytes: number): string {
@@ -46,9 +51,17 @@ export default function Installed() {
     deleteMod,
     reorderMods,
     importCustomMod,
+    soundVolume,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    const stored = localStorage.getItem('installedViewMode');
+    return stored === 'grid' ? 'grid' : 'list';
+  });
+  useEffect(() => {
+    localStorage.setItem('installedViewMode', viewMode);
+  }, [viewMode]);
+  const [search, setSearch] = useState('');
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   const [modToDelete, setModToDelete] = useState<{ id: string; name: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
@@ -57,6 +70,68 @@ export default function Installed() {
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
+
+  // Details overlay state
+  const [detailsMod, setDetailsMod] = useState<GameBananaModDetails | null>(null);
+  const [detailsSection, setDetailsSection] = useState<string>('Mod');
+  const [detailsCategoryId, setDetailsCategoryId] = useState<number>(0);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState<string | null>(null);
+  const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
+  const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
+  // Local id of the installed mod that triggered the overlay. On download we
+  // delete this entry first so Update/Reinstall replaces the old VPK instead
+  // of installing a second copy alongside it.
+  const [detailsSourceModId, setDetailsSourceModId] = useState<string | null>(null);
+
+  // Map of mod id → true if a newer version exists on GameBanana.
+  const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
+
+  const openModDetails = async (m: typeof mods[number]) => {
+    if (!m.gameBananaId) return;
+    const section = m.sourceSection ?? 'Mod';
+    const categoryId = m.categoryId ?? 0;
+    setDetailsLoading(true);
+    setDetailsError(null);
+    setDetailsSection(section);
+    setDetailsCategoryId(categoryId);
+    setDetailsSourceModId(m.id);
+    setDetailsInstalledFileIds(m.gameBananaFileId ? new Set([m.gameBananaFileId]) : new Set());
+    setDetailsUpdateAvailable(updatesAvailable.has(m.id));
+    try {
+      const details = await getModDetails(m.gameBananaId, section);
+      setDetailsMod(details);
+    } catch (err) {
+      setDetailsError(String(err));
+    } finally {
+      setDetailsLoading(false);
+    }
+  };
+
+  const closeModDetails = () => {
+    setDetailsMod(null);
+    setDetailsError(null);
+    setDetailsUpdateAvailable(false);
+    setDetailsSourceModId(null);
+  };
+
+  const handleDetailsDownload = async (fileId: number, fileName: string) => {
+    if (!detailsMod) return;
+    try {
+      // Remove the existing install first so Update/Reinstall replaces the old
+      // VPK instead of the backend's conflict-avoidance renaming it to a
+      // second copy alongside it.
+      if (detailsSourceModId) {
+        await deleteMod(detailsSourceModId);
+      }
+      // Queue the download — the global DownloadQueueIndicator shows progress.
+      await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
+      closeModDetails();
+      loadMods();
+    } catch (err) {
+      setDetailsError(String(err));
+    }
+  };
 
   const handleDeleteConfirm = async () => {
     if (modToDelete) {
@@ -98,6 +173,39 @@ export default function Installed() {
     }
   }, [mods]);
 
+  // Flag mods whose GameBanana dateModified is newer than when the user
+  // installed their copy. Uses the local mod cache (synced in the background)
+  // so this is cheap and works offline; staler cache just means fewer flags.
+  useEffect(() => {
+    let cancelled = false;
+    const checkUpdates = async () => {
+      const targets = mods.filter((m) => !!m.gameBananaId && !!m.installedAt);
+      if (targets.length === 0) {
+        setUpdatesAvailable(new Set());
+        return;
+      }
+      const available = new Set<string>();
+      for (const mod of targets) {
+        if (cancelled) return;
+        try {
+          const cached = await window.electronAPI.getCachedMod(mod.gameBananaId!);
+          if (!cached) continue;
+          const installedTs = Math.floor(new Date(mod.installedAt).getTime() / 1000);
+          if (Number.isFinite(installedTs) && cached.dateModified > installedTs) {
+            available.add(mod.id);
+          }
+        } catch {
+          // Cache miss or backend error — just skip this mod.
+        }
+      }
+      if (!cancelled) setUpdatesAvailable(available);
+    };
+    checkUpdates();
+    return () => {
+      cancelled = true;
+    };
+  }, [mods]);
+
   if (!activeDeadlockPath) {
     return (
       <EmptyState
@@ -114,11 +222,7 @@ export default function Installed() {
   }
 
   if (modsLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      </div>
-    );
+    return <InstalledSkeleton viewMode={viewMode} />;
   }
 
   if (modsError) {
@@ -136,6 +240,16 @@ export default function Installed() {
   const enabledMods = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
   const disabledMods = mods.filter((m) => !m.enabled);
   const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
+
+  // Filter by search query (case-insensitive substring on name). Drag-and-drop
+  // reorder is still correct because it targets the full enabled list order,
+  // not the filtered view.
+  const searchNeedle = search.trim().toLowerCase();
+  const matchesSearch = (m: typeof mods[number]) =>
+    !searchNeedle || m.name.toLowerCase().includes(searchNeedle);
+  const visibleEnabled = enabledMods.filter(matchesSearch);
+  const visibleDisabled = disabledMods.filter(matchesSearch);
+  const totalMatches = visibleEnabled.length + visibleDisabled.length;
 
   const resetDragState = () => {
     setDraggingId(null);
@@ -195,11 +309,43 @@ export default function Installed() {
   return (
     <div className="p-6">
       <PageHeader
-        icon={Package}
         title="Installed Mods"
-        description={`${enabledMods.length} enabled / ${mods.length} total`}
+        description={
+          <span className="flex items-center gap-2 flex-wrap">
+            <span>{enabledMods.length} enabled / {mods.length} total</span>
+            {mods.length > 0 && enabledMods.length === 0 && (
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 text-xs font-medium"
+                title="You have installed mods but none are enabled — nothing will apply when you launch."
+              >
+                <Info className="w-3 h-3" />
+                No mods enabled
+              </span>
+            )}
+          </span>
+        }
         action={
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Search installed..."
+                className="bg-bg-secondary border border-border rounded-lg pl-8 pr-8 py-2 text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent w-56"
+              />
+              {search && (
+                <button
+                  type="button"
+                  onClick={() => setSearch('')}
+                  title="Clear search"
+                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
             {conflictCount > 0 && (
               <Button
                 variant="warning"
@@ -229,8 +375,8 @@ export default function Installed() {
             <ViewModeToggle
               value={viewMode}
               options={[
-                { value: 'grid', label: 'Cards' },
                 { value: 'list', label: 'List' },
+                { value: 'grid', label: 'Cards' },
               ]}
               onChange={(mode) => setViewMode(mode as 'grid' | 'list')}
             />
@@ -239,9 +385,22 @@ export default function Installed() {
         className="mb-6"
       />
 
-      {enabledMods.length > 0 && (
+      {searchNeedle && totalMatches === 0 && (
+        <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
+          <Search className="w-12 h-12 mb-3 opacity-50" />
+          <p className="mb-2">No installed mods match &ldquo;{search}&rdquo;</p>
+          <button
+            onClick={() => setSearch('')}
+            className="mt-1 px-3 py-1.5 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer text-sm"
+          >
+            Clear search
+          </button>
+        </div>
+      )}
+
+      {visibleEnabled.length > 0 && (
         <div className="mb-6">
-          <SectionHeader count={enabledMods.length}>Enabled</SectionHeader>
+          <SectionHeader count={visibleEnabled.length}>Enabled</SectionHeader>
           <div
             className={
               viewMode === 'grid'
@@ -249,16 +408,19 @@ export default function Installed() {
                 : 'space-y-2'
             }
           >
-            {enabledMods.map((mod) => (
+            {visibleEnabled.map((mod) => (
               <ModCard
                 key={mod.id}
                 mod={mod}
                 viewMode={viewMode}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 conflicts={conflictMap.get(mod.id) || []}
+                soundVolume={soundVolume}
+                updateAvailable={updatesAvailable.has(mod.id)}
+                onOpenDetails={mod.gameBananaId ? () => openModDetails(mod) : undefined}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
-                draggable
+                draggable={!searchNeedle}
                 isDragging={draggingId === mod.id}
                 isDropTarget={dropTargetId === mod.id}
                 dropPosition={dropTargetId === mod.id ? dropPosition : null}
@@ -269,7 +431,6 @@ export default function Installed() {
                   setDropPosition(pos);
                 }}
                 onDragLeaveCard={() => {
-                  // Only clear if we're still targeting this card
                   if (dropTargetId === mod.id) {
                     setDropTargetId(null);
                     setDropPosition(null);
@@ -288,9 +449,9 @@ export default function Installed() {
         </div>
       )}
 
-      {disabledMods.length > 0 && (
+      {visibleDisabled.length > 0 && (
         <div>
-          <SectionHeader count={disabledMods.length}>Disabled</SectionHeader>
+          <SectionHeader count={visibleDisabled.length}>Disabled</SectionHeader>
           <div
             className={
               viewMode === 'grid'
@@ -298,13 +459,16 @@ export default function Installed() {
                 : 'space-y-2'
             }
           >
-            {disabledMods.map((mod) => (
+            {visibleDisabled.map((mod) => (
               <ModCard
                 key={mod.id}
                 mod={mod}
                 viewMode={viewMode}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 conflicts={conflictMap.get(mod.id) || []}
+                soundVolume={soundVolume}
+                updateAvailable={updatesAvailable.has(mod.id)}
+                onOpenDetails={mod.gameBananaId ? () => openModDetails(mod) : undefined}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
                 draggable={false}
@@ -338,6 +502,105 @@ export default function Installed() {
           }}
         />
       )}
+
+      {detailsLoading && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in"
+          onClick={closeModDetails}
+        >
+          <div
+            className="bg-bg-secondary border border-border rounded-xl p-6 flex items-center gap-3"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <Loader2 className="w-5 h-5 animate-spin text-accent" />
+            <span className="text-sm text-text-secondary">Loading mod details...</span>
+          </div>
+        </div>
+      )}
+
+      {detailsError && !detailsMod && (
+        <div
+          className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+          onClick={closeModDetails}
+        >
+          <div
+            className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-red-400 mb-2">Couldn't load mod details</h3>
+            <p className="text-sm text-text-secondary mb-4">{detailsError}</p>
+            <div className="flex justify-end">
+              <Button onClick={closeModDetails}>Close</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {detailsMod && (
+        <ModDetailsModal
+          mod={detailsMod}
+          section={detailsSection}
+          installed={true}
+          installedFileIds={detailsInstalledFileIds}
+          downloadingFileId={null}
+          extracting={false}
+          progress={null}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          updateAvailable={detailsUpdateAvailable}
+          onClose={closeModDetails}
+          onDownload={handleDetailsDownload}
+        />
+      )}
+    </div>
+  );
+}
+
+function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
+  const rows = viewMode === 'grid' ? 8 : 6;
+  return (
+    <div className="p-6 animate-fade-in" aria-busy="true" aria-live="polite">
+      <div className="flex items-end justify-between gap-4 pb-4 border-b border-border mb-6">
+        <div className="space-y-2">
+          <div className="skeleton-shimmer bg-bg-tertiary rounded-md h-9 w-52" />
+          <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-36" />
+        </div>
+        <div className="skeleton-shimmer bg-bg-tertiary rounded-lg h-9 w-56" />
+      </div>
+      <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-20 mb-3" />
+      <div
+        className={
+          viewMode === 'grid'
+            ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+            : 'space-y-2'
+        }
+      >
+        {Array.from({ length: rows }).map((_, i) =>
+          viewMode === 'grid' ? (
+            <div key={i} className="rounded-lg border border-border bg-bg-secondary p-3 flex flex-col gap-3">
+              <div className="skeleton-shimmer w-full aspect-video bg-bg-tertiary rounded-md" />
+              <div className="flex items-center gap-3">
+                <div className="skeleton-shimmer bg-bg-tertiary rounded-full w-5 h-5" />
+                <div className="flex-1 space-y-1.5">
+                  <div className="skeleton-shimmer bg-bg-tertiary rounded h-3.5 w-3/4" />
+                  <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-1/2" />
+                </div>
+                <div className="skeleton-shimmer bg-bg-tertiary rounded-full w-11 h-6" />
+              </div>
+            </div>
+          ) : (
+            <div key={i} className="rounded-lg border border-border bg-bg-secondary p-4 flex items-center gap-4">
+              <div className="skeleton-shimmer bg-bg-tertiary rounded w-5 h-5" />
+              <div className="skeleton-shimmer bg-bg-tertiary rounded-md w-20 h-12 flex-shrink-0" />
+              <div className="flex-1 space-y-1.5 min-w-0">
+                <div className="skeleton-shimmer bg-bg-tertiary rounded h-3.5 w-1/2" />
+                <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-1/3" />
+              </div>
+              <div className="skeleton-shimmer bg-bg-tertiary rounded-full w-11 h-6" />
+              <div className="skeleton-shimmer bg-bg-tertiary rounded-md w-8 h-8" />
+            </div>
+          )
+        )}
+      </div>
     </div>
   );
 }
@@ -351,11 +614,18 @@ interface ModCardProps {
     priority: number;
     size: number;
     thumbnailUrl?: string;
+    audioUrl?: string;
+    sourceSection?: string;
+    categoryName?: string;
     nsfw?: boolean;
+    gameBananaId?: number;
   };
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
   conflicts: ModConflict[];
+  soundVolume: number;
+  updateAvailable?: boolean;
+  onOpenDetails?: () => void;
   onToggle: () => void;
   onDelete: () => void;
   draggable?: boolean;
@@ -374,6 +644,9 @@ function ModCard({
   viewMode,
   hideNsfwPreviews,
   conflicts,
+  soundVolume,
+  updateAvailable,
+  onOpenDetails,
   onToggle,
   onDelete,
   draggable,
@@ -406,10 +679,10 @@ function ModCard({
     <div
       className={`relative rounded-lg border transition-colors ${
         hasConflicts
-          ? 'bg-yellow-500/5 border-yellow-500/50'
+          ? 'bg-state-warning/5 border-state-warning/50'
           : mod.enabled
-            ? 'bg-bg-secondary border-accent/30'
-            : 'bg-bg-tertiary border-border grayscale-[50%]'
+            ? 'bg-accent/5 border-accent/40'
+            : 'bg-bg-secondary/60 border-border/70 text-text-primary/80 hover:bg-bg-secondary hover:text-text-primary'
       } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'} ${
         isDragging ? 'opacity-40' : ''
       }`}
@@ -462,25 +735,135 @@ function ModCard({
     >
       {indicatorClasses && <div className={indicatorClasses} />}
 
-      {viewMode === 'grid' && (
-        <div className="relative w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden">
-          <ModThumbnail
-            src={mod.thumbnailUrl}
-            alt={mod.name}
-            nsfw={mod.nsfw}
-            hideNsfw={hideNsfwPreviews}
-            className="w-full h-full"
-          />
-          {hasConflicts && (
-            <div
-              className="absolute top-2 right-2 p-1.5 bg-yellow-500 rounded-full"
-              title={conflicts.map((c) => c.details).join(', ')}
-            >
-              <AlertTriangle className="w-3 h-3 text-black" />
+      {viewMode === 'grid' && (() => {
+        const isSoundCard = mod.sourceSection === 'Sound' && !!mod.audioUrl;
+        const overlayBadges = (
+          <>
+            {mod.enabled && (
+              <div className="absolute top-2 left-2 z-10">
+                <Tag
+                  tone="accent"
+                  variant="overlay"
+                  title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
+                  className="tabular-nums"
+                >
+                  Load #{mod.priority}
+                </Tag>
+              </div>
+            )}
+            <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
+              {hasConflicts && (
+                <Tag
+                  tone="warning"
+                  variant="overlay"
+                  icon={AlertTriangle}
+                  title={conflicts.map((c) => c.details).join(', ')}
+                >
+                  Conflict
+                </Tag>
+              )}
+              {updateAvailable && (
+                <Tag
+                  tone="info"
+                  variant="overlay"
+                  icon={Download}
+                  title="A newer version is available on GameBanana"
+                >
+                  Update
+                </Tag>
+              )}
             </div>
-          )}
-        </div>
-      )}
+          </>
+        );
+
+        if (isSoundCard) {
+          // Match Browse's Sound section: infer the hero from the mod title
+          // and reuse the locker render so the card carries the same hero
+          // art the user saw when they downloaded it.
+          const inferredHero = inferHeroFromTitle(mod.name);
+          const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : null;
+          const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 50;
+          return (
+            <div className="group relative w-full aspect-video rounded-md overflow-hidden bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary border border-border">
+              {overlayBadges}
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenDetails?.();
+                }}
+                disabled={!onOpenDetails}
+                className="absolute inset-0 w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+                title={onOpenDetails ? 'View mod details' : undefined}
+                aria-label={onOpenDetails ? `View details for ${mod.name}` : undefined}
+              >
+                {heroRenderUrl ? (
+                  <>
+                    <img
+                      src={heroRenderUrl}
+                      alt={inferredHero ?? mod.name}
+                      className="w-full h-full object-cover transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+                      style={{ objectPosition: `${heroFacePos}% 25%` }}
+                    />
+                    {/* Gradient so the overlaid player stays legible */}
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full gap-1 text-text-secondary group-hover:text-accent transition-colors">
+                    <div className="flex items-end gap-0.5 h-6 opacity-60">
+                      {[4, 7, 12, 16, 20, 14, 8, 12, 18, 10, 6, 14, 9].map((h, i) => (
+                        <span
+                          key={i}
+                          className="w-1 rounded-full bg-accent/70"
+                          style={{ height: `${h}px` }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider">Sound preview</span>
+                  </div>
+                )}
+              </button>
+              <div
+                className="absolute inset-x-2 bottom-2 z-20"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <AudioPreviewPlayer
+                  src={mod.audioUrl!}
+                  compact
+                  volume={soundVolume}
+                  className="w-full backdrop-blur-md bg-bg-primary/70 border border-white/10 rounded-md"
+                />
+              </div>
+            </div>
+          );
+        }
+
+        return (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onOpenDetails?.();
+            }}
+            disabled={!onOpenDetails}
+            className="group relative w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden block focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+            title={onOpenDetails ? 'View mod details' : undefined}
+            aria-label={onOpenDetails ? `View details for ${mod.name}` : undefined}
+          >
+            <ModThumbnail
+              src={mod.thumbnailUrl}
+              alt={mod.name}
+              nsfw={mod.nsfw}
+              hideNsfw={hideNsfwPreviews}
+              className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            />
+            {onOpenDetails && (
+              <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/20" />
+            )}
+            {overlayBadges}
+          </button>
+        );
+      })()}
 
       <div className={viewMode === 'grid' ? 'flex items-center gap-3' : 'contents'}>
         {draggable && (
@@ -499,45 +882,112 @@ function ModCard({
           </div>
         )}
 
-        <button
-          onClick={onToggle}
-          aria-pressed={mod.enabled}
-          aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
-          className={`transition-colors cursor-pointer ${
-            mod.enabled ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
-          }`}
-          title={mod.enabled ? 'Disable mod' : 'Enable mod'}
-        >
-          {mod.enabled ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
-        </button>
-
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className="font-medium truncate">{mod.name}</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            <h3 className="font-medium truncate flex-1 min-w-0" title={mod.name}>{mod.name}</h3>
             {hasConflicts && viewMode === 'list' && (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
-                <AlertTriangle className="w-3 h-3" />
+              <Tag tone="warning" icon={AlertTriangle} className="flex-shrink-0">
                 Conflict
-              </span>
+              </Tag>
+            )}
+            {mod.sourceSection === 'Sound' && (
+              <Tag tone="accent" icon={Volume2} className="flex-shrink-0">
+                Sound
+              </Tag>
+            )}
+            {mod.nsfw && (
+              <Tag tone="danger" className="flex-shrink-0">18+</Tag>
+            )}
+            {updateAvailable && viewMode === 'list' && (
+              <Tag
+                tone="info"
+                icon={Download}
+                title="A newer version is available on GameBanana"
+                className="flex-shrink-0"
+              >
+                Update
+              </Tag>
+            )}
+            {mod.enabled && viewMode === 'list' && (
+              <Tag
+                tone="accent"
+                title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
+                className="flex-shrink-0 tabular-nums"
+              >
+                Load #{mod.priority}
+              </Tag>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary mt-1">
-            <span className="font-mono">{mod.fileName}</span>
-            <span>{formatBytes(mod.size)}</span>
-            <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">
-              Priority: {mod.priority}
+          <div className="flex flex-nowrap items-center gap-2 text-xs text-text-secondary mt-1 min-w-0 overflow-hidden">
+            {mod.categoryName && (
+              <span className="flex-shrink-0 px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
+            )}
+            <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
+            <span
+              className="font-mono truncate opacity-60 hover:opacity-100 cursor-help min-w-0"
+              title={mod.fileName}
+            >
+              {mod.fileName}
             </span>
           </div>
         </div>
 
-        <button
-          onClick={onDelete}
-          className="p-2 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"
-          title="Delete mod"
-        >
-          <Trash2 className="w-5 h-5" />
-        </button>
+        {/* List-mode: audio preview sits between meta and delete, using the
+            empty right-side space. Grid mode puts it below the card body. */}
+        {viewMode === 'list' && mod.sourceSection === 'Sound' && mod.audioUrl && (
+          <div
+            className="hidden md:flex w-72 flex-shrink-0 items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AudioPreviewPlayer
+              src={mod.audioUrl}
+              compact
+              volume={soundVolume}
+              className="w-full border border-border"
+            />
+          </div>
+        )}
+
+        <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+          {onOpenDetails && viewMode === 'list' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenDetails();
+              }}
+              className="p-1 text-text-secondary hover:text-accent transition-colors cursor-pointer"
+              title="View mod details"
+              aria-label={`View details for ${mod.name}`}
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            onClick={onDelete}
+            className="p-1 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"
+            title="Delete mod"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={onToggle}
+            aria-pressed={mod.enabled}
+            aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
+            title={mod.enabled ? 'Disable mod' : 'Enable mod'}
+            className={`relative w-9 h-5 rounded-full transition-colors cursor-pointer ${
+              mod.enabled ? 'bg-accent' : 'bg-bg-tertiary border border-border'
+            }`}
+          >
+            <span
+              className={`absolute top-[2px] left-[2px] w-3.5 h-3.5 rounded-full bg-white shadow-sm transition-transform ${
+                mod.enabled ? 'translate-x-4' : 'translate-x-0'
+              }`}
+              aria-hidden
+            />
+          </button>
+        </div>
       </div>
+
     </div>
   );
 }

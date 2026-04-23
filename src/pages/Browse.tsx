@@ -5,7 +5,6 @@ import {
   Download,
   Eye,
   ThumbsUp,
-  ExternalLink,
   X,
   Volume2,
   RefreshCw,
@@ -14,13 +13,10 @@ import {
   List,
   AlertTriangle,
   Clock,
-  MessageSquare,
 } from 'lucide-react';
-import DOMPurify from 'dompurify';
 import {
   browseMods,
   getModDetails,
-  getModComments,
   downloadMod,
   getGamebananaSections,
   getGamebananaCategories,
@@ -31,13 +27,16 @@ import type {
   GameBananaModDetails,
   GameBananaSection,
   GameBananaCategoryNode,
-  GameBananaComment,
 } from '../types/gamebanana';
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
 import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
+import { Button, Tag } from '../components/common/ui';
+import { EmptyState } from '../components/common/PageComponents';
+import ModDetailsModal from '../components/ModDetailsModal';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
 
 const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
@@ -84,6 +83,43 @@ function flattenCategories(
   return results;
 }
 
+// Abbreviate counts (1234 -> 1.2k, 98765 -> 99k)
+function formatCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1)}m`;
+}
+
+// Treat Enter/Space as a click on role="button" divs (keyboard navigation).
+function handleCardKeyDown(e: React.KeyboardEvent, onClick: () => void): void {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    onClick();
+  }
+}
+
+// Render an error string with any embedded https:// URLs as clickable links.
+function renderErrorWithLinks(text: string): React.ReactNode {
+  const parts = text.split(/(https?:\/\/[^\s)]+)/g);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="underline text-accent hover:text-accent-hover"
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 function findCategoryByName(
   nodes: GameBananaCategoryNode[],
   name: string
@@ -128,6 +164,7 @@ export default function Browse() {
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadQueue, setDownloadQueue] = useState<Array<{ modId: number; fileId: number; fileName: string }>>([]);
+  const [playingModId, setPlayingModId] = useState<number | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
 
@@ -337,6 +374,7 @@ export default function Browse() {
   useEffect(() => {
     setPage(1);
     setHasMore(true);
+    setMods([]);
   }, [search, sort, section, effectiveCategoryId, perPage]);
 
   useEffect(() => {
@@ -460,8 +498,11 @@ export default function Browse() {
         setDownloading(null);
         setDownloadProgress(null);
         setExtracting(false);
-        // Show user-friendly error message
-        setError(data.message);
+        const fullMessage =
+          data.helpUrl && !data.message.includes(data.helpUrl)
+            ? `${data.message} ${data.helpUrl}`
+            : data.message;
+        setError(fullMessage);
       }
     });
 
@@ -877,56 +918,93 @@ export default function Browse() {
 
       {/* Main Content */}
       <div className="flex-1 p-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 animate-spin text-accent" />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-            <p className="text-red-400">{error}</p>
-            <button
-              onClick={fetchMods}
-              className="mt-4 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer"
-            >
-              Retry
-            </button>
-          </div>
-        ) : displayMods.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-            <Search className="w-16 h-16 mb-4 opacity-50" />
-            <p>No mods found</p>
-          </div>
-        ) : (
-          <div
-            className={
-              viewMode === 'list'
-                ? 'flex flex-col gap-3'
-                : viewMode === 'compact'
-                  ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
-                  : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3'
-            }
-          >
-            {displayMods.map((mod) => {
-              const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
-              const isQueued = queueIndex >= 0;
-              return (
-                <ModCard
-                  key={mod.id}
-                  mod={mod}
-                  installed={installedIds.has(mod.id)}
-                  downloading={downloading?.modId === mod.id}
-                  queuePosition={isQueued ? queueIndex + 1 : undefined}
-                  viewMode={viewMode}
-                  section={section}
-                  volume={soundVolume}
-                  hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
-                  onClick={() => handleModClick(mod)}
-                  onQuickDownload={() => handleQuickDownload(mod)}
-                />
-              );
-            })}
-          </div>
-        )}
+        {(() => {
+          const gridClass =
+            viewMode === 'list'
+              ? 'flex flex-col gap-3'
+              : viewMode === 'compact'
+                ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
+                : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3';
+          const hasActiveFilters =
+            search.trim().length > 0 || heroCategoryId !== 'all' || categoryId !== 'all' || sort !== 'default';
+
+          if (loading) {
+            // Match perPage so the skeleton grid fills roughly the same footprint
+            // as the real results once they arrive.
+            return (
+              <div className={gridClass} aria-busy="true" aria-live="polite">
+                {Array.from({ length: DEFAULT_PER_PAGE }).map((_, i) => (
+                  <ModCardSkeleton key={i} viewMode={viewMode} />
+                ))}
+              </div>
+            );
+          }
+          if (error) {
+            return (
+              <EmptyState
+                icon={AlertTriangle}
+                title="Couldn't load mods"
+                description={renderErrorWithLinks(error)}
+                variant="error"
+                action={<Button onClick={fetchMods}>Retry</Button>}
+              />
+            );
+          }
+          if (displayMods.length === 0) {
+            return (
+              <EmptyState
+                icon={Search}
+                title={hasActiveFilters ? 'No mods match your filters' : 'No mods found'}
+                description={hasActiveFilters ? 'Try widening your search or clearing filters.' : undefined}
+                action={
+                  hasActiveFilters ? (
+                    <Button
+                      onClick={() => {
+                        setSearch('');
+                        setHeroCategoryId('all');
+                        setCategoryId('all');
+                        setSort('default');
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  ) : undefined
+                }
+              />
+            );
+          }
+          return (
+            <div className={gridClass}>
+              {displayMods.map((mod) => {
+                const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
+                const isQueued = queueIndex >= 0;
+                return (
+                  <ModCard
+                    key={mod.id}
+                    mod={mod}
+                    installed={installedIds.has(mod.id)}
+                    downloading={downloading?.modId === mod.id}
+                    queuePosition={isQueued ? queueIndex + 1 : undefined}
+                    viewMode={viewMode}
+                    section={section}
+                    volume={soundVolume}
+                    onVolumeChange={setSoundVolume}
+                    hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+                    isPlaying={playingModId === mod.id}
+                    onPlayingChange={(playing) => {
+                      setPlayingModId((prev) => {
+                        if (playing) return mod.id;
+                        return prev === mod.id ? null : prev;
+                      });
+                    }}
+                    onClick={() => handleModClick(mod)}
+                    onQuickDownload={() => handleQuickDownload(mod)}
+                  />
+                );
+              })}
+            </div>
+          );
+        })()}
         {/* Infinite Scroll Trigger */}
         <div ref={loadMoreRef} className="flex items-center justify-center p-4">
           {loadingMore && (
@@ -970,52 +1048,85 @@ interface ModCardProps {
   viewMode: ViewMode;
   section: string;
   volume: number;
+  onVolumeChange: (v: number) => void;
   hideNsfwPreviews: boolean;
+  isPlaying: boolean;
+  onPlayingChange: (playing: boolean) => void;
   onClick: () => void;
   onQuickDownload: () => void;
 }
 
-function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
+function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
+  if (viewMode === 'list') {
+    return (
+      <div className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-4">
+        <div className="bg-bg-tertiary skeleton-shimmer w-32 h-20 flex-shrink-0 rounded-md" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="bg-bg-tertiary skeleton-shimmer h-4 rounded w-2/3" />
+          <div className="bg-bg-tertiary skeleton-shimmer h-3 rounded w-1/3" />
+        </div>
+      </div>
+    );
+  }
+  const aspect = viewMode === 'compact' ? 'aspect-[4/3]' : 'aspect-[3/2]';
+  return (
+    <div className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden ${aspect}`}>
+      <div className="absolute inset-0 skeleton-shimmer bg-bg-secondary" />
+      <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
+        <div className="h-3.5 bg-bg-tertiary/80 skeleton-shimmer rounded w-3/4" />
+        <div className="h-2.5 bg-bg-tertiary/80 skeleton-shimmer rounded w-1/2" />
+      </div>
+    </div>
+  );
+}
+
+function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
+  // Sound mods don't carry hero info in the API, so guess from the title.
+  // Used to swap in the locker hero portrait as the card backdrop.
+  const inferredHero = isSoundSection ? inferHeroFromTitle(mod.name) : null;
+  const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : undefined;
+  const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
 
   // List view keeps original layout
   if (isList) {
     return (
       <div
         onClick={onClick}
-        className="relative bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer flex items-center gap-4 p-3"
+        onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+        role="button"
+        tabIndex={0}
+        aria-label={`Open details for ${mod.name}`}
+        className={`relative bg-bg-secondary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
+          isPlaying
+            ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
+            : 'border-border hover:border-accent/50'
+        }`}
       >
         <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-md overflow-hidden">
           {isSoundSection ? (
-            <div className="w-full h-full relative">
-              {thumbnail ? (
-                <>
-                  <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-                </>
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
-              )}
-              <div className="absolute inset-0 flex flex-col items-center justify-end p-3">
-                {hasAudioPreview ? (
-                  <div className="w-full backdrop-blur-md bg-black/30 rounded-lg border border-white/10">
-                    <AudioPreviewPlayer src={audioPreview!} compact volume={volume} className="w-full" />
-                  </div>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-accent/90 text-white font-medium shadow-lg text-xs">
-                      <Volume2 className="w-3 h-3" />
-                      <span>SOUND</span>
-                    </div>
-                  </div>
-                )}
+            heroRenderUrl ? (
+              <img
+                src={heroRenderUrl}
+                alt={inferredHero ?? mod.name}
+                className="w-full h-full object-cover"
+                style={{ objectPosition: `${heroFacePos}% 25%` }}
+              />
+            ) : thumbnail ? (
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-accent/80 text-white text-[10px] font-semibold">
+                  <Volume2 className="w-3 h-3" />
+                  SOUND
+                </div>
               </div>
-            </div>
+            )
           ) : (
             <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
           )}
@@ -1024,7 +1135,10 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-medium truncate flex-1">{mod.name}</h3>
             {installed ? (
-              <span className="flex-shrink-0 rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">✓</span>
+              <Tag tone="success" variant="overlay" title="Installed" className="flex-shrink-0">
+                <span aria-hidden>✓</span>
+                Installed
+              </Tag>
             ) : downloading ? (
               <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
                 <Loader2 className="w-4 h-4 animate-spin text-accent" />
@@ -1039,110 +1153,237 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3 text-text-secondary mt-1 text-xs">
-            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{mod.likeCount}</span>
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{mod.viewCount}</span>
+          <div className="flex items-center gap-3 text-text-secondary mt-1 text-xs flex-wrap">
+            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
+            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
+            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
+              <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
+            )}
+            {mod.nsfw && <Tag tone="danger">18+</Tag>}
           </div>
           {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
           {mod.dateModified > 0 && (
-            <div className={`flex items-center gap-1 mt-1 text-xs ${isModOutdated(mod.dateModified) ? 'text-yellow-400' : 'text-text-secondary'}`}>
+            <div className={`flex items-center gap-1 mt-1 text-xs ${isModOutdated(mod.dateModified) ? 'text-state-warning' : 'text-text-secondary'}`}>
               {isModOutdated(mod.dateModified) ? <AlertTriangle className="w-3 h-3 flex-shrink-0" /> : <Clock className="w-3 h-3 flex-shrink-0" />}
               <span className="truncate">{isModOutdated(mod.dateModified) ? 'Outdated · ' : ''}{formatDate(mod.dateModified)}</span>
             </div>
           )}
         </div>
+
+        {/* Right-side audio cluster for sound mods — fills the empty space on wide rows */}
+        {isSoundSection && hasAudioPreview && (
+          <div
+            className="flex-shrink-0 w-72 hidden md:flex items-center gap-3 bg-bg-tertiary/50 rounded-full border border-border px-3 py-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex-1 min-w-0">
+              <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} onPlayingChange={onPlayingChange} />
+            </div>
+            <div className="w-px h-4 bg-border flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Volume2 className="w-3.5 h-3.5 text-text-secondary" />
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(volume * 100)}
+                onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+                className="w-14 h-1 accent-accent cursor-pointer"
+                aria-label="Volume"
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
 
   // Grid/Compact: overlay card — image fills card, info overlaid at bottom
+  const isOutdated = mod.dateModified > 0 && isModOutdated(mod.dateModified);
   return (
     <div
       onClick={onClick}
-      className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'}`}
+      onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open details for ${mod.name}`}
+      className={`relative bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+        isPlaying
+          ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
+          : downloading
+            ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
+            : installed
+              ? 'border-state-success/40 hover:border-state-success/70'
+              : 'border-border hover:border-accent/50'
+      }`}
     >
       {/* Full-bleed image */}
       <div className="absolute inset-0">
         {isSoundSection ? (
           <div className="w-full h-full relative">
-            {thumbnail ? (
-              <>
-                <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-              </>
+            {heroRenderUrl ? (
+              <img
+                src={heroRenderUrl}
+                alt={inferredHero ?? mod.name}
+                className="w-full h-full object-cover"
+                style={{ objectPosition: `${heroFacePos}% 20%` }}
+              />
+            ) : thumbnail ? (
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
             )}
-            <div className="absolute inset-0 flex flex-col items-center justify-end p-3">
-              {hasAudioPreview ? (
-                <>
-                  {!thumbnail && (
-                    <div className="flex items-end gap-0.5 mb-2 h-8">
-                      {[3, 5, 8, 12, 16, 12, 8, 14, 10, 6, 9, 14, 11, 7, 4, 6, 10, 8, 5, 3].map((h, i) => (
-                        <div key={i} className="w-1 bg-accent/60 rounded-full transition-all" style={{ height: `${h * 2}px` }} />
-                      ))}
-                    </div>
-                  )}
-                  <div className="w-full backdrop-blur-md bg-black/30 rounded-lg border border-white/10">
-                    <AudioPreviewPlayer src={audioPreview!} compact={isCompact} volume={volume} className="w-full" />
-                  </div>
-                </>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/90 text-white font-medium shadow-lg ${isCompact ? 'text-xs px-2 py-1' : 'text-sm'}`}>
-                    <Volume2 className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
-                    <span>SOUND</span>
-                  </div>
+            {!hasAudioPreview && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/90 text-white font-medium shadow-lg ${isCompact ? 'text-xs px-2 py-1' : 'text-sm'}`}>
+                  <Volume2 className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
+                  <span>SOUND</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+            {!thumbnail && !heroRenderUrl && hasAudioPreview && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex items-end gap-0.5 h-10">
+                  {[3, 5, 8, 12, 16, 12, 8, 14, 10, 6, 9, 14, 11, 7, 4, 6, 10, 8, 5, 3].map((h, i) => (
+                    <div key={i} className="w-1 bg-accent/60 rounded-full transition-all" style={{ height: `${h * 2}px` }} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
         )}
       </div>
 
-      {/* Single gradient: transparent at top, strongest darkness at the label band */}
+      {/* Gradient: for sound cards with audio preview, darken TOP (title) and BOTTOM (player).
+          For other cards, the classic bottom-darkest gradient. */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 22%, rgba(0,0,0,0.25) 55%, transparent 80%)',
-        }}
+        style={
+          isSoundSection && hasAudioPreview
+            ? {
+                background:
+                  'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.35) 35%, rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.9) 100%)',
+              }
+            : {
+                background:
+                  'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 22%, rgba(0,0,0,0.25) 55%, transparent 80%)',
+              }
+        }
       />
 
-      {/* Info overlaid at bottom */}
-      <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
-        <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-        <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
-          <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{mod.likeCount}</span>
-          <span className="flex items-center gap-1"><Eye className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{mod.viewCount}</span>
-          {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
-        </div>
-        {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
-          <div className={`flex items-center gap-1 mt-1 text-yellow-400 ${isCompact ? 'text-xs' : 'text-sm'}`}>
-            <AlertTriangle className={isCompact ? 'w-3 h-3 flex-shrink-0' : 'w-3.5 h-3.5 flex-shrink-0'} />
-            <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
+      {/* Info — moved to TOP for audio-preview sound cards so it stops covering the player */}
+      {isSoundSection && hasAudioPreview ? (
+        <div className={`absolute top-0 left-0 right-0 pointer-events-none ${isCompact ? 'p-2.5 pr-10' : 'p-3 pr-12'}`}>
+          <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
+            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
+            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
+            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
+              <span className="flex items-center gap-1"><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
+            )}
+            {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
+        </div>
+      ) : (
+        <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
+          <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.likeCount)}</span>
+            <span className="flex items-center gap-1"><Eye className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.viewCount)}</span>
+            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
+              <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}>
+                <Download className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.downloadCount)}
+              </span>
+            )}
+            {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
+          </div>
+          {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
+            <div className={`flex items-center gap-1 mt-1 text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}>
+              <AlertTriangle className={isCompact ? 'w-3 h-3 flex-shrink-0' : 'w-3.5 h-3.5 flex-shrink-0'} />
+              <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* State tag stack — top-left. Stacks NSFW / INSTALLED / OUTDATED so the
+          card is decodable without relying on icon color alone. */}
+      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+        {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
+        {installed && (
+          <Tag tone="success" variant="overlay">
+            <span aria-hidden>✓</span>
+            Installed
+          </Tag>
+        )}
+        {!installed && isOutdated && (
+          <Tag
+            tone="warning"
+            variant="overlay"
+            icon={AlertTriangle}
+            title={`Last updated ${formatDate(mod.dateModified)}`}
+          >
+            Outdated
+          </Tag>
         )}
       </div>
+
+      {/* Audio preview + volume, pinned to bottom with its own pointer-events layer.
+          z-20 keeps it above the gradient + any overlays so clicks always land.
+          Single spacious pill: [play + progress + time] | divider | [volume icon + slider] */}
+      {isSoundSection && hasAudioPreview && (
+        <div
+          className={`absolute bottom-0 left-0 right-0 z-20 ${isCompact ? 'p-2' : 'p-2.5'}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-3 backdrop-blur-md bg-black/60 rounded-full border border-white/10 px-3 py-2 shadow-lg">
+            <div className="flex-1 min-w-0">
+              <AudioPreviewPlayer
+                src={audioPreview!}
+                compact
+                variant="inline"
+                volume={volume}
+                onPlayingChange={onPlayingChange}
+              />
+            </div>
+            <div className="w-px h-5 bg-white/20 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Volume2 className="w-3.5 h-3.5 text-white/70" />
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(volume * 100)}
+                onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+                className="w-16 h-1 accent-accent cursor-pointer"
+                title={`Volume: ${Math.round(volume * 100)}%`}
+                aria-label="Volume"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Download button overlay — top right with backdrop */}
       <div className="absolute top-2 right-2">
         {installed ? (
           <span
-            className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm text-green-400 ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
+            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
             title="Installed"
           >
             ✓
           </span>
         ) : downloading ? (
-          <div className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
+          <div className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
             <Loader2 className={`animate-spin text-accent ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent/90 text-white rounded-full font-bold ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
+            className={`flex items-center justify-center bg-accent text-white rounded-full font-bold ring-1 ring-white/30 shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}
@@ -1150,7 +1391,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
-            className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm text-accent hover:bg-accent hover:text-white transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
+            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md text-accent hover:bg-accent hover:text-white hover:ring-white/40 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
             title="Install"
           >
             <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
@@ -1161,338 +1402,3 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
   );
 }
 
-interface ModDetailsModalProps {
-  mod: GameBananaModDetails;
-  section: string;
-  installed: boolean;
-  installedFileIds: Set<number>;
-  downloadingFileId: number | null;
-  extracting: boolean;
-  progress: { downloaded: number; total: number } | null;
-  hideNsfwPreviews: boolean;
-  dateAdded?: number;
-  dateModified?: number;
-  onClose: () => void;
-  onDownload: (fileId: number, fileName: string) => void;
-}
-
-function ModDetailsModal({
-  mod,
-  section,
-  installed,
-  installedFileIds,
-  downloadingFileId,
-  extracting,
-  progress,
-  hideNsfwPreviews,
-  dateAdded,
-  dateModified,
-  onClose,
-  onDownload,
-}: ModDetailsModalProps) {
-  const images = mod.previewMedia?.images ?? [];
-  const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
-  const [currentImageIndex, setCurrentImageIndex] = useState(0);
-  const [comments, setComments] = useState<GameBananaComment[]>([]);
-  const [commentsLoading, setCommentsLoading] = useState(true);
-  const [commentsTotalCount, setCommentsTotalCount] = useState(0);
-
-  // Fetch comments when modal opens
-  useEffect(() => {
-    let cancelled = false;
-    setCommentsLoading(true);
-    getModComments(mod.id, section)
-      .then((res) => {
-        if (!cancelled) {
-          setComments(res.comments);
-          setCommentsTotalCount(res.totalCount);
-        }
-      })
-      .catch((err) => {
-        console.error('[ModDetailsModal] Failed to load comments:', err);
-      })
-      .finally(() => {
-        if (!cancelled) setCommentsLoading(false);
-      });
-    return () => { cancelled = true; };
-  }, [mod.id, section]);
-
-  // Close on Escape key
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
-  const currentImage = images[currentImageIndex];
-  const currentImageUrl = currentImage
-    ? `${currentImage.baseUrl}/${currentImage.file530 || currentImage.file}`
-    : undefined;
-
-  const goToPrevious = () => {
-    setCurrentImageIndex((prev) => (prev > 0 ? prev - 1 : images.length - 1));
-  };
-
-  const goToNext = () => {
-    setCurrentImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
-  };
-
-  return (
-    <div
-      className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50"
-      onClick={onClose}
-    >
-      <div
-        className="bg-bg-secondary rounded-lg max-w-2xl w-full max-h-[80vh] overflow-auto"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="sticky top-0 bg-bg-secondary border-b border-border p-4 flex items-center justify-between">
-          <div className="flex items-center gap-2 min-w-0">
-            <h2 className="text-xl font-bold truncate">{mod.name}</h2>
-            {installed && (
-              <span className="rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
-                Installed
-              </span>
-            )}
-          </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-bg-tertiary rounded-lg transition-colors cursor-pointer"
-          >
-            ✕
-          </button>
-        </div>
-
-        {/* Outdated Warning */}
-        {dateModified && isModOutdated(dateModified) && (
-          <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-yellow-200 text-sm">
-            <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0" />
-            <span>This mod was last updated on {formatDate(dateModified)} and may not be compatible with the current version of Deadlock.</span>
-          </div>
-        )}
-
-        {/* Content */}
-        <div className="p-4 space-y-4">
-          {/* Dates */}
-          {(dateAdded || dateModified) && (
-            <div className="flex items-center gap-4 text-xs text-text-secondary">
-              {dateAdded && dateAdded > 0 && (
-                <span className="flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  Added: {formatDate(dateAdded)}
-                </span>
-              )}
-              {dateModified && dateModified > 0 && (
-                <span className={`flex items-center gap-1 ${isModOutdated(dateModified) ? 'text-yellow-400' : ''}`}>
-                  <Clock className="w-3 h-3" />
-                  Updated: {formatDate(dateModified)}
-                </span>
-              )}
-            </div>
-          )}
-
-          {/* Image Carousel */}
-          {images.length > 0 && (
-            <div className="relative w-full rounded-lg overflow-hidden border border-border">
-              {/* Current Image */}
-              <div className="relative">
-                <ModThumbnail
-                  src={currentImageUrl}
-                  alt={`${mod.name} - Image ${currentImageIndex + 1}`}
-                  nsfw={mod.nsfw}
-                  hideNsfw={hideNsfwPreviews}
-                  className="w-full max-h-[60vh] object-contain bg-bg-tertiary"
-                />
-              </div>
-
-              {/* Navigation Arrows (only if more than 1 image) */}
-              {images.length > 1 && (
-                <>
-                  <button
-                    onClick={goToPrevious}
-                    className="absolute left-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-colors cursor-pointer"
-                    aria-label="Previous image"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
-                    </svg>
-                  </button>
-                  <button
-                    onClick={goToNext}
-                    className="absolute right-2 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/50 text-white/80 hover:bg-black/70 hover:text-white transition-colors cursor-pointer"
-                    aria-label="Next image"
-                  >
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </button>
-
-                  {/* Dot Indicators */}
-                  <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex gap-1.5">
-                    {images.map((_, index) => (
-                      <button
-                        key={index}
-                        onClick={() => setCurrentImageIndex(index)}
-                        className={`w-2 h-2 rounded-full transition-colors cursor-pointer ${index === currentImageIndex
-                          ? 'bg-white'
-                          : 'bg-white/40 hover:bg-white/60'
-                          }`}
-                        aria-label={`Go to image ${index + 1}`}
-                      />
-                    ))}
-                  </div>
-
-                  {/* Image Counter */}
-                  <div className="absolute top-2 right-2 px-2 py-1 rounded bg-black/50 text-white/80 text-xs">
-                    {currentImageIndex + 1} / {images.length}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-
-          {/* Audio Preview - for Sound mods or any mod with audio */}
-          {audioPreviewUrl && (
-            <div className="relative rounded-lg overflow-hidden border border-border bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary p-4">
-              <div className="flex items-center gap-3 mb-3">
-                <Volume2 className="w-5 h-5 text-accent" />
-                <h3 className="font-medium text-text-primary">Audio Preview</h3>
-              </div>
-              {/* Waveform visualization */}
-              <div className="flex items-end justify-center gap-0.5 mb-3 h-12">
-                {[3, 5, 8, 12, 16, 20, 16, 12, 18, 14, 10, 6, 9, 14, 18, 14, 11, 7, 4, 6, 10, 14, 18, 14, 8, 5, 3].map((h, i) => (
-                  <div
-                    key={i}
-                    className="w-1.5 bg-accent/50 rounded-full transition-all"
-                    style={{ height: `${h * 2}px` }}
-                  />
-                ))}
-              </div>
-              {/* Audio Player with enhanced styling */}
-              <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-white/10 p-1">
-                <AudioPreviewPlayer
-                  src={audioPreviewUrl}
-                  className="w-full"
-                />
-              </div>
-            </div>
-          )}
-
-          {/* Sound Indicator - for Sound section without audio preview */}
-          {section === 'Sound' && !audioPreviewUrl && images.length === 0 && (
-            <div className="flex items-center justify-center p-8 rounded-lg border border-border bg-bg-tertiary">
-              <div className="flex flex-col items-center gap-2 text-text-secondary">
-                <Volume2 className="w-12 h-12 text-accent/60" />
-                <span className="text-sm">Sound Mod</span>
-                <span className="text-xs opacity-60">No audio preview available</span>
-              </div>
-            </div>
-          )}
-
-          {/* Description */}
-          {mod.description && (
-            <div className="text-sm text-text-secondary">
-              <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mod.description) }} />
-            </div>
-          )}
-
-          {/* Files */}
-          {mod.files && mod.files.length > 0 && (
-            <div className="space-y-2">
-              <h3 className="font-medium">Files</h3>
-              {mod.files.map((file) => (
-                <div
-                  key={file.id}
-                  className="flex items-center justify-between p-3 bg-bg-tertiary rounded-lg"
-                >
-                  <div className="min-w-0 flex-1">
-                    <p className="font-medium truncate">{file.fileName}</p>
-                    <p className="text-xs text-text-secondary">
-                      {(file.fileSize / 1024 / 1024).toFixed(2)} MB •{' '}
-                      {file.downloadCount.toLocaleString()} downloads
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => onDownload(file.id, file.fileName)}
-                    disabled={downloadingFileId !== null}
-                    className="flex items-center gap-2 px-4 py-2 bg-accent hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors ml-4 cursor-pointer"
-                  >
-                    {downloadingFileId === file.id ? (
-                      <>
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        {extracting
-                          ? 'Extracting...'
-                          : progress && progress.total > 0
-                            ? `${Math.round((progress.downloaded / progress.total) * 100)}%`
-                            : 'Downloading...'}
-                      </>
-                    ) : (
-                      <>
-                        <Download className="w-4 h-4" />
-                        {installedFileIds.has(file.id) ? 'Reinstall' : 'Install'}
-                      </>
-                    )}
-                  </button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Comments */}
-          <div className="space-y-2">
-            <h3 className="font-medium flex items-center gap-2">
-              <MessageSquare className="w-4 h-4" />
-              Comments {commentsTotalCount > 0 && <span className="text-xs text-text-secondary">({commentsTotalCount})</span>}
-            </h3>
-            {commentsLoading ? (
-              <div className="flex items-center gap-2 text-text-secondary text-sm py-2">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Loading comments...
-              </div>
-            ) : comments.length === 0 ? (
-              <p className="text-sm text-text-secondary py-2">No comments yet</p>
-            ) : (
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                {comments.map((comment) => (
-                  <div key={comment.id} className="flex gap-3 p-3 bg-bg-tertiary rounded-lg">
-                    {comment.poster.avatarUrl && (
-                      <img
-                        src={comment.poster.avatarUrl}
-                        alt={comment.poster.name}
-                        className="w-8 h-8 rounded-full flex-shrink-0"
-                      />
-                    )}
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-sm font-medium">{comment.poster.name}</span>
-                        <span className="text-[11px] text-text-secondary">{formatDate(comment.dateAdded)}</span>
-                      </div>
-                      <div
-                        className="text-sm text-text-secondary [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
-                        dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(comment.text) }}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
-
-          {/* GameBanana Link */}
-          <a
-            href={`https://gamebanana.com/mods/${mod.id}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
-          >
-            <ExternalLink className="w-4 h-4" />
-            View on GameBanana
-          </a>
-        </div>
-      </div>
-    </div>
-  );
-}

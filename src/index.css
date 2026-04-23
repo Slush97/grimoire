@@ -63,6 +63,14 @@
   --color-text-secondary: #a1a1aa;
   --color-border: #2d2d2d;
 
+  /* Semantic state tokens. Use these for card states, toasts, badges —
+     anything that communicates status. The raw Tailwind colors
+     (green-400/yellow-400/etc) stay available for non-semantic use. */
+  --color-state-success: #4ade80;
+  --color-state-warning: #facc15;
+  --color-state-danger:  #f87171;
+  --color-state-info:    #60a5fa;
+
   --font-radiance: 'Radiance', system-ui, sans-serif;
   --font-reaver: 'Reaver', serif;
   --font-valvepulp: 'ValvePulp', sans-serif;
@@ -166,4 +174,23 @@ body {
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out forwards;
+}
+
+/* Skeleton shimmer — used for async-loading placeholders. Surfaces apply
+   `.skeleton-shimmer` on a muted-background element; the shimmer gradient
+   sweeps left→right to signal "loading". */
+@keyframes skeletonShimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.skeleton-shimmer {
+  background-image: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.04) 50%,
+    transparent 100%
+  );
+  background-size: 200% 100%;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
 }

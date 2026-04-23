@@ -13,6 +13,38 @@ interface ModWithThumbnail {
   thumbnailUrl?: string;
 }
 
+function ConflictsSkeleton() {
+  return (
+    <div className="p-6 animate-fade-in" aria-busy="true" aria-live="polite">
+      <div className="flex items-end justify-between gap-4 pb-4 border-b border-border mb-6">
+        <div className="space-y-2">
+          <div className="skeleton-shimmer bg-bg-tertiary rounded-md h-9 w-56" />
+          <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-64" />
+        </div>
+        <div className="skeleton-shimmer bg-bg-tertiary rounded-lg h-9 w-28" />
+      </div>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="bg-bg-secondary border border-border rounded-xl overflow-hidden">
+            <div className="bg-bg-tertiary/50 px-4 py-2 border-b border-border">
+              <div className="skeleton-shimmer bg-bg-tertiary rounded h-3 w-48" />
+            </div>
+            <div className="p-4 flex gap-4">
+              {[0, 1].map((j) => (
+                <div key={j} className="flex-1 space-y-2">
+                  <div className="skeleton-shimmer aspect-video bg-bg-tertiary rounded-lg" />
+                  <div className="skeleton-shimmer bg-bg-tertiary rounded h-3.5 w-3/4 mx-auto" />
+                  <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-1/2 mx-auto" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 export default function Conflicts() {
   const [conflicts, setConflicts] = useState<ModConflict[]>([]);
   const [modsMap, setModsMap] = useState<Map<string, ModWithThumbnail>>(new Map());
@@ -66,12 +98,7 @@ export default function Conflicts() {
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary" role="status" aria-live="polite">
-        <RefreshCw className="w-8 h-8 animate-spin mb-4 text-accent" />
-        <p>Scanning for conflicts...</p>
-      </div>
-    );
+    return <ConflictsSkeleton />;
   }
 
   if (error) {
@@ -104,7 +131,6 @@ export default function Conflicts() {
   return (
     <div className="p-6">
       <PageHeader
-        icon={AlertTriangle}
         title={`Conflicts (${conflicts.length})`}
         description="Resolve conflicts between installed mods"
         action={

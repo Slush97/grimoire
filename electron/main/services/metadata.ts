@@ -4,6 +4,7 @@ import { getMetadataPath } from '../utils/paths';
 export interface ModMetadata {
     modName?: string;      // The human-readable mod name from GameBanana
     thumbnailUrl?: string;
+    audioUrl?: string;     // GameBanana audio preview URL (Sound mods)
     gameBananaId?: number;
     gameBananaFileId?: number; // The specific file ID that was downloaded
     categoryId?: number;

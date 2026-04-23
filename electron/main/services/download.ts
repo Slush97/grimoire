@@ -370,6 +370,7 @@ async function executeDownload(
         categoryId: details.category?.id,  // Get category from mod details, not filter
         categoryName: details.category?.name,  // Also store category name for display
         thumbnailUrl,
+        audioUrl: details.previewMedia?.metadata?.audioUrl,  // Persist for Sound mod preview
         sourceSection: section,
         nsfw: details.nsfw,  // Use actual NSFW flag from GameBanana
     };
@@ -393,20 +394,23 @@ async function executeDownload(
         } catch (extractError) {
             const errorMsg = extractError instanceof Error ? extractError.message : String(extractError);
 
-            // Check if this is a 7-Zip related error
+            // The bundled extractors should handle virtually all archives; if they
+            // failed, the archive is likely corrupt or uses an exotic format. We
+            // still surface 7-Zip as a fallback users can try.
             const is7zError = errorMsg.includes("7z") ||
                 errorMsg.includes("7-Zip") ||
                 errorMsg.includes("p7zip") ||
-                errorMsg.includes("unrar");
+                errorMsg.includes("unrar") ||
+                errorMsg.includes("RAR extraction failed");
 
-            // Emit download-error event with structured info
             mainWindow?.webContents.send('download-error', {
                 modId,
                 fileId,
                 errorCode: is7zError ? 'MISSING_7ZIP' : 'EXTRACTION_FAILED',
                 message: is7zError
-                    ? '7-Zip is required to extract this mod. Please install it from https://7-zip.org and restart the app.'
+                    ? "Couldn't extract this mod. Install 7-Zip from https://7-zip.org and try again."
                     : `Failed to extract mod: ${errorMsg}`,
+                helpUrl: is7zError ? 'https://7-zip.org' : undefined,
             });
 
             // Clean up failed download

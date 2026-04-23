@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Outlet, useNavigate } from 'react-router-dom';
+import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import WelcomeModal from './WelcomeModal';
@@ -11,6 +11,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 
 export default function Layout() {
   const navigate = useNavigate();
+  const location = useLocation();
   const [showWelcome, setShowWelcome] = useState(false);
   const [loading, setLoading] = useState(true);
   const [gameinfoAlert, setGameinfoAlert] = useState<string | null>(null);
@@ -110,7 +111,9 @@ export default function Layout() {
             </div>
           </div>
         )}
-        <Outlet />
+        <div key={location.pathname} className="animate-fade-in">
+          <Outlet />
+        </div>
       </main>
       {/* Status indicators - bottom-right corner */}
       <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">

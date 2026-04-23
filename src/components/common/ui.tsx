@@ -57,6 +57,62 @@ export function Badge({ children, variant = 'neutral', className = '' }: BadgePr
     );
 }
 
+// ============================================================================
+// Tag - Game-HUD styled status marker for cards (Load #, Conflict, Update,
+// Installed, Outdated, NSFW, Sound, etc). Uses a sharp 3px radius with a
+// bright leading accent bar so tags read as decisive callouts rather than
+// soft web-style pills.
+// ============================================================================
+
+type TagTone = 'accent' | 'warning' | 'danger' | 'success' | 'info' | 'neutral';
+
+interface TagProps {
+    children: ReactNode;
+    tone?: TagTone;
+    /**
+     * `overlay` — sits on top of imagery/thumbnails. Fully opaque saturated
+     *             background so it reads over any underlying art.
+     * `inline`  — sits inside a card against its own surface. Uses a muted
+     *             tinted bg with the tone's color as text.
+     */
+    variant?: 'overlay' | 'inline';
+    icon?: LucideIcon;
+    title?: string;
+    className?: string;
+}
+
+export function Tag({
+    children,
+    tone = 'neutral',
+    variant = 'inline',
+    icon: Icon,
+    title,
+    className = '',
+}: TagProps) {
+    const tones: Record<TagTone, { text: string; border: string; fill: string; overlayBorder: string }> = {
+        accent:  { text: 'text-accent',          border: 'border-accent/40',         fill: 'bg-accent/10',          overlayBorder: 'border-accent/70' },
+        warning: { text: 'text-state-warning',   border: 'border-state-warning/40',  fill: 'bg-state-warning/10',   overlayBorder: 'border-state-warning/70' },
+        danger:  { text: 'text-state-danger',    border: 'border-state-danger/40',   fill: 'bg-state-danger/10',    overlayBorder: 'border-state-danger/70' },
+        success: { text: 'text-state-success',   border: 'border-state-success/40',  fill: 'bg-state-success/10',   overlayBorder: 'border-state-success/70' },
+        info:    { text: 'text-state-info',      border: 'border-state-info/40',     fill: 'bg-state-info/10',      overlayBorder: 'border-state-info/70' },
+        neutral: { text: 'text-text-secondary',  border: 'border-white/10',          fill: 'bg-white/5',            overlayBorder: 'border-white/20' },
+    };
+    const t = tones[tone];
+    const isOverlay = variant === 'overlay';
+    const surface = isOverlay
+        ? `bg-black/65 backdrop-blur-sm border ${t.overlayBorder} ${t.text} shadow-[0_1px_2px_rgba(0,0,0,0.35)]`
+        : `${t.fill} border ${t.border} ${t.text} opacity-90`;
+    return (
+        <span
+            title={title}
+            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-[2px] text-[10.5px] font-semibold leading-none ${surface} ${className}`}
+        >
+            {Icon && <Icon className="w-3 h-3" />}
+            {children}
+        </span>
+    );
+}
+
 interface SliderProps {
     value: number;
     min: number;

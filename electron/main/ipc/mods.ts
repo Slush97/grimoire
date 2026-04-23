@@ -38,6 +38,7 @@ function enrichMod(mod: Mod): Mod {
             // Use the stored mod name from GameBanana if available
             name: metadata.modName || mod.name,
             thumbnailUrl: metadata.thumbnailUrl,
+            audioUrl: metadata.audioUrl,
             gameBananaId: metadata.gameBananaId,
             gameBananaFileId: metadata.gameBananaFileId,
             categoryId: metadata.categoryId,

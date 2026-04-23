@@ -12,7 +12,7 @@ import type { Profile, ProfileCrosshairSettings } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { Card, Badge, Button } from '../components/common/ui';
-import { ConfirmModal } from '../components/common/PageComponents';
+import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 
 export default function Profiles() {
@@ -190,14 +190,12 @@ export default function Profiles() {
           {/* Profile List */}
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6">
             {profiles.length === 0 ? (
-              <div className="col-span-full flex flex-col items-center justify-center py-16 text-text-secondary border border-dashed border-white/10 rounded-xl bg-bg-secondary/30">
-                <div className="w-20 h-20 mb-4 rounded-full bg-bg-tertiary flex items-center justify-center">
-                  <User className="w-8 h-8 opacity-40" />
-                </div>
-                <h3 className="text-lg font-medium text-text-primary mb-2">No Profiles Yet</h3>
-                <p className="text-center max-w-sm">
-                  Create your first profile above to save your current mod configuration.
-                </p>
+              <div className="col-span-full border border-dashed border-white/10 rounded-xl bg-bg-secondary/30 py-12">
+                <EmptyState
+                  icon={User}
+                  title="No Profiles Yet"
+                  description="Create your first profile above to save your current mod configuration."
+                />
               </div>
             ) : (
               profiles.map((profile) => {

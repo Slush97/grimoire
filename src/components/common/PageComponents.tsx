@@ -63,26 +63,22 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
 
 interface PageHeaderProps {
     title: string;
-    description?: string;
-    icon: LucideIcon;
+    description?: ReactNode;
     action?: ReactNode;
     stats?: ReactNode;
     className?: string;
 }
 
-export function PageHeader({ title, description, icon: Icon, action, stats, className = '' }: PageHeaderProps) {
+export function PageHeader({ title, description, action, stats, className = '' }: PageHeaderProps) {
     return (
-        <div className={`flex flex-wrap items-center justify-between gap-4 ${className}`}>
-            <div className="flex items-center gap-3">
-                <div className="p-3 bg-accent/10 rounded-xl">
-                    <Icon className="w-8 h-8 text-accent" />
-                </div>
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-bold font-reaver tracking-wide">{title}</h1>
-                    {description && <p className="text-text-secondary">{description}</p>}
-                </div>
+        <div className={`flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-border ${className}`}>
+            <div className="min-w-0">
+                <h1 className="text-3xl md:text-4xl font-reaver tracking-wide text-text-primary leading-tight">
+                    {title}
+                </h1>
+                {description && <div className="text-text-secondary text-sm mt-1">{description}</div>}
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3 flex-wrap">
                 {stats && <div className="text-sm text-text-secondary">{stats}</div>}
                 {action}
             </div>
@@ -97,23 +93,24 @@ export function PageHeader({ title, description, icon: Icon, action, stats, clas
 interface EmptyStateProps {
     icon: LucideIcon;
     title: string;
-    description?: string;
+    description?: ReactNode;
     action?: ReactNode;
     variant?: 'default' | 'error';
+    className?: string;
 }
 
-export function EmptyState({ icon: Icon, title, description, action, variant = 'default' }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action, variant = 'default', className = '' }: EmptyStateProps) {
     const iconColor = variant === 'error' ? 'text-red-500' : 'text-text-secondary';
     const titleColor = variant === 'error' ? 'text-red-400' : 'text-text-primary';
 
     return (
-        <div className="flex flex-col items-center justify-center h-full text-text-secondary">
+        <div className={`flex flex-col items-center justify-center h-full text-text-secondary animate-fade-in ${className}`}>
             <Icon className={`w-16 h-16 mb-4 opacity-50 ${iconColor}`} />
             <h2 className={`text-xl font-semibold mb-2 ${titleColor}`}>{title}</h2>
             {description && (
-                <p className={`text-center max-w-md ${variant === 'error' ? 'text-red-400' : ''}`}>
+                <div className={`text-center max-w-md ${variant === 'error' ? 'text-red-400' : ''}`}>
                     {description}
-                </p>
+                </div>
             )}
             {action && <div className="mt-4">{action}</div>}
         </div>

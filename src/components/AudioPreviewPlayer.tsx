@@ -5,8 +5,15 @@ interface AudioPreviewPlayerProps {
     src: string;
     className?: string;
     compact?: boolean;
+    /**
+     * `default` — standalone pill with its own background, padding, and border radius.
+     * `inline`  — no background/padding, for embedding inside a pre-styled container
+     *             (lets the parent own the surface styling without `!important` hacks).
+     */
+    variant?: 'default' | 'inline';
     volume?: number; // 0-1, externally controlled volume
     onPlay?: () => void; // Called when playback starts (to pause others)
+    onPlayingChange?: (playing: boolean) => void; // Fires on play/pause/ended
 }
 
 // Global reference to currently playing audio for single-audio playback
@@ -16,8 +23,10 @@ export default function AudioPreviewPlayer({
     src,
     className = '',
     compact = false,
+    variant = 'default',
     volume = 1,
-    onPlay
+    onPlay,
+    onPlayingChange,
 }: AudioPreviewPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
     const [isPlaying, setIsPlaying] = useState(false);
@@ -103,11 +112,16 @@ export default function AudioPreviewPlayer({
         const handlePlay = () => {
             setIsPlaying(true);
             setIsLoading(false);
+            onPlayingChange?.(true);
         };
-        const handlePause = () => setIsPlaying(false);
+        const handlePause = () => {
+            setIsPlaying(false);
+            onPlayingChange?.(false);
+        };
         const handleEnded = () => {
             setIsPlaying(false);
             setCurrentTime(0);
+            onPlayingChange?.(false);
         };
         const handleError = () => {
             setError(true);
@@ -148,9 +162,14 @@ export default function AudioPreviewPlayer({
         );
     }
 
+    const surfaceClass =
+        variant === 'inline'
+            ? 'flex items-center gap-4'
+            : `flex items-center gap-4 bg-bg-tertiary/50 rounded-lg ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`;
+
     return (
         <div
-            className={`flex items-center gap-2 bg-bg-tertiary/50 rounded-lg ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} ${className}`}
+            className={`${surfaceClass} ${className}`}
             onClick={(e) => e.stopPropagation()}
         >
             <audio ref={audioRef} src={src} preload="metadata" />
@@ -158,16 +177,15 @@ export default function AudioPreviewPlayer({
             {/* Play/Pause Button */}
             <button
                 onClick={togglePlay}
-                className={`flex-shrink-0 flex items-center justify-center rounded-full bg-accent hover:bg-accent-hover text-white transition-colors ${compact ? 'w-6 h-6' : 'w-8 h-8'
-                    }`}
+                className={`flex-shrink-0 flex items-center justify-center rounded-full bg-accent hover:bg-accent-hover active:scale-95 text-white ring-1 ring-white/20 shadow-sm transition-all ${compact ? 'w-8 h-8' : 'w-10 h-10'}`}
                 title={isPlaying ? 'Pause' : 'Play'}
             >
                 {isLoading ? (
-                    <div className={`animate-spin rounded-full border-2 border-white border-t-transparent ${compact ? 'w-3 h-3' : 'w-4 h-4'}`} />
+                    <div className={`animate-spin rounded-full border-2 border-white border-t-transparent ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
                 ) : isPlaying ? (
-                    <Pause className={compact ? 'w-3 h-3' : 'w-4 h-4'} />
+                    <Pause className={compact ? 'w-4 h-4' : 'w-5 h-5'} fill="currentColor" />
                 ) : (
-                    <Play className={`${compact ? 'w-3 h-3' : 'w-4 h-4'} ml-0.5`} />
+                    <Play className={`${compact ? 'w-4 h-4' : 'w-5 h-5'} ml-0.5`} fill="currentColor" />
                 )}
             </button>
 
