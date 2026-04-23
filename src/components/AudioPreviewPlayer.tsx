@@ -164,8 +164,8 @@ export default function AudioPreviewPlayer({
 
     const surfaceClass =
         variant === 'inline'
-            ? 'flex items-center gap-3'
-            : `flex items-center gap-3 bg-bg-tertiary/50 rounded-lg ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`;
+            ? 'flex items-center gap-4'
+            : `flex items-center gap-4 bg-bg-tertiary/50 rounded-lg ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`;
 
     return (
         <div
