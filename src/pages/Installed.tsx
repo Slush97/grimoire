@@ -160,6 +160,39 @@ export default function Installed() {
     }
   }, [mods]);
 
+  // Flag mods whose GameBanana dateModified is newer than when the user
+  // installed their copy. Uses the local mod cache (synced in the background)
+  // so this is cheap and works offline; staler cache just means fewer flags.
+  useEffect(() => {
+    let cancelled = false;
+    const checkUpdates = async () => {
+      const targets = mods.filter((m) => !!m.gameBananaId && !!m.installedAt);
+      if (targets.length === 0) {
+        setUpdatesAvailable(new Set());
+        return;
+      }
+      const available = new Set<string>();
+      for (const mod of targets) {
+        if (cancelled) return;
+        try {
+          const cached = await window.electronAPI.getCachedMod(mod.gameBananaId!);
+          if (!cached) continue;
+          const installedTs = Math.floor(new Date(mod.installedAt).getTime() / 1000);
+          if (Number.isFinite(installedTs) && cached.dateModified > installedTs) {
+            available.add(mod.id);
+          }
+        } catch {
+          // Cache miss or backend error — just skip this mod.
+        }
+      }
+      if (!cancelled) setUpdatesAvailable(available);
+    };
+    checkUpdates();
+    return () => {
+      cancelled = true;
+    };
+  }, [mods]);
+
   if (!activeDeadlockPath) {
     return (
       <EmptyState
