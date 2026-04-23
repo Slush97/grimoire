@@ -270,8 +270,21 @@ export default function Locker() {
 
   if (modsLoading || categoriesLoading) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
+      <div className="p-6 space-y-6">
+        <PageHeader
+          icon={Shield}
+          title="Hero Locker"
+          description="Pick the active skin per hero. Selecting one disables other skins for that hero."
+        />
+        <div
+          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          {Array.from({ length: 18 }).map((_, i) => (
+            <HeroGallerySkeleton key={i} />
+          ))}
+        </div>
       </div>
     );
   }
@@ -724,6 +737,18 @@ interface HeroGalleryCardProps {
   isActive: boolean;
   onNavigate: (rect: DOMRect) => void;
   onToggleFavorite: () => void;
+}
+
+function HeroGallerySkeleton() {
+  return (
+    <div className="relative overflow-hidden rounded-2xl border border-border bg-bg-secondary">
+      <div className="relative aspect-[3/4] skeleton-shimmer bg-bg-tertiary" />
+      <div className="absolute bottom-0 left-0 right-0 p-3 space-y-1.5">
+        <div className="h-3 w-2/3 rounded bg-bg-tertiary skeleton-shimmer" />
+        <div className="h-2 w-1/3 rounded bg-bg-tertiary/80 skeleton-shimmer" />
+      </div>
+    </div>
+  );
 }
 
 function HeroGalleryCard({
