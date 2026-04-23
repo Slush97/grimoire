@@ -38,6 +38,8 @@ import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
+import { Button } from '../components/common/ui';
+import { EmptyState } from '../components/common/PageComponents';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
 
 const DEFAULT_PER_PAGE = 20;
@@ -942,36 +944,36 @@ export default function Browse() {
           }
           if (error) {
             return (
-              <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-                <p className="text-state-danger max-w-xl text-center">{renderErrorWithLinks(error)}</p>
-                <button
-                  onClick={fetchMods}
-                  className="mt-4 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer"
-                >
-                  Retry
-                </button>
-              </div>
+              <EmptyState
+                icon={AlertTriangle}
+                title="Couldn't load mods"
+                description={renderErrorWithLinks(error)}
+                variant="error"
+                action={<Button onClick={fetchMods}>Retry</Button>}
+              />
             );
           }
           if (displayMods.length === 0) {
             return (
-              <div className="flex flex-col items-center justify-center h-full text-text-secondary py-16">
-                <Search className="w-16 h-16 mb-4 opacity-50" />
-                <p className="mb-2">{hasActiveFilters ? 'No mods match your filters' : 'No mods found'}</p>
-                {hasActiveFilters && (
-                  <button
-                    onClick={() => {
-                      setSearch('');
-                      setHeroCategoryId('all');
-                      setCategoryId('all');
-                      setSort('default');
-                    }}
-                    className="mt-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer text-sm"
-                  >
-                    Clear filters
-                  </button>
-                )}
-              </div>
+              <EmptyState
+                icon={Search}
+                title={hasActiveFilters ? 'No mods match your filters' : 'No mods found'}
+                description={hasActiveFilters ? 'Try widening your search or clearing filters.' : undefined}
+                action={
+                  hasActiveFilters ? (
+                    <Button
+                      onClick={() => {
+                        setSearch('');
+                        setHeroCategoryId('all');
+                        setCategoryId('all');
+                        setSort('default');
+                      }}
+                    >
+                      Clear filters
+                    </Button>
+                  ) : undefined
+                }
+              />
             );
           }
           return (

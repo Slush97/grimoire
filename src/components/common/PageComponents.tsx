@@ -93,23 +93,24 @@ export function PageHeader({ title, description, action, stats, className = '' }
 interface EmptyStateProps {
     icon: LucideIcon;
     title: string;
-    description?: string;
+    description?: ReactNode;
     action?: ReactNode;
     variant?: 'default' | 'error';
+    className?: string;
 }
 
-export function EmptyState({ icon: Icon, title, description, action, variant = 'default' }: EmptyStateProps) {
+export function EmptyState({ icon: Icon, title, description, action, variant = 'default', className = '' }: EmptyStateProps) {
     const iconColor = variant === 'error' ? 'text-red-500' : 'text-text-secondary';
     const titleColor = variant === 'error' ? 'text-red-400' : 'text-text-primary';
 
     return (
-        <div className="flex flex-col items-center justify-center h-full text-text-secondary">
+        <div className={`flex flex-col items-center justify-center h-full text-text-secondary animate-fade-in ${className}`}>
             <Icon className={`w-16 h-16 mb-4 opacity-50 ${iconColor}`} />
             <h2 className={`text-xl font-semibold mb-2 ${titleColor}`}>{title}</h2>
             {description && (
-                <p className={`text-center max-w-md ${variant === 'error' ? 'text-red-400' : ''}`}>
+                <div className={`text-center max-w-md ${variant === 'error' ? 'text-red-400' : ''}`}>
                     {description}
-                </p>
+                </div>
             )}
             {action && <div className="mt-4">{action}</div>}
         </div>
