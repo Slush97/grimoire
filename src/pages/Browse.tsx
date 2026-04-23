@@ -374,6 +374,7 @@ export default function Browse() {
   useEffect(() => {
     setPage(1);
     setHasMore(true);
+    setMods([]);
   }, [search, sort, section, effectiveCategoryId, perPage]);
 
   useEffect(() => {
