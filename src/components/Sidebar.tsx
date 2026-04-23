@@ -223,9 +223,9 @@ export default function Sidebar() {
                 to={to}
                 title={tooltip}
                 className={({ isActive }) =>
-                  `relative flex items-center gap-3 pl-4 pr-3 py-3 rounded-lg font-medium text-sm transition-colors ${
+                  `flex items-center gap-3 px-3 py-3 rounded-lg font-medium text-sm transition-colors ${
                     isActive
-                      ? 'bg-accent/10 text-text-primary before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-accent'
+                      ? 'bg-accent/15 text-accent'
                       : 'text-text-primary/70 hover:bg-bg-tertiary hover:text-text-primary'
                   }`
                 }
@@ -295,7 +295,7 @@ export default function Sidebar() {
                   ? 'Restores stashed mods first, then launches Deadlock via Steam'
                   : 'Launch Deadlock with mods active'
             }
-            className="relative flex w-full items-center gap-3 h-11 pl-4 pr-3 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent text-sm font-semibold tracking-wide transition-colors cursor-pointer before:absolute before:left-0 before:top-1.5 before:bottom-1.5 before:w-[3px] before:rounded-r-full before:bg-accent disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex w-full items-center gap-3 h-11 px-3 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent text-sm font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {launchPending === 'modded' ? (
               <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
@@ -315,7 +315,7 @@ export default function Sidebar() {
                   ? 'A vanilla session is already active — restore mods first'
                   : 'Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts'
             }
-            className="flex w-full items-center gap-3 h-11 pl-4 pr-3 rounded-lg text-text-primary/70 hover:text-text-primary hover:bg-bg-tertiary text-sm font-medium tracking-wide transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex w-full items-center gap-3 h-11 px-3 rounded-lg text-text-primary/70 hover:text-text-primary hover:bg-bg-tertiary text-sm font-medium tracking-wide transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {launchPending === 'vanilla' ? (
               <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
