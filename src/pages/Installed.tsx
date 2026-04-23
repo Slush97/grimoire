@@ -13,6 +13,8 @@ import {
   X,
   ImagePlus,
   Search,
+  Volume2,
+  Info,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -199,7 +201,20 @@ export default function Installed() {
       <PageHeader
         icon={Package}
         title="Installed Mods"
-        description={`${enabledMods.length} enabled / ${mods.length} total`}
+        description={
+          <span className="flex items-center gap-2 flex-wrap">
+            <span>{enabledMods.length} enabled / {mods.length} total</span>
+            {mods.length > 0 && enabledMods.length === 0 && (
+              <span
+                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 text-xs font-medium"
+                title="You have installed mods but none are enabled — nothing will apply when you launch."
+              >
+                <Info className="w-3 h-3" />
+                No mods enabled
+              </span>
+            )}
+          </span>
+        }
         action={
           <div className="flex items-center gap-3">
             {conflictCount > 0 && (
@@ -357,6 +372,7 @@ interface ModCardProps {
     thumbnailUrl?: string;
     audioUrl?: string;
     sourceSection?: string;
+    categoryName?: string;
     nsfw?: boolean;
   };
   viewMode: ViewMode;
@@ -520,7 +536,7 @@ function ModCard({
         </button>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium truncate">{mod.name}</h3>
             {hasConflicts && viewMode === 'list' && (
               <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
@@ -528,15 +544,45 @@ function ModCard({
                 Conflict
               </span>
             )}
+            {mod.sourceSection === 'Sound' && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-[10px] font-medium uppercase tracking-wide">
+                <Volume2 className="w-3 h-3" />
+                Sound
+              </span>
+            )}
+            {mod.nsfw && (
+              <span className="px-1.5 py-0.5 bg-red-500/15 text-red-400 rounded text-[10px] font-semibold uppercase tracking-wide">
+                18+
+              </span>
+            )}
           </div>
           <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary mt-1">
-            <span className="font-mono">{mod.fileName}</span>
+            {mod.categoryName && (
+              <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
+            )}
+            <span className="font-mono truncate">{mod.fileName}</span>
             <span>{formatBytes(mod.size)}</span>
             <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">
               Priority: {mod.priority}
             </span>
           </div>
         </div>
+
+        {/* List-mode: audio preview sits between meta and delete, using the
+            empty right-side space. Grid mode puts it below the card body. */}
+        {viewMode === 'list' && mod.sourceSection === 'Sound' && mod.audioUrl && (
+          <div
+            className="hidden md:flex w-72 flex-shrink-0 items-center"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <AudioPreviewPlayer
+              src={mod.audioUrl}
+              compact
+              volume={soundVolume}
+              className="w-full border border-border"
+            />
+          </div>
+        )}
 
         <button
           onClick={onDelete}
@@ -547,8 +593,15 @@ function ModCard({
         </button>
       </div>
 
-      {mod.sourceSection === 'Sound' && mod.audioUrl && viewMode === 'grid' && (
-        <AudioPreviewPlayer src={mod.audioUrl} compact volume={soundVolume} className="w-full" />
+      {viewMode === 'grid' && mod.sourceSection === 'Sound' && mod.audioUrl && (
+        <div className="w-full" onClick={(e) => e.stopPropagation()}>
+          <AudioPreviewPlayer
+            src={mod.audioUrl}
+            compact
+            volume={soundVolume}
+            className="w-full"
+          />
+        </div>
       )}
     </div>
   );

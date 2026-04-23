@@ -38,6 +38,7 @@ import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
 
 const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
@@ -82,6 +83,22 @@ function flattenCategories(
   }
 
   return results;
+}
+
+// Abbreviate counts (1234 -> 1.2k, 98765 -> 99k)
+function formatCount(n: number): string {
+  if (n < 1000) return String(n);
+  if (n < 10_000) return `${(n / 1000).toFixed(1)}k`;
+  if (n < 1_000_000) return `${Math.round(n / 1000)}k`;
+  return `${(n / 1_000_000).toFixed(1)}m`;
+}
+
+// Treat Enter/Space as a click on role="button" divs (keyboard navigation).
+function handleCardKeyDown(e: React.KeyboardEvent, onClick: () => void): void {
+  if (e.key === 'Enter' || e.key === ' ') {
+    e.preventDefault();
+    onClick();
+  }
 }
 
 // Render an error string with any embedded https:// URLs as clickable links.
@@ -943,6 +960,7 @@ export default function Browse() {
                   viewMode={viewMode}
                   section={section}
                   volume={soundVolume}
+                  onVolumeChange={setSoundVolume}
                   hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                   onClick={() => handleModClick(mod)}
                   onQuickDownload={() => handleQuickDownload(mod)}
@@ -994,52 +1012,55 @@ interface ModCardProps {
   viewMode: ViewMode;
   section: string;
   volume: number;
+  onVolumeChange: (v: number) => void;
   hideNsfwPreviews: boolean;
   onClick: () => void;
   onQuickDownload: () => void;
 }
 
-function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
+function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);
+  // Sound mods don't carry hero info in the API, so guess from the title.
+  // Used to swap in the locker hero portrait as the card backdrop.
+  const inferredHero = isSoundSection ? inferHeroFromTitle(mod.name) : null;
+  const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : undefined;
+  const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
 
   // List view keeps original layout
   if (isList) {
     return (
       <div
         onClick={onClick}
-        className="relative bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer flex items-center gap-4 p-3"
+        onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+        role="button"
+        tabIndex={0}
+        aria-label={`Open details for ${mod.name}`}
+        className="relative bg-bg-secondary border border-border rounded-lg overflow-hidden hover:border-accent/50 focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3"
       >
         <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-md overflow-hidden">
           {isSoundSection ? (
-            <div className="w-full h-full relative">
-              {thumbnail ? (
-                <>
-                  <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-                </>
-              ) : (
-                <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
-              )}
-              <div className="absolute inset-0 flex flex-col items-center justify-end p-3">
-                {hasAudioPreview ? (
-                  <div className="w-full backdrop-blur-md bg-black/30 rounded-lg border border-white/10">
-                    <AudioPreviewPlayer src={audioPreview!} compact volume={volume} className="w-full" />
-                  </div>
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="flex items-center gap-1.5 px-2 py-1 rounded-full bg-accent/90 text-white font-medium shadow-lg text-xs">
-                      <Volume2 className="w-3 h-3" />
-                      <span>SOUND</span>
-                    </div>
-                  </div>
-                )}
+            heroRenderUrl ? (
+              <img
+                src={heroRenderUrl}
+                alt={inferredHero ?? mod.name}
+                className="w-full h-full object-cover"
+                style={{ objectPosition: `${heroFacePos}% 25%` }}
+              />
+            ) : thumbnail ? (
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+            ) : (
+              <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
+                <div className="flex items-center gap-1 px-2 py-1 rounded-full bg-accent/80 text-white text-[10px] font-semibold">
+                  <Volume2 className="w-3 h-3" />
+                  SOUND
+                </div>
               </div>
-            </div>
+            )
           ) : (
             <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
           )}
@@ -1063,9 +1084,15 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3 text-text-secondary mt-1 text-xs">
-            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{mod.likeCount}</span>
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{mod.viewCount}</span>
+          <div className="flex items-center gap-3 text-text-secondary mt-1 text-xs flex-wrap">
+            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
+            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
+            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
+              <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
+            )}
+            {mod.nsfw && (
+              <span className="px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded text-[10px] font-semibold uppercase">18+</span>
+            )}
           </div>
           {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
           {mod.dateModified > 0 && (
@@ -1075,6 +1102,32 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
             </div>
           )}
         </div>
+
+        {/* Right-side audio cluster for sound mods — fills the empty space on wide rows */}
+        {isSoundSection && hasAudioPreview && (
+          <div
+            className="flex-shrink-0 w-72 hidden md:flex items-center gap-3 bg-bg-tertiary/50 rounded-full border border-border px-3 py-1.5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex-1 min-w-0">
+              <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} />
+            </div>
+            <div className="w-px h-4 bg-border flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Volume2 className="w-3.5 h-3.5 text-text-secondary" />
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(volume * 100)}
+                onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+                className="w-14 h-1 accent-accent cursor-pointer"
+                aria-label="Volume"
+              />
+            </div>
+          </div>
+        )}
       </div>
     );
   }
@@ -1083,73 +1136,145 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
   return (
     <div
       onClick={onClick}
-      className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden hover:border-accent/50 transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'}`}
+      onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open details for ${mod.name}`}
+      className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden hover:border-accent/50 focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'}`}
     >
       {/* Full-bleed image */}
       <div className="absolute inset-0">
         {isSoundSection ? (
           <div className="w-full h-full relative">
-            {thumbnail ? (
-              <>
-                <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
-                <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-              </>
+            {heroRenderUrl ? (
+              <img
+                src={heroRenderUrl}
+                alt={inferredHero ?? mod.name}
+                className="w-full h-full object-cover"
+                style={{ objectPosition: `${heroFacePos}% 20%` }}
+              />
+            ) : thumbnail ? (
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
             )}
-            <div className="absolute inset-0 flex flex-col items-center justify-end p-3">
-              {hasAudioPreview ? (
-                <>
-                  {!thumbnail && (
-                    <div className="flex items-end gap-0.5 mb-2 h-8">
-                      {[3, 5, 8, 12, 16, 12, 8, 14, 10, 6, 9, 14, 11, 7, 4, 6, 10, 8, 5, 3].map((h, i) => (
-                        <div key={i} className="w-1 bg-accent/60 rounded-full transition-all" style={{ height: `${h * 2}px` }} />
-                      ))}
-                    </div>
-                  )}
-                  <div className="w-full backdrop-blur-md bg-black/30 rounded-lg border border-white/10">
-                    <AudioPreviewPlayer src={audioPreview!} compact={isCompact} volume={volume} className="w-full" />
-                  </div>
-                </>
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/90 text-white font-medium shadow-lg ${isCompact ? 'text-xs px-2 py-1' : 'text-sm'}`}>
-                    <Volume2 className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
-                    <span>SOUND</span>
-                  </div>
+            {!hasAudioPreview && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-accent/90 text-white font-medium shadow-lg ${isCompact ? 'text-xs px-2 py-1' : 'text-sm'}`}>
+                  <Volume2 className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
+                  <span>SOUND</span>
                 </div>
-              )}
-            </div>
+              </div>
+            )}
+            {!thumbnail && !heroRenderUrl && hasAudioPreview && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="flex items-end gap-0.5 h-10">
+                  {[3, 5, 8, 12, 16, 12, 8, 14, 10, 6, 9, 14, 11, 7, 4, 6, 10, 8, 5, 3].map((h, i) => (
+                    <div key={i} className="w-1 bg-accent/60 rounded-full transition-all" style={{ height: `${h * 2}px` }} />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ) : (
           <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
         )}
       </div>
 
-      {/* Single gradient: transparent at top, strongest darkness at the label band */}
+      {/* Gradient: for sound cards with audio preview, darken TOP (title) and BOTTOM (player).
+          For other cards, the classic bottom-darkest gradient. */}
       <div
         className="absolute inset-0 pointer-events-none"
-        style={{
-          background:
-            'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 22%, rgba(0,0,0,0.25) 55%, transparent 80%)',
-        }}
+        style={
+          isSoundSection && hasAudioPreview
+            ? {
+                background:
+                  'linear-gradient(to bottom, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.35) 35%, rgba(0,0,0,0.35) 60%, rgba(0,0,0,0.9) 100%)',
+              }
+            : {
+                background:
+                  'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 22%, rgba(0,0,0,0.25) 55%, transparent 80%)',
+              }
+        }
       />
 
-      {/* Info overlaid at bottom */}
-      <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
-        <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-        <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
-          <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{mod.likeCount}</span>
-          <span className="flex items-center gap-1"><Eye className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{mod.viewCount}</span>
-          {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
-        </div>
-        {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
-          <div className={`flex items-center gap-1 mt-1 text-yellow-400 ${isCompact ? 'text-xs' : 'text-sm'}`}>
-            <AlertTriangle className={isCompact ? 'w-3 h-3 flex-shrink-0' : 'w-3.5 h-3.5 flex-shrink-0'} />
-            <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
+      {/* Info — moved to TOP for audio-preview sound cards so it stops covering the player */}
+      {isSoundSection && hasAudioPreview ? (
+        <div className={`absolute top-0 left-0 right-0 pointer-events-none ${isCompact ? 'p-2.5 pr-10' : 'p-3 pr-12'}`}>
+          <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
+            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
+            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
+            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
+              <span className="flex items-center gap-1"><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
+            )}
+            {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
+          <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
+          <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.likeCount)}</span>
+            <span className="flex items-center gap-1"><Eye className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.viewCount)}</span>
+            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
+              <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}>
+                <Download className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.downloadCount)}
+              </span>
+            )}
+            {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
+          </div>
+          {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
+            <div className={`flex items-center gap-1 mt-1 text-yellow-400 ${isCompact ? 'text-xs' : 'text-sm'}`}>
+              <AlertTriangle className={isCompact ? 'w-3 h-3 flex-shrink-0' : 'w-3.5 h-3.5 flex-shrink-0'} />
+              <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* NSFW badge — top-left corner, visible even when thumbnail is blurred */}
+      {mod.nsfw && (
+        <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-red-500/90 text-white rounded text-[10px] font-bold uppercase shadow">
+          18+
+        </div>
+      )}
+
+      {/* Audio preview + volume, pinned to bottom with its own pointer-events layer.
+          z-20 keeps it above the gradient + any overlays so clicks always land.
+          Single spacious pill: [play + progress + time] | divider | [volume icon + slider] */}
+      {isSoundSection && hasAudioPreview && (
+        <div
+          className={`absolute bottom-0 left-0 right-0 z-20 ${isCompact ? 'p-2' : 'p-2.5'}`}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center gap-3 backdrop-blur-md bg-black/60 rounded-full border border-white/10 px-3 py-2 shadow-lg">
+            <div className="flex-1 min-w-0">
+              <AudioPreviewPlayer
+                src={audioPreview!}
+                compact
+                variant="inline"
+                volume={volume}
+              />
+            </div>
+            <div className="w-px h-5 bg-white/20 flex-shrink-0" />
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <Volume2 className="w-3.5 h-3.5 text-white/70" />
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={1}
+                value={Math.round(volume * 100)}
+                onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+                className="w-16 h-1 accent-accent cursor-pointer"
+                title={`Volume: ${Math.round(volume * 100)}%`}
+                aria-label="Volume"
+              />
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Download button overlay — top right with backdrop */}
       <div className="absolute top-2 right-2">

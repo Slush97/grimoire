@@ -63,7 +63,7 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
 
 interface PageHeaderProps {
     title: string;
-    description?: string;
+    description?: ReactNode;
     icon: LucideIcon;
     action?: ReactNode;
     stats?: ReactNode;
@@ -79,7 +79,7 @@ export function PageHeader({ title, description, icon: Icon, action, stats, clas
                 </div>
                 <div>
                     <h1 className="text-2xl md:text-3xl font-bold font-reaver tracking-wide">{title}</h1>
-                    {description && <p className="text-text-secondary">{description}</p>}
+                    {description && <div className="text-text-secondary">{description}</div>}
                 </div>
             </div>
             <div className="flex items-center gap-4">

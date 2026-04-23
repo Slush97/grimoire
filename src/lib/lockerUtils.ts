@@ -52,6 +52,69 @@ export function getHeroFacePosition(name: string): number {
   return HERO_FACE_POSITION[name] ?? 55;
 }
 
+/**
+ * Known hero names — drives fuzzy matching for sound/voice mods whose titles
+ * tend to mention a hero (e.g. "Drifter ult replacement", "Pocket - VO").
+ * Superset of HERO_FACE_POSITION; includes newer heroes whose portrait assets
+ * exist in /locker/heroes/ but don't yet have a tuned face-crop position.
+ */
+export const HERO_NAMES: string[] = [
+  ...Object.keys(HERO_FACE_POSITION),
+  'Apollo',
+  'Celeste',
+  'Graves',
+  'Rem',
+  'Silver',
+  'The Doorman',
+  'Venator',
+];
+
+/**
+ * Alternate spellings / common shorthand. Keys are canonical names from
+ * HERO_FACE_POSITION; values are lowercase needles to search inside a title.
+ */
+const HERO_ALIASES: Record<string, string[]> = {
+  'Mo & Krill': ['mo & krill', 'mo and krill', 'mo+krill', 'mokrill'],
+  'Grey Talon': ['grey talon', 'greytalon', 'grey-talon'],
+  'Lady Geist': ['lady geist', 'ladygeist', 'geist'],
+  McGinnis: ['mcginnis', 'mc ginnis'],
+  'Yamato': ['yamato'],
+};
+
+function escapeRegex(s: string): string {
+  return s.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&');
+}
+
+/**
+ * Infer the Deadlock hero associated with a mod title. Uses case-insensitive
+ * substring match for multi-word heroes and word-boundary match for single
+ * tokens, so "Haze ULT" matches "Haze" but "Hazelnut" does not. Returns the
+ * canonical hero name (matching HERO_FACE_POSITION keys) or null.
+ */
+export function inferHeroFromTitle(title: string): string | null {
+  if (!title) return null;
+  const needle = title.toLowerCase();
+  // Longest hero names first so "Grey Talon" wins over "Grey".
+  const sorted = [...HERO_NAMES].sort((a, b) => b.length - a.length);
+
+  for (const hero of sorted) {
+    const lower = hero.toLowerCase();
+    const aliases = [lower, ...(HERO_ALIASES[hero] ?? [])];
+    for (const alias of aliases) {
+      if (alias.includes(' ') || alias.includes('&') || alias.includes('+')) {
+        // Multi-word / symbol aliases: plain substring is fine.
+        if (needle.includes(alias)) return hero;
+      } else {
+        // Single-token: require word boundary to avoid false positives
+        // (e.g. "mira" won't match "Mirage").
+        const re = new RegExp(`\\b${escapeRegex(alias)}\\b`, 'i');
+        if (re.test(needle)) return hero;
+      }
+    }
+  }
+  return null;
+}
+
 export type MinaPreset = {
   fileName: string;
   label: string;

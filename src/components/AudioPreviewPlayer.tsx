@@ -5,6 +5,12 @@ interface AudioPreviewPlayerProps {
     src: string;
     className?: string;
     compact?: boolean;
+    /**
+     * `default` — standalone pill with its own background, padding, and border radius.
+     * `inline`  — no background/padding, for embedding inside a pre-styled container
+     *             (lets the parent own the surface styling without `!important` hacks).
+     */
+    variant?: 'default' | 'inline';
     volume?: number; // 0-1, externally controlled volume
     onPlay?: () => void; // Called when playback starts (to pause others)
 }
@@ -16,6 +22,7 @@ export default function AudioPreviewPlayer({
     src,
     className = '',
     compact = false,
+    variant = 'default',
     volume = 1,
     onPlay
 }: AudioPreviewPlayerProps) {
@@ -148,9 +155,14 @@ export default function AudioPreviewPlayer({
         );
     }
 
+    const surfaceClass =
+        variant === 'inline'
+            ? 'flex items-center gap-3'
+            : `flex items-center gap-3 bg-bg-tertiary/50 rounded-lg ${compact ? 'px-2.5 py-1.5' : 'px-3 py-2'}`;
+
     return (
         <div
-            className={`flex items-center gap-2 bg-bg-tertiary/50 rounded-lg ${compact ? 'px-2 py-1.5' : 'px-3 py-2'} ${className}`}
+            className={`${surfaceClass} ${className}`}
             onClick={(e) => e.stopPropagation()}
         >
             <audio ref={audioRef} src={src} preload="metadata" />
