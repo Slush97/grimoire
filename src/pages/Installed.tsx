@@ -20,6 +20,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import ModThumbnail from '../components/ModThumbnail';
+import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { Button } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -46,6 +47,7 @@ export default function Installed() {
     deleteMod,
     reorderMods,
     importCustomMod,
+    soundVolume,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -256,6 +258,7 @@ export default function Installed() {
                 viewMode={viewMode}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 conflicts={conflictMap.get(mod.id) || []}
+                soundVolume={soundVolume}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
                 draggable
@@ -305,6 +308,7 @@ export default function Installed() {
                 viewMode={viewMode}
                 hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
                 conflicts={conflictMap.get(mod.id) || []}
+                soundVolume={soundVolume}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
                 draggable={false}
@@ -351,11 +355,14 @@ interface ModCardProps {
     priority: number;
     size: number;
     thumbnailUrl?: string;
+    audioUrl?: string;
+    sourceSection?: string;
     nsfw?: boolean;
   };
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
   conflicts: ModConflict[];
+  soundVolume: number;
   onToggle: () => void;
   onDelete: () => void;
   draggable?: boolean;
@@ -374,6 +381,7 @@ function ModCard({
   viewMode,
   hideNsfwPreviews,
   conflicts,
+  soundVolume,
   onToggle,
   onDelete,
   draggable,
@@ -538,6 +546,10 @@ function ModCard({
           <Trash2 className="w-5 h-5" />
         </button>
       </div>
+
+      {mod.sourceSection === 'Sound' && mod.audioUrl && viewMode === 'grid' && (
+        <AudioPreviewPlayer src={mod.audioUrl} compact volume={soundVolume} className="w-full" />
+      )}
     </div>
   );
 }

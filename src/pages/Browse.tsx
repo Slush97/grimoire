@@ -84,6 +84,27 @@ function flattenCategories(
   return results;
 }
 
+// Render an error string with any embedded https:// URLs as clickable links.
+function renderErrorWithLinks(text: string): React.ReactNode {
+  const parts = text.split(/(https?:\/\/[^\s)]+)/g);
+  return parts.map((part, i) => {
+    if (/^https?:\/\//.test(part)) {
+      return (
+        <a
+          key={i}
+          href={part}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="underline text-accent hover:text-accent-hover"
+        >
+          {part}
+        </a>
+      );
+    }
+    return <span key={i}>{part}</span>;
+  });
+}
+
 function findCategoryByName(
   nodes: GameBananaCategoryNode[],
   name: string
@@ -460,8 +481,11 @@ export default function Browse() {
         setDownloading(null);
         setDownloadProgress(null);
         setExtracting(false);
-        // Show user-friendly error message
-        setError(data.message);
+        const fullMessage =
+          data.helpUrl && !data.message.includes(data.helpUrl)
+            ? `${data.message} ${data.helpUrl}`
+            : data.message;
+        setError(fullMessage);
       }
     });
 
@@ -883,7 +907,7 @@ export default function Browse() {
           </div>
         ) : error ? (
           <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-            <p className="text-red-400">{error}</p>
+            <p className="text-red-400 max-w-xl text-center">{renderErrorWithLinks(error)}</p>
             <button
               onClick={fetchMods}
               className="mt-4 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer"

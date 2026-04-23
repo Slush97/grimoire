@@ -1,28 +1,44 @@
-import { existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync } from 'fs';
+import { existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync, writeFileSync, readFileSync, rmdirSync } from 'fs';
 import { join, extname, basename } from 'path';
 import { randomBytes } from 'crypto';
 import AdmZip from 'adm-zip';
 import { spawn } from 'child_process';
+import { createExtractorFromData } from 'node-unrar-js';
+import { path7za as bundled7zaPath } from '7zip-bin';
 
 /**
- * Find 7z executable path on Windows, checking common installation paths
+ * Resolve a node_modules binary path to its asar.unpacked location when packaged.
+ * electron-builder rewrites __dirname inside the asar, so bundled binaries
+ * (which must be executable on disk) live at app.asar.unpacked instead.
+ */
+function resolveUnpackedPath(p: string): string {
+    return p.replace(/app\.asar([\\/])/, 'app.asar.unpacked$1');
+}
+
+/**
+ * Find 7z executable paths, preferring the bundled binary over system installs.
  */
 function find7zPath(): string[] {
     const candidates: string[] = [];
 
-    // Check common Windows installation paths first
+    // 1. Bundled 7za (ships with the app, no user install required)
+    const bundled = resolveUnpackedPath(bundled7zaPath);
+    if (existsSync(bundled)) {
+        candidates.push(bundled);
+    }
+
+    // 2. Common Windows install paths (faster for huge archives)
     const windowsPaths = [
         'C:\\Program Files\\7-Zip\\7z.exe',
         'C:\\Program Files (x86)\\7-Zip\\7z.exe',
     ];
-
     for (const p of windowsPaths) {
         if (existsSync(p)) {
             candidates.push(p);
         }
     }
 
-    // Also try PATH-based commands as fallback
+    // 3. PATH fallback
     candidates.push('7z', '7za');
 
     return candidates;
@@ -85,14 +101,12 @@ function extractZip(archivePath: string, destDir: string): string[] {
 }
 
 /**
- * Extract a 7z archive using system 7z command
+ * Extract a 7z archive using the bundled 7za binary (falls back to system 7z).
  */
 async function extract7z(archivePath: string, destDir: string): Promise<string[]> {
-    // Create temp directory for extraction
     const tempDir = createTempDir('modmanager-7z');
 
     try {
-        // Try common 7z paths (Windows install dirs + PATH fallback)
         for (const tool of find7zPath()) {
             try {
                 await runCommand(tool, ['x', '-y', `-o${tempDir}`, archivePath]);
@@ -105,10 +119,9 @@ async function extract7z(archivePath: string, destDir: string): Promise<string[]
         }
 
         throw new Error(
-            "Failed to extract 7z. Install '7z' (p7zip-full) or '7za' and try again."
+            "Failed to extract 7z archive. The bundled extractor failed and no system 7-Zip was found. Please install 7-Zip from https://7-zip.org and try again."
         );
     } finally {
-        // Cleanup temp directory
         try {
             rmDirRecursive(tempDir);
         } catch {
@@ -118,13 +131,43 @@ async function extract7z(archivePath: string, destDir: string): Promise<string[]
 }
 
 /**
- * Extract a RAR archive using system unrar or 7z command
+ * Extract a RAR archive. Uses node-unrar-js (pure JS, no external binary) by
+ * default; falls back to the bundled 7za or system unrar if the in-process
+ * extractor fails (e.g. RAR5-specific features it can't handle).
  */
 async function extractRar(archivePath: string, destDir: string): Promise<string[]> {
-    const tempDir = createTempDir('modmanager-rar');
-
+    // Primary path: pure-JS in-process RAR extractor (no install required).
     try {
-        // Try common 7z paths, then unrar as fallback
+        const data = readFileSync(archivePath);
+        // Create an ArrayBuffer copy (node-unrar-js expects ArrayBuffer, not Buffer)
+        const ab = data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
+        const extractor = await createExtractorFromData({ data: ab });
+
+        const extracted = extractor.extract({
+            files: (header) => !header.flags.directory && extname(header.name).toLowerCase() === '.vpk',
+        });
+
+        const extractedVpks: string[] = [];
+        for (const file of extracted.files) {
+            if (!file.extraction) continue;
+            const fileName = basename(file.fileHeader.name);
+            const destPath = join(destDir, fileName);
+            writeFileSync(destPath, Buffer.from(file.extraction));
+            extractedVpks.push(destPath);
+        }
+
+        if (extractedVpks.length > 0) {
+            return extractedVpks;
+        }
+        // No VPKs found via in-process — fall through to 7za/unrar in case of
+        // odd RAR5 solid archives that node-unrar-js can't iterate.
+    } catch (err) {
+        console.warn('[extractRar] node-unrar-js failed, falling back to system tools:', err);
+    }
+
+    // Fallback path: bundled 7za, system 7z, or system unrar.
+    const tempDir = createTempDir('modmanager-rar');
+    try {
         for (const tool of [...find7zPath(), 'unrar']) {
             try {
                 if (tool === 'unrar') {
@@ -141,7 +184,7 @@ async function extractRar(archivePath: string, destDir: string): Promise<string[
         }
 
         throw new Error(
-            "RAR extraction failed. Install '7z' or 'unrar' and try again."
+            "RAR extraction failed. The bundled extractor could not read this archive. Please install 7-Zip from https://7-zip.org and try again."
         );
     } finally {
         try {
@@ -267,8 +310,6 @@ function rmDirRecursive(dir: string): void {
         }
     }
 
-    // Remove the directory itself
-    const { rmdirSync } = require('fs');
     rmdirSync(dir);
 }
 

@@ -23,6 +23,7 @@ export interface Mod {
     installedAt: string;
     description?: string;
     thumbnailUrl?: string;
+    audioUrl?: string;
     gameBananaId?: number;
     gameBananaFileId?: number;
     categoryId?: number;
