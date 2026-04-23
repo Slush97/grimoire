@@ -4,8 +4,6 @@ import {
   Loader2,
   Settings,
   Trash2,
-  ToggleLeft,
-  ToggleRight,
   AlertTriangle,
   FolderOpen,
   GripVertical,
@@ -576,12 +574,17 @@ function ModCard({
           onClick={onToggle}
           aria-pressed={mod.enabled}
           aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
-          className={`transition-colors cursor-pointer ${
-            mod.enabled ? 'text-accent' : 'text-text-secondary hover:text-text-primary'
-          }`}
           title={mod.enabled ? 'Disable mod' : 'Enable mod'}
+          className={`relative flex-shrink-0 w-10 h-6 rounded-full transition-colors cursor-pointer ${
+            mod.enabled ? 'bg-accent' : 'bg-bg-tertiary border border-border'
+          }`}
         >
-          {mod.enabled ? <ToggleRight className="w-8 h-8" /> : <ToggleLeft className="w-8 h-8" />}
+          <span
+            className={`absolute top-[3px] left-[3px] w-4 h-4 rounded-full bg-white shadow-sm transition-transform ${
+              mod.enabled ? 'translate-x-4' : 'translate-x-0'
+            }`}
+            aria-hidden
+          />
         </button>
 
         <div className="flex-1 min-w-0">
