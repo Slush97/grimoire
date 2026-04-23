@@ -25,7 +25,7 @@ import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
-import { Button } from '../components/common/ui';
+import { Button, Tag } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
 function formatBytes(bytes: number): string {
@@ -740,31 +740,37 @@ function ModCard({
         const overlayBadges = (
           <>
             {mod.enabled && (
-              <div
-                className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-accent text-white rounded-full text-[10px] font-bold uppercase tracking-wide ring-1 ring-black/40 shadow-md"
-                title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
-              >
-                Load #{mod.priority}
+              <div className="absolute top-2 left-2 z-10">
+                <Tag
+                  tone="accent"
+                  variant="overlay"
+                  title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
+                  className="tabular-nums"
+                >
+                  Load #{mod.priority}
+                </Tag>
               </div>
             )}
             <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
               {hasConflicts && (
-                <span
-                  className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning text-black rounded-full text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md"
+                <Tag
+                  tone="warning"
+                  variant="overlay"
+                  icon={AlertTriangle}
                   title={conflicts.map((c) => c.details).join(', ')}
                 >
-                  <AlertTriangle className="w-3 h-3" />
                   Conflict
-                </span>
+                </Tag>
               )}
               {updateAvailable && (
-                <span
-                  className="flex items-center gap-1 px-1.5 py-0.5 bg-state-info text-black rounded-full text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md"
+                <Tag
+                  tone="info"
+                  variant="overlay"
+                  icon={Download}
                   title="A newer version is available on GameBanana"
                 >
-                  <Download className="w-3 h-3" />
                   Update
-                </span>
+                </Tag>
               )}
             </div>
           </>
@@ -880,50 +886,48 @@ function ModCard({
           <div className="flex items-center gap-2 min-w-0">
             <h3 className="font-medium truncate flex-1 min-w-0" title={mod.name}>{mod.name}</h3>
             {hasConflicts && viewMode === 'list' && (
-              <span className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/20 text-state-warning rounded text-xs font-semibold uppercase tracking-wide">
-                <AlertTriangle className="w-3 h-3" />
+              <Tag tone="warning" icon={AlertTriangle} className="flex-shrink-0">
                 Conflict
-              </span>
+              </Tag>
             )}
             {mod.sourceSection === 'Sound' && (
-              <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-[10px] font-medium uppercase tracking-wide">
-                <Volume2 className="w-3 h-3" />
+              <Tag tone="accent" icon={Volume2} className="flex-shrink-0">
                 Sound
-              </span>
+              </Tag>
             )}
             {mod.nsfw && (
-              <span className="flex-shrink-0 px-1.5 py-0.5 bg-state-danger/15 text-state-danger rounded text-[10px] font-semibold uppercase tracking-wide">
-                18+
-              </span>
+              <Tag tone="danger" className="flex-shrink-0">18+</Tag>
             )}
             {updateAvailable && viewMode === 'list' && (
-              <span
-                className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 bg-state-info/20 text-state-info rounded text-[10px] font-semibold uppercase tracking-wide"
+              <Tag
+                tone="info"
+                icon={Download}
                 title="A newer version is available on GameBanana"
+                className="flex-shrink-0"
               >
-                <Download className="w-3 h-3" />
                 Update
-              </span>
+              </Tag>
             )}
             {mod.enabled && viewMode === 'list' && (
-              <span
-                className="flex-shrink-0 px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px] font-semibold uppercase tracking-wide"
+              <Tag
+                tone="accent"
                 title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
+                className="flex-shrink-0 tabular-nums"
               >
                 Load #{mod.priority}
-              </span>
+              </Tag>
             )}
           </div>
-          <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary mt-1">
+          <div className="flex flex-nowrap items-center gap-2 text-xs text-text-secondary mt-1 min-w-0 overflow-hidden">
             {mod.categoryName && (
-              <span className="px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
+              <span className="flex-shrink-0 px-1.5 py-0.5 bg-bg-tertiary rounded text-xs">{mod.categoryName}</span>
             )}
-            <span>{formatBytes(mod.size)}</span>
+            <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
             <span
-              className="font-mono truncate opacity-60 hover:opacity-100 cursor-help"
+              className="font-mono truncate opacity-60 hover:opacity-100 cursor-help min-w-0"
               title={mod.fileName}
             >
-              {mod.fileName.length > 20 ? `${mod.fileName.slice(0, 17)}…` : mod.fileName}
+              {mod.fileName}
             </span>
           </div>
         </div>

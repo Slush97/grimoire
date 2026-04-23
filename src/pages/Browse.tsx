@@ -33,7 +33,7 @@ import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
-import { Button } from '../components/common/ui';
+import { Button, Tag } from '../components/common/ui';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
@@ -1134,10 +1134,10 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-medium truncate flex-1">{mod.name}</h3>
             {installed ? (
-              <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-state-success/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-black" title="Installed">
+              <Tag tone="success" variant="overlay" title="Installed" className="flex-shrink-0">
                 <span aria-hidden>✓</span>
                 Installed
-              </span>
+              </Tag>
             ) : downloading ? (
               <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
                 <Loader2 className="w-4 h-4 animate-spin text-accent" />
@@ -1158,9 +1158,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
             {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
               <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
             )}
-            {mod.nsfw && (
-              <span className="px-1.5 py-0.5 bg-state-danger/20 text-state-danger rounded text-[10px] font-semibold uppercase">18+</span>
-            )}
+            {mod.nsfw && <Tag tone="danger">18+</Tag>}
           </div>
           {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
           {mod.dateModified > 0 && (
@@ -1310,29 +1308,25 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         </div>
       )}
 
-      {/* State pill stack — top-left. Stacks NSFW / INSTALLED / OUTDATED so the
-          card is decodable without relying on icon color alone. ring-1 +
-          shadow-md keeps the pills legible over busy thumbnails. */}
+      {/* State tag stack — top-left. Stacks NSFW / INSTALLED / OUTDATED so the
+          card is decodable without relying on icon color alone. */}
       <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
-        {mod.nsfw && (
-          <span className="px-1.5 py-0.5 bg-state-danger text-white rounded text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md">
-            18+
-          </span>
-        )}
+        {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
         {installed && (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-state-success text-black rounded text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md">
+          <Tag tone="success" variant="overlay">
             <span aria-hidden>✓</span>
             Installed
-          </span>
+          </Tag>
         )}
         {!installed && isOutdated && (
-          <span
-            className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning text-black rounded text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md"
+          <Tag
+            tone="warning"
+            variant="overlay"
+            icon={AlertTriangle}
             title={`Last updated ${formatDate(mod.dateModified)}`}
           >
-            <AlertTriangle className="w-3 h-3" />
             Outdated
-          </span>
+          </Tag>
         )}
       </div>
 
