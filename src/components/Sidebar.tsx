@@ -284,7 +284,7 @@ export default function Sidebar() {
           </div>
         )}
 
-        <div className="space-y-2">
+        <div className="space-y-1.5">
           <button
             onClick={handleLaunchModded}
             disabled={!canLaunch || !!launchPending}
@@ -295,7 +295,7 @@ export default function Sidebar() {
                   ? 'Restores stashed mods first, then launches Deadlock via Steam'
                   : 'Launch Deadlock with mods active'
             }
-            className="group relative flex w-full items-center justify-center gap-2 h-11 rounded-lg bg-accent hover:bg-accent-hover active:scale-[0.99] text-white text-[13px] font-semibold tracking-wide shadow-md shadow-accent/25 ring-1 ring-inset ring-white/10 transition-all cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none disabled:active:scale-100"
+            className="flex w-full items-center justify-center gap-2 h-10 rounded-lg bg-accent hover:bg-accent-hover text-black text-sm font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {launchPending === 'modded' ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -315,7 +315,7 @@ export default function Sidebar() {
                   ? 'A vanilla session is already active — restore mods first'
                   : 'Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts'
             }
-            className="flex w-full items-center justify-center gap-2 h-10 rounded-lg bg-bg-primary hover:bg-bg-tertiary active:scale-[0.99] text-text-primary text-[13px] font-semibold tracking-wide border border-border hover:border-accent/60 transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100"
+            className="flex w-full items-center justify-center gap-2 h-10 rounded-lg bg-bg-tertiary hover:bg-bg-tertiary/60 text-text-primary text-sm font-semibold tracking-wide border border-border hover:border-accent/50 transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {launchPending === 'vanilla' ? (
               <Loader2 className="w-4 h-4 animate-spin" />
