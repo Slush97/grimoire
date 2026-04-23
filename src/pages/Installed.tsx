@@ -13,6 +13,7 @@ import {
   Search,
   Volume2,
   Info,
+  Download,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -466,11 +467,14 @@ interface ModCardProps {
     sourceSection?: string;
     categoryName?: string;
     nsfw?: boolean;
+    gameBananaId?: number;
   };
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
   conflicts: ModConflict[];
   soundVolume: number;
+  updateAvailable?: boolean;
+  onOpenDetails?: () => void;
   onToggle: () => void;
   onDelete: () => void;
   draggable?: boolean;
@@ -490,6 +494,8 @@ function ModCard({
   hideNsfwPreviews,
   conflicts,
   soundVolume,
+  updateAvailable,
+  onOpenDetails,
   onToggle,
   onDelete,
   draggable,
@@ -579,24 +585,56 @@ function ModCard({
       {indicatorClasses && <div className={indicatorClasses} />}
 
       {viewMode === 'grid' && (
-        <div className="relative w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onOpenDetails?.();
+          }}
+          disabled={!onOpenDetails}
+          className="group relative w-full aspect-video bg-bg-tertiary rounded-md overflow-hidden block focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+          title={onOpenDetails ? 'View mod details' : undefined}
+          aria-label={onOpenDetails ? `View details for ${mod.name}` : undefined}
+        >
           <ModThumbnail
             src={mod.thumbnailUrl}
             alt={mod.name}
             nsfw={mod.nsfw}
             hideNsfw={hideNsfwPreviews}
-            className="w-full h-full"
+            className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
           />
-          {hasConflicts && (
+          {onOpenDetails && (
+            <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/20" />
+          )}
+          {mod.enabled && (
             <div
-              className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
-              title={conflicts.map((c) => c.details).join(', ')}
+              className="absolute top-2 left-2 flex items-center gap-1 px-2 py-0.5 bg-accent text-white rounded-full text-[10px] font-bold uppercase tracking-wide shadow-lg"
+              title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
             >
-              <AlertTriangle className="w-3 h-3" />
-              Conflict
+              Load #{mod.priority}
             </div>
           )}
-        </div>
+          <div className="absolute top-2 right-2 flex flex-col items-end gap-1">
+            {hasConflicts && (
+              <span
+                className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
+                title={conflicts.map((c) => c.details).join(', ')}
+              >
+                <AlertTriangle className="w-3 h-3" />
+                Conflict
+              </span>
+            )}
+            {updateAvailable && (
+              <span
+                className="flex items-center gap-1 px-1.5 py-0.5 bg-state-info/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
+                title="A newer version is available on GameBanana"
+              >
+                <Download className="w-3 h-3" />
+                Update
+              </span>
+            )}
+          </div>
+        </button>
       )}
 
       <div className={viewMode === 'grid' ? 'flex items-center gap-3' : 'contents'}>
@@ -636,7 +674,16 @@ function ModCard({
                 18+
               </span>
             )}
-            {mod.enabled && (
+            {updateAvailable && viewMode === 'list' && (
+              <span
+                className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 bg-state-info/20 text-state-info rounded text-[10px] font-semibold uppercase tracking-wide"
+                title="A newer version is available on GameBanana"
+              >
+                <Download className="w-3 h-3" />
+                Update
+              </span>
+            )}
+            {mod.enabled && viewMode === 'list' && (
               <span
                 className="flex-shrink-0 px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px] font-semibold uppercase tracking-wide"
                 title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
@@ -676,6 +723,19 @@ function ModCard({
         )}
 
         <div className="flex flex-col items-center gap-1.5 flex-shrink-0">
+          {onOpenDetails && viewMode === 'list' && (
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenDetails();
+              }}
+              className="p-1 text-text-secondary hover:text-accent transition-colors cursor-pointer"
+              title="View mod details"
+              aria-label={`View details for ${mod.name}`}
+            >
+              <Info className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={onDelete}
             className="p-1 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"
