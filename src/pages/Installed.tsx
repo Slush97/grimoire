@@ -617,28 +617,28 @@ function ModCard({
         )}
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="font-medium truncate">{mod.name}</h3>
+          <div className="flex items-center gap-2 min-w-0">
+            <h3 className="font-medium truncate flex-1 min-w-0" title={mod.name}>{mod.name}</h3>
             {hasConflicts && viewMode === 'list' && (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/20 text-state-warning rounded text-xs font-semibold uppercase tracking-wide">
+              <span className="flex-shrink-0 flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/20 text-state-warning rounded text-xs font-semibold uppercase tracking-wide">
                 <AlertTriangle className="w-3 h-3" />
                 Conflict
               </span>
             )}
             {mod.sourceSection === 'Sound' && (
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-[10px] font-medium uppercase tracking-wide">
+              <span className="flex-shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-[10px] font-medium uppercase tracking-wide">
                 <Volume2 className="w-3 h-3" />
                 Sound
               </span>
             )}
             {mod.nsfw && (
-              <span className="px-1.5 py-0.5 bg-state-danger/15 text-state-danger rounded text-[10px] font-semibold uppercase tracking-wide">
+              <span className="flex-shrink-0 px-1.5 py-0.5 bg-state-danger/15 text-state-danger rounded text-[10px] font-semibold uppercase tracking-wide">
                 18+
               </span>
             )}
             {mod.enabled && (
               <span
-                className="ml-auto px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px] font-semibold uppercase tracking-wide"
+                className="flex-shrink-0 px-1.5 py-0.5 bg-accent/10 text-accent rounded text-[10px] font-semibold uppercase tracking-wide"
                 title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
               >
                 Load #{mod.priority}
