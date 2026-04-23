@@ -728,7 +728,7 @@ function ModCard({
           <>
             {mod.enabled && (
               <div
-                className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-accent text-white rounded-full text-[10px] font-bold uppercase tracking-wide shadow-lg"
+                className="absolute top-2 left-2 z-10 flex items-center gap-1 px-2 py-0.5 bg-accent text-white rounded-full text-[10px] font-bold uppercase tracking-wide ring-1 ring-black/40 shadow-md"
                 title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
               >
                 Load #{mod.priority}
@@ -737,7 +737,7 @@ function ModCard({
             <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
               {hasConflicts && (
                 <span
-                  className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
+                  className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning text-black rounded-full text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md"
                   title={conflicts.map((c) => c.details).join(', ')}
                 >
                   <AlertTriangle className="w-3 h-3" />
@@ -746,7 +746,7 @@ function ModCard({
               )}
               {updateAvailable && (
                 <span
-                  className="flex items-center gap-1 px-1.5 py-0.5 bg-state-info/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
+                  className="flex items-center gap-1 px-1.5 py-0.5 bg-state-info text-black rounded-full text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md"
                   title="A newer version is available on GameBanana"
                 >
                   <Download className="w-3 h-3" />

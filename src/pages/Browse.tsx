@@ -1311,22 +1311,23 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
       )}
 
       {/* State pill stack — top-left. Stacks NSFW / INSTALLED / OUTDATED so the
-          card is decodable without relying on icon color alone. */}
+          card is decodable without relying on icon color alone. ring-1 +
+          shadow-md keeps the pills legible over busy thumbnails. */}
       <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
         {mod.nsfw && (
-          <span className="px-1.5 py-0.5 bg-state-danger/90 text-white rounded text-[10px] font-bold uppercase shadow">
+          <span className="px-1.5 py-0.5 bg-state-danger text-white rounded text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md">
             18+
           </span>
         )}
         {installed && (
-          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-state-success/90 text-black rounded text-[10px] font-bold uppercase shadow">
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-state-success text-black rounded text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md">
             <span aria-hidden>✓</span>
             Installed
           </span>
         )}
         {!installed && isOutdated && (
           <span
-            className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/90 text-black rounded text-[10px] font-bold uppercase shadow"
+            className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning text-black rounded text-[10px] font-bold uppercase ring-1 ring-black/40 shadow-md"
             title={`Last updated ${formatDate(mod.dateModified)}`}
           >
             <AlertTriangle className="w-3 h-3" />
@@ -1376,18 +1377,18 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
       <div className="absolute top-2 right-2">
         {installed ? (
           <span
-            className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
+            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
             title="Installed"
           >
             ✓
           </span>
         ) : downloading ? (
-          <div className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
+          <div className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
             <Loader2 className={`animate-spin text-accent ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent/90 text-white rounded-full font-bold ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
+            className={`flex items-center justify-center bg-accent text-white rounded-full font-bold ring-1 ring-white/30 shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}
@@ -1395,7 +1396,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
-            className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm text-accent hover:bg-accent hover:text-white transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
+            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md text-accent hover:bg-accent hover:text-white hover:ring-white/40 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
             title="Install"
           >
             <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
