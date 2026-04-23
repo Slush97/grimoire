@@ -758,8 +758,9 @@ function ModCard({
         );
 
         if (isSoundCard) {
+          const hasThumb = !!mod.thumbnailUrl;
           return (
-            <div className="relative w-full aspect-video rounded-md overflow-hidden bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary border border-border">
+            <div className="group relative w-full aspect-video rounded-md overflow-hidden bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary border border-border">
               {overlayBadges}
               <button
                 type="button"
@@ -768,20 +769,36 @@ function ModCard({
                   onOpenDetails?.();
                 }}
                 disabled={!onOpenDetails}
-                className="absolute inset-0 flex flex-col items-center justify-center gap-1 text-text-secondary hover:text-accent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+                className="absolute inset-0 w-full h-full focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
                 title={onOpenDetails ? 'View mod details' : undefined}
                 aria-label={onOpenDetails ? `View details for ${mod.name}` : undefined}
               >
-                <div className="flex items-end gap-0.5 h-6 opacity-60">
-                  {[4, 7, 12, 16, 20, 14, 8, 12, 18, 10, 6, 14, 9].map((h, i) => (
-                    <span
-                      key={i}
-                      className="w-1 rounded-full bg-accent/70"
-                      style={{ height: `${h}px` }}
+                {hasThumb ? (
+                  <>
+                    <ModThumbnail
+                      src={mod.thumbnailUrl}
+                      alt={mod.name}
+                      nsfw={mod.nsfw}
+                      hideNsfw={hideNsfwPreviews}
+                      className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
                     />
-                  ))}
-                </div>
-                <span className="text-[10px] font-semibold uppercase tracking-wider">Sound preview</span>
+                    {/* Gradient so the overlaid player stays legible */}
+                    <div className="pointer-events-none absolute inset-x-0 bottom-0 h-2/3 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+                  </>
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-full gap-1 text-text-secondary group-hover:text-accent transition-colors">
+                    <div className="flex items-end gap-0.5 h-6 opacity-60">
+                      {[4, 7, 12, 16, 20, 14, 8, 12, 18, 10, 6, 14, 9].map((h, i) => (
+                        <span
+                          key={i}
+                          className="w-1 rounded-full bg-accent/70"
+                          style={{ height: `${h}px` }}
+                        />
+                      ))}
+                    </div>
+                    <span className="text-[10px] font-semibold uppercase tracking-wider">Sound preview</span>
+                  </div>
+                )}
               </button>
               <div
                 className="absolute inset-x-2 bottom-2 z-20"
