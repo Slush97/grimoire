@@ -918,57 +918,86 @@ export default function Browse() {
 
       {/* Main Content */}
       <div className="flex-1 p-4">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <Loader2 className="w-8 h-8 animate-spin text-accent" />
-          </div>
-        ) : error ? (
-          <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-            <p className="text-red-400 max-w-xl text-center">{renderErrorWithLinks(error)}</p>
-            <button
-              onClick={fetchMods}
-              className="mt-4 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer"
-            >
-              Retry
-            </button>
-          </div>
-        ) : displayMods.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-            <Search className="w-16 h-16 mb-4 opacity-50" />
-            <p>No mods found</p>
-          </div>
-        ) : (
-          <div
-            className={
-              viewMode === 'list'
-                ? 'flex flex-col gap-3'
-                : viewMode === 'compact'
-                  ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
-                  : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3'
-            }
-          >
-            {displayMods.map((mod) => {
-              const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
-              const isQueued = queueIndex >= 0;
-              return (
-                <ModCard
-                  key={mod.id}
-                  mod={mod}
-                  installed={installedIds.has(mod.id)}
-                  downloading={downloading?.modId === mod.id}
-                  queuePosition={isQueued ? queueIndex + 1 : undefined}
-                  viewMode={viewMode}
-                  section={section}
-                  volume={soundVolume}
-                  onVolumeChange={setSoundVolume}
-                  hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
-                  onClick={() => handleModClick(mod)}
-                  onQuickDownload={() => handleQuickDownload(mod)}
-                />
-              );
-            })}
-          </div>
-        )}
+        {(() => {
+          const gridClass =
+            viewMode === 'list'
+              ? 'flex flex-col gap-3'
+              : viewMode === 'compact'
+                ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
+                : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3';
+          const hasActiveFilters =
+            search.trim().length > 0 || heroCategoryId !== 'all' || categoryId !== 'all' || sort !== 'default';
+
+          if (loading) {
+            // Match perPage so the skeleton grid fills roughly the same footprint
+            // as the real results once they arrive.
+            return (
+              <div className={gridClass} aria-busy="true" aria-live="polite">
+                {Array.from({ length: DEFAULT_PER_PAGE }).map((_, i) => (
+                  <ModCardSkeleton key={i} viewMode={viewMode} />
+                ))}
+              </div>
+            );
+          }
+          if (error) {
+            return (
+              <div className="flex flex-col items-center justify-center h-full text-text-secondary">
+                <p className="text-state-danger max-w-xl text-center">{renderErrorWithLinks(error)}</p>
+                <button
+                  onClick={fetchMods}
+                  className="mt-4 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer"
+                >
+                  Retry
+                </button>
+              </div>
+            );
+          }
+          if (displayMods.length === 0) {
+            return (
+              <div className="flex flex-col items-center justify-center h-full text-text-secondary py-16">
+                <Search className="w-16 h-16 mb-4 opacity-50" />
+                <p className="mb-2">{hasActiveFilters ? 'No mods match your filters' : 'No mods found'}</p>
+                {hasActiveFilters && (
+                  <button
+                    onClick={() => {
+                      setSearch('');
+                      setHeroCategoryId('all');
+                      setCategoryId('all');
+                      setSort('default');
+                    }}
+                    className="mt-2 px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer text-sm"
+                  >
+                    Clear filters
+                  </button>
+                )}
+              </div>
+            );
+          }
+          return (
+            <div className={gridClass}>
+              {displayMods.map((mod) => {
+                const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
+                const isQueued = queueIndex >= 0;
+                return (
+                  <ModCard
+                    key={mod.id}
+                    mod={mod}
+                    installed={installedIds.has(mod.id)}
+                    downloading={downloading?.modId === mod.id}
+                    queuePosition={isQueued ? queueIndex + 1 : undefined}
+                    viewMode={viewMode}
+                    section={section}
+                    volume={soundVolume}
+                    onVolumeChange={setSoundVolume}
+                    hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+                    onClick={() => handleModClick(mod)}
+                    onQuickDownload={() => handleQuickDownload(mod)}
+                  />
+                );
+              })}
+            </div>
+          );
+        })()}
         {/* Infinite Scroll Trigger */}
         <div ref={loadMoreRef} className="flex items-center justify-center p-4">
           {loadingMore && (
@@ -1016,6 +1045,30 @@ interface ModCardProps {
   hideNsfwPreviews: boolean;
   onClick: () => void;
   onQuickDownload: () => void;
+}
+
+function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
+  if (viewMode === 'list') {
+    return (
+      <div className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-4">
+        <div className="bg-bg-tertiary skeleton-shimmer w-32 h-20 flex-shrink-0 rounded-md" />
+        <div className="flex-1 min-w-0 space-y-2">
+          <div className="bg-bg-tertiary skeleton-shimmer h-4 rounded w-2/3" />
+          <div className="bg-bg-tertiary skeleton-shimmer h-3 rounded w-1/3" />
+        </div>
+      </div>
+    );
+  }
+  const aspect = viewMode === 'compact' ? 'aspect-[4/3]' : 'aspect-[3/2]';
+  return (
+    <div className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden ${aspect}`}>
+      <div className="absolute inset-0 skeleton-shimmer bg-bg-secondary" />
+      <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
+        <div className="h-3.5 bg-bg-tertiary/80 skeleton-shimmer rounded w-3/4" />
+        <div className="h-2.5 bg-bg-tertiary/80 skeleton-shimmer rounded w-1/2" />
+      </div>
+    </div>
+  );
 }
 
 function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, onClick, onQuickDownload }: ModCardProps) {
@@ -1069,7 +1122,10 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-medium truncate flex-1">{mod.name}</h3>
             {installed ? (
-              <span className="flex-shrink-0 rounded-full bg-green-500/90 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-white">✓</span>
+              <span className="flex-shrink-0 flex items-center gap-1 rounded-full bg-state-success/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-black" title="Installed">
+                <span aria-hidden>✓</span>
+                Installed
+              </span>
             ) : downloading ? (
               <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
                 <Loader2 className="w-4 h-4 animate-spin text-accent" />
@@ -1091,12 +1147,12 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
               <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
             )}
             {mod.nsfw && (
-              <span className="px-1.5 py-0.5 bg-red-500/20 text-red-400 rounded text-[10px] font-semibold uppercase">18+</span>
+              <span className="px-1.5 py-0.5 bg-state-danger/20 text-state-danger rounded text-[10px] font-semibold uppercase">18+</span>
             )}
           </div>
           {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
           {mod.dateModified > 0 && (
-            <div className={`flex items-center gap-1 mt-1 text-xs ${isModOutdated(mod.dateModified) ? 'text-yellow-400' : 'text-text-secondary'}`}>
+            <div className={`flex items-center gap-1 mt-1 text-xs ${isModOutdated(mod.dateModified) ? 'text-state-warning' : 'text-text-secondary'}`}>
               {isModOutdated(mod.dateModified) ? <AlertTriangle className="w-3 h-3 flex-shrink-0" /> : <Clock className="w-3 h-3 flex-shrink-0" />}
               <span className="truncate">{isModOutdated(mod.dateModified) ? 'Outdated · ' : ''}{formatDate(mod.dateModified)}</span>
             </div>
@@ -1133,6 +1189,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
   }
 
   // Grid/Compact: overlay card — image fills card, info overlaid at bottom
+  const isOutdated = mod.dateModified > 0 && isModOutdated(mod.dateModified);
   return (
     <div
       onClick={onClick}
@@ -1140,7 +1197,13 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden hover:border-accent/50 focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'}`}
+      className={`relative bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+        downloading
+          ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
+          : installed
+            ? 'border-state-success/40 hover:border-state-success/70'
+            : 'border-border hover:border-accent/50'
+      }`}
     >
       {/* Full-bleed image */}
       <div className="absolute inset-0">
@@ -1225,7 +1288,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
           {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
-            <div className={`flex items-center gap-1 mt-1 text-yellow-400 ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <div className={`flex items-center gap-1 mt-1 text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}>
               <AlertTriangle className={isCompact ? 'w-3 h-3 flex-shrink-0' : 'w-3.5 h-3.5 flex-shrink-0'} />
               <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
             </div>
@@ -1233,12 +1296,30 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         </div>
       )}
 
-      {/* NSFW badge — top-left corner, visible even when thumbnail is blurred */}
-      {mod.nsfw && (
-        <div className="absolute top-2 left-2 z-10 px-1.5 py-0.5 bg-red-500/90 text-white rounded text-[10px] font-bold uppercase shadow">
-          18+
-        </div>
-      )}
+      {/* State pill stack — top-left. Stacks NSFW / INSTALLED / OUTDATED so the
+          card is decodable without relying on icon color alone. */}
+      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+        {mod.nsfw && (
+          <span className="px-1.5 py-0.5 bg-state-danger/90 text-white rounded text-[10px] font-bold uppercase shadow">
+            18+
+          </span>
+        )}
+        {installed && (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 bg-state-success/90 text-black rounded text-[10px] font-bold uppercase shadow">
+            <span aria-hidden>✓</span>
+            Installed
+          </span>
+        )}
+        {!installed && isOutdated && (
+          <span
+            className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/90 text-black rounded text-[10px] font-bold uppercase shadow"
+            title={`Last updated ${formatDate(mod.dateModified)}`}
+          >
+            <AlertTriangle className="w-3 h-3" />
+            Outdated
+          </span>
+        )}
+      </div>
 
       {/* Audio preview + volume, pinned to bottom with its own pointer-events layer.
           z-20 keeps it above the gradient + any overlays so clicks always land.
@@ -1280,7 +1361,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
       <div className="absolute top-2 right-2">
         {installed ? (
           <span
-            className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm text-green-400 ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
+            className={`flex items-center justify-center rounded-full bg-black/50 backdrop-blur-sm text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
             title="Installed"
           >
             ✓

@@ -33,8 +33,11 @@ export default function Sidebar() {
   const [appVersion, setAppVersion] = useState('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const settings = useAppStore((state) => state.settings);
+  const mods = useAppStore((state) => state.mods);
   const loadMods = useAppStore((state) => state.loadMods);
   const navigate = useNavigate();
+
+  const installedCount = mods.length;
 
   const [stashStatus, setStashStatus] = useState<VanillaStashStatus>({ active: false });
   const [launchPending, setLaunchPending] = useState<'modded' | 'vanilla' | null>(null);
@@ -108,16 +111,26 @@ export default function Sidebar() {
   }, [toast]);
 
   const navItems = useMemo(() => {
-    const items = [
-      { to: '/', icon: Package, label: 'Installed' },
-      { to: '/browse', icon: Search, label: 'Browse' },
-      { to: '/locker', icon: Shield, label: 'Locker' },
-      { to: '/crosshair', icon: Crosshair, label: 'Crosshair', experimental: 'crosshair' as const },
-      { to: '/autoexec', icon: Terminal, label: 'Autoexec' },
-      { to: '/stats', icon: BarChart3, label: 'Stats', experimental: 'stats' as const },
-      { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', badge: conflictCount },
-      { to: '/profiles', icon: Layers, label: 'Profiles' },
-      { to: '/settings', icon: Settings, label: 'Settings' },
+    type BadgeTone = 'muted' | 'warning';
+    type NavItem = {
+      to: string;
+      icon: typeof Package;
+      label: string;
+      tooltip: string;
+      experimental?: 'crosshair' | 'stats';
+      badge?: number;
+      badgeTone?: BadgeTone;
+    };
+    const items: NavItem[] = [
+      { to: '/', icon: Package, label: 'Installed', tooltip: 'Mods currently in your Deadlock addons folder.', badge: installedCount, badgeTone: 'muted' },
+      { to: '/browse', icon: Search, label: 'Browse', tooltip: 'Discover and download mods from GameBanana.' },
+      { to: '/locker', icon: Shield, label: 'Locker', tooltip: "Saved mods you haven't installed yet." },
+      { to: '/crosshair', icon: Crosshair, label: 'Crosshair', tooltip: 'Custom crosshair editor.', experimental: 'crosshair' },
+      { to: '/autoexec', icon: Terminal, label: 'Autoexec', tooltip: 'Console commands that run at game launch.' },
+      { to: '/stats', icon: BarChart3, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
+      { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', tooltip: 'Mods that overwrite the same game files.', badge: conflictCount, badgeTone: 'warning' },
+      { to: '/profiles', icon: Layers, label: 'Profiles', tooltip: 'Save and swap sets of enabled mods.' },
+      { to: '/settings', icon: Settings, label: 'Settings', tooltip: 'Configure game path, NSFW, and preferences.' },
     ];
 
     return items.filter((item) => {
@@ -125,7 +138,7 @@ export default function Sidebar() {
       if (item.experimental === 'crosshair') return settings?.experimentalCrosshair;
       return true;
     });
-  }, [settings?.experimentalStats, settings?.experimentalCrosshair, conflictCount]);
+  }, [settings?.experimentalStats, settings?.experimentalCrosshair, conflictCount, installedCount]);
 
   const handleLaunchModded = async () => {
     if (launchPending) return;
@@ -204,10 +217,11 @@ export default function Sidebar() {
 
       <nav className="flex-1 p-2 overflow-y-auto">
         <ul className="space-y-1">
-          {navItems.map(({ to, icon: Icon, label, badge }) => (
+          {navItems.map(({ to, icon: Icon, label, tooltip, badge, badgeTone }) => (
             <li key={to}>
               <NavLink
                 to={to}
+                title={tooltip}
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                     isActive
@@ -219,7 +233,13 @@ export default function Sidebar() {
                 <Icon className="w-5 h-5" />
                 <span className="flex-1">{label}</span>
                 {badge !== undefined && badge > 0 && (
-                  <span className="px-1.5 py-0.5 text-xs font-medium bg-yellow-500 text-black rounded-full min-w-[20px] text-center">
+                  <span
+                    className={`px-1.5 py-0.5 text-xs font-medium rounded-full min-w-[20px] text-center ${
+                      badgeTone === 'warning'
+                        ? 'bg-state-warning text-black'
+                        : 'bg-bg-tertiary text-text-secondary'
+                    }`}
+                  >
                     {badge}
                   </span>
                 )}
@@ -295,12 +315,12 @@ export default function Sidebar() {
                   ? 'A vanilla session is already active — restore mods first'
                   : 'Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts'
             }
-            className="flex items-center justify-center gap-2 h-9 rounded-lg bg-bg-tertiary hover:bg-white/10 text-text-secondary hover:text-text-primary border border-white/5 text-xs font-medium transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center justify-center gap-2 h-10 rounded-lg bg-transparent hover:bg-bg-tertiary text-text-primary border border-border hover:border-accent/50 text-sm font-semibold transition-colors cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {launchPending === 'vanilla' ? (
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <Loader2 className="w-4 h-4 animate-spin" />
             ) : (
-              <Play className="w-3.5 h-3.5" />
+              <Play className="w-4 h-4" />
             )}
             Launch Vanilla
           </button>

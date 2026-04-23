@@ -497,10 +497,11 @@ function ModCard({
           />
           {hasConflicts && (
             <div
-              className="absolute top-2 right-2 p-1.5 bg-yellow-500 rounded-full"
+              className="absolute top-2 right-2 flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/90 text-black rounded-full text-[10px] font-bold uppercase shadow"
               title={conflicts.map((c) => c.details).join(', ')}
             >
-              <AlertTriangle className="w-3 h-3 text-black" />
+              <AlertTriangle className="w-3 h-3" />
+              Conflict
             </div>
           )}
         </div>
@@ -539,7 +540,7 @@ function ModCard({
           <div className="flex items-center gap-2 flex-wrap">
             <h3 className="font-medium truncate">{mod.name}</h3>
             {hasConflicts && viewMode === 'list' && (
-              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
+              <span className="flex items-center gap-1 px-1.5 py-0.5 bg-state-warning/20 text-state-warning rounded text-xs font-semibold uppercase tracking-wide">
                 <AlertTriangle className="w-3 h-3" />
                 Conflict
               </span>
@@ -551,7 +552,7 @@ function ModCard({
               </span>
             )}
             {mod.nsfw && (
-              <span className="px-1.5 py-0.5 bg-red-500/15 text-red-400 rounded text-[10px] font-semibold uppercase tracking-wide">
+              <span className="px-1.5 py-0.5 bg-state-danger/15 text-state-danger rounded text-[10px] font-semibold uppercase tracking-wide">
                 18+
               </span>
             )}
