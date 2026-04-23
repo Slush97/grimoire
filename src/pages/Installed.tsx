@@ -525,7 +525,7 @@ function ModCard({
           ? 'bg-state-warning/5 border-state-warning/50'
           : mod.enabled
             ? 'bg-accent/5 border-accent/40'
-            : 'bg-bg-tertiary border-border opacity-60 hover:opacity-90'
+            : 'bg-bg-secondary/60 border-border/70 text-text-primary/80 hover:bg-bg-secondary hover:text-text-primary'
       } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'} ${
         isDragging ? 'opacity-40' : ''
       }`}
