@@ -147,7 +147,7 @@ export default function Browse() {
   const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
-  const [totalCount, setTotalCount] = useState(0);
+  const [_totalCount, setTotalCount] = useState(0);
   const perPage = DEFAULT_PER_PAGE; // Fixed value for infinite scroll
   const [sort, setSort] = useState<SortOption>('default');
   const [sections, setSections] = useState<GameBananaSection[]>([]);

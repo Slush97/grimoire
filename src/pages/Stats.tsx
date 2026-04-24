@@ -47,7 +47,7 @@ export default function Stats() {
         playerHeroStats,
         playerMatchHistory,
         aggregatedStats,
-        localMMRHistory,
+        localMMRHistory: _localMMRHistory,
         localMatchHistory,
         playerDataLoading,
         playerDataError,
@@ -64,18 +64,18 @@ export default function Stats() {
         // Expanded analytics
         builds,
         buildsLoading,
-        patchNotes,
-        patchNotesLoading,
+        patchNotes: _patchNotes,
+        patchNotesLoading: _patchNotesLoading,
         heroCounters,
         heroSynergies,
         heroCounterSynergyLoading,
-        itemAnalytics,
-        itemAnalyticsLoading,
+        itemAnalytics: _itemAnalytics,
+        itemAnalyticsLoading: _itemAnalyticsLoading,
         badgeDistribution,
-        mmrDistribution,
+        mmrDistribution: _mmrDistribution,
         distributionLoading,
-        killDeathStats,
-        killDeathStatsLoading,
+        killDeathStats: _killDeathStats,
+        killDeathStatsLoading: _killDeathStatsLoading,
         heroCombStats,
         heroCombStatsLoading,
         // Actions
@@ -89,13 +89,13 @@ export default function Stats() {
         loadHeroAnalytics,
         loadSocialStats,
         loadBuilds,
-        loadPatchNotes,
+        loadPatchNotes: _loadPatchNotes,
         loadHeroCounters,
         loadHeroSynergies,
-        loadItemAnalytics,
+        loadItemAnalytics: _loadItemAnalytics,
         loadBadgeDistribution,
-        loadMMRDistribution,
-        loadKillDeathStats,
+        loadMMRDistribution: _loadMMRDistribution,
+        loadKillDeathStats: _loadKillDeathStats,
         loadHeroCombStats,
         refreshAll,
     } = useStatsStore()
@@ -154,7 +154,8 @@ export default function Stats() {
         }
     }
 
-    const selectedPlayer = trackedPlayers.find((p) => p.account_id === selectedAccountId)
+    const _selectedPlayer = trackedPlayers.find((p) => p.account_id === selectedAccountId)
+    void _selectedPlayer; // retained for upcoming player-detail panel
 
     const tabs: { id: Tab; label: string; icon: typeof Users }[] = [
         { id: 'overview', label: 'Overview', icon: BarChart3 },

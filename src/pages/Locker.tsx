@@ -494,7 +494,7 @@ function HeroOverlay({
   hero,
   visible,
   onClose,
-  cardRect,
+  cardRect: _cardRect,
   mods,
   onSelectSkin,
   isFavorite,
