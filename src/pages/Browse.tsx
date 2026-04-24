@@ -1267,7 +1267,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
             ) : (
               <button
                 onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
-                className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-secondary text-white rounded-full shadow-lg transition-colors cursor-pointer"
+                className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-accent hover:bg-accent-hover text-black rounded-full shadow-lg transition-colors cursor-pointer"
                 title="Install"
               >
                 <Download className="w-3.5 h-3.5" />
@@ -1493,18 +1493,18 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
       <div className="absolute top-2 right-2">
         {installed ? (
           <span
-            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
+            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-black/60 shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
             title="Installed"
           >
             ✓
           </span>
         ) : downloading ? (
-          <div className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
+          <div className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-black/60 shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
             <Loader2 className={`animate-spin text-accent ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent text-white rounded-full font-bold ring-1 ring-white/30 shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
+            className={`flex items-center justify-center bg-accent text-black rounded-full font-bold ring-1 ring-black/50 shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}
@@ -1512,7 +1512,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
-            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-white/25 shadow-md text-accent hover:bg-accent hover:text-white hover:ring-white/40 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
+            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-black/60 shadow-md text-accent hover:bg-accent hover:text-black hover:ring-black/70 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
             title="Install"
           >
             <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
