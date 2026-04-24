@@ -105,7 +105,7 @@ export function Tag({
     return (
         <span
             title={title}
-            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-[2px] text-[10.5px] font-semibold leading-none ${surface} ${className}`}
+            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold leading-none ${surface} ${className}`}
         >
             {Icon && <Icon className="w-3 h-3" />}
             {children}
@@ -193,7 +193,7 @@ export function Toggle({ checked, onChange, label, description, className = '', 
                     onChange={(e) => !disabled && onChange(e.target.checked)}
                     disabled={disabled}
                 />
-                <div className="w-11 h-6 bg-bg-tertiary peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent border border-white/5"></div>
+                <div className="w-11 h-6 bg-bg-tertiary peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent border border-white/5"></div>
             </div>
             <div>
                 {label && <span className="block text-sm font-medium text-text-primary group-hover:text-white transition-colors">{label}</span>}
@@ -223,12 +223,12 @@ export function Button({
     const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
 
     const variants = {
-        primary: 'bg-accent hover:bg-accent-hover text-white focus:ring-accent',
-        secondary: 'bg-bg-tertiary hover:bg-white/10 text-text-primary border border-white/5 focus:ring-white/20',
+        primary: 'bg-accent hover:bg-accent-hover text-black focus:ring-accent',
+        secondary: 'bg-bg-tertiary hover:bg-white/10 text-text-primary border border-white/5 focus:ring-white/60',
         danger: 'bg-red-500/10 hover:bg-red-500/20 text-red-500 border border-red-500/20 focus:ring-red-500',
         success: 'bg-green-500/10 hover:bg-green-500/20 text-green-400 border border-green-500/20 focus:ring-green-500',
         warning: 'bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-400 border border-yellow-500/20 focus:ring-yellow-500',
-        ghost: 'hover:bg-white/5 text-text-secondary hover:text-text-primary',
+        ghost: 'hover:bg-white/5 text-text-secondary hover:text-text-primary focus:ring-white/40',
     };
 
     const sizes = {

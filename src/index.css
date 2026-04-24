@@ -61,6 +61,7 @@
   --color-accent-hover: #ea580c;
   --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1aa;
+  --color-text-tertiary: #8a8a94;
   --color-border: #2d2d2d;
 
   /* Semantic state tokens. Use these for card states, toasts, badges —
@@ -188,9 +189,19 @@ body {
   background-image: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.04) 50%,
+    rgba(255, 255, 255, 0.09) 50%,
     transparent 100%
   );
   background-size: 200% 100%;
   animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-slide-in-left,
+  .animate-hero-zoom-in,
+  .animate-fade-in,
+  .skeleton-shimmer {
+    animation-duration: 0.01ms;
+    animation-iteration-count: 1;
+  }
 }
