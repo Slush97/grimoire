@@ -111,7 +111,7 @@ export default function Layout() {
             </div>
           </div>
         )}
-        <div key={location.pathname} className="animate-fade-in">
+        <div key={location.pathname} className="animate-fade-in h-full">
           <Outlet />
         </div>
       </main>
