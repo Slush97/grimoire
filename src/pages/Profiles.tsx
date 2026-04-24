@@ -12,7 +12,7 @@ import type { Profile, ProfileCrosshairSettings } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { Card, Badge, Button } from '../components/common/ui';
-import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
+import { ConfirmModal, EmptyState, PageHeader } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 
 export default function Profiles() {
@@ -142,20 +142,13 @@ export default function Profiles() {
 
   return (
     <div className="p-6 h-full flex flex-col overflow-hidden">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="p-3 bg-accent/10 rounded-xl">
-            <Layers className="w-8 h-8 text-accent" />
-          </div>
-          <div>
-            <h1 className="text-3xl font-bold font-reaver tracking-wide">Profiles</h1>
-            <p className="text-text-secondary">Save and restore your mod configurations</p>
-          </div>
-        </div>
-      </div>
+      <PageHeader
+        title="Profiles"
+        description="Save and restore your mod configurations"
+        className="mb-6 shrink-0"
+      />
 
-      <div className="flex flex-col gap-6 flex-1 overflow-auto px-1 custom-scrollbar">
+      <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
         <div className="space-y-6 pr-1">
           {error && (
             <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-red-400">
@@ -188,17 +181,17 @@ export default function Profiles() {
           </Card>
 
           {/* Profile List */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6">
-            {profiles.length === 0 ? (
-              <div className="col-span-full border border-dashed border-white/10 rounded-xl bg-bg-secondary/30 py-12">
-                <EmptyState
-                  icon={User}
-                  title="No Profiles Yet"
-                  description="Create your first profile above to save your current mod configuration."
-                />
-              </div>
-            ) : (
-              profiles.map((profile) => {
+          {profiles.length === 0 ? (
+            <div className="py-16">
+              <EmptyState
+                icon={User}
+                title="No Profiles Yet"
+                description="Create your first profile above to save your current mod configuration."
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 pb-6">
+              {profiles.map((profile) => {
                 const isApplying = applyingId === profile.id;
                 const isUpdating = updatingId === profile.id;
                 const isActive = activeProfileId === profile.id;
@@ -288,7 +281,7 @@ export default function Profiles() {
                             <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
                               Mods ({profile.mods.length})
                             </div>
-                            <div className="max-h-32 overflow-y-auto pr-2 custom-scrollbar space-y-1">
+                            <div className="max-h-32 overflow-y-auto pr-2 space-y-1">
                               {profile.mods.map((mod, idx) => {
                                 const displayName = modNameMap.get(mod.fileName) || mod.fileName;
                                 return (
@@ -330,7 +323,7 @@ export default function Profiles() {
                               <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
                                 Autoexec ({profile.autoexecCommands.length} commands)
                               </div>
-                              <div className="space-y-1 max-h-24 overflow-y-auto custom-scrollbar">
+                              <div className="space-y-1 max-h-24 overflow-y-auto">
                                 {profile.autoexecCommands.map((cmd, idx) => (
                                   <div key={idx} className="text-xs font-mono bg-white/5 rounded px-2 py-1 truncate" title={cmd}>
                                     {cmd}
@@ -344,9 +337,9 @@ export default function Profiles() {
                     </div>
                   </Card>
                 );
-              })
-            )}
-          </div>
+              })}
+            </div>
+          )}
         </div>
       </div>
 
