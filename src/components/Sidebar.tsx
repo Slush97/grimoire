@@ -27,6 +27,7 @@ import {
 } from '../lib/api';
 
 import { useAppStore } from '../stores/appStore';
+import UpdateModal from './UpdateModal';
 
 export default function Sidebar() {
   const [conflictCount, setConflictCount] = useState(0);
@@ -43,6 +44,7 @@ export default function Sidebar() {
   const [launchPending, setLaunchPending] = useState<'modded' | 'vanilla' | null>(null);
   const [restorePending, setRestorePending] = useState(false);
   const [toast, setToast] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
   const refreshStashStatus = useCallback(async () => {
     try {
@@ -334,14 +336,19 @@ export default function Sidebar() {
         </div>
 
         <button
-          onClick={() => navigate('/settings')}
+          onClick={() => {
+            if (updateAvailable) setUpdateModalOpen(true);
+            else navigate('/settings');
+          }}
           className="flex items-center justify-center gap-2 w-full pt-1 text-xs text-text-secondary cursor-pointer hover:text-accent transition-colors"
-          title={updateAvailable ? 'Update available! Click to view' : 'Open Settings'}
+          title={updateAvailable ? 'Update available — click to view release notes' : 'Open Settings'}
         >
           <span>{appVersion || 'v...'}</span>
           {updateAvailable && <Download className="w-3 h-3 text-accent animate-pulse" />}
         </button>
       </div>
+
+      {updateModalOpen && <UpdateModal onClose={() => setUpdateModalOpen(false)} />}
     </aside>
   );
 }

@@ -13,6 +13,9 @@ import {
   List,
   AlertTriangle,
   Clock,
+  Package,
+  Music,
+  SlidersHorizontal,
 } from 'lucide-react';
 import {
   browseMods,
@@ -167,11 +170,32 @@ export default function Browse() {
   const [playingModId, setPlayingModId] = useState<number | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const filtersRef = useRef<HTMLDivElement>(null);
 
   // Load settings on mount (needed for hideNsfwPreviews)
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Close the filters popover on outside click or Escape
+  useEffect(() => {
+    if (!filtersOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
+        setFiltersOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setFiltersOpen(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [filtersOpen]);
 
   // Check if local cache is available for search
   const [hasLocalCache, setHasLocalCache] = useState(false);
@@ -859,12 +883,34 @@ export default function Browse() {
             {/* Divider */}
             <div className="w-px h-6 bg-border" />
 
-            {/* Filters */}
-            <DynamicSelect
-              value={section}
-              onChange={(val) => setSection(val)}
-              options={sections.map((entry) => ({ value: entry.modelName, label: entry.pluralTitle }))}
-            />
+            {/* Section toggle — Mods vs Sounds as icon buttons */}
+            {sections.length > 1 && (
+              <div className="flex items-center rounded-lg border border-border bg-bg-secondary p-1" role="tablist" aria-label="Section">
+                {sections.map((entry) => {
+                  const Icon = entry.modelName === 'Sound' ? Music : Package;
+                  const active = section === entry.modelName;
+                  return (
+                    <button
+                      key={entry.modelName}
+                      type="button"
+                      role="tab"
+                      aria-selected={active}
+                      onClick={() => setSection(entry.modelName)}
+                      className={`flex items-center gap-1.5 px-3 py-2 rounded-md transition-colors cursor-pointer ${
+                        active
+                          ? 'bg-bg-tertiary text-text-primary'
+                          : 'text-text-secondary hover:text-text-primary'
+                      }`}
+                      title={entry.pluralTitle}
+                    >
+                      <Icon className="w-4 h-4" />
+                      <span className="text-sm">{entry.pluralTitle}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+
             {/* Global Volume Slider - visible when Sound section is selected */}
             {section === 'Sound' && (
               <div className="flex items-center gap-2 px-3 py-2 bg-bg-secondary border border-border rounded-lg">
@@ -881,6 +927,7 @@ export default function Browse() {
                 <span className="text-xs text-text-secondary tabular-nums w-8">{Math.round(soundVolume * 100)}%</span>
               </div>
             )}
+
             <DynamicSelect
               value={sort}
               onChange={(val) => setSort(val as SortOption)}
@@ -893,25 +940,99 @@ export default function Browse() {
                 { value: 'name', label: 'Name (A–Z)' },
               ]}
             />
-            {heroOptions.length > 0 && (
-              <DynamicSelect
-                value={String(heroCategoryId)}
-                onChange={(val) => setHeroCategoryId(val === 'all' ? 'all' : Number(val))}
-                options={[
-                  { value: 'all', label: 'All Heroes' },
-                  ...heroOptions.map((hero) => ({ value: String(hero.id), label: hero.label })),
-                ]}
-              />
-            )}
-            <DynamicSelect
-              value={String(categoryId)}
-              onChange={(val) => setCategoryId(val === 'all' ? 'all' : Number(val))}
-              options={[
-                { value: 'all', label: 'All Categories' },
-                ...categoryOptions.map((cat) => ({ value: String(cat.id), label: cat.label })),
-              ]}
-              disabled={heroCategoryId !== 'all'}
-            />
+
+            {/* Filters popover — houses hero + category selectors. Collapses two
+                always-visible dropdowns into one control with an active-count badge. */}
+            {(heroOptions.length > 0 || categoryOptions.length > 0) && (() => {
+              const filterCount =
+                (heroCategoryId !== 'all' ? 1 : 0) +
+                (categoryId !== 'all' ? 1 : 0);
+              return (
+                <div className="relative" ref={filtersRef}>
+                  <button
+                    type="button"
+                    onClick={() => setFiltersOpen((v) => !v)}
+                    aria-haspopup="dialog"
+                    aria-expanded={filtersOpen}
+                    className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                      filterCount > 0
+                        ? 'bg-accent/10 border-accent/40 text-accent hover:bg-accent/20'
+                        : 'bg-bg-secondary border-border text-text-primary hover:bg-bg-tertiary'
+                    }`}
+                  >
+                    <SlidersHorizontal className="w-4 h-4" />
+                    <span>Filters</span>
+                    {filterCount > 0 && (
+                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[11px] font-semibold flex items-center justify-center">
+                        {filterCount}
+                      </span>
+                    )}
+                  </button>
+
+                  {filtersOpen && (
+                    <div
+                      className="absolute right-0 top-full mt-2 z-20 w-72 bg-bg-secondary border border-border rounded-lg shadow-xl p-4 animate-fade-in"
+                      role="dialog"
+                      aria-label="Filters"
+                    >
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-semibold text-text-primary">Filters</h4>
+                        {filterCount > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setHeroCategoryId('all');
+                              setCategoryId('all');
+                            }}
+                            className="text-xs text-text-secondary hover:text-accent cursor-pointer"
+                          >
+                            Clear all
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="space-y-3">
+                        {heroOptions.length > 0 && (
+                          <label className="block">
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Hero</span>
+                            <select
+                              value={String(heroCategoryId)}
+                              onChange={(e) => setHeroCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                            >
+                              <option value="all">All Heroes</option>
+                              {heroOptions.map((hero) => (
+                                <option key={hero.id} value={String(hero.id)}>{hero.label}</option>
+                              ))}
+                            </select>
+                          </label>
+                        )}
+
+                        {categoryOptions.length > 0 && (
+                          <label className="block">
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Category</span>
+                            <select
+                              value={String(categoryId)}
+                              onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                              disabled={heroCategoryId !== 'all'}
+                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                              <option value="all">All Categories</option>
+                              {categoryOptions.map((cat) => (
+                                <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
+                              ))}
+                            </select>
+                            {heroCategoryId !== 'all' && (
+                              <span className="block text-[11px] text-text-tertiary mt-1">Hero filter overrides categories.</span>
+                            )}
+                          </label>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
         </form>
       </div>
