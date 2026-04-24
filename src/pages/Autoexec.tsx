@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle } from 'lucide-react';
 import { getSettings } from '../lib/api';
 import { Card, Badge, Button } from '../components/common/ui';
+import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 
 // Popular Deadlock autoexec command presets
 const COMMAND_PRESETS = [
@@ -79,6 +80,7 @@ export default function Autoexec() {
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
     const [hasUnsaved, setHasUnsaved] = useState(false);
+    const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
     // Load game path, autoexec status, and existing commands
     useEffect(() => {
@@ -157,22 +159,19 @@ export default function Autoexec() {
         }
     };
 
-    const handleClear = () => {
+    const confirmClear = () => {
         setCommands([]);
         setHasUnsaved(true);
+        setClearConfirmOpen(false);
     };
 
     return (
         <div className="flex flex-col min-h-0 flex-1 p-6 space-y-6 overflow-auto">
-            <div className="flex items-center gap-3 shrink-0">
-                <div className="p-3 bg-accent/10 rounded-xl">
-                    <Terminal className="w-8 h-8 text-accent" />
-                </div>
-                <div>
-                    <h1 className="text-3xl font-bold font-reaver tracking-wide">Autoexec Commands</h1>
-                    <p className="text-text-secondary">Manage startup commands and game configuration</p>
-                </div>
-            </div>
+            <PageHeader
+                title="Autoexec Commands"
+                description="Manage startup commands and game configuration"
+                className="shrink-0"
+            />
 
             <div className="flex flex-col lg:flex-row flex-1 gap-6 min-h-0 overflow-auto">
                 {/* Left Panel - Command Presets */}
@@ -248,7 +247,7 @@ export default function Autoexec() {
                         icon={Terminal}
                         action={
                             <div className="flex gap-2">
-                                <Button size="sm" variant="secondary" onClick={handleClear} disabled={commands.length === 0} icon={RefreshCw}>
+                                <Button size="sm" variant="secondary" onClick={() => setClearConfirmOpen(true)} disabled={commands.length === 0} icon={RefreshCw}>
                                     Clear
                                 </Button>
                                 <Button size="sm" variant="secondary" onClick={handleCopy} disabled={commands.length === 0} icon={copied ? Check : Copy}>
@@ -283,7 +282,7 @@ export default function Autoexec() {
                             </div>
                         )}
 
-                        <div className="overflow-y-auto space-y-2 pr-1 custom-scrollbar flex-1 min-h-0">
+                        <div className="overflow-y-auto space-y-2 pr-1 flex-1 min-h-0">
                             {commands.length > 0 ? (
                                 commands.map((cmd, i) => (
                                     <div
@@ -340,6 +339,16 @@ export default function Autoexec() {
                     </Card>
                 </div>
             </div>
+
+            <ConfirmModal
+                isOpen={clearConfirmOpen}
+                onCancel={() => setClearConfirmOpen(false)}
+                onConfirm={confirmClear}
+                title="Clear all commands?"
+                message={`Remove all ${commands.length} command${commands.length === 1 ? '' : 's'} from the list? Your saved autoexec.cfg won't change until you click Save.`}
+                confirmLabel="Clear"
+                variant="danger"
+            />
         </div>
     );
 }

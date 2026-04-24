@@ -110,28 +110,32 @@ export default function Conflicts() {
 
   if (error) {
     return (
-      <EmptyState
-        icon={AlertTriangle}
-        title="Error Loading Conflicts"
-        description={error ?? undefined}
-        variant="error"
-        action={
-          <Button onClick={loadConflicts}>Retry</Button>
-        }
-      />
+      <div className="h-full flex items-center justify-center p-6">
+        <EmptyState
+          icon={AlertTriangle}
+          title="Error Loading Conflicts"
+          description={error ?? undefined}
+          variant="error"
+          action={
+            <Button onClick={loadConflicts}>Retry</Button>
+          }
+        />
+      </div>
     );
   }
 
   if (conflicts.length === 0) {
     return (
-      <EmptyState
-        icon={CheckCircle}
-        title="No Conflicts Detected"
-        description="Your installed mods don't have any conflicts. Great!"
-        action={
-          <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
-        }
-      />
+      <div className="h-full flex items-center justify-center p-6">
+        <EmptyState
+          icon={CheckCircle}
+          title="No Conflicts Detected"
+          description="Your installed mods don't have any conflicts. Great!"
+          action={
+            <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
+          }
+        />
+      </div>
     );
   }
 
