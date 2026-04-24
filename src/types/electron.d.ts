@@ -246,6 +246,7 @@ export interface ElectronAPI {
     setMinaPreset: (args: SetMinaPresetArgs) => Promise<void>;
     listMinaVariants: (args: ListMinaVariantsArgs) => Promise<string[]>;
     applyMinaVariant: (args: ApplyMinaVariantArgs) => Promise<void>;
+    downloadMinaVariations: () => Promise<string>;
 
     // Maintenance
     cleanupAddons: () => Promise<CleanupResult>;

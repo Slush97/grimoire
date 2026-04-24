@@ -769,7 +769,7 @@ function HeroGalleryCard({
   const [isVisible, setIsVisible] = useState(false);
   const [renderLoaded, setRenderLoaded] = useState(false);
   const [nameLoaded, setNameLoaded] = useState(false);
-  const cardRef = useRef<HTMLButtonElement | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (isActive && !isVisible) {
