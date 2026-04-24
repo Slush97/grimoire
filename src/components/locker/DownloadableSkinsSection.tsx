@@ -6,6 +6,7 @@ import { getModThumbnail, getPrimaryFile, formatDate, isModOutdated } from '../.
 import type { CachedMod } from '../../types/electron';
 import type { GameBananaMod } from '../../types/gamebanana';
 import ModThumbnail from '../ModThumbnail';
+import { Skeleton } from '../common/Skeleton';
 import { useAppStore } from '../../stores/appStore';
 
 interface DownloadableSkinsSectionProps {
@@ -345,9 +346,28 @@ export default function DownloadableSkinsSection({
 
             <div className="flex-1 overflow-y-auto p-5">
               {loadState === 'loading' && (
-                <div className="flex flex-col items-center justify-center py-16 gap-3">
-                  <Loader2 className="w-8 h-8 animate-spin text-accent" />
-                  <span className="text-sm text-text-secondary">Loading skins…</span>
+                <div
+                  className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4"
+                  aria-busy="true"
+                  aria-live="polite"
+                >
+                  {Array.from({ length: 8 }).map((_, i) => (
+                    <div
+                      key={i}
+                      className="flex flex-col gap-2 p-2 bg-bg-tertiary rounded-lg border border-transparent"
+                    >
+                      <Skeleton className="aspect-video w-full" rounded="md" />
+                      <div className="space-y-1.5">
+                        <Skeleton className="h-3 w-full" />
+                        <Skeleton className="h-3 w-3/4" />
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <Skeleton className="h-2.5 w-1/3" />
+                        <Skeleton className="h-2.5 w-1/4" />
+                      </div>
+                      <Skeleton className="h-7 w-full" rounded="md" />
+                    </div>
+                  ))}
                 </div>
               )}
 

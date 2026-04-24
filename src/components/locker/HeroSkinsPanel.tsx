@@ -2,6 +2,7 @@ import type { Mod } from '../../types/mod';
 import type { MinaPreset, MinaSelection, MinaVariant } from '../../lib/lockerUtils';
 import ModThumbnail from '../ModThumbnail';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
+import { Skeleton } from '../common/Skeleton';
 
 interface HeroSkinsPanelProps {
   mods: Mod[];
@@ -125,9 +126,12 @@ export default function HeroSkinsPanel({
               </button>
             </div>
           ) : minaArchivePath === 'Downloading...' ? (
-            <div className="flex items-center gap-2 text-xs text-text-secondary">
-              <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-              <span>Downloading variations archive... (this may take a few minutes)</span>
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              <div className="flex items-center gap-2 text-xs text-text-secondary">
+                <div className="w-4 h-4 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <span>Downloading variations archive... (this may take a few minutes)</span>
+              </div>
+              <Skeleton className="h-2 w-full" rounded="full" />
             </div>
           ) : (
             <>
@@ -155,6 +159,16 @@ export default function HeroSkinsPanel({
                     ? `${minaVariants.length} presets found`
                     : 'Click Load to scan for presets.'}
               </div>
+              {minaVariantsLoading && (
+                <div className="space-y-1.5" aria-busy="true">
+                  {Array.from({ length: 3 }).map((_, i) => (
+                    <div key={i} className="flex items-center gap-2">
+                      <Skeleton className="h-6 w-6" rounded="sm" />
+                      <Skeleton className="h-2.5 flex-1" />
+                    </div>
+                  ))}
+                </div>
+              )}
             </>
           )}
           {minaVariantsError && <div className="text-xs text-red-400">{minaVariantsError}</div>}

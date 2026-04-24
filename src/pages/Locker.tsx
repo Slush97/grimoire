@@ -13,6 +13,7 @@ import ModThumbnail from '../components/ModThumbnail';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import { PageHeader, ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
+import { Skeleton } from '../components/common/Skeleton';
 import {
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
@@ -740,10 +741,11 @@ interface HeroGalleryCardProps {
 function HeroGallerySkeleton() {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-bg-secondary">
-      <div className="relative aspect-[3/4] skeleton-shimmer bg-bg-tertiary" />
+      <Skeleton className="relative aspect-[3/4]" rounded="none" />
+      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 to-transparent" />
       <div className="absolute bottom-0 left-0 right-0 p-3 space-y-1.5">
-        <div className="h-3 w-2/3 rounded bg-bg-tertiary skeleton-shimmer" />
-        <div className="h-2 w-1/3 rounded bg-bg-tertiary/80 skeleton-shimmer" />
+        <Skeleton className="h-3 w-2/3" rounded="sm" />
+        <Skeleton className="h-2 w-1/3" rounded="sm" />
       </div>
     </div>
   );
@@ -765,6 +767,8 @@ function HeroGalleryCard({
   const [fallbackStep, setFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [renderLoaded, setRenderLoaded] = useState(false);
+  const [nameLoaded, setNameLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -798,6 +802,7 @@ function HeroGalleryCard({
   }, [isVisible, renderLocal]);
 
   const handleRenderError = () => {
+    setRenderLoaded(false);
     if (fallbackStep === 0) {
       setRenderSrc(wikiUrl);
       setFallbackStep(1);
@@ -829,22 +834,30 @@ function HeroGalleryCard({
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
       <div className="relative aspect-[3/4]">
-        {renderSrc ? (
+        {/* Shimmer shows whenever the image hasn't decoded yet or we're
+            still waiting for the IntersectionObserver to reveal the card.
+            Always painted at least once because we don't short-circuit
+            onLoad based on img.complete — locally-bundled images would
+            otherwise skip the skeleton entirely. */}
+        {!renderLoaded && fallbackStep < 3 && (
+          <div className="absolute inset-0 skeleton-shimmer bg-bg-tertiary" aria-hidden />
+        )}
+        {renderSrc && fallbackStep < 3 && (
           <img
             src={renderSrc}
             alt={hero.name}
-            className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : 'scale-100'
-              }`}
+            className={`absolute inset-0 h-full w-full object-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : 'scale-100'} ${renderLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
             style={{
               objectPosition: `${facePositionX}% 20%`,
               imageRendering: 'auto',
               transform: isActive ? undefined : 'translateZ(0)',
             }}
-            loading="lazy"
             decoding="async"
+            onLoad={() => setRenderLoaded(true)}
             onError={handleRenderError}
           />
-        ) : (
+        )}
+        {fallbackStep === 3 && (
           <div className="absolute inset-0 flex items-center justify-center text-text-secondary">
             {hero.name}
           </div>
@@ -868,16 +881,20 @@ function HeroGalleryCard({
         {nameFailed ? (
           <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
         ) : (
-          <img
-            src={namePath}
-            alt={hero.name}
-            className={`w-[70%] h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-105 ${isActive ? 'scale-110' : 'scale-100'
-              }`}
-            style={{ transform: isActive ? undefined : 'translateZ(0)' }}
-            loading="lazy"
-            decoding="async"
-            onError={() => setNameFailed(true)}
-          />
+          <div className="relative w-[70%] h-6 sm:h-7 ml-auto">
+            {!nameLoaded && (
+              <div className="absolute inset-0 skeleton-shimmer bg-white/10 rounded-sm" aria-hidden />
+            )}
+            <img
+              src={namePath}
+              alt={hero.name}
+              className={`absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 ${isActive ? 'scale-110' : 'scale-100'} ${nameLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
+              style={{ transform: isActive ? undefined : 'translateZ(0)' }}
+              decoding="async"
+              onLoad={() => setNameLoaded(true)}
+              onError={() => setNameFailed(true)}
+            />
+          </div>
         )}
         {skinCount > 0 && (
           <div className="mt-1 text-[10px] text-white/70">
