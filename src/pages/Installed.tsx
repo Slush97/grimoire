@@ -79,6 +79,7 @@ export default function Installed() {
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
   const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
+  const [detailsDates, setDetailsDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
   // Local id of the installed mod that triggered the overlay. On download we
   // delete this entry first so Update/Reinstall replaces the old VPK instead
   // of installing a second copy alongside it.
@@ -98,9 +99,16 @@ export default function Installed() {
     setDetailsSourceModId(m.id);
     setDetailsInstalledFileIds(m.gameBananaFileId ? new Set([m.gameBananaFileId]) : new Set());
     setDetailsUpdateAvailable(updatesAvailable.has(m.id));
+    setDetailsDates(null);
     try {
-      const details = await getModDetails(m.gameBananaId, section);
+      const [details, cached] = await Promise.all([
+        getModDetails(m.gameBananaId, section),
+        window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null),
+      ]);
       setDetailsMod(details);
+      if (cached) {
+        setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
+      }
     } catch (err) {
       setDetailsError(String(err));
     } finally {
@@ -113,6 +121,7 @@ export default function Installed() {
     setDetailsError(null);
     setDetailsUpdateAvailable(false);
     setDetailsSourceModId(null);
+    setDetailsDates(null);
   };
 
   const handleDetailsDownload = async (fileId: number, fileName: string) => {
@@ -546,6 +555,8 @@ export default function Installed() {
           extracting={false}
           progress={null}
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          dateAdded={detailsDates?.dateAdded}
+          dateModified={detailsDates?.dateModified}
           updateAvailable={detailsUpdateAvailable}
           onClose={closeModDetails}
           onDownload={handleDetailsDownload}

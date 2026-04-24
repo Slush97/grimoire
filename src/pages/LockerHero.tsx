@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Layers, Loader2, Star } from 'lucide-react';
+import { ArrowLeft, Layers, Star } from 'lucide-react';
+import { Skeleton } from '../components/common/Skeleton';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import {
@@ -220,11 +221,7 @@ export default function LockerHero() {
   }
 
   if (modsLoading || categoriesLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      </div>
-    );
+    return <LockerHeroSkeleton />;
   }
 
   if (modsError || categoriesError) {
@@ -359,6 +356,49 @@ export default function LockerHero() {
 
         {/* Bottom gradient for depth */}
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+      </div>
+    </div>
+  );
+}
+
+function LockerHeroSkeleton() {
+  return (
+    <div className="flex h-full" aria-busy="true" aria-live="polite">
+      {/* Left panel — mirrors HeroSkinsPanel layout */}
+      <div className="w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-hidden border-r border-border bg-bg-secondary animate-slide-in-left">
+        <div className="p-6 space-y-6">
+          <div className="flex items-center justify-between gap-3">
+            <Skeleton className="h-4 w-16" />
+            <Skeleton className="h-4 w-4" rounded="full" />
+          </div>
+          <div className="space-y-3">
+            <Skeleton className="h-7 w-2/3" />
+            <Skeleton className="h-3 w-1/3" />
+          </div>
+          <div className="space-y-3 pt-2">
+            <Skeleton className="h-3 w-24" />
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                <Skeleton className="h-10 w-10" rounded="md" />
+                <div className="flex-1 space-y-2">
+                  <Skeleton className="h-3 w-3/4" />
+                  <Skeleton className="h-2 w-1/3" />
+                </div>
+                <Skeleton className="h-5 w-10" rounded="full" />
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {/* Right panel — hero portrait placeholder */}
+      <div className="flex-1 relative overflow-hidden bg-bg-primary animate-hero-zoom-in">
+        <Skeleton className="absolute inset-0" rounded="none" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        <div className="absolute bottom-8 left-8 space-y-3">
+          <Skeleton className="h-8 w-64" />
+          <Skeleton className="h-4 w-40" />
+        </div>
       </div>
     </div>
   );

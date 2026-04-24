@@ -13,6 +13,7 @@ import ModThumbnail from '../components/ModThumbnail';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import { PageHeader, ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
+import { Skeleton } from '../components/common/Skeleton';
 import {
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
@@ -740,10 +741,11 @@ interface HeroGalleryCardProps {
 function HeroGallerySkeleton() {
   return (
     <div className="relative overflow-hidden rounded-2xl border border-border bg-bg-secondary">
-      <div className="relative aspect-[3/4] skeleton-shimmer bg-bg-tertiary" />
+      <Skeleton className="relative aspect-[3/4]" rounded="none" />
+      <div className="absolute inset-x-0 bottom-0 h-20 bg-gradient-to-t from-black/70 to-transparent" />
       <div className="absolute bottom-0 left-0 right-0 p-3 space-y-1.5">
-        <div className="h-3 w-2/3 rounded bg-bg-tertiary skeleton-shimmer" />
-        <div className="h-2 w-1/3 rounded bg-bg-tertiary/80 skeleton-shimmer" />
+        <Skeleton className="h-3 w-2/3" rounded="sm" />
+        <Skeleton className="h-2 w-1/3" rounded="sm" />
       </div>
     </div>
   );
