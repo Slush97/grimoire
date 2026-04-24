@@ -767,6 +767,8 @@ function HeroGalleryCard({
   const [fallbackStep, setFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [isVisible, setIsVisible] = useState(false);
+  const [renderLoaded, setRenderLoaded] = useState(false);
+  const [nameLoaded, setNameLoaded] = useState(false);
   const cardRef = useRef<HTMLButtonElement | null>(null);
 
   useEffect(() => {
@@ -800,6 +802,7 @@ function HeroGalleryCard({
   }, [isVisible, renderLocal]);
 
   const handleRenderError = () => {
+    setRenderLoaded(false);
     if (fallbackStep === 0) {
       setRenderSrc(wikiUrl);
       setFallbackStep(1);
@@ -832,20 +835,30 @@ function HeroGalleryCard({
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
       <div className="relative aspect-[3/4]">
         {renderSrc ? (
-          <img
-            src={renderSrc}
-            alt={hero.name}
-            className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : 'scale-100'
-              }`}
-            style={{
-              objectPosition: `${facePositionX}% 20%`,
-              imageRendering: 'auto',
-              transform: isActive ? undefined : 'translateZ(0)',
-            }}
-            loading="lazy"
-            decoding="async"
-            onError={handleRenderError}
-          />
+          <>
+            {!renderLoaded && (
+              <div className="absolute inset-0 skeleton-shimmer bg-bg-tertiary" aria-hidden />
+            )}
+            <img
+              src={renderSrc}
+              alt={hero.name}
+              ref={(el) => {
+                if (el && el.complete && el.naturalWidth > 0 && !renderLoaded) {
+                  setRenderLoaded(true);
+                }
+              }}
+              className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : 'scale-100'} ${renderLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity`}
+              style={{
+                objectPosition: `${facePositionX}% 20%`,
+                imageRendering: 'auto',
+                transform: isActive ? undefined : 'translateZ(0)',
+              }}
+              loading="lazy"
+              decoding="async"
+              onLoad={() => setRenderLoaded(true)}
+              onError={handleRenderError}
+            />
+          </>
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-text-secondary">
             {hero.name}
@@ -870,16 +883,26 @@ function HeroGalleryCard({
         {nameFailed ? (
           <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
         ) : (
-          <img
-            src={namePath}
-            alt={hero.name}
-            className={`w-[70%] h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-105 ${isActive ? 'scale-110' : 'scale-100'
-              }`}
-            style={{ transform: isActive ? undefined : 'translateZ(0)' }}
-            loading="lazy"
-            decoding="async"
-            onError={() => setNameFailed(true)}
-          />
+          <div className="relative w-[70%] h-6 sm:h-7">
+            {!nameLoaded && (
+              <div className="absolute inset-0 skeleton-shimmer bg-bg-tertiary/40 rounded-sm ml-auto" aria-hidden />
+            )}
+            <img
+              src={namePath}
+              alt={hero.name}
+              ref={(el) => {
+                if (el && el.complete && el.naturalWidth > 0 && !nameLoaded) {
+                  setNameLoaded(true);
+                }
+              }}
+              className={`w-full h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-105 ${isActive ? 'scale-110' : 'scale-100'} ${nameLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity`}
+              style={{ transform: isActive ? undefined : 'translateZ(0)' }}
+              loading="lazy"
+              decoding="async"
+              onLoad={() => setNameLoaded(true)}
+              onError={() => setNameFailed(true)}
+            />
+          </div>
         )}
         {skinCount > 0 && (
           <div className="mt-1 text-[10px] text-white/70">
