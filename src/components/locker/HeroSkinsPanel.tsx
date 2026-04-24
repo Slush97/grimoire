@@ -112,7 +112,7 @@ export default function HeroSkinsPanel({
                 onClick={async () => {
                   try {
                     onMinaArchivePathChange?.('Downloading...');
-                    const path = await window.api.downloadMinaVariations();
+                    const path = await window.electronAPI.downloadMinaVariations();
                     onMinaArchivePathChange?.(path);
                     onLoadMinaVariants?.();
                   } catch (err) {

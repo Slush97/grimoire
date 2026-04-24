@@ -217,6 +217,7 @@ export default function AudioPreviewPlayer({
             {!compact && (
                 <button
                     onClick={toggleMute}
+                    aria-label={isMuted ? 'Unmute' : 'Mute'}
                     className="flex-shrink-0 text-text-secondary hover:text-text-primary transition-colors"
                     title={isMuted ? 'Unmute' : 'Mute'}
                 >

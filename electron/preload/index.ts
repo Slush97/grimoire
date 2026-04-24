@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer } from 'electron';
+import { contextBridge, ipcRenderer, webUtils } from 'electron';
 
 // Type definitions for the exposed API
 export interface ElectronAPI {
@@ -53,6 +53,10 @@ export interface ElectronAPI {
 
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => Promise<string | null>;
+
+    // Drag & drop — resolves a native filesystem path for a dropped File.
+    // Needed because Electron 32+ removed `File.path` from the DataTransfer API.
+    getDroppedFilePath: (file: File) => string;
 
     // Events
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
@@ -442,7 +446,7 @@ interface ModConflict {
     modAName: string;
     modB: string;
     modBName: string;
-    conflictType: 'priority' | 'samefile';
+    conflictType: 'priority' | 'file';
     details: string;
 }
 
@@ -659,6 +663,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => ipcRenderer.invoke('show-open-dialog', options),
+
+    // Drag & drop
+    getDroppedFilePath: (file: File) => webUtils.getPathForFile(file),
 
     // Events - return unsubscribe function
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => {

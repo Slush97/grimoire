@@ -5,7 +5,7 @@ import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { Button } from '../components/common/ui';
-import { PageHeader, EmptyState } from '../components/common/PageComponents';
+import { PageHeader, EmptyState, ConfirmModal } from '../components/common/PageComponents';
 interface ModWithThumbnail {
   id: string;
   name: string;
@@ -50,6 +50,8 @@ export default function Conflicts() {
   const [modsMap, setModsMap] = useState<Map<string, ModWithThumbnail>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [disableTarget, setDisableTarget] = useState<ModWithThumbnail | null>(null);
+  const [disabling, setDisabling] = useState(false);
   const { loadMods } = useAppStore();
 
   const loadConflicts = async () => {
@@ -83,13 +85,18 @@ export default function Conflicts() {
     loadConflicts();
   }, []);
 
-  const handleDisableMod = async (modId: string) => {
+  const confirmDisable = async () => {
+    if (!disableTarget) return;
+    setDisabling(true);
     try {
-      await disableMod(modId);
+      await disableMod(disableTarget.id);
       await loadMods();
       await loadConflicts();
+      setDisableTarget(null);
     } catch (err) {
       setError(String(err));
+    } finally {
+      setDisabling(false);
     }
   };
 
@@ -103,28 +110,32 @@ export default function Conflicts() {
 
   if (error) {
     return (
-      <EmptyState
-        icon={AlertTriangle}
-        title="Error Loading Conflicts"
-        description={error ?? undefined}
-        variant="error"
-        action={
-          <Button onClick={loadConflicts}>Retry</Button>
-        }
-      />
+      <div className="h-full flex items-center justify-center p-6">
+        <EmptyState
+          icon={AlertTriangle}
+          title="Error Loading Conflicts"
+          description={error ?? undefined}
+          variant="error"
+          action={
+            <Button onClick={loadConflicts}>Retry</Button>
+          }
+        />
+      </div>
     );
   }
 
   if (conflicts.length === 0) {
     return (
-      <EmptyState
-        icon={CheckCircle}
-        title="No Conflicts Detected"
-        description="Your installed mods don't have any conflicts. Great!"
-        action={
-          <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
-        }
-      />
+      <div className="h-full flex items-center justify-center p-6">
+        <EmptyState
+          icon={CheckCircle}
+          title="No Conflicts Detected"
+          description="Your installed mods don't have any conflicts. Great!"
+          action={
+            <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
+          }
+        />
+      </div>
     );
   }
 
@@ -173,9 +184,9 @@ export default function Conflicts() {
                       </div>
                     )}
                     <button
-                      onClick={() => handleDisableMod(modA.id)}
+                      onClick={() => setDisableTarget(modA)}
                       aria-label={`Disable ${modA.name}`}
-                      className="absolute inset-x-0 bottom-0 bg-red-500/80 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                      className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
                     >
                       <span className="text-white text-sm font-medium flex items-center gap-1">
                         <X className="w-4 h-4" /> Disable
@@ -212,9 +223,9 @@ export default function Conflicts() {
                       </div>
                     )}
                     <button
-                      onClick={() => handleDisableMod(modB.id)}
+                      onClick={() => setDisableTarget(modB)}
                       aria-label={`Disable ${modB.name}`}
-                      className="absolute inset-x-0 bottom-0 bg-red-500/80 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                      className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
                     >
                       <span className="text-white text-sm font-medium flex items-center gap-1">
                         <X className="w-4 h-4" /> Disable
@@ -235,6 +246,27 @@ export default function Conflicts() {
           );
         })}
       </div>
+
+      <ConfirmModal
+        isOpen={disableTarget !== null}
+        onCancel={() => !disabling && setDisableTarget(null)}
+        onConfirm={confirmDisable}
+        title="Disable this mod?"
+        message={
+          disableTarget ? (
+            <>
+              <p className="mb-2">
+                <span className="text-text-primary font-medium">{disableTarget.name}</span> will be disabled and moved out of the addons folder. You can re-enable it from the Installed page.
+              </p>
+              {disableTarget.fileName && (
+                <p className="text-xs font-mono text-text-tertiary truncate" title={disableTarget.fileName}>{disableTarget.fileName}</p>
+              )}
+            </>
+          ) : ''
+        }
+        confirmLabel={disabling ? 'Disabling…' : 'Disable'}
+        variant="danger"
+      />
     </div>
   );
 }

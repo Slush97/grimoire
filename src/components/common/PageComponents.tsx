@@ -145,24 +145,33 @@ export function ConfirmModal({
     if (!isOpen) return null;
 
     const confirmClass = variant === 'danger'
-        ? 'bg-red-500 hover:bg-red-600 text-white'
-        : 'bg-accent hover:bg-accent-hover text-white';
+        ? 'bg-red-600 hover:bg-red-500 text-white focus-visible:ring-red-400'
+        : 'bg-accent hover:bg-accent-hover text-black focus-visible:ring-accent';
 
     return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-            <div className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md mx-4">
-                <h3 className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
+        <div
+            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="confirm-modal-title"
+            onClick={onCancel}
+        >
+            <div
+                className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md w-full"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3 id="confirm-modal-title" className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
                 <div className="text-text-secondary mb-4">{message}</div>
                 <div className="flex justify-end gap-3">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer"
+                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                     >
                         {cancelLabel}
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`px-4 py-2 rounded-lg transition-colors cursor-pointer ${confirmClass}`}
+                        className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${confirmClass}`}
                     >
                         {confirmLabel}
                     </button>

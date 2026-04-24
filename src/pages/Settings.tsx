@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { Settings as SettingsIcon, FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle } from 'lucide-react';
+import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle } from 'lucide-react';
+import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
 import {
   cleanupAddons,
@@ -11,6 +12,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
+import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 
 export default function Settings() {
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
@@ -28,6 +30,9 @@ export default function Settings() {
   const [syncProgress, setSyncProgress] = useState<{ section: string; modsProcessed: number; totalMods: number } | null>(null);
   const [isWipingCache, setIsWipingCache] = useState(false);
   const [wipeResult, setWipeResult] = useState<string | null>(null);
+  const [wipeConfirmOpen, setWipeConfirmOpen] = useState(false);
+  const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
+  const [resetResult, setResetResult] = useState<string | null>(null);
 
   // Updater state
   const [appVersion, setAppVersion] = useState<string>('');
@@ -288,9 +293,7 @@ export default function Settings() {
   };
 
   const handleWipeCache = async () => {
-    if (!confirm('Wipe the local mod cache? This will remove all cached mods and sync state.')) {
-      return;
-    }
+    setWipeConfirmOpen(false);
     setIsWipingCache(true);
     setWipeResult(null);
     try {
@@ -302,6 +305,18 @@ export default function Settings() {
       setWipeResult(String(err));
     } finally {
       setIsWipingCache(false);
+    }
+  };
+
+  const handleResetWizard = async () => {
+    setResetConfirmOpen(false);
+    if (!settings) return;
+    try {
+      await saveSettings({ ...settings, hasCompletedSetup: false });
+      setResetResult('The setup wizard will appear on the next app launch.');
+      setTimeout(() => setResetResult(null), 5000);
+    } catch (err) {
+      setResetResult(`Error: ${String(err)}`);
     }
   };
 
@@ -323,15 +338,10 @@ export default function Settings() {
 
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8">
-      <div className="flex items-center gap-3">
-        <div className="p-3 bg-accent/10 rounded-xl">
-          <SettingsIcon className="w-8 h-8 text-accent" />
-        </div>
-        <div>
-          <h1 className="text-3xl font-bold font-reaver tracking-wide">Settings</h1>
-          <p className="text-text-secondary">Configure game paths, preferences, and maintenance tasks</p>
-        </div>
-      </div>
+      <PageHeader
+        title="Settings"
+        description="Configure game paths, preferences, and maintenance tasks"
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Game Configuration Section - Full Width */}
@@ -598,14 +608,12 @@ export default function Settings() {
                 <p className="text-xs text-text-secondary mt-1">
                   Show the first-run setup wizard again on next app launch.
                 </p>
+                {resetResult && (
+                  <p className="text-xs text-accent mt-2 animate-fade-in">{resetResult}</p>
+                )}
               </div>
               <Button
-                onClick={async () => {
-                  if (settings) {
-                    await saveSettings({ ...settings, hasCompletedSetup: false });
-                    alert('Setup wizard will appear on next app restart.');
-                  }
-                }}
+                onClick={() => setResetConfirmOpen(true)}
                 variant="secondary"
                 size="sm"
                 icon={RefreshCw}
@@ -644,11 +652,9 @@ export default function Settings() {
                   </div>
                   <div className="w-full bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
                     <div
-                      className="bg-accent h-full rounded-full transition-all duration-300 ease-out relative overflow-hidden"
+                      className="bg-accent h-full rounded-full transition-all duration-300 ease-out"
                       style={{ width: `${Math.min(100, (syncProgress.modsProcessed / syncProgress.totalMods) * 100)}%` }}
-                    >
-                      <div className="absolute inset-0 bg-white/20 animate-[shimmer_1s_infinite]" />
-                    </div>
+                    />
                   </div>
                 </div>
               )}
@@ -660,7 +666,7 @@ export default function Settings() {
 
             <div className="flex gap-3 shrink-0">
               <Button
-                onClick={handleWipeCache}
+                onClick={() => setWipeConfirmOpen(true)}
                 disabled={isWipingCache || isSyncing}
                 isLoading={isWipingCache}
                 variant="danger"
@@ -684,7 +690,7 @@ export default function Settings() {
       {/* Changelog Modal */}
       {showChangelog && updateStatus?.updateInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-scale-in">
+          <div className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-fade-in">
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div>
                 <h2 className="text-xl font-bold">What's New in v{updateStatus.updateInfo.version}</h2>
@@ -705,7 +711,7 @@ export default function Settings() {
               {typeof updateStatus.updateInfo.releaseNotes === 'string' ? (
                 <div
                   className="prose prose-invert prose-sm max-w-none"
-                  dangerouslySetInnerHTML={{ __html: updateStatus.updateInfo.releaseNotes }}
+                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(updateStatus.updateInfo.releaseNotes) }}
                 />
               ) : Array.isArray(updateStatus.updateInfo.releaseNotes) ? (
                 <div className="space-y-4">
@@ -715,7 +721,7 @@ export default function Settings() {
                       {note.note && (
                         <div
                           className="prose prose-invert prose-sm max-w-none mt-1"
-                          dangerouslySetInnerHTML={{ __html: note.note }}
+                          dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(note.note) }}
                         />
                       )}
                     </div>
@@ -745,6 +751,26 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      <ConfirmModal
+        isOpen={wipeConfirmOpen}
+        onCancel={() => setWipeConfirmOpen(false)}
+        onConfirm={handleWipeCache}
+        title="Wipe mod cache?"
+        message="This removes all cached mod metadata and sync state. The next Browse session will re-sync from GameBanana (a few minutes on first run). Your installed mods are not affected."
+        confirmLabel="Wipe Cache"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={resetConfirmOpen}
+        onCancel={() => setResetConfirmOpen(false)}
+        onConfirm={handleResetWizard}
+        title="Reset setup wizard?"
+        message="The first-run setup wizard will appear the next time you launch the app. Your settings and installed mods are not affected."
+        confirmLabel="Reset"
+        variant="primary"
+      />
     </div>
   );
 }

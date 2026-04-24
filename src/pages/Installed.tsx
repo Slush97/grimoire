@@ -14,6 +14,7 @@ import {
   Volume2,
   Info,
   Download,
+  UploadCloud,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -319,20 +320,6 @@ export default function Installed() {
     <div className="p-6">
       <PageHeader
         title="Installed Mods"
-        description={
-          <span className="flex items-center gap-2 flex-wrap">
-            <span>{enabledMods.length} enabled / {mods.length} total</span>
-            {mods.length > 0 && enabledMods.length === 0 && (
-              <span
-                className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-yellow-500/15 text-yellow-400 border border-yellow-500/30 text-xs font-medium"
-                title="You have installed mods but none are enabled — nothing will apply when you launch."
-              >
-                <Info className="w-3 h-3" />
-                No mods enabled
-              </span>
-            )}
-          </span>
-        }
         action={
           <div className="flex items-center gap-3 flex-wrap">
             <div className="relative">
@@ -1008,6 +995,18 @@ interface ImportCustomModModalProps {
   onImport: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
 }
 
+const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+
+function deriveModNameFromPath(p: string): string {
+  const base = p.split(/[\\/]/).pop() ?? '';
+  return base
+    .replace(/_dir\.vpk$/i, '')
+    .replace(/\.vpk$/i, '')
+    .replace(/^pak\d{2}_/, '')
+    .replace(/[_-]+/g, ' ')
+    .trim();
+}
+
 function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) {
   const [vpkPath, setVpkPath] = useState<string>('');
   const [name, setName] = useState<string>('');
@@ -1016,32 +1015,16 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
   const [nsfw, setNsfw] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
+  const [vpkDragActive, setVpkDragActive] = useState(false);
+  const [imgDragActive, setImgDragActive] = useState(false);
 
-  const pickVpk = async () => {
-    const picked = await showOpenDialog({
-      title: 'Select VPK file',
-      filters: [{ name: 'VPK files', extensions: ['vpk'] }],
-    });
-    if (picked) {
-      setVpkPath(picked);
-      if (!name) {
-        const base = picked.split(/[\\/]/).pop() ?? '';
-        const cleaned = base
-          .replace(/_dir\.vpk$/i, '')
-          .replace(/\.vpk$/i, '')
-          .replace(/^pak\d{2}_/, '')
-          .replace(/[_-]+/g, ' ');
-        setName(cleaned.trim());
-      }
-    }
+  const acceptVpkPath = (picked: string) => {
+    setVpkPath(picked);
+    setError(null);
+    if (!name) setName(deriveModNameFromPath(picked));
   };
 
-  const pickImage = async () => {
-    const picked = await showOpenDialog({
-      title: 'Select thumbnail image',
-      filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
-    });
-    if (!picked) return;
+  const acceptImagePath = async (picked: string) => {
     setImagePath(picked);
     setError(null);
     try {
@@ -1050,6 +1033,66 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
     } catch (err) {
       setThumbnailDataUrl('');
       setError(`Couldn't read image: ${String(err)}`);
+    }
+  };
+
+  const pickVpk = async () => {
+    const picked = await showOpenDialog({
+      title: 'Select VPK file',
+      filters: [{ name: 'VPK files', extensions: ['vpk'] }],
+    });
+    if (picked) acceptVpkPath(picked);
+  };
+
+  const pickImage = async () => {
+    const picked = await showOpenDialog({
+      title: 'Select thumbnail image',
+      filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
+    });
+    if (picked) await acceptImagePath(picked);
+  };
+
+  const handleVpkDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setVpkDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    if (!/\.vpk$/i.test(file.name)) {
+      setError(`Expected a .vpk file — got "${file.name}".`);
+      return;
+    }
+    const path = window.electronAPI.getDroppedFilePath(file);
+    if (!path) {
+      setError('Could not resolve the dropped file path.');
+      return;
+    }
+    acceptVpkPath(path);
+  };
+
+  const handleImageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setImgDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!IMAGE_EXTS.includes(ext)) {
+      setError(`Expected an image (${IMAGE_EXTS.join(', ')}) — got "${file.name}".`);
+      return;
+    }
+    const path = window.electronAPI.getDroppedFilePath(file);
+    if (!path) {
+      setError('Could not resolve the dropped image path.');
+      return;
+    }
+    await acceptImagePath(path);
+  };
+
+  const onZoneKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      action();
     }
   };
 
@@ -1095,20 +1138,42 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
             <label className="block text-sm font-medium text-text-primary mb-1.5">
               VPK file <span className="text-red-400">*</span>
             </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={vpkPath}
-                readOnly
-                placeholder="No file selected"
-                className="flex-1 min-w-0 px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none truncate"
-              />
-              <button
-                onClick={pickVpk}
-                className="px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm hover:bg-bg-secondary transition-colors cursor-pointer"
-              >
-                Choose…
-              </button>
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={vpkPath ? `VPK selected: ${vpkPath}. Press Enter to change.` : 'Drop a VPK file here or press Enter to browse'}
+              onClick={pickVpk}
+              onKeyDown={(e) => onZoneKeyDown(e, pickVpk)}
+              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(true); }}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setVpkDragActive(true); }}
+              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(false); }}
+              onDrop={handleVpkDrop}
+              className={`relative flex flex-col items-center justify-center gap-1.5 px-4 py-5 rounded-lg border border-dashed text-center cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+                vpkDragActive
+                  ? 'border-accent bg-accent/10'
+                  : vpkPath
+                    ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
+                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+              }`}
+            >
+              {vpkPath ? (
+                <>
+                  <FilePlus className="w-5 h-5 text-accent" aria-hidden />
+                  <span className="text-sm text-text-primary font-medium truncate max-w-full">
+                    {vpkPath.split(/[\\/]/).pop()}
+                  </span>
+                  <span className="text-xs text-text-secondary font-mono truncate max-w-full">{vpkPath}</span>
+                  <span className="text-xs text-accent">Click or drop another to replace</span>
+                </>
+              ) : (
+                <>
+                  <UploadCloud className="w-6 h-6 text-text-secondary" aria-hidden />
+                  <span className="text-sm text-text-primary font-medium">
+                    Drop a <code className="font-mono text-accent">.vpk</code> here
+                  </span>
+                  <span className="text-xs text-text-secondary">or click to browse</span>
+                </>
+              )}
             </div>
             <p className="mt-1 text-xs text-text-secondary">
               The file will be copied into your addons folder and renamed with the next available pak## priority.
@@ -1132,23 +1197,43 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
             <label className="block text-sm font-medium text-text-primary mb-1.5">
               Thumbnail image <span className="text-text-secondary font-normal">(optional)</span>
             </label>
-            <div className="flex items-start gap-3">
+            <div
+              role="button"
+              tabIndex={0}
+              aria-label={imagePath ? `Thumbnail selected: ${imagePath}. Press Enter to change.` : 'Drop an image here or press Enter to browse'}
+              onClick={pickImage}
+              onKeyDown={(e) => onZoneKeyDown(e, pickImage)}
+              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(true); }}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
+              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
+              onDrop={handleImageDrop}
+              className={`flex items-center gap-3 p-3 rounded-lg border border-dashed cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+                imgDragActive
+                  ? 'border-accent bg-accent/10'
+                  : thumbnailDataUrl
+                    ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
+                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+              }`}
+            >
               <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
                 {thumbnailDataUrl ? (
                   <img src={thumbnailDataUrl} alt="Thumbnail preview" className="w-full h-full object-cover" />
                 ) : (
-                  <ImagePlus className="w-5 h-5" />
+                  <ImagePlus className="w-5 h-5" aria-hidden />
                 )}
               </div>
-              <div className="flex-1 min-w-0 flex flex-col gap-2">
-                <button
-                  onClick={pickImage}
-                  className="px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm hover:bg-bg-secondary transition-colors cursor-pointer w-fit"
-                >
-                  {imagePath ? 'Change image…' : 'Choose image…'}
-                </button>
-                {imagePath && (
-                  <span className="text-xs text-text-secondary font-mono truncate">{imagePath}</span>
+              <div className="flex-1 min-w-0">
+                {imagePath ? (
+                  <>
+                    <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
+                    <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
+                    <div className="text-xs text-accent mt-0.5">Click or drop another to replace</div>
+                  </>
+                ) : (
+                  <>
+                    <div className="text-sm text-text-primary font-medium">Drop an image here</div>
+                    <div className="text-xs text-text-secondary">or click to browse — {IMAGE_EXTS.join(', ')}</div>
+                  </>
                 )}
               </div>
             </div>
@@ -1182,7 +1267,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
           <button
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="px-4 py-2 bg-accent hover:bg-accent-hover text-white rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            className="px-4 py-2 bg-accent hover:bg-accent-hover text-black rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             Import
