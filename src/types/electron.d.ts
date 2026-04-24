@@ -260,6 +260,9 @@ export interface ElectronAPI {
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => Promise<string | null>;
 
+    // Drag & drop
+    getDroppedFilePath: (file: File) => string;
+
     // Events
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;

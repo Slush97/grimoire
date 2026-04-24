@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { HashRouter, Routes, Route } from 'react-router-dom';
 import Layout from './components/Layout';
 import Installed from './pages/Installed';
@@ -13,6 +14,18 @@ import Stats from './pages/Stats';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 export default function App() {
+  // Swallow stray file drops so Electron doesn't navigate the window to the
+  // dropped file:// URL. Registered drop zones still handle their own events.
+  useEffect(() => {
+    const swallow = (e: DragEvent) => e.preventDefault();
+    window.addEventListener('dragover', swallow);
+    window.addEventListener('drop', swallow);
+    return () => {
+      window.removeEventListener('dragover', swallow);
+      window.removeEventListener('drop', swallow);
+    };
+  }, []);
+
   return (
     <HashRouter>
       <ErrorBoundary>
