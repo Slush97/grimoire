@@ -834,32 +834,30 @@ function HeroGalleryCard({
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
       <div className="relative aspect-[3/4]">
-        {renderSrc ? (
-          <>
-            {!renderLoaded && (
-              <div className="absolute inset-0 skeleton-shimmer bg-bg-tertiary" aria-hidden />
-            )}
-            <img
-              src={renderSrc}
-              alt={hero.name}
-              ref={(el) => {
-                if (el && el.complete && el.naturalWidth > 0 && !renderLoaded) {
-                  setRenderLoaded(true);
-                }
-              }}
-              className={`absolute inset-0 h-full w-full object-cover transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : 'scale-100'} ${renderLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity`}
-              style={{
-                objectPosition: `${facePositionX}% 20%`,
-                imageRendering: 'auto',
-                transform: isActive ? undefined : 'translateZ(0)',
-              }}
-              loading="lazy"
-              decoding="async"
-              onLoad={() => setRenderLoaded(true)}
-              onError={handleRenderError}
-            />
-          </>
-        ) : (
+        {/* Shimmer shows whenever the image hasn't decoded yet or we're
+            still waiting for the IntersectionObserver to reveal the card.
+            Always painted at least once because we don't short-circuit
+            onLoad based on img.complete — locally-bundled images would
+            otherwise skip the skeleton entirely. */}
+        {!renderLoaded && fallbackStep < 3 && (
+          <div className="absolute inset-0 skeleton-shimmer bg-bg-tertiary" aria-hidden />
+        )}
+        {renderSrc && fallbackStep < 3 && (
+          <img
+            src={renderSrc}
+            alt={hero.name}
+            className={`absolute inset-0 h-full w-full object-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] ${isActive ? 'scale-[1.12]' : 'scale-100'} ${renderLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
+            style={{
+              objectPosition: `${facePositionX}% 20%`,
+              imageRendering: 'auto',
+              transform: isActive ? undefined : 'translateZ(0)',
+            }}
+            decoding="async"
+            onLoad={() => setRenderLoaded(true)}
+            onError={handleRenderError}
+          />
+        )}
+        {fallbackStep === 3 && (
           <div className="absolute inset-0 flex items-center justify-center text-text-secondary">
             {hero.name}
           </div>
@@ -883,21 +881,15 @@ function HeroGalleryCard({
         {nameFailed ? (
           <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
         ) : (
-          <div className="relative w-[70%] h-6 sm:h-7">
+          <div className="relative w-[70%] h-6 sm:h-7 ml-auto">
             {!nameLoaded && (
-              <div className="absolute inset-0 skeleton-shimmer bg-bg-tertiary/40 rounded-sm ml-auto" aria-hidden />
+              <div className="absolute inset-0 skeleton-shimmer bg-white/10 rounded-sm" aria-hidden />
             )}
             <img
               src={namePath}
               alt={hero.name}
-              ref={(el) => {
-                if (el && el.complete && el.naturalWidth > 0 && !nameLoaded) {
-                  setNameLoaded(true);
-                }
-              }}
-              className={`w-full h-auto max-h-6 sm:max-h-7 object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] transition-transform duration-500 will-change-transform backface-visibility-hidden group-hover:scale-105 ${isActive ? 'scale-110' : 'scale-100'} ${nameLoaded ? 'opacity-100' : 'opacity-0'} transition-opacity`}
+              className={`absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 ${isActive ? 'scale-110' : 'scale-100'} ${nameLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
               style={{ transform: isActive ? undefined : 'translateZ(0)' }}
-              loading="lazy"
               decoding="async"
               onLoad={() => setNameLoaded(true)}
               onError={() => setNameFailed(true)}
