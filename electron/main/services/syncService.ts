@@ -79,6 +79,7 @@ function mapToCache(mod: GameBananaMod, section: string): CachedMod {
         hasFiles: mod.hasFiles ?? true,
         isNsfw: mod.nsfw ?? false,
         thumbnailUrl,
+        audioUrl: mod.previewMedia?.metadata?.audioUrl ?? null,
         profileUrl: mod.profileUrl,
         cachedAt: Math.floor(Date.now() / 1000),
     };
