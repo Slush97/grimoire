@@ -153,6 +153,10 @@ export default function Browse() {
   const [sections, setSections] = useState<GameBananaSection[]>([]);
   const [section, setSection] = useState('Mod');
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
+  // Hero list comes from the Mod section's category tree (Mod -> Skins -> heroes).
+  // Cached separately so hero filtering still works on the Sound tab, where the
+  // current section's category tree has no Skins parent.
+  const [modCategories, setModCategories] = useState<GameBananaCategoryNode[]>([]);
   const [heroCategoryId, setHeroCategoryId] = useState<number | 'all'>('all');
   const [categoryId, setCategoryId] = useState<number | 'all'>('all');
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -163,7 +167,9 @@ export default function Browse() {
   const [extracting, setExtracting] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
-  const [useLocalSearch, setUseLocalSearch] = useState(false);
+  // When local search fails (e.g. SQLite error), this flips so the main fetch
+  // effect falls back to the API path. Resets whenever filter inputs change.
+  const [localSearchFailed, setLocalSearchFailed] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadQueue, setDownloadQueue] = useState<Array<{ modId: number; fileId: number; fileName: string }>>([]);
@@ -237,14 +243,21 @@ export default function Browse() {
 
   const effectiveSearch = search;
 
-  // Use local search when:
-  // 1. There's an active search query AND we have cache, OR
-  // 2. A hero filter is selected (to enable enhanced OR search)
-  useEffect(() => {
+  // Derived (not state) so the right code path runs in the same render the
+  // user picks a hero/types a query. Storing it in useState lagged a render,
+  // which caused fetchMods (API, no hero filter) to race with searchLocal and
+  // overwrite real results with an empty API response.
+  const useLocalSearch = useMemo(() => {
     const hasSearchQuery = search.trim().length > 0;
     const hasHeroFilter = heroCategoryId !== 'all';
-    setUseLocalSearch((hasSearchQuery || hasHeroFilter) && hasLocalCache);
-  }, [search, hasLocalCache, heroCategoryId]);
+    return (hasSearchQuery || hasHeroFilter) && hasLocalCache && !localSearchFailed;
+  }, [search, heroCategoryId, hasLocalCache, localSearchFailed]);
+
+  // Reset the failure flag whenever the user changes filters so a one-off
+  // backend error doesn't permanently disable local search.
+  useEffect(() => {
+    setLocalSearchFailed(false);
+  }, [search, heroCategoryId, section]);
 
   const fetchMods = useCallback(async () => {
     // Don't fetch from API if we're using local search
@@ -333,9 +346,10 @@ export default function Browse() {
         name: 'name',
       };
 
-      // Get hero name and skins category ID for enhanced hero search
-      // Look up hero name directly from Skins children to avoid circular dependency
-      const skinsCat = findCategoryByName(categories, 'Skins');
+      // Hero list lives under Mod -> Skins, but we want the filter to work on
+      // any section (Sound mods include the hero name in the title), so always
+      // resolve the hero from the Mod-category tree.
+      const skinsCat = findCategoryByName(modCategories, 'Skins');
       const selectedHeroName = heroCategoryId !== 'all' && skinsCat?.children
         ? skinsCat.children.find(c => c.id === heroCategoryId)?.name
         : undefined;
@@ -366,15 +380,20 @@ export default function Browse() {
         rootCategory: m.categoryId ? { id: m.categoryId, name: m.categoryName || '' } : undefined,
         submitter: m.submitterName ? { id: m.submitterId || 0, name: m.submitterName } : undefined,
         previewMedia: (() => {
-          if (!m.thumbnailUrl) return undefined;
-          const lastSlash = m.thumbnailUrl.lastIndexOf('/');
-          if (lastSlash === -1) return undefined;
-          const baseUrl = m.thumbnailUrl.substring(0, lastSlash);
-          const file = m.thumbnailUrl.substring(lastSlash + 1);
-          if (!baseUrl || !file) return undefined;
-          return {
-            images: [{ baseUrl, file, file530: file }]
-          };
+          let images: { baseUrl: string; file: string; file530: string }[] | undefined;
+          if (m.thumbnailUrl) {
+            const lastSlash = m.thumbnailUrl.lastIndexOf('/');
+            if (lastSlash !== -1) {
+              const baseUrl = m.thumbnailUrl.substring(0, lastSlash);
+              const file = m.thumbnailUrl.substring(lastSlash + 1);
+              if (baseUrl && file) {
+                images = [{ baseUrl, file, file530: file }];
+              }
+            }
+          }
+          const metadata = m.audioUrl ? { audioUrl: m.audioUrl } : undefined;
+          if (!images && !metadata) return undefined;
+          return { images, metadata };
         })(),
       }));
 
@@ -387,19 +406,32 @@ export default function Browse() {
       setHasMore(convertedMods.length === perPage && page * perPage < result.totalCount);
     } catch (err) {
       console.error('Local search failed, falling back to API:', err);
-      // Setting useLocalSearch to false will trigger the effect to call fetchMods
-      setUseLocalSearch(false);
+      setLocalSearchFailed(true);
     } finally {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, categories]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, modCategories]);
 
   useEffect(() => {
     setPage(1);
     setHasMore(true);
     setMods([]);
   }, [search, sort, section, effectiveCategoryId, perPage]);
+
+  useEffect(() => {
+    let active = true;
+    getGamebananaCategories('ModCategory')
+      .then((data) => {
+        if (active) setModCategories(data);
+      })
+      .catch(() => {
+        // Hero filter just won't be available; not fatal.
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -727,8 +759,7 @@ export default function Browse() {
   };
 
   const heroOptions = useMemo(() => {
-    if (section !== 'Mod') return [];
-    const skins = findCategoryByName(categories, 'Skins');
+    const skins = findCategoryByName(modCategories, 'Skins');
     if (!skins?.children) return [];
     return skins.children
       .filter((child) => child.itemCount > 0)
@@ -736,7 +767,7 @@ export default function Browse() {
         id: child.id,
         label: child.name,
       }));
-  }, [categories, section]);
+  }, [modCategories]);
 
   const categoryOptions = useMemo(() => {
     const heroIds = new Set(heroOptions.map((hero) => hero.id));

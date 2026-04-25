@@ -31,10 +31,10 @@ let mainWindow: BrowserWindow | null = null;
 
 function createWindow(): void {
     mainWindow = new BrowserWindow({
-        width: 800,
-        height: 600,
-        minWidth: 600,
-        minHeight: 400,
+        width: 1280,
+        height: 800,
+        minWidth: 900,
+        minHeight: 600,
         title: 'Grimoire',
         show: false, // Don't show until ready to prevent white flash
         backgroundColor: '#1e1e2e', // Dark background matching app theme

@@ -162,6 +162,7 @@ export interface CachedMod {
     hasFiles: boolean;
     isNsfw: boolean;
     thumbnailUrl: string | null;
+    audioUrl: string | null;
     profileUrl: string;
     cachedAt: number;
 }

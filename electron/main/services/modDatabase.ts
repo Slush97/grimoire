@@ -19,6 +19,7 @@ export interface CachedMod {
     hasFiles: boolean;
     isNsfw: boolean;
     thumbnailUrl: string | null;
+    audioUrl: string | null;
     profileUrl: string;
     cachedAt: number;
 }
@@ -80,6 +81,7 @@ export function initDatabase(): Database.Database {
                 has_files INTEGER DEFAULT 1,
                 is_nsfw INTEGER DEFAULT 0,
                 thumbnail_url TEXT,
+                audio_url TEXT,
                 profile_url TEXT,
                 cached_at INTEGER DEFAULT (strftime('%s', 'now'))
             );
@@ -207,12 +209,12 @@ export function upsertMod(mod: CachedMod): void {
             id, name, section, category_id, category_name,
             submitter_name, submitter_id, like_count, view_count,
             date_added, date_modified, has_files, is_nsfw,
-            thumbnail_url, profile_url, cached_at
+            thumbnail_url, audio_url, profile_url, cached_at
         ) VALUES (
             @id, @name, @section, @categoryId, @categoryName,
             @submitterName, @submitterId, @likeCount, @viewCount,
             @dateAdded, @dateModified, @hasFiles, @isNsfw,
-            @thumbnailUrl, @profileUrl, @cachedAt
+            @thumbnailUrl, @audioUrl, @profileUrl, @cachedAt
         )
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
@@ -228,6 +230,7 @@ export function upsertMod(mod: CachedMod): void {
             has_files = excluded.has_files,
             is_nsfw = excluded.is_nsfw,
             thumbnail_url = excluded.thumbnail_url,
+            audio_url = excluded.audio_url,
             profile_url = excluded.profile_url,
             cached_at = excluded.cached_at
     `);
@@ -248,12 +251,12 @@ export function upsertMods(mods: CachedMod[]): void {
             id, name, section, category_id, category_name,
             submitter_name, submitter_id, like_count, view_count,
             date_added, date_modified, has_files, is_nsfw,
-            thumbnail_url, profile_url, cached_at
+            thumbnail_url, audio_url, profile_url, cached_at
         ) VALUES (
             @id, @name, @section, @categoryId, @categoryName,
             @submitterName, @submitterId, @likeCount, @viewCount,
             @dateAdded, @dateModified, @hasFiles, @isNsfw,
-            @thumbnailUrl, @profileUrl, @cachedAt
+            @thumbnailUrl, @audioUrl, @profileUrl, @cachedAt
         )
         ON CONFLICT(id) DO UPDATE SET
             name = excluded.name,
@@ -269,6 +272,7 @@ export function upsertMods(mods: CachedMod[]): void {
             has_files = excluded.has_files,
             is_nsfw = excluded.is_nsfw,
             thumbnail_url = excluded.thumbnail_url,
+            audio_url = excluded.audio_url,
             profile_url = excluded.profile_url,
             cached_at = excluded.cached_at
     `);
@@ -364,6 +368,7 @@ export function mapRowToMod(row: Record<string, unknown>): CachedMod {
         hasFiles: row.has_files != null ? (row.has_files as number) === 1 : true,
         isNsfw: row.is_nsfw != null ? (row.is_nsfw as number) === 1 : false,
         thumbnailUrl: row.thumbnail_url as string | null,
+        audioUrl: row.audio_url as string | null,
         profileUrl: (row.profile_url as string) ?? '',
         cachedAt: (row.cached_at as number) ?? 0,
     };
@@ -438,5 +443,11 @@ function runMigrations(database: Database.Database): void {
     if (!hasDownloadCount) {
         console.log('[ModDatabase] Running migration: adding download_count column');
         database.exec('ALTER TABLE mods ADD COLUMN download_count INTEGER');
+    }
+
+    const hasAudioUrl = tableInfo.some(col => col.name === 'audio_url');
+    if (!hasAudioUrl) {
+        console.log('[ModDatabase] Running migration: adding audio_url column');
+        database.exec('ALTER TABLE mods ADD COLUMN audio_url TEXT');
     }
 }
