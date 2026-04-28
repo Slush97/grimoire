@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { Download, Loader2, RefreshCw, AlertTriangle, Search, X } from 'lucide-react';
 import { browseMods, getModDetails, downloadMod } from '../../lib/api';
@@ -62,20 +62,17 @@ export default function DownloadableSkinsSection({
 
   const hideOutdated = useAppStore((s) => s.settings?.hideOutdatedMods) ?? false;
 
-  // Track categoryId to reset on change
-  const prevCategoryRef = useRef(categoryId);
-
-  // Reset when category changes
-  useEffect(() => {
-    if (prevCategoryRef.current !== categoryId) {
-      prevCategoryRef.current = categoryId;
-      setExpanded(false);
-      setMods([]);
-      setLoadState('idle');
-      setError(null);
-      setQuery('');
-    }
-  }, [categoryId]);
+  // Reset state when category changes — using render-time comparison
+  // (the React 19 sanctioned pattern for prop-driven resets).
+  const [prevCategoryId, setPrevCategoryId] = useState(categoryId);
+  if (prevCategoryId !== categoryId) {
+    setPrevCategoryId(categoryId);
+    setExpanded(false);
+    setMods([]);
+    setLoadState('idle');
+    setError(null);
+    setQuery('');
+  }
 
   const installedSet = useMemo(() => new Set(installedModIds), [installedModIds]);
 
@@ -179,12 +176,10 @@ export default function DownloadableSkinsSection({
     }
   }, [categoryId]);
 
-  // Load when first expanded
-  useEffect(() => {
-    if (expanded && loadState === 'idle') {
-      loadMods();
-    }
-  }, [expanded, loadState, loadMods]);
+  const handleOpen = useCallback(() => {
+    setExpanded(true);
+    if (loadState === 'idle') loadMods();
+  }, [loadState, loadMods]);
 
   // Download event listeners
   useEffect(() => {
@@ -277,7 +272,7 @@ export default function DownloadableSkinsSection({
       <div className="border-t border-border pt-3 mt-3">
         <button
           type="button"
-          onClick={() => setExpanded(true)}
+          onClick={handleOpen}
           className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg bg-accent hover:bg-accent-hover text-white text-sm font-semibold transition-colors cursor-pointer"
         >
           <Download className="w-4 h-4" />

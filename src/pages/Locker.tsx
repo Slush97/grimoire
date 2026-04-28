@@ -516,15 +516,17 @@ function HeroOverlay({
   selectedMinaVariant,
   onApplyMinaVariant,
 }: HeroOverlayProps) {
-  const [renderSrc, setRenderSrc] = useState('');
+  const [renderSrc, setRenderSrc] = useState(() => getHeroRenderPath(hero.name));
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
+  const [prevHero, setPrevHero] = useState(hero);
 
-  useEffect(() => {
+  if (prevHero !== hero) {
+    setPrevHero(hero);
     setRenderSrc(getHeroRenderPath(hero.name));
     setRenderFallbackStep(0);
     setNameFailed(false);
-  }, [hero]);
+  }
 
   const handleRenderError = () => {
     if (renderFallbackStep === 0) {
@@ -763,35 +765,38 @@ function HeroGalleryCard({
   const wikiUrl = getHeroWikiUrl(hero.name);
   const namePath = getHeroNamePath(hero.name);
   const facePositionX = getHeroFacePosition(hero.name);
-  const [renderSrc, setRenderSrc] = useState('');
   const [fallbackStep, setFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
-  const [isVisible, setIsVisible] = useState(false);
+  const [hasIntersected, setHasIntersected] = useState(false);
   const [renderLoaded, setRenderLoaded] = useState(false);
   const [nameLoaded, setNameLoaded] = useState(false);
   const cardRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (isActive && !isVisible) {
-      setIsVisible(true);
-    }
-  }, [isActive, isVisible]);
+  // Card is visible once the active hero changes to it, an IntersectionObserver
+  // sees it scroll into view, or the platform lacks IntersectionObserver entirely
+  // (in which case eager-render). Derived rather than chained setState-in-effects.
+  const supportsIntersectionObserver =
+    typeof window !== 'undefined' && 'IntersectionObserver' in window;
+  const isVisible = isActive || hasIntersected || !supportsIntersectionObserver;
+
+  const renderSrc = !isVisible
+    ? ''
+    : fallbackStep === 0
+      ? renderLocal
+      : fallbackStep === 1
+        ? wikiUrl
+        : fallbackStep === 2
+          ? (hero.iconUrl ?? '')
+          : '';
 
   useEffect(() => {
-    if (isVisible) {
-      setRenderSrc(renderLocal);
-      return;
-    }
-    if (typeof window === 'undefined' || !('IntersectionObserver' in window)) {
-      setIsVisible(true);
-      return;
-    }
+    if (isVisible) return;
     const node = cardRef.current;
     if (!node) return;
     const observer = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          setIsVisible(true);
+          setHasIntersected(true);
           observer.disconnect();
         }
       },
@@ -799,21 +804,18 @@ function HeroGalleryCard({
     );
     observer.observe(node);
     return () => observer.disconnect();
-  }, [isVisible, renderLocal]);
+  }, [isVisible]);
 
   const handleRenderError = () => {
     setRenderLoaded(false);
     if (fallbackStep === 0) {
-      setRenderSrc(wikiUrl);
       setFallbackStep(1);
       return;
     }
     if (fallbackStep === 1 && hero.iconUrl) {
-      setRenderSrc(hero.iconUrl);
       setFallbackStep(2);
       return;
     }
-    setRenderSrc('');
     setFallbackStep(3);
   };
 

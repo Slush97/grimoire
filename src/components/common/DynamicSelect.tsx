@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, type SelectHTMLAttributes } from 'react';
+import { useState, useCallback, type SelectHTMLAttributes } from 'react';
 import { ChevronDown } from 'lucide-react';
 
 interface DynamicSelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange'> {
@@ -21,24 +21,19 @@ export function DynamicSelect({
     disabled,
     ...props
 }: DynamicSelectProps) {
-    const selectRef = useRef<HTMLSelectElement>(null);
     const [width, setWidth] = useState<number | undefined>(undefined);
 
-    // Find the current label for measurement
     const currentLabel = options.find(opt => String(opt.value) === String(value))?.label || '';
 
-    // Measure text width using canvas for accuracy
-    useEffect(() => {
-        if (!selectRef.current) return;
-
+    // Callback ref re-runs when currentLabel changes, measuring against the live DOM node
+    // instead of doing it from a useEffect (which would trip react-hooks/set-state-in-effect).
+    const measureRef = useCallback((node: HTMLSelectElement | null) => {
+        if (!node) return;
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
-
-        // Get computed font from the select element
-        const computedStyle = window.getComputedStyle(selectRef.current);
-        ctx.font = `${computedStyle.fontSize} ${computedStyle.fontFamily}`;
-
+        const computed = window.getComputedStyle(node);
+        ctx.font = `${computed.fontSize} ${computed.fontFamily}`;
         const textWidth = ctx.measureText(currentLabel).width;
         // Text + left padding (12px) + gap before arrow (8px) + arrow (16px) + right padding (8px) + border (2px)
         setWidth(Math.ceil(textWidth) + 46);
@@ -47,7 +42,7 @@ export function DynamicSelect({
     return (
         <div className="relative inline-flex">
             <select
-                ref={selectRef}
+                ref={measureRef}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 disabled={disabled}
