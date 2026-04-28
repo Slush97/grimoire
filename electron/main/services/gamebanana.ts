@@ -461,7 +461,7 @@ export async function fetchSubmissions(
     console.log('[fetchSubmissions] Response:', JSON.stringify(raw).slice(0, 500));
 
     // Handle case where response is an array instead of object
-    let records = Array.isArray(raw) ? raw : (raw._aRecords || []);
+    const records = Array.isArray(raw) ? raw : (raw._aRecords || []);
     const metadata = Array.isArray(raw) ? null : raw._aMetadata;
 
     return {

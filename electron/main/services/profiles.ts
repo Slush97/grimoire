@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
-import { scanMods, enableMod, disableMod, setModPriority, Mod } from './mods';
+import { scanMods, enableMod, disableMod, setModPriority } from './mods';
 import { readAutoexec, writeAutoexec } from './autoexec';
 
 export interface ProfileMod {

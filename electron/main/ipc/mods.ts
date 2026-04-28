@@ -14,7 +14,7 @@ import {
     Mod,
 } from '../services/mods';
 import { getAddonsPath } from '../services/deadlock';
-import { getModMetadata, loadMetadata, setModMetadata } from '../services/metadata';
+import { getModMetadata, setModMetadata } from '../services/metadata';
 
 /**
  * Get the active deadlock path from settings

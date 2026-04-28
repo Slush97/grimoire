@@ -1,4 +1,4 @@
-import { ipcMain, dialog, BrowserWindow, shell } from 'electron';
+import { ipcMain, dialog, shell } from 'electron';
 import { getMainWindow } from '../index';
 import { loadSettings } from '../services/settings';
 import {
@@ -9,9 +9,28 @@ import {
     CleanupResult,
 } from '../services/system';
 import { listArchiveContents } from '../services/extract';
-import { existsSync, readdirSync, renameSync, copyFileSync, unlinkSync } from 'fs';
-import { join, basename, extname } from 'path';
+import {
+    existsSync,
+    readdirSync,
+    renameSync,
+    copyFileSync,
+    unlinkSync,
+    mkdirSync,
+    createWriteStream,
+    rmdirSync,
+} from 'fs';
+import { join, basename } from 'path';
+import { spawn } from 'child_process';
+import { tmpdir } from 'os';
+import https from 'https';
+import http from 'http';
 import { getAddonsPath, getDisabledPath } from '../services/deadlock';
+import { getUserDataPath } from '../utils/paths';
+import {
+    getModMetadata,
+    setModMetadata,
+    deleteModMetadata,
+} from '../services/metadata';
 
 interface OpenDialogOptions {
     directory?: boolean;
@@ -123,13 +142,7 @@ ipcMain.handle('fix-gameinfo', (): GameinfoStatus => {
 
 // download-mina-variations
 // Downloads the Midnight Mina variations archive from GameBanana
-ipcMain.handle('download-mina-variations', async (_, mainWindow): Promise<string> => {
-    const { getUserDataPath } = require('../utils/paths');
-    const https = require('https');
-    const http = require('http');
-    const fs = require('fs');
-    const { spawn } = require('child_process');
-
+ipcMain.handle('download-mina-variations', async (): Promise<string> => {
     const userDataPath = getUserDataPath();
     const minaAssetsDir = join(userDataPath, 'mina-assets');
     const archivePath = join(minaAssetsDir, 'sts_midnight_mina_10.7z');
@@ -143,7 +156,7 @@ ipcMain.handle('download-mina-variations', async (_, mainWindow): Promise<string
 
     // Create the assets directory
     if (!existsSync(minaAssetsDir)) {
-        fs.mkdirSync(minaAssetsDir, { recursive: true });
+        mkdirSync(minaAssetsDir, { recursive: true });
     }
 
     console.log('[downloadMinaVariations] Downloading from GameBanana...');
@@ -166,14 +179,14 @@ ipcMain.handle('download-mina-variations', async (_, mainWindow): Promise<string
                     reject(new Error(`Download failed with status ${response.statusCode}`));
                     return;
                 }
-                const fileStream = fs.createWriteStream(archivePath);
+                const fileStream = createWriteStream(archivePath);
                 response.pipe(fileStream);
                 fileStream.on('finish', () => {
                     fileStream.close();
                     resolve();
                 });
                 fileStream.on('error', (err: Error) => {
-                    fs.unlinkSync(archivePath);
+                    unlinkSync(archivePath);
                     reject(err);
                 });
             }).on('error', reject);
@@ -196,7 +209,7 @@ ipcMain.handle('download-mina-variations', async (_, mainWindow): Promise<string
     // Clean up the large archive to save space
     if (existsSync(archivePath)) {
         console.log('[downloadMinaVariations] Cleaning up large archive...');
-        fs.unlinkSync(archivePath);
+        unlinkSync(archivePath);
     }
 
     if (!existsSync(variationsPath)) {
@@ -280,14 +293,8 @@ ipcMain.handle(
 
         console.log('[applyMinaVariant] Applying variant:', { archivePath, archiveEntry, presetLabel });
 
-        // Extract the VPK from the archive to a temp location
-        const { spawn } = require('child_process');
-        const os = require('os');
-        const fs = require('fs');
-        const path = require('path');
-
-        const tempDir = join(os.tmpdir(), `mina-variant-${Date.now()}`);
-        fs.mkdirSync(tempDir, { recursive: true });
+        const tempDir = join(tmpdir(), `mina-variant-${Date.now()}`);
+        mkdirSync(tempDir, { recursive: true });
 
         try {
             // Extract specific file from 7z
@@ -301,7 +308,7 @@ ipcMain.handle(
             });
 
             // Find the extracted VPK
-            const extractedFiles = fs.readdirSync(tempDir);
+            const extractedFiles = readdirSync(tempDir);
             const vpkFile = extractedFiles.find((f: string) => f.toLowerCase().endsWith('.vpk'));
 
             if (!vpkFile) {
@@ -337,7 +344,6 @@ ipcMain.handle(
             const destPath = join(disabledPath, destFileName);
 
             // Remove any existing Mina preset VPKs that we created (identified via metadata)
-            const { getModMetadata, deleteModMetadata } = require('../services/metadata');
             const disabledEntries = existsSync(disabledPath) ? readdirSync(disabledPath) : [];
             const addonsEntries = existsSync(addonsPath) ? readdirSync(addonsPath) : [];
 
@@ -361,7 +367,6 @@ ipcMain.handle(
             console.log('[applyMinaVariant] Installed preset to:', destPath);
 
             // Save metadata with isMinaPreset flag so we can identify it later
-            const { setModMetadata } = require('../services/metadata');
             setModMetadata(destFileName, {
                 modName: `Midnight Mina — ${presetLabel}`,
                 categoryId: heroCategoryId,
@@ -374,11 +379,11 @@ ipcMain.handle(
         } finally {
             // Cleanup temp directory
             try {
-                const entries = fs.readdirSync(tempDir);
+                const entries = readdirSync(tempDir);
                 for (const entry of entries) {
-                    fs.unlinkSync(join(tempDir, entry));
+                    unlinkSync(join(tempDir, entry));
                 }
-                fs.rmdirSync(tempDir);
+                rmdirSync(tempDir);
             } catch {
                 // Ignore cleanup errors
             }

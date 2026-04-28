@@ -1,28 +1,20 @@
 import { openSync, readSync, closeSync, existsSync } from 'fs';
-import { join, basename } from 'path';
 
 /**
  * VPK Header Structure (Version 2):
  * - Signature: 4 bytes (0x55AA1234)
  * - Version: 4 bytes
  * - TreeSize: 4 bytes (size of directory tree in bytes)
- * 
+ *
  * After header comes the directory tree which contains:
  * - Extension strings (null-terminated)
  * - Path strings (null-terminated)
  * - Filename strings (null-terminated)
- * 
+ *
  * We parse this to extract all file paths the VPK contains.
  */
 
 const VPK_SIGNATURE = 0x55AA1234;
-
-interface VpkDirectoryEntry {
-    extension: string;
-    path: string;
-    filename: string;
-    fullPath: string;
-}
 
 /**
  * Read a null-terminated string from a buffer at the given offset
@@ -184,18 +176,18 @@ export function extractHeroFromPath(filePath: string): string | null {
     // Hero path patterns for Source 2 games (including Deadlock which uses heroes_wip)
     const patterns = [
         // Standard Source 2 patterns
-        /models\/heroes\/([^\/]+)\//i,
-        /materials\/models\/heroes\/([^\/]+)\//i,
-        /particles\/heroes\/([^\/]+)\//i,
-        /sounds\/heroes\/([^\/]+)\//i,
-        /scripts\/heroes\/([^\/]+)/i,
+        /models\/heroes\/([^/]+)\//i,
+        /materials\/models\/heroes\/([^/]+)\//i,
+        /particles\/heroes\/([^/]+)\//i,
+        /sounds\/heroes\/([^/]+)\//i,
+        /scripts\/heroes\/([^/]+)/i,
         // Deadlock-specific patterns (uses heroes_wip instead of heroes)
-        /models\/heroes_wip\/([^\/]+)\//i,
-        /materials\/models\/heroes_wip\/([^\/]+)\//i,
-        /materials\/heroes_wip\/([^\/]+)\//i,
-        /particles\/heroes_wip\/([^\/]+)\//i,
-        /sounds\/heroes_wip\/([^\/]+)\//i,
-        /scripts\/heroes_wip\/([^\/]+)/i,
+        /models\/heroes_wip\/([^/]+)\//i,
+        /materials\/models\/heroes_wip\/([^/]+)\//i,
+        /materials\/heroes_wip\/([^/]+)\//i,
+        /particles\/heroes_wip\/([^/]+)\//i,
+        /sounds\/heroes_wip\/([^/]+)\//i,
+        /scripts\/heroes_wip\/([^/]+)/i,
     ];
 
     for (const pattern of patterns) {

@@ -2,11 +2,11 @@ import { createWriteStream, existsSync } from 'fs';
 import { promises as fs, statSync } from 'fs';
 import { join, basename } from 'path';
 import { BrowserWindow } from 'electron';
-import { getAddonsPath, getDisabledPath } from './deadlock';
+import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive } from './extract';
 import { setModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
-import { findNextAvailablePriority, getUsedPriorities } from './mods';
+import { getUsedPriorities } from './mods';
 import { validateDownloadUrl, validateFileSize } from './security';
 import https from 'https';
 import http from 'http';
@@ -307,7 +307,7 @@ async function executeDownload(
     args: DownloadModArgs,
     mainWindow: BrowserWindow | null
 ): Promise<void> {
-    const { modId, fileId, fileName, section = 'Mod', categoryId } = args;
+    const { modId, fileId, fileName, section = 'Mod' } = args;
 
     console.log(`[downloadMod] Starting download: modId=${modId}, fileId=${fileId}, fileName=${fileName}`);
 

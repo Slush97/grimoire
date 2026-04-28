@@ -1,5 +1,5 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renameSync } from 'fs';
-import { join, extname, basename } from 'path';
+import { join, extname } from 'path';
 import { getGameinfoPath, getAddonsPath, getDisabledPath } from './deadlock';
 
 // The canonical SearchPaths block for Deadlock with mod support
