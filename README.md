@@ -19,6 +19,14 @@
 - **Autoexec Manager** — Configure console commands without editing files
 - **Profiles** — Save and switch between mod configurations
 
+## Screenshots
+
+![Installed mods](docs/screenshots/installed.png)
+
+![Browse GameBanana](docs/screenshots/browse.png)
+
+![Hero Locker](docs/screenshots/locker.png)
+
 ## Download
 
 Get the latest release for your platform:
