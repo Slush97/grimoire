@@ -22,9 +22,12 @@ Requires Deadlock installed via Steam.
 - Browse and install mods from GameBanana
 - Enable, disable, reorder, and detect conflicts
 - Per-hero skin locker
-- Crosshair editor with live preview
 - Autoexec manager
 - Profiles for saving and swapping mod configurations
+
+Experimental:
+
+- Crosshair editor with live preview
 
 ## Screenshots
 
