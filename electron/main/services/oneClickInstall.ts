@@ -79,17 +79,16 @@ export async function handleOneClickInstall(
         return;
     }
 
-    // Resolve the mod name up front so the toast can show "Installing
-    // <Mod Name>" instead of the bare archive filename. Best-effort: if the
-    // GB API call fails or no modId was passed, the renderer falls back to
-    // deriving a name from the URL.
-    let modName: string | undefined;
+    // Resolve mod details up front so we can (a) show "Installing <Mod Name>"
+    // in the toast and (b) hand the same payload to the download path so it
+    // doesn't double-hit the GB API (which previously caused the second call
+    // to occasionally rate-limit-fail and lose thumbnail/category metadata).
+    let enrichedDetails: Awaited<ReturnType<typeof fetchModDetails>> | undefined;
     if (parsed.modId !== undefined && parsed.modId > 0) {
         try {
-            const details = await fetchModDetails(parsed.modId, parsed.modType ?? 'Mod');
-            modName = details.name;
+            enrichedDetails = await fetchModDetails(parsed.modId, parsed.modType ?? 'Mod');
         } catch (err) {
-            console.warn('[oneClick] Could not resolve mod name for toast:', err);
+            console.warn('[oneClick] Could not resolve mod details:', err);
         }
     }
 
@@ -97,7 +96,7 @@ export async function handleOneClickInstall(
         archiveUrl: parsed.archiveUrl,
         modId: parsed.modId,
         modType: parsed.modType,
-        modName,
+        modName: enrichedDetails?.name,
     });
 
     try {
@@ -107,6 +106,7 @@ export async function handleOneClickInstall(
                 archiveUrl: parsed.archiveUrl,
                 modId: parsed.modId,
                 modType: parsed.modType,
+                enrichedDetails,
             },
             mainWindow
         );

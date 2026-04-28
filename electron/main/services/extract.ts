@@ -82,6 +82,37 @@ export async function checkOneClickOptOut(
 }
 
 /**
+ * Scan an archive's listing for files with extensions that are unusual for a
+ * Deadlock mod (executables, scripts, installers). Deadlock mods are pure VPK
+ * content packs — there's no legitimate reason to ship a .exe or .dll. The
+ * extract pipeline already filters by extension so these files can't reach
+ * the game folder, but per the GameBanana 1-Click spec we still surface them
+ * to the user before installing.
+ */
+const SUSPICIOUS_EXTENSIONS = new Set([
+    '.exe', '.dll', '.bat', '.cmd', '.com', '.msi', '.scr',
+    '.ps1', '.psm1', '.vbs', '.js', '.jar', '.lnk', '.reg', '.hta', '.wsf',
+]);
+
+export async function scanSuspiciousFiles(archivePath: string): Promise<string[]> {
+    let entries: string[];
+    try {
+        entries = await listArchiveContents(archivePath);
+    } catch {
+        return [];
+    }
+
+    const flagged: string[] = [];
+    for (const entry of entries) {
+        const ext = extname(entry).toLowerCase();
+        if (SUSPICIOUS_EXTENSIONS.has(ext)) {
+            flagged.push(entry);
+        }
+    }
+    return flagged;
+}
+
+/**
  * Extract an archive to a destination directory
  * Returns the list of extracted VPK files
  */

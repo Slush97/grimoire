@@ -72,6 +72,13 @@ export interface ElectronAPI {
 
     // GameBanana 1-Click protocol handler
     onOneClickInstall: (callback: (data: OneClickInstallData) => void) => () => void;
+    onOneClickSuspiciousFiles: (
+        callback: (data: OneClickSuspiciousFilesData) => void
+    ) => () => void;
+    respondToOneClickSuspiciousFiles: (
+        requestId: string,
+        accepted: boolean
+    ) => Promise<void>;
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
@@ -419,6 +426,12 @@ interface OneClickInstallData {
     error?: string;
 }
 
+interface OneClickSuspiciousFilesData {
+    requestId: string;
+    modName: string;
+    files: string[];
+}
+
 interface GameBananaModsResponse {
     records: unknown[];
     totalCount: number;
@@ -716,6 +729,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('one-click-install', handler);
         return () => ipcRenderer.removeListener('one-click-install', handler);
     },
+
+    onOneClickSuspiciousFiles: (callback: (data: OneClickSuspiciousFilesData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: OneClickSuspiciousFilesData) => callback(data);
+        ipcRenderer.on('one-click-suspicious-files', handler);
+        return () => ipcRenderer.removeListener('one-click-suspicious-files', handler);
+    },
+
+    respondToOneClickSuspiciousFiles: (requestId: string, accepted: boolean) =>
+        ipcRenderer.invoke('one-click-suspicious-response', { requestId, accepted }),
 
     // Conflicts
     getConflicts: () => ipcRenderer.invoke('get-conflicts'),

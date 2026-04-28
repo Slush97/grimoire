@@ -6,8 +6,10 @@ import WelcomeModal from './WelcomeModal';
 import SyncIndicator from './SyncIndicator';
 import DownloadQueueIndicator from './DownloadQueueIndicator';
 import { Button } from './common/ui';
+import { ConfirmModal } from './common/PageComponents';
 import { getSettings, setSettings, getGameinfoStatus, fixGameinfo } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import type { OneClickSuspiciousFilesData } from '../types/electron';
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -17,6 +19,7 @@ export default function Layout() {
   const [gameinfoAlert, setGameinfoAlert] = useState<string | null>(null);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
   const [oneClickBanner, setOneClickBanner] = useState<{ message: string; isError: boolean } | null>(null);
+  const [suspiciousPrompt, setSuspiciousPrompt] = useState<OneClickSuspiciousFilesData | null>(null);
 
   useEffect(() => {
     const checkFirstRun = async () => {
@@ -89,6 +92,22 @@ export default function Layout() {
     );
     return () => clearTimeout(timeout);
   }, [oneClickBanner]);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onOneClickSuspiciousFiles((data) => {
+      setSuspiciousPrompt(data);
+    });
+    return unsubscribe;
+  }, []);
+
+  const respondToSuspicious = async (accepted: boolean) => {
+    if (!suspiciousPrompt) return;
+    await window.electronAPI.respondToOneClickSuspiciousFiles(
+      suspiciousPrompt.requestId,
+      accepted
+    );
+    setSuspiciousPrompt(null);
+  };
 
   const handleFixGameinfo = async () => {
     setIsFixingGameinfo(true);
@@ -175,6 +194,40 @@ export default function Layout() {
           </div>
         </div>
       )}
+      <ConfirmModal
+        isOpen={!!suspiciousPrompt}
+        title="Suspicious files detected"
+        variant="danger"
+        confirmLabel="Install anyway"
+        cancelLabel="Cancel"
+        onConfirm={() => respondToSuspicious(true)}
+        onCancel={() => respondToSuspicious(false)}
+        message={
+          suspiciousPrompt ? (
+            <div className="space-y-3">
+              <p>
+                <span className="font-semibold text-text-primary">{suspiciousPrompt.modName}</span>{' '}
+                contains files that aren&apos;t typical for a Deadlock mod:
+              </p>
+              <ul className="max-h-40 overflow-y-auto rounded-md border border-border bg-bg-tertiary px-3 py-2 text-xs font-mono text-yellow-200">
+                {suspiciousPrompt.files.slice(0, 30).map((f) => (
+                  <li key={f}>{f}</li>
+                ))}
+                {suspiciousPrompt.files.length > 30 && (
+                  <li className="text-text-secondary">
+                    …and {suspiciousPrompt.files.length - 30} more
+                  </li>
+                )}
+              </ul>
+              <p className="text-xs">
+                Grimoire only extracts <code className="rounded bg-bg-tertiary px-1">.vpk</code> files
+                — these won&apos;t be installed even if you continue. Review the mod&apos;s GameBanana
+                page if anything looks off.
+              </p>
+            </div>
+          ) : null
+        }
+      />
       {showWelcome && <WelcomeModal onComplete={handleSetupComplete} />}
     </div>
   );

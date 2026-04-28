@@ -3,7 +3,8 @@ import { promises as fs, statSync } from 'fs';
 import { join, basename, extname } from 'path';
 import { BrowserWindow } from 'electron';
 import { getDisabledPath } from './deadlock';
-import { extractArchive, isArchive, checkOneClickOptOut } from './extract';
+import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles } from './extract';
+import { randomUUID } from 'crypto';
 import { setModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
 import { getUsedPriorities } from './mods';
@@ -23,6 +24,8 @@ export interface OneClickInstallArgs {
     archiveUrl: string;
     modType?: string;
     modId?: number;
+    /** Optional pre-fetched details — avoids re-hitting the GB API. */
+    enrichedDetails?: GameBananaModDetails;
 }
 
 // Download queue to prevent race conditions with VPK priority assignment
@@ -30,7 +33,7 @@ interface QueuedDownload {
     deadlockPath: string;
     args: DownloadModArgs;
     directUrl?: string;
-    enrichMetadata?: boolean;
+    enrichedDetails?: GameBananaModDetails;
     mainWindow: BrowserWindow | null;
     resolve: () => void;
     reject: (error: Error) => void;
@@ -149,7 +152,7 @@ export function downloadModFromUrl(
             deadlockPath,
             args,
             directUrl: oneClick.archiveUrl,
-            enrichMetadata: !!oneClick.modId,
+            enrichedDetails: oneClick.enrichedDetails,
             mainWindow,
             resolve,
             reject,
@@ -198,7 +201,7 @@ async function processQueue(): Promise<void> {
                     item.deadlockPath,
                     item.args,
                     item.directUrl,
-                    !!item.enrichMetadata,
+                    item.enrichedDetails,
                     item.mainWindow
                 );
             } else {
@@ -574,6 +577,35 @@ async function executeDownload(
     mainWindow?.webContents.send('download-complete', { modId, fileId });
 }
 
+// Promises awaiting the user's decision on a suspicious-file modal. Keyed by
+// requestId so the renderer can respond out-of-order or from any window.
+const pendingSuspiciousDecisions = new Map<string, (accepted: boolean) => void>();
+
+/** Renderer-facing IPC entry point: deliver the user's modal decision. */
+export function resolveSuspiciousFileDecision(requestId: string, accepted: boolean): void {
+    const resolver = pendingSuspiciousDecisions.get(requestId);
+    if (resolver) {
+        resolver(accepted);
+        pendingSuspiciousDecisions.delete(requestId);
+    }
+}
+
+function awaitSuspiciousDecision(
+    requestId: string,
+    modName: string,
+    files: string[],
+    mainWindow: BrowserWindow | null
+): Promise<boolean> {
+    return new Promise((resolve) => {
+        pendingSuspiciousDecisions.set(requestId, resolve);
+        mainWindow?.webContents.send('one-click-suspicious-files', {
+            requestId,
+            modName,
+            files,
+        });
+    });
+}
+
 /**
  * Sniff archive format from magic bytes so we don't have to trust the URL's
  * extension. GameBanana's `/dl/<id>` redirects don't expose the real filename
@@ -605,7 +637,7 @@ async function executeOneClickDownload(
     deadlockPath: string,
     args: DownloadModArgs,
     archiveUrl: string,
-    enrichMetadata: boolean,
+    enrichedDetails: GameBananaModDetails | undefined,
     mainWindow: BrowserWindow | null
 ): Promise<void> {
     const { modId, fileId, fileName, section = 'Mod' } = args;
@@ -669,11 +701,42 @@ async function executeOneClickDownload(
             });
             throw new Error(optOut.reason ?? '1-Click install disabled by mod author');
         }
+
+        // GameBanana 1-Click spec: scan for suspicious files (executables /
+        // scripts) and prompt the user before installing. The extract
+        // pipeline already filters by extension so these files cannot reach
+        // the game folder, but the prompt gives users transparency and the
+        // chance to bail on a sketchy archive.
+        const suspicious = await scanSuspiciousFiles(downloadPath);
+        if (suspicious.length > 0) {
+            const requestId = randomUUID();
+            const displayName = enrichedDetails?.name ?? fileName;
+            const accepted = await awaitSuspiciousDecision(
+                requestId,
+                displayName,
+                suspicious,
+                mainWindow
+            );
+            if (!accepted) {
+                if (existsSync(downloadPath)) {
+                    await fs.unlink(downloadPath).catch(() => { });
+                }
+                mainWindow?.webContents.send('download-error', {
+                    modId,
+                    fileId,
+                    errorCode: 'CANCELLED_BY_USER',
+                    message: 'Install cancelled — archive contained suspicious files.',
+                });
+                throw new Error('User cancelled install due to suspicious files');
+            }
+        }
     }
 
-    // Optional metadata enrichment (mod name, thumbnail, NSFW, category).
-    let enriched: GameBananaModDetails | null = null;
-    if (enrichMetadata && args.modId !== undefined && args.modId > 0) {
+    // Use pre-fetched details from the protocol handler when present so we
+    // don't double-hit the GB API. Fall back to a fetch only when the caller
+    // didn't pre-fetch (e.g. future callers, or if the pre-fetch failed).
+    let enriched: GameBananaModDetails | null = enrichedDetails ?? null;
+    if (!enriched && args.modId !== undefined && args.modId > 0) {
         try {
             enriched = await fetchModDetails(args.modId, section);
         } catch (err) {

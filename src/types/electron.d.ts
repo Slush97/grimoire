@@ -126,6 +126,12 @@ export interface OneClickInstallData {
     error?: string;
 }
 
+export interface OneClickSuspiciousFilesData {
+    requestId: string;
+    modName: string;
+    files: string[];
+}
+
 export interface SyncProgressData {
     section: string;
     currentPage: number;
@@ -287,6 +293,13 @@ export interface ElectronAPI {
 
     // GameBanana 1-Click protocol handler
     onOneClickInstall: (callback: (data: OneClickInstallData) => void) => () => void;
+    onOneClickSuspiciousFiles: (
+        callback: (data: OneClickSuspiciousFilesData) => void
+    ) => () => void;
+    respondToOneClickSuspiciousFiles: (
+        requestId: string,
+        accepted: boolean
+    ) => Promise<void>;
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
