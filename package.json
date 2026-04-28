@@ -23,8 +23,7 @@
     "lint": "eslint .",
     "package": "electron-vite build && electron-builder",
     "package:linux": "electron-vite build && electron-builder --linux",
-    "package:win": "electron-vite build && electron-builder --win",
-    "package:mac": "electron-vite build && electron-builder --mac"
+    "package:win": "electron-vite build && electron-builder --win"
   },
   "dependencies": {
     "7zip-bin": "^5.2.0",

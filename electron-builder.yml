@@ -40,12 +40,6 @@ win:
   target:
     - nsis
   icon: resources/icon.ico
-mac:
-  target:
-    - dmg
-    - zip
-  category: public.app-category.games
-  icon: resources/icon.icns
 nsis:
   oneClick: false
   perMachine: false
