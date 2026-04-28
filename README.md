@@ -51,6 +51,13 @@ from source, or audit any release artifact themselves before running
 it. Reports of security or trust concerns are welcome via
 [Issues](../../issues).
 
+Each release ships a `SHA256SUMS` file listing the hash of every
+installer. Verify a download with `sha256sum -c SHA256SUMS` (Linux) or
+`Get-FileHash <file>` (PowerShell) and compare against the listing.
+Releases also publish [build provenance attestations](https://docs.github.com/en/actions/security-guides/using-artifact-attestations-to-establish-provenance-for-builds)
+that tie each artifact back to the exact commit and workflow run that
+produced it; verify with `gh attestation verify <file> --owner Slush97`.
+
 Windows installers are not yet code-signed, so SmartScreen will show an
 "Unknown Publisher" warning on first run — click **More info → Run
 anyway** to proceed. Free Authenticode signing through the SignPath

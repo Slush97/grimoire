@@ -25,6 +25,11 @@ jobs:
 
     runs-on: ${{ matrix.os }}
 
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -72,6 +77,29 @@ jobs:
             exit 1
           fi
 
+      - name: Generate SHA256 checksums
+        shell: bash
+        run: |
+          cd release
+          # Hash user-facing artifacts only (skip auto-update metadata and blockmaps).
+          shopt -s nullglob
+          files=(*.exe *.AppImage *.deb)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "ERROR: no artifact files found to hash"
+            exit 1
+          fi
+          sha256sum "${files[@]}" > "SHA256SUMS-${{ matrix.platform }}.txt"
+          echo "=== SHA256SUMS-${{ matrix.platform }}.txt ==="
+          cat "SHA256SUMS-${{ matrix.platform }}.txt"
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            release/*.exe
+            release/*.AppImage
+            release/*.deb
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -97,6 +125,21 @@ jobs:
 
       - name: List downloaded artifacts
         run: ls -la artifacts/ 2>/dev/null || echo "No artifacts"
+
+      - name: Combine per-platform checksums into SHA256SUMS
+        shell: bash
+        run: |
+          cd artifacts
+          shopt -s nullglob
+          parts=(SHA256SUMS-*.txt)
+          if [ ${#parts[@]} -eq 0 ]; then
+            echo "ERROR: no per-platform SHA256SUMS files found"
+            exit 1
+          fi
+          cat "${parts[@]}" > SHA256SUMS
+          rm "${parts[@]}"
+          echo "=== SHA256SUMS ==="
+          cat SHA256SUMS
 
       - name: Create Release
         uses: softprops/action-gh-release@v2
