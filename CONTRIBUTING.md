@@ -1,65 +1,58 @@
-# Contributing to Deadlock Mod Manager
+# Contributing to Grimoire
 
-Thanks for your interest in contributing! This guide will help you get started.
+Thanks for your interest in contributing.
 
-## Development Setup
+## Development setup
 
-### Prerequisites
+Requirements:
 
 - [Node.js](https://nodejs.org/) 20+
 - [pnpm](https://pnpm.io/) 9+
 - [Git](https://git-scm.com/)
 
-### Getting Started
-
 ```bash
-git clone https://github.com/Slush97/modmanager.git
-cd modmanager
+git clone https://github.com/Slush97/grimoire.git
+cd grimoire
 pnpm install
+pnpm exec electron-rebuild -f -w better-sqlite3
 pnpm dev
 ```
 
-## Code Style
+## Code style
 
-- **TypeScript** — All code should be typed
-- **ESLint** — Run `pnpm lint` before committing
-- **Formatting** — Use your editor's formatting or Prettier
+- TypeScript everywhere
+- `pnpm lint` before committing
+- CI runs typecheck and build on every PR
 
-## Project Architecture
+## Project layout
 
 | Directory | Purpose |
 |-----------|---------|
 | `electron/main/services/` | Backend logic (mods, downloads, API calls) |
-| `electron/main/ipc/` | IPC handlers connecting frontend ↔ backend |
+| `electron/main/ipc/` | IPC handlers connecting frontend to backend |
 | `src/pages/` | Page components |
 | `src/components/` | Reusable UI components |
-| `src/stores/` | Zustand state management |
+| `src/stores/` | Zustand state |
 
-## Making Changes
+## Workflow
 
-1. **Fork** the repository
-2. **Create a branch** from `main` (`git checkout -b feat/my-feature`)
-3. **Make your changes** with clear commit messages
-4. **Test** your changes locally
-5. **Push** and open a Pull Request
+1. Fork the repo
+2. Branch from `main` (`git checkout -b feat/my-feature`)
+3. Make changes with conventional-commit messages
+4. Test locally
+5. Open a PR
 
-### Commit Messages
+Conventional commit prefixes used in this repo: `feat:`, `fix:`, `docs:`, `refactor:`, `chore:`, `ui:`, `ci:`.
 
-Use conventional commits:
-- `feat:` new feature
-- `fix:` bug fix
-- `docs:` documentation changes
-- `refactor:` code restructuring
-- `chore:` maintenance tasks
+## Reporting issues
 
-## Reporting Issues
+Include:
 
-When reporting bugs, please include:
 - Steps to reproduce
 - Expected vs actual behavior
-- Your OS and app version
-- Relevant error messages or logs
+- OS and app version
+- Relevant logs (Electron's main-process log lives in `%APPDATA%/Grimoire/logs/` on Windows)
 
-## Questions?
+## Questions
 
-Open a [Discussion](../../discussions) for questions or ideas.
+Open a [Discussion](../../discussions).
