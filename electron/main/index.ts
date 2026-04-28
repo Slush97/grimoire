@@ -1,6 +1,12 @@
 import { app, BrowserWindow, shell, session } from 'electron';
-import { join } from 'path';
+import { join, resolve } from 'path';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
+import {
+    GRIMOIRE_PROTOCOL,
+    findGrimoireUrlInArgv,
+    handleOneClickInstall,
+    parseGrimoireUrl,
+} from './services/oneClickInstall';
 
 // Stop Electron from registering with the Windows media session / hardware
 // media key stack. We never use transport controls, but opting in makes Win11
@@ -77,17 +83,43 @@ function createWindow(): void {
     }
 }
 
+// Register the `grimoire:` URL scheme so Windows hands `grimoire:...` URLs to
+// this app. The packaged NSIS installer also writes registry entries via the
+// `protocols:` block in electron-builder.yml, but the runtime call covers
+// dev/portable launches and re-asserts ownership when needed.
+if (process.defaultApp) {
+    if (process.argv.length >= 2) {
+        app.setAsDefaultProtocolClient(GRIMOIRE_PROTOCOL, process.execPath, [
+            resolve(process.argv[1]),
+        ]);
+    }
+} else {
+    app.setAsDefaultProtocolClient(GRIMOIRE_PROTOCOL);
+}
+
+// Capture any `grimoire:` URL from the launch args. We dispatch it after the
+// renderer has loaded so the UI can show the toast before extraction starts.
+const initialProtocolUrl = findGrimoireUrlInArgv(process.argv);
+
 // Single instance lock
 const gotTheLock = app.requestSingleInstanceLock();
 
 if (!gotTheLock) {
     app.quit();
 } else {
-    app.on('second-instance', () => {
+    app.on('second-instance', (_event, argv) => {
         // Focus the main window if a second instance is attempted
         if (mainWindow) {
             if (mainWindow.isMinimized()) mainWindow.restore();
             mainWindow.focus();
+        }
+
+        const url = findGrimoireUrlInArgv(argv);
+        if (url) {
+            const parsed = parseGrimoireUrl(url);
+            if (parsed) {
+                void handleOneClickInstall(parsed, mainWindow);
+            }
         }
     });
 
@@ -121,6 +153,19 @@ if (!gotTheLock) {
         }
 
         createWindow();
+
+        // If we were launched via a `grimoire:` URL, dispatch it once the
+        // renderer is ready so the UI can navigate + show a toast before the
+        // download begins. webContents.once handles both cold-launch and
+        // hot-reload paths cleanly.
+        if (initialProtocolUrl && mainWindow) {
+            const parsedInitial = parseGrimoireUrl(initialProtocolUrl);
+            if (parsedInitial) {
+                mainWindow.webContents.once('did-finish-load', () => {
+                    void handleOneClickInstall(parsedInitial, mainWindow);
+                });
+            }
+        }
 
         // Recover from any half-finished vanilla launch (app was closed mid-session,
         // or grimoire crashed while the user was playing vanilla). Runs in background.

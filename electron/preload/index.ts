@@ -70,6 +70,9 @@ export interface ElectronAPI {
     removeFromQueue: (modId: number) => Promise<boolean>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
+    // GameBanana 1-Click protocol handler
+    onOneClickInstall: (callback: (data: OneClickInstallData) => void) => () => void;
+
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
 
@@ -408,6 +411,13 @@ interface DownloadQueueData {
     currentDownload: DownloadQueueItem | null;
 }
 
+interface OneClickInstallData {
+    archiveUrl: string;
+    modId?: number;
+    modType?: string;
+    error?: string;
+}
+
 interface GameBananaModsResponse {
     records: unknown[];
     totalCount: number;
@@ -698,6 +708,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadQueueData) => callback(data);
         ipcRenderer.on('download-queue-updated', handler);
         return () => ipcRenderer.removeListener('download-queue-updated', handler);
+    },
+
+    onOneClickInstall: (callback: (data: OneClickInstallData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: OneClickInstallData) => callback(data);
+        ipcRenderer.on('one-click-install', handler);
+        return () => ipcRenderer.removeListener('one-click-install', handler);
     },
 
     // Conflicts

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Loader2 } from 'lucide-react';
+import { AlertTriangle, Download, Loader2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import WelcomeModal from './WelcomeModal';
 import SyncIndicator from './SyncIndicator';
@@ -16,6 +16,7 @@ export default function Layout() {
   const [loading, setLoading] = useState(true);
   const [gameinfoAlert, setGameinfoAlert] = useState<string | null>(null);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
+  const [oneClickBanner, setOneClickBanner] = useState<{ message: string; isError: boolean } | null>(null);
 
   useEffect(() => {
     const checkFirstRun = async () => {
@@ -51,6 +52,39 @@ export default function Layout() {
 
     checkFirstRun();
   }, []);
+
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onOneClickInstall((data) => {
+      if (data.error) {
+        setOneClickBanner({ message: data.error, isError: true });
+        return;
+      }
+      const filename = (() => {
+        try {
+          const u = new URL(data.archiveUrl);
+          const last = u.pathname.split('/').filter(Boolean).pop();
+          return last ? decodeURIComponent(last) : 'mod';
+        } catch {
+          return 'mod';
+        }
+      })();
+      setOneClickBanner({
+        message: `Installing ${filename} from GameBanana…`,
+        isError: false,
+      });
+      navigate('/');
+    });
+    return unsubscribe;
+  }, [navigate]);
+
+  useEffect(() => {
+    if (!oneClickBanner) return;
+    const timeout = setTimeout(
+      () => setOneClickBanner(null),
+      oneClickBanner.isError ? 8000 : 4000
+    );
+    return () => clearTimeout(timeout);
+  }, [oneClickBanner]);
 
   const handleFixGameinfo = async () => {
     setIsFixingGameinfo(true);
@@ -120,6 +154,23 @@ export default function Layout() {
         <DownloadQueueIndicator />
         <SyncIndicator />
       </div>
+      {oneClickBanner && (
+        <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2">
+          <div
+            className={`flex items-center gap-2 rounded-lg border px-4 py-2 text-sm shadow-lg backdrop-blur-sm ${oneClickBanner.isError
+              ? 'border-red-500/40 bg-red-500/15 text-red-200'
+              : 'border-accent/40 bg-accent/15 text-accent-foreground'
+              }`}
+          >
+            {oneClickBanner.isError ? (
+              <AlertTriangle className="h-4 w-4" />
+            ) : (
+              <Download className="h-4 w-4" />
+            )}
+            <span>{oneClickBanner.message}</span>
+          </div>
+        </div>
+      )}
       {showWelcome && <WelcomeModal onComplete={handleSetupComplete} />}
     </div>
   );

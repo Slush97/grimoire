@@ -118,6 +118,13 @@ export interface DownloadQueueData {
     currentDownload: DownloadQueueItem | null;
 }
 
+export interface OneClickInstallData {
+    archiveUrl: string;
+    modId?: number;
+    modType?: string;
+    error?: string;
+}
+
 export interface SyncProgressData {
     section: string;
     currentPage: number;
@@ -276,6 +283,9 @@ export interface ElectronAPI {
     getCurrentDownload: () => Promise<DownloadQueueItem | null>;
     removeFromQueue: (modId: number) => Promise<boolean>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
+
+    // GameBanana 1-Click protocol handler
+    onOneClickInstall: (callback: (data: OneClickInstallData) => void) => () => void;
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;

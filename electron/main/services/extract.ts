@@ -53,6 +53,35 @@ export function isArchive(filePath: string): boolean {
 }
 
 /**
+ * Check the archive for the GameBanana 1-Click opt-out markers.
+ * Mod authors can disable mod-manager integration by including an empty
+ * `.disable_gb1click` (all managers) or `.disable_gb1click_grimoire` (just us)
+ * file anywhere in the archive — see https://gamebanana.com/wikis/1999.
+ */
+export async function checkOneClickOptOut(
+    archivePath: string
+): Promise<{ disabled: boolean; reason?: string }> {
+    let entries: string[];
+    try {
+        entries = await listArchiveContents(archivePath);
+    } catch {
+        // If we can't list, let extraction handle the error path.
+        return { disabled: false };
+    }
+
+    for (const entry of entries) {
+        const name = basename(entry).toLowerCase();
+        if (name === '.disable_gb1click_grimoire') {
+            return { disabled: true, reason: 'The mod author disabled Grimoire 1-Click for this mod.' };
+        }
+        if (name === '.disable_gb1click') {
+            return { disabled: true, reason: 'The mod author disabled all 1-Click installers for this mod.' };
+        }
+    }
+    return { disabled: false };
+}
+
+/**
  * Extract an archive to a destination directory
  * Returns the list of extracted VPK files
  */

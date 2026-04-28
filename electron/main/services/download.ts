@@ -3,7 +3,7 @@ import { promises as fs, statSync } from 'fs';
 import { join, basename } from 'path';
 import { BrowserWindow } from 'electron';
 import { getDisabledPath } from './deadlock';
-import { extractArchive, isArchive } from './extract';
+import { extractArchive, isArchive, checkOneClickOptOut } from './extract';
 import { setModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
 import { getUsedPriorities } from './mods';
@@ -19,10 +19,18 @@ export interface DownloadModArgs {
     categoryId?: number;
 }
 
+export interface OneClickInstallArgs {
+    archiveUrl: string;
+    modType?: string;
+    modId?: number;
+}
+
 // Download queue to prevent race conditions with VPK priority assignment
 interface QueuedDownload {
     deadlockPath: string;
     args: DownloadModArgs;
+    directUrl?: string;
+    enrichMetadata?: boolean;
     mainWindow: BrowserWindow | null;
     resolve: () => void;
     reject: (error: Error) => void;
@@ -103,6 +111,69 @@ export function downloadMod(
 }
 
 /**
+ * Queue a 1-Click install triggered by a `grimoire:` protocol URL.
+ * Differs from downloadMod in that the archive URL is already known —
+ * we skip the GameBanana file lookup and (optionally) enrich metadata
+ * via fetchModDetails when modId+modType were passed in the URL.
+ */
+export function downloadModFromUrl(
+    deadlockPath: string,
+    oneClick: OneClickInstallArgs,
+    mainWindow: BrowserWindow | null
+): Promise<void> {
+    validateDownloadUrl(oneClick.archiveUrl);
+
+    const fileName = deriveFileNameFromUrl(oneClick.archiveUrl);
+    // Use the real GB modId when available, otherwise a synthetic negative id
+    // so the queue/UI can track this install without colliding with real mods.
+    const modId = oneClick.modId ?? -Math.floor(Date.now() / 1000);
+    const fileId = -1;
+
+    const alreadyQueued = downloadQueue.some(
+        (q) => q.directUrl === oneClick.archiveUrl
+    );
+    if (alreadyQueued) {
+        console.log(`[downloadModFromUrl] Already queued: ${oneClick.archiveUrl}`);
+        return Promise.resolve();
+    }
+
+    const args: DownloadModArgs = {
+        modId,
+        fileId,
+        fileName,
+        section: oneClick.modType ?? 'Mod',
+    };
+
+    return new Promise((resolve, reject) => {
+        downloadQueue.push({
+            deadlockPath,
+            args,
+            directUrl: oneClick.archiveUrl,
+            enrichMetadata: !!oneClick.modId,
+            mainWindow,
+            resolve,
+            reject,
+        });
+        emitQueueUpdate();
+        processQueue();
+    });
+}
+
+function deriveFileNameFromUrl(url: string): string {
+    try {
+        const parsed = new URL(url);
+        const segments = parsed.pathname.split('/').filter(Boolean);
+        const last = segments[segments.length - 1];
+        if (last && /\.(zip|7z|rar|vpk)$/i.test(last)) {
+            return decodeURIComponent(last);
+        }
+        return `gamebanana-mod-${Date.now()}.zip`;
+    } catch {
+        return `gamebanana-mod-${Date.now()}.zip`;
+    }
+}
+
+/**
  * Process the download queue one at a time
  */
 async function processQueue(): Promise<void> {
@@ -122,7 +193,17 @@ async function processQueue(): Promise<void> {
         };
         emitQueueUpdate(); // Notify UI that queue changed and current download started
         try {
-            await executeDownload(item.deadlockPath, item.args, item.mainWindow);
+            if (item.directUrl) {
+                await executeOneClickDownload(
+                    item.deadlockPath,
+                    item.args,
+                    item.directUrl,
+                    !!item.enrichMetadata,
+                    item.mainWindow
+                );
+            } else {
+                await executeDownload(item.deadlockPath, item.args, item.mainWindow);
+            }
             item.resolve();
         } catch (error) {
             item.reject(error instanceof Error ? error : new Error(String(error)));
@@ -490,5 +571,153 @@ async function executeDownload(
 
     // Notify completion
     console.log(`[downloadMod] Sending download-complete event`);
+    mainWindow?.webContents.send('download-complete', { modId, fileId });
+}
+
+/**
+ * Execute a 1-Click install: download a pre-resolved archive URL, run the
+ * GameBanana opt-out check, extract VPKs, then optionally enrich the mod
+ * metadata via the GB API if a modId was passed in the protocol URL.
+ */
+async function executeOneClickDownload(
+    deadlockPath: string,
+    args: DownloadModArgs,
+    archiveUrl: string,
+    enrichMetadata: boolean,
+    mainWindow: BrowserWindow | null
+): Promise<void> {
+    const { modId, fileId, fileName, section = 'Mod' } = args;
+
+    console.log(
+        `[oneClickInstall] Starting: url=${archiveUrl}, modType=${section}, modId=${modId}`
+    );
+
+    validateDownloadUrl(archiveUrl);
+
+    const targetPath = getDisabledPath(deadlockPath);
+    const downloadPath = join(targetPath, fileName);
+
+    await downloadFile(archiveUrl, downloadPath, (downloaded, total) => {
+        mainWindow?.webContents.send('download-progress', {
+            modId,
+            fileId,
+            downloaded,
+            total,
+        });
+    });
+
+    try {
+        const actualSize = statSync(downloadPath).size;
+        validateFileSize(0, actualSize);
+    } catch (sizeError) {
+        if (existsSync(downloadPath)) {
+            await fs.unlink(downloadPath).catch(() => { });
+        }
+        throw sizeError;
+    }
+
+    // Honor GameBanana opt-out markers before touching the archive contents.
+    if (isArchive(downloadPath)) {
+        const optOut = await checkOneClickOptOut(downloadPath);
+        if (optOut.disabled) {
+            if (existsSync(downloadPath)) {
+                await fs.unlink(downloadPath).catch(() => { });
+            }
+            mainWindow?.webContents.send('download-error', {
+                modId,
+                fileId,
+                errorCode: 'DISABLED_BY_AUTHOR',
+                message: optOut.reason ?? '1-Click install was disabled by the mod author.',
+            });
+            throw new Error(optOut.reason ?? '1-Click install disabled by mod author');
+        }
+    }
+
+    // Optional metadata enrichment (mod name, thumbnail, NSFW, category).
+    let enriched: GameBananaModDetails | null = null;
+    if (enrichMetadata && args.modId !== undefined && args.modId > 0) {
+        try {
+            enriched = await fetchModDetails(args.modId, section);
+        } catch (err) {
+            console.warn('[oneClickInstall] Metadata enrichment failed:', err);
+        }
+    }
+
+    const thumbnail = enriched?.previewMedia?.images?.[0];
+    const thumbnailUrl = thumbnail
+        ? `${thumbnail.baseUrl}/${thumbnail.file530 || thumbnail.file}`
+        : undefined;
+
+    const realModId = args.modId !== undefined && args.modId > 0 ? args.modId : undefined;
+    const metadata = {
+        modName: enriched?.name ?? fileName.replace(/\.(zip|7z|rar|vpk)$/i, ''),
+        gameBananaId: realModId,
+        categoryId: enriched?.category?.id,
+        categoryName: enriched?.category?.name,
+        thumbnailUrl,
+        audioUrl: enriched?.previewMedia?.metadata?.audioUrl,
+        sourceSection: section,
+        nsfw: enriched?.nsfw,
+    };
+
+    let installedVpks: string[] = [];
+
+    if (isArchive(downloadPath)) {
+        mainWindow?.webContents.send('download-extracting', { modId, fileId });
+
+        let extractedVpks: string[];
+        try {
+            extractedVpks = await extractArchive(downloadPath, targetPath);
+        } catch (extractError) {
+            const errorMsg =
+                extractError instanceof Error ? extractError.message : String(extractError);
+            const is7zError =
+                errorMsg.includes('7z') ||
+                errorMsg.includes('7-Zip') ||
+                errorMsg.includes('p7zip') ||
+                errorMsg.includes('unrar') ||
+                errorMsg.includes('RAR extraction failed');
+
+            mainWindow?.webContents.send('download-error', {
+                modId,
+                fileId,
+                errorCode: is7zError ? 'MISSING_7ZIP' : 'EXTRACTION_FAILED',
+                message: is7zError
+                    ? "Couldn't extract this mod. Install 7-Zip from https://7-zip.org and try again."
+                    : `Failed to extract mod: ${errorMsg}`,
+                helpUrl: is7zError ? 'https://7-zip.org' : undefined,
+            });
+
+            if (existsSync(downloadPath)) {
+                await fs.unlink(downloadPath).catch(() => { });
+            }
+            throw extractError;
+        }
+
+        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks);
+
+        // Standard 1-Click behavior: keep only the first VPK to avoid
+        // accidentally enabling many slots from a single archive.
+        installedVpks.sort((a, b) => a.localeCompare(b));
+        const [primaryVpk, ...extraVpks] = installedVpks;
+        installedVpks = primaryVpk ? [primaryVpk] : [];
+        for (const extraVpk of extraVpks) {
+            const extraPath = join(targetPath, extraVpk);
+            if (existsSync(extraPath)) {
+                await fs.unlink(extraPath);
+            }
+        }
+
+        if (existsSync(downloadPath)) {
+            await fs.unlink(downloadPath);
+        }
+    } else if (downloadPath.endsWith('.vpk')) {
+        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath]);
+    }
+
+    for (const vpkFileName of installedVpks) {
+        setModMetadata(vpkFileName, metadata);
+    }
+
     mainWindow?.webContents.send('download-complete', { modId, fileId });
 }

@@ -1,5 +1,10 @@
 appId: com.grimoire.modmanager
 productName: Grimoire
+# GameBanana 1-Click Mod Installer protocol registration
+protocols:
+  - name: Grimoire 1-Click Installer
+    schemes:
+      - grimoire
 # GitHub auto-update configuration
 publish:
   provider: github
