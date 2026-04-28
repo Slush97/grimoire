@@ -1,6 +1,6 @@
 import { createWriteStream, existsSync } from 'fs';
 import { promises as fs, statSync } from 'fs';
-import { join, basename } from 'path';
+import { join, basename, extname } from 'path';
 import { BrowserWindow } from 'electron';
 import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut } from './extract';
@@ -575,6 +575,28 @@ async function executeDownload(
 }
 
 /**
+ * Sniff archive format from magic bytes so we don't have to trust the URL's
+ * extension. GameBanana's `/dl/<id>` redirects don't expose the real filename
+ * to the URL parser, so a Bat Mina `.rar` would otherwise be fed to adm-zip.
+ */
+async function detectArchiveFormat(filePath: string): Promise<'zip' | '7z' | 'rar' | null> {
+    const fd = await fs.open(filePath, 'r');
+    try {
+        const buf = Buffer.alloc(8);
+        await fd.read(buf, 0, 8, 0);
+        // ZIP: PK\x03\x04 (also empty/single-file variants PK\x05\x06, PK\x07\x08)
+        if (buf[0] === 0x50 && buf[1] === 0x4b) return 'zip';
+        // RAR4: "Rar!\x1A\x07\x00" / RAR5: "Rar!\x1A\x07\x01\x00" — both start "Rar!"
+        if (buf[0] === 0x52 && buf[1] === 0x61 && buf[2] === 0x72 && buf[3] === 0x21) return 'rar';
+        // 7z: "7z\xBC\xAF\x27\x1C"
+        if (buf[0] === 0x37 && buf[1] === 0x7a && buf[2] === 0xbc && buf[3] === 0xaf) return '7z';
+        return null;
+    } finally {
+        await fd.close();
+    }
+}
+
+/**
  * Execute a 1-Click install: download a pre-resolved archive URL, run the
  * GameBanana opt-out check, extract VPKs, then optionally enrich the mod
  * metadata via the GB API if a modId was passed in the protocol URL.
@@ -595,7 +617,7 @@ async function executeOneClickDownload(
     validateDownloadUrl(archiveUrl);
 
     const targetPath = getDisabledPath(deadlockPath);
-    const downloadPath = join(targetPath, fileName);
+    let downloadPath = join(targetPath, fileName);
 
     await downloadFile(archiveUrl, downloadPath, (downloaded, total) => {
         mainWindow?.webContents.send('download-progress', {
@@ -614,6 +636,22 @@ async function executeOneClickDownload(
             await fs.unlink(downloadPath).catch(() => { });
         }
         throw sizeError;
+    }
+
+    // GameBanana's /dl/<id> URLs hide the real filename, so the extension we
+    // synthesized from the URL is unreliable. Sniff magic bytes and rename
+    // before extractArchive() (which dispatches on extension).
+    const detected = await detectArchiveFormat(downloadPath);
+    if (detected) {
+        const correctExt = `.${detected}`;
+        const currentExt = extname(downloadPath).toLowerCase();
+        if (currentExt !== correctExt) {
+            const renamed =
+                (currentExt ? downloadPath.slice(0, -currentExt.length) : downloadPath) +
+                correctExt;
+            await fs.rename(downloadPath, renamed);
+            downloadPath = renamed;
+        }
     }
 
     // Honor GameBanana opt-out markers before touching the archive contents.
