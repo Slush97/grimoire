@@ -44,6 +44,17 @@ pnpm dev
 
 Package builds: `pnpm package:win` or `pnpm package:linux`.
 
+## Security
+
+Grimoire is open source. Read the code, build from source, or audit any
+release artifact yourself before running it. Reports of security or
+trust concerns are welcome via [Issues](../../issues).
+
+Windows installers are not yet code-signed, so SmartScreen will show an
+"Unknown Publisher" warning on first run — click **More info → Run
+anyway** to proceed. Free Authenticode signing through the SignPath
+Foundation OSS program is being pursued.
+
 ## License
 
 MIT
