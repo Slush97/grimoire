@@ -2,6 +2,23 @@
 
 All notable changes to this project are documented here. Format is loosely based on [Keep a Changelog](https://keepachangelog.com/), and the project adheres to semantic versioning.
 
+## [1.6.0] - 2026-04
+
+### Added
+- **GameBanana 1-Click installer integration.** Click the Grimoire button on any compatible Deadlock mod page and the archive downloads, extracts, and registers automatically. Implements the full [GameBanana 1-Click spec](https://gamebanana.com/wikis/1999):
+  - Registers the `grimoire:` URL scheme via the Windows installer (NSIS), with a runtime fallback for portable launches
+  - Supports both URL formats — `grimoire:[archive_url]` and the extended `grimoire:[archive_url],[mod_type],[mod_id]` (the latter enriches the install with mod name, thumbnail, category, and NSFW flag from the GameBanana API)
+  - Accepts ZIP, RAR, and 7z archives. Decompression binaries ship with the app
+  - Magic-byte format detection so misnamed extensions on `/dl/<id>` redirect URLs still route correctly
+  - Pre-extraction scan flags executable / script files (`.exe`, `.dll`, `.bat`, `.ps1`, `.vbs`, `.msi`, `.scr`, `.jar`, etc.) and surfaces a confirmation modal listing them
+  - Honors the `.disable_gb1click` and `.disable_gb1click_grimoire` opt-out files anywhere in the archive
+  - Trusted-domain validator rejects any non-`gamebanana.com` URL before a connection is opened
+- Top-of-window toast on 1-click installs: *"Installing &lt;Mod Name&gt; from GameBanana…"*
+
+### Changed
+- Defense-in-depth: the extract pipeline writes only `.vpk` files into the addons folder, so 1-click archives can never deliver a binary to disk even if a user accepts the suspicious-files prompt
+- Installed list now refreshes live the moment any download completes — no more navigate-away-and-back to see new mods
+
 ## [1.5.5] - 2026-04
 
 ### Fixed
