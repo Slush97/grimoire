@@ -1,42 +1,36 @@
 <div align="center">
   <img src="resources/icon.png" width="128" height="128" alt="Grimoire">
   <h1>Grimoire</h1>
-  <p>Mod manager for Deadlock</p>
-  
-  <a href="../../releases/latest"><img src="https://img.shields.io/github/v/release/Slush97/grimoire?style=flat-square" alt="Release"></a>
-  <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-333?style=flat-square" alt="Platform">
-  <img src="https://img.shields.io/github/license/Slush97/grimoire?style=flat-square" alt="License">
+  <p>A mod manager for Deadlock.</p>
+
+  [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?style=flat-square)](../../releases/latest)
+  ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-333?style=flat-square)
+  ![License](https://img.shields.io/github/license/Slush97/grimoire?style=flat-square)
 </div>
 
-<br>
+## Download
+
+[Latest release →](../../releases/latest)
+
+- Windows: `Grimoire-Setup-x.y.z.exe`
+- Linux: `.AppImage` or `.deb`
+
+Requires Deadlock installed via Steam.
 
 ## Features
 
-- **Browse & Install** — Search GameBanana and install mods with one click
-- **Mod Management** — Enable, disable, reorder priority, detect conflicts
-- **Hero Locker** — Organize skins by character
-- **Crosshair Editor** — Design crosshairs with live preview
-- **Autoexec Manager** — Configure console commands without editing files
-- **Profiles** — Save and switch between mod configurations
+- Browse and install mods from GameBanana
+- Enable, disable, reorder, and detect conflicts
+- Per-hero skin locker
+- Crosshair editor with live preview
+- Autoexec manager
+- Profiles for saving and swapping mod configurations
 
 ## Screenshots
 
 ![Installed mods](docs/screenshots/installed.png)
-
 ![Browse GameBanana](docs/screenshots/browse.png)
-
 ![Hero Locker](docs/screenshots/locker.png)
-
-## Download
-
-Get the latest release for your platform:
-
-| Platform | Download |
-|----------|----------|
-| Windows | [Installer (.exe)](../../releases/latest) |
-| Linux | [AppImage](../../releases/latest), [.deb](../../releases/latest) |
-
-**Requirements:** Deadlock installed via Steam
 
 ## Development
 
@@ -48,7 +42,7 @@ pnpm exec electron-rebuild -f -w better-sqlite3
 pnpm dev
 ```
 
-Build: `pnpm package:linux` or `pnpm package:win`
+Package builds: `pnpm package:win` or `pnpm package:linux`.
 
 ## License
 
