@@ -2,6 +2,7 @@ import { BrowserWindow } from 'electron';
 import { downloadModFromUrl } from './download';
 import { loadSettings } from './settings';
 import { validateDownloadUrl } from './security';
+import { fetchModDetails } from './gamebanana';
 
 export const GRIMOIRE_PROTOCOL = 'grimoire';
 
@@ -78,10 +79,25 @@ export async function handleOneClickInstall(
         return;
     }
 
+    // Resolve the mod name up front so the toast can show "Installing
+    // <Mod Name>" instead of the bare archive filename. Best-effort: if the
+    // GB API call fails or no modId was passed, the renderer falls back to
+    // deriving a name from the URL.
+    let modName: string | undefined;
+    if (parsed.modId !== undefined && parsed.modId > 0) {
+        try {
+            const details = await fetchModDetails(parsed.modId, parsed.modType ?? 'Mod');
+            modName = details.name;
+        } catch (err) {
+            console.warn('[oneClick] Could not resolve mod name for toast:', err);
+        }
+    }
+
     mainWindow?.webContents.send('one-click-install', {
         archiveUrl: parsed.archiveUrl,
         modId: parsed.modId,
         modType: parsed.modType,
+        modName,
     });
 
     try {

@@ -415,6 +415,7 @@ interface OneClickInstallData {
     archiveUrl: string;
     modId?: number;
     modType?: string;
+    modName?: string;
     error?: string;
 }
 

@@ -59,17 +59,21 @@ export default function Layout() {
         setOneClickBanner({ message: data.error, isError: true });
         return;
       }
-      const filename = (() => {
+      const label = data.modName ?? (() => {
         try {
           const u = new URL(data.archiveUrl);
           const last = u.pathname.split('/').filter(Boolean).pop();
-          return last ? decodeURIComponent(last) : 'mod';
+          // Fall back to the archive filename only when it looks like one
+          // (has a recognized extension); otherwise just say "mod" — bare
+          // numeric paths like /dl/12345 aren't user-facing.
+          if (last && /\.(zip|7z|rar|vpk)$/i.test(last)) return decodeURIComponent(last);
+          return 'mod';
         } catch {
           return 'mod';
         }
       })();
       setOneClickBanner({
-        message: `Installing ${filename} from GameBanana…`,
+        message: `Installing ${label} from GameBanana…`,
         isError: false,
       });
       navigate('/');
