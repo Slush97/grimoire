@@ -160,6 +160,17 @@ export default function Installed() {
     }
   }, [activeDeadlockPath, loadMods]);
 
+  // Refresh the mod list whenever any download completes — covers 1-Click
+  // protocol installs (no UI navigation triggers loadMods) and the regular
+  // Browse → Download flow when the user is already on this page.
+  useEffect(() => {
+    if (!activeDeadlockPath) return;
+    const unsubscribe = window.electronAPI.onDownloadComplete(() => {
+      loadMods();
+    });
+    return unsubscribe;
+  }, [activeDeadlockPath, loadMods]);
+
   useEffect(() => {
     const loadConflictData = async () => {
       try {
