@@ -2,6 +2,14 @@
 
 All notable changes to this project are documented here. Format is loosely based on [Keep a Changelog](https://keepachangelog.com/), and the project adheres to semantic versioning.
 
+## [1.6.1] - 2026-04
+
+### Added
+- Windows portable build (`Grimoire-Portable-x.y.z.exe`) published alongside the NSIS installer for users who prefer not to install
+
+### Fixed
+- Browse: 18+ / Installed / Outdated overlay tags on mod cards no longer paint over the sticky search bar when scrolling
+
 ## [1.6.0] - 2026-04
 
 ### Added

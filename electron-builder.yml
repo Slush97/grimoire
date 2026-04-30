@@ -44,6 +44,7 @@ linux:
 win:
   target:
     - nsis
+    - portable
   icon: resources/icon.ico
 nsis:
   oneClick: false
@@ -55,3 +56,5 @@ nsis:
   shortcutName: Grimoire
   uninstallDisplayName: Grimoire Mod Manager
   artifactName: "${productName}-Setup-${version}.${ext}"
+portable:
+  artifactName: "${productName}-Portable-${version}.${ext}"

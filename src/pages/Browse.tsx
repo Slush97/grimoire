@@ -1360,7 +1360,7 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`relative bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+      className={`relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
         isPlaying
           ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
           : downloading
