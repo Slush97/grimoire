@@ -23,11 +23,12 @@ export function SectionHeader({ children, count, className = '' }: SectionHeader
 // ViewModeToggle - Unified toggle for switching between view modes
 // ============================================================================
 
-export type ViewMode = 'grid' | 'list' | 'gallery';
+export type ViewMode = 'grid' | 'list' | 'gallery' | 'compact';
 
 interface ViewModeOption {
     value: ViewMode;
     label: string;
+    icon?: LucideIcon;
 }
 
 interface ViewModeToggleProps {
@@ -38,21 +39,29 @@ interface ViewModeToggleProps {
 }
 
 export function ViewModeToggle({ value, options, onChange, className = '' }: ViewModeToggleProps) {
+    const anyIcon = options.some((o) => o.icon);
     return (
         <div className={`flex items-center rounded-lg border border-border bg-bg-secondary p-1 text-sm ${className}`}>
-            {options.map((option) => (
-                <button
-                    key={option.value}
-                    type="button"
-                    onClick={() => onChange(option.value)}
-                    className={`px-3 py-1.5 rounded-md transition-colors cursor-pointer ${value === option.value
-                        ? 'bg-accent text-white'
-                        : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
-                        }`}
-                >
-                    {option.label}
-                </button>
-            ))}
+            {options.map((option) => {
+                const Icon = option.icon;
+                const active = value === option.value;
+                const baseCls = anyIcon ? 'p-2' : 'px-3 py-1.5';
+                return (
+                    <button
+                        key={option.value}
+                        type="button"
+                        onClick={() => onChange(option.value)}
+                        title={option.label}
+                        aria-label={option.label}
+                        className={`${baseCls} rounded-md transition-colors cursor-pointer ${active
+                            ? 'bg-accent text-white'
+                            : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+                            }`}
+                    >
+                        {Icon ? <Icon className="w-5 h-5" /> : option.label}
+                    </button>
+                );
+            })}
         </div>
     );
 }

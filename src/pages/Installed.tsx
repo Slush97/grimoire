@@ -15,6 +15,9 @@ import {
   Info,
   Download,
   UploadCloud,
+  List,
+  LayoutGrid,
+  Grid3x3,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -57,7 +60,7 @@ export default function Installed() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const stored = localStorage.getItem('installedViewMode');
-    return stored === 'grid' ? 'grid' : 'list';
+    return stored === 'grid' || stored === 'compact' || stored === 'list' ? stored : 'list';
   });
   useEffect(() => {
     localStorage.setItem('installedViewMode', viewMode);
@@ -67,10 +70,13 @@ export default function Installed() {
   const [modToDelete, setModToDelete] = useState<{ id: string; name: string } | null>(null);
   const [importOpen, setImportOpen] = useState(false);
 
-  // Drag-and-drop reorder state
+  // Drag-and-drop reorder state. `draggingSection` scopes drops so dragging
+  // an enabled card can't drop onto a disabled card and vice-versa.
   const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [draggingSection, setDraggingSection] = useState<'enabled' | 'disabled' | null>(null);
   const [dropTargetId, setDropTargetId] = useState<string | null>(null);
   const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
+  const autoScrollRafRef = useRef<number | null>(null);
 
   // Details overlay state
   const [detailsMod, setDetailsMod] = useState<GameBananaModDetails | null>(null);
@@ -128,13 +134,13 @@ export default function Installed() {
   const handleDetailsDownload = async (fileId: number, fileName: string) => {
     if (!detailsMod) return;
     try {
-      // Remove the existing install first so Update/Reinstall replaces the old
-      // VPK instead of the backend's conflict-avoidance renaming it to a
-      // second copy alongside it.
-      if (detailsSourceModId) {
-        await deleteMod(detailsSourceModId);
+      // Same-file picks (true reinstall/update) replace the source install;
+      // different-file picks add a new entry and the download backend will
+      // auto-disable any prior enabled variants of the same GameBanana mod.
+      const sourceMod = detailsSourceModId ? mods.find((m) => m.id === detailsSourceModId) : null;
+      if (sourceMod && sourceMod.gameBananaFileId === fileId) {
+        await deleteMod(sourceMod.id);
       }
-      // Queue the download — the global DownloadQueueIndicator shows progress.
       await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
       closeModDetails();
       loadMods();
@@ -149,6 +155,45 @@ export default function Installed() {
       setModToDelete(null);
     }
   };
+
+  // Auto-scroll the main content container while drag-reordering. Native HTML
+  // drag-and-drop doesn't fire pointer events, so we hook `dragover` at the
+  // window and start a rAF loop whenever the cursor is near the top/bottom
+  // edge of the scroll container.
+  useEffect(() => {
+    if (!draggingId) return;
+    const main = document.querySelector('main');
+    if (!main) return;
+    const EDGE = 80;
+    const MAX_STEP = 18;
+    let pointerY = -1;
+
+    const tick = () => {
+      const rect = main.getBoundingClientRect();
+      const fromTop = pointerY - rect.top;
+      const fromBottom = rect.bottom - pointerY;
+      let dy = 0;
+      if (fromTop >= 0 && fromTop < EDGE) dy = -Math.round(((EDGE - fromTop) / EDGE) * MAX_STEP);
+      else if (fromBottom >= 0 && fromBottom < EDGE) dy = Math.round(((EDGE - fromBottom) / EDGE) * MAX_STEP);
+      if (dy !== 0) main.scrollBy({ top: dy });
+      autoScrollRafRef.current = requestAnimationFrame(tick);
+    };
+
+    const onDragOver = (e: DragEvent) => {
+      pointerY = e.clientY;
+      if (autoScrollRafRef.current === null) {
+        autoScrollRafRef.current = requestAnimationFrame(tick);
+      }
+    };
+    window.addEventListener('dragover', onDragOver);
+    return () => {
+      window.removeEventListener('dragover', onDragOver);
+      if (autoScrollRafRef.current !== null) {
+        cancelAnimationFrame(autoScrollRafRef.current);
+        autoScrollRafRef.current = null;
+      }
+    };
+  }, [draggingId]);
 
   useEffect(() => {
     loadSettings();
@@ -259,7 +304,10 @@ export default function Installed() {
   }
 
   const enabledMods = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
-  const disabledMods = mods.filter((m) => !m.enabled);
+  const disabledMods = mods.filter((m) => !m.enabled).sort((a, b) => a.priority - b.priority);
+  const hasPriorityGap =
+    enabledMods.some((m, i) => m.priority !== i + 1) ||
+    disabledMods.some((m, i) => m.priority !== enabledMods.length + i + 1);
   const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
 
   // Filter by search query (case-insensitive substring on name). Drag-and-drop
@@ -274,26 +322,41 @@ export default function Installed() {
 
   const resetDragState = () => {
     setDraggingId(null);
+    setDraggingSection(null);
     setDropTargetId(null);
     setDropPosition(null);
   };
 
-  const applyReorder = (sourceId: string, targetId: string, position: DropPosition) => {
+  const applyReorder = (
+    sourceId: string,
+    targetId: string,
+    position: DropPosition,
+    section: 'enabled' | 'disabled'
+  ) => {
     if (sourceId === targetId) return;
-    const sourceIdx = enabledMods.findIndex((m) => m.id === sourceId);
+    const list = section === 'enabled' ? enabledMods : disabledMods;
+    const sourceIdx = list.findIndex((m) => m.id === sourceId);
     if (sourceIdx === -1) return;
 
-    const working = enabledMods.slice();
+    const working = list.slice();
     const [moved] = working.splice(sourceIdx, 1);
     const adjustedTargetIdx = working.findIndex((m) => m.id === targetId);
     if (adjustedTargetIdx === -1) return;
     const insertAt = position === 'before' ? adjustedTargetIdx : adjustedTargetIdx + 1;
     working.splice(insertAt, 0, moved);
 
-    const unchanged = working.every((m, i) => m.id === enabledMods[i].id);
+    const unchanged = working.every((m, i) => m.id === list[i].id);
     if (unchanged) return;
 
     reorderMods(working.map((m) => m.fileName));
+  };
+
+  const compactPriorities = () => {
+    // Renumber every installed mod sequentially (enabled first, then disabled)
+    // so priority slots are tight 1..N with no gaps from prior delete/disable.
+    const ordered = [...enabledMods, ...disabledMods];
+    if (ordered.length === 0) return;
+    reorderMods(ordered.map((m) => m.fileName));
   };
 
   // No mods at all
@@ -382,10 +445,11 @@ export default function Installed() {
             <ViewModeToggle
               value={viewMode}
               options={[
-                { value: 'list', label: 'List' },
-                { value: 'grid', label: 'Cards' },
+                { value: 'list', label: 'List', icon: List },
+                { value: 'grid', label: 'Cards', icon: LayoutGrid },
+                { value: 'compact', label: 'Compact', icon: Grid3x3 },
               ]}
-              onChange={(mode) => setViewMode(mode as 'grid' | 'list')}
+              onChange={setViewMode}
             />
           </div>
         }
@@ -407,12 +471,26 @@ export default function Installed() {
 
       {visibleEnabled.length > 0 && (
         <div className="mb-6">
-          <SectionHeader count={visibleEnabled.length}>Enabled</SectionHeader>
+          <div className="flex items-center justify-between mb-3">
+            <SectionHeader count={visibleEnabled.length} className="!mb-0">Enabled</SectionHeader>
+            {hasPriorityGap && !searchNeedle && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={compactPriorities}
+                title="Renumber all installed mods 1, 2, 3, … to remove gaps from disable/delete"
+              >
+                Compact priorities
+              </Button>
+            )}
+          </div>
           <div
             className={
-              viewMode === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
-                : 'space-y-2'
+              viewMode === 'compact'
+                ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2'
+                : viewMode === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+                  : 'space-y-2'
             }
           >
             {visibleEnabled.map((mod) => (
@@ -431,9 +509,13 @@ export default function Installed() {
                 isDragging={draggingId === mod.id}
                 isDropTarget={dropTargetId === mod.id}
                 dropPosition={dropTargetId === mod.id ? dropPosition : null}
-                onDragStart={() => setDraggingId(mod.id)}
+                onDragStart={() => {
+                  setDraggingId(mod.id);
+                  setDraggingSection('enabled');
+                }}
                 onDragOver={(pos) => {
                   if (!draggingId || draggingId === mod.id) return;
+                  if (draggingSection !== 'enabled') return;
                   setDropTargetId(mod.id);
                   setDropPosition(pos);
                 }}
@@ -444,8 +526,8 @@ export default function Installed() {
                   }
                 }}
                 onDrop={() => {
-                  if (draggingId && dropTargetId && dropPosition) {
-                    applyReorder(draggingId, dropTargetId, dropPosition);
+                  if (draggingId && dropTargetId && dropPosition && draggingSection === 'enabled') {
+                    applyReorder(draggingId, dropTargetId, dropPosition, 'enabled');
                   }
                   resetDragState();
                 }}
@@ -461,9 +543,11 @@ export default function Installed() {
           <SectionHeader count={visibleDisabled.length}>Disabled</SectionHeader>
           <div
             className={
-              viewMode === 'grid'
-                ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
-                : 'space-y-2'
+              viewMode === 'compact'
+                ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2'
+                : viewMode === 'grid'
+                  ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+                  : 'space-y-2'
             }
           >
             {visibleDisabled.map((mod) => (
@@ -478,7 +562,33 @@ export default function Installed() {
                 onOpenDetails={mod.gameBananaId ? () => openModDetails(mod) : undefined}
                 onToggle={() => toggleMod(mod.id)}
                 onDelete={() => setModToDelete({ id: mod.id, name: mod.name })}
-                draggable={false}
+                draggable={!searchNeedle}
+                isDragging={draggingId === mod.id}
+                isDropTarget={dropTargetId === mod.id}
+                dropPosition={dropTargetId === mod.id ? dropPosition : null}
+                onDragStart={() => {
+                  setDraggingId(mod.id);
+                  setDraggingSection('disabled');
+                }}
+                onDragOver={(pos) => {
+                  if (!draggingId || draggingId === mod.id) return;
+                  if (draggingSection !== 'disabled') return;
+                  setDropTargetId(mod.id);
+                  setDropPosition(pos);
+                }}
+                onDragLeaveCard={() => {
+                  if (dropTargetId === mod.id) {
+                    setDropTargetId(null);
+                    setDropPosition(null);
+                  }
+                }}
+                onDrop={() => {
+                  if (draggingId && dropTargetId && dropPosition && draggingSection === 'disabled') {
+                    applyReorder(draggingId, dropTargetId, dropPosition, 'disabled');
+                  }
+                  resetDragState();
+                }}
+                onDragEnd={resetDragState}
               />
             ))}
           </div>
@@ -565,7 +675,8 @@ export default function Installed() {
 }
 
 function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
-  const rows = viewMode === 'grid' ? 8 : 6;
+  const isGridLike = viewMode !== 'list';
+  const rows = viewMode === 'compact' ? 12 : viewMode === 'grid' ? 8 : 6;
   return (
     <div className="p-6 animate-fade-in" aria-busy="true" aria-live="polite">
       <div className="flex items-end justify-between gap-4 pb-4 border-b border-border mb-6">
@@ -578,13 +689,15 @@ function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
       <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-20 mb-3" />
       <div
         className={
-          viewMode === 'grid'
-            ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
-            : 'space-y-2'
+          viewMode === 'compact'
+            ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2'
+            : viewMode === 'grid'
+              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+              : 'space-y-2'
         }
       >
         {Array.from({ length: rows }).map((_, i) =>
-          viewMode === 'grid' ? (
+          isGridLike ? (
             <div key={i} className="rounded-lg border border-border bg-bg-secondary p-3 flex flex-col gap-3">
               <div className="skeleton-shimmer w-full aspect-video bg-bg-tertiary rounded-md" />
               <div className="flex items-center gap-3">
@@ -692,7 +805,7 @@ function ModCard({
           : mod.enabled
             ? 'bg-accent/5 border-accent/40'
             : 'bg-bg-secondary/60 border-border/70 text-text-primary/80 hover:bg-bg-secondary hover:text-text-primary'
-      } ${viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'} ${
+      } ${viewMode === 'compact' ? 'p-2 flex flex-col gap-2' : viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-center gap-4 p-4'} ${
         isDragging ? 'opacity-40' : ''
       }`}
       draggable={draggable}
@@ -744,7 +857,7 @@ function ModCard({
     >
       {indicatorClasses && <div className={indicatorClasses} />}
 
-      {viewMode === 'grid' && (() => {
+      {viewMode !== 'list' && (() => {
         const isSoundCard = mod.sourceSection === 'Sound' && !!mod.audioUrl;
         const overlayBadges = (
           <>
@@ -874,7 +987,7 @@ function ModCard({
         );
       })()}
 
-      <div className={viewMode === 'grid' ? 'flex items-center gap-3' : 'contents'}>
+      <div className={viewMode !== 'list' ? 'flex items-center gap-3' : 'contents'}>
         {draggable && (
           <div
             onMouseDown={() => {

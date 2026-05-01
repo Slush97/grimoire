@@ -7,7 +7,7 @@ import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles } f
 import { randomUUID } from 'crypto';
 import { setModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
-import { getUsedPriorities } from './mods';
+import { getUsedPriorities, scanMods, disableMod } from './mods';
 import { validateDownloadUrl, validateFileSize } from './security';
 import https from 'https';
 import http from 'http';
@@ -570,6 +570,28 @@ async function executeDownload(
     for (const vpkFileName of installedVpks) {
         console.log(`[downloadMod] Saving metadata for: ${vpkFileName}`);
         setModMetadata(vpkFileName, metadata);
+    }
+
+    // Auto-disable previously installed variants of the same GameBanana mod so
+    // the newest pick is the active one. Avoids file-conflict warnings between
+    // sibling variants and matches the "Browse vs Installed" expectation that
+    // re-downloading swaps which variant is active without losing the others.
+    try {
+        const installedSet = new Set(installedVpks);
+        const allMods = await scanMods(deadlockPath);
+        const stalePeers = allMods.filter(
+            (m) =>
+                m.enabled &&
+                m.gameBananaId === modId &&
+                m.gameBananaFileId !== fileId &&
+                !installedSet.has(m.fileName)
+        );
+        for (const peer of stalePeers) {
+            console.log(`[downloadMod] Auto-disabling sibling variant: ${peer.fileName}`);
+            await disableMod(deadlockPath, peer.id);
+        }
+    } catch (err) {
+        console.warn(`[downloadMod] Failed to auto-disable sibling variants:`, err);
     }
 
     // Notify completion
