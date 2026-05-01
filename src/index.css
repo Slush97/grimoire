@@ -196,6 +196,140 @@ body {
   animation: skeletonShimmer 1.4s ease-in-out infinite;
 }
 
+/* Release notes — styles HTML rendered from GitHub release markdown
+   inside UpdateModal. We don't ship @tailwindcss/typography, so headings,
+   lists, and code blocks would otherwise be flattened by Tailwind preflight. */
+.release-notes {
+  color: var(--color-text-primary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  word-wrap: break-word;
+  overflow-wrap: anywhere;
+}
+
+.release-notes > :first-child { margin-top: 0; }
+.release-notes > :last-child  { margin-bottom: 0; }
+
+.release-notes h1,
+.release-notes h2,
+.release-notes h3,
+.release-notes h4,
+.release-notes h5,
+.release-notes h6 {
+  color: var(--color-text-primary);
+  font-weight: 700;
+  line-height: 1.25;
+  margin-top: 1.25em;
+  margin-bottom: 0.5em;
+}
+
+.release-notes h1 { font-size: 1.25rem; }
+.release-notes h2 { font-size: 1.125rem; }
+.release-notes h3 { font-size: 1rem; }
+.release-notes h4,
+.release-notes h5,
+.release-notes h6 { font-size: 0.9375rem; }
+
+.release-notes p {
+  margin: 0.5em 0;
+}
+
+.release-notes ul,
+.release-notes ol {
+  margin: 0.5em 0;
+  padding-left: 1.5em;
+}
+
+.release-notes ul { list-style: disc; }
+.release-notes ol { list-style: decimal; }
+
+.release-notes li {
+  margin: 0.25em 0;
+}
+
+.release-notes li > ul,
+.release-notes li > ol {
+  margin: 0.25em 0;
+}
+
+.release-notes a {
+  color: var(--color-accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.release-notes a:hover {
+  color: var(--color-accent-hover);
+}
+
+.release-notes strong { font-weight: 700; }
+.release-notes em     { font-style: italic; }
+
+.release-notes code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.85em;
+  background: var(--color-bg-tertiary);
+  padding: 0.15em 0.35em;
+  border-radius: 4px;
+  border: 1px solid var(--color-border);
+}
+
+.release-notes pre {
+  background: var(--color-bg-tertiary);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 0.75em 1em;
+  margin: 0.75em 0;
+  overflow-x: auto;
+  font-size: 0.85em;
+  line-height: 1.5;
+}
+
+.release-notes pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: inherit;
+}
+
+.release-notes blockquote {
+  border-left: 3px solid var(--color-border);
+  padding-left: 0.875em;
+  margin: 0.75em 0;
+  color: var(--color-text-secondary);
+}
+
+.release-notes hr {
+  border: 0;
+  border-top: 1px solid var(--color-border);
+  margin: 1em 0;
+}
+
+.release-notes img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+.release-notes table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 0.75em 0;
+  font-size: 0.85em;
+}
+
+.release-notes th,
+.release-notes td {
+  border: 1px solid var(--color-border);
+  padding: 0.4em 0.6em;
+  text-align: left;
+}
+
+.release-notes th {
+  background: var(--color-bg-tertiary);
+  font-weight: 600;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-slide-in-left,
   .animate-hero-zoom-in,

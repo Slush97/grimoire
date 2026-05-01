@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, RotateCcw, Crosshair as CrosshairIcon, Save, Trash2, Play, Pin } from 'lucide-react';
+import { Copy, Check, RotateCcw, Crosshair as CrosshairIcon, Save, Trash2, Play, Pin, XCircle } from 'lucide-react';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import { getSettings } from '../lib/api';
@@ -45,6 +45,7 @@ export default function Crosshair() {
         deletePreset,
         applyPreset,
         loadSettingsFromPreset,
+        clearAutoexec,
     } = useCrosshairStore();
 
     // Load presets and game path on mount
@@ -155,8 +156,31 @@ export default function Crosshair() {
     };
 
     const handleDeletePreset = async (presetId: string) => {
-        if (confirm('Delete this crosshair preset?')) {
-            await deletePreset(presetId);
+        if (!confirm('Delete this crosshair preset?')) return;
+        const wasActive = presetId === activePresetId;
+        if (wasActive && gamePath) {
+            try {
+                await clearAutoexec(gamePath);
+            } catch (error) {
+                console.error('Failed to clear crosshair from autoexec:', error);
+            }
+        }
+        await deletePreset(presetId);
+    };
+
+    const handleClearActive = async () => {
+        if (!gamePath) {
+            alert('Please configure your Deadlock game path in Settings first.');
+            return;
+        }
+        if (!confirm('Remove the active crosshair from autoexec.cfg? Your saved presets will be kept.\n\nNote: an in-progress game session keeps its current crosshair until you restart the game.')) {
+            return;
+        }
+        try {
+            await clearAutoexec(gamePath);
+        } catch (error) {
+            console.error('Failed to clear crosshair:', error);
+            alert('Failed to clear crosshair. Check the game path in Settings.');
         }
     };
 
@@ -346,7 +370,20 @@ export default function Crosshair() {
 
                     {/* Presets Gallery */}
                     {presets.length > 0 && (
-                        <Card title={`Saved Presets (${presets.length})`}>
+                        <Card
+                            title={`Saved Presets (${presets.length})`}
+                            action={activePresetId ? (
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
+                                    onClick={handleClearActive}
+                                    icon={XCircle}
+                                    title="Remove the active crosshair from autoexec.cfg (presets are kept)"
+                                >
+                                    Deselect Active
+                                </Button>
+                            ) : undefined}
+                        >
                             <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
                                 {presets.map((preset) => (
                                     <div

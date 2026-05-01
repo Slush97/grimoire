@@ -151,7 +151,7 @@ export default function UpdateModal({ onClose }: Props) {
                             </h3>
                             {typeof releaseNotes === 'string' ? (
                                 <div
-                                    className="prose prose-invert prose-sm max-w-none"
+                                    className="release-notes"
                                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(releaseNotes) }}
                                 />
                             ) : (
@@ -161,7 +161,7 @@ export default function UpdateModal({ onClose }: Props) {
                                             <h4 className="font-semibold text-accent">v{note.version}</h4>
                                             {note.note && (
                                                 <div
-                                                    className="prose prose-invert prose-sm max-w-none mt-1"
+                                                    className="release-notes mt-1"
                                                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(note.note) }}
                                                 />
                                             )}
