@@ -136,7 +136,7 @@ export default function Sidebar() {
       { to: '/locker', icon: Shield, label: 'Locker', tooltip: "Saved mods you haven't installed yet." },
       { to: '/crosshair', icon: Crosshair, label: 'Crosshair', tooltip: 'Custom crosshair editor.', experimental: 'crosshair' },
       { to: '/autoexec', icon: Terminal, label: 'Autoexec', tooltip: 'Console commands that run at game launch.' },
-      { to: '/stats', icon: BarChart3, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
+      { to: '/stats/me', icon: BarChart3, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
       { to: '/conflicts', icon: AlertTriangle, label: 'Conflicts', tooltip: 'Mods that overwrite the same game files.', badge: conflictCount, badgeTone: 'warning' },
       { to: '/profiles', icon: Layers, label: 'Profiles', tooltip: 'Save and swap sets of enabled mods.' },
       { to: '/settings', icon: Settings, label: 'Settings', tooltip: 'Configure game path, NSFW, and preferences.' },

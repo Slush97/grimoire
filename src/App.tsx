@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { HashRouter, Routes, Route } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import Layout from './components/Layout';
 import Installed from './pages/Installed';
 import Browse from './pages/Browse';
@@ -11,6 +11,8 @@ import Settings from './pages/Settings';
 import Crosshair from './pages/Crosshair';
 import Autoexec from './pages/Autoexec';
 import Stats from './pages/Stats';
+import StatsMe from './pages/StatsMe';
+import StatsMeta from './pages/StatsMeta';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 export default function App() {
@@ -39,7 +41,10 @@ export default function App() {
             <Route path="profiles" element={<Profiles />} />
             <Route path="crosshair" element={<Crosshair />} />
             <Route path="autoexec" element={<Autoexec />} />
-            <Route path="stats" element={<Stats />} />
+            <Route path="stats" element={<Navigate to="/stats/me" replace />} />
+            <Route path="stats/me" element={<StatsMe />} />
+            <Route path="stats/meta" element={<StatsMeta />} />
+            <Route path="stats/legacy" element={<Stats />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>
