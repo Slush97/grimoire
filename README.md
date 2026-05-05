@@ -5,6 +5,7 @@
 
   [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?style=flat-square)](../../releases/latest)
   ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-333?style=flat-square)
+  [![GameBanana](https://img.shields.io/badge/GameBanana-listing-ffcc4d?style=flat-square)](https://gamebanana.com/tools/22583)
   ![License](https://img.shields.io/github/license/Slush97/grimoire?style=flat-square)
 </div>
 
