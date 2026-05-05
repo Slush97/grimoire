@@ -3,10 +3,10 @@
   <h1>Grimoire</h1>
   <p>A mod manager for Deadlock.</p>
 
-  [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?style=flat-square)](../../releases/latest)
-  ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-333?style=flat-square)
-  [![GameBanana](https://img.shields.io/badge/GameBanana-listing-ffcc4d?style=flat-square)](https://gamebanana.com/tools/22583)
-  ![License](https://img.shields.io/github/license/Slush97/grimoire?style=flat-square)
+  [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?style=flat-square&logo=github&logoColor=white&label=release&color=1f2328&labelColor=1f2328)](../../releases/latest)
+  ![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20Linux-1f2328?style=flat-square&labelColor=1f2328)
+  [![GameBanana](https://img.shields.io/badge/GameBanana-FCDC2A?style=flat-square&labelColor=1f2328)](https://gamebanana.com/tools/22583)
+  [![License](https://img.shields.io/github/license/Slush97/grimoire?style=flat-square&color=1f2328&labelColor=1f2328)](LICENSE)
 </div>
 
 ## Download
