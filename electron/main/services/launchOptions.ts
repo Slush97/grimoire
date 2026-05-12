@@ -430,31 +430,6 @@ function sniffIndent(text: string): string {
 }
 
 /**
- * Build the byte sequence we'll splice in for a brand-new app block. Mirrors
- * Steam's own formatting: each key on its own line, tab-indented.
- */
-function buildAppBlock(appId: string, options: string, indent: string, depth: number): string {
-    const outer = indent.repeat(depth);
-    const inner = indent.repeat(depth + 1);
-    return (
-        `\n${outer}${quoteVdfString(appId)}\n` +
-        `${outer}{\n` +
-        `${inner}${quoteVdfString('LaunchOptions')}${indent}${quoteVdfString(options)}\n` +
-        `${outer}}`
-    );
-}
-
-/**
- * Build the byte sequence for a new LaunchOptions key inside an existing app
- * block. Inserted right after the opening `{` so we don't have to deal with
- * matching the file's existing trailing whitespace.
- */
-function buildLaunchOptionsLine(options: string, indent: string, depth: number): string {
-    const inner = indent.repeat(depth);
-    return `\n${inner}${quoteVdfString('LaunchOptions')}${indent}${quoteVdfString(options)}`;
-}
-
-/**
  * Atomically write `content` to `path`. Writes to `<path>.tmp` first, then
  * renames. Creates a `<path>.bak` backup beforehand on first call (or if no
  * backup exists yet) so the user can recover from a bad write.
@@ -540,9 +515,6 @@ export async function writeLaunchOptions(
             insertion +
             `\n${appsLeading}` +
             text.slice(loc.appsBlock.braceClose);
-        // Reference the unused helper so future callers stay aware of it.
-        void buildAppBlock;
-        void buildLaunchOptionsLine;
     }
 
     await safeAtomicWrite(found.path, updated);
