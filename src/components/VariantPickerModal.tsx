@@ -7,10 +7,11 @@ interface Props {
     /** Display name shared by the variants (use primary.name). */
     modName: string;
     variants: Mod[];
-    /** Called when the user picks a different variant. Caller is responsible
-     *  for enabling the target + disabling other variants (mutual exclusion). */
-    onSelect: (target: Mod) => Promise<void> | void;
-    /** Called when the user disables the currently-active variant. */
+    /** Toggle a single variant's enabled state. Variants are independent —
+     *  multiple can be active at once (e.g. a model VPK + its voice-lines
+     *  addon from the same mod page). */
+    onToggle: (target: Mod) => Promise<void> | void;
+    /** Called when the user disables every currently-enabled variant. */
     onDisableAll: () => Promise<void> | void;
     /** Called when the user requests deletion of a single variant. */
     onDeleteVariant: (variant: Mod) => Promise<void> | void;
@@ -33,9 +34,12 @@ function formatBytes(bytes: number): string {
 
 /**
  * Variant picker for grouped mods. Shown when the user clicks an Installed
- * card that represents multiple VPKs sharing a GameBanana mod id (e.g. five
- * presets of "Scientific Half Life as Rem"). One variant can be active at a
- * time; picking a new one disables the previous.
+ * card that represents multiple VPKs sharing a GameBanana mod id. Variants
+ * are independent — the user can enable any combination. Examples:
+ *   • Dallas PAYDAY ships a model VPK and a voice-lines VPK from one archive;
+ *     users want both on.
+ *   • A mod page with separate red/blue uploads: enable both if they don't
+ *     conflict, or just one if they do.
  *
  * Per-variant Delete lives here (rather than the card) so the card-level
  * Delete can keep its simple "remove this whole mod" meaning without
@@ -44,7 +48,7 @@ function formatBytes(bytes: number): string {
 export default function VariantPickerModal({
     modName,
     variants,
-    onSelect,
+    onToggle,
     onDisableAll,
     onDeleteVariant,
     onRenameVariant,
@@ -68,7 +72,7 @@ export default function VariantPickerModal({
         }
     }, [editingId]);
 
-    const active = variants.find((v) => v.enabled) ?? null;
+    const anyActive = variants.some((v) => v.enabled);
 
     const startRename = (v: Mod) => {
         setEditing({ id: v.id, draft: v.variantLabel ?? '' });
@@ -95,20 +99,18 @@ export default function VariantPickerModal({
 
     const pick = async (target: Mod) => {
         if (pending) return;
-        // Already active → treat as a no-op (don't toggle off; that's what
-        // the "Disable" button is for).
-        if (active?.id === target.id) return;
+        // Toggle this one variant's enabled state. Don't close the modal —
+        // users typically want to flip several before stepping back out.
         setPending(target.id);
         try {
-            await onSelect(target);
-            onClose();
+            await onToggle(target);
         } finally {
             setPending(null);
         }
     };
 
     const disableActive = async () => {
-        if (pending || !active) return;
+        if (pending || !anyActive) return;
         setPending('__disable__');
         try {
             await onDisableAll();
@@ -146,7 +148,7 @@ export default function VariantPickerModal({
                             {modName}
                         </h3>
                         <p className="text-xs text-text-secondary mt-0.5">
-                            {variants.length} variants — pick which one to enable
+                            {variants.length} variants — toggle any combination on or off
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -172,7 +174,7 @@ export default function VariantPickerModal({
 
                 <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
                     {variants.map((v) => {
-                        const isActive = active?.id === v.id;
+                        const isActive = v.enabled;
                         const isPending = pending === v.id;
                         const isDeletePending = pending === `delete:${v.id}`;
                         const isEditing = editing?.id === v.id;
@@ -207,11 +209,12 @@ export default function VariantPickerModal({
                                     onClick={() => pick(v)}
                                     disabled={!!pending || isEditing}
                                     className="flex-1 min-w-0 text-left cursor-pointer disabled:cursor-default disabled:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
-                                    title={isActive ? 'Currently active' : 'Switch to this variant'}
+                                    title={isActive ? 'Disable this variant' : 'Enable this variant'}
+                                    aria-pressed={isActive}
                                 >
                                     <div className="flex items-center gap-3">
                                         <span
-                                            className={`flex-shrink-0 w-4 h-4 rounded-full border-2 flex items-center justify-center ${
+                                            className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center ${
                                                 isActive ? 'border-accent bg-accent' : 'border-border bg-bg-secondary'
                                             }`}
                                             aria-hidden
@@ -327,7 +330,7 @@ export default function VariantPickerModal({
                                     </>
                                 )}
                                 {isPending && (
-                                    <span className="text-xs text-accent">Switching…</span>
+                                    <span className="text-xs text-accent">Toggling…</span>
                                 )}
                             </div>
                         );
@@ -335,7 +338,7 @@ export default function VariantPickerModal({
                 </div>
 
                 <div className="flex items-center justify-between gap-3 p-5 border-t border-border">
-                    {active ? (
+                    {anyActive ? (
                         <Button
                             variant="secondary"
                             size="sm"
@@ -344,12 +347,12 @@ export default function VariantPickerModal({
                             disabled={!!pending}
                             isLoading={pending === '__disable__'}
                         >
-                            Disable group
+                            Disable all
                         </Button>
                     ) : (
                         <span className="text-xs text-text-secondary inline-flex items-center gap-1.5">
                             <Power className="w-3 h-3" />
-                            No variant active — pick one to enable
+                            No variants active — toggle any to enable
                         </span>
                     )}
                     <Button variant="secondary" size="sm" onClick={onClose}>

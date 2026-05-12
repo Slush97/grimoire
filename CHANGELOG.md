@@ -2,6 +2,12 @@
 
 All notable changes to this project are documented here. Format is loosely based on [Keep a Changelog](https://keepachangelog.com/), and the project adheres to semantic versioning.
 
+## [1.7.1] - 2026-05
+
+### Fixed
+- **Installed-page variant grouping** no longer forces mutual exclusion. Mods that ship multiple complementary VPKs in one archive (e.g. Dallas PAYDAY's model + voice lines, QoL Lock + optional addons) can now have any combination of variants enabled simultaneously. The picker switched from radio buttons to checkboxes and stays open between toggles so users can flip several without re-opening it; the card-level toggle flips the whole mod on or off as a unit
+- **Multi-VPK install picker** now defaults to *all* VPKs checked instead of just the first. Previously this silently dropped complementary content (e.g. installing only the model and forgetting the voice-lines VPK)
+
 ## [1.7.0] - 2026-05
 
 ### Added

@@ -14,19 +14,17 @@ interface Props {
  * kept the alphabetically-first VPK and unlinked the rest — felt like data
  * loss to users. This modal makes the choice explicit.
  *
- * Default selection: only the first VPK is checked, matching the previous
- * implicit behavior. Users who want everything can flip the master toggle.
+ * Default selection: all VPKs are checked. Most multi-VPK archives ship
+ * complementary content (model + voice lines, mod + optional addons) where
+ * users want everything; unchecking unwanted variants is easier than
+ * remembering to check missing content.
  *
  * NOTE: the parent must mount this with a key tied to `data.requestId` so a
  * fresh request resets the selection — we deliberately avoid a syncing
  * useEffect here.
  */
 export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props) {
-    const [selected, setSelected] = useState<Set<string>>(() => {
-        const next = new Set<string>();
-        if (data.vpkFileNames[0]) next.add(data.vpkFileNames[0]);
-        return next;
-    });
+    const [selected, setSelected] = useState<Set<string>>(() => new Set(data.vpkFileNames));
 
     const allSelected = selected.size === data.vpkFileNames.length;
     const toggle = (vpk: string) => {

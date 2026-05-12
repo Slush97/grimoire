@@ -57,11 +57,15 @@ type ModEntry =
       kind: 'group';
       gameBananaId: number;
       variants: Mod[];
-      /** Currently-enabled variant in the group. Null when the whole group
-       *  is disabled. Mutual exclusion: only one variant is active at a time. */
+      /** First enabled variant in priority order, or null when every variant
+       *  is disabled. Used as a "group is on" flag and as the visual primary
+       *  when something's enabled. Variants are independent — multiple can be
+       *  enabled at once (e.g. a model VPK and its voice-lines VPK from one
+       *  archive). */
       active: Mod | null;
-      /** Mod we render visuals from (thumbnail, name, category). The active
-       *  variant when one's enabled, else the first variant by filename. */
+      /** Mod we render visuals from (thumbnail, name, category). The first
+       *  enabled variant when any is enabled, else the first variant by
+       *  filename. */
       primary: Mod;
       /** Sum of variant sizes — shown as the card's "size" field. */
       totalSize: number;
@@ -342,21 +346,14 @@ export default function Installed() {
   };
 
   /**
-   * Switch the active variant in a group. Disables every other variant in
-   * the group first (sequential, so the priority bookkeeping stays sane),
-   * then enables the target. If the target is already enabled this is a
-   * no-op. Mutual exclusion is enforced here rather than in the store so the
-   * existing toggleMod action stays single-mod.
+   * Flip a single variant's enabled state. Variants are independent — a
+   * mod's model VPK and its voice-lines VPK (same archive) or its red and
+   * blue uploads (different archives on the same mod page) can each be on
+   * or off without affecting the others. Sequential just because the store
+   * action is single-mod.
    */
-  const setActiveVariant = async (group: Extract<ModEntry, { kind: 'group' }>, target: Mod) => {
-    for (const v of group.variants) {
-      if (v.id !== target.id && v.enabled) {
-        await toggleMod(v.id);
-      }
-    }
-    if (!target.enabled) {
-      await toggleMod(target.id);
-    }
+  const toggleVariant = async (target: Mod) => {
+    await toggleMod(target.id);
   };
 
   const disableEntireGroup = async (group: Extract<ModEntry, { kind: 'group' }>) => {
@@ -367,14 +364,15 @@ export default function Installed() {
     }
   };
 
-  /** Top-level toggle on a grouped card. If anything's active, disable it;
-   *  otherwise enable the first variant by filename order (which becomes
-   *  the primary when nothing else is active). */
+  /** Top-level toggle on a grouped card. If any variant is active, disable
+   *  every active one ("turn the mod off"). Otherwise enable every variant
+   *  ("turn the mod on") — the user can open the picker to be selective. */
   const handleGroupToggle = async (group: Extract<ModEntry, { kind: 'group' }>) => {
-    if (group.active) {
-      await toggleMod(group.active.id);
-    } else if (group.variants.length > 0) {
-      await toggleMod(group.variants[0].id);
+    const anyActive = group.variants.some((v) => v.enabled);
+    for (const v of group.variants) {
+      if (anyActive ? v.enabled : !v.enabled) {
+        await toggleMod(v.id);
+      }
     }
   };
 
@@ -618,12 +616,12 @@ export default function Installed() {
    * Group cards:
    *   - Drag-reorder is disabled (the underlying VPKs span multiple priority
    *     slots; meaningful group-level reorder needs more design).
-   *   - Toggle hits the active variant (or enables the first variant when
-   *     the group is fully disabled).
+   *   - Toggle flips every variant on or off as a unit. The picker modal is
+   *     where the user enables/disables individual variants.
    *   - Delete asks the user to confirm removing every variant.
    *   - Card body click opens the variant picker modal.
-   *   - Conflicts shown are the union of conflicts on currently-enabled
-   *     variants (typically just one under mutual exclusion).
+   *   - Conflicts shown are the union of conflicts on every currently-enabled
+   *     variant.
    */
   const renderEntryCard = (entry: ModEntry, section: 'enabled' | 'disabled') => {
     if (entry.kind === 'single') {
@@ -739,18 +737,18 @@ export default function Installed() {
         onDragEnd={resetDragState}
         group={{
           variantCount: entry.variants.length,
-          // Display the active variant's user-given label when set, else
-          // the author's GameBanana file header, else the original GB
-          // filename stem (covers mods whose author left descriptions
-          // blank — e.g. "galaxy_rem_gold"), else the raw VPK filename.
-          // Lets the user see "Red preset" / "Gold w/ alt candle" on the
-          // card instead of "pak06_dir.vpk".
-          activeFileName: entry.active
-            ? (entry.active.variantLabel ??
-               entry.active.fileDescription ??
-               entry.active.sourceFileName ??
-               entry.active.fileName)
-            : null,
+          // Card badge label. Only meaningful when exactly one variant is
+          // active — then we show the variant's user-given label / GB file
+          // header / filename stem / raw VPK filename (precedence order).
+          // When 0 or 2+ are active, the variant-count pill + the card's
+          // on/off toggle convey enough at a glance; details live in the
+          // picker. Avoids redundancy with the meta-row "N variants" pill.
+          activeFileName: (() => {
+            const enabled = entry.variants.filter((v) => v.enabled);
+            if (enabled.length !== 1) return null;
+            const v = enabled[0];
+            return v.variantLabel ?? v.fileDescription ?? v.sourceFileName ?? v.fileName;
+          })(),
           onOpenPicker: () => setPickerGroupId(entry.gameBananaId),
         }}
       />
@@ -1008,7 +1006,7 @@ export default function Installed() {
           <VariantPickerModal
             modName={liveEntry.primary.name}
             variants={liveEntry.variants}
-            onSelect={(target) => setActiveVariant(liveEntry, target)}
+            onToggle={(target) => toggleVariant(target)}
             onDisableAll={() => disableEntireGroup(liveEntry)}
             onDeleteVariant={(variant) => deleteMod(variant.id)}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
@@ -1172,9 +1170,11 @@ interface ModCardProps {
    *  count and routes the card-body click to the picker modal. */
   group?: {
     variantCount: number;
-    /** Filename of the currently-active variant, or null if the group is
-     *  fully disabled. Shown in small text so the user can tell at a glance
-     *  which preset is live. */
+    /** Display label for the enabled variant when exactly one is on (and
+     *  null otherwise — for 0 active or 2+ active, the card's toggle state
+     *  plus the variant-count pill convey enough; details live in the
+     *  picker). Shown in small text so the user can tell at a glance which
+     *  preset is live in the common single-active case. */
     activeFileName: string | null;
     onOpenPicker: () => void;
   };
@@ -1328,7 +1328,7 @@ function ModCard({
                     tone="info"
                     variant="overlay"
                     icon={Layers}
-                    title={`Active variant: ${group.activeFileName} — click card to switch`}
+                    title={`${group.activeFileName} — click card to manage variants`}
                     className="max-w-full"
                   >
                     <span className="truncate">{group.activeFileName}</span>
