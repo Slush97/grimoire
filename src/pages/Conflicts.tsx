@@ -109,6 +109,10 @@ export default function Conflicts() {
       setConflicts((prev) =>
         prev.filter((c) => conflictPairKey(c.modA, c.modB) !== key)
       );
+      // Sidebar's badge count is derived from getConflicts() and only refreshes
+      // on mods-list changes. Ignore/unignore don't touch mods, so notify the
+      // Sidebar explicitly — otherwise the badge stays stale until restart.
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
     } catch (err) {
       setError(String(err));
     } finally {
@@ -126,6 +130,7 @@ export default function Conflicts() {
       // Re-detect so the unignored pair shows back up if still conflicting.
       const fresh = await getConflicts();
       setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
     } catch (err) {
       setError(String(err));
     } finally {

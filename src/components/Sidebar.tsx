@@ -78,21 +78,28 @@ export default function Sidebar() {
   // old 10s setInterval re-ran a full VPK-directory parse for every enabled
   // mod, and in dev that repeatedly-opening-and-closing of file handles was
   // triggering a Windows system sound every tick.
+  //
+  // Also listens for `grimoire:conflicts-changed` (dispatched by the Conflicts
+  // page after ignore/unignore). Those actions don't touch the mods list, so
+  // without this the badge stayed stuck at the pre-ignore count until restart.
+  const refreshConflictCount = useCallback(async () => {
+    try {
+      const conflicts = await getConflicts();
+      setConflictCount(conflicts.length);
+    } catch {
+      setConflictCount(0);
+    }
+  }, []);
+
   useEffect(() => {
-    let cancelled = false;
-    const loadConflicts = async () => {
-      try {
-        const conflicts = await getConflicts();
-        if (!cancelled) setConflictCount(conflicts.length);
-      } catch {
-        if (!cancelled) setConflictCount(0);
-      }
-    };
-    loadConflicts();
-    return () => {
-      cancelled = true;
-    };
-  }, [mods]);
+    void refreshConflictCount();
+  }, [mods, refreshConflictCount]);
+
+  useEffect(() => {
+    const handler = () => void refreshConflictCount();
+    window.addEventListener('grimoire:conflicts-changed', handler);
+    return () => window.removeEventListener('grimoire:conflicts-changed', handler);
+  }, [refreshConflictCount]);
 
   useEffect(() => {
     refreshStashStatus();
