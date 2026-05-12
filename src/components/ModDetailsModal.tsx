@@ -257,18 +257,29 @@ export default function ModDetailsModal({
                         type="button"
                         onClick={() => openLightboxAt(index)}
                         aria-label={`View image ${index + 1} of ${images.length} full size`}
-                        className="relative block w-full aspect-video bg-black rounded-lg overflow-hidden border border-border cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group"
+                        className="relative block w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden border border-border cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group"
                       >
-                        {/* NSFW handling lives on ModThumbnail, but its
-                            forced object-cover crops screenshots in
-                            unhelpful ways here. Use a raw <img> with
-                            object-contain + a manual NSFW blur to preserve
-                            full preview frames. */}
+                        {/* Letterbox fill — same image scaled to cover the
+                            slot and heavily blurred so non-16:9 previews get
+                            an art-matched backdrop instead of harsh black
+                            bars. Hidden from a11y; the contained image
+                            below carries the real meaning. NSFW path skips
+                            this so the blur+overlay still works as a
+                            single layer. */}
+                        {!(mod.nsfw && hideNsfwPreviews) && (
+                          <img
+                            src={previewSrc}
+                            alt=""
+                            aria-hidden
+                            loading="lazy"
+                            className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60 pointer-events-none"
+                          />
+                        )}
                         <img
                           src={previewSrc}
                           alt={`${mod.name} - Image ${index + 1}`}
                           loading="lazy"
-                          className={`w-full h-full object-contain transition-transform duration-200 group-hover:scale-[1.01] ${
+                          className={`relative w-full h-full object-contain transition-transform duration-200 group-hover:scale-[1.01] ${
                             mod.nsfw && hideNsfwPreviews ? 'blur-xl scale-110' : ''
                           }`}
                         />
