@@ -52,7 +52,6 @@ export default function Sidebar() {
     action?: { label: string; onClick: () => void | Promise<void> };
   } | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
-  const toggleMod = useAppStore((state) => state.toggleMod);
 
   const refreshStashStatus = useCallback(async () => {
     try {
@@ -151,40 +150,6 @@ export default function Sidebar() {
     });
     return unsub;
   }, [loadMods, navigate]);
-
-  // Post-download "Enable now" toast. Users complained that finished downloads
-  // dropped them on Browse with the new mod silently sitting in disabled/ —
-  // they had to navigate to Installed and toggle it themselves. This surfaces
-  // an Enable button right where they are so the round-trip isn't needed.
-  useEffect(() => {
-    const unsub = window.electronAPI.onDownloadComplete(async (data) => {
-      // Wait one tick so the loadMods() chained off download-complete in
-      // Browse/Installed has time to refresh the store. Otherwise the mod
-      // we just downloaded won't be in `mods` yet.
-      await new Promise((r) => setTimeout(r, 250));
-      const fresh = useAppStore.getState().mods;
-      const justInstalled = fresh.find(
-        (m) =>
-          m.gameBananaId === data.modId &&
-          m.gameBananaFileId === data.fileId
-      );
-      if (!justInstalled) return;
-      // If it landed enabled (rare — only happens on rapid re-download of an
-      // already-enabled mod), nothing to do.
-      if (justInstalled.enabled) return;
-      setToast({
-        kind: 'info',
-        text: `Installed “${justInstalled.name}” (disabled).`,
-        action: {
-          label: 'Enable now',
-          onClick: async () => {
-            await toggleMod(justInstalled.id);
-          },
-        },
-      });
-    });
-    return unsub;
-  }, [toggleMod]);
 
   const navItems = useMemo(() => {
     type BadgeTone = 'muted' | 'warning';
