@@ -14,6 +14,7 @@ export interface ElectronAPI {
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
+    setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
@@ -26,6 +27,7 @@ export interface ElectronAPI {
     getVanillaStashStatus: () => Promise<VanillaStashStatus>;
     restoreVanillaStash: () => Promise<VanillaRestoreResult>;
     onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
+    getSteamLaunchOptionsStatus: () => Promise<SteamLaunchOptionsStatus>;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
@@ -63,6 +65,7 @@ export interface ElectronAPI {
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;
+    onModsAutoDisabled: (callback: (data: ModsAutoDisabledData) => void) => () => void;
 
     // Download Queue
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
@@ -79,9 +82,17 @@ export interface ElectronAPI {
         requestId: string,
         accepted: boolean
     ) => Promise<void>;
+    onMultiVpkPick: (callback: (data: MultiVpkPickData) => void) => () => void;
+    respondToMultiVpkPick: (
+        requestId: string,
+        selected: string[] | null
+    ) => Promise<void>;
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
+    getIgnoredConflicts: () => Promise<string[]>;
+    ignoreConflict: (modA: string, modB: string) => Promise<string[]>;
+    unignoreConflict: (modA: string, modB: string) => Promise<string[]>;
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;
@@ -261,11 +272,20 @@ interface AppSettings {
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
     hideOutdatedMods: boolean;
+    autoDisableSiblingVariants: boolean;
+    steamLaunchOptions: string;
     activeProfileId: string | null;
     autoSaveProfile: boolean;
     experimentalStats: boolean;
     experimentalCrosshair: boolean;
     hasCompletedSetup: boolean;
+}
+
+interface SteamLaunchOptionsStatus {
+    available: boolean;
+    configPath: string | null;
+    currentValue: string | null;
+    steamRunning: boolean;
 }
 
 interface Mod {
@@ -406,6 +426,13 @@ interface DownloadErrorData {
     helpUrl?: string;
 }
 
+interface ModsAutoDisabledData {
+    reason: 'sibling-variant';
+    modId: number;
+    fileId: number;
+    disabled: Array<{ id: string; name: string; fileName: string }>;
+}
+
 interface DownloadQueueItem {
     modId: number;
     fileId: number;
@@ -430,6 +457,13 @@ interface OneClickSuspiciousFilesData {
     requestId: string;
     modName: string;
     files: string[];
+}
+
+interface MultiVpkPickData {
+    requestId: string;
+    modName: string;
+    vpkFileNames: string[];
+    vpkLabels?: Record<string, string>;
 }
 
 interface GameBananaModsResponse {
@@ -637,6 +671,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),
     deleteMod: (modId: string) => ipcRenderer.invoke('delete-mod', modId),
+    setVariantLabel: (modId: string, label: string) =>
+        ipcRenderer.invoke('set-variant-label', modId, label),
     setModPriority: (modId: string, priority: number) =>
         ipcRenderer.invoke('set-mod-priority', modId, priority),
     reorderMods: (orderedFileNames: string[]) =>
@@ -659,6 +695,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('vanilla-restore-complete', handler);
         return () => ipcRenderer.removeListener('vanilla-restore-complete', handler);
     },
+    getSteamLaunchOptionsStatus: () => ipcRenderer.invoke('get-steam-launch-options-status'),
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),
@@ -713,6 +750,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('download-error', handler);
         return () => ipcRenderer.removeListener('download-error', handler);
     },
+    onModsAutoDisabled: (callback: (data: ModsAutoDisabledData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: ModsAutoDisabledData) => callback(data);
+        ipcRenderer.on('mods-auto-disabled', handler);
+        return () => ipcRenderer.removeListener('mods-auto-disabled', handler);
+    },
 
     // Download Queue
     getDownloadQueue: () => ipcRenderer.invoke('get-download-queue'),
@@ -739,8 +781,22 @@ contextBridge.exposeInMainWorld('electronAPI', {
     respondToOneClickSuspiciousFiles: (requestId: string, accepted: boolean) =>
         ipcRenderer.invoke('one-click-suspicious-response', { requestId, accepted }),
 
+    onMultiVpkPick: (callback: (data: MultiVpkPickData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: MultiVpkPickData) => callback(data);
+        ipcRenderer.on('multi-vpk-pick', handler);
+        return () => ipcRenderer.removeListener('multi-vpk-pick', handler);
+    },
+
+    respondToMultiVpkPick: (requestId: string, selected: string[] | null) =>
+        ipcRenderer.invoke('multi-vpk-pick-response', { requestId, selected }),
+
     // Conflicts
     getConflicts: () => ipcRenderer.invoke('get-conflicts'),
+    getIgnoredConflicts: () => ipcRenderer.invoke('get-ignored-conflicts'),
+    ignoreConflict: (modA: string, modB: string) =>
+        ipcRenderer.invoke('ignore-conflict', modA, modB),
+    unignoreConflict: (modA: string, modB: string) =>
+        ipcRenderer.invoke('unignore-conflict', modA, modB),
 
     // Profiles
     getProfiles: () => ipcRenderer.invoke('get-profiles'),

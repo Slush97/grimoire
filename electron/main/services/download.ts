@@ -9,6 +9,8 @@ import { setModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
 import { getUsedPriorities, scanMods, disableMod } from './mods';
 import { validateDownloadUrl, validateFileSize } from './security';
+import { loadSettings } from './settings';
+import { getVpkLabels } from './vpk';
 import https from 'https';
 import http from 'http';
 
@@ -26,6 +28,15 @@ export interface OneClickInstallArgs {
     modId?: number;
     /** Optional pre-fetched details — avoids re-hitting the GB API. */
     enrichedDetails?: GameBananaModDetails;
+}
+
+/**
+ * Strip the trailing archive extension from a GameBanana filename so we keep
+ * a clean stem to use as a label fallback. Case-insensitive; leaves the rest
+ * of the name untouched (underscores etc. survive — the picker can prettify).
+ */
+function stripArchiveExtension(name: string): string {
+    return name.replace(/\.(zip|7z|rar|vpk)$/i, '').trim();
 }
 
 // Download queue to prevent race conditions with VPK priority assignment
@@ -447,6 +458,19 @@ async function executeDownload(
         ? `${thumbnail.baseUrl}/${thumbnail.file530 || thumbnail.file}`
         : undefined;
 
+    // GameBanana lets mod authors label each file (e.g. "Gold w/ alt candle").
+    // Persist that header so the variant picker can show meaningful names by
+    // default — much friendlier than raw VPK filenames. Trim because the
+    // upstream field occasionally has surrounding whitespace.
+    const fileDescription = details.files
+        ?.find((f) => f.id === fileId)
+        ?.description?.trim();
+    // Many mod authors leave file descriptions blank, so also capture the
+    // GB filename stem (e.g. "galaxy_rem_gold.zip" → "galaxy_rem_gold").
+    // This becomes the picker's second-line fallback so variants get a
+    // meaningful label even when the description is empty.
+    const sourceFileNameStem = stripArchiveExtension(fileName);
+
     const metadata = {
         modName: details.name,  // Store the actual mod name from GameBanana
         gameBananaId: modId,
@@ -457,6 +481,8 @@ async function executeDownload(
         audioUrl: details.previewMedia?.metadata?.audioUrl,  // Persist for Sound mod preview
         sourceSection: section,
         nsfw: details.nsfw,  // Use actual NSFW flag from GameBanana
+        fileDescription: fileDescription && fileDescription.length > 0 ? fileDescription : undefined,
+        sourceFileName: sourceFileNameStem.length > 0 ? sourceFileNameStem : undefined,
     };
 
     let installedVpks: string[] = [];
@@ -544,16 +570,55 @@ async function executeDownload(
                 }
             }
         } else if (!isMidnightMina) {
-            // Standard behavior: keep only the first VPK
+            // Multi-VPK archive (Warden Remodel et al). Previously kept only
+            // the alphabetically-first VPK and silently unlinked the rest —
+            // user feedback flagged that as data-loss-feeling. Now we prompt
+            // when there's more than one and let the user pick which to keep.
             installedVpks.sort((a, b) => a.localeCompare(b));
-            const [primaryVpk, ...extraVpks] = installedVpks;
-            installedVpks = primaryVpk ? [primaryVpk] : [];
-            for (const extraVpk of extraVpks) {
-                const extraPath = join(targetPath, extraVpk);
-                if (existsSync(extraPath)) {
-                    await fs.unlink(extraPath);
+            if (installedVpks.length > 1) {
+                const pickRequestId = randomUUID();
+                const vpkLabels = getVpkLabels(
+                    installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
+                );
+                const pick = await awaitMultiVpkPick(
+                    pickRequestId,
+                    details.name ?? fileName,
+                    installedVpks,
+                    vpkLabels,
+                    mainWindow
+                );
+                if (!pick || pick.selected.length === 0) {
+                    // Cancelled — wipe everything we extracted plus the archive.
+                    for (const vpk of installedVpks) {
+                        const extraPath = join(targetPath, vpk);
+                        if (existsSync(extraPath)) {
+                            await fs.unlink(extraPath).catch(() => { });
+                        }
+                    }
+                    if (existsSync(downloadPath)) {
+                        await fs.unlink(downloadPath).catch(() => { });
+                    }
+                    installedVpks = [];
+                    mainWindow?.webContents.send('download-error', {
+                        modId,
+                        fileId,
+                        errorCode: 'CANCELLED_BY_USER',
+                        message: 'Install cancelled.',
+                    });
+                    throw new Error('User cancelled multi-VPK pick');
                 }
+                const selectedSet = new Set(pick.selected);
+                for (const vpk of installedVpks) {
+                    if (!selectedSet.has(vpk)) {
+                        const extraPath = join(targetPath, vpk);
+                        if (existsSync(extraPath)) {
+                            await fs.unlink(extraPath);
+                        }
+                    }
+                }
+                installedVpks = installedVpks.filter((vpk) => selectedSet.has(vpk));
             }
+            // Single-VPK case: nothing to do — keep as-is.
         }
 
         // Clean up archive
@@ -576,22 +641,37 @@ async function executeDownload(
     // the newest pick is the active one. Avoids file-conflict warnings between
     // sibling variants and matches the "Browse vs Installed" expectation that
     // re-downloading swaps which variant is active without losing the others.
-    try {
-        const installedSet = new Set(installedVpks);
-        const allMods = await scanMods(deadlockPath);
-        const stalePeers = allMods.filter(
-            (m) =>
-                m.enabled &&
-                m.gameBananaId === modId &&
-                m.gameBananaFileId !== fileId &&
-                !installedSet.has(m.fileName)
-        );
-        for (const peer of stalePeers) {
-            console.log(`[downloadMod] Auto-disabling sibling variant: ${peer.fileName}`);
-            await disableMod(deadlockPath, peer.id);
+    // Opt-out: settings.autoDisableSiblingVariants = false keeps every variant
+    // enabled (user may rely on intentional overlap between mods).
+    const settings = loadSettings();
+    if (settings.autoDisableSiblingVariants !== false) {
+        try {
+            const installedSet = new Set(installedVpks);
+            const allMods = await scanMods(deadlockPath);
+            const stalePeers = allMods.filter(
+                (m) =>
+                    m.enabled &&
+                    m.gameBananaId === modId &&
+                    m.gameBananaFileId !== fileId &&
+                    !installedSet.has(m.fileName)
+            );
+            const disabledPeers: Array<{ id: string; name: string; fileName: string }> = [];
+            for (const peer of stalePeers) {
+                console.log(`[downloadMod] Auto-disabling sibling variant: ${peer.fileName}`);
+                await disableMod(deadlockPath, peer.id);
+                disabledPeers.push({ id: peer.id, name: peer.name, fileName: peer.fileName });
+            }
+            if (disabledPeers.length > 0) {
+                mainWindow?.webContents.send('mods-auto-disabled', {
+                    reason: 'sibling-variant',
+                    modId,
+                    fileId,
+                    disabled: disabledPeers,
+                });
+            }
+        } catch (err) {
+            console.warn(`[downloadMod] Failed to auto-disable sibling variants:`, err);
         }
-    } catch (err) {
-        console.warn(`[downloadMod] Failed to auto-disable sibling variants:`, err);
     }
 
     // Notify completion
@@ -610,6 +690,49 @@ export function resolveSuspiciousFileDecision(requestId: string, accepted: boole
         resolver(accepted);
         pendingSuspiciousDecisions.delete(requestId);
     }
+}
+
+// Multi-VPK picker decisions. The user picks which of N extracted VPKs to
+// keep when an archive (e.g. Warden Remodel) contains more than one. Null
+// means "cancel — discard everything".
+const pendingVpkPicks = new Map<
+    string,
+    (decision: { selected: string[] } | null) => void
+>();
+
+/** Renderer-facing IPC entry point for multi-VPK picker responses. */
+export function resolveMultiVpkPick(
+    requestId: string,
+    decision: { selected: string[] } | null
+): void {
+    const resolver = pendingVpkPicks.get(requestId);
+    if (resolver) {
+        resolver(decision);
+        pendingVpkPicks.delete(requestId);
+    }
+}
+
+/**
+ * Ask the renderer which VPKs from a multi-VPK archive to keep. Returns the
+ * subset the user wants to install, or null if they cancelled. Modal is
+ * driven by a `multi-vpk-pick` event keyed on requestId.
+ */
+function awaitMultiVpkPick(
+    requestId: string,
+    modName: string,
+    vpkFileNames: string[],
+    vpkLabels: Record<string, string>,
+    mainWindow: BrowserWindow | null
+): Promise<{ selected: string[] } | null> {
+    return new Promise((resolve) => {
+        pendingVpkPicks.set(requestId, resolve);
+        mainWindow?.webContents.send('multi-vpk-pick', {
+            requestId,
+            modName,
+            vpkFileNames,
+            vpkLabels,
+        });
+    });
 }
 
 function awaitSuspiciousDecision(
@@ -772,6 +895,13 @@ async function executeOneClickDownload(
         : undefined;
 
     const realModId = args.modId !== undefined && args.modId > 0 ? args.modId : undefined;
+    // Same trick as the regular download path: capture the author's per-file
+    // header so the variant picker has a sane default label. Only available
+    // when GB enrichment succeeded and the file id is recognised in the list.
+    const oneClickFileDescription = enriched?.files
+        ?.find((f) => f.id === fileId)
+        ?.description?.trim();
+    const oneClickSourceFileName = stripArchiveExtension(fileName);
     const metadata = {
         modName: enriched?.name ?? fileName.replace(/\.(zip|7z|rar|vpk)$/i, ''),
         gameBananaId: realModId,
@@ -781,6 +911,11 @@ async function executeOneClickDownload(
         audioUrl: enriched?.previewMedia?.metadata?.audioUrl,
         sourceSection: section,
         nsfw: enriched?.nsfw,
+        fileDescription:
+            oneClickFileDescription && oneClickFileDescription.length > 0
+                ? oneClickFileDescription
+                : undefined,
+        sourceFileName: oneClickSourceFileName.length > 0 ? oneClickSourceFileName : undefined,
     };
 
     let installedVpks: string[] = [];
@@ -819,16 +954,51 @@ async function executeOneClickDownload(
 
         installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks);
 
-        // Standard 1-Click behavior: keep only the first VPK to avoid
-        // accidentally enabling many slots from a single archive.
+        // Multi-VPK 1-Click archive: prompt the user instead of silently
+        // dropping all but the first entry. Same shape as the regular
+        // download path so behavior is consistent across install entry points.
         installedVpks.sort((a, b) => a.localeCompare(b));
-        const [primaryVpk, ...extraVpks] = installedVpks;
-        installedVpks = primaryVpk ? [primaryVpk] : [];
-        for (const extraVpk of extraVpks) {
-            const extraPath = join(targetPath, extraVpk);
-            if (existsSync(extraPath)) {
-                await fs.unlink(extraPath);
+        if (installedVpks.length > 1) {
+            const pickRequestId = randomUUID();
+            const vpkLabels = getVpkLabels(
+                installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
+            );
+            const pick = await awaitMultiVpkPick(
+                pickRequestId,
+                enriched?.name ?? fileName,
+                installedVpks,
+                vpkLabels,
+                mainWindow
+            );
+            if (!pick || pick.selected.length === 0) {
+                for (const vpk of installedVpks) {
+                    const extraPath = join(targetPath, vpk);
+                    if (existsSync(extraPath)) {
+                        await fs.unlink(extraPath).catch(() => { });
+                    }
+                }
+                if (existsSync(downloadPath)) {
+                    await fs.unlink(downloadPath).catch(() => { });
+                }
+                installedVpks = [];
+                mainWindow?.webContents.send('download-error', {
+                    modId,
+                    fileId,
+                    errorCode: 'CANCELLED_BY_USER',
+                    message: 'Install cancelled.',
+                });
+                throw new Error('User cancelled multi-VPK pick');
             }
+            const selectedSet = new Set(pick.selected);
+            for (const vpk of installedVpks) {
+                if (!selectedSet.has(vpk)) {
+                    const extraPath = join(targetPath, vpk);
+                    if (existsSync(extraPath)) {
+                        await fs.unlink(extraPath);
+                    }
+                }
+            }
+            installedVpks = installedVpks.filter((vpk) => selectedSet.has(vpk));
         }
 
         if (existsSync(downloadPath)) {

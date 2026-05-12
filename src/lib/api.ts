@@ -55,6 +55,10 @@ export async function deleteMod(modId: string): Promise<void> {
   return window.electronAPI.deleteMod(modId);
 }
 
+export async function setVariantLabel(modId: string, label: string): Promise<Mod> {
+  return window.electronAPI.setVariantLabel(modId, label);
+}
+
 export async function setModPriority(modId: string, priority: number): Promise<Mod> {
   return window.electronAPI.setModPriority(modId, priority);
 }
@@ -227,6 +231,24 @@ export interface ModConflict {
 
 export async function getConflicts(): Promise<ModConflict[]> {
   return window.electronAPI.getConflicts();
+}
+
+export async function getIgnoredConflicts(): Promise<string[]> {
+  return window.electronAPI.getIgnoredConflicts();
+}
+
+export async function ignoreConflict(modA: string, modB: string): Promise<string[]> {
+  return window.electronAPI.ignoreConflict(modA, modB);
+}
+
+export async function unignoreConflict(modA: string, modB: string): Promise<string[]> {
+  return window.electronAPI.unignoreConflict(modA, modB);
+}
+
+/** Build the ignored-list key for a pair of mod ids. Mirrors the backend
+ *  helper so the renderer can match locally without an extra IPC roundtrip. */
+export function conflictPairKey(a: string, b: string): string {
+  return a < b ? `${a}::${b}` : `${b}::${a}`;
 }
 
 // =====================

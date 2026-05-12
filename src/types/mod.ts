@@ -16,6 +16,9 @@ export interface Mod {
   categoryName?: string;
   sourceSection?: string;
   nsfw?: boolean;
+  variantLabel?: string;
+  fileDescription?: string;
+  sourceFileName?: string;
 }
 
 export interface Profile {
@@ -42,9 +45,12 @@ export interface AppSettings {
   devDeadlockPath: string | null;
   hideNsfwPreviews: boolean;
   hideOutdatedMods: boolean;
+  autoDisableSiblingVariants: boolean;
+  steamLaunchOptions: string;
   activeProfileId: string | null;
   autoSaveProfile: boolean;
   experimentalStats: boolean;
   experimentalCrosshair: boolean;
   hasCompletedSetup: boolean;
+  ignoredConflicts: string[];
 }

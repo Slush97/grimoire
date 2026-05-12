@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import {
   Search,
   Loader2,
@@ -16,6 +16,7 @@ import {
   Package,
   Music,
   SlidersHorizontal,
+  Power,
 } from 'lucide-react';
 import {
   browseMods,
@@ -45,6 +46,10 @@ const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 type ViewMode = 'grid' | 'compact' | 'list';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
+// Persist filter UI inputs across page navigation. The store keeps these in
+// memory so visiting Installed and coming back doesn't blow away the user's
+// current search/filter context. Kept out of localStorage so a fresh launch
+// starts clean — sessions, not preferences.
 
 // Only show these categories in the dropdown (lowercase for matching)
 const ALLOWED_CATEGORIES = new Set(['hud', 'other/misc', 'maps']);
@@ -140,33 +145,71 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadSettings, loadMods, mods: installedMods, soundVolume, setSoundVolume } = useAppStore();
+  const { settings, loadSettings, loadMods, mods: installedMods, soundVolume, setSoundVolume, browseUi, setBrowseUi } = useAppStore();
+  const browseSession = useAppStore((s) => s.browseSession);
+  const setBrowseSession = useAppStore((s) => s.setBrowseSession);
   const activeDeadlockPath = getActiveDeadlockPath(settings);
-  const [mods, setMods] = useState<GameBananaMod[]>([]);
+  // Filter inputs are mirrored from the store so they survive page nav.
+  // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
+  const { search, viewMode, sort, section, heroCategoryId, categoryId } = browseUi;
+  const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
+  const setViewMode = useCallback((v: ViewMode) => setBrowseUi({ viewMode: v }), [setBrowseUi]);
+  const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
+  const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
+  const setHeroCategoryId = useCallback((v: number | 'all') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
+  const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
+
+  // Hydrate from session cache on mount so navigating away + back doesn't
+  // wipe loaded results or scroll position. The cache stamp encodes current
+  // filters; if filters changed in between (impossible today since they only
+  // change on Browse, but defensive) we ignore the stale cache.
+  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}`;
+  const initialCache = browseSession && browseSession.stamp === initialFilterStamp
+    ? browseSession
+    : null;
+
+  const [mods, setMods] = useState<GameBananaMod[]>(
+    () => (initialCache?.mods as GameBananaMod[] | undefined) ?? []
+  );
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
-  const [page, setPage] = useState(1);
-  const [_totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(() => initialCache?.page ?? 1);
+  const [_totalCount, setTotalCount] = useState(() => initialCache?.totalCount ?? 0);
   const perPage = DEFAULT_PER_PAGE; // Fixed value for infinite scroll
-  const [sort, setSort] = useState<SortOption>('default');
   const [sections, setSections] = useState<GameBananaSection[]>([]);
-  const [section, setSection] = useState('Mod');
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
   // Hero list comes from the Mod section's category tree (Mod -> Skins -> heroes).
   // Cached separately so hero filtering still works on the Sound tab, where the
   // current section's category tree has no Skins parent.
   const [modCategories, setModCategories] = useState<GameBananaCategoryNode[]>([]);
-  const [heroCategoryId, setHeroCategoryId] = useState<number | 'all'>('all');
-  const [categoryId, setCategoryId] = useState<number | 'all'>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedMod, setSelectedMod] = useState<GameBananaModDetails | null>(null);
   const [selectedModDates, setSelectedModDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
   const [downloading, setDownloading] = useState<{ modId: number; fileId: number } | null>(null);
   const [downloadProgress, setDownloadProgress] = useState<{ downloaded: number; total: number } | null>(null);
   const [extracting, setExtracting] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
-  const [hasMore, setHasMore] = useState(true);
+  const [hasMore, setHasMore] = useState(() => initialCache?.hasMore ?? true);
+
+  // Last fetch's identity stamp. Value-comparison gate: if the next call to
+  // fetchMods/searchLocal would target the same (page + filters), skip it.
+  // Initialized from the session cache so hydrated state isn't re-fetched.
+  // Value-based (not "skip first run" ref) so it survives React StrictMode's
+  // double effect run in dev — the second setup compares stamps and short-
+  // circuits, instead of consuming a one-shot skip flag.
+  const lastFetchedStampRef = useRef<string | null>(
+    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}` : null
+  );
+  // Cached scroll position waiting to be applied once the grid is mounted
+  // and laid out. Cleared after restoration.
+  const pendingScrollTopRef = useRef<number | null>(initialCache?.scrollTop ?? null);
+  // The outer scroll container — same element with `h-full overflow-y-auto`.
+  const scrollContainerRef = useRef<HTMLDivElement | null>(null);
+  // Live mirror of the scroll container's scrollTop. Updated from a scroll
+  // listener so the unmount cleanup has a valid value to persist — by the
+  // time a useEffect cleanup runs, React has already detached
+  // `scrollContainerRef.current`, so reading scrollTop from the DOM ref
+  // there always returned 0 and the saved position was useless.
+  const latestScrollTopRef = useRef<number>(initialCache?.scrollTop ?? 0);
   // When local search fails (e.g. SQLite error), this flips so the main fetch
   // effect falls back to the API path. Resets whenever filter inputs change.
   const [localSearchFailed, setLocalSearchFailed] = useState(false);
@@ -241,32 +284,130 @@ export default function Browse() {
       ? (categoryId === 'all' ? undefined : categoryId)
       : heroCategoryId;
 
-  const effectiveSearch = search;
+  // Debounce the search input: every keystroke previously fired a full FTS5
+  // query + count + render, which felt slow even when the DB was fast. 250ms
+  // is short enough that typing-to-results still feels responsive but long
+  // enough to absorb fast typing into a single request.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const effectiveSearch = debouncedSearch;
+
+  // Keep a fresh `mods` reference outside the fetch closures so they can check
+  // "did the user already have results visible?" without making `mods` a
+  // useCallback dep (that would self-trigger). Also doubles as the source
+  // for the unmount-time cache save.
+  const modsRef = useRef<GameBananaMod[]>(mods);
+  const pageRef = useRef<number>(page);
+  const hasMoreRef = useRef<boolean>(hasMore);
+  const totalCountRef = useRef<number>(_totalCount);
+  useEffect(() => {
+    modsRef.current = mods;
+  }, [mods]);
+  useEffect(() => {
+    pageRef.current = page;
+  }, [page]);
+  useEffect(() => {
+    hasMoreRef.current = hasMore;
+  }, [hasMore]);
+  useEffect(() => {
+    totalCountRef.current = _totalCount;
+  }, [_totalCount]);
+
+  // Restore cached scroll position once the first paint with hydrated mods
+  // is on screen. useLayoutEffect (not useEffect) so we scroll before the
+  // browser paints, avoiding a visible jump from 0 to the saved offset.
+  useLayoutEffect(() => {
+    const target = pendingScrollTopRef.current;
+    if (target === null) return;
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    container.scrollTop = target;
+    pendingScrollTopRef.current = null;
+  }, []);
+
+  // Mirror scrollTop into a ref on every scroll. The unmount cleanup below
+  // runs as a passive effect — by then React has already nulled
+  // `scrollContainerRef.current`, so we can't read scrollTop off the DOM
+  // there. The ref gives us the last-known value to persist instead.
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      latestScrollTopRef.current = container.scrollTop;
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => container.removeEventListener('scroll', onScroll);
+  }, []);
+
+  // Persist session cache on unmount so navigating back resumes exactly
+  // where the user left off. Refs feed the cleanup with current values
+  // since the closure captures at first render.
+  useEffect(() => {
+    return () => {
+      const ui = useAppStore.getState().browseUi;
+      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}`;
+      const cachedMods = modsRef.current;
+      // Don't cache an empty state — would just bypass the next fetch
+      // unhelpfully. Clear instead so the next mount starts fresh.
+      if (cachedMods.length === 0) {
+        setBrowseSession(null);
+        return;
+      }
+      // Read scrollTop from the live mirror — `scrollContainerRef.current` is
+      // already null here (React detaches DOM refs before passive cleanups).
+      const scrollTop = latestScrollTopRef.current;
+      setBrowseSession({
+        mods: cachedMods,
+        page: pageRef.current,
+        hasMore: hasMoreRef.current,
+        totalCount: totalCountRef.current,
+        scrollTop,
+        stamp,
+      });
+    };
+  }, [setBrowseSession]);
 
   // Derived (not state) so the right code path runs in the same render the
   // user picks a hero/types a query. Storing it in useState lagged a render,
   // which caused fetchMods (API, no hero filter) to race with searchLocal and
   // overwrite real results with an empty API response.
   const useLocalSearch = useMemo(() => {
-    const hasSearchQuery = search.trim().length > 0;
+    const hasSearchQuery = debouncedSearch.trim().length > 0;
     const hasHeroFilter = heroCategoryId !== 'all';
     return (hasSearchQuery || hasHeroFilter) && hasLocalCache && !localSearchFailed;
-  }, [search, heroCategoryId, hasLocalCache, localSearchFailed]);
+  }, [debouncedSearch, heroCategoryId, hasLocalCache, localSearchFailed]);
 
   // Reset the failure flag whenever the user changes filters so a one-off
   // backend error doesn't permanently disable local search.
   useEffect(() => {
     setLocalSearchFailed(false);
-  }, [search, heroCategoryId, section]);
+  }, [debouncedSearch, heroCategoryId, section]);
 
   const fetchMods = useCallback(async () => {
     // Don't fetch from API if we're using local search
     if (useLocalSearch) return;
+    // Value-compare gate: skip when we'd be re-fetching the exact same state
+    // we already loaded. Covers cache hydration on mount AND React
+    // StrictMode's double-effect setup. Set BEFORE the network call so
+    // a second setup hitting this line sees the stamp and returns.
+    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}`;
+    if (lastFetchedStampRef.current === stamp) return;
+    lastFetchedStampRef.current = stamp;
 
-    // Show loading spinner on first page, loading indicator otherwise
+    // On a fresh load (no results yet) show the skeleton; on a refetch keep
+    // the stale list visible and just surface a soft progress indicator so
+    // each keystroke doesn't repaint the whole grid as gray boxes.
     if (page === 1) {
-      setLoading(true);
-      setMods([]);
+      const hadResults = modsRef.current.length > 0;
+      if (hadResults) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       setHasMore(true);
     } else {
       setLoadingMore(true);
@@ -321,15 +462,27 @@ export default function Browse() {
     section,
     perPage,
     effectiveCategoryId,
+    heroCategoryId,
     useLocalSearch,
   ]);
 
   // Local search function using SQLite cache
   const searchLocal = useCallback(async () => {
-    // Show loading spinner on first page, loading indicator otherwise
+    // Same value-compare gate as fetchMods so the shared stamp prevents
+    // re-fetching cached state and survives StrictMode double-mount.
+    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}`;
+    if (lastFetchedStampRef.current === stamp) return;
+    lastFetchedStampRef.current = stamp;
+    // Same anti-flash logic as fetchMods: skeleton only on truly empty first
+    // load. Subsequent refetches keep the previous result set visible until
+    // the new one arrives.
     if (page === 1) {
-      setLoading(true);
-      setMods([]);
+      const hadResults = modsRef.current.length > 0;
+      if (hadResults) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       setHasMore(true);
     } else {
       setLoadingMore(true);
@@ -413,11 +566,24 @@ export default function Browse() {
     }
   }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, modCategories]);
 
+  // Value-compare gate for the filter-reset: remember what filters last
+  // triggered a reset; only reset when the new combination is actually
+  // different. This survives both initial cache hydration and React
+  // StrictMode's double-effect run (the second setup sees the same stamp
+  // and short-circuits, instead of consuming a one-shot skip flag).
+  const lastResetFiltersRef = useRef<string | null>(
+    `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${perPage}`
+  );
   useEffect(() => {
+    const current = `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${perPage}`;
+    if (lastResetFiltersRef.current === current) return;
+    lastResetFiltersRef.current = current;
+    // Reset pagination when filters change but keep previous results visible
+    // until the new query lands. Blanking mods here is what produced the
+    // skeleton flash on every keystroke pre-debounce.
     setPage(1);
     setHasMore(true);
-    setMods([]);
-  }, [search, sort, section, effectiveCategoryId, perPage]);
+  }, [debouncedSearch, sort, section, effectiveCategoryId, perPage]);
 
   useEffect(() => {
     let active = true;
@@ -461,8 +627,17 @@ export default function Browse() {
     return () => {
       active = false;
     };
+    // Run once on mount: section selection is read inside but we don't want
+    // refires on every tab switch (that would re-fetch the section list
+    // unnecessarily). setSection is stable from the store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Track whether `section` actually changed (vs. the effect just firing on
+  // mount because deps populated for the first time). Without this guard the
+  // hero/category filters were reset to 'all' on every remount, which then
+  // triggered a refetch and threw away the cached scroll position.
+  const lastLoadedSectionRef = useRef<string | null>(null);
   useEffect(() => {
     let active = true;
     const selected = sections.find((entry) => entry.modelName === section);
@@ -473,13 +648,20 @@ export default function Browse() {
       };
     }
 
+    const sectionChanged = lastLoadedSectionRef.current !== null && lastLoadedSectionRef.current !== section;
+    lastLoadedSectionRef.current = section;
+
     const loadCategories = async () => {
       try {
         const data = await getGamebananaCategories(selected.categoryModelName);
         if (!active) return;
         setCategories(data);
-        setHeroCategoryId('all');
-        setCategoryId('all');
+        // Only reset the hero/category filter when the user actually
+        // switched sections — not on every remount.
+        if (sectionChanged) {
+          setHeroCategoryId('all');
+          setCategoryId('all');
+        }
       } catch (err) {
         if (active) {
           setError(String(err));
@@ -492,7 +674,7 @@ export default function Browse() {
     return () => {
       active = false;
     };
-  }, [sections, section]);
+  }, [sections, section, setCategoryId, setHeroCategoryId]);
 
   useEffect(() => {
     if (useLocalSearch) {
@@ -737,6 +919,16 @@ export default function Browse() {
         return;
       }
 
+      // When a mod has more than one downloadable file (different versions,
+      // variant builds, etc.) we used to silently pick whichever had the
+      // highest download count. Forum feedback flagged that — surface the
+      // details modal so the user can choose which file to install.
+      if (details.files.length > 1) {
+        setSelectedMod(details);
+        setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
+        return;
+      }
+
       const file = getPrimaryFile(details.files);
 
       // If nothing is currently downloading, set this as the active download
@@ -794,6 +986,26 @@ export default function Browse() {
     return ids;
   }, [installedMods]);
 
+  // Per-card lookup so each ModCard knows the local mod's id + enabled state.
+  // Drives the inline "Enable" affordance: once a download finishes, the
+  // top-right of the card flips from a downloading spinner into either a
+  // green ✓ (already enabled) or a yellow Enable pill (still disabled).
+  const installedByGbId = useMemo(() => {
+    const map = new Map<number, { id: string; enabled: boolean }>();
+    for (const mod of installedMods) {
+      if (typeof mod.gameBananaId !== 'number') continue;
+      // If a user has multiple variants of the same GB mod installed, prefer
+      // the enabled one — that's the relevant state to show.
+      const existing = map.get(mod.gameBananaId);
+      if (!existing || (mod.enabled && !existing.enabled)) {
+        map.set(mod.gameBananaId, { id: mod.id, enabled: mod.enabled });
+      }
+    }
+    return map;
+  }, [installedMods]);
+
+  const toggleMod = useAppStore((state) => state.toggleMod);
+
   // Track installed file IDs for per-file "Reinstall" button state
   const installedFileIds = useMemo(() => {
     const ids = new Set<number>();
@@ -803,6 +1015,23 @@ export default function Browse() {
       }
     }
     return ids;
+  }, [installedMods]);
+
+  // Per-file install map for the details modal. Lets a row that's installed
+  // but currently disabled surface an inline "Enable" pill — matches the
+  // affordance already on the tile card. If multiple local mods share a
+  // file id (rare, e.g. dupe installs), prefer the enabled one as the
+  // representative since that's the actionable state.
+  const installedFileStates = useMemo(() => {
+    const map = new Map<number, { modId: string; enabled: boolean }>();
+    for (const mod of installedMods) {
+      if (typeof mod.gameBananaFileId !== 'number') continue;
+      const existing = map.get(mod.gameBananaFileId);
+      if (!existing || (mod.enabled && !existing.enabled)) {
+        map.set(mod.gameBananaFileId, { modId: mod.id, enabled: mod.enabled });
+      }
+    }
+    return map;
   }, [installedMods]);
 
   // Just use all loaded mods - infinite scroll handles pagination.
@@ -824,7 +1053,7 @@ export default function Browse() {
   }
 
   return (
-    <div className="h-full overflow-y-auto">
+    <div className="h-full overflow-y-auto" ref={scrollContainerRef}>
       {/* Header with Search */}
       <div className="sticky top-0 z-10 p-4 border-b border-border bg-bg-primary">
         <form onSubmit={handleSearch}>
@@ -839,6 +1068,14 @@ export default function Browse() {
                 className="w-full bg-bg-secondary border border-border rounded-lg pl-3 pr-16 py-2 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                {/* Inline spinner while debouncing or refetching with stale results.
+                    Replaces the prior whole-grid skeleton flash on every keystroke. */}
+                {(search !== debouncedSearch || (loadingMore && page === 1)) && (
+                  <Loader2
+                    className="w-4 h-4 mx-1 animate-spin text-text-secondary"
+                    aria-label="Searching"
+                  />
+                )}
                 {search && (
                   <button
                     type="button"
@@ -1130,11 +1367,13 @@ export default function Browse() {
               {displayMods.map((mod) => {
                 const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
                 const isQueued = queueIndex >= 0;
+                const installedLocal = installedByGbId.get(mod.id);
                 return (
                   <ModCard
                     key={mod.id}
                     mod={mod}
                     installed={installedIds.has(mod.id)}
+                    installedDisabled={!!installedLocal && !installedLocal.enabled}
                     downloading={downloading?.modId === mod.id}
                     queuePosition={isQueued ? queueIndex + 1 : undefined}
                     viewMode={viewMode}
@@ -1151,6 +1390,9 @@ export default function Browse() {
                     }}
                     onClick={() => handleModClick(mod)}
                     onQuickDownload={() => handleQuickDownload(mod)}
+                    onEnable={installedLocal && !installedLocal.enabled
+                      ? () => toggleMod(installedLocal.id)
+                      : undefined}
                   />
                 );
               })}
@@ -1178,6 +1420,8 @@ export default function Browse() {
           section={section}
           installed={installedIds.has(selectedMod.id)}
           installedFileIds={installedFileIds}
+          installedFileStates={installedFileStates}
+          onEnableFile={(modId) => toggleMod(modId)}
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
           extracting={extracting}
           progress={downloadProgress}
@@ -1195,6 +1439,9 @@ export default function Browse() {
 interface ModCardProps {
   mod: GameBananaMod;
   installed: boolean;
+  /** True when the local install for this GB mod is currently disabled.
+   *  Drives the inline Enable affordance shown after a fresh download. */
+  installedDisabled?: boolean;
   downloading: boolean;
   queuePosition?: number;
   viewMode: ViewMode;
@@ -1206,6 +1453,9 @@ interface ModCardProps {
   onPlayingChange: (playing: boolean) => void;
   onClick: () => void;
   onQuickDownload: () => void;
+  /** Toggle the local mod's enabled state. Provided only when there's an
+   *  installed-but-disabled mod to enable. */
+  onEnable?: () => void;
 }
 
 function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
@@ -1232,7 +1482,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
-function ModCard({ mod, installed, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload }: ModCardProps) {
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isCompact = viewMode === 'compact';
@@ -1286,7 +1536,16 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <h3 className="font-medium truncate flex-1">{mod.name}</h3>
-            {installed ? (
+            {installed && installedDisabled && onEnable ? (
+              <button
+                onClick={(e) => { e.stopPropagation(); onEnable(); }}
+                className="flex-shrink-0 flex items-center gap-1.5 px-2.5 h-7 bg-state-warning/15 hover:bg-state-warning/25 border border-state-warning/40 text-state-warning rounded-full text-xs font-semibold transition-colors cursor-pointer"
+                title="Enable this mod (currently in your disabled folder)"
+              >
+                <Power className="w-3 h-3" />
+                Enable
+              </button>
+            ) : installed ? (
               <Tag tone="success" variant="overlay" title="Installed" className="flex-shrink-0">
                 <span aria-hidden>✓</span>
                 Installed
@@ -1520,12 +1779,24 @@ function ModCard({ mod, installed, downloading, queuePosition, viewMode, section
         </div>
       )}
 
-      {/* Download button overlay — top right with backdrop */}
+      {/* Download / Enable button overlay — top right with backdrop */}
       <div className="absolute top-2 right-2">
-        {installed ? (
+        {installed && installedDisabled && onEnable ? (
+          // Mod just installed but still in the disabled folder. Surface an
+          // inline Enable affordance right where the user's eye is rather
+          // than forcing them to the Installed tab.
+          <button
+            onClick={(e) => { e.stopPropagation(); onEnable(); }}
+            className={`flex items-center gap-1.5 rounded-full bg-state-warning/90 hover:bg-state-warning text-black backdrop-blur-sm ring-1 ring-black/40 shadow-md font-semibold transition-colors cursor-pointer ${isCompact ? 'h-7 px-2 text-[11px]' : 'h-8 px-2.5 text-xs'}`}
+            title="Enable this mod (currently in your disabled folder)"
+          >
+            <Power className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
+            Enable
+          </button>
+        ) : installed ? (
           <span
             className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-black/60 shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
-            title="Installed"
+            title="Installed and enabled"
           >
             ✓
           </span>

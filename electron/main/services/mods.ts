@@ -30,6 +30,18 @@ export interface Mod {
     categoryName?: string;
     sourceSection?: string;
     nsfw?: boolean;
+    /** User-given name for this VPK, used to disambiguate variants of the
+     *  same GameBanana mod (e.g. "Red preset" vs "Blue preset"). Optional. */
+    variantLabel?: string;
+    /** Author-provided file header from GameBanana (_sDescription). Used as
+     *  the variant-picker fallback when the user hasn't set a label of their
+     *  own, so rows show "Gold w/ alt candle" instead of the raw filename. */
+    fileDescription?: string;
+    /** Original GameBanana filename stem (e.g. "galaxy_rem_gold"). Captured
+     *  so variants from mods whose author left descriptions empty still get
+     *  a meaningful label — falls between fileDescription and the local
+     *  pakNN_dir.vpk filename in the picker's display chain. */
+    sourceFileName?: string;
 }
 
 /**

@@ -1,5 +1,14 @@
 import { scanMods, Mod } from './mods';
 import { parseVpkDirectory } from './vpk';
+import { loadSettings } from './settings';
+
+/**
+ * Build a stable order-independent key for a pair of mod ids. Sorts the two
+ * ids so detection order doesn't matter when checking the ignored list.
+ */
+export function conflictPairKey(a: string, b: string): string {
+    return a < b ? `${a}::${b}` : `${b}::${a}`;
+}
 
 // Files to ignore when checking for conflicts (non-game metadata files)
 const IGNORED_CONFLICT_FILES = new Set([
@@ -133,6 +142,14 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
         }
     }
 
-    console.log(`[detectConflicts] Found ${conflicts.length} conflicts`);
-    return conflicts;
+    // Strip out any pairs the user has explicitly dismissed. We do this at
+    // the end rather than inside the loops so the ignored list stays a clean
+    // post-filter — easy to reason about and easy to disable later.
+    const ignored = new Set(loadSettings().ignoredConflicts ?? []);
+    const filtered = ignored.size === 0
+        ? conflicts
+        : conflicts.filter((c) => !ignored.has(conflictPairKey(c.modA, c.modB)));
+
+    console.log(`[detectConflicts] Found ${conflicts.length} conflicts (${conflicts.length - filtered.length} ignored)`);
+    return filtered;
 }

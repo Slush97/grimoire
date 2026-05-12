@@ -8,6 +8,7 @@ import {
     recoverFromStashOnStartup,
     type RestoreResult,
 } from '../services/launch';
+import { readLaunchOptions, isSteamRunning } from '../services/launchOptions';
 import { getMainWindow } from '../index';
 
 function getActiveDeadlockPath(): string | null {
@@ -50,6 +51,27 @@ ipcMain.handle('get-vanilla-stash-status', async (): Promise<{
         active: true,
         startedAt: stash.startedAt,
         modCount: stash.mods.length,
+    };
+});
+
+ipcMain.handle('get-steam-launch-options-status', async (): Promise<{
+    available: boolean;
+    configPath: string | null;
+    currentValue: string | null;
+    steamRunning: boolean;
+}> => {
+    const [lookup, running] = await Promise.all([
+        readLaunchOptions(),
+        isSteamRunning(),
+    ]);
+    if (!lookup) {
+        return { available: false, configPath: null, currentValue: null, steamRunning: running };
+    }
+    return {
+        available: true,
+        configPath: lookup.configPath,
+        currentValue: lookup.currentValue,
+        steamRunning: running,
     };
 });
 

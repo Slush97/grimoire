@@ -43,7 +43,14 @@ export default function Sidebar() {
   const [stashStatus, setStashStatus] = useState<VanillaStashStatus>({ active: false });
   const [launchPending, setLaunchPending] = useState<'modded' | 'vanilla' | null>(null);
   const [restorePending, setRestorePending] = useState(false);
-  const [toast, setToast] = useState<{ kind: 'info' | 'error'; text: string } | null>(null);
+  // Toasts can carry an optional action button — used for "Enable" after a
+  // fresh download and "Re-enable" after a sibling auto-disable. The action
+  // closes the toast when invoked.
+  const [toast, setToast] = useState<{
+    kind: 'info' | 'error';
+    text: string;
+    action?: { label: string; onClick: () => void | Promise<void> };
+  } | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
   const refreshStashStatus = useCallback(async () => {
@@ -115,9 +122,34 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (!toast) return;
-    const t = setTimeout(() => setToast(null), 6000);
+    // Stickier when there's an action — give the user time to actually
+    // notice and tap it.
+    const lifetime = toast.action ? 10000 : 6000;
+    const t = setTimeout(() => setToast(null), lifetime);
     return () => clearTimeout(t);
   }, [toast]);
+
+  // Surface auto-disabled sibling variants. The download backend silently
+  // moves older variants of the same GB mod into disabled/ on re-download; this
+  // toast tells the user what happened so it doesn't look like data loss.
+  useEffect(() => {
+    const unsub = window.electronAPI.onModsAutoDisabled((data) => {
+      if (!data.disabled.length) return;
+      const names = data.disabled.map((m) => m.name);
+      const head = names.slice(0, 2).join(', ');
+      const tail = names.length > 2 ? ` and ${names.length - 2} more` : '';
+      setToast({
+        kind: 'info',
+        text: `Disabled older variant${names.length === 1 ? '' : 's'}: ${head}${tail}.`,
+        action: {
+          label: 'View',
+          onClick: () => navigate('/'),
+        },
+      });
+      loadMods();
+    });
+    return unsub;
+  }, [loadMods, navigate]);
 
   const navItems = useMemo(() => {
     type BadgeTone = 'muted' | 'warning';
@@ -289,7 +321,29 @@ export default function Sidebar() {
                 : 'border border-accent/40 bg-accent/10 text-accent'
             }`}
           >
-            {toast.text}
+            <div>{toast.text}</div>
+            {toast.action && (
+              <button
+                type="button"
+                onClick={async () => {
+                  const action = toast.action;
+                  if (!action) return;
+                  // Dismiss immediately so a slow handler doesn't leave a
+                  // stale toast on screen.
+                  setToast(null);
+                  try {
+                    await action.onClick();
+                  } catch (err) {
+                    console.warn('[Sidebar] toast action failed:', err);
+                  }
+                }}
+                className={`mt-1.5 text-xs font-medium underline-offset-2 hover:underline cursor-pointer ${
+                  toast.kind === 'error' ? 'text-red-200' : 'text-accent-hover'
+                }`}
+              >
+                {toast.action.label}
+              </button>
+            )}
           </div>
         )}
 

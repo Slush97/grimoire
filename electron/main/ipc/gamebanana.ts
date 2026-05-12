@@ -11,7 +11,7 @@ import {
     GameBananaModsResponse,
     GameBananaModDetails,
 } from '../services/gamebanana';
-import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, resolveSuspiciousFileDecision, DownloadModArgs } from '../services/download';
+import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, resolveSuspiciousFileDecision, resolveMultiVpkPick, DownloadModArgs } from '../services/download';
 import { getMainWindow } from '../index';
 import { updateModNsfw } from '../services/modDatabase';
 
@@ -108,6 +108,14 @@ ipcMain.handle(
     'one-click-suspicious-response',
     (_, args: { requestId: string; accepted: boolean }): void => {
         resolveSuspiciousFileDecision(args.requestId, args.accepted);
+    }
+);
+
+// multi-vpk-pick-response (renderer hands back the user's VPK selection)
+ipcMain.handle(
+    'multi-vpk-pick-response',
+    (_, args: { requestId: string; selected: string[] | null }): void => {
+        resolveMultiVpkPick(args.requestId, args.selected === null ? null : { selected: args.selected });
     }
 );
 

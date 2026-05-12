@@ -80,6 +80,13 @@ export interface VanillaStashStatus {
     modCount?: number;
 }
 
+export interface SteamLaunchOptionsStatus {
+    available: boolean;
+    configPath: string | null;
+    currentValue: string | null;
+    steamRunning: boolean;
+}
+
 export interface VanillaRestoreResult {
     restored: number;
     skipped: number;
@@ -106,6 +113,13 @@ export interface DownloadErrorData {
     helpUrl?: string;
 }
 
+export interface ModsAutoDisabledData {
+    reason: 'sibling-variant';
+    modId: number;
+    fileId: number;
+    disabled: Array<{ id: string; name: string; fileName: string }>;
+}
+
 export interface DownloadQueueItem {
     modId: number;
     fileId: number;
@@ -130,6 +144,15 @@ export interface OneClickSuspiciousFilesData {
     requestId: string;
     modName: string;
     files: string[];
+}
+
+export interface MultiVpkPickData {
+    requestId: string;
+    modName: string;
+    vpkFileNames: string[];
+    /** filename → human-readable label derived from VPK contents. Missing
+     *  entries fall back to the filename in the picker. */
+    vpkLabels?: Record<string, string>;
 }
 
 export interface SyncProgressData {
@@ -236,6 +259,7 @@ export interface ElectronAPI {
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
+    setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
@@ -248,6 +272,7 @@ export interface ElectronAPI {
     getVanillaStashStatus: () => Promise<VanillaStashStatus>;
     restoreVanillaStash: () => Promise<VanillaRestoreResult>;
     onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
+    getSteamLaunchOptionsStatus: () => Promise<SteamLaunchOptionsStatus>;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
@@ -284,6 +309,7 @@ export interface ElectronAPI {
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;
+    onModsAutoDisabled: (callback: (data: ModsAutoDisabledData) => void) => () => void;
 
     // Download Queue
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
@@ -300,9 +326,17 @@ export interface ElectronAPI {
         requestId: string,
         accepted: boolean
     ) => Promise<void>;
+    onMultiVpkPick: (callback: (data: MultiVpkPickData) => void) => () => void;
+    respondToMultiVpkPick: (
+        requestId: string,
+        selected: string[] | null
+    ) => Promise<void>;
 
     // Conflicts
     getConflicts: () => Promise<ModConflict[]>;
+    getIgnoredConflicts: () => Promise<string[]>;
+    ignoreConflict: (modA: string, modB: string) => Promise<string[]>;
+    unignoreConflict: (modA: string, modB: string) => Promise<string[]>;
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;

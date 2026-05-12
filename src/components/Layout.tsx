@@ -9,7 +9,8 @@ import { Button } from './common/ui';
 import { ConfirmModal } from './common/PageComponents';
 import { getSettings, setSettings, getGameinfoStatus, fixGameinfo } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import type { OneClickSuspiciousFilesData } from '../types/electron';
+import type { OneClickSuspiciousFilesData, MultiVpkPickData } from '../types/electron';
+import MultiVpkPickerModal from './MultiVpkPickerModal';
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -20,6 +21,7 @@ export default function Layout() {
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
   const [oneClickBanner, setOneClickBanner] = useState<{ message: string; isError: boolean } | null>(null);
   const [suspiciousPrompt, setSuspiciousPrompt] = useState<OneClickSuspiciousFilesData | null>(null);
+  const [multiVpkPrompt, setMultiVpkPrompt] = useState<MultiVpkPickData | null>(null);
 
   useEffect(() => {
     const checkFirstRun = async () => {
@@ -100,6 +102,13 @@ export default function Layout() {
     return unsubscribe;
   }, []);
 
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onMultiVpkPick((data) => {
+      setMultiVpkPrompt(data);
+    });
+    return unsubscribe;
+  }, []);
+
   const respondToSuspicious = async (accepted: boolean) => {
     if (!suspiciousPrompt) return;
     await window.electronAPI.respondToOneClickSuspiciousFiles(
@@ -107,6 +116,12 @@ export default function Layout() {
       accepted
     );
     setSuspiciousPrompt(null);
+  };
+
+  const respondToMultiVpk = async (selected: string[] | null) => {
+    if (!multiVpkPrompt) return;
+    await window.electronAPI.respondToMultiVpkPick(multiVpkPrompt.requestId, selected);
+    setMultiVpkPrompt(null);
   };
 
   const handleFixGameinfo = async () => {
@@ -228,6 +243,14 @@ export default function Layout() {
           ) : null
         }
       />
+      {multiVpkPrompt && (
+        <MultiVpkPickerModal
+          key={multiVpkPrompt.requestId}
+          data={multiVpkPrompt}
+          onConfirm={(selected) => respondToMultiVpk(selected)}
+          onCancel={() => respondToMultiVpk(null)}
+        />
+      )}
       {showWelcome && <WelcomeModal onComplete={handleSetupComplete} />}
     </div>
   );

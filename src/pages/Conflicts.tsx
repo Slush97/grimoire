@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, RefreshCw, X } from 'lucide-react';
-import { getConflicts, disableMod, getMods } from '../lib/api';
+import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye } from 'lucide-react';
+import {
+  getConflicts,
+  disableMod,
+  getMods,
+  getIgnoredConflicts,
+  ignoreConflict,
+  unignoreConflict,
+  conflictPairKey,
+} from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
@@ -48,19 +56,27 @@ function ConflictsSkeleton() {
 export default function Conflicts() {
   const [conflicts, setConflicts] = useState<ModConflict[]>([]);
   const [modsMap, setModsMap] = useState<Map<string, ModWithThumbnail>>(new Map());
+  // Set of ignored pair keys ("idA::idB" sorted). Used both to filter
+  // detected conflicts (defense-in-depth — backend already filters) and to
+  // render the "Ignored" panel.
+  const [ignored, setIgnored] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [disableTarget, setDisableTarget] = useState<ModWithThumbnail | null>(null);
   const [disabling, setDisabling] = useState(false);
+  // Tracks which pair the user is currently toggling so we can disable just
+  // that row's buttons during the round-trip without freezing the whole page.
+  const [pendingPair, setPendingPair] = useState<string | null>(null);
   const { loadMods } = useAppStore();
 
   const loadConflicts = async () => {
     setLoading(true);
     setError(null);
     try {
-      const [conflictResult, modsResult] = await Promise.all([
+      const [conflictResult, modsResult, ignoredResult] = await Promise.all([
         getConflicts(),
         getMods(),
+        getIgnoredConflicts(),
       ]);
 
       const map = new Map<string, ModWithThumbnail>();
@@ -74,10 +90,46 @@ export default function Conflicts() {
       }
       setModsMap(map);
       setConflicts(conflictResult);
+      setIgnored(new Set(ignoredResult));
     } catch (err) {
       setError(String(err));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleIgnore = async (modA: string, modB: string) => {
+    const key = conflictPairKey(modA, modB);
+    setPendingPair(key);
+    try {
+      const next = await ignoreConflict(modA, modB);
+      setIgnored(new Set(next));
+      // Backend filters ignored pairs from get-conflicts, so dropping locally
+      // keeps the UI consistent without a second round-trip.
+      setConflicts((prev) =>
+        prev.filter((c) => conflictPairKey(c.modA, c.modB) !== key)
+      );
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  const handleUnignore = async (key: string) => {
+    const [modA, modB] = key.split('::');
+    if (!modA || !modB) return;
+    setPendingPair(key);
+    try {
+      const next = await unignoreConflict(modA, modB);
+      setIgnored(new Set(next));
+      // Re-detect so the unignored pair shows back up if still conflicting.
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
     }
   };
 
@@ -124,7 +176,7 @@ export default function Conflicts() {
     );
   }
 
-  if (conflicts.length === 0) {
+  if (conflicts.length === 0 && ignored.size === 0) {
     return (
       <div className="h-full flex items-center justify-center p-6">
         <EmptyState
@@ -143,12 +195,27 @@ export default function Conflicts() {
     <div className="p-6">
       <PageHeader
         title={`Conflicts (${conflicts.length})`}
-        description="Resolve conflicts between installed mods"
+        description={
+          conflicts.length === 0
+            ? 'No active conflicts — review or restore your ignored pairs below.'
+            : 'Resolve conflicts between installed mods'
+        }
         action={
           <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
         }
         className="mb-6"
       />
+
+      {/* Empty active-conflict slot when every conflict has been dismissed.
+          We don't redirect to the global empty state because the user still
+          has the ignored list to manage — making everything disappear would
+          hide the only path back. */}
+      {conflicts.length === 0 && (
+        <div className="mb-6 p-4 rounded-xl border border-border bg-bg-secondary text-sm text-text-secondary flex items-center gap-2">
+          <CheckCircle className="w-4 h-4 text-green-400" />
+          No active conflicts. {ignored.size > 0 && `${ignored.size} pair(s) currently ignored — see below.`}
+        </div>
+      )}
 
       {/* Grid of conflict cards */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -163,8 +230,20 @@ export default function Conflicts() {
             >
               {/* Header */}
               <div className="bg-yellow-500/10 px-4 py-2 flex items-center gap-2 border-b border-yellow-500/20">
-                <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                <span className="text-sm text-yellow-400">{conflict.details}</span>
+                <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                <span className="text-sm text-yellow-400 min-w-0 flex-1 truncate" title={conflict.details}>
+                  {conflict.details}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleIgnore(conflict.modA, conflict.modB)}
+                  disabled={pendingPair === conflictPairKey(conflict.modA, conflict.modB)}
+                  title="Stop flagging this pair as a conflict"
+                  className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  <EyeOff className="w-3.5 h-3.5" />
+                  Ignore
+                </button>
               </div>
 
               {/* Two mod cards */}
@@ -246,6 +325,51 @@ export default function Conflicts() {
           );
         })}
       </div>
+
+      {/* Ignored conflicts panel — sits at the bottom of the page so the
+          live conflict list stays the primary focus. Each row shows the two
+          mod names plus an Unignore action that re-runs detection so the
+          pair shows back up if it's still actually conflicting. */}
+      {ignored.size > 0 && (
+        <div className="mt-10">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary mb-3 flex items-center gap-2">
+            <EyeOff className="w-4 h-4" />
+            Ignored ({ignored.size})
+          </h3>
+          <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
+            {Array.from(ignored).map((key) => {
+              const [idA, idB] = key.split('::');
+              const a = modsMap.get(idA);
+              const b = modsMap.get(idB);
+              // If either mod was uninstalled while ignored we still show the
+              // entry (using a placeholder) so the user can clean it up. The
+              // backend's filter is a no-op for missing ids — they just
+              // never re-appear as active conflicts.
+              const aName = a?.name ?? '(removed mod)';
+              const bName = b?.name ?? '(removed mod)';
+              return (
+                <div key={key} className="flex items-center gap-3 px-4 py-3">
+                  <div className="min-w-0 flex-1 flex items-center gap-2 text-sm">
+                    <span className="truncate text-text-primary" title={aName}>{aName}</span>
+                    <span className="text-text-tertiary text-xs flex-shrink-0">vs</span>
+                    <span className="truncate text-text-primary" title={bName}>{bName}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleUnignore(key)}
+                    disabled={pendingPair === key}
+                    className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Restore conflict detection for this pair"
+                  >
+                    <Eye className="w-3.5 h-3.5" />
+                    Unignore
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <ConfirmModal
         isOpen={disableTarget !== null}

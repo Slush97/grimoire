@@ -45,6 +45,9 @@ function enrichMod(mod: Mod): Mod {
             categoryName: metadata.categoryName,
             sourceSection: metadata.sourceSection,
             nsfw: metadata.nsfw,
+            variantLabel: metadata.variantLabel,
+            fileDescription: metadata.fileDescription,
+            sourceFileName: metadata.sourceFileName,
         };
     }
     return mod;
@@ -88,6 +91,30 @@ ipcMain.handle('delete-mod', async (_, modId: string): Promise<void> => {
     }
     await deleteMod(deadlockPath, modId);
 });
+
+// set-variant-label — user-facing rename of a single VPK (the "variant"
+// inside a grouped mod). Stored alongside the mod's other metadata so it
+// survives priority renames via migrateModMetadata. An empty string clears
+// the label and falls back to the filename-derived display.
+ipcMain.handle(
+    'set-variant-label',
+    async (_, modId: string, label: string): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        const trimmed = label.trim();
+        setModMetadata(target.fileName, {
+            variantLabel: trimmed.length > 0 ? trimmed : undefined,
+        });
+        return enrichMod(target);
+    }
+);
 
 // set-mod-priority
 ipcMain.handle(

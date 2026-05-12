@@ -201,6 +201,65 @@ export function extractHeroFromPath(filePath: string): string | null {
 }
 
 /**
+ * Best-effort label derived from a VPK's file tree (VPKs have no authored
+ * title). Returns null when nothing distinctive matches — caller should
+ * fall back to the filename rather than guess.
+ */
+export function getVpkLabel(vpkPath: string): string | null {
+    const paths = parseVpkDirectory(vpkPath);
+    if (!paths || paths.length === 0) return null;
+
+    const titleCase = (s: string) =>
+        s.replace(/[_-]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()).trim();
+
+    const heroes = new Set<string>();
+    for (const p of paths) {
+        const hero = extractHeroFromPath(p);
+        if (hero) heroes.add(hero);
+    }
+    if (heroes.size > 0 && heroes.size <= 3) {
+        return [...heroes].map(titleCase).join(', ');
+    }
+
+    const extractUnique = (pattern: RegExp): string[] => {
+        const set = new Set<string>();
+        for (const p of paths) {
+            const m = p.match(pattern);
+            if (m?.[1]) set.add(m[1].toLowerCase());
+        }
+        return [...set];
+    };
+
+    const skyboxes = extractUnique(/materials\/skybox\/([^/]+)\//i);
+    if (skyboxes.length === 1) return `${titleCase(skyboxes[0])} skybox`;
+    if (skyboxes.length > 1 && skyboxes.length <= 3) {
+        return `${skyboxes.map(titleCase).join(', ')} skyboxes`;
+    }
+
+    const maps = extractUnique(/^maps\/([^/]+?)(?:\.|\/)/i);
+    if (maps.length === 1) return `${titleCase(maps[0])} map`;
+
+    const uiThemes = extractUnique(/panorama\/(?:images|layout|styles)\/(?:hud|themes?)\/([^/]+)\//i);
+    if (uiThemes.length === 1) return `${titleCase(uiThemes[0])} UI`;
+
+    return null;
+}
+
+/** Batch wrapper around getVpkLabel; omits entries with no label. */
+export function getVpkLabels(vpkPaths: Array<{ fileName: string; absPath: string }>): Record<string, string> {
+    const out: Record<string, string> = {};
+    for (const { fileName, absPath } of vpkPaths) {
+        try {
+            const label = getVpkLabel(absPath);
+            if (label) out[fileName] = label;
+        } catch {
+            // best-effort; missing label is fine
+        }
+    }
+    return out;
+}
+
+/**
  * Get a summary of what a VPK modifies
  */
 export function getVpkContentSummary(vpkPath: string): {
