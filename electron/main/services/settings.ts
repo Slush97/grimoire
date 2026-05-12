@@ -8,6 +8,8 @@ export interface AppSettings {
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
     hideOutdatedMods: boolean;       // Hide GameBanana mods flagged as outdated in Browse
+    autoDisableSiblingVariants: boolean; // When re-downloading a GB mod, auto-disable older variants
+    steamLaunchOptions: string;      // Args written to Steam's localconfig.vdf for Deadlock just before launch
     activeProfileId: string | null;  // Currently active profile
     autoSaveProfile: boolean;        // Auto-save when mods change
     experimentalStats: boolean;
@@ -21,6 +23,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     devDeadlockPath: null,
     hideNsfwPreviews: false,
     hideOutdatedMods: false,
+    autoDisableSiblingVariants: true,
+    steamLaunchOptions: '',
     activeProfileId: null,
     autoSaveProfile: false,
     experimentalStats: false,

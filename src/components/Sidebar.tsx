@@ -119,6 +119,24 @@ export default function Sidebar() {
     return () => clearTimeout(t);
   }, [toast]);
 
+  // Surface auto-disabled sibling variants. The download backend silently
+  // moves older variants of the same GB mod into disabled/ on re-download; this
+  // toast tells the user what happened so it doesn't look like data loss.
+  useEffect(() => {
+    const unsub = window.electronAPI.onModsAutoDisabled((data) => {
+      if (!data.disabled.length) return;
+      const names = data.disabled.map((m) => m.name);
+      const head = names.slice(0, 2).join(', ');
+      const tail = names.length > 2 ? ` and ${names.length - 2} more` : '';
+      setToast({
+        kind: 'info',
+        text: `Disabled older variant${names.length === 1 ? '' : 's'}: ${head}${tail}. Re-enable in Installed if you want to keep both.`,
+      });
+      loadMods();
+    });
+    return unsub;
+  }, [loadMods]);
+
   const navItems = useMemo(() => {
     type BadgeTone = 'muted' | 'warning';
     type NavItem = {

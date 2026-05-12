@@ -12,6 +12,63 @@ interface CacheEntry<T> {
 // TTL for download counts cache (1 hour in ms)
 const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 
+// Browse-page UI state. Kept in the store (not local component state) so it
+// survives navigation away from /browse and back — user complaint: search
+// query, view mode, and filters all reset when switching pages.
+export type BrowseSortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
+export type BrowseViewMode = 'grid' | 'compact' | 'list';
+export interface BrowseUiState {
+  search: string;
+  viewMode: BrowseViewMode;
+  sort: BrowseSortOption;
+  section: string;
+  heroCategoryId: number | 'all';
+  categoryId: number | 'all';
+}
+
+// viewMode + sort behave like preferences (the user mentioned wanting their
+// "list vs blocks" choice remembered). Cache them in localStorage so they
+// survive app restarts. The rest of BrowseUiState is session-only — search
+// queries and filters shouldn't follow the user across launches.
+const VIEW_MODE_KEY = 'browseViewMode';
+const SORT_KEY = 'browseSort';
+
+const VIEW_MODES: BrowseViewMode[] = ['grid', 'compact', 'list'];
+const SORT_OPTIONS: BrowseSortOption[] = ['default', 'popular', 'recent', 'updated', 'views', 'name'];
+
+function readPersistedViewMode(): BrowseViewMode {
+  try {
+    const stored = localStorage.getItem(VIEW_MODE_KEY);
+    if (stored && (VIEW_MODES as string[]).includes(stored)) {
+      return stored as BrowseViewMode;
+    }
+  } catch {
+    // localStorage may be unavailable (e.g. SSR, restricted contexts).
+  }
+  return 'grid';
+}
+
+function readPersistedSort(): BrowseSortOption {
+  try {
+    const stored = localStorage.getItem(SORT_KEY);
+    if (stored && (SORT_OPTIONS as string[]).includes(stored)) {
+      return stored as BrowseSortOption;
+    }
+  } catch {
+    // ignore
+  }
+  return 'default';
+}
+
+const DEFAULT_BROWSE_UI: BrowseUiState = {
+  search: '',
+  viewMode: readPersistedViewMode(),
+  sort: readPersistedSort(),
+  section: 'Mod',
+  heroCategoryId: 'all',
+  categoryId: 'all',
+};
+
 interface AppState {
   // Settings
   settings: AppSettings | null;
@@ -28,6 +85,9 @@ interface AppState {
 
   // Global sound preview volume (0-1)
   soundVolume: number;
+
+  // Browse-page UI state (preserved across page nav)
+  browseUi: BrowseUiState;
 
   // Actions
   loadSettings: () => Promise<void>;
@@ -48,6 +108,10 @@ interface AppState {
 
   // Sound volume
   setSoundVolume: (volume: number) => void;
+
+  // Browse UI state
+  setBrowseUi: (partial: Partial<BrowseUiState>) => void;
+  resetBrowseUi: () => void;
 }
 
 export const useAppStore = create<AppState>((set, get) => ({
@@ -60,6 +124,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   modsError: null,
   downloadCountsCache: new Map(),
   soundVolume: 0.7,
+  browseUi: { ...DEFAULT_BROWSE_UI },
 
   // Load settings from backend
   loadSettings: async () => {
@@ -207,6 +272,28 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Set global sound preview volume
   setSoundVolume: (volume: number) => {
     set({ soundVolume: Math.max(0, Math.min(1, volume)) });
+  },
+
+  // Patch Browse UI state. Use a partial so callers can update one field at
+  // a time without restating the rest. viewMode + sort also mirror to
+  // localStorage so they persist across app restarts.
+  setBrowseUi: (partial: Partial<BrowseUiState>) => {
+    set({ browseUi: { ...get().browseUi, ...partial } });
+    try {
+      if (partial.viewMode !== undefined) {
+        localStorage.setItem(VIEW_MODE_KEY, partial.viewMode);
+      }
+      if (partial.sort !== undefined) {
+        localStorage.setItem(SORT_KEY, partial.sort);
+      }
+    } catch {
+      // localStorage write may fail (quota, restricted context); state still
+      // updates in memory so the user's current session works.
+    }
+  },
+
+  resetBrowseUi: () => {
+    set({ browseUi: { ...DEFAULT_BROWSE_UI } });
   },
 }));
 

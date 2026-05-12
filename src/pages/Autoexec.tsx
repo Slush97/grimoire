@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle } from 'lucide-react';
-import { getSettings } from '../lib/api';
+import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle, Rocket } from 'lucide-react';
+import { getSettings, setSettings } from '../lib/api';
 import { Card, Badge, Button } from '../components/common/ui';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
+import type { AppSettings } from '../types/mod';
+import type { SteamLaunchOptionsStatus } from '../types/electron';
 
 // Popular Deadlock autoexec command presets
 const COMMAND_PRESETS = [
@@ -82,11 +84,22 @@ export default function Autoexec() {
     const [hasUnsaved, setHasUnsaved] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
+    // Steam launch options — owned by appSettings; written into Steam's
+    // localconfig.vdf right before the game launches. Local UI state holds
+    // the unsaved edit; `settings.steamLaunchOptions` is the source of truth.
+    const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+    const [launchOptionsDraft, setLaunchOptionsDraft] = useState('');
+    const [launchStatus, setLaunchStatus] = useState<SteamLaunchOptionsStatus | null>(null);
+    const [launchSaving, setLaunchSaving] = useState(false);
+    const [launchMessage, setLaunchMessage] = useState<string | null>(null);
+
     // Load game path, autoexec status, and existing commands
     useEffect(() => {
         const load = async () => {
             const settings = await getSettings();
             setGamePath(settings.deadlockPath);
+            setAppSettings(settings);
+            setLaunchOptionsDraft(settings.steamLaunchOptions ?? '');
             if (settings.deadlockPath) {
                 const s = await window.electronAPI.getAutoexecStatus(settings.deadlockPath);
                 setStatus(s);
@@ -96,9 +109,42 @@ export default function Autoexec() {
                     setCommands(result.commands);
                 }
             }
+            try {
+                const status = await window.electronAPI.getSteamLaunchOptionsStatus();
+                setLaunchStatus(status);
+            } catch (err) {
+                console.warn('Failed to read Steam launch options status:', err);
+            }
         };
         load();
     }, []);
+
+    const launchOptionsDirty = (appSettings?.steamLaunchOptions ?? '') !== launchOptionsDraft;
+
+    const handleSaveLaunchOptions = async () => {
+        if (!appSettings) return;
+        setLaunchSaving(true);
+        setLaunchMessage(null);
+        try {
+            const next: AppSettings = { ...appSettings, steamLaunchOptions: launchOptionsDraft };
+            await setSettings(next);
+            setAppSettings(next);
+            setLaunchMessage('Saved. Applied next time you launch Deadlock via grimoire.');
+            // Re-read current VDF value so the user sees the actual on-disk
+            // state (it only changes when we write before a launch).
+            try {
+                const status = await window.electronAPI.getSteamLaunchOptionsStatus();
+                setLaunchStatus(status);
+            } catch {
+                // best-effort
+            }
+            setTimeout(() => setLaunchMessage(null), 4000);
+        } catch (err) {
+            setLaunchMessage(`Error: ${err}`);
+        } finally {
+            setLaunchSaving(false);
+        }
+    };
 
     const filteredPresets = useMemo(() => {
         if (!searchTerm) return COMMAND_PRESETS;
@@ -172,6 +218,88 @@ export default function Autoexec() {
                 description="Manage startup commands and game configuration"
                 className="shrink-0"
             />
+
+            {/* Steam Launch Options. Stored in app settings, written into
+                Steam's localconfig.vdf right before grimoire triggers Deadlock
+                via the steam:// URL. Steam must be closed when we write — we
+                handle that by writing during the launch flow, when Steam is
+                guaranteed not to be running yet. */}
+            <Card title="Steam Launch Options" icon={Rocket} className="shrink-0">
+                <div className="space-y-3">
+                    <p className="text-xs text-text-secondary">
+                        Args passed to Deadlock when launched via Steam (e.g.{' '}
+                        <code className="font-mono text-text-primary/90 bg-black/30 px-1 py-0.5 rounded">-condebug</code>
+                        {' '}for Deadlock Rich Presence). Grimoire writes these into Steam&apos;s
+                        config right before launching the game.
+                    </p>
+
+                    <div className="flex gap-2">
+                        <input
+                            type="text"
+                            value={launchOptionsDraft}
+                            onChange={(e) => setLaunchOptionsDraft(e.target.value)}
+                            placeholder="-condebug -high"
+                            className="flex-1 px-3 py-2 bg-bg-tertiary border border-white/10 rounded-lg text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
+                        />
+                        <Button
+                            onClick={handleSaveLaunchOptions}
+                            disabled={launchSaving || !launchOptionsDirty || !appSettings}
+                            isLoading={launchSaving}
+                            icon={Save}
+                        >
+                            Save
+                        </Button>
+                    </div>
+
+                    {launchMessage && (
+                        <div
+                            role="status"
+                            aria-live="polite"
+                            className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${
+                                launchMessage.startsWith('Error')
+                                    ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                                    : 'bg-green-500/10 border-green-500/20 text-green-400'
+                            }`}
+                        >
+                            {launchMessage.startsWith('Error') ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                            {launchMessage}
+                        </div>
+                    )}
+
+                    {launchStatus && (
+                        <div className="text-xs text-text-secondary space-y-1">
+                            {launchStatus.available ? (
+                                <>
+                                    <div>
+                                        Currently in Steam config:{' '}
+                                        {launchStatus.currentValue
+                                            ? <code className="font-mono text-text-primary/90 bg-black/30 px-1 py-0.5 rounded">{launchStatus.currentValue}</code>
+                                            : <span className="italic">none</span>}
+                                    </div>
+                                    {launchStatus.steamRunning && (
+                                        <div className="flex items-start gap-1.5 text-yellow-400">
+                                            <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                                            <span>
+                                                Steam is running. We can&apos;t safely update its config
+                                                while Steam is open — close Steam before launching
+                                                Deadlock via grimoire so the options take effect.
+                                            </span>
+                                        </div>
+                                    )}
+                                </>
+                            ) : (
+                                <div className="flex items-start gap-1.5 text-yellow-400">
+                                    <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
+                                    <span>
+                                        Couldn&apos;t find a Steam userdata folder. Launch Deadlock
+                                        via Steam once so it creates the config, then come back.
+                                    </span>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </Card>
 
             <div className="flex flex-col lg:flex-row flex-1 gap-6 min-h-0 overflow-auto">
                 {/* Left Panel - Command Presets */}

@@ -31,6 +31,103 @@ export interface SearchResult {
 }
 
 /**
+ * Order-by clause for a sort option. `hasQuery` differentiates relevance:
+ * with a query, sort by FTS5 rank; without one, fall back to recency.
+ */
+function buildOrderBy(sortBy: SearchOptions['sortBy'], hasQuery: boolean): string {
+    switch (sortBy) {
+        case 'relevance':
+            return hasQuery ? 'rank ASC' : 'date_modified DESC';
+        case 'likes':
+            return 'like_count DESC';
+        case 'date':
+            return 'date_modified DESC';
+        case 'date_added':
+            return 'date_added DESC';
+        case 'views':
+            return 'view_count DESC';
+        case 'name':
+            return 'name COLLATE NOCASE ASC';
+        default:
+            return 'date_modified DESC';
+    }
+}
+
+/**
+ * Fallback search used when the FTS5 path returns zero results. FTS5 is
+ * tokenized and prefix-only, so creative names ("MìnaMod-v2", typos, partial
+ * substrings inside a word) miss even when they should match. This runs a
+ * substring LIKE against the mod name as a safety net — slower (no FTS
+ * index), but only fires when FTS5 would have shown an empty page.
+ */
+function runFallbackSubstringSearch(
+    database: ReturnType<typeof initDatabase>,
+    rawQuery: string,
+    section: string | undefined,
+    categoryId: number | undefined,
+    heroName: string | undefined,
+    skinsCategoryId: number | undefined,
+    sortBy: SearchOptions['sortBy'],
+    limit: number,
+    offset: number
+): SearchResult {
+    const conditions: string[] = [];
+    const params: Record<string, unknown> = {};
+
+    // Split on whitespace so multi-term searches still all have to match.
+    // Cap at 10 terms; longer queries get truncated rather than bloating the SQL.
+    const terms = rawQuery
+        .trim()
+        .split(/\s+/)
+        .filter((t) => t.length > 0)
+        .slice(0, 10);
+
+    terms.forEach((term, i) => {
+        const key = `fallback_term_${i}`;
+        params[key] = `%${term.toLowerCase()}%`;
+        conditions.push(`LOWER(mods.name) LIKE @${key}`);
+    });
+
+    if (section) {
+        conditions.push('mods.section = @section');
+        params.section = section;
+    }
+
+    if (categoryId !== undefined) {
+        if (heroName && skinsCategoryId !== undefined) {
+            params.heroNamePattern = `%${heroName.toLowerCase()}%`;
+            conditions.push('LOWER(mods.name) LIKE @heroNamePattern');
+        } else {
+            conditions.push('mods.category_id = @categoryId');
+            params.categoryId = categoryId;
+        }
+    }
+
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    const orderBy = buildOrderBy(sortBy, false); // no FTS rank in fallback
+
+    const countRow = database
+        .prepare(`SELECT COUNT(*) as count FROM mods ${whereClause}`)
+        .get(params) as { count: number };
+    const totalCount = countRow.count;
+
+    params.limit = limit;
+    params.offset = offset;
+    const rows = database
+        .prepare(
+            `SELECT mods.*, 0 as rank FROM mods ${whereClause} ORDER BY ${orderBy} LIMIT @limit OFFSET @offset`
+        )
+        .all(params) as Record<string, unknown>[];
+
+    return {
+        mods: rows.map(mapRowToMod),
+        totalCount,
+        offset,
+        limit,
+    };
+}
+
+/**
  * Search mods using FTS5 full-text search
  */
 export function searchMods(options: SearchOptions): SearchResult {
@@ -54,6 +151,7 @@ export function searchMods(options: SearchOptions): SearchResult {
     // FTS5 search if query provided
     let fromClause = 'FROM mods';
     let rankSelect = '0 as rank';
+    let appliedFtsQuery = false;
     if (query && query.trim()) {
         // P2 fix #15: Limit query length to prevent ReDoS/expensive queries
         const truncatedQuery = query.slice(0, 500);
@@ -71,6 +169,7 @@ export function searchMods(options: SearchOptions): SearchResult {
                 fromClause = 'FROM mods JOIN mods_fts ON mods.id = mods_fts.rowid';
                 rankSelect = 'bm25(mods_fts) as rank';
                 conditions.push('mods_fts MATCH @query');
+                appliedFtsQuery = true;
             }
         }
     }
@@ -105,30 +204,7 @@ export function searchMods(options: SearchOptions): SearchResult {
         console.log(`[searchMods] Params:`, JSON.stringify(params));
     }
 
-    // Determine ORDER BY
-    let orderBy: string;
-    switch (sortBy) {
-        case 'relevance':
-            orderBy = query?.trim() ? 'rank ASC' : 'date_modified DESC';
-            break;
-        case 'likes':
-            orderBy = 'like_count DESC';
-            break;
-        case 'date':
-            orderBy = 'date_modified DESC';
-            break;
-        case 'date_added':
-            orderBy = 'date_added DESC';
-            break;
-        case 'views':
-            orderBy = 'view_count DESC';
-            break;
-        case 'name':
-            orderBy = 'name COLLATE NOCASE ASC';
-            break;
-        default:
-            orderBy = 'date_modified DESC';
-    }
+    const orderBy = buildOrderBy(sortBy, !!query?.trim());
 
     // Count query
     const countQuery = `SELECT COUNT(*) as count ${fromClause} ${whereClause}`;
@@ -138,6 +214,24 @@ export function searchMods(options: SearchOptions): SearchResult {
 
     if (heroName && skinsCategoryId !== undefined) {
         console.log(`[searchMods] Result count: ${totalCount}`);
+    }
+
+    // FTS5 missed — fall back to substring matching so creative names / typos
+    // still surface something instead of an empty page. Only triggers when a
+    // real query was applied (avoids running an unnecessary second query when
+    // the user hasn't typed anything yet).
+    if (totalCount === 0 && appliedFtsQuery && query) {
+        return runFallbackSubstringSearch(
+            database,
+            query.slice(0, 500),
+            section,
+            categoryId,
+            heroName,
+            skinsCategoryId,
+            sortBy,
+            limit,
+            offset
+        );
     }
 
     // Main query with pagination

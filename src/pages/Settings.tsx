@@ -167,6 +167,12 @@ export default function Settings() {
     }
   };
 
+  const handleAutoDisableSiblingsChange = async (checked: boolean) => {
+    if (settings) {
+      await saveSettings({ ...settings, autoDisableSiblingVariants: checked });
+    }
+  };
+
   const handleDevModeChange = async (checked: boolean) => {
     if (!settings) return;
     if (checked) {
@@ -529,6 +535,15 @@ export default function Settings() {
               onChange={handleHideOutdatedChange}
               label="Hide Outdated Mods"
               description="Hide mods in Browse that haven't been updated since the current game version cutoff."
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.autoDisableSiblingVariants ?? true}
+              onChange={handleAutoDisableSiblingsChange}
+              label="Auto-disable older variants on re-download"
+              description="When you re-download a GameBanana mod with a different file, automatically disable the previously installed variant. Disable this if you want to keep multiple variants enabled at once."
             />
 
             <div className="h-px bg-white/5" />

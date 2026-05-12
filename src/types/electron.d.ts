@@ -80,6 +80,13 @@ export interface VanillaStashStatus {
     modCount?: number;
 }
 
+export interface SteamLaunchOptionsStatus {
+    available: boolean;
+    configPath: string | null;
+    currentValue: string | null;
+    steamRunning: boolean;
+}
+
 export interface VanillaRestoreResult {
     restored: number;
     skipped: number;
@@ -104,6 +111,13 @@ export interface DownloadErrorData {
     errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
     message: string;
     helpUrl?: string;
+}
+
+export interface ModsAutoDisabledData {
+    reason: 'sibling-variant';
+    modId: number;
+    fileId: number;
+    disabled: Array<{ id: string; name: string; fileName: string }>;
 }
 
 export interface DownloadQueueItem {
@@ -248,6 +262,7 @@ export interface ElectronAPI {
     getVanillaStashStatus: () => Promise<VanillaStashStatus>;
     restoreVanillaStash: () => Promise<VanillaRestoreResult>;
     onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
+    getSteamLaunchOptionsStatus: () => Promise<SteamLaunchOptionsStatus>;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
@@ -284,6 +299,7 @@ export interface ElectronAPI {
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;
+    onModsAutoDisabled: (callback: (data: ModsAutoDisabledData) => void) => () => void;
 
     // Download Queue
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;

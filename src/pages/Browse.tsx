@@ -45,6 +45,10 @@ const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 type ViewMode = 'grid' | 'compact' | 'list';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
+// Persist filter UI inputs across page navigation. The store keeps these in
+// memory so visiting Installed and coming back doesn't blow away the user's
+// current search/filter context. Kept out of localStorage so a fresh launch
+// starts clean — sessions, not preferences.
 
 // Only show these categories in the dropdown (lowercase for matching)
 const ALLOWED_CATEGORIES = new Set(['hud', 'other/misc', 'maps']);
@@ -140,26 +144,29 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadSettings, loadMods, mods: installedMods, soundVolume, setSoundVolume } = useAppStore();
+  const { settings, loadSettings, loadMods, mods: installedMods, soundVolume, setSoundVolume, browseUi, setBrowseUi } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
+  // Filter inputs are mirrored from the store so they survive page nav.
+  // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
+  const { search, viewMode, sort, section, heroCategoryId, categoryId } = browseUi;
+  const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
+  const setViewMode = useCallback((v: ViewMode) => setBrowseUi({ viewMode: v }), [setBrowseUi]);
+  const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
+  const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
+  const setHeroCategoryId = useCallback((v: number | 'all') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
+  const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
   const [mods, setMods] = useState<GameBananaMod[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [search, setSearch] = useState('');
   const [page, setPage] = useState(1);
   const [_totalCount, setTotalCount] = useState(0);
   const perPage = DEFAULT_PER_PAGE; // Fixed value for infinite scroll
-  const [sort, setSort] = useState<SortOption>('default');
   const [sections, setSections] = useState<GameBananaSection[]>([]);
-  const [section, setSection] = useState('Mod');
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
   // Hero list comes from the Mod section's category tree (Mod -> Skins -> heroes).
   // Cached separately so hero filtering still works on the Sound tab, where the
   // current section's category tree has no Skins parent.
   const [modCategories, setModCategories] = useState<GameBananaCategoryNode[]>([]);
-  const [heroCategoryId, setHeroCategoryId] = useState<number | 'all'>('all');
-  const [categoryId, setCategoryId] = useState<number | 'all'>('all');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [selectedMod, setSelectedMod] = useState<GameBananaModDetails | null>(null);
   const [selectedModDates, setSelectedModDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
   const [downloading, setDownloading] = useState<{ modId: number; fileId: number } | null>(null);
@@ -241,32 +248,56 @@ export default function Browse() {
       ? (categoryId === 'all' ? undefined : categoryId)
       : heroCategoryId;
 
-  const effectiveSearch = search;
+  // Debounce the search input: every keystroke previously fired a full FTS5
+  // query + count + render, which felt slow even when the DB was fast. 250ms
+  // is short enough that typing-to-results still feels responsive but long
+  // enough to absorb fast typing into a single request.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 250);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  const effectiveSearch = debouncedSearch;
+
+  // Keep a fresh `mods` reference outside the fetch closures so they can check
+  // "did the user already have results visible?" without making `mods` a
+  // useCallback dep (that would self-trigger).
+  const modsRef = useRef<GameBananaMod[]>(mods);
+  useEffect(() => {
+    modsRef.current = mods;
+  }, [mods]);
 
   // Derived (not state) so the right code path runs in the same render the
   // user picks a hero/types a query. Storing it in useState lagged a render,
   // which caused fetchMods (API, no hero filter) to race with searchLocal and
   // overwrite real results with an empty API response.
   const useLocalSearch = useMemo(() => {
-    const hasSearchQuery = search.trim().length > 0;
+    const hasSearchQuery = debouncedSearch.trim().length > 0;
     const hasHeroFilter = heroCategoryId !== 'all';
     return (hasSearchQuery || hasHeroFilter) && hasLocalCache && !localSearchFailed;
-  }, [search, heroCategoryId, hasLocalCache, localSearchFailed]);
+  }, [debouncedSearch, heroCategoryId, hasLocalCache, localSearchFailed]);
 
   // Reset the failure flag whenever the user changes filters so a one-off
   // backend error doesn't permanently disable local search.
   useEffect(() => {
     setLocalSearchFailed(false);
-  }, [search, heroCategoryId, section]);
+  }, [debouncedSearch, heroCategoryId, section]);
 
   const fetchMods = useCallback(async () => {
     // Don't fetch from API if we're using local search
     if (useLocalSearch) return;
 
-    // Show loading spinner on first page, loading indicator otherwise
+    // On a fresh load (no results yet) show the skeleton; on a refetch keep
+    // the stale list visible and just surface a soft progress indicator so
+    // each keystroke doesn't repaint the whole grid as gray boxes.
     if (page === 1) {
-      setLoading(true);
-      setMods([]);
+      const hadResults = modsRef.current.length > 0;
+      if (hadResults) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       setHasMore(true);
     } else {
       setLoadingMore(true);
@@ -326,10 +357,16 @@ export default function Browse() {
 
   // Local search function using SQLite cache
   const searchLocal = useCallback(async () => {
-    // Show loading spinner on first page, loading indicator otherwise
+    // Same anti-flash logic as fetchMods: skeleton only on truly empty first
+    // load. Subsequent refetches keep the previous result set visible until
+    // the new one arrives.
     if (page === 1) {
-      setLoading(true);
-      setMods([]);
+      const hadResults = modsRef.current.length > 0;
+      if (hadResults) {
+        setLoadingMore(true);
+      } else {
+        setLoading(true);
+      }
       setHasMore(true);
     } else {
       setLoadingMore(true);
@@ -414,10 +451,12 @@ export default function Browse() {
   }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, modCategories]);
 
   useEffect(() => {
+    // Reset pagination when filters change but keep previous results visible
+    // until the new query lands. Blanking mods here is what produced the
+    // skeleton flash on every keystroke pre-debounce.
     setPage(1);
     setHasMore(true);
-    setMods([]);
-  }, [search, sort, section, effectiveCategoryId, perPage]);
+  }, [debouncedSearch, sort, section, effectiveCategoryId, perPage]);
 
   useEffect(() => {
     let active = true;
@@ -461,6 +500,10 @@ export default function Browse() {
     return () => {
       active = false;
     };
+    // Run once on mount: section selection is read inside but we don't want
+    // refires on every tab switch (that would re-fetch the section list
+    // unnecessarily). setSection is stable from the store.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -492,7 +535,7 @@ export default function Browse() {
     return () => {
       active = false;
     };
-  }, [sections, section]);
+  }, [sections, section, setCategoryId, setHeroCategoryId]);
 
   useEffect(() => {
     if (useLocalSearch) {
@@ -839,6 +882,14 @@ export default function Browse() {
                 className="w-full bg-bg-secondary border border-border rounded-lg pl-3 pr-16 py-2 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
+                {/* Inline spinner while debouncing or refetching with stale results.
+                    Replaces the prior whole-grid skeleton flash on every keystroke. */}
+                {(search !== debouncedSearch || (loadingMore && page === 1)) && (
+                  <Loader2
+                    className="w-4 h-4 mx-1 animate-spin text-text-secondary"
+                    aria-label="Searching"
+                  />
+                )}
                 {search && (
                   <button
                     type="button"

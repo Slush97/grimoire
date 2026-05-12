@@ -26,6 +26,7 @@ export interface ElectronAPI {
     getVanillaStashStatus: () => Promise<VanillaStashStatus>;
     restoreVanillaStash: () => Promise<VanillaRestoreResult>;
     onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
+    getSteamLaunchOptionsStatus: () => Promise<SteamLaunchOptionsStatus>;
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
@@ -63,6 +64,7 @@ export interface ElectronAPI {
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;
+    onModsAutoDisabled: (callback: (data: ModsAutoDisabledData) => void) => () => void;
 
     // Download Queue
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
@@ -261,11 +263,20 @@ interface AppSettings {
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
     hideOutdatedMods: boolean;
+    autoDisableSiblingVariants: boolean;
+    steamLaunchOptions: string;
     activeProfileId: string | null;
     autoSaveProfile: boolean;
     experimentalStats: boolean;
     experimentalCrosshair: boolean;
     hasCompletedSetup: boolean;
+}
+
+interface SteamLaunchOptionsStatus {
+    available: boolean;
+    configPath: string | null;
+    currentValue: string | null;
+    steamRunning: boolean;
 }
 
 interface Mod {
@@ -404,6 +415,13 @@ interface DownloadErrorData {
     errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
     message: string;
     helpUrl?: string;
+}
+
+interface ModsAutoDisabledData {
+    reason: 'sibling-variant';
+    modId: number;
+    fileId: number;
+    disabled: Array<{ id: string; name: string; fileName: string }>;
 }
 
 interface DownloadQueueItem {
@@ -659,6 +677,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('vanilla-restore-complete', handler);
         return () => ipcRenderer.removeListener('vanilla-restore-complete', handler);
     },
+    getSteamLaunchOptionsStatus: () => ipcRenderer.invoke('get-steam-launch-options-status'),
 
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),
@@ -712,6 +731,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadErrorData) => callback(data);
         ipcRenderer.on('download-error', handler);
         return () => ipcRenderer.removeListener('download-error', handler);
+    },
+    onModsAutoDisabled: (callback: (data: ModsAutoDisabledData) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, data: ModsAutoDisabledData) => callback(data);
+        ipcRenderer.on('mods-auto-disabled', handler);
+        return () => ipcRenderer.removeListener('mods-auto-disabled', handler);
     },
 
     // Download Queue

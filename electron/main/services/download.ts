@@ -9,6 +9,7 @@ import { setModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
 import { getUsedPriorities, scanMods, disableMod } from './mods';
 import { validateDownloadUrl, validateFileSize } from './security';
+import { loadSettings } from './settings';
 import https from 'https';
 import http from 'http';
 
@@ -576,22 +577,37 @@ async function executeDownload(
     // the newest pick is the active one. Avoids file-conflict warnings between
     // sibling variants and matches the "Browse vs Installed" expectation that
     // re-downloading swaps which variant is active without losing the others.
-    try {
-        const installedSet = new Set(installedVpks);
-        const allMods = await scanMods(deadlockPath);
-        const stalePeers = allMods.filter(
-            (m) =>
-                m.enabled &&
-                m.gameBananaId === modId &&
-                m.gameBananaFileId !== fileId &&
-                !installedSet.has(m.fileName)
-        );
-        for (const peer of stalePeers) {
-            console.log(`[downloadMod] Auto-disabling sibling variant: ${peer.fileName}`);
-            await disableMod(deadlockPath, peer.id);
+    // Opt-out: settings.autoDisableSiblingVariants = false keeps every variant
+    // enabled (user may rely on intentional overlap between mods).
+    const settings = loadSettings();
+    if (settings.autoDisableSiblingVariants !== false) {
+        try {
+            const installedSet = new Set(installedVpks);
+            const allMods = await scanMods(deadlockPath);
+            const stalePeers = allMods.filter(
+                (m) =>
+                    m.enabled &&
+                    m.gameBananaId === modId &&
+                    m.gameBananaFileId !== fileId &&
+                    !installedSet.has(m.fileName)
+            );
+            const disabledPeers: Array<{ id: string; name: string; fileName: string }> = [];
+            for (const peer of stalePeers) {
+                console.log(`[downloadMod] Auto-disabling sibling variant: ${peer.fileName}`);
+                await disableMod(deadlockPath, peer.id);
+                disabledPeers.push({ id: peer.id, name: peer.name, fileName: peer.fileName });
+            }
+            if (disabledPeers.length > 0) {
+                mainWindow?.webContents.send('mods-auto-disabled', {
+                    reason: 'sibling-variant',
+                    modId,
+                    fileId,
+                    disabled: disabledPeers,
+                });
+            }
+        } catch (err) {
+            console.warn(`[downloadMod] Failed to auto-disable sibling variants:`, err);
         }
-    } catch (err) {
-        console.warn(`[downloadMod] Failed to auto-disable sibling variants:`, err);
     }
 
     // Notify completion

@@ -4,6 +4,8 @@ import { spawn } from 'child_process';
 import { shell } from 'electron';
 import { getUserDataPath } from '../utils/paths';
 import { getAddonsPath, getDisabledPath } from './deadlock';
+import { loadSettings } from './settings';
+import { writeLaunchOptions, readLaunchOptions, isSteamRunning } from './launchOptions';
 
 // Deadlock's Steam AppID — used for the steam://rungameid/... URI scheme.
 const DEADLOCK_STEAM_APP_ID = 1422450;
@@ -262,6 +264,42 @@ function scheduleMidLaunchRestore(
 }
 
 /**
+ * Sync the user's configured launch-options string into Steam's
+ * localconfig.vdf for Deadlock. Best-effort: failures are logged and
+ * swallowed so a broken Steam config can't block the user from launching.
+ *
+ * We only write when Steam isn't running — Steam clobbers localconfig.vdf on
+ * shutdown, so a write while Steam is up gets undone moments later. The
+ * caller (launchModded / launchVanilla) runs this BEFORE invoking the
+ * Steam URL, which is the safe window: Steam will pick up our edit when it
+ * starts.
+ */
+async function syncLaunchOptionsToSteam(): Promise<void> {
+    const settings = loadSettings();
+    const desired = settings.steamLaunchOptions ?? '';
+    try {
+        if (await isSteamRunning()) {
+            console.warn('[launch] Steam already running — skipping launch-options sync to avoid clobber.');
+            return;
+        }
+        // Only write if the value actually differs from what's on disk —
+        // avoids a needless backup + rewrite of a multi-megabyte file on
+        // every launch.
+        const current = await readLaunchOptions();
+        if (current && current.currentValue === desired) {
+            return;
+        }
+        if (!current && !desired) {
+            // Nothing set and nothing to set; skip even creating the entry.
+            return;
+        }
+        await writeLaunchOptions(desired);
+    } catch (err) {
+        console.warn('[launch] Failed to sync launch options to Steam:', err);
+    }
+}
+
+/**
  * Trigger Steam to launch Deadlock. Doesn't wait for the game to actually start.
  */
 async function triggerSteamLaunch(): Promise<void> {
@@ -297,6 +335,7 @@ export async function launchModded({
                 );
             }
         }
+        await syncLaunchOptionsToSteam();
         await triggerSteamLaunch();
     } finally {
         launchInFlight = false;
@@ -343,6 +382,7 @@ export async function launchVanilla({
     }
 
     try {
+        await syncLaunchOptionsToSteam();
         await triggerSteamLaunch();
     } catch (err) {
         // Steam URL failed — immediately restore so the user isn't left with
