@@ -2,6 +2,19 @@
 
 All notable changes to this project are documented here. Format is loosely based on [Keep a Changelog](https://keepachangelog.com/), and the project adheres to semantic versioning.
 
+## [1.7.2] - 2026-05
+
+### Added
+- **Variant reorder inside the picker.** Now that variants can be co-loaded (1.7.1 multi-select), the relative load order between siblings matters — later loads win overlapping files. Picker rows now expose both ▲/▼ chevron buttons and full drag-and-drop (GripVertical handle), wired through the same `reorderMods` pipeline the Installed page already uses. Cross-section moves are blocked in both UIs so reordering can't silently flip a variant's on/off status
+- **"Ignore all" bulk action** on the Conflicts page header. Visible whenever active conflicts exist; click → confirm dialog ("Ignore all 8 conflicts?") → moves every active pair to the *Ignored* section in one batch. Individual *Unignore* still restores pairs one at a time
+
+### Fixed
+- **Sidebar conflict-badge no longer goes stale** after Ignore / Unignore. The badge useEffect only re-ran when the mods list changed, which doesn't happen for ignore-conflict (it just persists settings). Page now dispatches a `grimoire:conflicts-changed` window event so the Sidebar re-fetches the count immediately instead of waiting for an app restart
+
+### Changed
+- Dropped the redundant *Active* text badge on variant picker rows — the accent-colored outline plus the filled checkbox already convey the same state
+- The group-card drag tooltip now matches the actual behavior; group cards have been draggable as a contiguous block since the 1.7 variant-grouping feature, but a stale comment had claimed otherwise
+
 ## [1.7.1] - 2026-05
 
 ### Fixed
