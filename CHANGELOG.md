@@ -2,6 +2,43 @@
 
 All notable changes to this project are documented here. Format is loosely based on [Keep a Changelog](https://keepachangelog.com/), and the project adheres to semantic versioning.
 
+## [1.7.0] - 2026-05
+
+### Added
+- **Steam Launch Options** field on the Autoexec page. Writes `-high -nojoy` (or whatever you set) into Steam's `localconfig.vdf` for Deadlock right before the launch URL fires. Surgical byte-level edits with a `.grimoire.bak` backup and atomic temp+rename; fails closed if the file structure doesn't match what we expect. Read-only status row shows the on-disk value and warns when Steam is currently running
+- **Multi-VPK picker.** Archives containing multiple `.vpk` files (Warden Remodel, etc.) now surface a checkbox modal listing every extracted file instead of silently keeping the first and unlinking the rest. Applies to both regular installs and the 1-Click flow
+- **Human-readable VPK labels** in the multi-VPK picker. Hero asset paths, materials/skybox folders, panorama theme folders, and map folders are detected and labeled (e.g. *"Abrams"*, *"Galaxy skybox"*); raw filename is shown muted underneath when nothing distinctive matches
+- **Multi-version picker.** Quick-download on a mod card with more than one downloadable file now opens the mod-details modal so the user picks the file explicitly. Single-file mods still quick-install in one click
+- **Variant grouping on the Installed page.** Multi-variant downloads of the same GameBanana mod collapse into a single card. Click the card to open a picker that lets the user switch the active variant (mutual exclusion), rename variants inline, delete individual variants, or disable the whole group. Drag-reorder moves a group as a block
+- **"Active variant" tag** on grouped Installed cards — Layers-iconed pill anchored to the bottom-left of the thumbnail shows which preset is live
+- **"Enable now" affordance** when a freshly-downloaded mod lands disabled — appears on the sidebar download-complete toast *and* as a yellow Enable pill in the Browse mod-details file row, so users don't have to bounce to Installed to flip it on
+- **Ignore conflicts.** Conflicts page gains a per-card Ignore action and an "Ignored (N)" panel at the bottom with Unignore. Pairs persist in app settings and are stripped by the backend detector
+- **Sibling-variant auto-disable toast** with a *View* action — previously silent on re-download, easy to mistake for data loss. Gated behind a new `autoDisableSiblingVariants` setting (default on)
+
+### Changed
+- **Mod Details modal redesign.** Single-row header (status + category + title + date/download metadata + close), responsive two-column body at lg+ with independently scrollable image and content columns, vertical preview stack so users scroll naturally through every screenshot, click-to-zoom lightbox using GameBanana's full-resolution asset, and visually separated Files / Comments sections. Modal grows to `max-w-6xl` on wide screens so it stops leaving dark gutters on 1080p+ displays
+- Mod Details now shows **all installed siblings** of the same GameBanana mod with an explicit *Active* badge on the enabled row, matching the Browse view
+- **GameBanana per-file headers** (`_sDescription`) now feed variant labels by default: rows read *"Gold w/ alt candle"* instead of `pak04_dir.vpk`. User renames still win. New installs only — no backfill
+- Letterboxed preview thumbs in the mod-details modal use a **blurred backdrop** instead of harsh black bars
+- **Autoexec page** reorganized: Launch Options card moves into the right column above "Your Commands" so the launch stack reads top-to-bottom: launch args → autoexec commands → file status
+- Installed page default view is **Cards (grid)** instead of List for new users; existing localStorage preference still wins
+- Sidebar download-complete toast removed in favor of the card-level Enable pill (less redundant — the user's eye is already on the card they clicked)
+
+### Fixed
+- **Browse-tab state survives navigation.** Search query, filters, view mode, sort, loaded mods, page state, and scroll position all persist when switching tabs and returning. Scroll restore had a latent bug — cleanup ran after React detached the ref, so saved `scrollTop` was always 0
+- **Search input debounced** (250ms). Stops blanking results into a skeleton grid on every keystroke; inline spinner shows in the input while debouncing or refetching
+- **FTS5 fallback to substring LIKE** when prefix search returns zero rows, so creative mod names and typos still surface something
+- Quick-download no longer silently picks a variant on multi-file mods
+
+## [1.6.2] - 2026-05
+
+### Changed
+- Installed-tab UX polish: faster variant swap, drag/view improvements
+
+### Fixed
+- Update modal release-notes styling
+- Crosshair preview now clears when the active preset is deselected
+
 ## [1.6.1] - 2026-04
 
 ### Added
@@ -122,6 +159,10 @@ All notable changes to this project are documented here. Format is loosely based
 
 Initial public release. Repo rebranded from `modmanager` to `grimoire`.
 
+[1.7.0]: https://github.com/Slush97/grimoire/releases/tag/v1.7.0
+[1.6.2]: https://github.com/Slush97/grimoire/releases/tag/v1.6.2
+[1.6.1]: https://github.com/Slush97/grimoire/releases/tag/v1.6.1
+[1.6.0]: https://github.com/Slush97/grimoire/releases/tag/v1.6.0
 [1.5.5]: https://github.com/Slush97/grimoire/releases/tag/v1.5.5
 [1.5.0]: https://github.com/Slush97/grimoire/releases/tag/v1.5.0
 [1.4.0]: https://github.com/Slush97/grimoire/releases/tag/v1.4.0
