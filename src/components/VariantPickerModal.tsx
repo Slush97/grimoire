@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Check, Trash2, Power, PowerOff, Info, Pencil } from 'lucide-react';
+import { X, Check, Trash2, Power, PowerOff, Info, Pencil, ChevronUp, ChevronDown } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import { Button } from './common/ui';
 
@@ -11,6 +11,11 @@ interface Props {
      *  multiple can be active at once (e.g. a model VPK + its voice-lines
      *  addon from the same mod page). */
     onToggle: (target: Mod) => Promise<void> | void;
+    /** Swap a variant with its picker-neighbor (up = earlier load slot,
+     *  down = later, wins overlapping file conflicts). Caller is responsible
+     *  for refusing cross-section swaps; this picker just disables the
+     *  button when the neighbor isn't in the same enabled state. */
+    onMoveVariant: (target: Mod, direction: 'up' | 'down') => Promise<void> | void;
     /** Called when the user disables every currently-enabled variant. */
     onDisableAll: () => Promise<void> | void;
     /** Called when the user requests deletion of a single variant. */
@@ -49,6 +54,7 @@ export default function VariantPickerModal({
     modName,
     variants,
     onToggle,
+    onMoveVariant,
     onDisableAll,
     onDeleteVariant,
     onRenameVariant,
@@ -130,6 +136,16 @@ export default function VariantPickerModal({
         }
     };
 
+    const move = async (variant: Mod, direction: 'up' | 'down') => {
+        if (pending) return;
+        setPending(`move:${variant.id}:${direction}`);
+        try {
+            await onMoveVariant(variant, direction);
+        } finally {
+            setPending(null);
+        }
+    };
+
     return (
         <div
             className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
@@ -173,12 +189,25 @@ export default function VariantPickerModal({
                 </div>
 
                 <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
-                    {variants.map((v) => {
+                    {variants.map((v, idx) => {
                         const isActive = v.enabled;
                         const isPending = pending === v.id;
                         const isDeletePending = pending === `delete:${v.id}`;
                         const isEditing = editing?.id === v.id;
                         const isRenamePending = pending === `rename:${v.id}`;
+                        // Reorder buttons swap with the picker-neighbor in load
+                        // order. Allowed only when the neighbor shares the
+                        // variant's enabled state — cross-section swaps would
+                        // flip a variant's on/off status implicitly. Hide the
+                        // controls entirely when the group has just one
+                        // variant (nothing to swap with).
+                        const prev = idx > 0 ? variants[idx - 1] : null;
+                        const nextSibling = idx < variants.length - 1 ? variants[idx + 1] : null;
+                        const canMoveUp = !!prev && prev.enabled === v.enabled;
+                        const canMoveDown = !!nextSibling && nextSibling.enabled === v.enabled;
+                        const showReorder = variants.length > 1;
+                        const isMoveUpPending = pending === `move:${v.id}:up`;
+                        const isMoveDownPending = pending === `move:${v.id}:down`;
                         // Title precedence: user rename wins, else the
                         // GameBanana file header the author set (e.g. "Gold
                         // w/ alt candle"), else the original GB filename
@@ -303,6 +332,50 @@ export default function VariantPickerModal({
                                     </div>
                                 ) : (
                                     <>
+                                        {showReorder && (
+                                            <div className="flex flex-col gap-0.5 flex-shrink-0">
+                                                <button
+                                                    type="button"
+                                                    onClick={() => move(v, 'up')}
+                                                    disabled={!!pending || !canMoveUp}
+                                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                                    title={
+                                                        canMoveUp
+                                                            ? 'Move up (loads earlier — overlapping files lose to later loads)'
+                                                            : idx === 0
+                                                                ? 'Already first in load order'
+                                                                : 'Adjacent variant is in a different section'
+                                                    }
+                                                    aria-label="Move variant up in load order"
+                                                >
+                                                    {isMoveUpPending ? (
+                                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <ChevronUp className="w-3.5 h-3.5" />
+                                                    )}
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    onClick={() => move(v, 'down')}
+                                                    disabled={!!pending || !canMoveDown}
+                                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                                    title={
+                                                        canMoveDown
+                                                            ? 'Move down (loads later — wins overlapping files)'
+                                                            : idx === variants.length - 1
+                                                                ? 'Already last in load order'
+                                                                : 'Adjacent variant is in a different section'
+                                                    }
+                                                    aria-label="Move variant down in load order"
+                                                >
+                                                    {isMoveDownPending ? (
+                                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                                    ) : (
+                                                        <ChevronDown className="w-3.5 h-3.5" />
+                                                    )}
+                                                </button>
+                                            </div>
+                                        )}
                                         <button
                                             type="button"
                                             onClick={() => startRename(v)}

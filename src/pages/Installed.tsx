@@ -376,6 +376,45 @@ export default function Installed() {
     }
   };
 
+  /**
+   * Swap a variant with its picker-neighbor in load order. The picker shows
+   * a group's variants sorted by priority, so "up" = lower priority slot =
+   * loads earlier, "down" = higher slot = loads later (and wins overlapping
+   * file conflicts). Only allowed when the neighbor shares the variant's
+   * enabled state: cross-section swaps would implicitly flip a variant's
+   * on/off status, which the user didn't ask for. The picker disables the
+   * button in those cases.
+   *
+   * Implementation: find the variant and its neighbor inside the same
+   * section list (enabledMods or disabledMods), swap their indices, then
+   * pass the full reordered filename list to reorderMods. The backend
+   * renumbers densely 1..N within each section, so the swap manifests as a
+   * pak##_ filename rename on disk.
+   */
+  const moveVariant = async (
+    group: Extract<ModEntry, { kind: 'group' }>,
+    target: Mod,
+    direction: 'up' | 'down'
+  ) => {
+    const idxInPicker = group.variants.findIndex((v) => v.id === target.id);
+    if (idxInPicker === -1) return;
+    const neighborIdx = direction === 'up' ? idxInPicker - 1 : idxInPicker + 1;
+    if (neighborIdx < 0 || neighborIdx >= group.variants.length) return;
+    const neighbor = group.variants[neighborIdx];
+    if (neighbor.enabled !== target.enabled) return;
+
+    const section = target.enabled ? enabledMods : disabledMods;
+    const sectionNext = section.slice();
+    const a = sectionNext.findIndex((m) => m.id === target.id);
+    const b = sectionNext.findIndex((m) => m.id === neighbor.id);
+    if (a === -1 || b === -1) return;
+    [sectionNext[a], sectionNext[b]] = [sectionNext[b], sectionNext[a]];
+    const next = target.enabled
+      ? [...sectionNext, ...disabledMods]
+      : [...enabledMods, ...sectionNext];
+    await reorderMods(next.map((m) => m.fileName));
+  };
+
   // Auto-scroll the main content container while drag-reordering. Native HTML
   // drag-and-drop doesn't fire pointer events, so we hook `dragover` at the
   // window and start a rAF loop whenever the cursor is near the top/bottom
@@ -614,10 +653,13 @@ export default function Installed() {
    * each carry a 40-line inline JSX block.
    *
    * Group cards:
-   *   - Drag-reorder is disabled (the underlying VPKs span multiple priority
-   *     slots; meaningful group-level reorder needs more design).
+   *   - Drag-reorder moves every variant as a contiguous block, preserving
+   *     their internal order (applyReorder + buildModEntries handle the
+   *     block math). Disabled during search since the visible order doesn't
+   *     match the full priority order.
    *   - Toggle flips every variant on or off as a unit. The picker modal is
-   *     where the user enables/disables individual variants.
+   *     where the user enables/disables individual variants and reorders
+   *     them relative to each other.
    *   - Delete asks the user to confirm removing every variant.
    *   - Card body click opens the variant picker modal.
    *   - Conflicts shown are the union of conflicts on every currently-enabled
@@ -1007,6 +1049,7 @@ export default function Installed() {
             modName={liveEntry.primary.name}
             variants={liveEntry.variants}
             onToggle={(target) => toggleVariant(target)}
+            onMoveVariant={(target, direction) => moveVariant(liveEntry, target, direction)}
             onDisableAll={() => disableEntireGroup(liveEntry)}
             onDeleteVariant={(variant) => deleteMod(variant.id)}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
