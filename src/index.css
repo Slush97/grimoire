@@ -101,7 +101,7 @@ body {
 
 *::-webkit-scrollbar-thumb {
   background: var(--color-border);
-  border-radius: 999px;
+  border-radius: 2px;
   border: 2px solid var(--color-bg-secondary);
 }
 

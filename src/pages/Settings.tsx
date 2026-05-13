@@ -1,5 +1,5 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
-import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle } from 'lucide-react';
+import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
 import {
@@ -13,6 +13,7 @@ import {
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
+import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
 
 export default function Settings() {
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
@@ -154,6 +155,17 @@ export default function Settings() {
     }
   };
 
+
+  const handleAccentChange = async (color: string) => {
+    // Apply optimistically so the UI re-themes the moment the swatch is
+    // clicked, even before the settings round-trip finishes. The store push
+    // in saveSettings re-triggers Layout's effect, but doing it here too
+    // avoids a perceptible flash on slower disks.
+    applyAccentColor(color);
+    if (settings) {
+      await saveSettings({ ...settings, accentColor: color });
+    }
+  };
 
   const handleHideNsfwChange = async (checked: boolean) => {
     if (settings) {
@@ -390,7 +402,7 @@ export default function Settings() {
                     onChange={(e) => handlePathChange(e.target.value)}
                     placeholder="/path/to/Deadlock"
                     disabled={isDevMode}
-                    className="w-full bg-bg-tertiary border border-white/5 rounded-lg px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed font-mono text-sm"
+                    className="w-full bg-bg-tertiary border border-white/5 rounded-sm px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed font-mono text-sm"
                   />
                 </div>
                 <Button
@@ -513,14 +525,57 @@ export default function Settings() {
                   <span>Downloading update...</span>
                   <span>{Math.round(updateStatus.progress)}%</span>
                 </div>
-                <div className="w-full bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
+                <div className="w-full bg-bg-tertiary rounded-sm h-1.5 overflow-hidden">
                   <div
-                    className="bg-accent h-full rounded-full transition-all duration-300 ease-out"
+                    className="bg-accent h-full rounded-sm transition-all duration-300 ease-out"
                     style={{ width: `${updateStatus.progress}%` }}
                   />
                 </div>
               </div>
             )}
+          </div>
+        </Card>
+
+        {/* Appearance */}
+        <Card title="Appearance" icon={Palette} className="lg:col-span-2">
+          <div className="space-y-3">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <h4 className="font-medium text-sm">Accent Color</h4>
+                <p className="text-xs text-text-secondary mt-1">
+                  Sets the highlight color used for buttons, links, and active states across the app.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {ACCENT_PRESETS.map((preset) => {
+                const current = (settings?.accentColor ?? DEFAULT_ACCENT_COLOR).toLowerCase();
+                const isActive = current === preset.color.toLowerCase();
+                return (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => handleAccentChange(preset.color)}
+                    title={preset.name}
+                    aria-label={`Accent: ${preset.name}`}
+                    aria-pressed={isActive}
+                    className={`group relative flex items-center gap-2 px-3 py-2 rounded-sm border text-xs font-medium tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+                      isActive
+                        ? 'border-white/30 bg-white/5 text-text-primary'
+                        : 'border-white/5 bg-bg-tertiary text-text-secondary hover:text-text-primary hover:border-white/20'
+                    }`}
+                    style={isActive ? { boxShadow: `inset 3px 0 0 ${preset.color}` } : undefined}
+                  >
+                    <span
+                      className="block w-4 h-4 rounded-sm border border-black/30"
+                      style={{ backgroundColor: preset.color }}
+                    />
+                    <span>{preset.name}</span>
+                    {isActive && <Check className="w-3.5 h-3.5 ml-0.5" style={{ color: preset.color }} />}
+                  </button>
+                );
+              })}
+            </div>
           </div>
         </Card>
 
@@ -572,7 +627,7 @@ export default function Settings() {
                 description="Use a dummy Deadlock directory for local testing without game files."
               />
               {isDevMode && settings?.devDeadlockPath && (
-                <div className="mt-2 text-xs font-mono bg-black/30 p-2 rounded text-text-secondary break-all">
+                <div className="mt-2 text-xs font-mono bg-black/30 p-2 rounded-sm text-text-secondary break-all">
                   {settings.devDeadlockPath}
                 </div>
               )}
@@ -680,9 +735,9 @@ export default function Settings() {
                     <span>Syncing {syncProgress.section}...</span>
                     <span>{Math.round((syncProgress.modsProcessed / syncProgress.totalMods) * 100)}%</span>
                   </div>
-                  <div className="w-full bg-bg-tertiary rounded-full h-1.5 overflow-hidden">
+                  <div className="w-full bg-bg-tertiary rounded-sm h-1.5 overflow-hidden">
                     <div
-                      className="bg-accent h-full rounded-full transition-all duration-300 ease-out"
+                      className="bg-accent h-full rounded-sm transition-all duration-300 ease-out"
                       style={{ width: `${Math.min(100, (syncProgress.modsProcessed / syncProgress.totalMods) * 100)}%` }}
                     />
                   </div>
@@ -720,7 +775,8 @@ export default function Settings() {
       {/* Changelog Modal */}
       {showChangelog && updateStatus?.updateInfo && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm animate-fade-in">
-          <div className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-fade-in">
+          <div className="bg-bg-secondary border border-white/10 rounded-sm w-full max-w-2xl max-h-[80vh] overflow-hidden shadow-2xl animate-fade-in relative">
+            <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div>
                 <h2 className="text-xl font-bold">What's New in v{updateStatus.updateInfo.version}</h2>
@@ -732,7 +788,7 @@ export default function Settings() {
               </div>
               <button
                 onClick={() => setShowChangelog(false)}
-                className="p-2 rounded-lg hover:bg-white/5 transition-colors"
+                className="p-2 rounded-sm hover:bg-white/5 transition-colors"
               >
                 <X className="w-5 h-5" />
               </button>

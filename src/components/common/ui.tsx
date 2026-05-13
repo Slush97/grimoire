@@ -13,7 +13,10 @@ interface CardProps {
 
 export function Card({ children, className = '', contentClassName = '', title, icon: Icon, description, action }: CardProps) {
     return (
-        <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-white/5 rounded-xl overflow-hidden ${className}`}>
+        <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-white/5 rounded-sm overflow-hidden relative ${className}`}>
+            {/* Sharp accent edge — sits flush with the left side so cards read
+                as HUD callouts rather than soft web cards. */}
+            {(title || action) && <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />}
             {(title || action) && (
                 <div className="px-5 py-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-4">
                     <div className="min-w-0">
@@ -51,7 +54,7 @@ export function Badge({ children, variant = 'neutral', className = '' }: BadgePr
     };
 
     return (
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-medium border ${variants[variant]} ${className}`}>
+        <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-sm text-xs font-medium border ${variants[variant]} ${className}`}>
             {children}
         </span>
     );
@@ -105,7 +108,7 @@ export function Tag({
     return (
         <span
             title={title}
-            className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-xs font-semibold leading-none ${surface} ${className}`}
+            className={`inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-semibold leading-none ${surface} ${className}`}
         >
             {Icon && <Icon className="w-3 h-3" />}
             {children}
@@ -143,7 +146,7 @@ export function Slider({
             <div className="flex justify-between items-center">
                 {label && <label className="text-sm font-medium text-text-secondary">{label}</label>}
                 {showValue && (
-                    <span className="text-xs font-mono text-text-primary bg-bg-tertiary px-1.5 py-0.5 rounded">
+                    <span className="text-xs font-mono text-text-primary bg-bg-tertiary px-1.5 py-0.5 rounded-sm">
                         {formatValue ? formatValue(value) : value}
                     </span>
                 )}
@@ -220,7 +223,7 @@ export function Button({
     disabled,
     ...props
 }: ButtonProps) {
-    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-lg font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
 
     const variants = {
         primary: 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus:ring-accent',

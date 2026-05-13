@@ -9,6 +9,8 @@ import { Button } from './common/ui';
 import { ConfirmModal } from './common/PageComponents';
 import { getSettings, setSettings, getGameinfoStatus, fixGameinfo } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import { applyAccentColor } from '../lib/accentColor';
+import { useAppStore } from '../stores/appStore';
 import type { OneClickSuspiciousFilesData, MultiVpkPickData } from '../types/electron';
 import MultiVpkPickerModal from './MultiVpkPickerModal';
 
@@ -37,6 +39,19 @@ export default function Layout() {
   const [oneClickBanner, setOneClickBanner] = useState<OneClickToast | null>(null);
   const [suspiciousPrompt, setSuspiciousPrompt] = useState<OneClickSuspiciousFilesData | null>(null);
   const [multiVpkPrompt, setMultiVpkPrompt] = useState<MultiVpkPickData | null>(null);
+
+  // Re-theme the app whenever the stored accent color changes. We pull
+  // settings into the global store on mount so the value is available before
+  // any page renders — otherwise the first paint flashes the default orange
+  // even when the user has picked a different accent.
+  const accentColor = useAppStore((s) => s.settings?.accentColor);
+  const loadStoreSettings = useAppStore((s) => s.loadSettings);
+  useEffect(() => {
+    loadStoreSettings();
+  }, [loadStoreSettings]);
+  useEffect(() => {
+    applyAccentColor(accentColor);
+  }, [accentColor]);
 
   useEffect(() => {
     const checkFirstRun = async () => {
@@ -293,7 +308,7 @@ export default function Layout() {
             );
             return (
               <div
-                className={`flex flex-col gap-1.5 overflow-hidden rounded-lg border text-sm shadow-lg backdrop-blur-sm min-w-[260px] max-w-[420px] ${
+                className={`flex flex-col gap-1.5 overflow-hidden rounded-sm border text-sm shadow-lg backdrop-blur-sm min-w-[260px] max-w-[420px] ${
                   isError
                     ? 'border-red-500/40 bg-red-500/15 text-red-200'
                     : isSuccess
@@ -333,7 +348,7 @@ export default function Layout() {
                 <span className="font-semibold text-text-primary">{suspiciousPrompt.modName}</span>{' '}
                 contains files that aren&apos;t typical for a Deadlock mod:
               </p>
-              <ul className="max-h-40 overflow-y-auto rounded-md border border-border bg-bg-tertiary px-3 py-2 text-xs font-mono text-yellow-200">
+              <ul className="max-h-40 overflow-y-auto rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-xs font-mono text-yellow-200">
                 {suspiciousPrompt.files.slice(0, 30).map((f) => (
                   <li key={f}>{f}</li>
                 ))}

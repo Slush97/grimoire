@@ -41,7 +41,7 @@ interface ViewModeToggleProps {
 export function ViewModeToggle({ value, options, onChange, className = '' }: ViewModeToggleProps) {
     const anyIcon = options.some((o) => o.icon);
     return (
-        <div className={`flex items-center rounded-lg border border-border bg-bg-secondary p-0.5 text-sm ${className}`}>
+        <div className={`flex items-center rounded-sm border border-border bg-bg-secondary p-0.5 text-sm ${className}`}>
             {options.map((option) => {
                 const Icon = option.icon;
                 const active = value === option.value;
@@ -53,7 +53,7 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
                         onClick={() => onChange(option.value)}
                         title={option.label}
                         aria-label={option.label}
-                        className={`${baseCls} rounded-md transition-colors cursor-pointer ${active
+                        className={`${baseCls} rounded-sm transition-colors cursor-pointer ${active
                             ? 'border border-accent/40 bg-accent/10 text-text-primary'
                             : 'border border-transparent text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
                             }`}
@@ -166,21 +166,22 @@ export function ConfirmModal({
             onClick={onCancel}
         >
             <div
-                className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md w-full"
+                className="bg-bg-secondary border border-border rounded-sm p-6 max-w-md w-full relative overflow-hidden"
                 onClick={(e) => e.stopPropagation()}
             >
+                <span aria-hidden className={`absolute left-0 top-0 bottom-0 w-[2px] ${variant === 'danger' ? 'bg-red-500/60' : 'bg-accent/60'}`} />
                 <h3 id="confirm-modal-title" className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
                 <div className="text-text-secondary mb-4">{message}</div>
                 <div className="flex justify-end gap-3">
                     <button
                         onClick={onCancel}
-                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                     >
                         {cancelLabel}
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${confirmClass}`}
+                        className={`px-4 py-2 rounded-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${confirmClass}`}
                     >
                         {confirmLabel}
                     </button>
