@@ -238,6 +238,7 @@ export default function Profiles() {
                       <div className="flex items-center gap-2 pt-3 border-t border-white/5">
                         {!isActive && (
                           <Button
+                            size="sm"
                             className="flex-1"
                             onClick={() => handleApplyProfile(profile.id)}
                             disabled={isApplying || isUpdating}
@@ -248,6 +249,7 @@ export default function Profiles() {
                           </Button>
                         )}
                         <Button
+                          size="sm"
                           className={isActive ? "flex-1" : ""}
                           variant="secondary"
                           onClick={() => handleUpdateProfile(profile.id)}
@@ -259,17 +261,20 @@ export default function Profiles() {
                           Update
                         </Button>
                         <Button
+                          size="sm"
                           variant="ghost"
                           onClick={() => toggleExpand(profile.id)}
                           icon={isExpanded ? ChevronUp : ChevronDown}
-                          className="px-2"
+                          className="px-1.5"
                         />
                         <Button
+                          size="sm"
                           variant="danger"
                           onClick={() => setDeleteConfirmId(profile.id)}
                           disabled={isApplying || isUpdating}
                           icon={Trash2}
                           title="Delete Profile"
+                          className="px-1.5"
                         />
                       </div>
 
