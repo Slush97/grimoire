@@ -9,6 +9,7 @@ import { writeLaunchOptions, readLaunchOptions, isSteamRunning } from './launchO
 
 // Deadlock's Steam AppID — used for the steam://rungameid/... URI scheme.
 const DEADLOCK_STEAM_APP_ID = 1422450;
+const DEADLOCK_PROCESS_NAME = 'deadlock.exe';
 
 // How long we wait for Deadlock.exe to appear after triggering a Steam launch
 // before restoring anyway (Steam not installed, user cancelled the prompt, etc.).
@@ -85,24 +86,90 @@ function sleep(ms: number): Promise<void> {
 }
 
 /**
- * Check whether Deadlock.exe is currently running. Platform-specific; we only
- * implement Windows (the game is effectively Windows-only; on other platforms
- * we conservatively assume "not running" so restore proceeds after the grace
- * period).
+ * Check whether Deadlock is currently running. On Linux/Proton the process
+ * still appears as deadlock.exe, so both platforms can key off the same name.
  */
-async function isDeadlockRunning(): Promise<boolean> {
-    if (process.platform !== 'win32') return false;
-    return new Promise<boolean>((resolve) => {
-        const proc = spawn('tasklist.exe', ['/FI', 'IMAGENAME eq deadlock.exe', '/NH'], {
-            windowsHide: true,
-        });
+export async function isDeadlockRunning(): Promise<boolean> {
+    try {
+        if (process.platform === 'win32') {
+            const result = await runCommand('tasklist.exe', [
+                '/FI',
+                `IMAGENAME eq ${DEADLOCK_PROCESS_NAME}`,
+                '/NH',
+            ]);
+            return /deadlock\.exe/i.test(result.stdout);
+        }
+        if (process.platform === 'linux') {
+            const result = await runCommand('pgrep', ['-x', DEADLOCK_PROCESS_NAME]);
+            return result.code === 0 && result.stdout.trim().length > 0;
+        }
+    } catch {
+        return false;
+    }
+    return false;
+}
+
+export interface StopDeadlockResult {
+    wasRunning: boolean;
+    stopped: boolean;
+}
+
+interface CommandResult {
+    code: number;
+    stdout: string;
+    stderr: string;
+}
+
+function runCommand(command: string, args: string[]): Promise<CommandResult> {
+    return new Promise<CommandResult>((resolve, reject) => {
+        const proc = spawn(command, args, { windowsHide: true });
         let stdout = '';
+        let stderr = '';
         proc.stdout?.on('data', (chunk) => { stdout += chunk.toString(); });
-        proc.on('close', () => {
-            resolve(/deadlock\.exe/i.test(stdout));
+        proc.stderr?.on('data', (chunk) => { stderr += chunk.toString(); });
+        proc.on('close', (code) => {
+            resolve({ code: code ?? 0, stdout, stderr });
         });
-        proc.on('error', () => resolve(false));
+        proc.on('error', reject);
     });
+}
+
+async function requestDeadlockStop(force: boolean): Promise<CommandResult> {
+    if (process.platform === 'win32') {
+        return runCommand(
+            'taskkill.exe',
+            force
+                ? ['/F', '/IM', DEADLOCK_PROCESS_NAME, '/T']
+                : ['/IM', DEADLOCK_PROCESS_NAME, '/T']
+        );
+    }
+    if (process.platform === 'linux') {
+        return runCommand('pkill', [force ? '-KILL' : '-TERM', '-x', DEADLOCK_PROCESS_NAME]);
+    }
+    return { code: 0, stdout: '', stderr: '' };
+}
+
+export async function stopDeadlockGame(): Promise<StopDeadlockResult> {
+    const wasRunning = await isDeadlockRunning();
+    if (!wasRunning) {
+        return { wasRunning: false, stopped: true };
+    }
+
+    const result = await requestDeadlockStop(false);
+    await sleep(750);
+    if (!(await isDeadlockRunning())) {
+        return { wasRunning: true, stopped: true };
+    }
+
+    const forceResult = await requestDeadlockStop(true);
+    if (forceResult.code !== 0 && await isDeadlockRunning()) {
+        throw new Error(
+            (forceResult.stderr || forceResult.stdout || result.stderr || result.stdout || 'Could not stop Deadlock.').trim()
+        );
+    }
+
+    await sleep(750);
+    return { wasRunning: true, stopped: !(await isDeadlockRunning()) };
 }
 
 /**

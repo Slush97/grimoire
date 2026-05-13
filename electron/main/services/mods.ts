@@ -30,6 +30,7 @@ export interface Mod {
     categoryName?: string;
     sourceSection?: string;
     nsfw?: boolean;
+    isArchived?: boolean;
     /** User-given name for this VPK, used to disambiguate variants of the
      *  same GameBanana mod (e.g. "Red preset" vs "Blue preset"). Optional. */
     variantLabel?: string;

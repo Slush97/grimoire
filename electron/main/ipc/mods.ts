@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { promises as fs, existsSync } from 'fs';
 import { basename, dirname, extname, join } from 'path';
-import { loadSettings } from '../services/settings';
+import { loadSettings, saveSettings } from '../services/settings';
 import {
     scanMods,
     enableMod,
@@ -15,6 +15,7 @@ import {
 } from '../services/mods';
 import { getAddonsPath } from '../services/deadlock';
 import { getModMetadata, setModMetadata } from '../services/metadata';
+import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 
 /**
  * Get the active deadlock path from settings
@@ -45,12 +46,28 @@ function enrichMod(mod: Mod): Mod {
             categoryName: metadata.categoryName,
             sourceSection: metadata.sourceSection,
             nsfw: metadata.nsfw,
+            isArchived: metadata.isArchived,
             variantLabel: metadata.variantLabel,
             fileDescription: metadata.fileDescription,
             sourceFileName: metadata.sourceFileName,
         };
     }
     return mod;
+}
+
+function sameKeys(a: string[], b: string[]): boolean {
+    return a.length === b.length && a.every((key, index) => key === b[index]);
+}
+
+function migrateIgnoredConflictKeysBeforeRenames(mods: Mod[]): void {
+    const settings = loadSettings();
+    const current = settings.ignoredConflicts ?? [];
+    if (current.length === 0) return;
+
+    const migrated = migrateIgnoredConflictKeysForMods(current, mods);
+    if (!sameKeys(migrated, current)) {
+        saveSettings({ ...settings, ignoredConflicts: migrated });
+    }
 }
 
 // get-mods
@@ -168,6 +185,7 @@ ipcMain.handle(
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
+        migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
         const mod = await setModPriority(deadlockPath, modId, priority);
         return enrichMod(mod);
     }
@@ -181,6 +199,7 @@ ipcMain.handle(
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
+        migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
         await reorderMods(deadlockPath, orderedFileNames);
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
@@ -195,6 +214,7 @@ ipcMain.handle(
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
+        migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
         await swapModPriority(deadlockPath, modIdA, modIdB);
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);

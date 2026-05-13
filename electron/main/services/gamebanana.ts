@@ -81,6 +81,7 @@ export interface GameBananaFile {
     downloadUrl: string;
     downloadCount: number;
     description?: string;
+    isArchived: boolean;
 }
 
 export interface GameBananaComment {
@@ -176,6 +177,7 @@ interface FileRaw {
     _sDownloadUrl: string;
     _nDownloadCount: number;
     _sDescription?: string;
+    _bIsArchived?: boolean;
 }
 
 interface PostRaw {
@@ -505,6 +507,7 @@ export async function fetchModDetails(
             downloadUrl: f._sDownloadUrl,
             downloadCount: f._nDownloadCount,
             description: f._sDescription,
+            isArchived: f._bIsArchived ?? false,
         })),
         previewMedia: raw._aPreviewMedia
             ? {

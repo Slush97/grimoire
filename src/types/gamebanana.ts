@@ -74,6 +74,7 @@ export interface GameBananaFile {
   downloadUrl: string;
   downloadCount: number;
   description?: string;
+  isArchived: boolean;
 }
 
 export interface GameBananaModDetails {

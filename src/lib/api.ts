@@ -107,12 +107,30 @@ export interface VanillaRestoreResult {
   failed: string[];
 }
 
+export interface GameRunningStatus {
+  running: boolean;
+}
+
+export interface StopGameResult {
+  wasRunning: boolean;
+  stopped: boolean;
+  restoreResult?: VanillaRestoreResult;
+}
+
 export async function launchModded(): Promise<void> {
   return window.electronAPI.launchModded();
 }
 
 export async function launchVanilla(): Promise<void> {
   return window.electronAPI.launchVanilla();
+}
+
+export async function getGameRunningStatus(): Promise<GameRunningStatus> {
+  return window.electronAPI.getGameRunningStatus();
+}
+
+export async function stopGame(): Promise<StopGameResult> {
+  return window.electronAPI.stopGame();
 }
 
 export async function getVanillaStashStatus(): Promise<VanillaStashStatus> {
@@ -232,6 +250,9 @@ export interface ModConflict {
   modAName: string;
   modB: string;
   modBName: string;
+  modAIdentity: string;
+  modBIdentity: string;
+  ignoreKey: string;
   conflictType: 'priority' | 'file';
   details: string;
 }
@@ -252,8 +273,9 @@ export async function unignoreConflict(modA: string, modB: string): Promise<stri
   return window.electronAPI.unignoreConflict(modA, modB);
 }
 
-/** Build the ignored-list key for a pair of mod ids. Mirrors the backend
- *  helper so the renderer can match locally without an extra IPC roundtrip. */
+/** Build the ignored-list key for a pair of mod ids or stable identities.
+ *  Mirrors the backend helper so the renderer can match locally without an
+ *  extra IPC roundtrip. */
 export function conflictPairKey(a: string, b: string): string {
   return a < b ? `${a}::${b}` : `${b}::${a}`;
 }

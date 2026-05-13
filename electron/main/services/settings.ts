@@ -15,10 +15,9 @@ export interface AppSettings {
     experimentalStats: boolean;
     experimentalCrosshair: boolean;
     hasCompletedSetup: boolean;      // First-run setup completed
-    /** Mod pairs the user has dismissed in the Conflicts page. Each entry is
-     *  the two mod ids joined sorted with `::` (e.g. "abc123::def456") so the
-     *  order of detection doesn't affect matching. Detector strips these out
-     *  before returning so the warning stops appearing for that pair. */
+    /** Mod pairs the user has dismissed in the Conflicts page. New entries use
+     *  stable per-mod identities (GameBanana mod/file ids when available)
+     *  joined sorted with `::`; older local-id pairs are still recognized. */
     ignoredConflicts: string[];
     /** When true, the conflict detector returns an empty list — every detected
      *  pair is hidden without persisting it to ignoredConflicts, so toggling

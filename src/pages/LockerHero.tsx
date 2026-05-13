@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, Layers, Star } from 'lucide-react';
 import { Skeleton } from '../components/common/Skeleton';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -12,22 +12,54 @@ import {
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
+import type { Mod } from '../types/mod';
 import {
   FAVORITE_HEROES_KEY,
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
   buildMinaPresets,
+  countLockerSkins,
   detectMinaTextures,
   findMinaVariant,
+  getLockerSkinKey,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
   groupModsByCategory,
+  isLockerManagedMod,
   parseMinaVariant,
   readStoredFavorites,
+  type HeroCategory,
+  type MinaPreset,
   type MinaSelection,
   type MinaVariant,
 } from '../lib/lockerUtils';
+
+interface LockerHeroViewProps {
+  hero: HeroCategory;
+  list: Mod[];
+  skinCount: number;
+  isFavorite: boolean;
+  onBack: () => void;
+  onToggleFavorite: () => void;
+  onSelect: (modId: string) => void | Promise<void>;
+  onToggleVariant: (modId: string) => void | Promise<void>;
+  hideNsfwPreviews?: boolean;
+  minaPresets?: MinaPreset[];
+  activeMinaPreset?: MinaPreset;
+  minaTextures?: Mod[];
+  onApplyMinaPreset?: (presetFileName: string) => void;
+  minaArchivePath?: string;
+  onMinaArchivePathChange?: (path: string) => void;
+  minaVariants?: MinaVariant[];
+  minaVariantsLoading?: boolean;
+  minaVariantsError?: string | null;
+  onLoadMinaVariants?: () => void;
+  minaSelection?: MinaSelection;
+  onMinaSelectionChange?: (selection: MinaSelection) => void;
+  selectedMinaVariant?: MinaVariant;
+  onApplyMinaVariant?: () => void;
+}
 
 export default function LockerHero() {
   const navigate = useNavigate();
@@ -64,7 +96,6 @@ export default function LockerHero() {
     garter: 'Default',
     dress: 'Default',
   });
-
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
@@ -111,8 +142,10 @@ export default function LockerHero() {
 
   const heroList = useMemo(() => buildHeroList(categories), [categories]);
   const hero = heroList.find((entry) => entry.id === heroId);
-  const heroMods = useMemo(() => groupModsByCategory(mods), [mods]);
-  const list = hero ? heroMods.map.get(hero.id) ?? [] : [];
+  const lockerMods = useMemo(() => mods.filter(isLockerManagedMod), [mods]);
+  const heroMods = useMemo(() => groupModsByCategory(lockerMods, heroList), [lockerMods, heroList]);
+  const list = useMemo(() => (hero ? heroMods.map.get(hero.id) ?? [] : []), [hero, heroMods]);
+  const skinCount = useMemo(() => countLockerSkins(list), [list]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -154,12 +187,12 @@ export default function LockerHero() {
     const heroModList = heroMods.map.get(hero.id) ?? [];
     const target = heroModList.find((m) => m.id === modId);
     if (!target) return;
-    const groupKey = target.gameBananaId ? `gb:${target.gameBananaId}` : `mod:${target.id}`;
+    const groupKey = getLockerSkinKey(target);
     const actions: Promise<void>[] = [];
     for (const mod of heroModList) {
       if (mod.id === modId) continue;
       if (!mod.enabled) continue;
-      const otherKey = mod.gameBananaId ? `gb:${mod.gameBananaId}` : `mod:${mod.id}`;
+      const otherKey = getLockerSkinKey(mod);
       if (otherKey !== groupKey) actions.push(toggleMod(mod.id));
     }
     actions.push(toggleMod(modId));
@@ -207,33 +240,6 @@ export default function LockerHero() {
     }
   };
 
-  const [renderSrc, setRenderSrc] = useState('');
-  const [renderFallbackStep, setRenderFallbackStep] = useState(0);
-  const [nameFailed, setNameFailed] = useState(false);
-
-  useEffect(() => {
-    if (!hero) return;
-    setRenderSrc(getHeroRenderPath(hero.name));
-    setRenderFallbackStep(0);
-    setNameFailed(false);
-  }, [hero]);
-
-  const handleRenderError = () => {
-    if (!hero) return;
-    if (renderFallbackStep === 0) {
-      setRenderSrc(getHeroWikiUrl(hero.name));
-      setRenderFallbackStep(1);
-      return;
-    }
-    if (renderFallbackStep === 1 && hero.iconUrl) {
-      setRenderSrc(hero.iconUrl);
-      setRenderFallbackStep(2);
-      return;
-    }
-    setRenderSrc('');
-    setRenderFallbackStep(3);
-  };
-
   if (!activeDeadlockPath) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
@@ -275,6 +281,89 @@ export default function LockerHero() {
       </div>
     );
   }
+
+  return (
+    <LockerHeroView
+      key={hero.id}
+      hero={hero}
+      list={list}
+      skinCount={skinCount}
+      isFavorite={favoriteHeroes.includes(hero.id)}
+      onBack={() => navigate('/locker')}
+      onToggleFavorite={() =>
+        setFavoriteHeroes((prev) =>
+          prev.includes(hero.id) ? prev.filter((id) => id !== hero.id) : [...prev, hero.id]
+        )
+      }
+      onSelect={setActiveSkin}
+      onToggleVariant={toggleHeroVariant}
+      hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+      minaPresets={hero.name === 'Mina' ? minaPresets : []}
+      activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
+      minaTextures={hero.name === 'Mina' ? minaTextures : []}
+      onApplyMinaPreset={hero.name === 'Mina' ? applyMinaPreset : undefined}
+      minaArchivePath={hero.name === 'Mina' ? minaArchivePath : undefined}
+      onMinaArchivePathChange={hero.name === 'Mina' ? setMinaArchivePath : undefined}
+      minaVariants={hero.name === 'Mina' ? minaVariants : []}
+      minaVariantsLoading={hero.name === 'Mina' ? minaVariantsLoading : false}
+      minaVariantsError={hero.name === 'Mina' ? minaVariantsError : null}
+      onLoadMinaVariants={hero.name === 'Mina' ? loadMinaVariants : undefined}
+      minaSelection={hero.name === 'Mina' ? minaSelection : undefined}
+      onMinaSelectionChange={hero.name === 'Mina' ? setMinaSelection : undefined}
+      selectedMinaVariant={hero.name === 'Mina' ? selectedMinaVariant : undefined}
+      onApplyMinaVariant={hero.name === 'Mina' ? applyMinaVariantSelection : undefined}
+    />
+  );
+}
+
+export function LockerHeroView({
+  hero,
+  list,
+  skinCount,
+  isFavorite,
+  onBack,
+  onToggleFavorite,
+  onSelect,
+  onToggleVariant,
+  hideNsfwPreviews = false,
+  minaPresets = [],
+  activeMinaPreset,
+  minaTextures = [],
+  onApplyMinaPreset,
+  minaArchivePath,
+  onMinaArchivePathChange,
+  minaVariants = [],
+  minaVariantsLoading = false,
+  minaVariantsError = null,
+  onLoadMinaVariants,
+  minaSelection,
+  onMinaSelectionChange,
+  selectedMinaVariant,
+  onApplyMinaVariant,
+}: LockerHeroViewProps) {
+  const [renderFallbackStep, setRenderFallbackStep] = useState(0);
+  const [nameFailed, setNameFailed] = useState(false);
+
+  const renderSrc =
+    renderFallbackStep === 0
+      ? getHeroRenderPath(hero.name)
+      : renderFallbackStep === 1
+        ? getHeroWikiUrl(hero.name)
+        : renderFallbackStep === 2
+          ? (hero.iconUrl ?? '')
+          : '';
+
+  const handleRenderError = () => {
+    if (renderFallbackStep === 0) {
+      setRenderFallbackStep(1);
+      return;
+    }
+    if (renderFallbackStep === 1 && hero.iconUrl) {
+      setRenderFallbackStep(2);
+      return;
+    }
+    setRenderFallbackStep(3);
+  };
 
   return (
     <div className="relative flex h-full overflow-hidden">
@@ -357,28 +446,25 @@ export default function LockerHero() {
         <div className="relative z-10 p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between gap-3">
-            <Link
-              to="/locker"
+            <button
+              type="button"
+              onClick={onBack}
               className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
             >
               <ArrowLeft className="w-4 h-4" />
               Back
-            </Link>
+            </button>
             <button
               type="button"
-              onClick={() =>
-                setFavoriteHeroes((prev) =>
-                  prev.includes(hero.id) ? prev.filter((id) => id !== hero.id) : [...prev, hero.id]
-                )
-              }
+              onClick={onToggleFavorite}
               className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
-                favoriteHeroes.includes(hero.id)
+                isFavorite
                   ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
                   : 'border-border/70 text-text-secondary hover:text-text-primary'
               }`}
             >
               <Star className="w-4 h-4" />
-              {favoriteHeroes.includes(hero.id) ? 'Favorite' : 'Save'}
+              {isFavorite ? 'Favorite' : 'Save'}
             </button>
           </div>
 
@@ -395,7 +481,7 @@ export default function LockerHero() {
               />
             )}
             <span className="text-sm text-text-secondary">
-              {list.length > 0 ? `${list.length} skin${list.length !== 1 ? 's' : ''}` : 'No skins'}
+              {skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins'}
             </span>
           </div>
 
@@ -403,23 +489,24 @@ export default function LockerHero() {
           <div className="space-y-4">
             <HeroSkinsPanel
               mods={list}
-              onSelect={setActiveSkin}
-              onToggleVariant={toggleHeroVariant}
+              onSelect={onSelect}
+              onToggleVariant={onToggleVariant}
+              hideNsfwPreviews={hideNsfwPreviews}
               categoryId={hero.id}
-              minaPresets={hero.name === 'Mina' ? minaPresets : []}
-              activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
-              minaTextures={hero.name === 'Mina' ? minaTextures : []}
-              onApplyMinaPreset={hero.name === 'Mina' ? applyMinaPreset : undefined}
-              minaArchivePath={hero.name === 'Mina' ? minaArchivePath : undefined}
-              onMinaArchivePathChange={hero.name === 'Mina' ? setMinaArchivePath : undefined}
-              minaVariants={hero.name === 'Mina' ? minaVariants : []}
-              minaVariantsLoading={hero.name === 'Mina' ? minaVariantsLoading : false}
-              minaVariantsError={hero.name === 'Mina' ? minaVariantsError : null}
-              onLoadMinaVariants={hero.name === 'Mina' ? loadMinaVariants : undefined}
-              minaSelection={hero.name === 'Mina' ? minaSelection : undefined}
-              onMinaSelectionChange={hero.name === 'Mina' ? setMinaSelection : undefined}
-              selectedMinaVariant={hero.name === 'Mina' ? selectedMinaVariant : undefined}
-              onApplyMinaVariant={hero.name === 'Mina' ? applyMinaVariantSelection : undefined}
+              minaPresets={minaPresets}
+              activeMinaPreset={activeMinaPreset}
+              minaTextures={minaTextures}
+              onApplyMinaPreset={onApplyMinaPreset}
+              minaArchivePath={minaArchivePath}
+              onMinaArchivePathChange={onMinaArchivePathChange}
+              minaVariants={minaVariants}
+              minaVariantsLoading={minaVariantsLoading}
+              minaVariantsError={minaVariantsError}
+              onLoadMinaVariants={onLoadMinaVariants}
+              minaSelection={minaSelection}
+              onMinaSelectionChange={onMinaSelectionChange}
+              selectedMinaVariant={selectedMinaVariant}
+              onApplyMinaVariant={onApplyMinaVariant}
             />
           </div>
 

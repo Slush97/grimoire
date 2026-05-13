@@ -113,6 +113,14 @@ export function Tag({
     );
 }
 
+export function ArchivedTag({ className = '' }: { className?: string }) {
+    return (
+        <span className={`flex-shrink-0 text-[10px] uppercase tracking-wide bg-bg-primary text-text-secondary rounded px-1.5 py-0.5 border border-border ${className}`}>
+            Archived
+        </span>
+    );
+}
+
 interface SliderProps {
     value: number;
     min: number;

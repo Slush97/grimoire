@@ -1,10 +1,11 @@
 import { scanMods, Mod } from './mods';
 import { parseVpkDirectory } from './vpk';
 import { loadSettings } from './settings';
+import { getModMetadata } from './metadata';
 
 /**
- * Build a stable order-independent key for a pair of mod ids. Sorts the two
- * ids so detection order doesn't matter when checking the ignored list.
+ * Build a stable order-independent key for a pair of mod ids or identities.
+ * Sorts the two values so detection order doesn't matter when checking the ignored list.
  */
 export function conflictPairKey(a: string, b: string): string {
     return a < b ? `${a}::${b}` : `${b}::${a}`;
@@ -35,8 +36,74 @@ export interface ModConflict {
     modAName: string;  // mod display name
     modB: string;      // mod ID
     modBName: string;  // mod display name
+    modAIdentity: string; // stable ignore identity
+    modBIdentity: string; // stable ignore identity
+    ignoreKey: string;    // stable sorted pair key
     conflictType: 'priority' | 'file';
     details: string;
+}
+
+function normalizeIdentityPart(value: string): string {
+    return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+export function modConflictIdentity(mod: Mod): string {
+    const metadata = getModMetadata(mod.fileName);
+    if (typeof metadata?.gameBananaId === 'number' && metadata.gameBananaId > 0) {
+        if (typeof metadata.gameBananaFileId === 'number' && metadata.gameBananaFileId > 0) {
+            return `gb:${metadata.gameBananaId}:file:${metadata.gameBananaFileId}`;
+        }
+        if (metadata.sourceFileName) {
+            return `gb:${metadata.gameBananaId}:source:${normalizeIdentityPart(metadata.sourceFileName)}`;
+        }
+        return `gb:${metadata.gameBananaId}:mod`;
+    }
+
+    const installedStamp = Number.isFinite(Date.parse(mod.installedAt))
+        ? String(Date.parse(mod.installedAt))
+        : normalizeIdentityPart(mod.installedAt);
+    return `local:${mod.size}:${installedStamp}`;
+}
+
+export function migrateIgnoredConflictKeysForMods(keys: string[], mods: Mod[]): string[] {
+    const idToIdentity = new Map<string, string>();
+    for (const mod of mods) {
+        idToIdentity.set(mod.id, modConflictIdentity(mod));
+    }
+
+    const migrated = keys.map((key) => {
+        const parts = key.split('::');
+        if (parts.length !== 2) return key;
+
+        const modAIdentity = idToIdentity.get(parts[0]);
+        const modBIdentity = idToIdentity.get(parts[1]);
+        if (!modAIdentity || !modBIdentity) return key;
+
+        return conflictPairKey(modAIdentity, modBIdentity);
+    });
+
+    return Array.from(new Set(migrated));
+}
+
+function createConflict(
+    modA: Mod,
+    modB: Mod,
+    conflictType: ModConflict['conflictType'],
+    details: string
+): ModConflict {
+    const modAIdentity = modConflictIdentity(modA);
+    const modBIdentity = modConflictIdentity(modB);
+    return {
+        modA: modA.id,
+        modAName: modA.name,
+        modB: modB.id,
+        modBName: modB.name,
+        modAIdentity,
+        modBIdentity,
+        ignoreKey: conflictPairKey(modAIdentity, modBIdentity),
+        conflictType,
+        details,
+    };
 }
 
 /**
@@ -66,14 +133,12 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
         if (modsWithPriority.length > 1) {
             for (let i = 0; i < modsWithPriority.length; i++) {
                 for (let j = i + 1; j < modsWithPriority.length; j++) {
-                    conflicts.push({
-                        modA: modsWithPriority[i].id,
-                        modAName: modsWithPriority[i].name,
-                        modB: modsWithPriority[j].id,
-                        modBName: modsWithPriority[j].name,
-                        conflictType: 'priority',
-                        details: `Both use pak${String(priority).padStart(2, '0')}`,
-                    });
+                    conflicts.push(createConflict(
+                        modsWithPriority[i],
+                        modsWithPriority[j],
+                        'priority',
+                        `Both use pak${String(priority).padStart(2, '0')}`
+                    ));
                 }
             }
         }
@@ -129,14 +194,12 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
                         console.log(`[detectConflicts]   ... and ${overlapping.length - 20} more`);
                     }
 
-                    conflicts.push({
-                        modA: modA.id,
-                        modAName: modA.name,
-                        modB: modB.id,
-                        modBName: modB.name,
-                        conflictType: 'file',
-                        details: `${overlapping.length} shared file(s): ${overlapping.slice(0, 3).join(', ')}${overlapping.length > 3 ? '...' : ''}`,
-                    });
+                    conflicts.push(createConflict(
+                        modA,
+                        modB,
+                        'file',
+                        `${overlapping.length} shared file(s): ${overlapping.slice(0, 3).join(', ')}${overlapping.length > 3 ? '...' : ''}`
+                    ));
                 }
             }
         }
@@ -153,7 +216,10 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     const ignored = new Set(settings.ignoredConflicts ?? []);
     const filtered = ignored.size === 0
         ? conflicts
-        : conflicts.filter((c) => !ignored.has(conflictPairKey(c.modA, c.modB)));
+        : conflicts.filter((c) =>
+            !ignored.has(c.ignoreKey) &&
+            !ignored.has(conflictPairKey(c.modA, c.modB))
+        );
 
     console.log(`[detectConflicts] Found ${conflicts.length} conflicts (${conflicts.length - filtered.length} ignored)`);
     return filtered;

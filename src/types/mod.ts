@@ -16,6 +16,7 @@ export interface Mod {
   categoryName?: string;
   sourceSection?: string;
   nsfw?: boolean;
+  isArchived?: boolean;
   variantLabel?: string;
   fileDescription?: string;
   sourceFileName?: string;
@@ -35,8 +36,14 @@ export interface Profile {
 
 export interface ModConflict {
   modA: string;
+  modAName: string;
   modB: string;
-  conflictingPaths: string[];
+  modBName: string;
+  modAIdentity: string;
+  modBIdentity: string;
+  ignoreKey: string;
+  conflictType: 'priority' | 'file';
+  details: string;
 }
 
 export interface AppSettings {

@@ -14,6 +14,67 @@ import { useCrosshairStore } from '../stores/crosshairStore';
 import { Card, Badge, Button } from '../components/common/ui';
 import { ConfirmModal, EmptyState, PageHeader } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
+import type { Mod } from '../types/mod';
+
+type ProfileModEntry = Profile['mods'][number];
+
+interface ProfileModVariantDisplay {
+  label: string;
+  hasDetail: boolean;
+}
+
+interface ProfileModGroupDisplay {
+  key: string;
+  name: string;
+  variants: ProfileModVariantDisplay[];
+  enabled: boolean;
+}
+
+function fallbackFileLabel(fileName: string): string {
+  const cleaned = fileName
+    .replace(/^pak\d{2}_/, '')
+    .replace(/_dir\.vpk$/, '')
+    .replace(/\.vpk$/, '')
+    .replace(/[_-]/g, ' ')
+    .trim();
+  return cleaned || fileName;
+}
+
+function getVariantDisplayLabel(profileMod: ProfileModEntry, mod?: Mod): string {
+  return (
+    mod?.variantLabel ||
+    mod?.fileDescription ||
+    mod?.sourceFileName ||
+    fallbackFileLabel(profileMod.fileName)
+  );
+}
+
+function getProfileModGroups(
+  profileMods: ProfileModEntry[],
+  modByFileName: Map<string, Mod>
+): ProfileModGroupDisplay[] {
+  const groups = new Map<string, ProfileModGroupDisplay>();
+
+  for (const profileMod of profileMods) {
+    const mod = modByFileName.get(profileMod.fileName);
+    const key = mod?.gameBananaId ? `gamebanana:${mod.gameBananaId}` : `file:${profileMod.fileName}`;
+    const group = groups.get(key) ?? {
+      key,
+      name: mod?.name || fallbackFileLabel(profileMod.fileName),
+      variants: [],
+      enabled: false,
+    };
+
+    group.enabled = group.enabled || profileMod.enabled;
+    group.variants.push({
+      label: getVariantDisplayLabel(profileMod, mod),
+      hasDetail: !!(mod?.variantLabel || mod?.fileDescription || mod?.sourceFileName),
+    });
+    groups.set(key, group);
+  }
+
+  return Array.from(groups.values());
+}
 
 export default function Profiles() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
@@ -31,8 +92,7 @@ export default function Profiles() {
   const { mods, loadMods } = useAppStore();
   const { getSettings: getCrosshairSettings, loadSettingsFromPreset } = useCrosshairStore();
 
-  // Create lookup map for mod display names
-  const modNameMap = new Map(mods.map(m => [m.fileName, m.name]));
+  const modByFileName = new Map(mods.map(m => [m.fileName, m]));
 
   const loadProfileList = async () => {
     setLoading(true);
@@ -196,6 +256,8 @@ export default function Profiles() {
                 const isUpdating = updatingId === profile.id;
                 const isActive = activeProfileId === profile.id;
                 const isExpanded = expandedProfiles.has(profile.id);
+                const profileModGroups = getProfileModGroups(profile.mods, modByFileName);
+                const profileFileCount = profile.mods.length;
 
                 return (
                   <Card
@@ -216,7 +278,7 @@ export default function Profiles() {
                     <div className="flex flex-col gap-4">
                       <div className="flex items-center justify-between text-sm text-text-secondary bg-black/20 p-4 rounded-lg border border-white/5">
                         <div className="flex flex-col items-center">
-                          <span className="text-2xl font-bold text-text-primary">{profile.mods.length}</span>
+                          <span className="text-2xl font-bold text-text-primary">{profileModGroups.length}</span>
                           <span className="text-xs uppercase tracking-wider opacity-70">Mods</span>
                         </div>
                         <div className="text-right text-xs">
@@ -284,19 +346,34 @@ export default function Profiles() {
                           {/* Mods List */}
                           <div>
                             <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-                              Mods ({profile.mods.length})
+                              {`Mods (${profileModGroups.length}${profileFileCount !== profileModGroups.length ? `, ${profileFileCount} files` : ''})`}
                             </div>
                             <div className="max-h-32 overflow-y-auto pr-2 space-y-1">
-                              {profile.mods.map((mod, idx) => {
-                                const displayName = modNameMap.get(mod.fileName) || mod.fileName;
+                              {profileModGroups.map((group) => {
+                                const variantSummary = group.variants.map((variant) => variant.label).join(', ');
+                                const showVariantSummary = group.variants.length > 1 || group.variants.some((variant) => variant.hasDetail);
                                 return (
-                                  <div key={idx} className="flex items-center justify-between text-xs py-1.5 px-2 hover:bg-white/5 rounded">
-                                    <span className="truncate flex-1" title={mod.fileName}>{displayName}</span>
-                                    {mod.enabled && <Check className="w-3 h-3 text-green-400 shrink-0 ml-2" />}
+                                  <div key={group.key} className="flex items-center justify-between gap-2 text-xs py-1.5 px-2 hover:bg-white/5 rounded">
+                                    <div className="min-w-0 flex-1">
+                                      <div className="truncate text-text-primary" title={group.name}>{group.name}</div>
+                                      {showVariantSummary && (
+                                        <div className="truncate text-[11px] text-text-secondary" title={variantSummary}>
+                                          {variantSummary}
+                                        </div>
+                                      )}
+                                    </div>
+                                    <div className="flex items-center gap-2 shrink-0">
+                                      {group.variants.length > 1 && (
+                                        <span className="text-[10px] text-text-secondary bg-white/5 rounded px-1.5 py-0.5">
+                                          {group.variants.length} files
+                                        </span>
+                                      )}
+                                      {group.enabled && <Check className="w-3 h-3 text-green-400" />}
+                                    </div>
                                   </div>
                                 );
                               })}
-                              {profile.mods.length === 0 && (
+                              {profileModGroups.length === 0 && (
                                 <div className="text-xs text-text-secondary italic">No mods in profile</div>
                               )}
                             </div>

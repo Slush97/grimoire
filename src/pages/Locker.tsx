@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Layers, Shield, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
@@ -20,13 +21,17 @@ import {
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
   buildMinaPresets,
+  countLockerSkins,
   detectMinaTextures,
   findMinaVariant,
+  getLockerSkinKey,
   getHeroFacePosition,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
+  groupLockerSkins,
   groupModsByCategory,
+  isLockerManagedMod,
   parseMinaVariant,
   readStoredFavorites,
   type HeroCategory,
@@ -69,7 +74,6 @@ export default function Locker() {
     garter: 'Default',
     dress: 'Default',
   });
-
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
@@ -120,28 +124,33 @@ export default function Locker() {
   }, [viewMode]);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const goToHero = useCallback(
     (hero: HeroCategory) => navigate(`/locker/hero/${hero.id}`),
     [navigate]
   );
+  const selectedHeroRouteParam = useMemo(() => {
+    const match = location.pathname.match(/^\/locker\/hero\/([^/]+)\/?$/);
+    return match ? match[1] : null;
+  }, [location.pathname]);
+  const selectedHeroId = useMemo(() => {
+    if (selectedHeroRouteParam === null || !/^\d+$/.test(selectedHeroRouteParam)) {
+      return null;
+    }
+    return Number(selectedHeroRouteParam);
+  }, [selectedHeroRouteParam]);
 
   // Build basic hero list first (needed for mod categorization)
   const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
 
+  const lockerMods = useMemo(() => mods.filter(isLockerManagedMod), [mods]);
+
   // Calculate heroMods, passing heroList for name-based category inference
   const heroMods = useMemo(() => {
-    const modSkins = mods.filter((mod) => {
-      if (mod.sourceSection !== 'Mod') return false;
-      const lower = mod.fileName.toLowerCase();
-
-      // Exclude internal preset files (these are managed by the Custom Variants UI)
-      if (lower.startsWith('clothing_preset_')) return false;
-      if (lower.includes('sts_midnight_mina_') && !lower.includes('textures')) return false;
-
-      return true;
-    });
-    return groupModsByCategory(modSkins, baseHeroList);
-  }, [mods, baseHeroList]);
+    return groupModsByCategory(lockerMods, baseHeroList);
+  }, [lockerMods, baseHeroList]);
+  const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
+  const unassignedSkins = useMemo(() => groupLockerSkins(heroMods.unassigned), [heroMods]);
 
   // Sorted hero list for display
   const heroList = useMemo(() => {
@@ -151,13 +160,25 @@ export default function Locker() {
       // Favorites first
       if (aFav !== bFav) return aFav ? -1 : 1;
       // Then heroes with skins
-      const aHasSkins = (heroMods.map.get(a.id)?.length ?? 0) > 0;
-      const bHasSkins = (heroMods.map.get(b.id)?.length ?? 0) > 0;
+      const aHasSkins = countLockerSkins(heroMods.map.get(a.id) ?? []) > 0;
+      const bHasSkins = countLockerSkins(heroMods.map.get(b.id) ?? []) > 0;
       if (aHasSkins !== bHasSkins) return aHasSkins ? -1 : 1;
       // Then alphabetically
       return a.name.localeCompare(b.name);
     });
   }, [baseHeroList, favoriteHeroes, heroMods]);
+  const selectedHero = selectedHeroId === null
+    ? null
+    : heroList.find((hero) => hero.id === selectedHeroId) ?? null;
+  const selectedHeroMissing = selectedHeroRouteParam !== null && !selectedHero;
+  const selectedHeroMods = useMemo(
+    () => (selectedHero ? heroMods.map.get(selectedHero.id) ?? [] : []),
+    [heroMods, selectedHero]
+  );
+  const selectedHeroSkinCount = useMemo(
+    () => countLockerSkins(selectedHeroMods),
+    [selectedHeroMods]
+  );
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -169,12 +190,26 @@ export default function Locker() {
 
   const setActiveSkin = async (heroId: number, modId: string) => {
     const list = heroMods.map.get(heroId) ?? [];
+    const selected = list.find((mod) => mod.id === modId);
+    if (!selected) return;
+
+    const selectedSkinKey = getLockerSkinKey(selected);
+    const selectedSkinFiles = list.filter((mod) => getLockerSkinKey(mod) === selectedSkinKey);
+    const selectedEnabledFiles = selectedSkinFiles.filter((mod) => mod.enabled);
+    const otherEnabledFiles = list.filter(
+      (mod) => getLockerSkinKey(mod) !== selectedSkinKey && mod.enabled
+    );
     const actions: Promise<void>[] = [];
-    for (const mod of list) {
-      if (mod.id === modId) {
-        if (!mod.enabled) actions.push(toggleMod(mod.id));
-      } else if (mod.enabled) {
+    if (selectedEnabledFiles.length > 0 && otherEnabledFiles.length === 0) {
+      for (const mod of selectedEnabledFiles) {
         actions.push(toggleMod(mod.id));
+      }
+    } else {
+      for (const mod of otherEnabledFiles) {
+        actions.push(toggleMod(mod.id));
+      }
+      if (selectedEnabledFiles.length === 0 && !selected.enabled) {
+        actions.push(toggleMod(selected.id));
       }
     }
     await Promise.all(actions);
@@ -187,12 +222,12 @@ export default function Locker() {
     const list = heroMods.map.get(heroId) ?? [];
     const target = list.find((m) => m.id === modId);
     if (!target) return;
-    const groupKey = target.gameBananaId ? `gb:${target.gameBananaId}` : `mod:${target.id}`;
+    const groupKey = getLockerSkinKey(target);
     const actions: Promise<void>[] = [];
     for (const mod of list) {
       if (mod.id === modId) continue;
       if (!mod.enabled) continue;
-      const otherKey = mod.gameBananaId ? `gb:${mod.gameBananaId}` : `mod:${mod.id}`;
+      const otherKey = getLockerSkinKey(mod);
       if (otherKey !== groupKey) actions.push(toggleMod(mod.id));
     }
     actions.push(toggleMod(modId));
@@ -282,21 +317,22 @@ export default function Locker() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <>
+      <div className="p-6 space-y-6">
       <PageHeader
         title="Hero Locker"
         description="Pick the active skin per hero. Selecting one disables other skins for that hero."
-        stats={`${heroList.length} heroes • ${mods.length} installed`}
+        stats={`${heroList.length} heroes • ${installedSkinCount} installed skins`}
         action={
           <div className="flex items-center gap-3">
-            {viewMode === 'gallery' && heroMods.unassigned.length > 0 && (
+            {viewMode === 'gallery' && unassignedSkins.length > 0 && (
               <button
                 onClick={() => setViewMode('list')}
                 className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
                 title="Switch to List view to see unassigned mods"
               >
                 <Layers className="w-3 h-3" />
-                {heroMods.unassigned.length} unassigned
+                {unassignedSkins.length} unassigned
               </button>
             )}
             <ViewModeToggle
@@ -322,7 +358,7 @@ export default function Locker() {
             <HeroGalleryCard
               key={hero.id}
               hero={hero}
-              skinCount={heroMods.map.get(hero.id)?.length ?? 0}
+              skinCount={countLockerSkins(heroMods.map.get(hero.id) ?? [])}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onNavigate={() => goToHero(hero)}
               onToggleFavorite={() =>
@@ -372,40 +408,104 @@ export default function Locker() {
         </div>
       )}
 
-      {viewMode === 'list' && heroMods.unassigned.length > 0 && (
+      {viewMode === 'list' && unassignedSkins.length > 0 && (
         <div className="space-y-3">
           <SectionHeader>Unassigned Skins</SectionHeader>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {heroMods.unassigned.map((mod) => (
-              <div
-                key={mod.id}
-                className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3"
-              >
-                <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary">
-                  <ModThumbnail
-                    src={mod.thumbnailUrl}
-                    alt={mod.name}
-                    nsfw={mod.nsfw}
-                    hideNsfw={settings?.hideNsfwPreviews ?? false}
-                    className="w-full h-full"
-                    fallback={
-                      <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
-                        No preview
-                      </div>
-                    }
-                  />
+            {unassignedSkins.map((skin) => {
+              const mod = skin.primary;
+              const subtitle = skin.variants.length > 1 ? `${skin.variants.length} files` : mod.fileName;
+
+              return (
+                <div
+                  key={skin.key}
+                  className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left"
+                >
+                  <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary">
+                    <ModThumbnail
+                      src={mod.thumbnailUrl}
+                      alt={mod.name}
+                      nsfw={mod.nsfw}
+                      hideNsfw={settings?.hideNsfwPreviews ?? false}
+                      className="w-full h-full"
+                      fallback={
+                        <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
+                          No preview
+                        </div>
+                      }
+                    />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{mod.name}</div>
+                    <div className="text-xs text-text-secondary truncate">{subtitle}</div>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <div className="font-medium truncate">{mod.name}</div>
-                  <div className="text-xs text-text-secondary truncate">{mod.fileName}</div>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       )}
-
     </div>
+
+      {selectedHero && (
+        <div
+          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
+          style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
+        >
+          <LockerHeroView
+            key={selectedHero.id}
+            hero={selectedHero}
+            list={selectedHeroMods}
+            skinCount={selectedHeroSkinCount}
+            isFavorite={favoriteHeroes.includes(selectedHero.id)}
+            onBack={() => navigate('/locker')}
+            onToggleFavorite={() =>
+              setFavoriteHeroes((prev) =>
+                prev.includes(selectedHero.id)
+                  ? prev.filter((id) => id !== selectedHero.id)
+                  : [...prev, selectedHero.id]
+              )
+            }
+            onSelect={(modId) => setActiveSkin(selectedHero.id, modId)}
+            onToggleVariant={(modId) => toggleHeroVariant(selectedHero.id, modId)}
+            hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+            minaPresets={selectedHero.name === 'Mina' ? minaPresets : []}
+            activeMinaPreset={selectedHero.name === 'Mina' ? activeMinaPreset : undefined}
+            minaTextures={selectedHero.name === 'Mina' ? minaTextures : []}
+            onApplyMinaPreset={selectedHero.name === 'Mina' ? applyMinaPreset : undefined}
+            minaArchivePath={selectedHero.name === 'Mina' ? minaArchivePath : undefined}
+            onMinaArchivePathChange={selectedHero.name === 'Mina' ? setMinaArchivePath : undefined}
+            minaVariants={selectedHero.name === 'Mina' ? minaVariants : []}
+            minaVariantsLoading={selectedHero.name === 'Mina' ? minaVariantsLoading : false}
+            minaVariantsError={selectedHero.name === 'Mina' ? minaVariantsError : null}
+            onLoadMinaVariants={selectedHero.name === 'Mina' ? loadMinaVariants : undefined}
+            minaSelection={selectedHero.name === 'Mina' ? minaSelection : undefined}
+            onMinaSelectionChange={selectedHero.name === 'Mina' ? setMinaSelection : undefined}
+            selectedMinaVariant={selectedHero.name === 'Mina' ? selectedMinaVariant : undefined}
+            onApplyMinaVariant={selectedHero.name === 'Mina' ? applyMinaVariantSelection : undefined}
+          />
+        </div>
+      )}
+
+      {selectedHeroMissing && (
+        <div
+          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
+          style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
+        >
+          <div className="flex h-full flex-col items-center justify-center p-6 text-text-secondary">
+            <Layers className="w-16 h-16 mb-4 opacity-50" />
+            <h2 className="text-xl font-semibold text-text-primary mb-2">Hero Not Found</h2>
+            <button
+              type="button"
+              onClick={() => navigate('/locker')}
+              className="mt-3 px-4 py-2 rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary transition-colors cursor-pointer"
+            >
+              Back to Locker
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 
@@ -636,6 +736,7 @@ function HeroCard({
   const wikiUrl = getHeroWikiUrl(hero.name);
   const [iconSrc, setIconSrc] = useState(() => localUrl);
   const [fallbackStep, setFallbackStep] = useState(0);
+  const skinCount = useMemo(() => countLockerSkins(mods), [mods]);
 
   const handleError = () => {
     if (fallbackStep === 0) {
@@ -665,7 +766,7 @@ function HeroCard({
         <div className="min-w-0">
           <div className="font-semibold truncate">{hero.name}</div>
           <div className="text-xs text-text-secondary">
-            {mods.length > 0 ? `${mods.length} skin${mods.length !== 1 ? 's' : ''}` : 'No skins installed'}
+            {skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins installed'}
           </div>
         </div>
         <button

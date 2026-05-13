@@ -161,6 +161,13 @@ export type MinaSelection = Omit<MinaVariant, 'archiveEntry' | 'label'>;
 
 export const MINA_ARCHIVE_DEFAULT = '';
 
+export type LockerSkin = {
+  key: string;
+  primary: Mod;
+  variants: Mod[];
+  enabledVariants: Mod[];
+};
+
 export function heroAssetBaseName(name: string): string {
   return name.trim().replace(/\s+/g, '_');
 }
@@ -257,6 +264,51 @@ export function detectMinaTextures(mods: Mod[]) {
     }
     return lower === 'textures-pak21_dir.vpk';
   });
+}
+
+export function isLockerManagedMod(mod: Mod): boolean {
+  if (mod.sourceSection !== 'Mod') return false;
+
+  const lower = mod.fileName.toLowerCase();
+  // Internal Midnight Mina preset files are managed by the custom variants UI,
+  // not counted as normal hero skins in the Locker.
+  if (lower.startsWith('clothing_preset_')) return false;
+  if (lower.includes('sts_midnight_mina_') && !lower.includes('textures')) return false;
+
+  return true;
+}
+
+export function getLockerSkinKey(mod: Mod): string {
+  return typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0
+    ? `gamebanana:${mod.gameBananaId}`
+    : `mod:${mod.id}`;
+}
+
+export function groupLockerSkins(mods: Mod[]): LockerSkin[] {
+  const bySkin = new Map<string, Mod[]>();
+  for (const mod of mods) {
+    const key = getLockerSkinKey(mod);
+    const variants = bySkin.get(key) ?? [];
+    variants.push(mod);
+    bySkin.set(key, variants);
+  }
+
+  return Array.from(bySkin.entries())
+    .map(([key, variants]) => {
+      const sortedVariants = [...variants].sort((a, b) => a.priority - b.priority);
+      const enabledVariants = sortedVariants.filter((variant) => variant.enabled);
+      return {
+        key,
+        primary: enabledVariants[0] ?? sortedVariants[0],
+        variants: sortedVariants,
+        enabledVariants,
+      };
+    })
+    .sort((a, b) => a.primary.priority - b.primary.priority);
+}
+
+export function countLockerSkins(mods: Mod[]): number {
+  return groupLockerSkins(mods).length;
 }
 
 /**

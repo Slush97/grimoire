@@ -11,6 +11,7 @@ export interface ModMetadata {
     categoryName?: string; // Hero/category name from GameBanana
     sourceSection?: string;
     nsfw?: boolean;
+    isArchived?: boolean;   // True when the downloaded GameBanana file is from the archived files list
     isMinaPreset?: boolean; // Flag for Mina presets we extracted from the 7z
     variantLabel?: string;  // User-provided label to disambiguate variants of the same mod
     fileDescription?: string;  // GameBanana file "header" (_sDescription) — author's per-file label, used as fallback when the user hasn't named the variant

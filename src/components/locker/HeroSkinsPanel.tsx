@@ -1,7 +1,7 @@
 import { useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { Mod } from '../../types/mod';
-import type { MinaPreset, MinaSelection, MinaVariant } from '../../lib/lockerUtils';
+import { getLockerSkinKey, type MinaPreset, type MinaSelection, type MinaVariant } from '../../lib/lockerUtils';
 import ModThumbnail from '../ModThumbnail';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { Skeleton } from '../common/Skeleton';
@@ -30,7 +30,7 @@ function groupVariants(mods: Mod[]): SkinGroup[] {
     // Mods sharing a gameBananaId are variants of the same upload. Mods
     // without a gameBananaId (custom imports, legacy installs) get their own
     // singleton group keyed by mod id so they still render.
-    const key = mod.gameBananaId ? `gb:${mod.gameBananaId}` : `mod:${mod.id}`;
+    const key = getLockerSkinKey(mod);
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(mod);
   }

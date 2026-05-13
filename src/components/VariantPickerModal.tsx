@@ -1,7 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
-import { X, Check, Trash2, Power, PowerOff, Info, Pencil, ChevronUp, ChevronDown, GripVertical } from 'lucide-react';
+import {
+    X,
+    Check,
+    Trash2,
+    Power,
+    PowerOff,
+    Info,
+    Pencil,
+    ChevronUp,
+    ChevronDown,
+    GripVertical,
+    AlertTriangle,
+} from 'lucide-react';
 import type { Mod } from '../types/mod';
-import { Button } from './common/ui';
+import { ArchivedTag, Button, Tag } from './common/ui';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 
 type DropPosition = 'before' | 'after';
@@ -10,29 +22,21 @@ interface Props {
     /** Display name shared by the variants (use primary.name). */
     modName: string;
     variants: Mod[];
-    /** Toggle a single variant's enabled state. Variants are independent —
-     *  multiple can be active at once (e.g. a model VPK + its voice-lines
-     *  addon from the same mod page). */
+    /** Toggle a single variant's enabled state. Variants are independent. */
     onToggle: (target: Mod) => Promise<void> | void;
-    /** Swap a variant with its picker-neighbor (up = earlier load slot,
-     *  down = later, wins overlapping file conflicts). Caller is responsible
-     *  for refusing cross-section swaps; this picker just disables the
-     *  button when the neighbor isn't in the same enabled state. */
+    /** Swap a variant with its picker-neighbor. */
     onMoveVariant: (target: Mod, direction: 'up' | 'down') => Promise<void> | void;
-    /** Drag-drop reorder. Drops source before or after neighbor in load
-     *  order. Same cross-section constraint as onMoveVariant — the picker
-     *  refuses to set dropTargetId when source and target are in different
-     *  enabled states, so this handler can assume same-section. */
+    /** Drag-drop reorder. Drops source before or after neighbor in load order. */
     onReorderVariantTo: (source: Mod, neighbor: Mod, position: DropPosition) => Promise<void> | void;
     /** Called when the user disables every currently-enabled variant. */
     onDisableAll: () => Promise<void> | void;
+    /** Conflicts keyed by local mod id. Only in-group conflicts are passed in. */
+    conflictsByVariantId?: Record<string, string[]>;
     /** Called when the user requests deletion of a single variant. */
     onDeleteVariant: (variant: Mod) => Promise<void> | void;
     /** Persist a user-given label for a variant. Empty string clears it. */
     onRenameVariant: (variant: Mod, label: string) => Promise<void> | void;
-    /** Optional — open the GameBanana details modal for this mod. When set,
-     *  a small "Mod page" link appears in the header. Not provided when the
-     *  group has no GB id (shouldn't happen since groups require one). */
+    /** Optional - open the GameBanana details modal for this mod. */
     onOpenModDetails?: () => void;
     onClose: () => void;
 }
@@ -46,17 +50,8 @@ function formatBytes(bytes: number): string {
 }
 
 /**
- * Variant picker for grouped mods. Shown when the user clicks an Installed
- * card that represents multiple VPKs sharing a GameBanana mod id. Variants
- * are independent — the user can enable any combination. Examples:
- *   • Dallas PAYDAY ships a model VPK and a voice-lines VPK from one archive;
- *     users want both on.
- *   • A mod page with separate red/blue uploads: enable both if they don't
- *     conflict, or just one if they do.
- *
- * Per-variant Delete lives here (rather than the card) so the card-level
- * Delete can keep its simple "remove this whole mod" meaning without
- * ambiguity about which file would be removed.
+ * Variant picker for grouped mods. Shown when a card represents multiple
+ * VPKs sharing a GameBanana mod id. Any combination can be enabled.
  */
 export default function VariantPickerModal({
     modName,
@@ -65,25 +60,20 @@ export default function VariantPickerModal({
     onMoveVariant,
     onReorderVariantTo,
     onDisableAll,
+    conflictsByVariantId = {},
     onDeleteVariant,
     onRenameVariant,
     onOpenModDetails,
     onClose,
 }: Props) {
     const [pending, setPending] = useState<string | null>(null);
-    // Per-row rename state. Holds the variant id being edited plus the
-    // working draft text; null when no row is in edit mode.
     const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
     const editInputRef = useRef<HTMLInputElement | null>(null);
-    // Drag-and-drop state. dropPosition is computed from cursor Y vs row
-    // midpoint; the visual indicator (top/bottom border on the target row)
-    // matches the position the source will land in. handleDownRef gates the
-    // drag to the grip icon so clicks on toggle/rename/delete/chevrons don't
-    // accidentally start one.
     const [draggingId, setDraggingId] = useState<string | null>(null);
     const [dropTargetId, setDropTargetId] = useState<string | null>(null);
     const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
     const handleDownRef = useRef(false);
+
     const resetDrag = () => {
         setDraggingId(null);
         setDropTargetId(null);
@@ -91,9 +81,21 @@ export default function VariantPickerModal({
         handleDownRef.current = false;
     };
 
-    // Focus + select when the editing target changes (entering edit mode
-    // for a new row). Driven by the id alone so we don't re-focus on every
-    // keystroke as the draft updates.
+    const orderedVariants = [
+        ...variants.filter((v) => v.enabled),
+        ...variants.filter((v) => !v.enabled),
+    ];
+
+    const isNoopDrop = (sourceId: string, targetId: string, position: DropPosition) => {
+        if (sourceId === targetId) return true;
+        const sourceIdx = orderedVariants.findIndex((v) => v.id === sourceId);
+        const targetIdx = orderedVariants.findIndex((v) => v.id === targetId);
+        if (sourceIdx === -1 || targetIdx === -1) return false;
+        return position === 'before'
+            ? sourceIdx === targetIdx - 1
+            : sourceIdx === targetIdx + 1;
+    };
+
     const editingId = editing?.id ?? null;
     useEffect(() => {
         if (editingId && editInputRef.current) {
@@ -102,7 +104,8 @@ export default function VariantPickerModal({
         }
     }, [editingId]);
 
-    const anyActive = variants.some((v) => v.enabled);
+    const enabledCount = variants.filter((v) => v.enabled).length;
+    const anyActive = enabledCount > 0;
 
     const startRename = (v: Mod) => {
         setEditing({ id: v.id, draft: v.variantLabel ?? '' });
@@ -113,7 +116,6 @@ export default function VariantPickerModal({
     const commitRename = async (v: Mod) => {
         if (!editing || editing.id !== v.id || pending) return;
         const next = editing.draft.trim();
-        // No-op when the value hasn't changed (avoids a needless write).
         if (next === (v.variantLabel ?? '')) {
             setEditing(null);
             return;
@@ -129,8 +131,6 @@ export default function VariantPickerModal({
 
     const pick = async (target: Mod) => {
         if (pending) return;
-        // Toggle this one variant's enabled state. Don't close the modal —
-        // users typically want to flip several before stepping back out.
         setPending(target.id);
         try {
             await onToggle(target);
@@ -144,14 +144,13 @@ export default function VariantPickerModal({
         setPending('__disable__');
         try {
             await onDisableAll();
-            onClose();
         } finally {
             setPending(null);
         }
     };
 
     const handleDelete = async (variant: Mod) => {
-        if (pending) return;
+        if (pending || editing) return;
         setPending(`delete:${variant.id}`);
         try {
             await onDeleteVariant(variant);
@@ -188,7 +187,7 @@ export default function VariantPickerModal({
                             {modName}
                         </h3>
                         <p className="text-xs text-text-secondary mt-0.5">
-                            {variants.length} variants — toggle any combination on or off
+                            {enabledCount} of {variants.length} files enabled
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -213,20 +212,14 @@ export default function VariantPickerModal({
                 </div>
 
                 <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
-                    {variants.map((v, idx) => {
+                    {orderedVariants.map((v, idx) => {
                         const isActive = v.enabled;
                         const isPending = pending === v.id;
                         const isDeletePending = pending === `delete:${v.id}`;
                         const isEditing = editing?.id === v.id;
                         const isRenamePending = pending === `rename:${v.id}`;
-                        // Reorder buttons swap with the picker-neighbor in load
-                        // order. Allowed only when the neighbor shares the
-                        // variant's enabled state — cross-section swaps would
-                        // flip a variant's on/off status implicitly. Hide the
-                        // controls entirely when the group has just one
-                        // variant (nothing to swap with).
-                        const prev = idx > 0 ? variants[idx - 1] : null;
-                        const nextSibling = idx < variants.length - 1 ? variants[idx + 1] : null;
+                        const prev = idx > 0 ? orderedVariants[idx - 1] : null;
+                        const nextSibling = idx < orderedVariants.length - 1 ? orderedVariants[idx + 1] : null;
                         const canMoveUp = !!prev && prev.enabled === v.enabled;
                         const canMoveDown = !!nextSibling && nextSibling.enabled === v.enabled;
                         const showReorder = variants.length > 1;
@@ -234,15 +227,7 @@ export default function VariantPickerModal({
                         const isMoveDownPending = pending === `move:${v.id}:down`;
                         const isDragging = draggingId === v.id;
                         const isDropTarget = dropTargetId === v.id;
-                        // Title precedence: user rename wins, else the
-                        // GameBanana file header the author set (e.g. "Gold
-                        // w/ alt candle"), else the original GB filename
-                        // stem (covers mods whose author left descriptions
-                        // empty — far more useful than pak04_dir.vpk), else
-                        // the local VPK filename. Show the local filename as
-                        // a secondary line whenever we used a friendlier
-                        // label up top so the underlying file is still
-                        // discoverable.
+                        const conflictDetails = conflictsByVariantId[v.id] ?? [];
                         const primaryTitle =
                             v.variantLabel ??
                             v.fileDescription ??
@@ -250,6 +235,7 @@ export default function VariantPickerModal({
                             v.fileName;
                         const showSecondaryFileName =
                             !!v.variantLabel || !!v.fileDescription || !!v.sourceFileName;
+
                         return (
                             <div
                                 key={v.id}
@@ -264,7 +250,7 @@ export default function VariantPickerModal({
                                     try {
                                         e.dataTransfer.setData('text/plain', v.id);
                                     } catch {
-                                        // Firefox is picky about setData; ignore failures.
+                                        // Some drag implementations do not allow setting data.
                                     }
                                     setDraggingId(v.id);
                                 }}
@@ -281,8 +267,6 @@ export default function VariantPickerModal({
                                     setDropPosition(pos);
                                 }}
                                 onDragLeave={(e) => {
-                                    // Children fire dragleave on the row; only clear when the
-                                    // cursor actually exits the row's bounding box.
                                     if (e.currentTarget.contains(e.relatedTarget as Node)) return;
                                     if (dropTargetId === v.id) {
                                         setDropTargetId(null);
@@ -295,6 +279,7 @@ export default function VariantPickerModal({
                                     const pos = dropPosition;
                                     resetDrag();
                                     if (!sourceId || sourceId === v.id || !pos) return;
+                                    if (isNoopDrop(sourceId, v.id, pos)) return;
                                     const source = variants.find((x) => x.id === sourceId);
                                     if (!source || source.enabled !== v.enabled) return;
                                     setPending(`move:${sourceId}:drag`);
@@ -337,7 +322,7 @@ export default function VariantPickerModal({
                                     onClick={() => pick(v)}
                                     disabled={!!pending || isEditing}
                                     className="flex-1 min-w-0 text-left cursor-pointer disabled:cursor-default disabled:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
-                                    title={isActive ? 'Disable this variant' : 'Enable this variant'}
+                                    title={isActive ? 'Disable this file' : 'Enable this file'}
                                     aria-pressed={isActive}
                                 >
                                     <div className="flex items-center gap-3">
@@ -372,16 +357,29 @@ export default function VariantPickerModal({
                                                     className="w-full bg-bg-secondary border border-accent/50 rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                                                 />
                                             ) : (
-                                                <span
-                                                    className={`block truncate ${showSecondaryFileName ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
-                                                    title={primaryTitle}
-                                                >
-                                                    {primaryTitle}
-                                                </span>
+                                                <div className="flex items-center gap-2 min-w-0">
+                                                    <span
+                                                        className={`truncate ${showSecondaryFileName ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
+                                                        title={primaryTitle}
+                                                    >
+                                                        {primaryTitle}
+                                                    </span>
+                                                    {v.isArchived && <ArchivedTag />}
+                                                    {conflictDetails.length > 0 && (
+                                                        <Tag
+                                                            tone="warning"
+                                                            icon={AlertTriangle}
+                                                            title={conflictDetails.join(', ')}
+                                                            className="flex-shrink-0"
+                                                        >
+                                                            Conflict
+                                                        </Tag>
+                                                    )}
+                                                </div>
                                             )}
                                             <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5 min-w-0">
                                                 <span className="flex-shrink-0">{formatBytes(v.size)}</span>
-                                                <span className="opacity-50 flex-shrink-0">•</span>
+                                                <span className="opacity-50 flex-shrink-0">-</span>
                                                 <span className="flex-shrink-0">Slot #{v.priority}</span>
                                                 <span className="opacity-50 flex-shrink-0">•</span>
                                                 <span
@@ -392,7 +390,7 @@ export default function VariantPickerModal({
                                                 </span>
                                                 {showSecondaryFileName && !isEditing && (
                                                     <>
-                                                        <span className="opacity-50 flex-shrink-0">•</span>
+                                                        <span className="opacity-50 flex-shrink-0">-</span>
                                                         <span className="font-mono truncate opacity-70" title={v.fileName}>
                                                             {v.fileName}
                                                         </span>
@@ -410,7 +408,7 @@ export default function VariantPickerModal({
                                             disabled={!!pending}
                                             className="p-1.5 text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:opacity-50"
                                             title="Save"
-                                            aria-label="Save variant name"
+                                            aria-label="Save file name"
                                         >
                                             {isRenamePending ? (
                                                 <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -438,14 +436,8 @@ export default function VariantPickerModal({
                                                     onClick={() => move(v, 'up')}
                                                     disabled={!!pending || !canMoveUp}
                                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                                    title={
-                                                        canMoveUp
-                                                            ? 'Move up (loads earlier — overlapping files lose to later loads)'
-                                                            : idx === 0
-                                                                ? 'Already first in load order'
-                                                                : 'Adjacent variant is in a different section'
-                                                    }
-                                                    aria-label="Move variant up in load order"
+                                                    title={canMoveUp ? 'Move up' : idx === 0 ? 'Already first in load order' : 'Adjacent file is in a different section'}
+                                                    aria-label="Move file up in load order"
                                                 >
                                                     {isMoveUpPending ? (
                                                         <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -458,14 +450,8 @@ export default function VariantPickerModal({
                                                     onClick={() => move(v, 'down')}
                                                     disabled={!!pending || !canMoveDown}
                                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                                    title={
-                                                        canMoveDown
-                                                            ? 'Move down (loads later — wins overlapping files)'
-                                                            : idx === variants.length - 1
-                                                                ? 'Already last in load order'
-                                                                : 'Adjacent variant is in a different section'
-                                                    }
-                                                    aria-label="Move variant down in load order"
+                                                    title={canMoveDown ? 'Move down' : idx === orderedVariants.length - 1 ? 'Already last in load order' : 'Adjacent file is in a different section'}
+                                                    aria-label="Move file down in load order"
                                                 >
                                                     {isMoveDownPending ? (
                                                         <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -480,8 +466,8 @@ export default function VariantPickerModal({
                                             onClick={() => startRename(v)}
                                             disabled={!!pending}
                                             className="flex-shrink-0 p-1.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
-                                            title={v.variantLabel ? 'Rename variant' : 'Give this variant a name'}
-                                            aria-label="Rename variant"
+                                            title={v.variantLabel ? 'Rename file' : 'Give this file a name'}
+                                            aria-label="Rename file"
                                         >
                                             <Pencil className="w-4 h-4" />
                                         </button>
@@ -502,7 +488,7 @@ export default function VariantPickerModal({
                                     </>
                                 )}
                                 {isPending && (
-                                    <span className="text-xs text-accent">Toggling…</span>
+                                    <span className="text-xs text-accent">Saving...</span>
                                 )}
                             </div>
                         );
@@ -516,7 +502,7 @@ export default function VariantPickerModal({
                             size="sm"
                             icon={PowerOff}
                             onClick={disableActive}
-                            disabled={!!pending}
+                            disabled={!!pending || !!editing}
                             isLoading={pending === '__disable__'}
                         >
                             Disable all
@@ -524,7 +510,7 @@ export default function VariantPickerModal({
                     ) : (
                         <span className="text-xs text-text-secondary inline-flex items-center gap-1.5">
                             <Power className="w-3 h-3" />
-                            No variants active — toggle any to enable
+                            No files enabled
                         </span>
                     )}
                     <Button variant="secondary" size="sm" onClick={onClose}>

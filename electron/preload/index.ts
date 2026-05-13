@@ -24,6 +24,8 @@ export interface ElectronAPI {
     // Launch
     launchModded: () => Promise<void>;
     launchVanilla: () => Promise<void>;
+    getGameRunningStatus: () => Promise<GameRunningStatus>;
+    stopGame: () => Promise<StopGameResult>;
     getVanillaStashStatus: () => Promise<VanillaStashStatus>;
     restoreVanillaStash: () => Promise<VanillaRestoreResult>;
     onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
@@ -304,6 +306,7 @@ interface Mod {
     categoryId?: number;
     sourceSection?: string;
     nsfw?: boolean;
+    isArchived?: boolean;
 }
 
 interface BrowseModsArgs {
@@ -406,6 +409,16 @@ interface VanillaRestoreResult {
     failed: string[];
 }
 
+interface GameRunningStatus {
+    running: boolean;
+}
+
+interface StopGameResult {
+    wasRunning: boolean;
+    stopped: boolean;
+    restoreResult?: VanillaRestoreResult;
+}
+
 interface DownloadProgressData {
     modId: number;
     fileId: number;
@@ -504,6 +517,9 @@ interface ModConflict {
     modAName: string;
     modB: string;
     modBName: string;
+    modAIdentity: string;
+    modBIdentity: string;
+    ignoreKey: string;
     conflictType: 'priority' | 'file';
     details: string;
 }
@@ -691,6 +707,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Launch
     launchModded: () => ipcRenderer.invoke('launch-modded'),
     launchVanilla: () => ipcRenderer.invoke('launch-vanilla'),
+    getGameRunningStatus: () => ipcRenderer.invoke('get-game-running-status'),
+    stopGame: () => ipcRenderer.invoke('stop-game'),
     getVanillaStashStatus: () => ipcRenderer.invoke('get-vanilla-stash-status'),
     restoreVanillaStash: () => ipcRenderer.invoke('restore-vanilla-stash'),
     onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => {

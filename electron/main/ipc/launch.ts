@@ -3,10 +3,13 @@ import { loadSettings } from '../services/settings';
 import {
     launchModded,
     launchVanilla,
+    isDeadlockRunning,
     readStash,
     restoreFromStash,
     recoverFromStashOnStartup,
+    stopDeadlockGame,
     type RestoreResult,
+    type StopDeadlockResult,
 } from '../services/launch';
 import { readLaunchOptions, isSteamRunning } from '../services/launchOptions';
 import { getMainWindow } from '../index';
@@ -38,6 +41,25 @@ ipcMain.handle('launch-vanilla', async (): Promise<void> => {
         throw new Error('No Deadlock path configured');
     }
     await launchVanilla({ deadlockPath, onRestoreComplete: emitRestore });
+});
+
+ipcMain.handle('get-game-running-status', async (): Promise<{ running: boolean }> => {
+    return { running: await isDeadlockRunning() };
+});
+
+ipcMain.handle('stop-game', async (): Promise<StopDeadlockResult & {
+    restoreResult?: RestoreResult;
+}> => {
+    const stopResult = await stopDeadlockGame();
+    const deadlockPath = getActiveDeadlockPath();
+    const stash = await readStash();
+
+    if (!deadlockPath || !stash || !stopResult.stopped) {
+        return stopResult;
+    }
+
+    const restoreResult = await restoreFromStash(deadlockPath, stash);
+    return { ...stopResult, restoreResult };
 });
 
 ipcMain.handle('get-vanilla-stash-status', async (): Promise<{

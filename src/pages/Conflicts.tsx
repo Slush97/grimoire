@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye } from 'lucide-react';
 import {
   getConflicts,
@@ -19,7 +18,51 @@ interface ModWithThumbnail {
   id: string;
   name: string;
   fileName: string;
+  identity: string;
+  size?: number;
+  installedAt?: string;
   thumbnailUrl?: string;
+  gameBananaId?: number;
+  gameBananaFileId?: number;
+  hasSiblingVariants?: boolean;
+  variantLabel?: string;
+  fileDescription?: string;
+  sourceFileName?: string;
+}
+
+function getVariantLabel(mod: ModWithThumbnail): string | null {
+  if (!mod.hasSiblingVariants) return null;
+  return (
+    mod.variantLabel?.trim() ||
+    mod.fileDescription?.trim() ||
+    mod.sourceFileName?.trim() ||
+    null
+  );
+}
+
+function normalizeIdentityPart(value: string): string {
+  return value.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+function getModConflictIdentity(mod: Mod): string {
+  if (typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0) {
+    if (typeof mod.gameBananaFileId === 'number' && mod.gameBananaFileId > 0) {
+      return `gb:${mod.gameBananaId}:file:${mod.gameBananaFileId}`;
+    }
+    if (mod.sourceFileName) {
+      return `gb:${mod.gameBananaId}:source:${normalizeIdentityPart(mod.sourceFileName)}`;
+    }
+    return `gb:${mod.gameBananaId}:mod`;
+  }
+
+  const installedStamp = Number.isFinite(Date.parse(mod.installedAt))
+    ? String(Date.parse(mod.installedAt))
+    : normalizeIdentityPart(mod.installedAt);
+  return `local:${mod.size}:${installedStamp}`;
+}
+
+function getConflictIgnoreKey(conflict: ModConflict): string {
+  return conflict.ignoreKey ?? conflictPairKey(conflict.modA, conflict.modB);
 }
 
 function ConflictsSkeleton() {
@@ -57,9 +100,9 @@ function ConflictsSkeleton() {
 export default function Conflicts() {
   const [conflicts, setConflicts] = useState<ModConflict[]>([]);
   const [modsMap, setModsMap] = useState<Map<string, ModWithThumbnail>>(new Map());
-  // Set of ignored pair keys ("idA::idB" sorted). Used both to filter
-  // detected conflicts (defense-in-depth — backend already filters) and to
-  // render the "Ignored" panel.
+  // Set of ignored pair keys ("identityA::identityB" sorted). Used both to
+  // filter detected conflicts (defense-in-depth — backend already filters)
+  // and to render the "Ignored" panel.
   const [ignored, setIgnored] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,19 +117,6 @@ export default function Conflicts() {
   // that row's buttons during the round-trip without freezing the whole page.
   const [pendingPair, setPendingPair] = useState<string | null>(null);
   const { loadMods } = useAppStore();
-  const navigate = useNavigate();
-  const location = useLocation();
-  // location.key is the literal string "default" on the very first entry to the
-  // app (no prior history). In every other case there's a route to go back to.
-  const canGoBack = useRef(location.key !== 'default');
-
-  const returnToPreviousScreen = () => {
-    if (canGoBack.current) {
-      navigate(-1);
-    } else {
-      navigate('/');
-    }
-  };
 
   const loadConflicts = async () => {
     setLoading(true);
@@ -99,13 +129,34 @@ export default function Conflicts() {
       ]);
 
       const map = new Map<string, ModWithThumbnail>();
+      const gameBananaCounts = new Map<number, number>();
       for (const mod of modsResult as Mod[]) {
-        map.set(mod.id, {
+        if (typeof mod.gameBananaId !== 'number' || mod.gameBananaId <= 0) continue;
+        gameBananaCounts.set(mod.gameBananaId, (gameBananaCounts.get(mod.gameBananaId) ?? 0) + 1);
+      }
+
+      for (const mod of modsResult as Mod[]) {
+        const hasSiblingVariants =
+          typeof mod.gameBananaId === 'number' &&
+          mod.gameBananaId > 0 &&
+          (gameBananaCounts.get(mod.gameBananaId) ?? 0) > 1;
+        const info: ModWithThumbnail = {
           id: mod.id,
           name: mod.name,
           fileName: mod.fileName,
+          identity: getModConflictIdentity(mod),
+          size: mod.size,
+          installedAt: mod.installedAt,
           thumbnailUrl: mod.thumbnailUrl,
-        });
+          gameBananaId: mod.gameBananaId,
+          gameBananaFileId: mod.gameBananaFileId,
+          hasSiblingVariants,
+          variantLabel: mod.variantLabel,
+          fileDescription: mod.fileDescription,
+          sourceFileName: mod.sourceFileName,
+        };
+        map.set(mod.id, info);
+        map.set(info.identity, info);
       }
       setModsMap(map);
       setConflicts(conflictResult);
@@ -117,25 +168,22 @@ export default function Conflicts() {
     }
   };
 
-  const handleIgnore = async (modA: string, modB: string) => {
-    const key = conflictPairKey(modA, modB);
+  const handleIgnore = async (conflict: ModConflict) => {
+    const key = getConflictIgnoreKey(conflict);
     setPendingPair(key);
     try {
-      const next = await ignoreConflict(modA, modB);
+      const next = await ignoreConflict(conflict.modA, conflict.modB);
       setIgnored(new Set(next));
       // Backend filters ignored pairs from get-conflicts, so dropping locally
       // keeps the UI consistent without a second round-trip.
       const remaining = conflicts.filter(
-        (c) => conflictPairKey(c.modA, c.modB) !== key
+        (c) => getConflictIgnoreKey(c) !== key
       );
       setConflicts(remaining);
       // Sidebar's badge count is derived from getConflicts() and only refreshes
       // on mods-list changes. Ignore/unignore don't touch mods, so notify the
       // Sidebar explicitly — otherwise the badge stays stale until restart.
       window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
-      if (remaining.length === 0) {
-        returnToPreviousScreen();
-      }
     } catch (err) {
       setError(String(err));
     } finally {
@@ -178,9 +226,6 @@ export default function Conflicts() {
       // Single event after the whole batch — the Sidebar badge re-fetches
       // once instead of N times during the loop.
       window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
-      if (failures.length === 0) {
-        returnToPreviousScreen();
-      }
     } finally {
       setIgnoringAll(false);
       setIgnoreAllConfirmOpen(false);
@@ -225,7 +270,7 @@ export default function Conflicts() {
   };
 
   const getModInfo = (modId: string, fallbackName: string): ModWithThumbnail => {
-    return modsMap.get(modId) || { id: modId, name: fallbackName, fileName: '' };
+    return modsMap.get(modId) || { id: modId, name: fallbackName, fileName: '', identity: modId };
   };
 
   if (loading) {
@@ -306,6 +351,8 @@ export default function Conflicts() {
         {conflicts.map((conflict, i) => {
           const modA = getModInfo(conflict.modA, conflict.modAName);
           const modB = getModInfo(conflict.modB, conflict.modBName);
+          const variantA = getVariantLabel(modA);
+          const variantB = getVariantLabel(modB);
 
           return (
             <div
@@ -320,8 +367,8 @@ export default function Conflicts() {
                 </span>
                 <button
                   type="button"
-                  onClick={() => handleIgnore(conflict.modA, conflict.modB)}
-                  disabled={pendingPair === conflictPairKey(conflict.modA, conflict.modB)}
+                  onClick={() => handleIgnore(conflict)}
+                  disabled={pendingPair === getConflictIgnoreKey(conflict)}
                   title="Stop flagging this pair as a conflict"
                   className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
@@ -359,6 +406,11 @@ export default function Conflicts() {
                   <p className="text-sm font-medium text-text-primary text-center truncate">
                     {modA.name}
                   </p>
+                  {variantA && (
+                    <p className="text-xs text-accent text-center truncate" title={variantA}>
+                      {variantA}
+                    </p>
+                  )}
                   {modA.fileName && (
                     <p className="text-xs text-text-tertiary text-center truncate" title={modA.fileName}>
                       {modA.fileName}
@@ -398,6 +450,11 @@ export default function Conflicts() {
                   <p className="text-sm font-medium text-text-primary text-center truncate">
                     {modB.name}
                   </p>
+                  {variantB && (
+                    <p className="text-xs text-accent text-center truncate" title={variantB}>
+                      {variantB}
+                    </p>
+                  )}
                   {modB.fileName && (
                     <p className="text-xs text-text-tertiary text-center truncate" title={modB.fileName}>
                       {modB.fileName}
@@ -431,12 +488,18 @@ export default function Conflicts() {
               // never re-appear as active conflicts.
               const aName = a?.name ?? '(removed mod)';
               const bName = b?.name ?? '(removed mod)';
+              const aVariant = a ? getVariantLabel(a) : null;
+              const bVariant = b ? getVariantLabel(b) : null;
               return (
                 <div key={key} className="flex items-center gap-3 px-4 py-3">
                   <div className="min-w-0 flex-1 flex items-center gap-2 text-sm">
-                    <span className="truncate text-text-primary" title={aName}>{aName}</span>
+                    <span className="truncate text-text-primary" title={aVariant ? `${aName} - ${aVariant}` : aName}>
+                      {aName}{aVariant ? ` (${aVariant})` : ''}
+                    </span>
                     <span className="text-text-tertiary text-xs flex-shrink-0">vs</span>
-                    <span className="truncate text-text-primary" title={bName}>{bName}</span>
+                    <span className="truncate text-text-primary" title={bVariant ? `${bName} - ${bVariant}` : bName}>
+                      {bName}{bVariant ? ` (${bVariant})` : ''}
+                    </span>
                   </div>
                   <button
                     type="button"
@@ -466,6 +529,11 @@ export default function Conflicts() {
               <p className="mb-2">
                 <span className="text-text-primary font-medium">{disableTarget.name}</span> will be disabled and moved out of the addons folder. You can re-enable it from the Installed page.
               </p>
+              {getVariantLabel(disableTarget) && (
+                <p className="text-xs text-accent truncate" title={getVariantLabel(disableTarget) ?? undefined}>
+                  {getVariantLabel(disableTarget)}
+                </p>
+              )}
               {disableTarget.fileName && (
                 <p className="text-xs font-mono text-text-tertiary truncate" title={disableTarget.fileName}>{disableTarget.fileName}</p>
               )}
