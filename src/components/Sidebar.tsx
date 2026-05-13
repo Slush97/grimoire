@@ -3,7 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Boxes,
   Compass,
-  Archive,
+  Vault,
   Target,
   ScrollText,
   Activity,
@@ -47,8 +47,8 @@ export default function Sidebar() {
   const [stashStatus, setStashStatus] = useState<VanillaStashStatus>({ active: false });
   const [launchPending, setLaunchPending] = useState<'modded' | 'vanilla' | null>(null);
   const [restorePending, setRestorePending] = useState(false);
-  // Toasts can carry an optional action button — used for "Enable" after a
-  // fresh download and "Re-enable" after a sibling auto-disable. The action
+  // Toasts can carry an optional action button (used for "Enable" after a
+  // fresh download and "Re-enable" after a sibling auto-disable). The action
   // closes the toast when invoked.
   const [toast, setToast] = useState<{
     kind: 'info' | 'error';
@@ -58,7 +58,7 @@ export default function Sidebar() {
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
 
   // Persisted via localStorage so it survives reloads without round-tripping
-  // through the main-process settings file — this is pure UI state.
+  // through the main-process settings file. This is pure UI state.
   const [collapsed, setCollapsed] = useState<boolean>(() => {
     if (typeof window === 'undefined') return false;
     return localStorage.getItem(COLLAPSED_KEY) === '1';
@@ -90,7 +90,7 @@ export default function Sidebar() {
     return unsub;
   }, []);
 
-  // Refresh the conflict badge whenever the mods list changes — which already
+  // Refresh the conflict badge whenever the mods list changes, which already
   // covers every install / toggle / delete / reorder. No periodic polling: the
   // old 10s setInterval re-ran a full VPK-directory parse for every enabled
   // mod, and in dev that repeatedly-opening-and-closing of file handles was
@@ -146,7 +146,7 @@ export default function Sidebar() {
 
   useEffect(() => {
     if (!toast) return;
-    // Stickier when there's an action — give the user time to actually
+    // Stickier when there's an action so the user has time to actually
     // notice and tap it.
     const lifetime = toast.action ? 10000 : 6000;
     const t = setTimeout(() => setToast(null), lifetime);
@@ -189,7 +189,7 @@ export default function Sidebar() {
     const items: NavItem[] = [
       { to: '/', icon: Boxes, label: 'Installed', tooltip: 'Mods currently in your Deadlock addons folder.', badge: installedCount, badgeTone: 'muted' },
       { to: '/browse', icon: Compass, label: 'Browse', tooltip: 'Discover and download mods from GameBanana.' },
-      { to: '/locker', icon: Archive, label: 'Locker', tooltip: "Saved mods you haven't installed yet." },
+      { to: '/locker', icon: Vault, label: 'Locker', tooltip: 'Active cosmetic skins, organized by hero.' },
       { to: '/crosshair', icon: Target, label: 'Crosshair', tooltip: 'Custom crosshair editor.', experimental: 'crosshair' },
       { to: '/autoexec', icon: ScrollText, label: 'Autoexec', tooltip: 'Console commands that run at game launch.' },
       { to: '/stats', icon: Activity, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
@@ -302,14 +302,14 @@ export default function Sidebar() {
             <li key={to}>
               <NavLink
                 to={to}
-                title={collapsed ? `${label} — ${tooltip}` : tooltip}
+                title={collapsed ? `${label}: ${tooltip}` : tooltip}
                 className={({ isActive }) =>
                   `group relative flex items-center leading-5 rounded-md text-sm transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
                     collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
                   } ${
                     isActive
                       ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary font-medium'
-                      : 'border-transparent text-text-primary/80 font-medium hover:bg-bg-tertiary/60 hover:text-text-primary'
+                      : 'border-transparent text-text-primary/80 font-medium hover:bg-accent/5 hover:border-accent/25 hover:text-text-primary'
                   }`
                 }
               >
@@ -360,7 +360,7 @@ export default function Sidebar() {
             <button
               onClick={handleRestoreNow}
               disabled={restorePending}
-              title={`Vanilla session — ${stashStatus.modCount ?? 0} mod${stashStatus.modCount === 1 ? '' : 's'} stashed. Click to restore now.`}
+              title={`Vanilla session active. ${stashStatus.modCount ?? 0} mod${stashStatus.modCount === 1 ? '' : 's'} stashed. Click to restore now.`}
               className="w-full flex items-center justify-center h-10 rounded-md border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {restorePending ? (
@@ -373,7 +373,7 @@ export default function Sidebar() {
             <div className="rounded-md border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-xs text-yellow-200 flex items-center gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="flex-1 leading-tight">
-                Vanilla — {stashStatus.modCount ?? 0} stashed
+                Vanilla: {stashStatus.modCount ?? 0} stashed
               </span>
               <button
                 onClick={handleRestoreNow}
@@ -392,7 +392,7 @@ export default function Sidebar() {
           )
         )}
 
-        {/* Toasts need horizontal room to read — suppress in collapsed mode. */}
+        {/* Toasts need horizontal room to read, so suppress in collapsed mode. */}
         {toast && !collapsed && (
           <div
             className={`rounded-md px-2.5 py-1.5 text-xs leading-snug ${
@@ -457,10 +457,10 @@ export default function Sidebar() {
               !canLaunch
                 ? 'Configure your Deadlock path in Settings first'
                 : stashStatus.active
-                  ? 'A vanilla session is already active — restore mods first'
+                  ? 'A vanilla session is already active. Restore mods first.'
                   : 'Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts'
             }
-            className={`flex w-full items-center rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary/60 text-sm font-medium tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed ${
+            className={`flex w-full items-center rounded-md border border-transparent hover:border-accent/25 hover:bg-accent/5 text-text-secondary hover:text-text-primary text-sm font-medium tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed ${
               collapsed ? 'justify-center h-10' : 'gap-3 h-10 px-3'
             }`}
           >
@@ -477,7 +477,7 @@ export default function Sidebar() {
           updateAvailable && (
             <button
               onClick={() => setUpdateModalOpen(true)}
-              title={`Update available — ${appVersion || 'click to view'}`}
+              title={`Update available. ${appVersion || 'Click to view'}.`}
               className="flex items-center justify-center w-full h-7 text-accent cursor-pointer hover:bg-bg-tertiary rounded-md transition-colors"
             >
               <Download className="w-3.5 h-3.5 animate-pulse" />
@@ -490,7 +490,7 @@ export default function Sidebar() {
               else navigate('/settings');
             }}
             className="flex items-center justify-center gap-2 w-full pt-1 text-xs text-text-secondary cursor-pointer hover:text-accent transition-colors"
-            title={updateAvailable ? 'Update available — click to view release notes' : 'Open Settings'}
+            title={updateAvailable ? 'Update available. Click to view release notes.' : 'Open Settings'}
           >
             <span>{appVersion || 'v...'}</span>
             {updateAvailable && <Download className="w-3 h-3 text-accent animate-pulse" />}

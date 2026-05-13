@@ -41,11 +41,11 @@ interface ViewModeToggleProps {
 export function ViewModeToggle({ value, options, onChange, className = '' }: ViewModeToggleProps) {
     const anyIcon = options.some((o) => o.icon);
     return (
-        <div className={`flex items-center rounded-lg border border-border bg-bg-secondary p-1 text-sm ${className}`}>
+        <div className={`flex items-center rounded-lg border border-border bg-bg-secondary p-0.5 text-sm ${className}`}>
             {options.map((option) => {
                 const Icon = option.icon;
                 const active = value === option.value;
-                const baseCls = anyIcon ? 'p-2' : 'px-3 py-1.5';
+                const baseCls = anyIcon ? 'p-1.5' : 'px-3 py-1';
                 return (
                     <button
                         key={option.value}
