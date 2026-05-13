@@ -9,14 +9,19 @@ interface CardProps {
     icon?: LucideIcon;
     description?: string;
     action?: ReactNode;
+    // Controls the left accent bar. 'subtle' is the default HUD callout look;
+    // 'active' makes the bar thicker and full-opacity so it can stand in for a
+    // ring/border highlight; 'none' suppresses it entirely.
+    accentEdge?: 'none' | 'subtle' | 'active';
 }
 
-export function Card({ children, className = '', contentClassName = '', title, icon: Icon, description, action }: CardProps) {
+export function Card({ children, className = '', contentClassName = '', title, icon: Icon, description, action, accentEdge }: CardProps) {
+    const showHeader = !!(title || action);
+    const edge: NonNullable<CardProps['accentEdge']> = accentEdge ?? (showHeader ? 'subtle' : 'none');
+    const edgeClass = edge === 'active' ? 'w-[3px] bg-accent' : 'w-[2px] bg-accent/60';
     return (
         <div className={`bg-bg-secondary/50 backdrop-blur-sm border border-white/5 rounded-sm overflow-hidden relative ${className}`}>
-            {/* Sharp accent edge — sits flush with the left side so cards read
-                as HUD callouts rather than soft web cards. */}
-            {(title || action) && <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />}
+            {edge !== 'none' && <span aria-hidden className={`absolute left-0 top-0 bottom-0 ${edgeClass}`} />}
             {(title || action) && (
                 <div className="px-5 py-4 border-b border-white/5 flex flex-wrap items-center justify-between gap-4">
                     <div className="min-w-0">

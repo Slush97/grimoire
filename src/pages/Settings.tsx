@@ -1,5 +1,7 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
-import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette } from 'lucide-react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { createPortal } from 'react-dom';
+import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette } from 'lucide-react';
+import { HexColorPicker, HexColorInput } from 'react-colorful';
 import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
 import {
@@ -166,6 +168,58 @@ export default function Settings() {
       await saveSettings({ ...settings, accentColor: color });
     }
   };
+
+  // Custom color picker state. While the popover is open, picker drags only
+  // update CSS vars + draft locally; the settings file is written once on
+  // commit (close or hex blur) so we don't hammer it 60x/sec mid-drag.
+  // The popover renders via a portal because Card has overflow-hidden, which
+  // would clip any in-tree absolute child.
+  const [customPickerOpen, setCustomPickerOpen] = useState(false);
+  const [customDraft, setCustomDraft] = useState<string | null>(null);
+  const [pickerAnchor, setPickerAnchor] = useState<{ top: number; left: number } | null>(null);
+  const customButtonRef = useRef<HTMLButtonElement>(null);
+  const customPopoverRef = useRef<HTMLDivElement>(null);
+
+  const handleCustomDraft = (color: string) => {
+    applyAccentColor(color);
+    setCustomDraft(color);
+  };
+
+  const commitCustomDraft = useCallback(async () => {
+    setCustomPickerOpen(false);
+    if (customDraft && settings && customDraft.toLowerCase() !== settings.accentColor?.toLowerCase()) {
+      await saveSettings({ ...settings, accentColor: customDraft });
+    }
+    setCustomDraft(null);
+  }, [customDraft, settings, saveSettings]);
+
+  const openCustomPicker = () => {
+    if (customButtonRef.current) {
+      const r = customButtonRef.current.getBoundingClientRect();
+      setPickerAnchor({ top: r.bottom + 8, left: r.left });
+    }
+    setCustomDraft(settings?.accentColor ?? DEFAULT_ACCENT_COLOR);
+    setCustomPickerOpen(true);
+  };
+
+  useEffect(() => {
+    if (!customPickerOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      const target = e.target as Node;
+      if (customPopoverRef.current?.contains(target)) return;
+      if (customButtonRef.current?.contains(target)) return;
+      void commitCustomDraft();
+    };
+    const onScrollOrResize = () => void commitCustomDraft();
+    document.addEventListener('mousedown', onPointerDown);
+    window.addEventListener('resize', onScrollOrResize);
+    window.addEventListener('scroll', onScrollOrResize, true);
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown);
+      window.removeEventListener('resize', onScrollOrResize);
+      window.removeEventListener('scroll', onScrollOrResize, true);
+    };
+  }, [customPickerOpen, commitCustomDraft]);
 
   const handleHideNsfwChange = async (checked: boolean) => {
     if (settings) {
@@ -538,43 +592,99 @@ export default function Settings() {
 
         {/* Appearance */}
         <Card title="Appearance" icon={Palette} className="lg:col-span-2">
-          <div className="space-y-3">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h4 className="font-medium text-sm">Accent Color</h4>
-                <p className="text-xs text-text-secondary mt-1">
-                  Sets the highlight color used for buttons, links, and active states across the app.
-                </p>
-              </div>
+          <div className="flex items-center justify-between gap-6 flex-wrap">
+            <div className="min-w-0">
+              <h4 className="font-medium text-sm">Accent Color</h4>
+              <p className="text-xs text-text-secondary mt-1">
+                Sets the highlight color used for buttons, links, and active states across the app.
+              </p>
             </div>
-            <div className="flex flex-wrap gap-2">
-              {ACCENT_PRESETS.map((preset) => {
+            <div className="flex flex-wrap gap-2 items-center">
+              {(() => {
                 const current = (settings?.accentColor ?? DEFAULT_ACCENT_COLOR).toLowerCase();
-                const isActive = current === preset.color.toLowerCase();
+                const isCustomActive = !ACCENT_PRESETS.some((p) => p.color.toLowerCase() === current);
+                const customDisplay = customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR;
+                const swatchBase = 'relative flex items-center justify-center w-9 h-9 rounded-sm border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary';
                 return (
-                  <button
-                    key={preset.id}
-                    type="button"
-                    onClick={() => handleAccentChange(preset.color)}
-                    title={preset.name}
-                    aria-label={`Accent: ${preset.name}`}
-                    aria-pressed={isActive}
-                    className={`group relative flex items-center gap-2 px-3 py-2 rounded-sm border text-xs font-medium tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
-                      isActive
-                        ? 'border-white/30 bg-white/5 text-text-primary'
-                        : 'border-white/5 bg-bg-tertiary text-text-secondary hover:text-text-primary hover:border-white/20'
-                    }`}
-                    style={isActive ? { boxShadow: `inset 3px 0 0 ${preset.color}` } : undefined}
-                  >
-                    <span
-                      className="block w-4 h-4 rounded-sm border border-black/30"
-                      style={{ backgroundColor: preset.color }}
-                    />
-                    <span>{preset.name}</span>
-                    {isActive && <Check className="w-3.5 h-3.5 ml-0.5" style={{ color: preset.color }} />}
-                  </button>
+                  <>
+                    {ACCENT_PRESETS.map((preset) => {
+                      const isActive = current === preset.color.toLowerCase();
+                      return (
+                        <button
+                          key={preset.id}
+                          type="button"
+                          onClick={() => handleAccentChange(preset.color)}
+                          title={preset.name}
+                          aria-label={`Accent: ${preset.name}`}
+                          aria-pressed={isActive}
+                          className={`${swatchBase} ${
+                            isActive
+                              ? 'border-white/40'
+                              : 'border-white/10 hover:border-white/30'
+                          }`}
+                          style={{ backgroundColor: preset.color }}
+                        >
+                          {isActive && <Check className="w-4 h-4 text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]" />}
+                        </button>
+                      );
+                    })}
+
+                    <button
+                      ref={customButtonRef}
+                      type="button"
+                      onClick={() => (customPickerOpen ? void commitCustomDraft() : openCustomPicker())}
+                      title="Pick a custom color"
+                      aria-label="Accent: Custom"
+                      aria-pressed={isCustomActive}
+                      aria-expanded={customPickerOpen}
+                      className={`${swatchBase} ${
+                        isCustomActive
+                          ? 'border-white/40'
+                          : 'border-white/10 hover:border-white/30'
+                      }`}
+                      style={
+                        isCustomActive
+                          ? { backgroundColor: customDisplay }
+                          : { background: 'conic-gradient(from 0deg, #ef4444, #f59e0b, #10b981, #06b6d4, #3b82f6, #8b5cf6, #ec4899, #ef4444)' }
+                      }
+                    >
+                      <Pipette className="w-3.5 h-3.5 text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]" />
+                    </button>
+
+                    {customPickerOpen && pickerAnchor && createPortal(
+                      <div
+                        ref={customPopoverRef}
+                        style={{ position: 'fixed', top: pickerAnchor.top, left: pickerAnchor.left, zIndex: 60 }}
+                        className="p-3 rounded-sm border border-white/10 bg-bg-secondary shadow-2xl space-y-3"
+                        role="dialog"
+                        aria-label="Custom accent color"
+                      >
+                        <HexColorPicker
+                          color={customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR}
+                          onChange={handleCustomDraft}
+                        />
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-text-secondary font-mono">#</span>
+                          <HexColorInput
+                            color={customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR}
+                            onChange={handleCustomDraft}
+                            className="w-24 bg-bg-tertiary border border-white/5 rounded-sm px-2 py-1 text-xs font-mono text-text-primary focus:outline-none focus:ring-1 focus:ring-accent uppercase"
+                          />
+                          <Button
+                            variant="primary"
+                            size="sm"
+                            onClick={() => void commitCustomDraft()}
+                            className="ml-auto"
+                          >
+                            Done
+                          </Button>
+                        </div>
+                      </div>,
+                      document.body
+                    )}
+                  </>
                 );
-              })}
+              })()}
             </div>
           </div>
         </Card>

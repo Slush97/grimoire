@@ -37,6 +37,7 @@
     "node-7z": "^3.0.0",
     "node-unrar-js": "^2.0.0",
     "react": "^19.2.0",
+    "react-colorful": "^5.7.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.11.0",
     "zustand": "^5.0.9"

@@ -264,7 +264,8 @@ export default function Profiles() {
                     key={profile.id}
                     title={profile.name}
                     icon={Layers}
-                    className={`transition-all duration-300 ${isActive ? 'ring-1 ring-accent border-accent/50 shadow-[0_0_20px_rgba(203,166,247,0.15)]' : 'hover:border-white/10'}`}
+                    accentEdge={isActive ? 'active' : 'subtle'}
+                    className={`transition-all duration-300 ${isActive ? '' : 'hover:border-white/10'}`}
                     action={
                       <div className="flex items-center gap-2">
                         {isActive ? (
