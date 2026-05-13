@@ -54,6 +54,7 @@ export default function Settings() {
   } | null>(null);
   const [showChangelog, setShowChangelog] = useState(false);
   const [upToDate, setUpToDate] = useState(false);
+  const [installSource, setInstallSource] = useState<'managed' | 'appimage' | 'standard'>('standard');
 
   const isDevMode = settings?.devMode ?? false;
   const activeDeadlockPath = getActiveDeadlockPath(settings);
@@ -293,6 +294,7 @@ export default function Settings() {
   useEffect(() => {
     window.electronAPI.updater.getVersion().then(setAppVersion);
     window.electronAPI.updater.getStatus().then(setUpdateStatus);
+    window.electronAPI.updater.getInstallSource().then(setInstallSource);
     const unsub = window.electronAPI.updater.onStatus(setUpdateStatus);
     return unsub;
   }, []);
@@ -517,7 +519,7 @@ export default function Settings() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
-                {updateStatus?.downloaded ? (
+                {installSource === 'managed' ? null : updateStatus?.downloaded ? (
                   <Button
                     onClick={handleInstallUpdate}
                     icon={ArrowDownCircle}
@@ -554,6 +556,18 @@ export default function Settings() {
                 )}
               </div>
             </div>
+
+            {installSource === 'managed' && (
+              <div className="rounded-lg bg-bg-tertiary border border-white/10 p-3 text-sm text-text-secondary space-y-2">
+                <p className="text-text-primary font-medium">Updates are managed by your package manager.</p>
+                <p>Grimoire was installed via apt or AUR. Update with your usual system upgrade:</p>
+                <pre className="bg-bg-primary border border-white/10 rounded-sm p-2 text-xs font-mono overflow-x-auto">{`# apt
+sudo apt update && sudo apt upgrade grimoire
+
+# AUR
+yay -Syu grimoire-bin`}</pre>
+              </div>
+            )}
 
             {updateStatus?.downloading && (
               <div className="animate-fade-in">

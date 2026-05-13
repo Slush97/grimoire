@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
-import { X, Download, ArrowDownCircle, RefreshCw, Sparkles, AlertTriangle } from 'lucide-react';
+import { X, Download, ArrowDownCircle, RefreshCw, Sparkles, AlertTriangle, Package } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { Button } from './common/ui';
+
+type InstallSource = 'managed' | 'appimage' | 'standard';
 
 interface UpdateInfo {
     version: string;
@@ -27,10 +29,12 @@ export default function UpdateModal({ onClose }: Props) {
     const [appVersion, setAppVersion] = useState('');
     const [status, setStatus] = useState<UpdateStatus | null>(null);
     const [checkedOnce, setCheckedOnce] = useState(false);
+    const [installSource, setInstallSource] = useState<InstallSource>('standard');
 
     useEffect(() => {
         window.electronAPI.updater.getVersion().then(setAppVersion);
         window.electronAPI.updater.getStatus().then(setStatus);
+        window.electronAPI.updater.getInstallSource().then(setInstallSource);
         const unsub = window.electronAPI.updater.onStatus((s) => {
             setStatus(s);
             if (!s.checking) setCheckedOnce(true);
@@ -108,6 +112,21 @@ export default function UpdateModal({ onClose }: Props) {
                 </div>
 
                 <div className="p-6 overflow-y-auto flex-1 min-h-0">
+                    {installSource === 'managed' && (
+                        <div className="flex items-start gap-3 p-4 rounded-lg bg-bg-tertiary border border-white/10 mb-4">
+                            <Package className="w-5 h-5 flex-shrink-0 mt-0.5 text-accent" />
+                            <div className="text-sm text-text-secondary space-y-2">
+                                <p className="text-text-primary font-medium">Managed by your package manager.</p>
+                                <p>This install was provided through apt or AUR. Update with your usual system upgrade:</p>
+                                <pre className="bg-bg-primary border border-white/10 rounded-sm p-2 text-xs font-mono overflow-x-auto">{`# apt
+sudo apt update && sudo apt upgrade grimoire
+
+# AUR
+yay -Syu grimoire-bin`}</pre>
+                            </div>
+                        </div>
+                    )}
+
                     {status?.error && (
                         <div className="flex items-start gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/30 text-red-300 text-sm mb-4">
                             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
@@ -177,7 +196,7 @@ export default function UpdateModal({ onClose }: Props) {
                                 </div>
                             )}
                         </>
-                    ) : !status?.available && !status?.checking && (
+                    ) : installSource !== 'managed' && !status?.available && !status?.checking && (
                         <p className="text-sm text-text-secondary">
                             Updates are delivered automatically through GitHub Releases. Click Check for Updates to look now.
                         </p>
@@ -188,7 +207,7 @@ export default function UpdateModal({ onClose }: Props) {
                     <Button onClick={onClose} variant="secondary">
                         Close
                     </Button>
-                    {status?.downloaded ? (
+                    {installSource === 'managed' ? null : status?.downloaded ? (
                         <Button onClick={handleInstall} icon={ArrowDownCircle}>
                             Install &amp; Restart
                         </Button>

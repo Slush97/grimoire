@@ -5,11 +5,18 @@ import {
     downloadUpdate,
     quitAndInstall,
     getUpdateStatus,
+    getInstallSource,
 } from '../services/updater';
 
 // Get current app version
 ipcMain.handle('updater:getVersion', () => {
     return getAppVersion();
+});
+
+// Tell the renderer whether in-app updates are available, so apt/AUR users
+// see a "use your package manager" message instead of broken update buttons.
+ipcMain.handle('updater:getInstallSource', () => {
+    return getInstallSource();
 });
 
 // Get current update status

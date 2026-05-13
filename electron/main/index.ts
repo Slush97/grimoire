@@ -31,7 +31,7 @@ import './ipc/stats';
 import './ipc/updater';
 import './ipc/launch';
 
-import { initUpdater, checkForUpdates } from './services/updater';
+import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
 
 let mainWindow: BrowserWindow | null = null;
@@ -218,15 +218,17 @@ if (!gotTheLock) {
         // or grimoire crashed while the user was playing vanilla). Runs in background.
         void runStartupRecovery();
 
-        // Initialize auto-updater (production only)
+        // Initialize auto-updater (production only). Skip the background check
+        // for apt/AUR/snap installs since the package manager owns updates.
         if (!is.dev && mainWindow) {
             initUpdater(mainWindow);
-            // Auto-check for updates after a short delay
-            setTimeout(() => {
-                checkForUpdates().catch((err) => {
-                    console.log('[Updater] Auto-check failed:', err.message);
-                });
-            }, 5000);
+            if (getInstallSource() !== 'managed') {
+                setTimeout(() => {
+                    checkForUpdates().catch((err) => {
+                        console.log('[Updater] Auto-check failed:', err.message);
+                    });
+                }, 5000);
+            }
         }
 
         app.on('activate', () => {

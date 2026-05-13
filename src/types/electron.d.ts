@@ -394,6 +394,7 @@ export interface ElectronAPI {
     updater: {
         getVersion: () => Promise<string>;
         getStatus: () => Promise<UpdateStatus>;
+        getInstallSource: () => Promise<'managed' | 'appimage' | 'standard'>;
         checkForUpdates: () => Promise<UpdateInfo | null>;
         downloadUpdate: () => Promise<void>;
         installUpdate: () => void;

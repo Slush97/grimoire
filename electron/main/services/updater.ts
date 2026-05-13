@@ -4,6 +4,31 @@ import type { UpdateInfo } from 'electron-updater';
 import { app, BrowserWindow } from 'electron';
 import log from 'electron-log';
 
+export type InstallSource = 'managed' | 'appimage' | 'standard';
+
+// Detect installs owned by a system package manager (apt/AUR/snap/flatpak).
+// In-app updates would fail on these because /opt and /usr are root-owned, so
+// we route those users to their package manager instead.
+export function getInstallSource(): InstallSource {
+    if (process.platform === 'linux') {
+        if (process.env.APPIMAGE) return 'appimage';
+        const exec = process.execPath;
+        if (
+            exec.startsWith('/opt/') ||
+            exec.startsWith('/usr/') ||
+            exec.startsWith('/snap/') ||
+            exec.startsWith('/var/lib/flatpak/') ||
+            exec.startsWith('/app/')
+        ) {
+            return 'managed';
+        }
+    }
+    return 'standard';
+}
+
+const installSource = getInstallSource();
+const updaterDisabled = installSource === 'managed';
+
 // Configure logging
 autoUpdater.logger = log;
 log.transports.file.level = 'info';
@@ -49,6 +74,10 @@ function sendStatusToRenderer() {
 
 export function initUpdater(window: BrowserWindow) {
     mainWindow = window;
+    if (updaterDisabled) {
+        log.info('[Updater] System package install detected; in-app updater disabled.');
+        return;
+    }
 
     autoUpdater.on('checking-for-update', () => {
         currentStatus = { ...currentStatus, checking: true, error: null };
@@ -111,6 +140,7 @@ export function getAppVersion(): string {
 }
 
 export async function checkForUpdates(): Promise<UpdateInfo | null> {
+    if (updaterDisabled) return null;
     try {
         const result = await autoUpdater.checkForUpdates();
         return result?.updateInfo ?? null;
@@ -121,6 +151,7 @@ export async function checkForUpdates(): Promise<UpdateInfo | null> {
 }
 
 export async function downloadUpdate(): Promise<void> {
+    if (updaterDisabled) return;
     try {
         await autoUpdater.downloadUpdate();
     } catch (error) {
@@ -130,6 +161,7 @@ export async function downloadUpdate(): Promise<void> {
 }
 
 export function quitAndInstall(): void {
+    if (updaterDisabled) return;
     autoUpdater.quitAndInstall(false, true);
 }
 

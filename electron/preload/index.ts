@@ -137,6 +137,7 @@ export interface ElectronAPI {
     updater: {
         getVersion: () => Promise<string>;
         getStatus: () => Promise<UpdateStatus>;
+        getInstallSource: () => Promise<'managed' | 'appimage' | 'standard'>;
         checkForUpdates: () => Promise<UpdateInfo | null>;
         downloadUpdate: () => Promise<void>;
         installUpdate: () => void;
@@ -867,6 +868,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updater: {
         getVersion: () => ipcRenderer.invoke('updater:getVersion'),
         getStatus: () => ipcRenderer.invoke('updater:getStatus'),
+        getInstallSource: () => ipcRenderer.invoke('updater:getInstallSource'),
         checkForUpdates: () => ipcRenderer.invoke('updater:check'),
         downloadUpdate: () => ipcRenderer.invoke('updater:download'),
         installUpdate: () => ipcRenderer.invoke('updater:install'),
