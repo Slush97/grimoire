@@ -83,6 +83,10 @@ export default function ModDetailsModal({
   // its native GB resolution so the user can inspect detail the inline
   // preview hides.
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  // Per-image natural aspect ratio, captured on load so each preview slot
+  // can size to its real proportions instead of being forced into 16:9
+  // (which letterboxed portraits and chopped UI screenshots).
+  const [imageRatios, setImageRatios] = useState<Record<number, number>>({});
 
   useEffect(() => {
     let cancelled = false;
@@ -261,35 +265,34 @@ export default function ModDetailsModal({
                 <div className="space-y-3" aria-label="Image previews">
                   {images.map((img, index) => {
                     const previewSrc = `${img.baseUrl}/${img.file530 || img.file}`;
+                    const ratio = imageRatios[index];
+                    // Pre-load: hold a 16:9 placeholder so the column doesn't
+                    // jump as images decode. Post-load: snap to the image's
+                    // real aspect ratio so portraits, ultrawides, and UI
+                    // screenshots all render at their natural shape — no
+                    // letterboxing, no cropping, no blurred fill needed.
                     return (
                       <button
                         key={`${img.baseUrl}/${img.file}`}
                         type="button"
                         onClick={() => openLightboxAt(index)}
                         aria-label={`View image ${index + 1} of ${images.length} full size`}
-                        className="relative block w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden border border-border cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group"
+                        style={{ aspectRatio: ratio ? String(ratio) : '16 / 9' }}
+                        className="relative block w-full bg-bg-tertiary rounded-lg overflow-hidden border border-border cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 group"
                       >
-                        {/* Letterbox fill — same image scaled to cover the
-                            slot and heavily blurred so non-16:9 previews get
-                            an art-matched backdrop instead of harsh black
-                            bars. Hidden from a11y; the contained image
-                            below carries the real meaning. NSFW path skips
-                            this so the blur+overlay still works as a
-                            single layer. */}
-                        {!(mod.nsfw && hideNsfwPreviews) && (
-                          <img
-                            src={previewSrc}
-                            alt=""
-                            aria-hidden
-                            loading="lazy"
-                            className="absolute inset-0 w-full h-full object-cover scale-110 blur-2xl opacity-60 pointer-events-none"
-                          />
-                        )}
                         <img
                           src={previewSrc}
                           alt={`${mod.name} - Image ${index + 1}`}
                           loading="lazy"
-                          className={`relative w-full h-full object-contain transition-transform duration-200 group-hover:scale-[1.01] ${
+                          onLoad={(e) => {
+                            const el = e.currentTarget;
+                            if (el.naturalWidth > 0 && el.naturalHeight > 0) {
+                              setImageRatios((prev) =>
+                                prev[index] ? prev : { ...prev, [index]: el.naturalWidth / el.naturalHeight }
+                              );
+                            }
+                          }}
+                          className={`absolute inset-0 w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.01] ${
                             mod.nsfw && hideNsfwPreviews ? 'blur-xl scale-110' : ''
                           }`}
                         />
@@ -298,9 +301,6 @@ export default function ModDetailsModal({
                             NSFW preview hidden
                           </div>
                         )}
-                        {/* Per-image index pill + zoom affordance. The
-                            zoom button shows on hover so it doesn't
-                            compete with the image visually at rest. */}
                         {images.length > 1 && (
                           <div className="absolute top-2 left-2 px-2 py-0.5 rounded-md bg-black/55 backdrop-blur-sm text-white/85 text-[11px] border border-white/10">
                             {index + 1} / {images.length}
@@ -356,7 +356,7 @@ export default function ModDetailsModal({
                   <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
                     About
                   </h3>
-                  <div className="text-sm text-text-secondary [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full">
+                  <div className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full">
                     <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mod.description) }} />
                   </div>
                 </section>
@@ -522,7 +522,7 @@ export default function ModDetailsModal({
                             <span className="text-[11px] text-text-tertiary">{formatDate(comment.dateAdded)}</span>
                           </div>
                           <div
-                            className="text-sm text-text-secondary [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
+                            className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
                             dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(comment.text) }}
                           />
                         </div>

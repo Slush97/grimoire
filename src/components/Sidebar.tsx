@@ -316,26 +316,27 @@ export default function Sidebar() {
                 {({ isActive }) => (
                   <>
                     <Icon
-                      className={`w-5 h-5 flex-shrink-0 ${
-                        isActive ? 'text-accent' : 'text-text-primary/70 group-hover:text-text-primary'
-                      }`}
+                      className="w-5 h-5 flex-shrink-0 text-text-primary/70 group-hover:text-text-primary"
                       strokeWidth={isActive ? 2 : 1.75}
                     />
                     {!collapsed && <span className="flex-1">{label}</span>}
                     {badge !== undefined && badge > 0 && (
                       collapsed ? (
-                        <span
-                          aria-hidden
-                          className={`absolute top-1 right-1 w-2 h-2 rounded-full ring-2 ring-bg-secondary ${
-                            badgeTone === 'warning' ? 'bg-state-warning' : 'bg-accent/80'
-                          }`}
-                        />
+                        // In collapsed mode, only surface warning-tone badges
+                        // (e.g. conflicts). The Installed count is informational,
+                        // not a status alert, so it shouldn't crowd the rail.
+                        badgeTone === 'warning' ? (
+                          <span
+                            aria-hidden
+                            className="absolute top-1 right-1 w-2 h-2 rounded-full ring-2 ring-bg-secondary bg-state-warning"
+                          />
+                        ) : null
                       ) : (
                         <span
                           className={`px-1.5 py-0.5 text-[11px] font-semibold tabular-nums rounded-full min-w-[20px] text-center leading-4 ${
                             badgeTone === 'warning'
                               ? 'bg-state-warning/90 text-black'
-                              : 'bg-bg-tertiary text-text-primary/80'
+                              : 'border border-text-primary/50 text-text-primary/80'
                           }`}
                         >
                           {badge}

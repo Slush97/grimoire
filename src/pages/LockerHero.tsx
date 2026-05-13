@@ -281,10 +281,79 @@ export default function LockerHero() {
   }
 
   return (
-    <div className="flex h-full">
+    <div className="relative flex h-full overflow-hidden">
+      {/* Hero portrait — sits behind both panels so it can bleed through the
+          frosted-glass sidebar on the right side of the panel. On narrow
+          viewports (no portrait area) it falls back to the solid panel bg. */}
+      <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in">
+        {renderSrc ? (
+          <img
+            src={renderSrc}
+            alt={hero.name}
+            className="absolute inset-0 h-full w-full object-cover object-right"
+            onError={handleRenderError}
+          />
+        ) : (
+          <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">
+            {hero.name}
+          </div>
+        )}
+        {/* Bottom gradient for depth */}
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+      </div>
+
+      {/* Progressive frosted-glass background — every layer (including the
+          base heavy blur) is masked with a long, smooth taper so nothing has
+          a hard right edge. Stacking blurs compounds: a region under all
+          three layers is much more blurred than one under only the lightest.
+          So as the lighter layers fade out first, the effective blur softens
+          from "very heavy" through "medium" to "nothing" without ever
+          dropping off a cliff. The container is intentionally much wider
+          than the sidebar (sidebar is 400/450px; container is ~720/800px)
+          so the gradient has runway to feather all the way to clear. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[720px] xl:w-[800px]"
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(48px) saturate(135%)',
+            WebkitBackdropFilter: 'blur(48px) saturate(135%)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 18%, transparent 92%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 18%, transparent 92%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 12%, transparent 72%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 12%, transparent 72%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 8%, transparent 52%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 8%, transparent 52%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 28%, rgba(26,26,26,0.75) 50%, rgba(26,26,26,0.4) 70%, rgba(26,26,26,0.15) 85%, transparent 96%)',
+          }}
+        />
+      </div>
+
       {/* Left Panel - Skin Selection */}
-      <div className="w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto border-r border-border bg-bg-secondary animate-slide-in-left">
-        <div className="p-6 space-y-6">
+      <div className="relative z-10 w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto bg-bg-secondary lg:bg-transparent animate-slide-in-left">
+        <div className="relative z-10 p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between gap-3">
             <Link
@@ -354,29 +423,6 @@ export default function LockerHero() {
           </div>
 
         </div>
-      </div>
-
-      {/* Right Panel - Hero Portrait */}
-      <div className="hidden lg:block relative flex-1 overflow-hidden bg-bg-primary animate-hero-zoom-in">
-        {/* Gradient overlay from left to blend with panel */}
-        <div className="absolute inset-y-0 left-0 w-32 bg-gradient-to-r from-bg-secondary to-transparent z-10" />
-
-        {/* Hero Portrait */}
-        {renderSrc ? (
-          <img
-            src={renderSrc}
-            alt={hero.name}
-            className="absolute inset-0 h-full w-full object-cover object-right"
-            onError={handleRenderError}
-          />
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">
-            {hero.name}
-          </div>
-        )}
-
-        {/* Bottom gradient for depth */}
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
     </div>
   );

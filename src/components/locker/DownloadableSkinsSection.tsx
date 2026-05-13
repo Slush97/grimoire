@@ -27,11 +27,11 @@ export default function DownloadableSkinsSection({ categoryId }: DownloadableSki
   };
 
   return (
-    <div className="border-t border-border pt-3 mt-3">
+    <div className="border-t border-border/60 pt-3 mt-3">
       <button
         type="button"
         onClick={handleClick}
-        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary text-sm font-semibold transition-colors cursor-pointer"
+        className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-accent/50 bg-bg-secondary/85 hover:bg-bg-tertiary hover:border-accent/70 text-text-primary text-sm font-semibold transition-colors cursor-pointer shadow-sm"
       >
         <Download className="w-4 h-4" />
         Browse more skins

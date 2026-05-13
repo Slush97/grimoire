@@ -380,8 +380,8 @@ export default function HeroSkinsPanel({
               key={group.key}
               className={`rounded-md border transition-colors ${
                 groupActive
-                  ? 'border-accent bg-bg-tertiary'
-                  : 'border-border hover:border-accent/60'
+                  ? 'border-accent/60 bg-white/[0.04] backdrop-blur-sm'
+                  : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
               }`}
             >
               <button
