@@ -63,6 +63,22 @@ function createWindow(): void {
         return { action: 'deny' };
     });
 
+    // Catch in-place navigations (bare `<a href="https://...">` clicks in
+    // user content like mod descriptions and comments). Without this, those
+    // links replace the React app with a webpage and the user has no back
+    // button to recover. setWindowOpenHandler only covers target="_blank".
+    // We let the renderer keep its own internal navigation (the renderer
+    // URL in dev, the file:// path in prod) and ship everything else out
+    // to the user's default browser via shell.openExternal.
+    mainWindow.webContents.on('will-navigate', (event, url) => {
+        const allowed = is.dev && process.env['ELECTRON_RENDERER_URL']
+            ? url.startsWith(process.env['ELECTRON_RENDERER_URL'])
+            : url.startsWith('file://');
+        if (allowed) return;
+        event.preventDefault();
+        shell.openExternal(url);
+    });
+
     // Debug: log renderer errors
     mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
         console.error('[Main] Renderer failed to load:', errorCode, errorDescription);

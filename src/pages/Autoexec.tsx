@@ -287,10 +287,97 @@ export default function Autoexec() {
 
                 {/* Right Panel - Active Commands */}
                 <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-hidden order-1 lg:order-2">
-                    {/* Launch options card — lives in the right column so the
-                        "what runs when I launch" stack stays together (launch
-                        args → autoexec commands → file status). Compact by
-                        design so it doesn't dwarf Your Commands. */}
+                    <Card
+                        className="flex flex-col"
+                        title={
+                            <span className="flex items-center gap-2 min-w-0">
+                                <span className="truncate">Your Commands ({commands.length})</span>
+                                {status ? (
+                                    status.exists ? (
+                                        <Badge variant="success">Active</Badge>
+                                    ) : (
+                                        <Badge variant="warning">Missing</Badge>
+                                    )
+                                ) : null}
+                            </span>
+                        }
+                        icon={Terminal}
+                        action={
+                            <div className="flex gap-2">
+                                <Button size="sm" variant="secondary" onClick={() => setClearConfirmOpen(true)} disabled={commands.length === 0} icon={RefreshCw}>
+                                    Clear
+                                </Button>
+                                <Button size="sm" variant="secondary" onClick={handleCopy} disabled={commands.length === 0} icon={copied ? Check : Copy}>
+                                    {copied ? 'Copied' : 'Copy'}
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    onClick={handleSave}
+                                    disabled={isSaving || !gamePath}
+                                    isLoading={isSaving}
+                                    icon={Save}
+                                >
+                                    Save
+                                </Button>
+                            </div>
+                        }
+                    >
+                        {(!gamePath || saveMessage || hasUnsaved) && (
+                            <div className="mb-3 space-y-2" role="status" aria-live="polite">
+                                {!gamePath && (
+                                    <div className="text-xs text-yellow-400 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                                        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                                        Game path not configured. Set it in Settings to save.
+                                    </div>
+                                )}
+                                {saveMessage && (
+                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessage.includes('Error') ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
+                                        {saveMessage.includes('Error') ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                        {saveMessage}
+                                    </div>
+                                )}
+                                {hasUnsaved && !saveMessage && (
+                                    <div className="text-xs text-yellow-400 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
+                                        You have unsaved changes
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        <div className="overflow-y-auto space-y-2 pr-1 flex-1 min-h-0">
+                            {commands.length > 0 ? (
+                                commands.map((cmd, i) => (
+                                    <div
+                                        key={i}
+                                        className="flex items-center gap-3 p-3 bg-bg-tertiary/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors animate-fade-in"
+                                    >
+                                        <div className="flex-1 font-mono text-sm text-text-primary truncate">
+                                            {cmd}
+                                        </div>
+                                        <button
+                                            onClick={() => handleRemoveCommand(i)}
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded transition-all cursor-pointer"
+                                            title="Remove"
+                                        >
+                                            <Trash2 className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))
+                            ) : (
+                                <div className="flex items-center gap-3 py-6 text-text-secondary opacity-50">
+                                    <Terminal className="w-6 h-6" />
+                                    <div>
+                                        <p className="text-sm font-medium">No commands added</p>
+                                        <p className="text-xs">Select from presets on the left</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </Card>
+
+                    {/* Launch options — lives below Your Commands so the
+                        primary editor surface owns the top of the column. */}
                     <Card title="Launch Options" icon={Rocket} className="shrink-0">
                         <div className="space-y-2.5">
                             <p className="text-xs text-text-secondary">
@@ -343,8 +430,6 @@ export default function Autoexec() {
                                         </div>
                                     );
                                 }
-                                // Only surface the on-disk value when it diverges from what
-                                // the user has saved in grimoire — otherwise it's just noise.
                                 const savedValue = appSettings?.steamLaunchOptions ?? '';
                                 const onDisk = launchStatus.currentValue ?? '';
                                 const inSync = savedValue === onDisk;
@@ -375,103 +460,6 @@ export default function Autoexec() {
                                     </div>
                                 );
                             })()}
-                        </div>
-                    </Card>
-
-                    <Card
-                        className="flex flex-col"
-                        title={`Your Commands (${commands.length})`}
-                        icon={Terminal}
-                        action={
-                            <div className="flex gap-2">
-                                <Button size="sm" variant="secondary" onClick={() => setClearConfirmOpen(true)} disabled={commands.length === 0} icon={RefreshCw}>
-                                    Clear
-                                </Button>
-                                <Button size="sm" variant="secondary" onClick={handleCopy} disabled={commands.length === 0} icon={copied ? Check : Copy}>
-                                    {copied ? 'Copied' : 'Copy'}
-                                </Button>
-                                <Button
-                                    size="sm"
-                                    onClick={handleSave}
-                                    disabled={isSaving || !gamePath}
-                                    isLoading={isSaving}
-                                    icon={Save}
-                                >
-                                    Save
-                                </Button>
-                            </div>
-                        }
-                    >
-                        {(saveMessage || hasUnsaved) && (
-                            <div className="mb-3" role="status" aria-live="polite">
-                                {saveMessage && (
-                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessage.includes('Error') ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
-                                        {saveMessage.includes('Error') ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
-                                        {saveMessage}
-                                    </div>
-                                )}
-                                {hasUnsaved && !saveMessage && (
-                                    <div className="text-xs text-yellow-400 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                                        You have unsaved changes
-                                    </div>
-                                )}
-                            </div>
-                        )}
-
-                        <div className="overflow-y-auto space-y-2 pr-1 flex-1 min-h-0">
-                            {commands.length > 0 ? (
-                                commands.map((cmd, i) => (
-                                    <div
-                                        key={i}
-                                        className="flex items-center gap-3 p-3 bg-bg-tertiary/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors animate-fade-in"
-                                    >
-                                        <div className="flex-1 font-mono text-sm text-text-primary truncate">
-                                            {cmd}
-                                        </div>
-                                        <button
-                                            onClick={() => handleRemoveCommand(i)}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded transition-all cursor-pointer"
-                                            title="Remove"
-                                        >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ))
-                            ) : (
-                                <div className="flex items-center gap-3 py-6 text-text-secondary opacity-50">
-                                    <Terminal className="w-6 h-6" />
-                                    <div>
-                                        <p className="text-sm font-medium">No commands added</p>
-                                        <p className="text-xs">Select from presets on the left</p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </Card>
-
-                    <Card title="Status" className="shrink-0">
-                        <div className="flex justify-between items-center text-sm">
-                            <div className="space-y-1">
-                                <p className="text-text-secondary">File Status</p>
-                                <div className="flex items-center gap-2">
-                                    {status ? (
-                                        status.exists ? (
-                                            <Badge variant="success">Active</Badge>
-                                        ) : (
-                                            <Badge variant="warning">Missing</Badge>
-                                        )
-                                    ) : (
-                                        <span className="text-text-secondary">Checking...</span>
-                                    )}
-                                </div>
-                            </div>
-                            {!gamePath && (
-                                <div className="text-xs text-yellow-500 flex items-center gap-1 bg-yellow-500/10 px-3 py-2 rounded-lg">
-                                    <AlertTriangle className="w-3 h-3" />
-                                    Game path not configured
-                                </div>
-                            )}
                         </div>
                     </Card>
                 </div>

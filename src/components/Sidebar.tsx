@@ -439,7 +439,7 @@ export default function Sidebar() {
                   ? 'Restores stashed mods first, then launches Deadlock via Steam'
                   : 'Launch Deadlock with mods active'
             }
-            className={`flex w-full items-center rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-accent text-sm font-semibold tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed ${
+            className={`flex w-full items-center rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary text-sm font-semibold tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed ${
               collapsed ? 'justify-center h-10' : 'gap-3 h-10 px-3'
             }`}
           >

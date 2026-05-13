@@ -5,7 +5,7 @@ interface CardProps {
     children: ReactNode;
     className?: string;
     contentClassName?: string;
-    title?: string;
+    title?: ReactNode;
     icon?: LucideIcon;
     description?: string;
     action?: ReactNode;
