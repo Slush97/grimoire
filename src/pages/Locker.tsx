@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { Layers, Shield, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
@@ -123,10 +124,21 @@ export default function Locker() {
   }, [viewMode]);
 
   const navigate = useNavigate();
+  const location = useLocation();
   const goToHero = useCallback(
     (hero: HeroCategory) => navigate(`/locker/hero/${hero.id}`),
     [navigate]
   );
+  const selectedHeroRouteParam = useMemo(() => {
+    const match = location.pathname.match(/^\/locker\/hero\/([^/]+)\/?$/);
+    return match ? match[1] : null;
+  }, [location.pathname]);
+  const selectedHeroId = useMemo(() => {
+    if (selectedHeroRouteParam === null || !/^\d+$/.test(selectedHeroRouteParam)) {
+      return null;
+    }
+    return Number(selectedHeroRouteParam);
+  }, [selectedHeroRouteParam]);
 
   // Build basic hero list first (needed for mod categorization)
   const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
@@ -155,6 +167,18 @@ export default function Locker() {
       return a.name.localeCompare(b.name);
     });
   }, [baseHeroList, favoriteHeroes, heroMods]);
+  const selectedHero = selectedHeroId === null
+    ? null
+    : heroList.find((hero) => hero.id === selectedHeroId) ?? null;
+  const selectedHeroMissing = selectedHeroRouteParam !== null && !selectedHero;
+  const selectedHeroMods = useMemo(
+    () => (selectedHero ? heroMods.map.get(selectedHero.id) ?? [] : []),
+    [heroMods, selectedHero]
+  );
+  const selectedHeroSkinCount = useMemo(
+    () => countLockerSkins(selectedHeroMods),
+    [selectedHeroMods]
+  );
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -198,12 +222,12 @@ export default function Locker() {
     const list = heroMods.map.get(heroId) ?? [];
     const target = list.find((m) => m.id === modId);
     if (!target) return;
-    const groupKey = target.gameBananaId ? `gb:${target.gameBananaId}` : `mod:${target.id}`;
+    const groupKey = getLockerSkinKey(target);
     const actions: Promise<void>[] = [];
     for (const mod of list) {
       if (mod.id === modId) continue;
       if (!mod.enabled) continue;
-      const otherKey = mod.gameBananaId ? `gb:${mod.gameBananaId}` : `mod:${mod.id}`;
+      const otherKey = getLockerSkinKey(mod);
       if (otherKey !== groupKey) actions.push(toggleMod(mod.id));
     }
     actions.push(toggleMod(modId));
@@ -293,7 +317,8 @@ export default function Locker() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <>
+      <div className="p-6 space-y-6">
       <PageHeader
         title="Hero Locker"
         description="Pick the active skin per hero. Selecting one disables other skins for that hero."
@@ -420,8 +445,67 @@ export default function Locker() {
           </div>
         </div>
       )}
-
     </div>
+
+      {selectedHero && (
+        <div
+          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
+          style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
+        >
+          <LockerHeroView
+            key={selectedHero.id}
+            hero={selectedHero}
+            list={selectedHeroMods}
+            skinCount={selectedHeroSkinCount}
+            isFavorite={favoriteHeroes.includes(selectedHero.id)}
+            onBack={() => navigate('/locker')}
+            onToggleFavorite={() =>
+              setFavoriteHeroes((prev) =>
+                prev.includes(selectedHero.id)
+                  ? prev.filter((id) => id !== selectedHero.id)
+                  : [...prev, selectedHero.id]
+              )
+            }
+            onSelect={(modId) => setActiveSkin(selectedHero.id, modId)}
+            onToggleVariant={(modId) => toggleHeroVariant(selectedHero.id, modId)}
+            hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+            minaPresets={selectedHero.name === 'Mina' ? minaPresets : []}
+            activeMinaPreset={selectedHero.name === 'Mina' ? activeMinaPreset : undefined}
+            minaTextures={selectedHero.name === 'Mina' ? minaTextures : []}
+            onApplyMinaPreset={selectedHero.name === 'Mina' ? applyMinaPreset : undefined}
+            minaArchivePath={selectedHero.name === 'Mina' ? minaArchivePath : undefined}
+            onMinaArchivePathChange={selectedHero.name === 'Mina' ? setMinaArchivePath : undefined}
+            minaVariants={selectedHero.name === 'Mina' ? minaVariants : []}
+            minaVariantsLoading={selectedHero.name === 'Mina' ? minaVariantsLoading : false}
+            minaVariantsError={selectedHero.name === 'Mina' ? minaVariantsError : null}
+            onLoadMinaVariants={selectedHero.name === 'Mina' ? loadMinaVariants : undefined}
+            minaSelection={selectedHero.name === 'Mina' ? minaSelection : undefined}
+            onMinaSelectionChange={selectedHero.name === 'Mina' ? setMinaSelection : undefined}
+            selectedMinaVariant={selectedHero.name === 'Mina' ? selectedMinaVariant : undefined}
+            onApplyMinaVariant={selectedHero.name === 'Mina' ? applyMinaVariantSelection : undefined}
+          />
+        </div>
+      )}
+
+      {selectedHeroMissing && (
+        <div
+          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
+          style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
+        >
+          <div className="flex h-full flex-col items-center justify-center p-6 text-text-secondary">
+            <Layers className="w-16 h-16 mb-4 opacity-50" />
+            <h2 className="text-xl font-semibold text-text-primary mb-2">Hero Not Found</h2>
+            <button
+              type="button"
+              onClick={() => navigate('/locker')}
+              className="mt-3 px-4 py-2 rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary transition-colors cursor-pointer"
+            >
+              Back to Locker
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

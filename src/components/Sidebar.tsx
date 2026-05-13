@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Boxes,
@@ -36,6 +36,12 @@ import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
 
 const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
+const LABEL_TRANSITION_MS = 200;
+
+function readCollapsedPreference(): boolean {
+  if (typeof window === 'undefined') return false;
+  return localStorage.getItem(COLLAPSED_KEY) === '1';
+}
 
 export default function Sidebar() {
   const [conflictCount, setConflictCount] = useState(0);
@@ -65,15 +71,67 @@ export default function Sidebar() {
 
   // Persisted via localStorage so it survives reloads without round-tripping
   // through the main-process settings file. This is pure UI state.
-  const [collapsed, setCollapsed] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return localStorage.getItem(COLLAPSED_KEY) === '1';
-  });
+  const [collapsed, setCollapsed] = useState<boolean>(readCollapsedPreference);
+  const [labelsVisible, setLabelsVisible] = useState<boolean>(() => !readCollapsedPreference());
+  const [labelMounted, setLabelMounted] = useState<boolean>(() => !readCollapsedPreference());
+  const collapseTimerRef = useRef<number | null>(null);
+  const labelFrameRef = useRef<number | null>(null);
+
+  const clearCollapseTimer = useCallback(() => {
+    if (collapseTimerRef.current !== null) {
+      window.clearTimeout(collapseTimerRef.current);
+      collapseTimerRef.current = null;
+    }
+    if (labelFrameRef.current !== null) {
+      window.cancelAnimationFrame(labelFrameRef.current);
+      labelFrameRef.current = null;
+    }
+  }, []);
+
+  const toggleCollapsed = useCallback(() => {
+    clearCollapseTimer();
+    if (collapsed) {
+      setCollapsed(false);
+      setLabelMounted(true);
+      setLabelsVisible(false);
+      labelFrameRef.current = window.requestAnimationFrame(() => {
+        labelFrameRef.current = window.requestAnimationFrame(() => {
+          setLabelsVisible(true);
+          labelFrameRef.current = null;
+        });
+      });
+    } else {
+      setLabelMounted(true);
+      setLabelsVisible(false);
+      setCollapsed(true);
+      collapseTimerRef.current = window.setTimeout(() => {
+        setLabelMounted(false);
+        collapseTimerRef.current = null;
+      }, LABEL_TRANSITION_MS);
+    }
+  }, [clearCollapseTimer, collapsed]);
+
+  useEffect(() => clearCollapseTimer, [clearCollapseTimer]);
+
+  const isFullyCollapsed = collapsed && !labelMounted;
+  const labelTransitionClass = `overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out ${
+    labelsVisible ? 'opacity-100 max-w-40' : 'opacity-0 max-w-0'
+  }`;
+  const titleTransitionClass = `whitespace-nowrap transition-opacity duration-200 ease-out ${
+    labelsVisible ? 'opacity-100' : 'opacity-0'
+  }`;
+  const navLabelClass = `flex-1 ${labelTransitionClass}`;
+  const actionLabelClass = `flex-1 text-left ${labelTransitionClass}`;
+  const actionIconClass = 'flex h-full w-10 flex-shrink-0 items-center justify-center';
 
   useEffect(() => {
     try {
       localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
     } catch { /* quota / private mode */ }
+    document.documentElement.style.setProperty(
+      '--grimoire-sidebar-width',
+      collapsed ? '4rem' : '14rem'
+    );
   }, [collapsed]);
 
   const refreshStashStatus = useCallback(async () => {
@@ -327,33 +385,30 @@ export default function Sidebar() {
     <aside
       className={`${collapsed ? 'w-16' : 'w-56'} bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 transition-[width] duration-200 ease-out`}
     >
-      <div
-        className={`relative flex-shrink-0 border-b border-border ${
-          collapsed ? 'px-2 pt-2 pb-2 flex items-center justify-center' : 'px-3 pt-3 pb-2 text-center'
-        }`}
-      >
-        {!collapsed && (
+      <div className="relative flex h-11 flex-shrink-0 items-center justify-center overflow-hidden border-b border-border px-3">
+        {labelMounted && (
           <span
-            className="text-2xl text-accent block leading-none"
+            className={`text-2xl text-accent block leading-none ${titleTransitionClass}`}
             style={{ fontFamily: "'IM Fell English', serif" }}
+            aria-hidden={!labelsVisible}
           >
             Grimoire
           </span>
         )}
         <button
           type="button"
-          onClick={() => setCollapsed((v) => !v)}
+          onClick={toggleCollapsed}
           title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
           aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={`flex items-center justify-center w-7 h-7 rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
-            collapsed ? '' : 'absolute top-1/2 right-2 -translate-y-1/2'
+          className={`absolute top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-md text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-[right,color,background-color] duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
+            collapsed ? 'right-[18px]' : 'right-2'
           }`}
         >
           <Menu className="w-4 h-4" />
         </button>
       </div>
 
-      <nav className={`flex-1 min-h-0 overflow-y-auto ${collapsed ? 'p-1.5' : 'p-2'}`}>
+      <nav className="flex-1 min-h-0 overflow-y-auto p-2">
         <ul className="space-y-0.5">
           {navItems.map(({ to, icon: Icon, label, tooltip, badge, badgeTone }) => (
             <li key={to}>
@@ -361,8 +416,8 @@ export default function Sidebar() {
                 to={to}
                 title={collapsed ? `${label}: ${tooltip}` : tooltip}
                 className={({ isActive }) =>
-                  `group relative flex items-center leading-5 rounded-md text-sm transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
-                    collapsed ? 'justify-center h-10' : 'gap-3 px-3 py-2.5'
+                  `group relative flex items-center h-10 overflow-hidden leading-5 rounded-md text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
+                    collapsed ? '' : 'pr-3'
                   } ${
                     isActive
                       ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary font-medium'
@@ -372,11 +427,17 @@ export default function Sidebar() {
               >
                 {({ isActive }) => (
                   <>
-                    <Icon
-                      className="w-5 h-5 flex-shrink-0 text-text-primary/70 group-hover:text-text-primary"
-                      strokeWidth={isActive ? 2 : 1.75}
-                    />
-                    {!collapsed && <span className="flex-1">{label}</span>}
+                    <span className="flex h-full w-[46px] flex-shrink-0 items-center justify-center">
+                      <Icon
+                        className="w-5 h-5 flex-shrink-0 text-text-primary/70 group-hover:text-text-primary"
+                        strokeWidth={isActive ? 2 : 1.75}
+                      />
+                    </span>
+                    {labelMounted && (
+                      <span className={navLabelClass} aria-hidden={!labelsVisible}>
+                        {label}
+                      </span>
+                    )}
                     {badge !== undefined && badge > 0 && (
                       collapsed ? (
                         // In collapsed mode, only surface warning-tone badges
@@ -390,7 +451,9 @@ export default function Sidebar() {
                         ) : null
                       ) : (
                         <span
-                          className={`px-1.5 py-0.5 text-[11px] font-semibold tabular-nums rounded-full min-w-[20px] text-center leading-4 ${
+                          className={`inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-full px-1 text-[11px] font-semibold tabular-nums leading-none transition-opacity duration-150 ${
+                            labelsVisible ? 'opacity-100' : 'opacity-0'
+                          } ${
                             badgeTone === 'warning'
                               ? 'bg-state-warning/90 text-black'
                               : 'border border-text-primary/50 text-text-primary/80'
@@ -408,11 +471,7 @@ export default function Sidebar() {
         </ul>
       </nav>
 
-      <div
-        className={`flex-shrink-0 border-t border-border ${
-          collapsed ? 'p-1.5 space-y-1.5' : 'p-3 space-y-2'
-        }`}
-      >
+      <div className="flex-shrink-0 border-t border-border p-3 space-y-2">
         {stashStatus.active && (
           collapsed ? (
             <button
@@ -451,7 +510,7 @@ export default function Sidebar() {
         )}
 
         {/* Toasts need horizontal room to read, so suppress in collapsed mode. */}
-        {toast && !collapsed && (
+        {toast && labelMounted && (
           <div
             className={`rounded-md px-2.5 py-1.5 text-xs leading-snug ${
               toast.kind === 'error'
@@ -491,14 +550,22 @@ export default function Sidebar() {
               onClick={handleStopGame}
               disabled={stopPending || !!launchPending}
               title="Stop the running Deadlock process"
-              className="flex w-full items-center gap-3 h-11 px-3 rounded-lg border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 text-red-300 text-sm font-semibold tracking-wide transition-colors cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed"
+              className={`flex w-full items-center overflow-hidden rounded-lg bg-red-500/10 text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/20 hover:ring-red-500/50 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
+                collapsed ? 'h-10' : 'h-11'
+              }`}
             >
-              {stopPending ? (
-                <Loader2 className="w-5 h-5 animate-spin flex-shrink-0" />
-              ) : (
-                <Square className="w-5 h-5 flex-shrink-0" strokeWidth={2} />
+              <span className={actionIconClass}>
+                {stopPending ? (
+                  <Loader2 className="w-5 h-5 animate-spin" />
+                ) : (
+                  <Square className="w-5 h-5" strokeWidth={2} />
+                )}
+              </span>
+              {labelMounted && (
+                <span className={actionLabelClass} aria-hidden={!labelsVisible}>
+                  Stop Game
+                </span>
               )}
-              <span className="flex-1 text-left">Stop Game</span>
             </button>
           ) : (
             <>
@@ -512,16 +579,20 @@ export default function Sidebar() {
                   ? 'Restores stashed mods first, then launches Deadlock via Steam'
                   : 'Launch Deadlock with mods active'
             }
-            className={`flex w-full items-center rounded-md border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary text-sm font-semibold tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed ${
-              collapsed ? 'justify-center h-10' : 'gap-3 h-10 px-3'
-            }`}
+            className="flex w-full h-10 items-center overflow-hidden rounded-md bg-accent/10 text-text-primary ring-1 ring-accent/40 hover:bg-accent/20 hover:ring-accent/60 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/60 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {launchPending === 'modded' ? (
-              <Loader2 className="w-[18px] h-[18px] animate-spin flex-shrink-0" />
-            ) : (
-              <Wand2 className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
+            <span className={actionIconClass}>
+              {launchPending === 'modded' ? (
+                <Loader2 className="w-[18px] h-[18px] animate-spin" />
+              ) : (
+                <Wand2 className="w-[18px] h-[18px]" strokeWidth={2} />
+              )}
+            </span>
+            {labelMounted && (
+              <span className={actionLabelClass} aria-hidden={!labelsVisible}>
+                Launch Modded
+              </span>
             )}
-            {!collapsed && <span className="flex-1 text-left">Launch Modded</span>}
           </button>
 
           <button
@@ -534,44 +605,54 @@ export default function Sidebar() {
                   ? 'A vanilla session is already active. Restore mods first.'
                   : 'Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts'
             }
-            className={`flex w-full items-center rounded-md border border-transparent hover:border-accent/25 hover:bg-accent/5 text-text-secondary hover:text-text-primary text-sm font-medium tracking-wide transition-colors cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed ${
-              collapsed ? 'justify-center h-10' : 'gap-3 h-10 px-3'
-            }`}
+            className="flex w-full h-10 items-center overflow-hidden rounded-md text-text-secondary ring-1 ring-transparent hover:bg-accent/5 hover:text-text-primary hover:ring-accent/25 text-sm font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            {launchPending === 'vanilla' ? (
-              <Loader2 className="w-[18px] h-[18px] animate-spin flex-shrink-0" />
-            ) : (
-              <Play className="w-[18px] h-[18px] flex-shrink-0" strokeWidth={2} />
+            <span className={actionIconClass}>
+              {launchPending === 'vanilla' ? (
+                <Loader2 className="w-[18px] h-[18px] animate-spin" />
+              ) : (
+                <Play className="w-[18px] h-[18px]" strokeWidth={2} />
+              )}
+            </span>
+            {labelMounted && (
+              <span className={actionLabelClass} aria-hidden={!labelsVisible}>
+                Launch Vanilla
+              </span>
             )}
-            {!collapsed && <span className="flex-1 text-left">Launch Vanilla</span>}
           </button>
             </>
           )}
         </div>
 
-        {collapsed ? (
-          updateAvailable && (
-            <button
-              onClick={() => setUpdateModalOpen(true)}
-              title={`Update available. ${appVersion || 'Click to view'}.`}
-              className="flex items-center justify-center w-full h-7 text-accent cursor-pointer hover:bg-bg-tertiary rounded-md transition-colors"
-            >
-              <Download className="w-3.5 h-3.5 animate-pulse" />
-            </button>
-          )
-        ) : (
-          <button
-            onClick={() => {
-              if (updateAvailable) setUpdateModalOpen(true);
-              else navigate('/settings');
-            }}
-            className="flex items-center justify-center gap-2 w-full pt-1 text-xs text-text-secondary cursor-pointer hover:text-accent transition-colors"
-            title={updateAvailable ? 'Update available. Click to view release notes.' : 'Open Settings'}
-          >
-            <span>{appVersion || 'v...'}</span>
-            {updateAvailable && <Download className="w-3 h-3 text-accent animate-pulse" />}
-          </button>
-        )}
+        <button
+          onClick={() => {
+            if (updateAvailable) setUpdateModalOpen(true);
+            else navigate('/settings');
+          }}
+          className={`flex w-full items-center rounded-md text-xs text-text-secondary cursor-pointer hover:text-accent hover:bg-bg-tertiary transition-[color,background-color,padding,height,opacity] duration-200 ${
+            isFullyCollapsed
+              ? updateAvailable
+                ? 'h-7 justify-center px-0 opacity-100'
+                : 'h-0 px-[19px] opacity-0 pointer-events-none overflow-hidden'
+              : 'h-6 justify-center gap-2 pt-1 opacity-100'
+          }`}
+          title={updateAvailable ? 'Update available. Click to view release notes.' : 'Open Settings'}
+          aria-hidden={isFullyCollapsed && !updateAvailable}
+          tabIndex={isFullyCollapsed && !updateAvailable ? -1 : undefined}
+        >
+          {labelMounted && (
+            <span className={labelTransitionClass} aria-hidden={!labelsVisible}>
+              {appVersion || 'v...'}
+            </span>
+          )}
+          {updateAvailable && (
+            <Download
+              className={`w-3.5 h-3.5 flex-shrink-0 text-accent animate-pulse transition-transform duration-200 ${
+                isFullyCollapsed ? 'translate-y-0' : '-translate-y-px'
+              }`}
+            />
+          )}
+        </button>
       </div>
 
       {updateModalOpen && <UpdateModal onClose={() => setUpdateModalOpen(false)} />}

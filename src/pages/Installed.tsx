@@ -17,7 +17,6 @@ import {
   List,
   LayoutGrid,
   Grid3x3,
-  Layers,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -442,6 +441,8 @@ export default function Installed() {
     if (neighborIdx === -1) return;
     const insertAt = position === 'before' ? neighborIdx : neighborIdx + 1;
     next.splice(insertAt, 0, source);
+    const unchanged = next.every((m, i) => m.id === section[i]?.id);
+    if (unchanged) return;
 
     const full = source.enabled
       ? [...next, ...disabledMods]
@@ -459,11 +460,12 @@ export default function Installed() {
     target: Mod,
     direction: 'up' | 'down'
   ) => {
-    const idxInPicker = group.variants.findIndex((v) => v.id === target.id);
+    const reorderableSiblings = group.variants.filter((v) => v.enabled === target.enabled);
+    const idxInPicker = reorderableSiblings.findIndex((v) => v.id === target.id);
     if (idxInPicker === -1) return;
     const neighborIdx = direction === 'up' ? idxInPicker - 1 : idxInPicker + 1;
-    if (neighborIdx < 0 || neighborIdx >= group.variants.length) return;
-    const neighbor = group.variants[neighborIdx];
+    if (neighborIdx < 0 || neighborIdx >= reorderableSiblings.length) return;
+    const neighbor = reorderableSiblings[neighborIdx];
     await reorderVariantTo(target, neighbor, direction === 'up' ? 'before' : 'after');
   };
 
@@ -832,12 +834,6 @@ export default function Installed() {
             variant.sourceFileName ??
             variant.fileName
           ),
-          activeFileName: (() => {
-            const enabled = entry.variants.filter((v) => v.enabled);
-            if (enabled.length !== 1) return null;
-            const v = enabled[0];
-            return v.variantLabel ?? v.fileDescription ?? v.sourceFileName ?? v.fileName;
-          })(),
           onOpenPicker: () => setPickerGroupId(entry.gameBananaId),
         }}
       />
@@ -1283,12 +1279,6 @@ interface ModCardProps {
     /** Enabled file labels for this group. Empty when fully disabled. */
     enabledCount: number;
     enabledLabels: string[];
-    /** Display label for the enabled variant when exactly one is on (and
-     *  null otherwise — for 0 active or 2+ active, the card's toggle state
-     *  plus the variant-count pill convey enough; details live in the
-     *  picker). Shown in small text so the user can tell at a glance which
-     *  preset is live in the common single-active case. */
-    activeFileName: string | null;
     onOpenPicker: () => void;
   };
 }
@@ -1317,16 +1307,10 @@ function ModCard({
   const hasConflicts = conflicts.length > 0;
   const handleDownRef = useRef<boolean>(false);
   const isGroupCard = !!group;
-  const enabledBadgeLabel = group
-    ? group.enabledCount === 1
-      ? group.enabledLabels[0]
-      : `${group.enabledCount}/${group.variantCount} enabled`
-    : null;
+  const variantStatusLabel = group ? `${group.enabledCount}/${group.variantCount}` : null;
   const enabledTitle = group?.enabledLabels.join(', ') ?? '';
-  const enabledBadgeTitle = group
-    ? group.enabledCount === 1
-      ? `1/${group.variantCount} enabled: ${enabledTitle} - click card to choose files`
-      : `${group.enabledCount}/${group.variantCount} enabled${enabledTitle ? `: ${enabledTitle}` : ''} - click card to choose files`
+  const variantStatusTitle = group
+    ? `${enabledTitle || 'No files enabled'} - click card to choose files`
     : '';
   const listHeroName = viewMode === 'list' && mod.sourceSection === 'Sound'
     ? inferHeroFromTitle(mod.name)
@@ -1335,7 +1319,7 @@ function ModCard({
   const listHeroFacePos = listHeroName ? getHeroFacePosition(listHeroName) : 50;
   const hasListTags =
     viewMode === 'list' &&
-    (hasConflicts || mod.sourceSection === 'Sound' || mod.nsfw || updateAvailable || mod.enabled || !!group);
+    (hasConflicts || mod.sourceSection === 'Sound' || mod.nsfw || updateAvailable || mod.enabled);
 
   const indicatorClasses = (() => {
     if (!isDropTarget || !dropPosition) return '';
@@ -1448,26 +1432,6 @@ function ModCard({
                 </Tag>
               )}
             </div>
-            {/* Enabled-file badge anchored at the bottom so it doesn't fight
-                the top-right Conflict/Update stack or visually clash with the
-                accent-colored Enable toggle in the card body. A short gradient
-                behind it keeps the label legible against busy thumbnail art. */}
-            {group && group.enabledCount > 0 && enabledBadgeLabel && (
-              <>
-                <div className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-t from-black/75 via-black/40 to-transparent z-[5]" />
-                <div className="absolute bottom-2 left-2 right-2 z-10 flex">
-                  <Tag
-                    tone="info"
-                    variant="overlay"
-                    icon={Layers}
-                    title={enabledBadgeTitle}
-                    className="max-w-full"
-                  >
-                    <span className="truncate">{enabledBadgeLabel}</span>
-                  </Tag>
-                </div>
-              </>
-            )}
           </>
         );
 
@@ -1639,8 +1603,11 @@ function ModCard({
               {formatRelativeDate(mod.installedAt)}
             </span>
             {group ? (
-              <span className="flex-shrink-0 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-xs font-medium" title="Click the card to pick a variant">
-                {group.variantCount} variants
+              <span
+                className="flex-shrink-0 px-1.5 py-0.5 bg-accent/15 text-accent rounded text-xs font-medium tabular-nums"
+                title={variantStatusTitle}
+              >
+                {variantStatusLabel}
               </span>
             ) : (
               <span
@@ -1683,16 +1650,6 @@ function ModCard({
                   className="flex-shrink-0 tabular-nums"
                 >
                   Load #{mod.priority}
-                </Tag>
-              )}
-              {group && enabledBadgeLabel && (
-                <Tag
-                  tone={group.enabledCount > 0 ? 'info' : 'neutral'}
-                  icon={Layers}
-                  title={enabledBadgeTitle}
-                  className="max-w-full"
-                >
-                  <span className="truncate">{enabledBadgeLabel}</span>
                 </Tag>
               )}
             </div>

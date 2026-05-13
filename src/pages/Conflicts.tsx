@@ -1,5 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
-import { useLocation, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye } from 'lucide-react';
 import {
   getConflicts,
@@ -118,19 +117,6 @@ export default function Conflicts() {
   // that row's buttons during the round-trip without freezing the whole page.
   const [pendingPair, setPendingPair] = useState<string | null>(null);
   const { loadMods } = useAppStore();
-  const navigate = useNavigate();
-  const location = useLocation();
-  // location.key is the literal string "default" on the very first entry to the
-  // app (no prior history). In every other case there's a route to go back to.
-  const canGoBack = useRef(location.key !== 'default');
-
-  const returnToPreviousScreen = () => {
-    if (canGoBack.current) {
-      navigate(-1);
-    } else {
-      navigate('/');
-    }
-  };
 
   const loadConflicts = async () => {
     setLoading(true);
@@ -191,16 +177,13 @@ export default function Conflicts() {
       // Backend filters ignored pairs from get-conflicts, so dropping locally
       // keeps the UI consistent without a second round-trip.
       const remaining = conflicts.filter(
-        (c) => conflictPairKey(c.modA, c.modB) !== key
+        (c) => getConflictIgnoreKey(c) !== key
       );
       setConflicts(remaining);
       // Sidebar's badge count is derived from getConflicts() and only refreshes
       // on mods-list changes. Ignore/unignore don't touch mods, so notify the
       // Sidebar explicitly — otherwise the badge stays stale until restart.
       window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
-      if (remaining.length === 0) {
-        returnToPreviousScreen();
-      }
     } catch (err) {
       setError(String(err));
     } finally {
@@ -243,9 +226,6 @@ export default function Conflicts() {
       // Single event after the whole batch — the Sidebar badge re-fetches
       // once instead of N times during the loop.
       window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
-      if (failures.length === 0) {
-        returnToPreviousScreen();
-      }
     } finally {
       setIgnoringAll(false);
       setIgnoreAllConfirmOpen(false);

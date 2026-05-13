@@ -1,4 +1,4 @@
-﻿import { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Volume2,
   Loader2,
@@ -33,7 +33,7 @@ interface ModDetailsModalProps {
    *  an "Active" badge so the user can see what is actually loaded. */
   activeFileIds?: Set<number>;
   /** Per-file local install state, keyed by GameBanana file id. When provided
-   *  (Browse only â€” Installed leaves this undefined), an installed-but-disabled
+   *  (Browse only - Installed leaves this undefined), an installed-but-disabled
    *  file row shows an inline "Enable" pill so the user can flip it on without
    *  leaving the Browse tab after downloading. */
   installedFileStates?: Map<number, { modId: string; enabled: boolean }>;
@@ -71,7 +71,7 @@ export default function ModDetailsModal({
 }: ModDetailsModalProps) {
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
-  // Cursor into the images array â€” only the lightbox cares about this now
+  // Cursor into the images array - only the lightbox cares about this now
   // that previews are stacked vertically rather than swapped via carousel.
   // It tracks which image is currently zoomed and which one keyboard arrows
   // step through while the lightbox is open.
@@ -80,7 +80,7 @@ export default function ModDetailsModal({
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
   const [archivedFilesOpen, setArchivedFilesOpen] = useState(false);
-  // Lightbox state â€” when true, the selected image renders full-screen at
+  // Lightbox state - when true, the selected image renders full-screen at
   // its native GB resolution so the user can inspect detail the inline
   // preview hides.
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -125,7 +125,7 @@ export default function ModDetailsModal({
           onClose();
         }
       }
-      // Arrow keys only navigate while the lightbox is open â€” otherwise
+      // Arrow keys only navigate while the lightbox is open - otherwise
       // they'd silently mutate hidden state while the user scrolls the
       // description with the cursor.
       if (lightboxOpen && images.length > 1) {
@@ -231,7 +231,7 @@ export default function ModDetailsModal({
           )}
           <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5">
             <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
-            <span className="opacity-50">â€¢</span>
+            <span className="opacity-50">-</span>
             <span>{file.downloadCount.toLocaleString()} downloads</span>
           </div>
           {isDownloadingThis && pct !== null && (
@@ -293,7 +293,7 @@ export default function ModDetailsModal({
         className="relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col border border-border shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Header â€” single row. Status badges, category, title, and dense
+        {/* Header - single row. Status badges, category, title, and dense
             metadata cluster all fit on one line so the modal's vertical
             budget goes to content, not chrome. Title shrinks/truncates
             first when space gets tight; metadata hides on narrow screens. */}
@@ -328,7 +328,7 @@ export default function ModDetailsModal({
           </h2>
           {(() => {
             // Hide the modified date when it formats to the same day as the
-            // added date â€” common for fresh uploads where both timestamps
+            // added date - common for fresh uploads where both timestamps
             // fall on the same calendar day, which makes the header read
             // "5/12/2026 5/12/2026".
             const addedStr = dateAdded && dateAdded > 0 ? formatDate(dateAdded) : null;
@@ -367,7 +367,7 @@ export default function ModDetailsModal({
           </button>
         </div>
 
-        {/* Body â€” single scroll on narrow (everything flows top to bottom),
+        {/* Body - single scroll on narrow (everything flows top to bottom),
             two independently-scrollable columns on lg+. Independent scroll
             on wide is critical now that previews stack vertically: scrolling
             comments shouldn't drag the image column away, and vice versa. */}
@@ -375,7 +375,7 @@ export default function ModDetailsModal({
             {/* Image / preview column */}
             <div className="lg:w-[460px] lg:flex-shrink-0 lg:overflow-y-auto lg:max-h-full p-5 lg:pr-3 space-y-3">
               {images.length > 0 ? (
-                /* Vertical preview stack â€” every image renders inline so
+                /* Vertical preview stack - every image renders inline so
                    users scroll naturally to see all of them. Click any one
                    to open the lightbox at that image's index. We use the
                    530px preview here (fast load + sharp on the inline slot)
@@ -387,7 +387,7 @@ export default function ModDetailsModal({
                     // Pre-load: hold a 16:9 placeholder so the column doesn't
                     // jump as images decode. Post-load: snap to the image's
                     // real aspect ratio so portraits, ultrawides, and UI
-                    // screenshots all render at their natural shape â€” no
+                    // screenshots all render at their natural shape - no
                     // letterboxing, no cropping, no blurred fill needed.
                     return (
                       <button
@@ -464,7 +464,7 @@ export default function ModDetailsModal({
               )}
             </div>
 
-            {/* Content column â€” description / files / comments / GB link.
+            {/* Content column - description / files / comments / GB link.
                 Takes the remaining horizontal space on wide layouts.
                 Independently scrollable on lg+ so reading comments or
                 installing a file doesn't move the image stack on the left. */}
@@ -541,7 +541,7 @@ export default function ModDetailsModal({
                 ) : comments.length === 0 ? (
                   <p className="text-sm text-text-secondary py-1">No comments yet</p>
                 ) : (
-                  /* Flat threaded layout â€” no per-comment card. Files stay
+                  /* Flat threaded layout - no per-comment card. Files stay
                      as bordered action cards (each is something you DO);
                      comments are conversational content (something you
                      READ), so we strip the boxes and let the avatar + name
@@ -587,7 +587,7 @@ export default function ModDetailsModal({
         </div>
       </div>
 
-      {/* Lightbox overlay â€” sits above the modal so ESC closes it first.
+      {/* Lightbox overlay - sits above the modal so ESC closes it first.
           Click outside the image dismisses; carousel arrows still work via
           the global keydown listener so users can flip pictures while zoomed. */}
       {lightboxOpen && currentImageFullUrl && (
@@ -599,7 +599,7 @@ export default function ModDetailsModal({
           }}
           role="dialog"
           aria-modal="true"
-          aria-label={`${mod.name} â€” full size image`}
+          aria-label={`${mod.name} - full size image`}
         >
           <button
             type="button"

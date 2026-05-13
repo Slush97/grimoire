@@ -81,6 +81,21 @@ export default function VariantPickerModal({
         handleDownRef.current = false;
     };
 
+    const orderedVariants = [
+        ...variants.filter((v) => v.enabled),
+        ...variants.filter((v) => !v.enabled),
+    ];
+
+    const isNoopDrop = (sourceId: string, targetId: string, position: DropPosition) => {
+        if (sourceId === targetId) return true;
+        const sourceIdx = orderedVariants.findIndex((v) => v.id === sourceId);
+        const targetIdx = orderedVariants.findIndex((v) => v.id === targetId);
+        if (sourceIdx === -1 || targetIdx === -1) return false;
+        return position === 'before'
+            ? sourceIdx === targetIdx - 1
+            : sourceIdx === targetIdx + 1;
+    };
+
     const editingId = editing?.id ?? null;
     useEffect(() => {
         if (editingId && editInputRef.current) {
@@ -197,14 +212,14 @@ export default function VariantPickerModal({
                 </div>
 
                 <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
-                    {variants.map((v, idx) => {
+                    {orderedVariants.map((v, idx) => {
                         const isActive = v.enabled;
                         const isPending = pending === v.id;
                         const isDeletePending = pending === `delete:${v.id}`;
                         const isEditing = editing?.id === v.id;
                         const isRenamePending = pending === `rename:${v.id}`;
-                        const prev = idx > 0 ? variants[idx - 1] : null;
-                        const nextSibling = idx < variants.length - 1 ? variants[idx + 1] : null;
+                        const prev = idx > 0 ? orderedVariants[idx - 1] : null;
+                        const nextSibling = idx < orderedVariants.length - 1 ? orderedVariants[idx + 1] : null;
                         const canMoveUp = !!prev && prev.enabled === v.enabled;
                         const canMoveDown = !!nextSibling && nextSibling.enabled === v.enabled;
                         const showReorder = variants.length > 1;
@@ -264,6 +279,7 @@ export default function VariantPickerModal({
                                     const pos = dropPosition;
                                     resetDrag();
                                     if (!sourceId || sourceId === v.id || !pos) return;
+                                    if (isNoopDrop(sourceId, v.id, pos)) return;
                                     const source = variants.find((x) => x.id === sourceId);
                                     if (!source || source.enabled !== v.enabled) return;
                                     setPending(`move:${sourceId}:drag`);
@@ -434,7 +450,7 @@ export default function VariantPickerModal({
                                                     onClick={() => move(v, 'down')}
                                                     disabled={!!pending || !canMoveDown}
                                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                                    title={canMoveDown ? 'Move down' : idx === variants.length - 1 ? 'Already last in load order' : 'Adjacent file is in a different section'}
+                                                    title={canMoveDown ? 'Move down' : idx === orderedVariants.length - 1 ? 'Already last in load order' : 'Adjacent file is in a different section'}
                                                     aria-label="Move file down in load order"
                                                 >
                                                     {isMoveDownPending ? (
