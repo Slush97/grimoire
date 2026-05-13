@@ -1399,7 +1399,7 @@ function ModCard({
         const overlayBadges = (
           <>
             {mod.enabled && (
-              <div className="absolute top-2 left-2 z-10">
+              <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1">
                 <Tag
                   tone="accent"
                   variant="overlay"
@@ -1461,7 +1461,7 @@ function ModCard({
                     <img
                       src={heroRenderUrl}
                       alt={inferredHero ?? mod.name}
-                      className="w-full h-full object-cover transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+                      className="block w-full h-full object-cover origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
                       style={{ objectPosition: `${heroFacePos}% 25%` }}
                     />
                     {/* Gradient so the overlaid player stays legible */}
@@ -1514,7 +1514,8 @@ function ModCard({
               alt={mod.name}
               nsfw={mod.nsfw}
               hideNsfw={hideNsfwPreviews}
-              className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+              className="w-full h-full"
+              imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
             />
             {onOpenDetails && (
               <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/20" />
@@ -1557,7 +1558,7 @@ function ModCard({
               <img
                 src={listHeroRenderUrl}
                 alt={listHeroName ?? mod.name}
-                className="w-full h-full object-cover transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+                className="block w-full h-full object-cover origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
                 style={{ objectPosition: `${listHeroFacePos}% 25%` }}
               />
             ) : (
@@ -1566,7 +1567,8 @@ function ModCard({
                 alt={mod.name}
                 nsfw={mod.nsfw}
                 hideNsfw={hideNsfwPreviews}
-                className="w-full h-full transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+                className="w-full h-full"
+                imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
               />
             )}
             {onOpenDetails && (

@@ -378,10 +378,10 @@ export default function Conflicts() {
               </div>
 
               {/* Two mod cards */}
-              <div className="p-4 flex gap-4">
+              <div className="p-4 grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] gap-3 items-start">
                 {/* Mod A Card */}
-                <div className="flex-1 group">
-                  <div className="relative aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
+                <div className="min-w-0 group">
+                  <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
                     {modA.thumbnailUrl ? (
                       <img
                         src={modA.thumbnailUrl}
@@ -403,29 +403,29 @@ export default function Conflicts() {
                       </span>
                     </button>
                   </div>
-                  <p className="text-sm font-medium text-text-primary text-center truncate">
+                  <p className="text-sm font-medium text-text-primary text-center break-words" title={modA.name}>
                     {modA.name}
                   </p>
                   {variantA && (
-                    <p className="text-xs text-accent text-center truncate" title={variantA}>
+                    <p className="text-xs text-accent text-center break-words" title={variantA}>
                       {variantA}
                     </p>
                   )}
                   {modA.fileName && (
-                    <p className="text-xs text-text-tertiary text-center truncate" title={modA.fileName}>
+                    <p className="text-xs text-text-tertiary text-center break-all" title={modA.fileName}>
                       {modA.fileName}
                     </p>
                   )}
                 </div>
 
                 {/* VS divider */}
-                <div className="flex items-center">
+                <div className="h-full flex items-center justify-center">
                   <span className="text-text-tertiary text-sm font-bold">VS</span>
                 </div>
 
                 {/* Mod B Card */}
-                <div className="flex-1 group">
-                  <div className="relative aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
+                <div className="min-w-0 group">
+                  <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
                     {modB.thumbnailUrl ? (
                       <img
                         src={modB.thumbnailUrl}
@@ -447,16 +447,16 @@ export default function Conflicts() {
                       </span>
                     </button>
                   </div>
-                  <p className="text-sm font-medium text-text-primary text-center truncate">
+                  <p className="text-sm font-medium text-text-primary text-center break-words" title={modB.name}>
                     {modB.name}
                   </p>
                   {variantB && (
-                    <p className="text-xs text-accent text-center truncate" title={variantB}>
+                    <p className="text-xs text-accent text-center break-words" title={variantB}>
                       {variantB}
                     </p>
                   )}
                   {modB.fileName && (
-                    <p className="text-xs text-text-tertiary text-center truncate" title={modB.fileName}>
+                    <p className="text-xs text-text-tertiary text-center break-all" title={modB.fileName}>
                       {modB.fileName}
                     </p>
                   )}

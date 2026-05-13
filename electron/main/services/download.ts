@@ -1,6 +1,7 @@
-import { createWriteStream, existsSync } from 'fs';
+import { createWriteStream, existsSync, constants } from 'fs';
 import { promises as fs, statSync } from 'fs';
-import { join, basename, extname } from 'path';
+import { join, basename, extname, resolve } from 'path';
+import { tmpdir } from 'os';
 import { BrowserWindow } from 'electron';
 import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles } from './extract';
@@ -81,6 +82,44 @@ function parseContentDispositionFilename(header: string): string | undefined {
         if (value.length > 0) return value;
     }
     return undefined;
+}
+
+async function createDownloadWorkDir(): Promise<string> {
+    return fs.mkdtemp(join(tmpdir(), 'grimoire-download-'));
+}
+
+async function cleanupDownloadWorkDir(workDir: string): Promise<void> {
+    try {
+        await fs.rm(workDir, { recursive: true, force: true });
+    } catch (err) {
+        console.warn(`[download] Failed to clean temporary download folder ${workDir}:`, err);
+    }
+}
+
+function normalizePathForCompare(filePath: string): string {
+    const normalized = resolve(filePath);
+    return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+async function moveFileWithoutOverwrite(sourcePath: string, destinationPath: string): Promise<void> {
+    if (normalizePathForCompare(sourcePath) === normalizePathForCompare(destinationPath)) {
+        return;
+    }
+
+    if (existsSync(destinationPath)) {
+        throw new Error(`Refusing to overwrite existing mod file: ${basename(destinationPath)}`);
+    }
+
+    try {
+        await fs.rename(sourcePath, destinationPath);
+    } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== 'EXDEV') {
+            throw err;
+        }
+
+        await fs.copyFile(sourcePath, destinationPath, constants.COPYFILE_EXCL);
+        await fs.unlink(sourcePath);
+    }
 }
 
 // Download queue to prevent race conditions with VPK priority assignment
@@ -414,6 +453,8 @@ async function renameVpksToAvoidConflicts(
 
     for (const vpkPath of extractedVpks) {
         const fileName = basename(vpkPath);
+        let finalFileName: string;
+
         // Check if this VPK has a priority that conflicts
         const match = fileName.match(/^pak(\d{2})_/);
         if (match) {
@@ -421,29 +462,24 @@ async function renameVpksToAvoidConflicts(
 
             if (usedPriorities.has(currentPriority)) {
                 const newPriority = getNextAvailablePriority();
-                const newFileName = `pak${String(newPriority).padStart(2, '0')}_dir.vpk`;
-                const newPath = join(targetPath, newFileName);
+                finalFileName = `pak${String(newPriority).padStart(2, '0')}_dir.vpk`;
 
-                console.log(`[renameVpks] Renaming ${fileName} to ${newFileName} to avoid conflict`);
-                await fs.rename(vpkPath, newPath);
+                console.log(`[renameVpks] Renaming ${fileName} to ${finalFileName} to avoid conflict`);
                 usedPriorities.add(newPriority);
-                renamedFiles.push(newFileName);
-                continue;
+            } else {
+                usedPriorities.add(currentPriority);
+                finalFileName = fileName;
             }
+        } else {
+            const newPriority = getNextAvailablePriority();
+            finalFileName = `pak${String(newPriority).padStart(2, '0')}_dir.vpk`;
 
-            usedPriorities.add(currentPriority);
-            renamedFiles.push(fileName);
-            continue;
+            console.log(`[renameVpks] Renaming ${fileName} to ${finalFileName} to add priority`);
+            usedPriorities.add(newPriority);
         }
 
-        const newPriority = getNextAvailablePriority();
-        const newFileName = `pak${String(newPriority).padStart(2, '0')}_dir.vpk`;
-        const newPath = join(targetPath, newFileName);
-
-        console.log(`[renameVpks] Renaming ${fileName} to ${newFileName} to add priority`);
-        await fs.rename(vpkPath, newPath);
-        usedPriorities.add(newPriority);
-        renamedFiles.push(newFileName);
+        await moveFileWithoutOverwrite(vpkPath, join(targetPath, finalFileName));
+        renamedFiles.push(finalFileName);
     }
 
     return renamedFiles;
@@ -476,10 +512,13 @@ async function executeDownload(
     // Validate download URL before proceeding (P0 security fix)
     validateDownloadUrl(file.downloadUrl);
 
-    // Download to disabled folder by default so it doesn't auto-apply
+    // Stage downloads before moving them into the disabled folder so an
+    // incoming pakNN file cannot overwrite an existing mod before we rename it.
     const targetPath = getDisabledPath(deadlockPath);
-    const downloadPath = join(targetPath, fileName);
+    const workDir = await createDownloadWorkDir();
+    const downloadPath = join(workDir, basename(fileName));
 
+    try {
     console.log(`[downloadMod] Downloading to: ${downloadPath}`);
 
     // Download with progress
@@ -555,7 +594,7 @@ async function executeDownload(
 
         let extractedVpks: string[];
         try {
-            extractedVpks = await extractArchive(downloadPath, targetPath);
+            extractedVpks = await extractArchive(downloadPath, workDir);
         } catch (extractError) {
             const errorMsg = extractError instanceof Error ? extractError.message : String(extractError);
 
@@ -680,7 +719,7 @@ async function executeDownload(
         if (existsSync(downloadPath)) {
             await fs.unlink(downloadPath);
         }
-    } else if (downloadPath.endsWith('.vpk')) {
+    } else if (extname(downloadPath).toLowerCase() === '.vpk') {
         // Direct VPK download
         installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath]);
     }
@@ -732,6 +771,9 @@ async function executeDownload(
     // Notify completion
     console.log(`[downloadMod] Sending download-complete event`);
     mainWindow?.webContents.send('download-complete', { modId, fileId });
+    } finally {
+        await cleanupDownloadWorkDir(workDir);
+    }
 }
 
 // Promises awaiting the user's decision on a suspicious-file modal. Keyed by
@@ -849,8 +891,10 @@ async function executeOneClickDownload(
     validateDownloadUrl(archiveUrl);
 
     const targetPath = getDisabledPath(deadlockPath);
-    let downloadPath = join(targetPath, fileName);
+    const workDir = await createDownloadWorkDir();
+    let downloadPath = join(workDir, basename(fileName));
 
+    try {
     // Capture the canonical archive name from Content-Disposition. GB's 1-click
     // URL points at /mmdl/<id> which has no extension, so the URL-derived
     // fileName above is a generic placeholder; the response header carries the
@@ -1028,7 +1072,7 @@ async function executeOneClickDownload(
 
         let extractedVpks: string[];
         try {
-            extractedVpks = await extractArchive(downloadPath, targetPath);
+            extractedVpks = await extractArchive(downloadPath, workDir);
         } catch (extractError) {
             const errorMsg =
                 extractError instanceof Error ? extractError.message : String(extractError);
@@ -1107,7 +1151,7 @@ async function executeOneClickDownload(
         if (existsSync(downloadPath)) {
             await fs.unlink(downloadPath);
         }
-    } else if (downloadPath.endsWith('.vpk')) {
+    } else if (extname(downloadPath).toLowerCase() === '.vpk') {
         installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath]);
     }
 
@@ -1116,4 +1160,7 @@ async function executeOneClickDownload(
     }
 
     mainWindow?.webContents.send('download-complete', { modId, fileId });
+    } finally {
+        await cleanupDownloadWorkDir(workDir);
+    }
 }
