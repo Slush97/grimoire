@@ -4,12 +4,18 @@
 /* Grenze Gotisch: https://fonts.google.com/specimen/Grenze+Gotisch */
 
 /* Deadlock Fonts */
+/* Radiance ships with a top-heavy line-box (ascent metric > descent), which
+   makes glyphs sit visually low when flex-centered next to icons. Overriding
+   the metrics rebalances the box so labels align with their adjacent icons. */
 @font-face {
   font-family: 'Radiance';
   src: url('/fonts/radiance-regular.otf') format('opentype');
   font-weight: 400;
   font-style: normal;
   font-display: swap;
+  ascent-override: 85%;
+  descent-override: 25%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -18,6 +24,9 @@
   font-weight: 600;
   font-style: normal;
   font-display: swap;
+  ascent-override: 85%;
+  descent-override: 25%;
+  line-gap-override: 0%;
 }
 
 @font-face {
@@ -26,6 +35,9 @@
   font-weight: 700;
   font-style: normal;
   font-display: swap;
+  ascent-override: 85%;
+  descent-override: 25%;
+  line-gap-override: 0%;
 }
 
 @font-face {
