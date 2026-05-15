@@ -183,7 +183,7 @@ export default function AudioPreviewPlayer({
             {/* Play/Pause Button */}
             <button
                 onClick={togglePlay}
-                className={`flex-shrink-0 flex items-center justify-center rounded-full border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 active:scale-95 text-text-primary shadow-sm transition-all cursor-pointer ${compact ? 'w-8 h-8' : 'w-10 h-10'}`}
+                className={`flex-shrink-0 flex items-center justify-center rounded-full border border-accent/50 bg-accent/25 hover:bg-accent/35 hover:border-accent/70 active:scale-95 text-text-primary shadow-sm transition-all cursor-pointer ${compact ? 'w-8 h-8' : 'w-10 h-10'}`}
                 title={isPlaying ? 'Pause' : 'Play'}
             >
                 {isLoading ? (

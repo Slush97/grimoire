@@ -987,7 +987,7 @@ export default function Installed() {
       <PageHeader
         title="Installed Mods"
         action={
-          <div className="flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
               <input
@@ -995,7 +995,7 @@ export default function Installed() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search installed..."
-                className="bg-bg-secondary border border-border rounded-lg pl-8 pr-8 py-2 text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent w-56"
+                className="bg-bg-secondary border border-border rounded-lg pl-8 pr-8 py-2 text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent w-40"
               />
               {search && (
                 <button
@@ -1068,7 +1068,7 @@ export default function Installed() {
             />
           </div>
         }
-        className="mb-6"
+        className="mb-4 !flex-nowrap"
       />
 
       {searchNeedle && totalMatches === 0 && (
@@ -1086,17 +1086,17 @@ export default function Installed() {
 
       {visibleEnabled.length > 0 && (
         <div className="mb-6">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex items-baseline justify-between mb-3">
             <SectionHeader count={visibleEnabled.length} className="!mb-0">Enabled</SectionHeader>
             {!searchNeedle && (
-              <Button
-                variant="secondary"
-                size="sm"
+              <button
+                type="button"
                 onClick={fixOrder}
                 title="Renumber all installed mods 1, 2, 3, … to tidy priority slots"
+                className="text-xs uppercase tracking-wider text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
               >
                 Fix Order
-              </Button>
+              </button>
             )}
           </div>
           <div
@@ -1403,7 +1403,7 @@ function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
   const rows = viewMode === 'compact' ? 12 : viewMode === 'grid' ? 8 : 6;
   return (
     <div className="p-6 animate-fade-in" aria-busy="true" aria-live="polite">
-      <div className="flex items-end justify-between gap-4 pb-4 border-b border-border mb-6">
+      <div className="flex items-end justify-between gap-4 pb-4 border-b border-border mb-4">
         <div className="space-y-2">
           <div className="skeleton-shimmer bg-bg-tertiary rounded-md h-9 w-52" />
           <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-36" />

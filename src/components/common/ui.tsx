@@ -237,7 +237,7 @@ export function Button({
     disabled,
     ...props
 }: ButtonProps) {
-    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm font-medium transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
+    const baseStyles = 'inline-flex items-center justify-center gap-2 rounded-sm font-medium whitespace-nowrap transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-bg-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer';
 
     const variants = {
         primary: 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus:ring-accent',
