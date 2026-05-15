@@ -17,6 +17,8 @@ import {
   List,
   LayoutGrid,
   Grid3x3,
+  Check,
+  CheckSquare,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -187,9 +189,28 @@ export default function Installed() {
   }, [viewMode]);
   const [search, setSearch] = useState('');
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
-  // Delete confirmation. `ids` is a list so the same prompt can drive both
-  // single-mod and "all files in this group" deletions.
-  const [modToDelete, setModToDelete] = useState<{ ids: string[]; name: string; isGroup: boolean } | null>(null);
+  // Delete confirmation. `ids` is a list so the same prompt can drive
+  // single-mod, group, and bulk-selection deletions.
+  const [modToDelete, setModToDelete] = useState<{
+    ids: string[];
+    name: string;
+    isGroup: boolean;
+    isBulk?: boolean;
+  } | null>(null);
+
+  // Multi-select state. `selectedIds` always stores mod ids (variants of a
+  // selected group expand to every variant id) so bulk handlers can iterate
+  // directly without re-deriving from entries.
+  const [selectMode, setSelectMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // Per-item progress for the in-flight bulk enable/disable. While set, the
+  // action bar swaps its buttons for a "Enabling 2/5…" line so users see
+  // incremental progress on large selections.
+  const [bulkProgress, setBulkProgress] = useState<{
+    verb: 'Enabling' | 'Disabling';
+    done: number;
+    total: number;
+  } | null>(null);
   // GB id of the group whose picker is open, or null. The actual entry is
   // derived from live `mods` each render so per-file deletes inside the
   // picker reflect immediately without juggling a separate snapshot.
@@ -360,14 +381,88 @@ export default function Installed() {
     }
   };
 
+  const exitSelectMode = () => {
+    setSelectMode(false);
+    setSelectedIds(new Set());
+  };
+
   const handleDeleteConfirm = async () => {
     if (!modToDelete) return;
+    const wasBulk = !!modToDelete.isBulk;
     // Sequential to keep priority renames coherent — parallel deletes have
     // raced renameVpks before.
     for (const id of modToDelete.ids) {
       await deleteMod(id);
     }
     setModToDelete(null);
+    if (wasBulk) exitSelectMode();
+  };
+
+  const toggleEntrySelection = (entry: ModEntry) => {
+    const ids = entry.kind === 'single' ? [entry.mod.id] : entry.variants.map((v) => v.id);
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      const allSelected = ids.every((id) => next.has(id));
+      if (allSelected) {
+        ids.forEach((id) => next.delete(id));
+      } else {
+        ids.forEach((id) => next.add(id));
+      }
+      return next;
+    });
+  };
+
+  const isEntrySelected = (entry: ModEntry): boolean => {
+    if (entry.kind === 'single') return selectedIds.has(entry.mod.id);
+    return entry.variants.length > 0 && entry.variants.every((v) => selectedIds.has(v.id));
+  };
+
+  // Recomputed each render — cheap, and ensures action-bar counts/labels
+  // track the live `mods` state after each bulk toggle.
+  const selectedMods = mods.filter((m) => selectedIds.has(m.id));
+  const selectedEnabledCount = selectedMods.filter((m) => m.enabled).length;
+  const selectedDisabledCount = selectedMods.length - selectedEnabledCount;
+
+  const handleBulkEnable = async () => {
+    // Snapshot the work list before the loop so the progress total stays
+    // stable even as `mods` updates after each toggle.
+    const targets = selectedMods.filter((m) => !m.enabled);
+    if (targets.length === 0) {
+      exitSelectMode();
+      return;
+    }
+    setBulkProgress({ verb: 'Enabling', done: 0, total: targets.length });
+    for (let i = 0; i < targets.length; i++) {
+      await toggleMod(targets[i].id);
+      setBulkProgress({ verb: 'Enabling', done: i + 1, total: targets.length });
+    }
+    setBulkProgress(null);
+    exitSelectMode();
+  };
+
+  const handleBulkDisable = async () => {
+    const targets = selectedMods.filter((m) => m.enabled);
+    if (targets.length === 0) {
+      exitSelectMode();
+      return;
+    }
+    setBulkProgress({ verb: 'Disabling', done: 0, total: targets.length });
+    for (let i = 0; i < targets.length; i++) {
+      await toggleMod(targets[i].id);
+      setBulkProgress({ verb: 'Disabling', done: i + 1, total: targets.length });
+    }
+    setBulkProgress(null);
+    exitSelectMode();
+  };
+
+  const openBulkDeleteConfirm = () => {
+    if (selectedMods.length === 0) return;
+    setModToDelete({
+      ids: selectedMods.map((m) => m.id),
+      name: `${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'}`,
+      isGroup: false,
+      isBulk: true,
+    });
   };
 
   /**
@@ -638,6 +733,15 @@ export default function Installed() {
   const visibleDisabled = disabledEntries.filter(matchesSearchEntry);
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
 
+  const selectAllVisible = () => {
+    const ids = new Set<string>();
+    for (const entry of [...visibleEnabled, ...visibleDisabled]) {
+      if (entry.kind === 'single') ids.add(entry.mod.id);
+      else entry.variants.forEach((v) => ids.add(v.id));
+    }
+    setSelectedIds(ids);
+  };
+
   const resetDragState = () => {
     setDraggingId(null);
     setDraggingSection(null);
@@ -709,6 +813,7 @@ export default function Installed() {
    *     variant.
    */
   const renderEntryCard = (entry: ModEntry, section: 'enabled' | 'disabled') => {
+    const entrySelected = isEntrySelected(entry);
     if (entry.kind === 'single') {
       const mod = entry.mod;
       return (
@@ -723,7 +828,10 @@ export default function Installed() {
           onOpenDetails={mod.gameBananaId ? () => openModDetails(mod) : undefined}
           onToggle={() => toggleMod(mod.id)}
           onDelete={() => setModToDelete({ ids: [mod.id], name: mod.name, isGroup: false })}
-          draggable={!searchNeedle}
+          selectMode={selectMode}
+          selected={entrySelected}
+          onSelectToggle={() => toggleEntrySelection(entry)}
+          draggable={!searchNeedle && !selectMode}
           isDragging={draggingId === mod.id}
           isDropTarget={dropTargetId === mod.id}
           dropPosition={dropTargetId === mod.id ? dropPosition : null}
@@ -797,7 +905,10 @@ export default function Installed() {
             isGroup: true,
           })
         }
-        draggable={!searchNeedle}
+        selectMode={selectMode}
+        selected={entrySelected}
+        onSelectToggle={() => toggleEntrySelection(entry)}
+        draggable={!searchNeedle && !selectMode}
         isDragging={draggingId === dragRepId}
         isDropTarget={dropTargetId === dragRepId}
         dropPosition={dropTargetId === dragRepId ? dropPosition : null}
@@ -936,6 +1047,16 @@ export default function Installed() {
             >
               Open Folder
             </Button>
+            <Button
+              variant={selectMode ? 'primary' : 'secondary'}
+              onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
+              icon={CheckSquare}
+              disabled={!!bulkProgress}
+              className="!px-2.5"
+              aria-label={selectMode ? 'Exit selection mode' : 'Select multiple mods'}
+              title={selectMode ? 'Exit selection mode' : 'Select multiple mods for bulk delete, enable, or disable'}
+            />
+
             <ViewModeToggle
               value={viewMode}
               options={[
@@ -1042,9 +1163,21 @@ export default function Installed() {
 
       <ConfirmModal
         isOpen={!!modToDelete}
-        title={modToDelete?.isGroup ? `Delete ${modToDelete.ids.length} files?` : 'Delete Mod?'}
+        title={
+          modToDelete?.isBulk
+            ? `Delete ${modToDelete.name}?`
+            : modToDelete?.isGroup
+              ? `Delete ${modToDelete.ids.length} files?`
+              : 'Delete Mod?'
+        }
         message={
-          modToDelete?.isGroup ? (
+          modToDelete?.isBulk ? (
+            <>
+              Delete{' '}
+              <span className="font-medium text-text-primary">{modToDelete.name}</span>?
+              This removes every VPK in the selection and cannot be undone.
+            </>
+          ) : modToDelete?.isGroup ? (
             <>
               Delete all {modToDelete.ids.length} files from{' '}
               <span className="font-medium text-text-primary">{modToDelete.name}</span>? This
@@ -1059,7 +1192,13 @@ export default function Installed() {
             </>
           )
         }
-        confirmLabel={modToDelete?.isGroup ? `Delete ${modToDelete.ids.length}` : 'Delete'}
+        confirmLabel={
+          modToDelete?.isBulk
+            ? `Delete ${modToDelete.name}`
+            : modToDelete?.isGroup
+              ? `Delete ${modToDelete.ids.length}`
+              : 'Delete'
+        }
         variant="danger"
         onConfirm={handleDeleteConfirm}
         onCancel={() => setModToDelete(null)}
@@ -1181,6 +1320,80 @@ export default function Installed() {
           onDownload={handleDetailsDownload}
         />
       )}
+
+      {selectMode && (
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
+          {bulkProgress ? (
+            <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
+              <Loader2 className="w-4 h-4 animate-spin text-accent" />
+              {bulkProgress.verb} {bulkProgress.done}/{bulkProgress.total}…
+            </span>
+          ) : (
+            <>
+              <span className="text-sm text-text-primary tabular-nums px-2">
+                {selectedMods.length === 0
+                  ? 'No mods selected'
+                  : `${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'} selected`}
+              </span>
+              <span className="h-5 w-px bg-border" />
+              <button
+                type="button"
+                onClick={selectAllVisible}
+                className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
+              >
+                Select all
+              </button>
+              {selectedMods.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedIds(new Set())}
+                  className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
+                >
+                  Clear
+                </button>
+              )}
+              <span className="h-5 w-px bg-border" />
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={selectedDisabledCount === 0}
+                onClick={handleBulkEnable}
+                title={selectedDisabledCount === 0 ? 'No disabled mods selected' : `Enable ${selectedDisabledCount} mod${selectedDisabledCount === 1 ? '' : 's'}`}
+              >
+                Enable{selectedDisabledCount > 0 ? ` (${selectedDisabledCount})` : ''}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={selectedEnabledCount === 0}
+                onClick={handleBulkDisable}
+                title={selectedEnabledCount === 0 ? 'No enabled mods selected' : `Disable ${selectedEnabledCount} mod${selectedEnabledCount === 1 ? '' : 's'}`}
+              >
+                Disable{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
+              </Button>
+              <Button
+                variant="danger"
+                size="sm"
+                disabled={selectedMods.length === 0}
+                icon={Trash2}
+                onClick={openBulkDeleteConfirm}
+              >
+                Delete{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
+              </Button>
+              <span className="h-5 w-px bg-border" />
+              <button
+                type="button"
+                onClick={exitSelectMode}
+                className="p-1.5 text-text-secondary hover:text-text-primary rounded hover:bg-bg-tertiary cursor-pointer"
+                aria-label="Exit selection mode"
+                title="Exit selection mode"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1262,6 +1475,12 @@ interface ModCardProps {
   onOpenDetails?: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  /** When true, the card renders a selection checkbox overlay and clicks
+   *  anywhere on the card route to `onSelectToggle` instead of opening
+   *  details / firing toggle / delete. */
+  selectMode?: boolean;
+  selected?: boolean;
+  onSelectToggle?: () => void;
   draggable?: boolean;
   isDragging?: boolean;
   isDropTarget?: boolean;
@@ -1293,6 +1512,9 @@ function ModCard({
   onOpenDetails,
   onToggle,
   onDelete,
+  selectMode,
+  selected,
+  onSelectToggle,
   draggable,
   isDragging,
   isDropTarget,
@@ -1344,7 +1566,7 @@ function ModCard({
             : 'bg-bg-secondary/60 border-border/70 text-text-primary/80 hover:bg-bg-secondary hover:text-text-primary'
       } ${viewMode === 'compact' ? 'p-2 flex flex-col gap-2' : viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-start sm:items-center gap-3 p-3'} ${
         isDragging ? 'opacity-40' : ''
-      }`}
+      } ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
       draggable={draggable}
       onDragStart={(e) => {
         if (!draggable || !onDragStart) {
@@ -1394,11 +1616,35 @@ function ModCard({
     >
       {indicatorClasses && <div className={indicatorClasses} />}
 
+      {selectMode && (
+        <>
+          {/* Full-card click target. Sits above thumbnail button, toggle, and
+              delete (their non-positioned containers stack below this absolute
+              z-30 element) so every click in select mode lands here. */}
+          <button
+            type="button"
+            onClick={onSelectToggle}
+            className="absolute inset-0 z-30 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+            aria-label={selected ? `Deselect ${mod.name}` : `Select ${mod.name}`}
+            aria-pressed={!!selected}
+          />
+          {/* Visible checkbox indicator. pointer-events-none so the overlay
+              button below it still receives the click. */}
+          <div
+            className={`absolute top-2 left-2 z-40 w-6 h-6 rounded-md border-2 transition-colors pointer-events-none flex items-center justify-center shadow-md ${
+              selected ? 'bg-accent border-accent' : 'bg-bg-primary/85 border-white/40'
+            }`}
+          >
+            {selected && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
+          </div>
+        </>
+      )}
+
       {viewMode !== 'list' && (() => {
         const isSoundCard = mod.sourceSection === 'Sound' && !!mod.audioUrl;
         const overlayBadges = (
           <>
-            {mod.enabled && (
+            {mod.enabled && !selectMode && (
               <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1">
                 <Tag
                   tone="accent"
