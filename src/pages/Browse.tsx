@@ -1196,7 +1196,7 @@ export default function Browse() {
               <button
                 type="button"
                 onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'grid'
+                className={`p-1.5 rounded-md transition-colors cursor-pointer ${viewMode === 'grid'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -1244,7 +1244,7 @@ export default function Browse() {
                       role="tab"
                       aria-selected={active}
                       onClick={() => setSection(entry.modelName)}
-                      className={`flex items-center gap-1.5 px-3 py-2 rounded-md transition-colors cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
                         active
                           ? 'bg-bg-tertiary text-text-primary'
                           : 'text-text-secondary hover:text-text-primary'

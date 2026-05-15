@@ -82,7 +82,7 @@ export function PageHeader({ title, description, action, stats, className = '' }
     return (
         <div className={`flex flex-wrap items-end justify-between gap-4 pb-4 border-b border-border ${className}`}>
             <div className="min-w-0">
-                <h1 className="text-3xl md:text-4xl font-reaver tracking-wide text-text-primary leading-tight">
+                <h1 className="text-3xl md:text-4xl font-reaver tracking-wide text-text-primary leading-tight whitespace-nowrap">
                     {title}
                 </h1>
                 {description && <div className="text-text-secondary text-sm mt-1">{description}</div>}
