@@ -189,6 +189,10 @@ export default function Installed() {
   }, [viewMode]);
   const [search, setSearch] = useState('');
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
+  // Raw pair count from detectConflicts. conflictMap.size / 2 only works when
+  // every mod is in exactly one pair — when one mod conflicts with multiple
+  // peers, that math produces fractional or wrong totals.
+  const [conflictPairCount, setConflictPairCount] = useState(0);
   // Delete confirmation. `ids` is a list so the same prompt can drive
   // single-mod, group, and bulk-selection deletions.
   const [modToDelete, setModToDelete] = useState<{
@@ -638,8 +642,10 @@ export default function Installed() {
           map.set(conflict.modB, existingB);
         }
         setConflictMap(map);
+        setConflictPairCount(conflicts.length);
       } catch {
         setConflictMap(new Map());
+        setConflictPairCount(0);
       }
     };
     if (mods.length > 0) {
@@ -721,7 +727,7 @@ export default function Installed() {
     .filter((e) => !isEntryEnabled(e))
     .sort((a, b) => entrySortPriority(a) - entrySortPriority(b));
   const compactOrder = buildCompactPriorityOrder(allEntries);
-  const conflictCount = conflictMap.size > 0 ? new Set([...conflictMap.keys()]).size : 0;
+  const conflictCount = conflictPairCount;
 
   // Filter by search query (case-insensitive substring on name). Drag-and-drop
   // reorder is still correct because it targets the full enabled list order,
@@ -982,6 +988,40 @@ export default function Installed() {
     );
   }
 
+  // Conflicts and update-all buttons live on the section header row (next to
+  // Fix Order) rather than the top action bar — when both are active the top
+  // bar gets cramped, so move them to the line below where there's room.
+  const hasStatusButtons =
+    conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress;
+  const statusButtons = hasStatusButtons ? (
+    <div className="flex items-center gap-2">
+      {conflictCount > 0 && (
+        <Button
+          variant="warning"
+          size="sm"
+          onClick={() => navigate('/conflicts')}
+          icon={AlertTriangle}
+        >
+          {conflictPairCount} conflict{conflictPairCount === 1 ? '' : 's'}
+        </Button>
+      )}
+      {(updatesAvailable.size > 0 || updateAllProgress) && (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => setUpdateAllConfirmOpen(true)}
+          icon={Download}
+          isLoading={!!updateAllProgress}
+          title="Re-download every mod with a newer version on GameBanana and restore each one's enabled state"
+        >
+          {updateAllProgress
+            ? `Updating ${updateAllProgress.done}/${updateAllProgress.total}…`
+            : `Update all (${updatesAvailable.size})`}
+        </Button>
+      )}
+    </div>
+  ) : null;
+
   return (
     <div className="p-6">
       <PageHeader
@@ -1008,29 +1048,6 @@ export default function Installed() {
                 </button>
               )}
             </div>
-            {conflictCount > 0 && (
-              <Button
-                variant="warning"
-                size="sm"
-                onClick={() => navigate('/conflicts')}
-                icon={AlertTriangle}
-              >
-                {conflictMap.size / 2} conflicts
-              </Button>
-            )}
-            {(updatesAvailable.size > 0 || updateAllProgress) && (
-              <Button
-                variant="primary"
-                onClick={() => setUpdateAllConfirmOpen(true)}
-                icon={Download}
-                isLoading={!!updateAllProgress}
-                title="Re-download every mod with a newer version on GameBanana and restore each one's enabled state"
-              >
-                {updateAllProgress
-                  ? `Updating ${updateAllProgress.done}/${updateAllProgress.total}…`
-                  : `Update all (${updatesAvailable.size})`}
-              </Button>
-            )}
             <Button
               variant="secondary"
               onClick={() => setImportOpen(true)}
@@ -1088,16 +1105,19 @@ export default function Installed() {
         <div className="mb-6">
           <div className="flex items-baseline justify-between mb-3">
             <SectionHeader count={visibleEnabled.length} className="!mb-0">Enabled</SectionHeader>
-            {!searchNeedle && (
-              <button
-                type="button"
-                onClick={fixOrder}
-                title="Renumber all installed mods 1, 2, 3, … to tidy priority slots"
-                className="text-xs uppercase tracking-wider text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-              >
-                Fix Order
-              </button>
-            )}
+            <div className="flex items-center gap-4">
+              {statusButtons}
+              {!searchNeedle && (
+                <button
+                  type="button"
+                  onClick={fixOrder}
+                  title="Renumber all installed mods 1, 2, 3, … to tidy priority slots"
+                  className="text-xs uppercase tracking-wider text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+                >
+                  Fix Order
+                </button>
+              )}
+            </div>
           </div>
           <div
             className={
@@ -1115,7 +1135,11 @@ export default function Installed() {
 
       {visibleDisabled.length > 0 && (
         <div>
-          <SectionHeader count={visibleDisabled.length}>Disabled</SectionHeader>
+          <div className="flex items-baseline justify-between mb-3">
+            <SectionHeader count={visibleDisabled.length} className="!mb-0">Disabled</SectionHeader>
+            {/* Fall back here when there's nothing in the Enabled section to host the status buttons. */}
+            {visibleEnabled.length === 0 && statusButtons}
+          </div>
           <div
             className={
               viewMode === 'compact'
