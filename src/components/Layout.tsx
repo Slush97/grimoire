@@ -268,8 +268,8 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
-      {/* Status indicators - bottom-right corner */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      {/* Status indicators stack in the bottom-right corner. */}
+      <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
         <DownloadQueueIndicator />
         <SyncIndicator />
       </div>

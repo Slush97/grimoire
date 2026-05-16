@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Download, Loader2, X } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { Download, Loader2, X, ChevronUp } from 'lucide-react';
 import type { DownloadQueueItem, DownloadProgressData } from '../types/electron';
 
 interface DownloadQueueIndicatorProps {
@@ -12,39 +12,99 @@ interface QueueState {
     progress: { downloaded: number; total: number } | null;
 }
 
+interface SpeedSample {
+    time: number;
+    bytes: number;
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes <= 0) return '0 B';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    const n = bytes / Math.pow(1024, i);
+    return `${n < 10 ? n.toFixed(1) : Math.round(n)} ${units[i]}`;
+}
+
+function formatSpeed(bytesPerSec: number): string {
+    if (bytesPerSec <= 0) return '';
+    return `${formatBytes(bytesPerSec)}/s`;
+}
+
+function formatEta(seconds: number): string {
+    if (!isFinite(seconds) || seconds <= 0) return '';
+    if (seconds < 60) return `${Math.round(seconds)}s`;
+    const m = Math.floor(seconds / 60);
+    const s = Math.round(seconds % 60);
+    if (m < 60) return `${m}m ${s}s`;
+    const h = Math.floor(m / 60);
+    return `${h}h ${m % 60}m`;
+}
+
 export default function DownloadQueueIndicator({ className = '' }: DownloadQueueIndicatorProps) {
-    const [queueState, setQueueState] = useState<QueueState>({ queue: [], currentDownload: null, progress: null });
+    const [queueState, setQueueState] = useState<QueueState>({
+        queue: [],
+        currentDownload: null,
+        progress: null,
+    });
     const [isExpanded, setIsExpanded] = useState(false);
 
+    // Speed/ETA derived from the rate of the current download's progress
+    // stream. Anchored to the first sample after the active download
+    // changes so we report average throughput for this file rather than
+    // bleeding speed from the previous one.
+    const sampleRef = useRef<SpeedSample | null>(null);
+    const [speed, setSpeed] = useState(0);
+
     useEffect(() => {
-        // Fetch initial state
         Promise.all([
             window.electronAPI.getDownloadQueue(),
             window.electronAPI.getCurrentDownload(),
         ]).then(([queue, currentDownload]) => {
-            setQueueState(prev => ({ ...prev, queue, currentDownload }));
+            setQueueState((prev) => ({ ...prev, queue, currentDownload }));
         });
 
-        // Listen for queue updates
         const queueUnsub = window.electronAPI.onDownloadQueueUpdated((data) => {
-            setQueueState(prev => ({
-                ...prev,
-                queue: data.queue,
-                currentDownload: data.currentDownload,
-            }));
+            setQueueState((prev) => {
+                const nextCurrent = data.currentDownload;
+                const switched =
+                    prev.currentDownload?.modId !== nextCurrent?.modId ||
+                    prev.currentDownload?.fileId !== nextCurrent?.fileId;
+                if (switched) {
+                    sampleRef.current = null;
+                    setSpeed(0);
+                }
+                return {
+                    ...prev,
+                    queue: data.queue,
+                    currentDownload: nextCurrent,
+                    progress: switched ? null : prev.progress,
+                };
+            });
         });
 
-        // Listen for download progress
         const progressUnsub = window.electronAPI.onDownloadProgress((data: DownloadProgressData) => {
-            setQueueState(prev => ({
+            const now = Date.now();
+            const anchor = sampleRef.current;
+            if (!anchor) {
+                sampleRef.current = { time: now, bytes: data.downloaded };
+            } else {
+                const dt = (now - anchor.time) / 1000;
+                if (dt > 0.25) {
+                    const rate = (data.downloaded - anchor.bytes) / dt;
+                    // Light smoothing so the readout doesn't twitch every tick.
+                    setSpeed((prev) => (prev <= 0 ? rate : prev * 0.7 + rate * 0.3));
+                }
+            }
+            setQueueState((prev) => ({
                 ...prev,
                 progress: { downloaded: data.downloaded, total: data.total },
             }));
         });
 
-        // Clear progress on complete
         const completeUnsub = window.electronAPI.onDownloadComplete(() => {
-            setQueueState(prev => ({ ...prev, progress: null }));
+            sampleRef.current = null;
+            setSpeed(0);
+            setQueueState((prev) => ({ ...prev, progress: null }));
         });
 
         return () => {
@@ -59,93 +119,174 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     };
 
     const totalItems = queueState.queue.length + (queueState.currentDownload ? 1 : 0);
-    const progressPercent = queueState.progress && queueState.progress.total > 0
-        ? Math.round((queueState.progress.downloaded / queueState.progress.total) * 100)
-        : 0;
+    const progressPercent =
+        queueState.progress && queueState.progress.total > 0
+            ? (queueState.progress.downloaded / queueState.progress.total) * 100
+            : 0;
+    const progressPercentRounded = Math.round(progressPercent);
+
+    const etaSeconds = useMemo(() => {
+        if (!queueState.progress || speed <= 0) return 0;
+        const remaining = queueState.progress.total - queueState.progress.downloaded;
+        return remaining / speed;
+    }, [queueState.progress, speed]);
 
     if (totalItems === 0) return null;
 
-    return (
-        <div className={`bg-bg-secondary/95 backdrop-blur-sm rounded-lg border border-border shadow-xl min-w-[280px] ${className}`}>
-            {/* Header - always visible */}
-            <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="flex items-center gap-2 px-3 py-2 w-full hover:bg-bg-tertiary/50 rounded-lg transition-colors"
-            >
-                <Download className="w-4 h-4 text-accent" />
-                <span className="text-sm text-text-primary font-medium">
-                    Downloads
-                </span>
-                <span className="text-xs text-text-secondary">
-                    ({totalItems})
-                </span>
-                {queueState.currentDownload && (
-                    <span className="ml-auto text-xs text-accent font-medium">
-                        {progressPercent}%
-                    </span>
-                )}
-                {queueState.currentDownload && (
-                    <Loader2 className="w-3 h-3 animate-spin text-accent" />
-                )}
-            </button>
+    const currentFileName = queueState.currentDownload?.fileName ?? 'Preparing…';
 
-            {/* Expanded queue list */}
+    return (
+        <div className={`pointer-events-auto ${className}`}>
+            {/* Collapsed pill: compact chip with filename + percent and an
+                inline progress bar across the bottom edge. Clicking pops the
+                expanded panel up above it. */}
+            {!isExpanded && (
+                <button
+                    type="button"
+                    onClick={() => setIsExpanded(true)}
+                    className="group relative flex w-72 items-center gap-2.5 overflow-hidden rounded-full border border-white/10 bg-bg-secondary/95 px-3 py-2 text-left shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90 cursor-pointer"
+                    title="Show download details"
+                >
+                    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent/15">
+                        {queueState.currentDownload ? (
+                            <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+                        ) : (
+                            <Download className="h-3.5 w-3.5 text-accent" />
+                        )}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                        <div className="truncate text-[13px] font-medium leading-tight text-text-primary" title={currentFileName}>
+                            {currentFileName}
+                        </div>
+                        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-secondary">
+                            <span className="tabular-nums">{progressPercentRounded}%</span>
+                            {speed > 0 && (
+                                <>
+                                    <span className="opacity-50">·</span>
+                                    <span className="tabular-nums">{formatSpeed(speed)}</span>
+                                </>
+                            )}
+                            {totalItems > 1 && (
+                                <>
+                                    <span className="opacity-50">·</span>
+                                    <span>{totalItems - 1} queued</span>
+                                </>
+                            )}
+                        </div>
+                    </div>
+                    <ChevronUp className="h-4 w-4 flex-shrink-0 text-text-secondary opacity-0 transition-opacity group-hover:opacity-100" />
+                    <span
+                        aria-hidden
+                        className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-white/5"
+                    >
+                        <span
+                            className="block h-full bg-accent transition-[width] duration-200 ease-out"
+                            style={{ width: `${progressPercent}%` }}
+                        />
+                    </span>
+                </button>
+            )}
+
+            {/* Expanded panel: opens upward (transform-origin-bottom) so the
+                pill stays anchored to the corner. Shows full progress detail
+                + the queue. */}
             {isExpanded && (
-                <div className="border-t border-border px-3 py-2 max-h-64 overflow-y-auto">
-                    {/* Current download */}
+                <div className="w-80 rounded-2xl border border-white/10 bg-bg-secondary/95 shadow-2xl shadow-black/50 backdrop-blur-md animate-fade-in">
+                    <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
+                        <div className="flex items-center gap-2">
+                            <Download className="h-4 w-4 text-accent" />
+                            <span className="text-sm font-semibold text-text-primary">Downloads</span>
+                            <span className="text-xs text-text-secondary">({totalItems})</span>
+                        </div>
+                        <button
+                            type="button"
+                            onClick={() => setIsExpanded(false)}
+                            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary transition-colors cursor-pointer"
+                            aria-label="Collapse"
+                            title="Collapse"
+                        >
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    </div>
+
                     {queueState.currentDownload && (
-                        <div className="flex items-center gap-2 py-2 border-b border-border/50 mb-2">
-                            <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                                <p className="text-sm text-text-primary truncate" title={queueState.currentDownload.fileName}>
-                                    {queueState.currentDownload.fileName}
+                        <div className="px-4 py-3 border-b border-white/5">
+                            <div className="flex items-center gap-2">
+                                <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-accent" />
+                                <p
+                                    className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary"
+                                    title={currentFileName}
+                                >
+                                    {currentFileName}
                                 </p>
-                                <div className="flex items-center gap-2 mt-1">
-                                    <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
-                                        <div
-                                            className="h-full bg-accent transition-all duration-300"
-                                            style={{ width: `${progressPercent}%` }}
-                                        />
-                                    </div>
-                                    <span className="text-xs text-text-secondary">{progressPercent}%</span>
-                                </div>
+                                <span className="text-xs tabular-nums text-accent font-semibold">
+                                    {progressPercentRounded}%
+                                </span>
+                            </div>
+                            <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
+                                <div
+                                    className="h-full rounded-full bg-gradient-to-r from-accent/80 to-accent transition-[width] duration-200 ease-out"
+                                    style={{ width: `${progressPercent}%` }}
+                                />
+                            </div>
+                            <div className="mt-2 flex items-center justify-between text-[11px] text-text-secondary tabular-nums">
+                                <span>
+                                    {queueState.progress
+                                        ? `${formatBytes(queueState.progress.downloaded)} / ${formatBytes(queueState.progress.total)}`
+                                        : '—'}
+                                </span>
+                                <span className="flex items-center gap-2">
+                                    {speed > 0 && <span>{formatSpeed(speed)}</span>}
+                                    {etaSeconds > 0 && (
+                                        <>
+                                            <span className="opacity-50">·</span>
+                                            <span>{formatEta(etaSeconds)} left</span>
+                                        </>
+                                    )}
+                                </span>
                             </div>
                         </div>
                     )}
 
-                    {/* Queued items */}
                     {queueState.queue.length > 0 && (
-                        <div className="space-y-1">
-                            <p className="text-xs text-text-secondary mb-1">Queued ({queueState.queue.length})</p>
-                            {queueState.queue.map((item, index) => (
-                                <div
-                                    key={`${item.modId}-${item.fileId}`}
-                                    className="flex items-center gap-2 py-1.5 group hover:bg-bg-tertiary/30 rounded px-1 -mx-1"
-                                >
-                                    <span className="w-5 h-5 flex items-center justify-center bg-bg-tertiary rounded-full text-xs text-text-secondary flex-shrink-0">
-                                        {index + 1}
-                                    </span>
-                                    <span className="text-sm text-text-secondary truncate flex-1" title={item.fileName}>
-                                        {item.fileName}
-                                    </span>
-                                    <button
-                                        onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleCancelQueued(item.modId);
-                                        }}
-                                        className="p-1 text-text-secondary hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity"
-                                        title="Cancel"
+                        <div className="px-4 py-2 max-h-56 overflow-y-auto">
+                            <p className="text-[11px] uppercase tracking-wider text-text-secondary mb-1">
+                                Queued ({queueState.queue.length})
+                            </p>
+                            <ul className="space-y-0.5">
+                                {queueState.queue.map((item, index) => (
+                                    <li
+                                        key={`${item.modId}-${item.fileId}`}
+                                        className="group flex items-center gap-2 rounded-md px-1.5 py-1.5 hover:bg-white/5"
                                     >
-                                        <X className="w-3.5 h-3.5" />
-                                    </button>
-                                </div>
-                            ))}
+                                        <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-white/5 text-[10px] tabular-nums text-text-secondary">
+                                            {index + 1}
+                                        </span>
+                                        <span
+                                            className="flex-1 truncate text-xs text-text-secondary"
+                                            title={item.fileName}
+                                        >
+                                            {item.fileName}
+                                        </span>
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                void handleCancelQueued(item.modId);
+                                            }}
+                                            className="rounded-md p-1 text-text-secondary opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 cursor-pointer"
+                                            title="Remove from queue"
+                                        >
+                                            <X className="h-3 w-3" />
+                                        </button>
+                                    </li>
+                                ))}
+                            </ul>
                         </div>
                     )}
 
-                    {/* Empty state */}
                     {!queueState.currentDownload && queueState.queue.length === 0 && (
-                        <p className="text-sm text-text-secondary text-center py-2">No downloads</p>
+                        <p className="px-4 py-3 text-xs text-text-secondary text-center">No downloads</p>
                     )}
                 </div>
             )}
