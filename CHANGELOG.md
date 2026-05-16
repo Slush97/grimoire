@@ -2,6 +2,110 @@
 
 All notable changes to this project are documented here. Format is loosely based on [Keep a Changelog](https://keepachangelog.com/), and the project adheres to semantic versioning.
 
+## [1.10.0] - 2026-05
+
+### Added
+- **Grimoire Social: Discover page.** Browse mod profiles published by other Grimoire users behind the *experimentalSocial* setting (off by default). Cards are image-led with hero/variant badges and a viewer-aware Like toggle; click opens a detail dialog and Import hands the profile off to the existing `ImportProfileDialog` flow
+- **Steam sign-in.** OpenID flow launches in the user's default browser, the Worker mints a session token, and the main process catches it via the `grimoire://auth/done` callback. The token never crosses into the renderer
+- **Publish profile.** Header button on Discover (signed-in only) opens a picker of local profiles, then the existing publish dialog. After a successful publish the view jumps to *Your profile* and the new row appears without remount
+- **Edit profile dialog.** Owner-only inline edit of a published profile's title/description
+- **Manage uploads** on Discover with unpublish, social-aware import, and a CSRF-defended sign-in path
+- **Portable profile export/import.** Share profiles via short `mp1:` codes or `.modprofile.json` files (Grimoire-only format, see `docs/profile-spec.md`). Schema 1.1 adds `vpkStem` + `alreadyInstalled` so an import dialog can highlight files the user already has
+- Manual Discord release-announcement workflow
+
+### Changed
+- **Discover production URL is locked at build time.** `electron.vite.config.ts` now refuses to produce a production build without `GRIMOIRE_SOCIAL_BASE_URL` set to an `https://` URL, so installers can never ship pointing at `localhost:8787`
+- **Downloads indicator** modernized: pill button with expandable panel listing in-flight downloads
+- **Installed page** Fix Order button restyled as a pill so it reads as clickable
+
+### Fixed
+- **Social hardening pass** (audit follow-up): OpenID state nonce verified on the `grimoire://auth/done` callback (rejects login-CSRF), gunzip output capped at 16 KB on share-code import (gzip-bomb defense), Discover infinite scroll switched to IntersectionObserver, paginated requests bounded, and the prod URL gate above
+
+## [1.9.3] - 2026-05
+
+### Fixed
+- **Conflict-pair count** on the Installed page now reflects the deduped set; status row moved beneath the page header
+- **Conflicts detector** runs O(1) dedupe, ignores engine defaults, and emits quieter logs
+- **Orphan metadata** is purged on mod delete so slots don't leak across reinstalls
+- **Sibling-variant swap** keeps the newest variant active instead of falling back to the previous winner
+- **GameBanana collection import** restored to the prior `createProfileFromGameBananaIds` behavior after a regression in 1.9.2
+
+### Changed
+- Settings → Support card links GitHub Issues alongside Discord
+
+## [1.9.2] - 2026-05
+
+### Added
+- **Bulk select on the Installed page.** Multi-select rows then delete, enable, or disable in one action
+- **GameBanana collection bulk import.** Paste a collection URL on Browse and queue every mod for download in one pass
+- **Inline profile rename** directly on the profile card
+- Settings → Support card with a Discord link
+
+### Changed
+- Header spacing tightened; control heights normalized across pages
+- Radiance font metrics rebalanced so labels align with icons
+
+### Removed
+- Apt-publish job dropped from the release pipeline until a host with 100 MB+ artifact support is picked
+
+## [1.9.1] - 2026-05
+
+### Added
+- **Managed-install detection** in the auto-updater: when Grimoire is installed via a system package manager (deb, AUR, etc.) the in-app updater routes the user to the package manager instead of trying to overwrite the binary
+
+### Changed
+- Signed apt repo published to `gh-pages` (later reverted in 1.9.2 pending a larger-artifact host)
+
+## [1.9.0] - 2026-05
+
+### Added
+- **Configurable accent color.** Settings → Appearance picker writes a custom accent across the app; HUD-style active card preview reflects the choice live
+
+### Fixed
+- Installs and download flows hardened: progress accounting, retry behavior, and mod-card polish
+- Variant and locker interactions further refined on the back of 1.8.x work
+- Settings/Profiles appearance row inlined and the picker converted to a modal so the layout doesn't shift while choosing
+
+## [1.8.1] - 2026-05
+
+### Added
+- **AUR auto-publish.** Tag releases now bump and push `grimoire-bin` to the AUR automatically (PKGBUILD + .SRCINFO)
+- **Install date** shown on mod cards and variant rows
+
+### Security
+- **Renderer sandbox** enabled in the Electron BrowserWindow
+- **`shell.openExternal` URL scheme allowlist** so a malicious link inside a mod description can't open arbitrary protocols
+
+### Fixed
+- Linux/Proton: `deadlock.exe` is now detected via `pgrep -f` so the "Is the game running?" status matches reality
+
+## [1.8.0] - 2026-05
+
+### Added
+- **Collapsible sidebar** with a thematic icon set and refined hierarchy
+- **Frosted-glass hero page** in the Locker with natural-aspect previews and toggle-off for the active skin
+- **Multi-variant skin prompt** in the Locker so users explicitly pick a variant before applying
+- **Aggregated release notes** in the updater modal (consolidates every version skipped since the user's last update)
+- **Wand icon** for Launch Modded; in-app links re-route to the system browser
+- **Variant pills** + Browse deep-link from the Conflicts page; default behavior is "ignore" until the user opts in
+
+### Changed
+- App-wide tinted CTA style and larger Locker thumbnails for parity with the new sidebar
+- Sidebar/toolbar chrome refined; view-toggle height aligned to siblings
+- Profile-card action buttons sized to fit their labels
+
+### Fixed
+- Browse: zero counts render as `0` instead of `NaNm` for likes/views/downloads
+- Locker favorites persist correctly, hover-to-favorite works, and navigation hardening fixes the hero-portrait zoom regression
+
+## [1.7.3] - 2026-05
+
+### Added
+- **1-Click lifecycle toast.** GameBanana 1-Click installs surface a real-time download/extract toast (recovering the file id and labels along the way), so the user can see progress instead of guessing
+
+### Fixed
+- Mod Details modal hides the "modified" date when it matches the "added" date instead of showing the same line twice
+
 ## [1.7.2] - 2026-05
 
 ### Added

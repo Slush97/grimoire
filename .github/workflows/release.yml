@@ -56,6 +56,11 @@ jobs:
       - name: Build and package
         id: build
         shell: bash
+        env:
+          # Baked into the renderer by electron.vite.config.ts. Production
+          # builds refuse to start without this set to an https:// URL so
+          # installers can't ship pointing at localhost:8787.
+          GRIMOIRE_SOCIAL_BASE_URL: https://grimoire-social.slusheliott.workers.dev
         run: |
           if [ "${{ matrix.platform }}" = "linux" ]; then
             pnpm exec electron-vite build && pnpm exec electron-builder --linux --publish never
