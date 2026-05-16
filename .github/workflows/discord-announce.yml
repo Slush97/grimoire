@@ -1,0 +1,89 @@
+name: Discord Release Announcement
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to announce (e.g. v1.9.3). Defaults to latest published release.'
+        required: false
+        type: string
+
+jobs:
+  announce:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Resolve release
+        id: rel
+        env:
+          GH_TOKEN: ${{ github.token }}
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ -n "${INPUT_TAG:-}" ]; then
+            TAG="$INPUT_TAG"
+          else
+            TAG="$(gh release view --repo "$GITHUB_REPOSITORY" --json tagName --jq .tagName)"
+          fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+          DATA="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json name,body,url,isPrerelease,isDraft)"
+          echo "$DATA" | jq -r '"name=\(.name)\nurl=\(.url)\nprerelease=\(.isPrerelease)\ndraft=\(.isDraft)"' >> "$GITHUB_OUTPUT"
+          echo "$DATA" | jq -r '.body' > release_body.md
+
+      - name: Skip prereleases and drafts
+        if: steps.rel.outputs.prerelease == 'true' || steps.rel.outputs.draft == 'true'
+        run: |
+          echo "Release is prerelease or draft; skipping announcement."
+          exit 0
+
+      - name: Verify webhook secret is set
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_ANNOUNCE_WEBHOOK_URL }}
+        run: |
+          if [ -z "${WEBHOOK_URL:-}" ]; then
+            echo "ERROR: DISCORD_ANNOUNCE_WEBHOOK_URL secret is not set."
+            echo "Add a Discord webhook URL (NOT the /github one) under repo Settings -> Secrets and variables -> Actions."
+            exit 1
+          fi
+
+      - name: Post to Discord
+        env:
+          WEBHOOK_URL: ${{ secrets.DISCORD_ANNOUNCE_WEBHOOK_URL }}
+          TAG: ${{ steps.rel.outputs.tag }}
+          NAME: ${{ steps.rel.outputs.name }}
+          URL: ${{ steps.rel.outputs.url }}
+        run: |
+          set -euo pipefail
+
+          # Discord embed description limit is 4096; truncate with a link to the full notes.
+          BODY="$(cat release_body.md)"
+          MAX=4000
+          if [ "${#BODY}" -gt "$MAX" ]; then
+            BODY="${BODY:0:$MAX}"$'\n\n... (truncated, full notes: '"$URL"')'
+          fi
+
+          # Title falls back to the tag when the release has no name set.
+          TITLE="${NAME:-$TAG}"
+
+          PAYLOAD="$(jq -n \
+            --arg title "$TITLE" \
+            --arg url "$URL" \
+            --arg body "$BODY" \
+            --arg tag "$TAG" \
+            '{
+              content: ("A new version of Grimoire is out: **" + $tag + "**"),
+              embeds: [{
+                title: $title,
+                url: $url,
+                description: $body,
+                color: 7615669
+              }]
+            }')"
+
+          curl -fsS -X POST -H "Content-Type: application/json" \
+            -d "$PAYLOAD" \
+            "$WEBHOOK_URL"
+
+          echo "Announcement posted for $TAG."
