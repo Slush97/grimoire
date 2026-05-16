@@ -1,59 +1,140 @@
-import { existsSync, mkdirSync } from 'fs';
+import { existsSync, mkdirSync, readFileSync } from 'fs';
 import { join } from 'path';
 import { homedir } from 'os';
+import { execFileSync } from 'child_process';
+
+const DEADLOCK_APP_ID = '1422450';
 
 /**
- * Get platform-specific Steam library paths to search for Deadlock
+ * Steam install locations to probe (the directory that contains steamapps/),
+ * in priority order. On Windows we ask the registry first so users with
+ * Steam installed off the C: default are handled correctly.
  */
-function getSteamLibraryPaths(): string[] {
-    const paths: string[] = [];
+function getSteamInstallPaths(): string[] {
     const home = homedir();
 
     if (process.platform === 'linux') {
-        // Common Steam locations on Linux
-        paths.push(join(home, '.steam/steam/steamapps/common'));
-        paths.push(join(home, '.local/share/Steam/steamapps/common'));
-        // Flatpak
-        paths.push(join(home, '.var/app/com.valvesoftware.Steam/.steam/steam/steamapps/common'));
-    } else if (process.platform === 'win32') {
-        // Common Steam locations on Windows
-        paths.push('C:\\Program Files (x86)\\Steam\\steamapps\\common');
-        paths.push('C:\\Program Files\\Steam\\steamapps\\common');
-        paths.push('D:\\Steam\\steamapps\\common');
-        paths.push('D:\\SteamLibrary\\steamapps\\common');
-    } else if (process.platform === 'darwin') {
-        // macOS
-        paths.push(join(home, 'Library/Application Support/Steam/steamapps/common'));
+        return [
+            join(home, '.steam/steam'),
+            join(home, '.local/share/Steam'),
+            join(home, '.var/app/com.valvesoftware.Steam/.steam/steam'),
+        ];
     }
 
-    return paths;
+    if (process.platform === 'darwin') {
+        return [join(home, 'Library/Application Support/Steam')];
+    }
+
+    if (process.platform === 'win32') {
+        const paths: string[] = [];
+        const push = (p: string | null) => {
+            if (!p) return;
+            const norm = p.replace(/\//g, '\\').replace(/\\+$/, '');
+            if (!paths.some((existing) => existing.toLowerCase() === norm.toLowerCase())) {
+                paths.push(norm);
+            }
+        };
+        push(queryWindowsRegistry('HKLM\\SOFTWARE\\WOW6432Node\\Valve\\Steam', 'InstallPath'));
+        push(queryWindowsRegistry('HKCU\\SOFTWARE\\Valve\\Steam', 'SteamPath'));
+        push('C:\\Program Files (x86)\\Steam');
+        push('C:\\Program Files\\Steam');
+        return paths;
+    }
+
+    return [];
+}
+
+function queryWindowsRegistry(key: string, value: string): string | null {
+    try {
+        const stdout = execFileSync('reg', ['query', key, '/v', value], {
+            stdio: ['ignore', 'pipe', 'ignore'],
+            timeout: 2000,
+        }).toString();
+        const match = stdout.match(/REG_SZ\s+(.+?)\s*$/m);
+        return match ? match[1].trim() : null;
+    } catch {
+        return null;
+    }
 }
 
 /**
- * Check if a path is a valid Deadlock installation
+ * Read every "path" entry from a Steam libraryfolders.vdf so we discover
+ * every Steam library on the machine, not just the default install dir.
+ */
+function readSteamLibraries(steamInstallPath: string): string[] {
+    const vdfPath = join(steamInstallPath, 'steamapps', 'libraryfolders.vdf');
+    if (!existsSync(vdfPath)) return [];
+    try {
+        const content = readFileSync(vdfPath, 'utf-8');
+        const libraries: string[] = [];
+        const re = /"path"\s+"([^"]+)"/g;
+        let match: RegExpExecArray | null;
+        while ((match = re.exec(content)) !== null) {
+            // VDF escapes backslashes; "C:\\SteamLibrary" -> "C:\SteamLibrary"
+            libraries.push(match[1].replace(/\\\\/g, '\\'));
+        }
+        return libraries;
+    } catch {
+        return [];
+    }
+}
+
+/**
+ * A path is a valid Deadlock installation iff gameinfo.gi is present. The
+ * directory structure alone is insufficient because stale empty
+ * game/citadel/ folders can survive a move-library or partial uninstall
+ * and would otherwise masquerade as a real install.
  */
 export function isValidDeadlockPath(path: string): boolean {
-    const gameDir = join(path, 'game');
-    const citadelDir = join(gameDir, 'citadel');
-    return existsSync(gameDir) && existsSync(citadelDir);
+    return existsSync(join(path, 'game', 'citadel', 'gameinfo.gi'));
 }
 
 /**
- * Auto-detect Deadlock installation path
+ * Auto-detect Deadlock by walking every Steam library declared in
+ * libraryfolders.vdf. Libraries whose appmanifest_<APPID>.acf claims
+ * Deadlock are preferred, as that is Steam's authoritative record.
  */
 export function detectDeadlockPath(): string | null {
-    const paths = getSteamLibraryPaths();
-    console.log('[detectDeadlockPath] Searching paths:', paths);
+    const steamInstalls = getSteamInstallPaths();
+    const visited = new Set<string>();
+    const fallback: string[] = [];
 
-    for (const libraryPath of paths) {
-        const deadlockPath = join(libraryPath, 'Deadlock');
-        console.log('[detectDeadlockPath] Checking:', deadlockPath);
-        if (isValidDeadlockPath(deadlockPath)) {
-            console.log('[detectDeadlockPath] FOUND:', deadlockPath);
-            return deadlockPath;
+    console.log('[detectDeadlockPath] Steam installs:', steamInstalls);
+
+    for (const steamPath of steamInstalls) {
+        if (!existsSync(steamPath)) continue;
+        const libraries = readSteamLibraries(steamPath);
+        // Steam's own install dir is implicitly a library, even when the
+        // VDF is missing or doesn't list it.
+        if (!libraries.some((lib) => lib.toLowerCase() === steamPath.toLowerCase())) {
+            libraries.unshift(steamPath);
+        }
+        for (const lib of libraries) {
+            const key = lib.toLowerCase();
+            if (visited.has(key)) continue;
+            visited.add(key);
+
+            const candidate = join(lib, 'steamapps', 'common', 'Deadlock');
+            const manifest = join(lib, 'steamapps', `appmanifest_${DEADLOCK_APP_ID}.acf`);
+            if (existsSync(manifest) && isValidDeadlockPath(candidate)) {
+                console.log('[detectDeadlockPath] FOUND via manifest:', candidate);
+                return candidate;
+            }
+            fallback.push(candidate);
         }
     }
-    console.log('[detectDeadlockPath] Not found in any location');
+
+    // No library's appmanifest claims Deadlock; fall back to whichever
+    // candidate directory holds a valid install. Catches manually-copied
+    // installs that Steam doesn't know about.
+    for (const candidate of fallback) {
+        if (isValidDeadlockPath(candidate)) {
+            console.log('[detectDeadlockPath] FOUND via fallback scan:', candidate);
+            return candidate;
+        }
+    }
+
+    console.log('[detectDeadlockPath] Not found in any library');
     return null;
 }
 
