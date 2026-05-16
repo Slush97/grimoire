@@ -3,12 +3,36 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 
-// Bake the social Worker URL at build time so packaged releases have a stable
-// endpoint. Override via env var at build (CI sets prod URL); dev runs default
-// to wrangler's local port. Substituted into the main bundle by Vite's define.
-const SOCIAL_BASE_URL = process.env['GRIMOIRE_SOCIAL_BASE_URL'] ?? 'http://localhost:8787';
+// Bake the social Worker URL at build time. Dev runs (electron-vite dev) fall
+// back to wrangler's local port. Production builds (electron-vite build, used
+// by all package:* scripts) REQUIRE GRIMOIRE_SOCIAL_BASE_URL to be set —
+// otherwise we'd ship installers that try to talk to localhost:8787 in user
+// homes. The build fails loudly rather than silently producing a broken
+// social experience.
+function resolveSocialBaseUrl(mode: string): string {
+    const env = process.env['GRIMOIRE_SOCIAL_BASE_URL'];
+    if (mode === 'production') {
+        if (!env) {
+            throw new Error(
+                'GRIMOIRE_SOCIAL_BASE_URL must be set for production builds. ' +
+                'Set it to your Cloudflare Worker URL (e.g. ' +
+                'https://grimoire-social.example.workers.dev) before running ' +
+                'electron-vite build / pnpm package:*.'
+            );
+        }
+        if (!env.startsWith('https://')) {
+            throw new Error(
+                `GRIMOIRE_SOCIAL_BASE_URL must be https:// in production builds (got "${env}").`
+            );
+        }
+        return env.replace(/\/+$/, '');
+    }
+    return env?.replace(/\/+$/, '') ?? 'http://localhost:8787';
+}
 
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+    const SOCIAL_BASE_URL = resolveSocialBaseUrl(mode);
+    return {
     main: {
         plugins: [
             externalizeDepsPlugin({
@@ -61,4 +85,5 @@ export default defineConfig({
             port: 5173,
         },
     },
+    };
 });

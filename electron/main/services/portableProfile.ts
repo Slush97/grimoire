@@ -1,5 +1,5 @@
 import { app } from 'electron';
-import { gzipSync, gunzipSync } from 'zlib';
+import { gzipSync, gunzipSync, constants as zlibConstants } from 'zlib';
 import { addProfile, generateProfileId, loadProfiles, type Profile, type ProfileMod } from './profiles';
 import { scanMods } from './mods';
 import { getModMetadata } from './metadata';
@@ -39,12 +39,33 @@ export function encodeShareCode(json: string): string {
     return PORTABLE_PROFILE_SHARE_PREFIX + base64UrlEncode(compressed);
 }
 
+// Mirror the server-side cap so a malicious / corrupted share code can't
+// inflate into a multi-MB allocation in the Electron main process. The
+// previous implementation called gunzipSync with no maxOutputLength, which
+// let a 16 KB compressed payload expand up to ~16 MB before failing.
+const MAX_INFLATED_SHARE_CODE_BYTES = 16 * 1024;
+
 export function decodeShareCode(code: string): string {
     if (!code.startsWith(PORTABLE_PROFILE_SHARE_PREFIX)) {
         throw new Error(`Share code missing "${PORTABLE_PROFILE_SHARE_PREFIX}" prefix`);
     }
     const body = code.slice(PORTABLE_PROFILE_SHARE_PREFIX.length).trim();
-    const decompressed = gunzipSync(base64UrlDecode(body));
+    let decompressed: Buffer;
+    try {
+        decompressed = gunzipSync(base64UrlDecode(body), {
+            // Hard ceiling: zlib raises ERR_BUFFER_TOO_LARGE when an output
+            // chunk would push the buffer past this. Caught below to surface
+            // a friendly error instead of a Node-internal message.
+            maxOutputLength: MAX_INFLATED_SHARE_CODE_BYTES,
+            // Match the server-side stream cap so behavior is symmetric.
+            finishFlush: zlibConstants.Z_FINISH,
+        });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        throw new Error(
+            `Invalid share code (gzip payload rejected: ${msg.slice(0, 120)})`
+        );
+    }
     return decompressed.toString('utf8');
 }
 
