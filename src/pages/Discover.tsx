@@ -11,6 +11,7 @@ import {
   X,
   ExternalLink,
   ShieldCheck,
+  Upload,
   User as UserIcon,
 } from 'lucide-react';
 import { SteamIcon } from '../components/social/SteamIcon';
@@ -27,6 +28,8 @@ import { Card, Button } from '../components/common/ui';
 import { EmptyState, PageHeader } from '../components/common/PageComponents';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import MyPublishedSection from '../components/social/MyPublishedSection';
+import PublishPickerDialog from '../components/social/PublishPickerDialog';
+import PublishDialog from '../components/social/PublishDialog';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatRelativeDate } from '../lib/dates';
 
@@ -81,6 +84,14 @@ export default function Discover() {
   // The active card-import target: profileId + a seed row from the list so the
   // dialog's left rail can render instantly while /v1/profiles/:id loads.
   const [importTarget, setImportTarget] = useState<CardProfile | null>(null);
+
+  // Publish flow: picker -> publish dialog. Two-stage so users can back out of
+  // the picker without committing to a specific local profile.
+  const [showPicker, setShowPicker] = useState(false);
+  const [publishTarget, setPublishTarget] = useState<{ id: string; name: string } | null>(null);
+  // Bumped on every successful publish so MyPublishedSection refetches without
+  // remounting (otherwise the new row only appears after a manual tab switch).
+  const [publishedTick, setPublishedTick] = useState(0);
 
   // Merge the viewer_has_liked field from a response into our local map.
   // Pulled out so loadProfiles and loadMore can share it.
@@ -226,23 +237,33 @@ export default function Discover() {
   // chip (signed-in). The pulse class fires when a signed-out user clicks a
   // card's like button so the right action is obvious.
   const headerAction = signedIn && user ? (
-    <div
-      className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-bg-secondary border border-white/10"
-      title={`Signed in as ${user.display_name}`}
-    >
-      {user.avatar_url ? (
-        <img
-          src={user.avatar_url}
-          alt=""
-          referrerPolicy="no-referrer"
-          className="w-5 h-5 rounded-full"
-        />
-      ) : (
-        <UserIcon className="w-4 h-4 text-text-secondary" />
-      )}
-      <span className="text-xs text-text-primary truncate max-w-[10rem]">
-        {user.display_name}
-      </span>
+    <div className="flex items-center gap-2">
+      <Button
+        size="sm"
+        icon={Upload}
+        onClick={() => setShowPicker(true)}
+        title="Pick a local profile and publish it to Discover"
+      >
+        Publish profile
+      </Button>
+      <div
+        className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-bg-secondary border border-white/10"
+        title={`Signed in as ${user.display_name}`}
+      >
+        {user.avatar_url ? (
+          <img
+            src={user.avatar_url}
+            alt=""
+            referrerPolicy="no-referrer"
+            className="w-5 h-5 rounded-full"
+          />
+        ) : (
+          <UserIcon className="w-4 h-4 text-text-secondary" />
+        )}
+        <span className="text-xs text-text-primary truncate max-w-[10rem]">
+          {user.display_name}
+        </span>
+      </div>
     </div>
   ) : (
     <div
@@ -269,16 +290,57 @@ export default function Discover() {
   return (
     <div className="h-full overflow-y-auto">
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <PageHeader
-        title="Discover"
-        description="Mod profiles published by other Grimoire users."
-        stats={
-          tab !== 'mine' && data
-            ? `${data.total} ${data.total === 1 ? 'profile' : 'profiles'}`
-            : undefined
-        }
-        action={headerAction}
-      />
+      <div>
+        <PageHeader
+          title="Discover"
+          description="Mod profiles published by other Grimoire users."
+          className="border-b-0 pb-3"
+        />
+        <div className="flex items-end justify-between gap-3 border-b border-border flex-wrap">
+          <div className="flex items-center gap-1">
+            {BROWSE_TABS.map(({ key, label, icon: Icon }) => {
+              const active = tab === key;
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTab(key)}
+                  className={`px-4 py-2 -mb-px border-b-2 inline-flex items-center gap-2 text-sm transition-colors cursor-pointer ${
+                    active
+                      ? 'border-accent text-text-primary'
+                      : 'border-transparent text-text-secondary hover:text-text-primary'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  {label}
+                </button>
+              );
+            })}
+            {signedIn && (
+              <button
+                type="button"
+                onClick={() => setTab('mine')}
+                className={`px-4 py-2 -mb-px border-b-2 inline-flex items-center gap-2 text-sm transition-colors cursor-pointer ${
+                  tab === 'mine'
+                    ? 'border-accent text-text-primary'
+                    : 'border-transparent text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <UserIcon className="w-4 h-4" />
+                Your profile
+              </button>
+            )}
+          </div>
+          <div className="flex items-center gap-3 pb-2">
+            {tab !== 'mine' && data && (
+              <span className="text-sm text-text-secondary">
+                {data.total} {data.total === 1 ? 'profile' : 'profiles'}
+              </span>
+            )}
+            {headerAction}
+          </div>
+        </div>
+      </div>
 
       {!signedIn && signInBusy && (
         <div className="text-xs text-text-secondary flex items-start gap-1.5">
@@ -309,43 +371,10 @@ export default function Discover() {
         </div>
       )}
 
-      <div className="flex items-center gap-1 border-b border-border">
-        {BROWSE_TABS.map(({ key, label, icon: Icon }) => {
-          const active = tab === key;
-          return (
-            <button
-              key={key}
-              type="button"
-              onClick={() => setTab(key)}
-              className={`px-4 py-2 -mb-px border-b-2 inline-flex items-center gap-2 text-sm transition-colors cursor-pointer ${
-                active
-                  ? 'border-accent text-text-primary'
-                  : 'border-transparent text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          );
-        })}
-        {signedIn && (
-          <button
-            type="button"
-            onClick={() => setTab('mine')}
-            className={`px-4 py-2 -mb-px border-b-2 inline-flex items-center gap-2 text-sm transition-colors cursor-pointer ${
-              tab === 'mine'
-                ? 'border-accent text-text-primary'
-                : 'border-transparent text-text-secondary hover:text-text-primary'
-            }`}
-          >
-            <UserIcon className="w-4 h-4" />
-            Your profile
-          </button>
-        )}
-      </div>
-
       {tab === 'mine' && signedIn && (
         <MyPublishedSection
+          refreshKey={publishedTick}
+          onPublishNew={() => setShowPicker(true)}
           onOpenProfile={(id) => {
             // Prefer the discover-list seed if it's there; otherwise the
             // dialog refetches detail and fills in the header from /v1/profiles/:id.
@@ -595,6 +624,28 @@ export default function Discover() {
       )}
 
       </div>
+      {showPicker && (
+        <PublishPickerDialog
+          onClose={() => setShowPicker(false)}
+          onPick={(picked) => {
+            setShowPicker(false);
+            setPublishTarget(picked);
+          }}
+        />
+      )}
+      {publishTarget && (
+        <PublishDialog
+          profileId={publishTarget.id}
+          profileName={publishTarget.name}
+          onClose={() => setPublishTarget(null)}
+          onPublished={() => {
+            // Reveal the new post immediately: jump to "Your profile" and
+            // bump the refresh tick so MyPublishedSection refetches.
+            setPublishedTick((n) => n + 1);
+            setTab('mine');
+          }}
+        />
+      )}
       {importTarget && (
         <ImportProfileDialog
           activeDeadlockPath={getActiveDeadlockPath(settings)}
