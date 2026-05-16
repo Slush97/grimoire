@@ -31,8 +31,23 @@ jobs:
       attestations: write
 
     steps:
-      - name: Checkout
+      - name: Checkout grimoire
         uses: actions/checkout@v4
+        with:
+          path: grimoire
+
+      # pnpm-workspace.yaml resolves @grimoire/social-types from
+      # ../grimoire-social/packages/*. Without this sibling checkout the
+      # workspace dep fails to resolve and pnpm install bails out.
+      # WORKSPACE_PAT is a fine-grained PAT scoped to Slush97/grimoire-social
+      # with Contents:Read (private repo, default GITHUB_TOKEN can't read it).
+      - name: Checkout grimoire-social (sibling for shared types)
+        uses: actions/checkout@v4
+        with:
+          repository: Slush97/grimoire-social
+          token: ${{ secrets.WORKSPACE_PAT }}
+          path: grimoire-social
+          ref: main
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -43,11 +58,22 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
+          cache: pnpm
+          cache-dependency-path: grimoire/pnpm-lock.yaml
+
+      # @grimoire/social-types declares zod as a peer dependency; the symlinked
+      # workspace package needs its own node_modules so the import resolves
+      # from the Electron build.
+      - name: Install grimoire-social deps (for the shared workspace package)
+        working-directory: grimoire-social
+        run: pnpm install --frozen-lockfile
 
       - name: Install dependencies
-        run: pnpm install
+        working-directory: grimoire
+        run: pnpm install --frozen-lockfile
 
       - name: Clean previous builds
+        working-directory: grimoire
         shell: bash
         run: |
           rm -rf dist release
@@ -55,6 +81,7 @@ jobs:
 
       - name: Build and package
         id: build
+        working-directory: grimoire
         shell: bash
         env:
           # Baked into the renderer by electron.vite.config.ts. Production
@@ -70,6 +97,7 @@ jobs:
 
       - name: List release directory
         if: always()
+        working-directory: grimoire
         shell: bash
         run: |
           echo "=== Release directory contents ==="
@@ -83,6 +111,7 @@ jobs:
           fi
 
       - name: Generate SHA256 checksums
+        working-directory: grimoire
         shell: bash
         run: |
           cd release
@@ -101,15 +130,15 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: |
-            release/*.exe
-            release/*.AppImage
-            release/*.deb
+            grimoire/release/*.exe
+            grimoire/release/*.AppImage
+            grimoire/release/*.deb
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.platform }}-build
-          path: release/*
+          path: grimoire/release/*
           if-no-files-found: error
           retention-days: 1
 
