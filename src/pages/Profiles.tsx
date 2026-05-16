@@ -343,7 +343,7 @@ export default function Profiles() {
                     }
                     icon={Layers}
                     accentEdge={isActive ? 'active' : 'none'}
-                    className={`transition-all duration-300 ${isActive ? '' : 'hover:border-white/10'}`}
+                    className={`@container/profile-card transition-all duration-300 ${isActive ? '' : 'hover:border-white/10'}`}
                     action={
                       <div className="flex items-center gap-2">
                         {!isRenamingThis && (
@@ -401,67 +401,76 @@ export default function Profiles() {
                         </div>
                       )}
 
-                      <div className="flex items-center gap-2 pt-3 border-t border-white/5">
-                        {!isActive && (
+                      <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5">
+                        <div className="flex items-center gap-2 flex-1 min-w-0 basis-full @sm/profile-card:basis-auto">
+                          {!isActive && (
+                            <Button
+                              size="sm"
+                              className="flex-1 min-w-0"
+                              onClick={() => handleApplyProfile(profile.id)}
+                              disabled={isApplying || isUpdating}
+                              isLoading={isApplying}
+                              icon={Play}
+                            >
+                              Apply
+                            </Button>
+                          )}
                           <Button
                             size="sm"
-                            className="flex-1"
-                            onClick={() => handleApplyProfile(profile.id)}
-                            disabled={isApplying || isUpdating}
-                            isLoading={isApplying}
-                            icon={Play}
+                            className="flex-1 min-w-0"
+                            variant="secondary"
+                            onClick={() => handleUpdateProfile(profile.id)}
+                            disabled={isUpdating || isApplying}
+                            isLoading={isUpdating}
+                            icon={Save}
+                            title="Overwrite with current mods"
                           >
-                            Apply
+                            Update
                           </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          className={isActive ? "flex-1" : ""}
-                          variant="secondary"
-                          onClick={() => handleUpdateProfile(profile.id)}
-                          disabled={isUpdating || isApplying}
-                          isLoading={isUpdating}
-                          icon={Save}
-                          title="Overwrite with current mods"
-                        >
-                          Update
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setExportingProfileId(profile.id)}
-                          disabled={isApplying || isUpdating}
-                          icon={Share2}
-                          title="Export / share profile"
-                          className="px-1.5"
-                        />
-                        {socialSignedIn && (
+                        </div>
+                        <div className="flex items-center gap-1 ml-auto">
                           <Button
                             size="sm"
                             variant="ghost"
-                            onClick={() => setPublishingProfileId(profile.id)}
+                            onClick={() => setExportingProfileId(profile.id)}
                             disabled={isApplying || isUpdating}
-                            icon={Globe}
-                            title="Publish to Discover"
+                            icon={Share2}
+                            title="Export / share profile"
+                            aria-label="Export profile"
                             className="px-1.5"
                           />
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => toggleExpand(profile.id)}
-                          icon={isExpanded ? ChevronUp : ChevronDown}
-                          className="px-1.5"
-                        />
-                        <Button
-                          size="sm"
-                          variant="danger"
-                          onClick={() => setDeleteConfirmId(profile.id)}
-                          disabled={isApplying || isUpdating}
-                          icon={Trash2}
-                          title="Delete Profile"
-                          className="px-1.5"
-                        />
+                          {socialSignedIn && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => setPublishingProfileId(profile.id)}
+                              disabled={isApplying || isUpdating}
+                              icon={Globe}
+                              title="Publish to Discover"
+                              aria-label="Publish to Discover"
+                              className="px-1.5"
+                            />
+                          )}
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => toggleExpand(profile.id)}
+                            icon={isExpanded ? ChevronUp : ChevronDown}
+                            title={isExpanded ? 'Collapse details' : 'Expand details'}
+                            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+                            className="px-1.5"
+                          />
+                          <Button
+                            size="sm"
+                            variant="danger"
+                            onClick={() => setDeleteConfirmId(profile.id)}
+                            disabled={isApplying || isUpdating}
+                            icon={Trash2}
+                            title="Delete Profile"
+                            aria-label="Delete profile"
+                            className="px-1.5"
+                          />
+                        </div>
                       </div>
 
                       {/* Expanded Content */}
