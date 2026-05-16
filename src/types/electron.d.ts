@@ -60,6 +60,8 @@ export interface CleanupResult {
 export interface GameinfoStatus {
     configured: boolean;
     message: string;
+    missing: boolean;
+    candidates: string[];
 }
 
 export interface OpenDialogOptions {
@@ -313,6 +315,7 @@ export interface ElectronAPI {
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
     openModsFolder: () => Promise<void>;
+    openGameFolder: () => Promise<void>;
 
     // Window control
     setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;

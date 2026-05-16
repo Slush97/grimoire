@@ -234,16 +234,20 @@ export async function cleanupAddons(): Promise<{
   return window.electronAPI.cleanupAddons();
 }
 
-export async function getGameinfoStatus(): Promise<{ configured: boolean; message: string }> {
+export async function getGameinfoStatus(): Promise<{ configured: boolean; message: string; missing: boolean; candidates: string[] }> {
   return window.electronAPI.getGameinfoStatus();
 }
 
-export async function fixGameinfo(): Promise<{ configured: boolean; message: string }> {
+export async function fixGameinfo(): Promise<{ configured: boolean; message: string; missing: boolean; candidates: string[] }> {
   return window.electronAPI.fixGameinfo();
 }
 
 export async function openModsFolder(): Promise<void> {
   return window.electronAPI.openModsFolder();
+}
+
+export async function openGameFolder(): Promise<void> {
+  return window.electronAPI.openGameFolder();
 }
 
 // Dialog helper for Settings page

@@ -71,6 +71,7 @@ export interface ElectronAPI {
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
     openModsFolder: () => Promise<void>;
+    openGameFolder: () => Promise<void>;
 
     // Window control
     setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
@@ -434,6 +435,8 @@ interface CleanupResult {
 interface GameinfoStatus {
     configured: boolean;
     message: string;
+    missing: boolean;
+    candidates: string[];
 }
 
 interface OpenDialogOptions {
@@ -813,6 +816,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getGameinfoStatus: () => ipcRenderer.invoke('get-gameinfo-status'),
     fixGameinfo: () => ipcRenderer.invoke('fix-gameinfo'),
     openModsFolder: () => ipcRenderer.invoke('open-mods-folder'),
+    openGameFolder: () => ipcRenderer.invoke('open-game-folder'),
 
     // Window control
     setAlwaysOnTop: (enabled: boolean) => ipcRenderer.invoke('set-always-on-top', enabled),
