@@ -122,11 +122,15 @@ ipcMain.handle('parse-portable-profile', (_, input: string): PortableProfile => 
 
 // resolve-portable-profile — looks up each entry against GameBanana and
 // returns the per-row exact/upgraded/unresolvable categorization for the
-// import preview UI.
+// import preview UI. Passes the active Deadlock path so the resolver can
+// flag entries that are already installed and skip their downloads. When no
+// path is configured, resolution still succeeds but the already-installed
+// hint is unavailable.
 ipcMain.handle(
     'resolve-portable-profile',
     async (_, profile: PortableProfile) => {
-        return resolvePortableProfile(profile);
+        const deadlockPath = getActiveDeadlockPath();
+        return resolvePortableProfile(profile, deadlockPath);
     }
 );
 

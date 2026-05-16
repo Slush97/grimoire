@@ -5,7 +5,7 @@ A portable JSON format for sharing mod loadouts between mod managers.
 The format was first implemented in [Grimoire](https://github.com/Slush97/grimoire) for Deadlock, but the schema is intentionally game and manager agnostic. A profile is just a named, ordered list of mod references, each pinned to a specific source (currently GameBanana) plus optional manager-specific extensions.
 
 * Format ID: `mod-profile`
-* Current schema version: `1.0`
+* Current schema version: `1.1`
 * File extension: `.modprofile.json`
 * Share code prefix: `mp1:`
 * MIME type (proposed): `application/vnd.modprofile+json`
@@ -97,7 +97,7 @@ Readers MUST refuse to apply a profile whose game does not match their target ga
 
 ## `mods[]` entries
 
-Each entry is one logical mod. If a single downloaded file expands into multiple VPKs at install time, that's an implementation detail handled by the receiving manager: still one entry per `(source, ref)` pair.
+Each entry is one logical mod. If a single downloaded file expands into multiple VPKs at install time, exporters MAY emit one entry per VPK and distinguish them via the optional `vpkStem` field on the ref; importers without `vpkStem` (pre-1.1 profiles) treat all VPKs from the same archive as interchangeable.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
@@ -120,6 +120,7 @@ Each entry is one logical mod. If a single downloaded file expands into multiple
 | `submissionId` | number | yes | The GameBanana `_idRow` of the mod submission. |
 | `fileId` | number | yes | The GameBanana `_idRow` of the specific downloadable file. Required because most submissions have multiple files (color variants, versions, etc.). |
 | `section` | string | no | GameBanana modelName: `"Mod"`, `"Sound"`, etc. Helps disambiguate cross-section lookups. Defaults to `"Mod"`. |
+| `vpkStem` | string | no | Added in 1.1. Variant key when a single GameBanana file expands into multiple VPKs. The exporter SHOULD derive this from the local VPK filename body (e.g. `skin_red` from `pak01_skin_red_dir.vpk`) and omit it when the body is uninformative (`dir`) or when the archive yields a single VPK. Importers SHOULD use it to match the correct local VPK and SHOULD fall back to archive-only matching when absent. Lowercased for cross-platform comparison. |
 
 #### Other sources
 
@@ -213,7 +214,7 @@ A foreign profile is untrusted input. At minimum:
 
 ## Conformance
 
-A reader claims conformance to schema version 1.0 if it:
+A reader claims conformance to schema version 1.x if it:
 
 1. Refuses files with `format !== "mod-profile"` or with a MAJOR other than `1`.
 2. Validates required fields per the tables above.

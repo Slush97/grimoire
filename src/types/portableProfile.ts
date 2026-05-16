@@ -4,7 +4,7 @@
  */
 
 export const PORTABLE_PROFILE_FORMAT = 'mod-profile';
-export const PORTABLE_PROFILE_SCHEMA_VERSION = '1.0';
+export const PORTABLE_PROFILE_SCHEMA_VERSION = '1.1';
 export const PORTABLE_PROFILE_SHARE_PREFIX = 'mp1:';
 export const PORTABLE_PROFILE_FILE_EXTENSION = '.modprofile.json';
 
@@ -31,6 +31,12 @@ export interface PortableGameBananaRef {
   submissionId: number;
   fileId: number;
   section?: string;
+  /** Variant discriminator when one GameBanana file expands into multiple
+   *  VPKs. Derived from the local VPK filename body (the `<body>` in
+   *  `pakNN_<body>.vpk`). Stable across users because it comes from inside
+   *  the archive. Omit when the archive yields a single VPK or when the
+   *  installer fell back to `pakNN_dir.vpk` (uninformative). */
+  vpkStem?: string;
 }
 
 export type PortableModRef = PortableGameBananaRef | Record<string, unknown>;
@@ -109,6 +115,11 @@ export interface PortableResolvedMod {
   resolvedFileName?: string;
   /** Human-readable reason for unresolvable status (e.g. "submission 404"). */
   reason?: string;
+  /** True when the resolved (submissionId, resolvedFileId) pair is already
+   *  installed locally. The dialog skips the download for these rows and
+   *  wires the on-disk VPK into the new profile as-is. Only populated when
+   *  resolution had a Deadlock path to scan against. */
+  alreadyInstalled?: boolean;
 }
 
 export interface PortableResolutionReport {
@@ -117,4 +128,5 @@ export interface PortableResolutionReport {
   exactCount: number;
   upgradedCount: number;
   unresolvableCount: number;
+  alreadyInstalledCount: number;
 }

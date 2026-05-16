@@ -86,9 +86,15 @@ export async function buildPortableProfile(
             metadata?.sourceFileName ||
             undefined;
 
+        const vpkStem = vpkStemOf(profileMod.fileName);
         mods.push({
             source: 'gamebanana',
-            ref: { submissionId: gbId, fileId, section: metadata?.sourceSection || 'Mod' },
+            ref: {
+                submissionId: gbId,
+                fileId,
+                section: metadata?.sourceSection || 'Mod',
+                ...(vpkStem !== null ? { vpkStem } : {}),
+            },
             enabled: profileMod.enabled,
             priority: profileMod.priority,
             hint: {
@@ -166,6 +172,9 @@ function validatePortable(obj: unknown): PortableProfile {
             const ref = m.ref as Record<string, unknown>;
             if (typeof ref.submissionId !== 'number') throw new Error(`mods[${i}].ref.submissionId missing`);
             if (typeof ref.fileId !== 'number') throw new Error(`mods[${i}].ref.fileId missing`);
+            if (ref.vpkStem !== undefined && typeof ref.vpkStem !== 'string') {
+                throw new Error(`mods[${i}].ref.vpkStem must be a string when present`);
+            }
         }
     }
 
@@ -190,26 +199,111 @@ export function parsePortableProfile(input: string): PortableProfile {
 
 /** Resolve each mod entry against its source. For GameBanana we pin the
  *  exact fileId, falling back to the newest non-archived file of the same
- *  submission when the pinned file is archived or missing. */
+ *  submission when the pinned file is archived or missing. When `deadlockPath`
+ *  is provided, the resolver also annotates each entry whose resolved file
+ *  is already on disk so the dialog can skip those downloads. */
 export async function resolvePortableProfile(
-    profile: PortableProfile
+    profile: PortableProfile,
+    deadlockPath?: string | null
 ): Promise<PortableResolutionReport> {
-    const resolved: PortableResolvedMod[] = [];
+    const installedIndex = deadlockPath
+        ? await buildInstalledIndex(deadlockPath)
+        : null;
 
+    const resolved: PortableResolvedMod[] = [];
     for (const entry of profile.mods) {
-        resolved.push(await resolveOne(entry));
+        const r = await resolveOne(entry);
+        if (
+            installedIndex &&
+            r.status !== 'unresolvable' &&
+            r.entry.source === 'gamebanana' &&
+            r.resolvedFileId !== undefined
+        ) {
+            const ref = r.entry.ref as { submissionId: number; vpkStem?: string };
+            const hit = lookupInstalled(installedIndex, ref.submissionId, r.resolvedFileId, ref.vpkStem);
+            if (hit) r.alreadyInstalled = true;
+        }
+        resolved.push(r);
     }
 
     let exactCount = 0;
     let upgradedCount = 0;
     let unresolvableCount = 0;
+    let alreadyInstalledCount = 0;
     for (const r of resolved) {
         if (r.status === 'exact') exactCount++;
         else if (r.status === 'upgraded') upgradedCount++;
         else unresolvableCount++;
+        if (r.alreadyInstalled) alreadyInstalledCount++;
     }
 
-    return { profile, resolved, exactCount, upgradedCount, unresolvableCount };
+    return {
+        profile,
+        resolved,
+        exactCount,
+        upgradedCount,
+        unresolvableCount,
+        alreadyInstalledCount,
+    };
+}
+
+/** Strip the `pakNN_` priority prefix and `.vpk` (with optional `_dir`)
+ *  suffix from an installed VPK filename to recover the body that originated
+ *  inside the source archive. Returns null when the body would be the
+ *  uninformative fallback `dir` that the install conflict-renamer assigns
+ *  when it has to give up on the archive's original VPK name. */
+function vpkStemOf(fileName: string): string | null {
+    const m = fileName.match(/^pak\d{2}_(.+?)\.vpk$/i);
+    if (!m) return null;
+    const body = m[1].replace(/_dir$/i, '');
+    if (!body || body.toLowerCase() === 'dir') return null;
+    return body.toLowerCase();
+}
+
+interface InstalledIndex {
+    /** Precise key `<gbId>:<fileId>:<vpkStem>`. Only populated for installed
+     *  VPKs whose filename body survived (i.e. not renamed to `pakNN_dir.vpk`). */
+    byVariant: Map<string, string>;
+    /** Fallback key `<gbId>:<fileId>` → first matching installed fileName.
+     *  Used when the portable ref lacks a vpkStem (single-VPK archives,
+     *  pre-1.1 exports) or when no precise match is found. */
+    byArchive: Map<string, string>;
+}
+
+/** Index installed mods by both precise (archive + variant stem) and fuzzy
+ *  (archive only) keys. Shared between resolution (to flag already-installed
+ *  entries) and finalize (to wire entries to existing local VPKs). */
+async function buildInstalledIndex(deadlockPath: string): Promise<InstalledIndex> {
+    const installed = await scanMods(deadlockPath);
+    const byVariant = new Map<string, string>();
+    const byArchive = new Map<string, string>();
+    for (const mod of installed) {
+        const meta = getModMetadata(mod.fileName);
+        if (meta?.gameBananaId === undefined || meta?.gameBananaFileId === undefined) continue;
+        const archiveKey = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
+        if (!byArchive.has(archiveKey)) byArchive.set(archiveKey, mod.fileName);
+        const stem = vpkStemOf(mod.fileName);
+        if (stem !== null) {
+            byVariant.set(`${archiveKey}:${stem}`, mod.fileName);
+        }
+    }
+    return { byVariant, byArchive };
+}
+
+/** Find the installed VPK that corresponds to a resolved portable entry.
+ *  Prefers exact `(archive, variant)` match when both sides carry a stem;
+ *  falls back to archive-only for single-VPK archives and pre-1.1 exports. */
+function lookupInstalled(
+    index: InstalledIndex,
+    submissionId: number,
+    fileId: number,
+    vpkStem?: string
+): string | null {
+    if (vpkStem) {
+        const hit = index.byVariant.get(`${submissionId}:${fileId}:${vpkStem.toLowerCase()}`);
+        if (hit) return hit;
+    }
+    return index.byArchive.get(`${submissionId}:${fileId}`) ?? null;
 }
 
 async function resolveOne(entry: PortableModEntry): Promise<PortableResolvedMod> {
@@ -284,23 +378,22 @@ export async function createProfileFromPortable(
     portable: PortableProfile,
     resolved: PortableResolvedMod[]
 ): Promise<Profile> {
-    const installed = await scanMods(deadlockPath);
-    const keyMap = new Map<string, string>();
-    for (const mod of installed) {
-        const meta = getModMetadata(mod.fileName);
-        if (meta?.gameBananaId !== undefined && meta?.gameBananaFileId !== undefined) {
-            keyMap.set(`${meta.gameBananaId}:${meta.gameBananaFileId}`, mod.fileName);
-        }
-    }
+    const installedIndex = await buildInstalledIndex(deadlockPath);
 
     const profileMods: ProfileMod[] = [];
+    const claimedVariants = new Set<string>();
     for (const r of resolved) {
         if (r.status === 'unresolvable') continue;
         if (r.entry.source !== 'gamebanana') continue;
         if (r.resolvedFileId === undefined) continue;
-        const ref = r.entry.ref as { submissionId: number };
-        const fileName = keyMap.get(`${ref.submissionId}:${r.resolvedFileId}`);
+        const ref = r.entry.ref as { submissionId: number; vpkStem?: string };
+        const fileName = lookupInstalled(installedIndex, ref.submissionId, r.resolvedFileId, ref.vpkStem);
         if (!fileName) continue;
+        // Multi-VPK archives may produce several portable entries that all
+        // resolve to the same file on disk when stems aren't carried. Skip
+        // duplicate wirings so each local VPK is claimed at most once.
+        if (claimedVariants.has(fileName)) continue;
+        claimedVariants.add(fileName);
 
         profileMods.push({
             fileName,
