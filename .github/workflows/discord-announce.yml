@@ -7,6 +7,11 @@ on:
         description: 'Release tag to announce (e.g. v1.9.3). Defaults to latest published release.'
         required: false
         type: string
+      everyone:
+        description: '@everyone ping (use sparingly: minor releases only, not patch hotfixes).'
+        required: false
+        type: boolean
+        default: false
 
 jobs:
   announce:
@@ -54,6 +59,7 @@ jobs:
           TAG: ${{ steps.rel.outputs.tag }}
           NAME: ${{ steps.rel.outputs.name }}
           URL: ${{ steps.rel.outputs.url }}
+          EVERYONE: ${{ inputs.everyone }}
         run: |
           set -euo pipefail
 
@@ -67,13 +73,26 @@ jobs:
           # Title falls back to the tag when the release has no name set.
           TITLE="${NAME:-$TAG}"
 
+          # @everyone is opt-in. Discord webhooks suppress the ping by default
+          # unless allowed_mentions explicitly parses "everyone". Mention goes
+          # at the front of content so the ping notification preview reads it.
+          if [ "$EVERYONE" = "true" ]; then
+            CONTENT="@everyone A new version of Grimoire is out: **$TAG**"
+            ALLOWED='{"parse":["everyone"]}'
+          else
+            CONTENT="A new version of Grimoire is out: **$TAG**"
+            ALLOWED='{"parse":[]}'
+          fi
+
           PAYLOAD="$(jq -n \
             --arg title "$TITLE" \
             --arg url "$URL" \
             --arg body "$BODY" \
-            --arg tag "$TAG" \
+            --arg content "$CONTENT" \
+            --argjson allowed "$ALLOWED" \
             '{
-              content: ("A new version of Grimoire is out: **" + $tag + "**"),
+              content: $content,
+              allowed_mentions: $allowed,
               embeds: [{
                 title: $title,
                 url: $url,
@@ -86,4 +105,4 @@ jobs:
             -d "$PAYLOAD" \
             "$WEBHOOK_URL"
 
-          echo "Announcement posted for $TAG."
+          echo "Announcement posted for $TAG (everyone=$EVERYONE)."
