@@ -419,6 +419,7 @@ export interface ElectronAPI {
     social: {
         getSessionStatus: () => Promise<import('./social').SocialSessionStatus>;
         login: () => Promise<import('./social').SocialSessionStatus>;
+        cancelLogin: () => Promise<void>;
         logout: () => Promise<import('./social').SocialSessionStatus>;
         me: () => Promise<import('@grimoire/social-types').MeResponse>;
         listProfiles: (args?: {

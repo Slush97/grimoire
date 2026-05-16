@@ -425,6 +425,10 @@ export async function socialLogin(): Promise<SocialSessionStatus> {
   return window.electronAPI.social.login();
 }
 
+export async function socialCancelLogin(): Promise<void> {
+  return window.electronAPI.social.cancelLogin();
+}
+
 export async function socialLogout(): Promise<SocialSessionStatus> {
   return window.electronAPI.social.logout();
 }

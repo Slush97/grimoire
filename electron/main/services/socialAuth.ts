@@ -1,14 +1,15 @@
-// Login lifecycle for Grimoire Social. Owns the Steam OpenID BrowserWindow
-// flow, persists the session token via Electron's ASYNC safeStorage API, and
-// gates persistence on Linux per ADR-011: when no real secret store is
-// available (gnome-libsecret / kwallet / Portal), refuse to persist; the user
-// re-signs each launch.
+// Login lifecycle for Grimoire Social. Drives the Steam OpenID flow in the
+// user's default browser (Steam Guard + password manager + sign-in trust all
+// work best there) and waits for the grimoire://auth/done deep link to come
+// back through the OS protocol handler. Persists the session token via
+// Electron's ASYNC safeStorage API; on Linux without a real keychain
+// (gnome-libsecret / kwallet / Portal) we refuse to persist per ADR-011.
 //
 // The session bearer itself lives in social.ts module memory and is set via
 // social.setSessionToken. The renderer never imports either module; it talks
 // to the social IPC handlers, which delegate here.
 
-import { app, BrowserWindow, safeStorage } from 'electron';
+import { app, safeStorage, shell } from 'electron';
 import { EventEmitter } from 'events';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -185,67 +186,58 @@ export function isGrimoireAuthUrl(url: string): boolean {
     return parseGrimoireAuthUrl(url) !== null;
 }
 
-let activeLoginResolver:
-    | { resolve: (parts: AuthCallbackParts) => void; reject: (err: Error) => void }
-    | null = null;
+// 10 min cap. Steam OpenID round-trips are seconds when the user is already
+// logged into Steam in their browser; the long tail is Steam Guard email
+// codes. Longer than this and the user has almost certainly abandoned.
+const LOGIN_TIMEOUT_MS = 10 * 60 * 1000;
 
-/** Open a Steam OpenID login window as a child of the main window. Resolves
- *  when grimoire://auth/done?token=... is intercepted; rejects if the window
- *  closes first or the redirect URL is malformed. */
-export async function login(parentWindow: BrowserWindow | null): Promise<SessionStatus> {
+interface ActiveLogin {
+    resolve: (parts: AuthCallbackParts) => void;
+    reject: (err: Error) => void;
+    timer: NodeJS.Timeout;
+}
+
+let activeLoginResolver: ActiveLogin | null = null;
+
+/** Reject and clear the active login (if any) with the given error.
+ *  Idempotent: a no-op when nothing is in flight. */
+function rejectActiveLogin(err: Error): void {
+    const current = activeLoginResolver;
+    if (!current) return;
+    activeLoginResolver = null;
+    clearTimeout(current.timer);
+    current.reject(err);
+}
+
+/** Cancel an in-flight external-browser sign-in. Called from the renderer via
+ *  IPC when the user clicks "Cancel" on the spinner. Safe to call when no
+ *  login is in progress. */
+export function cancelLogin(): void {
+    rejectActiveLogin(new Error('Sign-in cancelled'));
+}
+
+/** Open the Steam OpenID begin URL in the user's default browser. Resolves
+ *  when grimoire://auth/done?token=... comes back through the OS protocol
+ *  handler (cold-launch argv or second-instance event), or rejects on
+ *  timeout / cancel. */
+export async function login(): Promise<SessionStatus> {
     if (activeLoginResolver) {
         throw new Error('A Grimoire Social login is already in progress');
     }
 
-    const authWindow = new BrowserWindow({
-        width: 720,
-        height: 820,
-        title: 'Sign in to Grimoire Social',
-        parent: parentWindow ?? undefined,
-        modal: parentWindow !== null,
-        autoHideMenuBar: true,
-        webPreferences: {
-            contextIsolation: true,
-            nodeIntegration: false,
-            sandbox: true,
-        },
-    });
-
     const result = await new Promise<AuthCallbackParts>((resolve, reject) => {
-        activeLoginResolver = { resolve, reject };
+        const timer = setTimeout(() => {
+            rejectActiveLogin(
+                new Error(
+                    'Sign-in timed out. Finish in your browser and try again, or cancel and retry.'
+                )
+            );
+        }, LOGIN_TIMEOUT_MS);
+        activeLoginResolver = { resolve, reject, timer };
 
-        const handleRedirect = (event: Electron.Event, url: string): void => {
-            const parts = parseGrimoireAuthUrl(url);
-            if (!parts) return;
-            event.preventDefault();
-            if (activeLoginResolver) {
-                activeLoginResolver.resolve(parts);
-            }
-            if (!authWindow.isDestroyed()) authWindow.close();
-        };
-
-        authWindow.webContents.on('will-redirect', handleRedirect);
-        authWindow.webContents.on('will-navigate', handleRedirect);
-
-        authWindow.on('closed', () => {
-            if (activeLoginResolver) {
-                activeLoginResolver.reject(new Error('Sign-in window was closed before completion'));
-            }
+        shell.openExternal(getAuthBeginUrl()).catch((err) => {
+            rejectActiveLogin(err instanceof Error ? err : new Error(String(err)));
         });
-
-        authWindow.webContents.on('did-fail-load', (_e, _code, description, failingUrl) => {
-            // Failed navigation to grimoire:// is expected and already handled
-            // via will-redirect/will-navigate. Anything else is a real error.
-            if (failingUrl && failingUrl.toLowerCase().startsWith('grimoire://')) return;
-            console.warn('[socialAuth] Auth window did-fail-load:', description, failingUrl);
-        });
-
-        authWindow.loadURL(getAuthBeginUrl()).catch((err) => {
-            if (activeLoginResolver) activeLoginResolver.reject(err);
-            if (!authWindow.isDestroyed()) authWindow.close();
-        });
-    }).finally(() => {
-        activeLoginResolver = null;
     });
 
     setSessionToken(result.token);
@@ -302,13 +294,18 @@ export async function clearLocalAfterAccountDeletion(): Promise<void> {
 }
 
 /** Handle a grimoire://auth/done URL that arrived via the OS protocol
- *  handler (cold-launch argv or second-instance event), as a fallback for
- *  cases where the in-window intercept didn't fire. */
+ *  handler (cold-launch argv or second-instance event). This is the primary
+ *  return path for the external-browser sign-in flow; if a login() promise is
+ *  in flight it resolves that, otherwise (e.g. cold launch via deep link) the
+ *  session is hydrated here directly. */
 export async function handleProtocolAuthCallback(url: string): Promise<void> {
     const parts = parseGrimoireAuthUrl(url);
     if (!parts) return;
-    if (activeLoginResolver) {
-        activeLoginResolver.resolve(parts);
+    const current = activeLoginResolver;
+    if (current) {
+        activeLoginResolver = null;
+        clearTimeout(current.timer);
+        current.resolve(parts);
         return;
     }
     setSessionToken(parts.token);

@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import {
   getSocialSessionStatus,
+  socialCancelLogin,
   socialDeleteAccount,
   socialLogin,
   socialLogout,
@@ -16,6 +17,7 @@ interface SocialStore {
 
   hydrate: () => Promise<void>;
   login: () => Promise<void>;
+  cancelLogin: () => Promise<void>;
   logout: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   clearError: () => void;
@@ -58,6 +60,17 @@ export const useSocialStore = create<SocialStore>((set, get) => ({
         loading: false,
       });
       throw err;
+    }
+  },
+
+  cancelLogin: async () => {
+    // Main resolves the in-flight login promise with a rejection, which lands
+    // in the login() catch above and clears `loading` for us. Errors from the
+    // IPC call itself are harmless (no login in flight) — swallow.
+    try {
+      await socialCancelLogin();
+    } catch {
+      /* no-op */
     }
   },
 

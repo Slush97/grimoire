@@ -28,6 +28,10 @@ interface ImportProfileDialogProps {
   hideNsfwPreviews: boolean;
   onClose: () => void;
   onImported: () => void;
+  // When provided, the dialog skips the paste-and-click step: the input is
+  // prefilled and parsed automatically. Used by the Discover flow to hand a
+  // share code straight from a profile card into resolution.
+  initialInput?: string;
 }
 
 type RowStatus =
@@ -43,6 +47,7 @@ interface RowState {
   selected: boolean;
   status: RowStatus;
   statusMessage?: string;
+  progress?: { downloaded: number; total: number };
 }
 
 function gbId(mod: PortableResolvedMod): number | null {
@@ -56,8 +61,9 @@ export default function ImportProfileDialog({
   hideNsfwPreviews,
   onClose,
   onImported,
+  initialInput,
 }: ImportProfileDialogProps) {
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState(initialInput ?? '');
   const [parsed, setParsed] = useState<PortableProfile | null>(null);
   const [report, setReport] = useState<PortableResolutionReport | null>(null);
   const [rows, setRows] = useState<RowState[]>([]);
@@ -67,6 +73,7 @@ export default function ImportProfileDialog({
   const [finalizeError, setFinalizeError] = useState<string | null>(null);
   const [importedProfileName, setImportedProfileName] = useState<string | null>(null);
   const [profileName, setProfileName] = useState('');
+  const [includeAutoexec, setIncludeAutoexec] = useState(true);
 
   const rowsRef = useRef<RowState[]>([]);
   useEffect(() => { rowsRef.current = rows; }, [rows]);
@@ -76,6 +83,9 @@ export default function ImportProfileDialog({
   // on every keystroke, racing the importedProfileName guard.
   const profileNameRef = useRef('');
   useEffect(() => { profileNameRef.current = profileName; }, [profileName]);
+
+  const includeAutoexecRef = useRef(true);
+  useEffect(() => { includeAutoexecRef.current = includeAutoexec; }, [includeAutoexec]);
 
   const trackedIds = useMemo(() => {
     const s = new Set<number>();
@@ -127,7 +137,18 @@ export default function ImportProfileDialog({
       updateRowByGb(modId, { status: 'failed', statusMessage: message });
     });
 
-    return () => { unsubQueue(); unsubComplete(); unsubError(); };
+    const unsubProgress = window.electronAPI.onDownloadProgress(({ modId, downloaded, total }) => {
+      if (!trackedIdsRef.current.has(modId)) return;
+      setRows((prev) =>
+        prev.map((r) =>
+          gbId(r.mod) === modId
+            ? { ...r, progress: { downloaded, total } }
+            : r
+        )
+      );
+    });
+
+    return () => { unsubQueue(); unsubComplete(); unsubError(); unsubProgress(); };
   }, []);
 
   const handleParse = useCallback(async () => {
@@ -164,6 +185,18 @@ export default function ImportProfileDialog({
   const handleFile = useCallback(async (file: File) => {
     const text = await file.text();
     setInput(text);
+  }, []);
+
+  // Auto-parse when invoked with a prefilled share code (Discover → Import).
+  const didAutoParseRef = useRef(false);
+  useEffect(() => {
+    if (didAutoParseRef.current) return;
+    if (!initialInput || !initialInput.trim()) return;
+    didAutoParseRef.current = true;
+    void handleParse();
+    // handleParse is stable for the lifetime of `input`; we only want this to
+    // run once for the prefilled value.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const toggleRow = useCallback((idx: number) => {
@@ -237,8 +270,23 @@ export default function ImportProfileDialog({
       }
       try {
         const finalName = profileNameRef.current.trim() || parsed.profile.name;
+        const hasAutoexec = !!parsed.extensions?.grimoire?.autoexecCommands?.length;
+        const dropAutoexec = hasAutoexec && !includeAutoexecRef.current;
+        const finalProfile = dropAutoexec
+          ? {
+              ...parsed,
+              profile: { ...parsed.profile, name: finalName },
+              extensions: {
+                ...parsed.extensions,
+                grimoire: {
+                  ...parsed.extensions?.grimoire,
+                  autoexecCommands: undefined,
+                },
+              },
+            }
+          : { ...parsed, profile: { ...parsed.profile, name: finalName } };
         const created = await finalizePortableImport({
-          profile: { ...parsed, profile: { ...parsed.profile, name: finalName } },
+          profile: finalProfile,
           resolved: installedEntries,
         });
         setImportedProfileName(created.name);
@@ -266,7 +314,7 @@ export default function ImportProfileDialog({
 
   return (
     <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="import-profile-title"
@@ -276,12 +324,12 @@ export default function ImportProfileDialog({
         className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-start justify-between p-6 border-b border-white/10">
+        <div className="flex items-start justify-between p-4 sm:p-6 border-b border-white/10">
           <div className="min-w-0">
-            <h2 id="import-profile-title" className="text-xl font-bold text-text-primary">
+            <h2 id="import-profile-title" className="text-lg sm:text-xl font-bold text-text-primary">
               Import Profile
             </h2>
-            <p className="text-sm text-text-secondary mt-1">
+            <p className="hidden sm:block text-sm text-text-secondary mt-1">
               Paste a share code or load a .modprofile.json file exported from Grimoire's Profiles tab. This format is Grimoire-only and not compatible with other mod managers.
             </p>
           </div>
@@ -295,7 +343,7 @@ export default function ImportProfileDialog({
         </div>
 
         {!parsed && (
-          <div className="p-6 border-b border-white/10 space-y-3">
+          <div className="p-4 sm:p-6 border-b border-white/10 space-y-3">
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
@@ -332,7 +380,7 @@ export default function ImportProfileDialog({
 
         {parsed && report && (
           <>
-            <div className="px-6 py-4 border-b border-white/10">
+            <div className="px-4 sm:px-6 py-4 border-b border-white/10">
               <label className="block text-[11px] uppercase tracking-wider text-text-secondary mb-1">
                 Save as
               </label>
@@ -375,7 +423,7 @@ export default function ImportProfileDialog({
               </div>
             </div>
 
-            <div className="px-6 py-3 sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10">
+            <div className="px-4 sm:px-6 py-3 sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10">
               <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
                 <input
                   type="checkbox"
@@ -398,15 +446,31 @@ export default function ImportProfileDialog({
                   const mod = r.mod;
                   const hint = mod.entry.hint;
                   const isUnresolvable = mod.status === 'unresolvable';
+                  const progressPct =
+                    r.status === 'downloading' && r.progress && r.progress.total > 0
+                      ? Math.min(100, (r.progress.downloaded / r.progress.total) * 100)
+                      : null;
                   return (
-                    <li key={idx} className="px-6 py-4">
-                      <div className="flex items-center gap-4">
+                    <li key={idx} className="relative px-4 sm:px-6 py-4">
+                      {r.status === 'downloading' && (
+                        <div className="absolute top-0 left-0 right-0 h-0.5 bg-white/5 overflow-hidden">
+                          {progressPct === null ? (
+                            <div className="h-full w-1/3 bg-accent/70 animate-pulse" />
+                          ) : (
+                            <div
+                              className="h-full bg-accent transition-[width] duration-150 ease-out"
+                              style={{ width: `${progressPct}%` }}
+                            />
+                          )}
+                        </div>
+                      )}
+                      <div className="flex items-center gap-3 sm:gap-4">
                         <input
                           type="checkbox"
                           checked={r.selected}
                           onChange={() => toggleRow(idx)}
                           disabled={isUnresolvable || importing}
-                          className="w-4 h-4 accent-accent cursor-pointer disabled:cursor-not-allowed"
+                          className="w-4 h-4 accent-accent cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
                           aria-label={`Toggle ${hint?.name ?? 'mod'}`}
                         />
                         <ModThumbnail
@@ -414,56 +478,67 @@ export default function ImportProfileDialog({
                           alt={hint?.name ?? 'Mod'}
                           nsfw={hint?.nsfw}
                           hideNsfw={hideNsfwPreviews}
-                          className="w-20 h-14 flex-shrink-0 rounded-sm bg-bg-tertiary"
+                          className="w-14 h-10 sm:w-20 sm:h-14 flex-shrink-0 rounded-sm bg-bg-tertiary"
                         />
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-medium text-text-primary truncate">
                             {hint?.name ?? `Submission #${gbId(mod) ?? '?'}`}
                           </div>
                           <div className="text-xs text-text-secondary flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                            {hint?.category && <span>{hint.category}</span>}
-                            {hint?.fileLabel && <span>· {hint.fileLabel}</span>}
-                            <span>· priority {mod.entry.priority}</span>
+                            {hint?.category && <span className="truncate max-w-[12rem]">{hint.category}</span>}
+                            {hint?.fileLabel && <span className="hidden sm:inline">· {hint.fileLabel}</span>}
+                            <span>· p{mod.entry.priority}</span>
                             {!mod.entry.enabled && <span className="text-text-tertiary">· disabled</span>}
                           </div>
                           {mod.status === 'upgraded' && (
                             <div className="text-xs text-blue-300 mt-1 inline-flex items-center gap-1">
-                              <ArrowUpCircle className="w-3.5 h-3.5" />
-                              Original file no longer available, will use newest version
+                              <ArrowUpCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span className="truncate">Original file no longer available, will use newest version</span>
                             </div>
                           )}
                           {mod.status === 'unresolvable' && (
                             <div className="text-xs text-red-400 mt-1 inline-flex items-center gap-1">
-                              <AlertTriangle className="w-3.5 h-3.5" />
-                              {mod.reason ?? 'Not available on GameBanana'}
+                              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span className="truncate">{mod.reason ?? 'Not available on GameBanana'}</span>
+                            </div>
+                          )}
+                          {r.status === 'downloading' && progressPct !== null && (
+                            <div className="text-[10px] text-text-tertiary mt-0.5 sm:hidden font-mono">
+                              {Math.round(progressPct)}%
                             </div>
                           )}
                         </div>
-                        <div className="text-sm flex-shrink-0 text-right min-w-[100px]">
+                        <div className="text-sm flex-shrink-0 text-right sm:min-w-[100px]">
                           {r.status === 'pending' && !isUnresolvable && (
                             <span className="text-text-tertiary text-xs">Ready</span>
                           )}
                           {r.status === 'queued' && (
-                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Queued
+                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs" title="Queued">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                              <span className="hidden sm:inline">Queued</span>
                             </span>
                           )}
                           {r.status === 'downloading' && (
-                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs">
-                              <Loader2 className="w-3.5 h-3.5 animate-spin" /> Downloading
+                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs" title="Downloading">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+                              <span className="hidden sm:inline">
+                                {progressPct !== null ? `${Math.round(progressPct)}%` : 'Downloading'}
+                              </span>
                             </span>
                           )}
                           {r.status === 'installed' && (
-                            <span className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs">
-                              <CheckCircle2 className="w-3.5 h-3.5" /> Installed
+                            <span className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs" title="Installed">
+                              <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span className="hidden sm:inline">Installed</span>
                             </span>
                           )}
                           {r.status === 'failed' && (
                             <span
                               className="text-red-400 inline-flex items-center gap-1.5 justify-end text-xs"
-                              title={r.statusMessage}
+                              title={r.statusMessage ?? 'Failed'}
                             >
-                              <AlertTriangle className="w-3.5 h-3.5" /> Failed
+                              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span className="hidden sm:inline">Failed</span>
                             </span>
                           )}
                           {r.status === 'skipped' && (
@@ -478,32 +553,47 @@ export default function ImportProfileDialog({
             </div>
 
             {parsed.extensions?.grimoire?.autoexecCommands?.length ? (
-              <div className="px-6 py-3 border-t border-white/5 bg-yellow-500/5">
+              <div className="px-4 sm:px-6 py-3 border-t border-white/5 bg-yellow-500/5">
                 <div className="text-xs text-yellow-200 flex items-start gap-2">
                   <Terminal className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                  <div className="min-w-0">
-                    <div className="font-medium">Autoexec commands from this profile</div>
-                    <div className="mt-1 space-y-0.5 max-h-24 overflow-y-auto font-mono text-[11px] text-text-secondary">
+                  <div className="min-w-0 flex-1">
+                    <label className="flex items-center gap-2 cursor-pointer w-fit">
+                      <input
+                        type="checkbox"
+                        checked={includeAutoexec}
+                        onChange={(e) => setIncludeAutoexec(e.target.checked)}
+                        disabled={importing || !!importedProfileName}
+                        className="accent-accent cursor-pointer disabled:cursor-not-allowed"
+                        aria-label="Include autoexec commands from this profile"
+                      />
+                      <span className="font-medium">Include autoexec commands from this profile</span>
+                    </label>
+                    <div className={`mt-1 space-y-0.5 max-h-24 overflow-y-auto font-mono text-[11px] text-text-secondary ${includeAutoexec ? '' : 'opacity-50 line-through'}`}>
                       {parsed.extensions.grimoire.autoexecCommands.map((cmd, i) => (
                         <div key={i} className="truncate" title={cmd}>{cmd}</div>
                       ))}
                     </div>
                     <div className="text-xs text-text-secondary mt-1">
-                      These will be written to autoexec.cfg when you apply the imported profile.
+                      {includeAutoexec
+                        ? 'These will be written to autoexec.cfg when you apply the imported profile.'
+                        : 'These will be discarded. Your autoexec.cfg will not be modified by this profile.'}
                     </div>
                   </div>
                 </div>
               </div>
             ) : null}
 
-            <div className="border-t border-white/10 p-4 flex items-center justify-between gap-3">
-              <div className="text-xs text-text-secondary">
+            <div className="border-t border-white/10 p-3 sm:p-4 flex items-center justify-between gap-3 flex-wrap">
+              <div className="text-xs text-text-secondary min-w-0 flex-1">
                 {importedProfileName ? (
-                  <span className="text-green-400 inline-flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5" /> Imported as "{importedProfileName}"
+                  <span className="text-green-400 inline-flex items-center gap-1.5 min-w-0">
+                    <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                    <span className="truncate">Imported as "{importedProfileName}"</span>
                   </span>
                 ) : importing ? (
-                  `${counts.downloading} downloading · ${counts.queued} queued · ${counts.installed} installed${counts.failed > 0 ? ` · ${counts.failed} failed` : ''}`
+                  <span className="truncate inline-block max-w-full">
+                    {counts.downloading}↓ · {counts.queued} queued · {counts.installed} done{counts.failed > 0 ? ` · ${counts.failed} failed` : ''}
+                  </span>
                 ) : (
                   `${selectedCount} of ${selectableCount} selected`
                 )}

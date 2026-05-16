@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom';
 import {
   Boxes,
   Compass,
+  Globe2,
   Vault,
   Target,
   ScrollText,
@@ -268,6 +269,7 @@ export default function Sidebar() {
     const items: NavItem[] = [
       { to: '/', icon: Boxes, label: 'Installed', tooltip: 'Mods currently in your Deadlock addons folder.', badge: installedCount, badgeTone: 'muted' },
       { to: '/browse', icon: Compass, label: 'Browse', tooltip: 'Discover and download mods from GameBanana.' },
+      { to: '/discover', icon: Globe2, label: 'Discover', tooltip: 'Browse and import profiles published by other Grimoire users.' },
       { to: '/locker', icon: Vault, label: 'Locker', tooltip: 'Active cosmetic skins, organized by hero.' },
       { to: '/crosshair', icon: Target, label: 'Crosshair', tooltip: 'Custom crosshair editor.', experimental: 'crosshair' },
       { to: '/autoexec', icon: ScrollText, label: 'Autoexec', tooltip: 'Console commands that run at game launch.' },

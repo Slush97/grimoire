@@ -173,6 +173,7 @@ export interface ElectronAPI {
     social: {
         getSessionStatus: () => Promise<SocialSessionStatus>;
         login: () => Promise<SocialSessionStatus>;
+        cancelLogin: () => Promise<void>;
         logout: () => Promise<SocialSessionStatus>;
         me: () => Promise<MeResponse>;
         listProfiles: (args?: {
@@ -957,6 +958,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     social: {
         getSessionStatus: () => ipcRenderer.invoke('social:getSessionStatus'),
         login: () => ipcRenderer.invoke('social:login'),
+        cancelLogin: () => ipcRenderer.invoke('social:cancelLogin'),
         logout: () => ipcRenderer.invoke('social:logout'),
         me: () => ipcRenderer.invoke('social:me'),
         listProfiles: (args?: {

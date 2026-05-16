@@ -2,7 +2,7 @@
 // boundary; the renderer asks main to do an authed action and main attaches
 // the token internally (same posture as the deadlock-api key handling).
 
-import { BrowserWindow, ipcMain } from 'electron';
+import { ipcMain } from 'electron';
 import type {
     LikeResponse,
     ListProfilesResponse,
@@ -25,6 +25,7 @@ import {
     type ListProfilesArgs,
 } from '../services/social';
 import {
+    cancelLogin as socialCancelLogin,
     clearLocalAfterAccountDeletion,
     getSessionStatus,
     login as socialLogin,
@@ -46,9 +47,12 @@ ipcMain.handle('social:getSessionStatus', (): SessionStatus => {
     return getSessionStatus();
 });
 
-ipcMain.handle('social:login', async (event): Promise<SessionStatus> => {
-    const parent = BrowserWindow.fromWebContents(event.sender) ?? getMainWindow();
-    return socialLogin(parent);
+ipcMain.handle('social:login', async (): Promise<SessionStatus> => {
+    return socialLogin();
+});
+
+ipcMain.handle('social:cancelLogin', (): void => {
+    socialCancelLogin();
 });
 
 ipcMain.handle('social:logout', async (): Promise<SessionStatus> => {

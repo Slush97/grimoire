@@ -712,6 +712,11 @@ export default function Settings() {
           }
         />
 
+        {/* Grimoire Social */}
+        <Card title="Grimoire Social" icon={Globe} className="lg:col-span-2">
+          <SocialAccountSection />
+        </Card>
+
         {/* Preferences */}
         <Card title="Preferences" icon={Shield}>
           <div className="space-y-6">
@@ -766,11 +771,6 @@ export default function Settings() {
               )}
             </div>
           </div>
-        </Card>
-
-        {/* Grimoire Social */}
-        <Card title="Grimoire Social" icon={Globe} className="lg:col-span-2">
-          <SocialAccountSection />
         </Card>
 
         {/* Experimental Features */}
