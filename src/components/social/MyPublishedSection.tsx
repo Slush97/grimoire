@@ -9,6 +9,7 @@ import {
   Sparkles,
   Pencil,
   Globe2,
+  Upload,
 } from 'lucide-react';
 import { Button, Badge } from '../common/ui';
 import { EmptyState } from '../common/PageComponents';
@@ -26,6 +27,10 @@ interface MyPublishedSectionProps {
   // section refetches without remounting.
   refreshKey?: number;
   onOpenProfile?: (profileId: string) => void;
+  // Opens the parent's "pick a local profile to publish" flow. Surfaced from
+  // both the empty state and the list header so a signed-in user can start a
+  // new post from this tab.
+  onPublishNew?: () => void;
   // Notify parent when a profile was unpublished so the main Discover list
   // can drop the row optimistically.
   onUnpublished?: (profileId: string) => void;
@@ -47,6 +52,7 @@ type EditTarget = {
 export default function MyPublishedSection({
   refreshKey,
   onOpenProfile,
+  onPublishNew,
   onUnpublished,
   onUpdated,
 }: MyPublishedSectionProps) {
@@ -144,8 +150,23 @@ export default function MyPublishedSection({
         <EmptyState
           icon={Globe2}
           title="You haven't published anything yet"
-          description="Open Profiles, pick one, and click Publish to Discover."
+          description="Pick one of your local profiles and post it to Discover."
+          action={
+            onPublishNew ? (
+              <Button icon={Upload} onClick={onPublishNew}>
+                Publish a profile
+              </Button>
+            ) : undefined
+          }
         />
+      )}
+
+      {data && data.profiles.length > 0 && onPublishNew && (
+        <div className="flex justify-end">
+          <Button size="sm" variant="secondary" icon={Upload} onClick={onPublishNew}>
+            Publish another
+          </Button>
+        </div>
       )}
 
       {data && data.profiles.length > 0 && (
