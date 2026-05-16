@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Globe2,
   Heart,
@@ -7,6 +7,7 @@ import {
   Clock,
   Flame,
   CloudOff,
+  Loader2,
   X,
   ExternalLink,
   ShieldCheck,
@@ -66,12 +67,13 @@ export default function Discover() {
   const [tab, setTab] = useState<TabKey>('top');
   const [data, setData] = useState<SocialListProfilesResponse | null>(null);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [likingId, setLikingId] = useState<string | null>(null);
-  // Tracks the viewer's like state per profile so toggling works without
-  // depending on the server returning an error on duplicate Like. The list
-  // endpoint doesn't include viewer_has_liked, so we start empty and learn
-  // the truth from each like/unlike response.
+  // Tracks the viewer's like state per profile. Seeded from the list response
+  // when the server returns viewer_has_liked (only when authenticated), and
+  // kept in sync by each like/unlike response. Cards without an entry default
+  // to "not liked" — same as before the field existed on the wire.
   const [viewerLiked, setViewerLiked] = useState<Record<string, boolean>>({});
   // Pulses the header sign-in button when a signed-out user clicks Like.
   const [signInPulse, setSignInPulse] = useState(false);
@@ -80,23 +82,84 @@ export default function Discover() {
   // dialog's left rail can render instantly while /v1/profiles/:id loads.
   const [importTarget, setImportTarget] = useState<CardProfile | null>(null);
 
+  // Merge the viewer_has_liked field from a response into our local map.
+  // Pulled out so loadProfiles and loadMore can share it.
+  const mergeViewerLiked = useCallback((profiles: SocialListProfilesResponse['profiles']) => {
+    setViewerLiked((prev) => {
+      const next = { ...prev };
+      for (const p of profiles) {
+        if (typeof p.viewer_has_liked === 'boolean') {
+          next[p.id] = p.viewer_has_liked;
+        }
+      }
+      return next;
+    });
+  }, []);
+
   const loadProfiles = useCallback(async () => {
     if (tab === 'mine') return;
     setLoading(true);
     setError(null);
     try {
-      const res = await socialListProfiles({ sort: tab, hideNsfw });
+      const res = await socialListProfiles({ sort: tab, hideNsfw, page: 1 });
       setData(res);
+      mergeViewerLiked(res.profiles);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
-  }, [tab, hideNsfw]);
+  }, [tab, hideNsfw, mergeViewerLiked]);
 
   useEffect(() => {
     void loadProfiles();
   }, [loadProfiles]);
+
+  // Are more profiles available beyond what's currently in `data.profiles`?
+  // Drives both the observer sentinel rendering and the early-out in loadMore.
+  const hasMore = !!(data && data.profiles.length < data.total);
+
+  const loadMore = useCallback(async () => {
+    if (!data || loading || loadingMore || tab === 'mine' || !hasMore) return;
+    setLoadingMore(true);
+    setError(null);
+    try {
+      const nextPage = data.page + 1;
+      const res = await socialListProfiles({ sort: tab, hideNsfw, page: nextPage });
+      setData((prev) => {
+        // Tab/filter changed mid-fetch: drop the response, let the fresh
+        // loadProfiles win. Comparing the snapshot identity catches resets.
+        if (!prev || prev !== data) return prev;
+        // De-dupe defensively in case a new publish shifted offsets between
+        // pages. id is the primary key.
+        const seen = new Set(prev.profiles.map((p) => p.id));
+        const merged = prev.profiles.concat(res.profiles.filter((p) => !seen.has(p.id)));
+        return { ...res, profiles: merged };
+      });
+      mergeViewerLiked(res.profiles);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [data, hasMore, hideNsfw, loading, loadingMore, mergeViewerLiked, tab]);
+
+  // IntersectionObserver-driven infinite scroll. Mirrors the pattern Browse
+  // uses so the two pages feel the same.
+  const loadMoreRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (tab === 'mine' || !hasMore) return;
+    const node = loadMoreRef.current;
+    if (!node) return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) void loadMore();
+      },
+      { rootMargin: '600px 0px' }
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [tab, hasMore, loadMore]);
 
   // If a signed-in user lands on Your profile and then signs out, fall back
   // to Top so they don't end up staring at an empty owner-only view.
@@ -513,10 +576,21 @@ export default function Discover() {
         </div>
       )}
 
-      {tab !== 'mine' && data && data.profiles.length > 0 && data.total > data.profiles.length && (
-        <div className="text-xs text-text-secondary text-center pt-2 inline-flex items-center gap-2 justify-center w-full">
-          <AlertTriangle className="w-3 h-3" />
-          Pagination not wired up yet (showing first {data.page_size} of {data.total}).
+      {tab !== 'mine' && hasMore && (
+        <div
+          ref={loadMoreRef}
+          className="text-xs text-text-secondary text-center pt-2 inline-flex items-center gap-2 justify-center w-full"
+        >
+          {loadingMore ? (
+            <>
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Loading more...
+            </>
+          ) : (
+            <span className="opacity-60">
+              Showing {data!.profiles.length} of {data!.total}
+            </span>
+          )}
         </div>
       )}
 

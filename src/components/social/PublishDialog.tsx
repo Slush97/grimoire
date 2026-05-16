@@ -195,7 +195,7 @@ export default function PublishDialog({
                   type="text"
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
-                  maxLength={120}
+                  maxLength={80}
                   placeholder="Short, memorable title"
                   className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
                 />
@@ -213,7 +213,7 @@ export default function PublishDialog({
                   id="publish-description"
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  maxLength={1200}
+                  maxLength={1000}
                   rows={4}
                   placeholder="What's the vibe? Who's it for?"
                   className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-none"

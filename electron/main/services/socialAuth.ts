@@ -10,6 +10,7 @@
 // to the social IPC handlers, which delegate here.
 
 import { app, safeStorage, shell } from 'electron';
+import { randomBytes } from 'crypto';
 import { EventEmitter } from 'events';
 import { promises as fs } from 'fs';
 import { join } from 'path';
@@ -152,6 +153,7 @@ export async function hydrateOnBoot(): Promise<void> {
 interface AuthCallbackParts {
     token: string;
     expiresAt: number;
+    state: string | null;
 }
 
 function parseGrimoireAuthUrl(url: string): AuthCallbackParts | null {
@@ -162,9 +164,9 @@ function parseGrimoireAuthUrl(url: string): AuthCallbackParts | null {
     } catch {
         return null;
     }
-    // grimoire://auth/done?token=...&expires_at=... is the canonical shape.
-    // Be lenient on which segment the OS gives us — host vs first path part
-    // can vary slightly across platforms when an app handles the protocol.
+    // grimoire://auth/done?token=...&expires_at=...&state=... is the canonical
+    // shape. Be lenient on which segment the OS gives us — host vs first path
+    // part can vary slightly across platforms when an app handles the protocol.
     const segments = [parsed.host, ...parsed.pathname.split('/')].filter(Boolean);
     if (segments[0] !== 'auth' || segments[1] !== 'done') return null;
     const token = parsed.searchParams.get('token');
@@ -174,7 +176,18 @@ function parseGrimoireAuthUrl(url: string): AuthCallbackParts | null {
     return {
         token,
         expiresAt: Number.isFinite(expiresAt) ? expiresAt : defaultExpiry(),
+        state: parsed.searchParams.get('state'),
     };
+}
+
+/** Constant-time compare for the OAuth-style state nonce. Same shape as the
+ *  Worker's compare; the strings are short hex so a non-CT compare leaks
+ *  almost nothing, but we keep the pattern uniform. */
+function timingSafeEqualStr(a: string, b: string): boolean {
+    if (a.length !== b.length) return false;
+    let diff = 0;
+    for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+    return diff === 0;
 }
 
 function defaultExpiry(): number {
@@ -195,6 +208,11 @@ interface ActiveLogin {
     resolve: (parts: AuthCallbackParts) => void;
     reject: (err: Error) => void;
     timer: NodeJS.Timeout;
+    // 32-byte hex nonce minted at login() time and round-tripped through Steam
+    // + the Worker. We refuse any grimoire://auth/done URL whose state doesn't
+    // match this — defends against an attacker handing the OS a crafted
+    // callback URL while no real login is in flight (or while one is).
+    state: string;
 }
 
 let activeLoginResolver: ActiveLogin | null = null;
@@ -225,6 +243,11 @@ export async function login(): Promise<SessionStatus> {
         throw new Error('A Grimoire Social login is already in progress');
     }
 
+    // 32 bytes of entropy hex-encoded (64 chars). The Worker validates the
+    // shape and round-trips it through Steam's openid.return_to; we verify the
+    // returned URL carries this exact value before accepting any token.
+    const state = randomBytes(32).toString('hex');
+
     const result = await new Promise<AuthCallbackParts>((resolve, reject) => {
         const timer = setTimeout(() => {
             rejectActiveLogin(
@@ -233,9 +256,10 @@ export async function login(): Promise<SessionStatus> {
                 )
             );
         }, LOGIN_TIMEOUT_MS);
-        activeLoginResolver = { resolve, reject, timer };
+        activeLoginResolver = { resolve, reject, timer, state };
 
-        shell.openExternal(getAuthBeginUrl()).catch((err) => {
+        const beginUrl = `${getAuthBeginUrl()}?state=${encodeURIComponent(state)}`;
+        shell.openExternal(beginUrl).catch((err) => {
             rejectActiveLogin(err instanceof Error ? err : new Error(String(err)));
         });
     });
@@ -294,38 +318,33 @@ export async function clearLocalAfterAccountDeletion(): Promise<void> {
 }
 
 /** Handle a grimoire://auth/done URL that arrived via the OS protocol
- *  handler (cold-launch argv or second-instance event). This is the primary
- *  return path for the external-browser sign-in flow; if a login() promise is
- *  in flight it resolves that, otherwise (e.g. cold launch via deep link) the
- *  session is hydrated here directly. */
+ *  handler (cold-launch argv or second-instance event). This is the return
+ *  path for the external-browser sign-in flow.
+ *
+ *  CSRF defense: we ONLY accept the callback when (a) a login() is in flight
+ *  AND (b) the URL's state matches the nonce we minted for that login. Any
+ *  other shape — including a callback that arrives when nothing is in flight,
+ *  which used to be silently accepted — is dropped. Without this, a victim
+ *  who clicks an attacker-crafted grimoire://auth/done?token=... URL would
+ *  unknowingly adopt the attacker's session. */
 export async function handleProtocolAuthCallback(url: string): Promise<void> {
     const parts = parseGrimoireAuthUrl(url);
     if (!parts) return;
     const current = activeLoginResolver;
-    if (current) {
-        activeLoginResolver = null;
-        clearTimeout(current.timer);
-        current.resolve(parts);
+    if (!current) {
+        console.warn('[socialAuth] dropping auth callback with no active login');
         return;
     }
-    setSessionToken(parts.token);
-    sessionExpiresAt = parts.expiresAt;
-    if (canPersistSecurely()) {
-        try {
-            await persistSession({ token: parts.token, expires_at: parts.expiresAt });
-        } catch (err) {
-            console.warn('[socialAuth] Failed to persist OS-callback session:', err);
-        }
+    if (!parts.state || !timingSafeEqualStr(parts.state, current.state)) {
+        // Mismatch could be a race (stale callback from a previous abandoned
+        // login) or a CSRF attempt. Either way: reject loudly enough to log
+        // but don't reveal which case it was.
+        rejectActiveLogin(
+            new Error('Sign-in callback did not match this login. Try again.')
+        );
+        return;
     }
-    try {
-        const me = await getMe();
-        cachedUser = me.user;
-        emitChange();
-    } catch (err) {
-        setSessionToken(null);
-        sessionExpiresAt = null;
-        await clearPersistedSession();
-        emitChange();
-        console.warn('[socialAuth] /me failed after OS-callback auth:', err);
-    }
+    activeLoginResolver = null;
+    clearTimeout(current.timer);
+    current.resolve(parts);
 }
