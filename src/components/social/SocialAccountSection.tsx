@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Globe, LogOut, AlertTriangle, ShieldAlert, Trash2, X, ExternalLink } from 'lucide-react';
+import { Globe, LogOut, AlertTriangle, ShieldAlert, Trash2, X, ExternalLink, ShieldCheck } from 'lucide-react';
 import { Button, Badge } from '../common/ui';
 import { ConfirmModal } from '../common/PageComponents';
 import { useSocialStore } from '../../stores/socialStore';
@@ -131,6 +131,12 @@ export default function SocialAccountSection() {
                   Cancel
                 </Button>
               )}
+            </div>
+            <div className="text-xs text-text-secondary flex items-center gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
+              <span>
+                Opens Steam in your browser. Grimoire never sees your password.
+              </span>
             </div>
             {loading && (
               <div className="text-xs text-text-secondary flex items-start gap-1.5">

@@ -7,11 +7,12 @@ import {
   Sparkles,
   Clock,
   Flame,
-  LogIn,
   CloudOff,
   X,
   ExternalLink,
+  ShieldCheck,
 } from 'lucide-react';
+import { SteamIcon } from '../components/social/SteamIcon';
 import {
   socialListProfiles,
   socialLike,
@@ -153,21 +154,26 @@ export default function Discover() {
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-2 flex-shrink-0">
-              <Button
-                icon={LogIn}
-                variant="secondary"
-                onClick={handleSignIn}
-                isLoading={signInBusy}
-                disabled={signInBusy}
-              >
-                Sign in
-              </Button>
-              {signInBusy && (
-                <Button variant="secondary" icon={X} onClick={cancelLogin}>
-                  Cancel
+            <div className="flex flex-col items-end gap-1 flex-shrink-0">
+              <div className="flex items-center gap-2">
+                <Button
+                  icon={SteamIcon}
+                  onClick={handleSignIn}
+                  isLoading={signInBusy}
+                  disabled={signInBusy}
+                >
+                  Sign in with Steam
                 </Button>
-              )}
+                {signInBusy && (
+                  <Button variant="secondary" icon={X} onClick={cancelLogin}>
+                    Cancel
+                  </Button>
+                )}
+              </div>
+              <div className="text-[11px] text-text-tertiary flex items-center gap-1">
+                <ShieldCheck className="w-3 h-3" />
+                <span>Opens Steam in your browser. Grimoire never sees your password.</span>
+              </div>
             </div>
           </div>
           {signInBusy && (

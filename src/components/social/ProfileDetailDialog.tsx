@@ -7,13 +7,13 @@ import {
   Sparkles,
   Download,
   Flag,
-  LogIn,
   Calendar,
   Boxes,
   User as UserIcon,
   CheckCircle2,
 } from 'lucide-react';
 import { Button, Badge } from '../common/ui';
+import { SteamIcon } from './SteamIcon';
 import {
   socialGetProfile,
   socialLike,
@@ -326,11 +326,11 @@ export default function ProfileDetailDialog({
                 <Button
                   variant="ghost"
                   size="sm"
-                  icon={LogIn}
+                  icon={SteamIcon}
                   onClick={onSignInRequested}
-                  title="Sign in with Steam"
+                  title="Opens Steam in your browser. Grimoire never sees your password."
                 >
-                  Sign in
+                  Sign in with Steam
                 </Button>
               )}
               <Button
