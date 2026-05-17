@@ -263,8 +263,11 @@ export async function saveDiagnosticReport(): Promise<{ path: string } | null> {
   return window.electronAPI.diagnostics.saveReport();
 }
 
-export async function buildDiagnosticReport(description: string): Promise<string> {
-  return window.electronAPI.diagnostics.buildReport(description);
+export async function buildDiagnosticReport(
+  description: string,
+  options?: { includeFullLog?: boolean },
+): Promise<string> {
+  return window.electronAPI.diagnostics.buildReport(description, options);
 }
 
 // Dialog helper for Settings page

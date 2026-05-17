@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github, Globe, FileText, ScrollText, Bug, Copy } from 'lucide-react';
+import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github, Globe, FileText, Bug, Copy } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
@@ -10,10 +10,7 @@ import {
   createDevDeadlockPath,
   fixGameinfo,
   getGameinfoStatus,
-  getLogPath,
   openGameFolder,
-  openLogsFolder,
-  saveDiagnosticReport,
   validateDeadlockPath,
   showOpenDialog,
 } from '../lib/api';
@@ -64,17 +61,13 @@ export default function Settings() {
   const [upToDate, setUpToDate] = useState(false);
   const [installSource, setInstallSource] = useState<'managed' | 'appimage' | 'standard'>('standard');
 
-  // Diagnostics
-  const [logPath, setLogPath] = useState<string | null>(null);
-  const [isSavingReport, setIsSavingReport] = useState(false);
-  const [reportResult, setReportResult] = useState<string | null>(null);
-
-  // Bug report form (copy-paste flow, separate from save-to-file)
+  // Bug report form (copy-paste flow)
   const [bugDescription, setBugDescription] = useState('');
   const [bugReportText, setBugReportText] = useState<string | null>(null);
   const [isBuildingReport, setIsBuildingReport] = useState(false);
   const [bugReportError, setBugReportError] = useState<string | null>(null);
   const [bugCopyState, setBugCopyState] = useState<'idle' | 'copied' | 'failed'>('idle');
+  const [includeFullLog, setIncludeFullLog] = useState(false);
 
   const isDevMode = settings?.devMode ?? false;
   const activeDeadlockPath = getActiveDeadlockPath(settings);
@@ -303,47 +296,12 @@ export default function Settings() {
     }
   };
 
-  useEffect(() => {
-    let active = true;
-    getLogPath()
-      .then((p) => {
-        if (active) setLogPath(p);
-      })
-      .catch(() => {
-        // Non-fatal — the buttons still work, the path label just won't render.
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
-  const handleOpenLogs = async () => {
-    try {
-      await openLogsFolder();
-    } catch (err) {
-      setReportResult(`Could not open logs folder: ${String(err)}`);
-    }
-  };
-
-  const handleSaveReport = async () => {
-    setIsSavingReport(true);
-    setReportResult(null);
-    try {
-      const result = await saveDiagnosticReport();
-      setReportResult(result ? `Saved to ${result.path}` : 'Save cancelled.');
-    } catch (err) {
-      setReportResult(`Failed to save report: ${String(err)}`);
-    } finally {
-      setIsSavingReport(false);
-    }
-  };
-
   const handleGenerateBugReport = async () => {
     setIsBuildingReport(true);
     setBugReportError(null);
     setBugCopyState('idle');
     try {
-      const text = await buildDiagnosticReport(bugDescription);
+      const text = await buildDiagnosticReport(bugDescription, { includeFullLog });
       setBugReportText(text);
     } catch (err) {
       setBugReportError(`Couldn't build report: ${String(err)}`);
@@ -996,7 +954,7 @@ export default function Settings() {
                 className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-white/5 rounded-sm text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-y"
               />
 
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <Button
                   onClick={handleGenerateBugReport}
                   isLoading={isBuildingReport}
@@ -1006,6 +964,15 @@ export default function Settings() {
                 >
                   {bugReportText ? 'Regenerate report' : 'Generate report'}
                 </Button>
+                <label className="inline-flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={includeFullLog}
+                    onChange={(e) => setIncludeFullLog(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded-sm border border-white/20 bg-bg-tertiary accent-accent focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  Include full log (up to 5 MB; Discord auto-attaches as a file)
+                </label>
               </div>
 
               {bugReportError && (
@@ -1059,47 +1026,6 @@ export default function Settings() {
                   </div>
                 </div>
               )}
-            </div>
-
-            <div className="h-px bg-white/5" />
-
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-              <div className="min-w-0">
-                <h4 className="font-medium text-sm">Diagnostic logs</h4>
-                <p className="text-xs text-text-secondary mt-1">
-                  Save a diagnostic report (app version, OS info, recent log) and attach it when filing a bug.
-                </p>
-                {logPath && (
-                  <p
-                    className="text-[11px] text-text-secondary/70 mt-2 font-mono truncate"
-                    title={logPath}
-                  >
-                    {logPath}
-                  </p>
-                )}
-                {reportResult && (
-                  <p className="text-xs text-accent mt-2 animate-fade-in break-all">{reportResult}</p>
-                )}
-              </div>
-              <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-                <Button
-                  onClick={handleOpenLogs}
-                  variant="secondary"
-                  size="sm"
-                  icon={ScrollText}
-                >
-                  Open logs folder
-                </Button>
-                <Button
-                  onClick={handleSaveReport}
-                  isLoading={isSavingReport}
-                  variant="secondary"
-                  size="sm"
-                  icon={FileText}
-                >
-                  Save diagnostic report
-                </Button>
-              </div>
             </div>
           </div>
         </Card>

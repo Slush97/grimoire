@@ -19,6 +19,16 @@ ipcMain.handle('diagnostics:saveReport', (): Promise<DiagnosticReport | null> =>
     return saveDiagnosticReport();
 });
 
-ipcMain.handle('diagnostics:buildReport', (_, description: unknown): Promise<string> => {
-    return buildReportText(typeof description === 'string' ? description : '');
-});
+ipcMain.handle(
+    'diagnostics:buildReport',
+    (_, description: unknown, options: unknown): Promise<string> => {
+        const includeFullLog =
+            typeof options === 'object' &&
+            options !== null &&
+            (options as { includeFullLog?: unknown }).includeFullLog === true;
+        return buildReportText(
+            typeof description === 'string' ? description : '',
+            { includeFullLog },
+        );
+    },
+);

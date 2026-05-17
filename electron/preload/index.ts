@@ -176,7 +176,7 @@ export interface ElectronAPI {
         getLogPath: () => Promise<string>;
         openLogsFolder: () => Promise<void>;
         saveReport: () => Promise<{ path: string } | null>;
-        buildReport: (description: string) => Promise<string>;
+        buildReport: (description: string, options?: { includeFullLog?: boolean }) => Promise<string>;
     };
 
     // Grimoire Social (publish + discover + likes). Session token lives in
@@ -976,7 +976,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getLogPath: () => ipcRenderer.invoke('diagnostics:getLogPath'),
         openLogsFolder: () => ipcRenderer.invoke('diagnostics:openLogsFolder'),
         saveReport: () => ipcRenderer.invoke('diagnostics:saveReport'),
-        buildReport: (description: string) => ipcRenderer.invoke('diagnostics:buildReport', description),
+        buildReport: (description: string, options?: { includeFullLog?: boolean }) =>
+            ipcRenderer.invoke('diagnostics:buildReport', description, options),
     },
 
     // Grimoire Social

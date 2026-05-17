@@ -98,13 +98,25 @@ export function sanitize(text: string): string {
     return out;
 }
 
+export interface BuildReportOptions {
+    /** When true, include the entire current main.log instead of the 256 KB
+     *  tail. The rotated main.old.log is never included either way. */
+    includeFullLog?: boolean;
+}
+
 /** Build the full sanitized report body shared by the in-app copy-to-clipboard
  *  flow and the save-to-file flow. Description is what the user typed in the
  *  "what happened" textarea; pass '' when there isn't one. */
-export async function buildReportText(description: string): Promise<string> {
+export async function buildReportText(
+    description: string,
+    options: BuildReportOptions = {},
+): Promise<string> {
     const logPath = getLogFilePath();
-    const rawTail = await readLogTail(logPath, REPORT_TAIL_BYTES);
-    const sanitizedTail = sanitize(rawTail);
+    const includeFullLog = options.includeFullLog === true;
+    const rawLog = includeFullLog
+        ? await readFullLog(logPath)
+        : await readLogTail(logPath, REPORT_TAIL_BYTES);
+    const sanitizedLog = sanitize(rawLog);
     const sanitizedDesc = sanitize((description ?? '').trim());
 
     const headerLines = [
@@ -123,10 +135,10 @@ export async function buildReportText(description: string): Promise<string> {
     if (sanitizedDesc) {
         parts.push('--- what happened ---', sanitizedDesc);
     }
-    parts.push(
-        `--- last ${Math.round(REPORT_TAIL_BYTES / 1024)} KB of main.log (sanitized) ---`,
-        sanitizedTail || '<log file empty>',
-    );
+    const logLabel = includeFullLog
+        ? '--- full main.log (sanitized) ---'
+        : `--- last ${Math.round(REPORT_TAIL_BYTES / 1024)} KB of main.log (sanitized) ---`;
+    parts.push(logLabel, sanitizedLog || '<log file empty>');
     return parts.join('\n\n');
 }
 
@@ -154,6 +166,14 @@ export async function saveDiagnosticReport(): Promise<DiagnosticReport | null> {
     await fs.writeFile(result.filePath, body, 'utf8');
     log.info('[diagnostics] saved diagnostic report to', result.filePath);
     return { path: result.filePath };
+}
+
+async function readFullLog(path: string): Promise<string> {
+    try {
+        return await fs.readFile(path, 'utf8');
+    } catch (err) {
+        return `<could not read log file: ${err instanceof Error ? err.message : String(err)}>`;
+    }
 }
 
 async function readLogTail(path: string, maxBytes: number): Promise<string> {

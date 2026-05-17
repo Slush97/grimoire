@@ -423,7 +423,7 @@ export interface ElectronAPI {
         getLogPath: () => Promise<string>;
         openLogsFolder: () => Promise<void>;
         saveReport: () => Promise<{ path: string } | null>;
-        buildReport: (description: string) => Promise<string>;
+        buildReport: (description: string, options?: { includeFullLog?: boolean }) => Promise<string>;
     };
 
     // Grimoire Social
