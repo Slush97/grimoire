@@ -208,6 +208,37 @@ body {
   animation: skeletonShimmer 1.4s ease-in-out infinite;
 }
 
+/* Update-available cards. Accent-agnostic: stripes are white at low opacity
+   so any user accent color (orange, blue, cyan, etc) reads cleanly on top.
+   The stripes slide slowly so the card pulls the eye without being noisy. */
+@keyframes updateStripes {
+  from { background-position: 0 0; }
+  to   { background-position: 28px 0; }
+}
+
+.update-stripes {
+  position: relative;
+  /* Create a stacking context so the ::before stripe layer with z-index:-1
+     stays scoped to this card (sits above the card background, below text). */
+  isolation: isolate;
+}
+
+.update-stripes::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  pointer-events: none;
+  background-image: repeating-linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.06) 0 8px,
+    transparent 8px 20px
+  );
+  background-size: 28px 28px;
+  animation: updateStripes 2.4s linear infinite;
+}
+
 /* Release notes — styles HTML rendered from GitHub release markdown
    inside UpdateModal. We don't ship @tailwindcss/typography, so headings,
    lists, and code blocks would otherwise be flattened by Tailwind preflight. */
@@ -349,5 +380,10 @@ body {
   .skeleton-shimmer {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
+  }
+
+  /* Keep the stripe pattern visible (it carries meaning) but stop the slide. */
+  .update-stripes::before {
+    animation: none;
   }
 }

@@ -327,17 +327,16 @@ export default function Installed() {
   };
 
   /**
-   * Bulk-update every mod currently flagged in updatesAvailable. Snapshots
-   * pre-update enabled state per mod and re-applies it after the new install
-   * lands — downloads always go to the disabled folder by default, so without
-   * this restore step the user would have to manually re-enable each one.
+   * Re-download each target mod and restore its pre-update enabled state.
+   * Downloads always go to the disabled folder by default, so without the
+   * restore step the user would have to manually re-enable every updated mod.
    * Failures are caught per-item so one bad mod doesn't halt the rest.
+   * Drives the same `updateAllProgress` state regardless of caller, so the
+   * Update-all button reflects per-group updates too.
    */
-  const handleUpdateAll = async () => {
-    setUpdateAllConfirmOpen(false);
-    setUpdateAllError(null);
-    const snapshots = mods
-      .filter((m) => updatesAvailable.has(m.id) && m.gameBananaId && typeof m.gameBananaFileId === 'number')
+  const runUpdate = async (targets: typeof mods) => {
+    const snapshots = targets
+      .filter((m) => m.gameBananaId && typeof m.gameBananaFileId === 'number')
       .map((m) => ({
         oldId: m.id,
         gameBananaId: m.gameBananaId!,
@@ -381,8 +380,25 @@ export default function Installed() {
     setUpdateAllProgress(null);
     if (failures.length > 0) {
       setUpdateAllError(`${failures.length} mod${failures.length === 1 ? '' : 's'} failed to update. See console for details.`);
-      console.warn('[Update all] failures:', failures);
+      console.warn('[Update] failures:', failures);
     }
+  };
+
+  const handleUpdateAll = async () => {
+    setUpdateAllConfirmOpen(false);
+    setUpdateAllError(null);
+    await runUpdate(mods.filter((m) => updatesAvailable.has(m.id)));
+  };
+
+  /**
+   * Update every flagged variant within one grouped mod. Invoked from the
+   * variant picker so the user doesn't have to bounce out to the mod page.
+   */
+  const handleUpdateGroup = async (gameBananaId: number) => {
+    setUpdateAllError(null);
+    await runUpdate(
+      mods.filter((m) => m.gameBananaId === gameBananaId && updatesAvailable.has(m.id)),
+    );
   };
 
   const exitSelectMode = () => {
@@ -1159,9 +1175,30 @@ export default function Installed() {
         title={`Update all (${updatesAvailable.size})?`}
         message={
           <>
-            Re-download every mod flagged with an available update. Each one's enabled state
-            will be restored after the install finishes. Downloads run one at a time and may
-            take a while.
+            <p className="mb-3">
+              Re-download every mod flagged with an available update. Each one's enabled state
+              will be restored after the install finishes. Downloads run one at a time and may
+              take a while.
+            </p>
+            {(() => {
+              const pending = mods.filter((m) => updatesAvailable.has(m.id));
+              if (pending.length === 0) return null;
+              return (
+                <div className="update-stripes border border-border bg-bg-tertiary/40 rounded-md px-3 py-2 max-h-48 overflow-y-auto">
+                  <div className="text-[11px] uppercase tracking-wider text-text-secondary mb-1.5 font-semibold">
+                    Mods receiving updates
+                  </div>
+                  <ul className="space-y-1 text-sm text-text-primary">
+                    {pending.map((m) => (
+                      <li key={m.id} className="flex items-center gap-2 min-w-0">
+                        <Download className="w-3.5 h-3.5 text-text-secondary flex-shrink-0" />
+                        <span className="truncate" title={m.name}>{m.name}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })()}
           </>
         }
         confirmLabel={`Update ${updatesAvailable.size}`}
@@ -1265,6 +1302,9 @@ export default function Installed() {
             return [variant.id, conflicts];
           })
         );
+        const variantsWithUpdate = new Set(
+          liveEntry.variants.filter((v) => updatesAvailable.has(v.id)).map((v) => v.id),
+        );
         return (
           <VariantPickerModal
             modName={liveEntry.primary.name}
@@ -1288,6 +1328,14 @@ export default function Installed() {
                   }
                 : undefined
             }
+            variantsWithUpdate={variantsWithUpdate}
+            onUpdateGroup={
+              variantsWithUpdate.size > 0
+                ? () => handleUpdateGroup(liveEntry.gameBananaId)
+                : undefined
+            }
+            isUpdating={!!updateAllProgress}
+            updateProgress={updateAllProgress}
             onClose={() => setPickerGroupId(null)}
           />
         );
@@ -1588,7 +1636,7 @@ function ModCard({
           : mod.enabled
             ? 'bg-accent/5 border-accent/40'
             : 'bg-bg-secondary/60 border-border/70 text-text-primary/80 hover:bg-bg-secondary hover:text-text-primary'
-      } ${viewMode === 'compact' ? 'p-2 flex flex-col gap-2' : viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-start sm:items-center gap-3 p-3'} ${
+      } ${updateAvailable ? 'update-stripes' : ''} ${viewMode === 'compact' ? 'p-2 flex flex-col gap-2' : viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-start sm:items-center gap-3 p-3'} ${
         isDragging ? 'opacity-40' : ''
       } ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
       draggable={draggable}
@@ -1692,14 +1740,13 @@ function ModCard({
                 </Tag>
               )}
               {updateAvailable && (
-                <Tag
-                  tone="info"
-                  variant="overlay"
-                  icon={Download}
+                <span
                   title="A newer version is available on GameBanana"
+                  className="inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-semibold leading-none bg-black/75 backdrop-blur-sm border border-white/40 text-white shadow-[0_1px_2px_rgba(0,0,0,0.45)] uppercase tracking-wide"
                 >
+                  <Download className="w-3 h-3" />
                   Update
-                </Tag>
+                </span>
               )}
             </div>
           </>
@@ -1906,14 +1953,13 @@ function ModCard({
                 <Tag tone="danger" className="flex-shrink-0">18+</Tag>
               )}
               {updateAvailable && (
-                <Tag
-                  tone="info"
-                  icon={Download}
+                <span
                   title="A newer version is available on GameBanana"
-                  className="flex-shrink-0"
+                  className="flex-shrink-0 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-xs font-semibold leading-none bg-white/10 border border-white/30 text-text-primary uppercase tracking-wide"
                 >
+                  <Download className="w-3 h-3" />
                   Update
-                </Tag>
+                </span>
               )}
               {mod.enabled && (
                 <Tag

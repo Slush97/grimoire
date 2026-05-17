@@ -11,6 +11,7 @@ import {
     ChevronDown,
     GripVertical,
     AlertTriangle,
+    Download,
 } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import { ArchivedTag, Button, Tag } from './common/ui';
@@ -38,6 +39,16 @@ interface Props {
     onRenameVariant: (variant: Mod, label: string) => Promise<void> | void;
     /** Optional - open the GameBanana details modal for this mod. */
     onOpenModDetails?: () => void;
+    /** Local mod ids that have a newer version available on GameBanana.
+     *  Drives the per-row "Update" stamp and the group-level Update button. */
+    variantsWithUpdate?: Set<string>;
+    /** Trigger an in-place update for every flagged variant in this group.
+     *  Omitted when nothing in the group has an update. */
+    onUpdateGroup?: () => void | Promise<void>;
+    /** True while an update run is in progress (shared with the page-level
+     *  Update-all button) so this modal mirrors the same disabled/progress UX. */
+    isUpdating?: boolean;
+    updateProgress?: { done: number; total: number } | null;
     onClose: () => void;
 }
 
@@ -64,6 +75,10 @@ export default function VariantPickerModal({
     onDeleteVariant,
     onRenameVariant,
     onOpenModDetails,
+    variantsWithUpdate,
+    onUpdateGroup,
+    isUpdating = false,
+    updateProgress = null,
     onClose,
 }: Props) {
     const [pending, setPending] = useState<string | null>(null);
@@ -191,10 +206,35 @@ export default function VariantPickerModal({
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
+                        {onUpdateGroup && variantsWithUpdate && variantsWithUpdate.size > 0 && (
+                            <button
+                                onClick={() => void onUpdateGroup()}
+                                disabled={isUpdating}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs font-semibold text-text-primary bg-white/10 border border-white/30 hover:bg-white/15 hover:border-white/50 rounded cursor-pointer transition-colors disabled:cursor-default disabled:opacity-60"
+                                title={
+                                    isUpdating
+                                        ? 'Update already in progress'
+                                        : `Re-download ${variantsWithUpdate.size} file${variantsWithUpdate.size === 1 ? '' : 's'} and restore their enabled state`
+                                }
+                            >
+                                {isUpdating && updateProgress ? (
+                                    <>
+                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                        Updating {updateProgress.done}/{updateProgress.total}
+                                    </>
+                                ) : (
+                                    <>
+                                        <Download className="w-3.5 h-3.5" />
+                                        Update {variantsWithUpdate.size}
+                                    </>
+                                )}
+                            </button>
+                        )}
                         {onOpenModDetails && (
                             <button
                                 onClick={onOpenModDetails}
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary border border-border hover:border-accent/40 rounded cursor-pointer transition-colors"
+                                disabled={isUpdating}
+                                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary border border-border hover:border-accent/40 rounded cursor-pointer transition-colors disabled:cursor-default disabled:opacity-50"
                                 title="Open the GameBanana mod page"
                             >
                                 <Info className="w-3.5 h-3.5" />
@@ -227,6 +267,7 @@ export default function VariantPickerModal({
                         const isMoveDownPending = pending === `move:${v.id}:down`;
                         const isDragging = draggingId === v.id;
                         const isDropTarget = dropTargetId === v.id;
+                        const hasUpdate = variantsWithUpdate?.has(v.id) ?? false;
                         const conflictDetails = conflictsByVariantId[v.id] ?? [];
                         const primaryTitle =
                             v.variantLabel ??
@@ -294,7 +335,7 @@ export default function VariantPickerModal({
                                     isActive
                                         ? 'border-accent/40 bg-accent/5'
                                         : 'border-border bg-bg-tertiary hover:bg-white/5'
-                                } ${isDragging ? 'opacity-50' : ''}`}
+                                } ${hasUpdate ? 'update-stripes' : ''} ${isDragging ? 'opacity-50' : ''}`}
                             >
                                 {isDropTarget && dropPosition && (
                                     <span
@@ -365,6 +406,15 @@ export default function VariantPickerModal({
                                                         {primaryTitle}
                                                     </span>
                                                     {v.isArchived && <ArchivedTag />}
+                                                    {hasUpdate && (
+                                                        <span
+                                                            title="A newer version is available on GameBanana"
+                                                            className="flex-shrink-0 inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-[10px] font-semibold leading-none bg-white/10 border border-white/30 text-text-primary uppercase tracking-wide"
+                                                        >
+                                                            <Download className="w-3 h-3" />
+                                                            Update
+                                                        </span>
+                                                    )}
                                                     {conflictDetails.length > 0 && (
                                                         <Tag
                                                             tone="warning"
