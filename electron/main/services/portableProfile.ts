@@ -162,7 +162,7 @@ export async function buildPortableProfile(
 
     for (const profileMod of profile.mods) {
         const installedMod = modByFileName.get(profileMod.fileName);
-        const metadata = getModMetadata(profileMod.fileName);
+        const metadata = installedMod ? getModMetadata(installedMod.fileName) : getModMetadata(profileMod.fileName);
         const gbId = metadata?.gameBananaId ?? installedMod?.gameBananaId;
         const fileId = metadata?.gameBananaFileId ?? installedMod?.gameBananaFileId;
 

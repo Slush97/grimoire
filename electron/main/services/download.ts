@@ -6,7 +6,7 @@ import { BrowserWindow } from 'electron';
 import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles } from './extract';
 import { randomUUID } from 'crypto';
-import { setModMetadata, getModMetadata } from './metadata';
+import { setModMetadataWithHash, getModMetadata } from './metadata';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
 import { getUsedPriorities, scanMods, disableMod, enableMod } from './mods';
 import { validateDownloadUrl, validateFileSize } from './security';
@@ -21,6 +21,10 @@ export interface DownloadModArgs {
     fileName: string;
     section?: string;
     categoryId?: number;
+}
+
+export interface DownloadInstallResult {
+    installedVpks: string[];
 }
 
 export interface OneClickInstallArgs {
@@ -129,7 +133,7 @@ interface QueuedDownload {
     directUrl?: string;
     enrichedDetails?: GameBananaModDetails;
     mainWindow: BrowserWindow | null;
-    resolve: () => void;
+    resolve: (result: DownloadInstallResult) => void;
     reject: (error: Error) => void;
 }
 
@@ -192,12 +196,12 @@ export function downloadMod(
     deadlockPath: string,
     args: DownloadModArgs,
     mainWindow: BrowserWindow | null
-): Promise<void> {
+): Promise<DownloadInstallResult> {
     // Check if this mod is already in the queue (prevent duplicates)
     const alreadyQueued = downloadQueue.some(q => q.args.modId === args.modId);
     if (alreadyQueued) {
         console.log(`[downloadMod] Mod ${args.modId} already in queue, skipping`);
-        return Promise.resolve();
+        return Promise.resolve({ installedVpks: [] });
     }
 
     return new Promise((resolve, reject) => {
@@ -217,7 +221,7 @@ export function downloadModFromUrl(
     deadlockPath: string,
     oneClick: OneClickInstallArgs,
     mainWindow: BrowserWindow | null
-): Promise<void> {
+): Promise<DownloadInstallResult> {
     validateDownloadUrl(oneClick.archiveUrl);
 
     const fileName = deriveFileNameFromUrl(oneClick.archiveUrl);
@@ -231,7 +235,7 @@ export function downloadModFromUrl(
     );
     if (alreadyQueued) {
         console.log(`[downloadModFromUrl] Already queued: ${oneClick.archiveUrl}`);
-        return Promise.resolve();
+        return Promise.resolve({ installedVpks: [] });
     }
 
     const args: DownloadModArgs = {
@@ -290,18 +294,16 @@ async function processQueue(): Promise<void> {
         };
         emitQueueUpdate(); // Notify UI that queue changed and current download started
         try {
-            if (item.directUrl) {
-                await executeOneClickDownload(
+            const result = item.directUrl
+                ? await executeOneClickDownload(
                     item.deadlockPath,
                     item.args,
                     item.directUrl,
                     item.enrichedDetails,
                     item.mainWindow
-                );
-            } else {
-                await executeDownload(item.deadlockPath, item.args, item.mainWindow);
-            }
-            item.resolve();
+                )
+                : await executeDownload(item.deadlockPath, item.args, item.mainWindow);
+            item.resolve(result);
         } catch (error) {
             item.reject(error instanceof Error ? error : new Error(String(error)));
         }
@@ -492,7 +494,7 @@ async function executeDownload(
     deadlockPath: string,
     args: DownloadModArgs,
     mainWindow: BrowserWindow | null
-): Promise<void> {
+): Promise<DownloadInstallResult> {
     const { modId, fileId, fileName, section = 'Mod' } = args;
 
     console.log(`[downloadMod] Starting download: modId=${modId}, fileId=${fileId}, fileName=${fileName}`);
@@ -728,7 +730,7 @@ async function executeDownload(
     console.log(`[downloadMod] Saving metadata for ${installedVpks.length} VPKs`);
     for (const vpkFileName of installedVpks) {
         console.log(`[downloadMod] Saving metadata for: ${vpkFileName}`);
-        setModMetadata(vpkFileName, metadata);
+        await setModMetadataWithHash(vpkFileName, metadata, join(targetPath, vpkFileName));
     }
 
     // Auto-disable previously installed variants of the same GameBanana mod so
@@ -794,6 +796,7 @@ async function executeDownload(
     // Notify completion
     console.log(`[downloadMod] Sending download-complete event`);
     mainWindow?.webContents.send('download-complete', { modId, fileId });
+    return { installedVpks };
     } finally {
         await cleanupDownloadWorkDir(workDir);
     }
@@ -904,7 +907,7 @@ async function executeOneClickDownload(
     archiveUrl: string,
     enrichedDetails: GameBananaModDetails | undefined,
     mainWindow: BrowserWindow | null
-): Promise<void> {
+): Promise<DownloadInstallResult> {
     const { modId, fileId, fileName, section = 'Mod' } = args;
 
     console.log(
@@ -1179,10 +1182,11 @@ async function executeOneClickDownload(
     }
 
     for (const vpkFileName of installedVpks) {
-        setModMetadata(vpkFileName, metadata);
+        await setModMetadataWithHash(vpkFileName, metadata, join(targetPath, vpkFileName));
     }
 
     mainWindow?.webContents.send('download-complete', { modId, fileId });
+    return { installedVpks };
     } finally {
         await cleanupDownloadWorkDir(workDir);
     }

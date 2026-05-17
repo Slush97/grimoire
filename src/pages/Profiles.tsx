@@ -121,7 +121,7 @@ export default function Profiles() {
   const { getSettings: getCrosshairSettings, loadSettingsFromPreset } = useCrosshairStore();
   const socialSignedIn = useSocialStore((s) => s.status.signedIn);
 
-  const modByFileName = new Map(mods.map(m => [m.fileName, m]));
+  const modByFileName = new Map(mods.map((m) => [m.fileName, m]));
 
   const loadProfileList = async (opts?: { silent?: boolean }) => {
     // Silent refresh leaves the page rendered: needed for in-modal flows

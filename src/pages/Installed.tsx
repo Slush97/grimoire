@@ -13,19 +13,22 @@ import {
   Search,
   Volume2,
   Download,
+  Info,
   UploadCloud,
   List,
   LayoutGrid,
   Grid3x3,
   Check,
   CheckSquare,
+  RotateCcw,
+  Wrench,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod } from '../types/mod';
+import type { Mod, UnknownModFilterGuess } from '../types/mod';
 import type { GameBananaModDetails } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
@@ -209,6 +212,7 @@ export default function Installed() {
     isGroup: boolean;
     isBulk?: boolean;
   } | null>(null);
+  const [customUnknownMod, setCustomUnknownMod] = useState<Mod | null>(null);
 
   // Multi-select state. `selectedIds` always stores mod ids (variants of a
   // selected group expand to every variant id) so bulk handlers can iterate
@@ -228,6 +232,19 @@ export default function Installed() {
   // picker reflect immediately without juggling a separate snapshot.
   const [pickerGroupId, setPickerGroupId] = useState<number | null>(null);
   const [importOpen, setImportOpen] = useState(false);
+  const [unknownFilterGuess, setUnknownFilterGuess] = useState<{
+    mod: Mod;
+    loading: boolean;
+    result?: UnknownModFilterGuess;
+    error?: string;
+    cancelled?: boolean;
+  } | null>(null);
+  const [unknownFixMode, setUnknownFixMode] = useState<'single' | 'bulk' | null>(null);
+  const [unknownFilterCache, setUnknownFilterCache] = useState<Record<string, UnknownModFilterGuess>>({});
+  const [unknownFilterPendingIds, setUnknownFilterPendingIds] = useState<Set<string>>(new Set());
+  const [unknownFilterErrors, setUnknownFilterErrors] = useState<Record<string, string>>({});
+  const unknownRequestSeqRef = useRef(0);
+  const unknownRequestIdsRef = useRef<Record<string, number>>({});
 
   // Drag-and-drop reorder state. `draggingSection` scopes drops so dragging
   // an enabled card can't drop onto a disabled card and vice-versa.
@@ -314,6 +331,185 @@ export default function Installed() {
     setDetailsSourceModId(null);
     setDetailsActiveFileIds(new Set());
     setDetailsDates(null);
+  };
+
+  const inspectUnknownModFilters = async (
+    mod: Mod,
+    force = false,
+    mode: 'single' | 'bulk' = 'single',
+    focus = true
+  ) => {
+    setUnknownFixMode(mode);
+    if (unknownFilterPendingIds.has(mod.id) && !force) {
+      if (focus) setUnknownFilterGuess({ mod, loading: true });
+      return;
+    }
+
+    const cached = unknownFilterCache[mod.id];
+    if (cached && !force) {
+      if (focus) setUnknownFilterGuess({ mod, loading: false, result: cached });
+      return;
+    }
+
+    const requestId = ++unknownRequestSeqRef.current;
+    unknownRequestIdsRef.current[mod.id] = requestId;
+    setUnknownFilterPendingIds((prev) => new Set(prev).add(mod.id));
+    setUnknownFilterErrors((prev) => {
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
+    if (focus) setUnknownFilterGuess({ mod, loading: true });
+    try {
+      const result = await detectUnknownModFilters(mod.id);
+      if (unknownRequestIdsRef.current[mod.id] !== requestId) return;
+      delete unknownRequestIdsRef.current[mod.id];
+      setUnknownFilterPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(mod.id);
+        return next;
+      });
+      if (result.crcMatch.status !== 'error') {
+        setUnknownFilterCache((prev) => ({ ...prev, [mod.id]: result }));
+      }
+      setUnknownFilterGuess((current) =>
+        current?.mod.id === mod.id ? { mod: current.mod, loading: false, result } : current
+      );
+    } catch (err) {
+      if (unknownRequestIdsRef.current[mod.id] !== requestId) return;
+      delete unknownRequestIdsRef.current[mod.id];
+      const message = err instanceof Error ? err.message : String(err);
+      setUnknownFilterPendingIds((prev) => {
+        const next = new Set(prev);
+        next.delete(mod.id);
+        return next;
+      });
+      setUnknownFilterErrors((prev) => ({ ...prev, [mod.id]: message }));
+      setUnknownFilterGuess((current) => {
+        if (current?.mod.id !== mod.id) return current;
+        return {
+          mod: current.mod,
+          loading: false,
+          error: message,
+        };
+      });
+    }
+  };
+
+  const openUnknownModFix = (mod: Mod, mode: 'single' | 'bulk' = 'single') => {
+    setUnknownFixMode(mode);
+    setUnknownFilterGuess({ mod, loading: unknownFilterPendingIds.has(mod.id) });
+  };
+
+  const applyUnknownMatch = async (mod: Mod, match: FoundUnknownMatch) => {
+    if (!match.modId || !match.modName) {
+      throw new Error('Matched mod is missing GameBanana metadata');
+    }
+    await applyUnknownModMatch(mod.id, {
+      gameBananaId: match.modId,
+      modName: match.modName,
+      gameBananaFileId: match.fileId,
+      sourceFileName: match.fileName,
+      sourceSection: match.section,
+      categoryName: match.categoryName,
+      thumbnailUrl: match.thumbnailUrl,
+      nsfw: match.nsfw,
+    });
+    await loadMods();
+    setUnknownFilterCache((prev) => {
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
+    setUnknownFilterErrors((prev) => {
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
+    delete unknownRequestIdsRef.current[mod.id];
+    setUnknownFilterPendingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mod.id);
+      return next;
+    });
+    if (unknownFixMode === 'bulk') {
+      const nextUnknown = unknownMods.find((candidate) => candidate.id !== mod.id);
+      if (nextUnknown) {
+        openUnknownModFix(nextUnknown, 'bulk');
+      } else {
+        closeUnknownFix();
+      }
+    } else {
+      closeUnknownFix();
+    }
+  };
+
+  const closeUnknownFix = () => {
+    setUnknownFilterGuess(null);
+    setUnknownFixMode(null);
+  };
+
+  const cancelUnknownMatch = (mod: Mod) => {
+    delete unknownRequestIdsRef.current[mod.id];
+    void cancelUnknownModDetection(mod.id).catch(() => undefined);
+    setUnknownFilterPendingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mod.id);
+      return next;
+    });
+    setUnknownFilterErrors((prev) => {
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
+    setUnknownFilterGuess((current) =>
+      current?.mod.id === mod.id ? { mod: current.mod, loading: false, cancelled: true } : current
+    );
+  };
+
+  const openBulkUnknownFix = (unknowns: Mod[]) => {
+    const first = unknowns[0];
+    if (!first) return;
+    openUnknownModFix(first, 'bulk');
+  };
+
+  const findAllUnknownMods = (unknowns: Mod[]) => {
+    const queued = unknowns.filter(
+      (mod) => !unknownFilterPendingIds.has(mod.id) && !unknownFilterCache[mod.id]
+    );
+    void runUnknownFindQueue(queued);
+  };
+
+  const runUnknownFindQueue = async (queued: Mod[]) => {
+    let nextIndex = 0;
+    const workerCount = Math.min(2, queued.length);
+    const workers = Array.from({ length: workerCount }, async () => {
+      while (nextIndex < queued.length) {
+        const mod = queued[nextIndex++];
+        await inspectUnknownModFilters(mod, false, 'bulk', false);
+      }
+    });
+    await Promise.all(workers);
+  };
+
+  const viewUnknownMatch = (mod: Mod, match: FoundUnknownMatch) => {
+    if (!match.modId) return;
+    closeUnknownFix();
+    void openModDetails({
+      ...mod,
+      name: match.modName ?? mod.name,
+      gameBananaId: match.modId,
+      gameBananaFileId: match.fileId,
+      sourceSection: match.section,
+      categoryName: match.categoryName,
+      thumbnailUrl: match.thumbnailUrl,
+      nsfw: match.nsfw,
+    });
+  };
+
+  const makeUnknownCustomMod = (mod: Mod) => {
+    closeUnknownFix();
+    setCustomUnknownMod(mod);
   };
 
   const handleDetailsDownload = async (fileId: number, fileName: string) => {
@@ -883,7 +1079,22 @@ export default function Installed() {
     .sort((a, b) => entrySortPriority(a) - entrySortPriority(b));
   const compactOrder = buildCompactPriorityOrder(allEntries);
   const conflictCount = conflictPairCount;
-
+  const unknownMods = mods
+    .filter((mod) => mod.isUnknown)
+    .sort((a, b) => a.priority - b.priority);
+  const selectedUnknownState = unknownFilterGuess
+    ? {
+        mod: unknownFilterGuess.mod,
+        loading: unknownFilterPendingIds.has(unknownFilterGuess.mod.id),
+        result: unknownFilterPendingIds.has(unknownFilterGuess.mod.id)
+          ? undefined
+          : unknownFilterCache[unknownFilterGuess.mod.id] ?? unknownFilterGuess.result,
+        error: unknownFilterPendingIds.has(unknownFilterGuess.mod.id)
+          ? undefined
+          : unknownFilterErrors[unknownFilterGuess.mod.id] ?? unknownFilterGuess.error,
+        cancelled: unknownFilterPendingIds.has(unknownFilterGuess.mod.id) ? false : unknownFilterGuess.cancelled,
+      }
+    : null;
   // Filter by search query (case-insensitive substring on name). Drag-and-drop
   // reorder is still correct because it targets the full enabled list order,
   // not the filtered view.
@@ -989,6 +1200,8 @@ export default function Installed() {
           onOpenDetails={mod.gameBananaId ? () => openModDetails(mod) : undefined}
           onToggle={() => toggleMod(mod.id)}
           onDelete={() => setModToDelete({ ids: [mod.id], name: mod.name, isGroup: false })}
+          onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
+          fixingUnknown={unknownFilterPendingIds.has(mod.id)}
           selectMode={selectMode}
           selected={entrySelected}
           onSelectToggle={() => toggleEntrySelection(entry)}
@@ -1147,7 +1360,7 @@ export default function Installed() {
   // Fix Order) rather than the top action bar — when both are active the top
   // bar gets cramped, so move them to the line below where there's room.
   const hasStatusButtons =
-    conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress;
+    conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
     <div className="flex items-center gap-2">
       {conflictCount > 0 && (
@@ -1174,6 +1387,17 @@ export default function Installed() {
             : `Update all (${updatesAvailable.size})`}
         </Button>
       )}
+      {unknownMods.length > 0 && (
+        <Button
+          variant="primary"
+          size="sm"
+          onClick={() => openBulkUnknownFix(unknownMods)}
+          icon={Wrench}
+          title="Find GameBanana matches or add custom metadata for unknown local mods"
+        >
+          Fix unknown ({unknownMods.length})
+        </Button>
+      )}
     </div>
   ) : null;
 
@@ -1190,7 +1414,7 @@ export default function Installed() {
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search installed..."
-                className="bg-bg-secondary border border-border rounded-lg pl-8 pr-8 py-2 text-sm text-text-primary placeholder:text-text-secondary/60 focus:outline-none focus:ring-2 focus:ring-accent w-40"
+                className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-40`}
               />
               {search && (
                 <button
@@ -1532,6 +1756,73 @@ export default function Installed() {
         />
       )}
 
+      {selectedUnknownState && unknownFixMode === 'single' && (
+        <UnknownFilterGuessModal
+          state={selectedUnknownState}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          onApplyMatch={applyUnknownMatch}
+          onViewMatch={viewUnknownMatch}
+          onMakeCustom={makeUnknownCustomMod}
+          onFind={(mod) => void inspectUnknownModFilters(mod, false, 'single')}
+          onRetry={(mod) => void inspectUnknownModFilters(mod, true, 'single')}
+          onCancel={cancelUnknownMatch}
+          onClose={closeUnknownFix}
+        />
+      )}
+
+      {selectedUnknownState && unknownFixMode === 'bulk' && (
+        <BulkUnknownFixModal
+          unknownMods={unknownMods}
+          state={selectedUnknownState}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          cache={unknownFilterCache}
+          pendingIds={unknownFilterPendingIds}
+          errors={unknownFilterErrors}
+          onSelect={(mod) => openUnknownModFix(mod, 'bulk')}
+          onApplyMatch={applyUnknownMatch}
+          onViewMatch={viewUnknownMatch}
+          onMakeCustom={makeUnknownCustomMod}
+          onFindAll={findAllUnknownMods}
+          onFind={(mod) => void inspectUnknownModFilters(mod, false, 'bulk')}
+          onRetry={(mod) => void inspectUnknownModFilters(mod, true, 'bulk')}
+          onCancel={cancelUnknownMatch}
+          onClose={closeUnknownFix}
+        />
+      )}
+
+      {customUnknownMod && (
+        <ImportCustomModModal
+          title="Make Custom Mod"
+          submitLabel="Save Custom Mod"
+          initialVpkPath={customUnknownMod.path}
+          initialName={deriveModNameFromPath(customUnknownMod.fileName)}
+          lockVpk
+          vpkHelpText="This VPK is already installed. Saving will only add custom metadata to it."
+          onClose={() => setCustomUnknownMod(null)}
+          onImport={async ({ name, thumbnailDataUrl, nsfw }) => {
+            await applyUnknownCustomMod(customUnknownMod.id, { name, thumbnailDataUrl, nsfw });
+            await loadMods();
+            setUnknownFilterCache((prev) => {
+              const next = { ...prev };
+              delete next[customUnknownMod.id];
+              return next;
+            });
+            setUnknownFilterErrors((prev) => {
+              const next = { ...prev };
+              delete next[customUnknownMod.id];
+              return next;
+            });
+            delete unknownRequestIdsRef.current[customUnknownMod.id];
+            setUnknownFilterPendingIds((prev) => {
+              const next = new Set(prev);
+              next.delete(customUnknownMod.id);
+              return next;
+            });
+            setCustomUnknownMod(null);
+          }}
+        />
+      )}
+
       {selectMode && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
           {bulkProgress ? (
@@ -1662,6 +1953,508 @@ function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
+function UnknownFilterGuessModal({
+  state,
+  hideNsfwPreviews,
+  onApplyMatch,
+  onViewMatch,
+  onMakeCustom,
+  onFind,
+  onRetry,
+  onCancel,
+  onClose,
+}: {
+  state: {
+    mod: Mod;
+    loading: boolean;
+    result?: UnknownModFilterGuess;
+    error?: string;
+    cancelled?: boolean;
+  };
+  hideNsfwPreviews: boolean;
+  onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
+  onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
+  onMakeCustom: (mod: Mod) => void;
+  onFind: (mod: Mod) => void;
+  onRetry: (mod: Mod) => void;
+  onCancel: (mod: Mod) => void;
+  onClose: () => void;
+}) {
+  const { mod } = state;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="unknown-filter-title"
+      onClick={onClose}
+    >
+      <div
+        className="bg-bg-secondary border border-white/10 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
+          <div className="min-w-0">
+            <h2 id="unknown-filter-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-orange-400" />
+              Fix Unknown Mod
+            </h2>
+            <p className="text-xs text-text-secondary mt-1 truncate" title={mod.fileName}>
+              {mod.fileName}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+            aria-label="Close"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <UnknownMatchPanel
+          key={mod.id}
+          state={state}
+          hideNsfwPreviews={hideNsfwPreviews}
+          onApplyMatch={onApplyMatch}
+          onViewMatch={onViewMatch}
+          onMakeCustom={onMakeCustom}
+          onFind={onFind}
+          onRetry={onRetry}
+          onCancel={onCancel}
+        />
+
+      </div>
+    </div>
+  );
+}
+
+function BulkUnknownFixModal({
+  unknownMods,
+  state,
+  hideNsfwPreviews,
+  cache,
+  pendingIds,
+  errors,
+  onSelect,
+  onApplyMatch,
+  onViewMatch,
+  onMakeCustom,
+  onFindAll,
+  onFind,
+  onRetry,
+  onCancel,
+  onClose,
+}: {
+  unknownMods: Mod[];
+  state: {
+    mod: Mod;
+    loading: boolean;
+    result?: UnknownModFilterGuess;
+    error?: string;
+    cancelled?: boolean;
+  };
+  hideNsfwPreviews: boolean;
+  cache: Record<string, UnknownModFilterGuess>;
+  pendingIds: Set<string>;
+  errors: Record<string, string>;
+  onSelect: (mod: Mod) => void;
+  onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
+  onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
+  onMakeCustom: (mod: Mod) => void;
+  onFindAll: (mods: Mod[]) => void;
+  onFind: (mod: Mod) => void;
+  onRetry: (mod: Mod) => void;
+  onCancel: (mod: Mod) => void;
+  onClose: () => void;
+}) {
+  const findableCount = unknownMods.filter((mod) => !pendingIds.has(mod.id) && !cache[mod.id]).length;
+
+  return (
+    <div
+      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="bulk-unknown-title"
+      onClick={onClose}
+    >
+      <div
+        className="bg-bg-secondary border border-white/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
+          <div className="min-w-0">
+            <h2 id="bulk-unknown-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
+              <Wrench className="w-4 h-4 text-orange-400" />
+              Fix Unknown Mods
+            </h2>
+            <p className="text-xs text-text-secondary mt-1">
+              {unknownMods.length} unknown mod{unknownMods.length === 1 ? '' : 's'}
+            </p>
+          </div>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="primary"
+              size="sm"
+              icon={Search}
+              disabled={findableCount === 0}
+              onClick={() => onFindAll(unknownMods)}
+              title="Search every unknown mod that has not already been checked"
+            >
+              Find all
+            </Button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+              aria-label="Close"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
+
+        <div className="grid min-h-0 grid-cols-[240px_1fr] flex-1">
+          <div className="border-r border-white/10 p-3 overflow-y-auto space-y-1.5">
+            {unknownMods.map((mod) => {
+              const cached = cache[mod.id];
+              const cachedMatch = cached?.crcMatch;
+              const isSelected = state.mod.id === mod.id;
+              const isLoading = pendingIds.has(mod.id);
+              const hasError = !!errors[mod.id];
+              const statusLabel = isLoading
+                ? 'Searching'
+                : hasError
+                  ? 'Error'
+                : cachedMatch?.status === 'found'
+                  ? 'Found'
+                  : cachedMatch?.status === 'not-found'
+                    ? 'No match'
+                    : 'Unknown';
+              const statusTone = cachedMatch?.status === 'found'
+                ? 'text-state-success'
+                : hasError
+                  ? 'text-state-danger'
+                : cachedMatch?.status === 'not-found'
+                  ? 'text-text-tertiary'
+                  : 'text-text-secondary';
+
+              return (
+                <button
+                  key={mod.id}
+                  type="button"
+                  onClick={() => onSelect(mod)}
+                  className={`w-full text-left rounded-md border px-3 py-2 transition-colors cursor-pointer ${
+                    isSelected
+                      ? 'bg-accent/10 border-accent/40'
+                      : 'bg-bg-tertiary/40 border-white/5 hover:bg-bg-tertiary hover:border-white/10'
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm font-medium text-text-primary truncate">{mod.name}</span>
+                    {isLoading && <Loader2 className="w-3.5 h-3.5 animate-spin text-accent flex-shrink-0" />}
+                  </div>
+                  <div className="mt-0.5 flex items-center gap-2 text-[11px] min-w-0">
+                    <span className="font-mono text-text-tertiary truncate" title={mod.fileName}>{mod.fileName}</span>
+                    <span className={`flex-shrink-0 ${statusTone}`}>{statusLabel}</span>
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+
+          <UnknownMatchPanel
+            key={state.mod.id}
+            state={state}
+            hideNsfwPreviews={hideNsfwPreviews}
+            onApplyMatch={onApplyMatch}
+            onViewMatch={onViewMatch}
+            onMakeCustom={onMakeCustom}
+            onFind={onFind}
+            onRetry={onRetry}
+            onCancel={onCancel}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function UnknownMatchPanel({
+  state,
+  hideNsfwPreviews,
+  onApplyMatch,
+  onViewMatch,
+  onMakeCustom,
+  onFind,
+  onRetry,
+  onCancel,
+}: {
+  state: {
+    mod: Mod;
+    loading: boolean;
+    result?: UnknownModFilterGuess;
+    error?: string;
+    cancelled?: boolean;
+  };
+  hideNsfwPreviews: boolean;
+  onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
+  onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
+  onMakeCustom: (mod: Mod) => void;
+  onFind: (mod: Mod) => void;
+  onRetry: (mod: Mod) => void;
+  onCancel: (mod: Mod) => void;
+}) {
+  const { mod, loading, result, error, cancelled } = state;
+  const [applying, setApplying] = useState(false);
+  const [applyError, setApplyError] = useState<string | null>(null);
+  const match = result?.crcMatch;
+  const foundMatch = isFoundUnknownMatch(match) ? match : null;
+
+  const handleApply = async (matchToApply: FoundUnknownMatch) => {
+    if (applying) return;
+    setApplying(true);
+    setApplyError(null);
+    try {
+      await onApplyMatch(mod, matchToApply);
+    } catch (err) {
+      setApplyError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setApplying(false);
+    }
+  };
+
+  const handleRetry = () => {
+    if (applying) return;
+    setApplyError(null);
+    onRetry(mod);
+  };
+
+  const handleFind = () => {
+    if (applying) return;
+    setApplyError(null);
+    onFind(mod);
+  };
+
+  const handleCancel = () => {
+    if (applying) return;
+    setApplyError(null);
+    onCancel(mod);
+  };
+
+  return (
+    <div className="p-5 overflow-y-auto space-y-4">
+      {loading && (
+        <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
+            <span>Finding a matching mod...</span>
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={X}
+            onClick={handleCancel}
+          >
+            Cancel
+          </Button>
+        </div>
+      )}
+
+      {error && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{error}</span>
+        </div>
+      )}
+
+      {foundMatch && (
+        <UnknownMatchCard
+          match={foundMatch}
+          hideNsfwPreviews={hideNsfwPreviews}
+          applying={applying}
+          onApply={() => void handleApply(foundMatch)}
+          onView={() => onViewMatch(mod, foundMatch)}
+          onRetry={handleRetry}
+        />
+      )}
+
+      {applyError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+          <span>{applyError}</span>
+        </div>
+      )}
+
+      {result && match && !foundMatch && (
+        <div className="rounded-md bg-bg-tertiary/50 border border-white/5 overflow-hidden">
+          <div className="p-4">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="w-5 h-5 text-text-tertiary flex-shrink-0 mt-0.5" />
+              <div className="min-w-0">
+                <div className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                  {match.status === 'error' ? 'Match Check Failed' : 'No Match Found'}
+                </div>
+                <p className="text-sm text-text-secondary mt-1">
+                  {match.reason ?? 'No GameBanana archive matched this local VPK by CRC-32.'}
+                </p>
+                <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-text-tertiary">
+                  <span>{match.checkedMods} mods checked</span>
+                  <span>{match.checkedFiles} files checked</span>
+                  <span>{match.bytesFetched.toLocaleString()} bytes fetched</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div className="border-t border-white/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={RotateCcw}
+              onClick={handleRetry}
+            >
+              Retry
+            </Button>
+            {match.status !== 'error' && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={FilePlus}
+                onClick={() => onMakeCustom(mod)}
+              >
+                Make Custom Mod
+              </Button>
+            )}
+          </div>
+        </div>
+      )}
+
+      {!loading && !error && !result && (
+        <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            {cancelled ? (
+              <X className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+            ) : (
+              <Search className="w-4 h-4 text-accent flex-shrink-0" />
+            )}
+            <span>{cancelled ? 'Search cancelled.' : 'Look for a matching mod from GameBanana.'}</span>
+          </div>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={Search}
+            onClick={handleFind}
+          >
+            Search
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+type FoundUnknownMatch = UnknownModFilterGuess['crcMatch'] & { status: 'found' };
+
+function isFoundUnknownMatch(match: UnknownModFilterGuess['crcMatch'] | undefined): match is FoundUnknownMatch {
+  return match?.status === 'found';
+}
+
+function UnknownMatchCard({
+  match,
+  hideNsfwPreviews,
+  applying,
+  onApply,
+  onView,
+  onRetry,
+}: {
+  match: FoundUnknownMatch;
+  hideNsfwPreviews: boolean;
+  applying: boolean;
+  onApply: () => void;
+  onView: () => void;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="rounded-md border border-state-success/35 bg-state-success/10 overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start gap-4">
+          <ModThumbnail
+            src={match.thumbnailUrl}
+            alt={match.modName ?? 'GameBanana mod'}
+            nsfw={match.nsfw}
+            hideNsfw={hideNsfwPreviews}
+            className="w-24 h-16 rounded-md bg-bg-primary border border-white/10 flex-shrink-0"
+          />
+          <div className="min-w-0 flex-1">
+            <div className="text-xs font-semibold uppercase tracking-wider text-state-success">
+              Likely Match
+            </div>
+            <h3 className="text-base font-semibold text-text-primary mt-1 truncate" title={match.modName}>
+              {match.modName ?? 'GameBanana mod'}
+            </h3>
+            {match.fileName && (
+              <p className="text-sm text-text-secondary mt-1 truncate" title={match.fileName}>
+                {match.fileName}
+              </p>
+            )}
+          </div>
+          <Tag tone="success">Exact CRC</Tag>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 mt-3">
+          {match.section && <Tag tone="neutral">{match.section === 'Mod' ? 'Mods' : 'Sounds'}</Tag>}
+          {match.categoryName && <Tag tone="neutral">{match.categoryName}</Tag>}
+          {typeof match.modId === 'number' && <Tag tone="neutral">Mod #{match.modId}</Tag>}
+          {typeof match.fileId === 'number' && <Tag tone="neutral">File #{match.fileId}</Tag>}
+        </div>
+
+        {match.reason && (
+          <p className="text-xs text-text-secondary mt-3">{match.reason}</p>
+        )}
+
+        <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-text-tertiary">
+          <span>{match.checkedMods} mods checked</span>
+          <span>{match.checkedFiles} files checked</span>
+          <span>{match.bytesFetched.toLocaleString()} bytes fetched</span>
+          {match.skipped7z > 0 && <span>{match.skipped7z} 7z skipped</span>}
+        </div>
+      </div>
+
+      <div className="border-t border-state-success/20 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={Info}
+          disabled={applying}
+          onClick={onView}
+        >
+          View Mod
+        </Button>
+        <Button
+          variant="secondary"
+          size="sm"
+          icon={RotateCcw}
+          disabled={applying}
+          onClick={onRetry}
+        >
+          Retry
+        </Button>
+        <Button
+          variant="success"
+          size="sm"
+          icon={Check}
+          isLoading={applying}
+          onClick={onApply}
+        >
+          Apply
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 interface ModCardProps {
   mod: {
     id: string;
@@ -1677,6 +2470,7 @@ interface ModCardProps {
     categoryName?: string;
     nsfw?: boolean;
     gameBananaId?: number;
+    isUnknown?: boolean;
   };
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
@@ -1686,6 +2480,8 @@ interface ModCardProps {
   onOpenDetails?: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  onFixUnknown?: () => void;
+  fixingUnknown?: boolean;
   /** When true, the card renders a selection checkbox overlay and clicks
    *  anywhere on the card route to `onSelectToggle` instead of opening
    *  details / firing toggle / delete. */
@@ -1723,6 +2519,8 @@ function ModCard({
   onOpenDetails,
   onToggle,
   onDelete,
+  onFixUnknown,
+  fixingUnknown,
   selectMode,
   selected,
   onSelectToggle,
@@ -1752,7 +2550,7 @@ function ModCard({
   const listHeroFacePos = listHeroName ? getHeroFacePosition(listHeroName) : 50;
   const hasListTags =
     viewMode === 'list' &&
-    (hasConflicts || mod.sourceSection === 'Sound' || mod.nsfw || updateAvailable || mod.enabled);
+    (hasConflicts || mod.isUnknown || mod.sourceSection === 'Sound' || mod.nsfw || updateAvailable || mod.enabled);
 
   const indicatorClasses = (() => {
     if (!isDropTarget || !dropPosition) return '';
@@ -1876,6 +2674,16 @@ function ModCard({
                   title={conflicts.map((c) => c.details).join(', ')}
                 >
                   Conflict
+                </Tag>
+              )}
+              {mod.isUnknown && (
+                <Tag
+                  variant="overlay"
+                  icon={Wrench}
+                  title="This local mod has no saved GameBanana or custom metadata"
+                  className="border-cyan-300/70 text-cyan-200"
+                >
+                  Unknown
                 </Tag>
               )}
               {updateAvailable && (
@@ -2083,6 +2891,15 @@ function ModCard({
                   Conflict
                 </Tag>
               )}
+              {mod.isUnknown && (
+                <Tag
+                  icon={Wrench}
+                  title="This local mod has no saved GameBanana or custom metadata"
+                  className="flex-shrink-0 bg-cyan-400/10 border-cyan-300/40 text-cyan-200"
+                >
+                  Unknown
+                </Tag>
+              )}
               {mod.sourceSection === 'Sound' && (
                 <Tag tone="accent" icon={Volume2} className="flex-shrink-0">
                   Sound
@@ -2136,13 +2953,34 @@ function ModCard({
               : 'flex-col items-center gap-1.5'
           }`}
         >
-          <button
-            onClick={onDelete}
-            className="p-1 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"
-            title="Delete mod"
-          >
-            <Trash2 className="w-4 h-4" />
-          </button>
+          <div className={viewMode === 'list' ? 'contents' : 'flex items-center gap-1.5'}>
+            {mod.isUnknown && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onFixUnknown?.();
+                }}
+                disabled={!onFixUnknown}
+                className="p-1 text-text-secondary hover:text-orange-500 transition-colors cursor-pointer disabled:opacity-60"
+                title="Fix unknown mod"
+                aria-label={`Fix unknown mod ${mod.name}`}
+              >
+                {fixingUnknown ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Wrench className="w-4 h-4" />
+                )}
+              </button>
+            )}
+            <button
+              onClick={onDelete}
+              className="p-1 text-text-secondary hover:text-red-500 transition-colors cursor-pointer"
+              title="Delete mod"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
           <button
             onClick={onToggle}
             aria-pressed={mod.enabled}
@@ -2169,6 +3007,12 @@ function ModCard({
 interface ImportCustomModModalProps {
   onClose: () => void;
   onImport: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
+  title?: string;
+  submitLabel?: string;
+  initialVpkPath?: string;
+  initialName?: string;
+  lockVpk?: boolean;
+  vpkHelpText?: string;
 }
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
@@ -2183,9 +3027,18 @@ function deriveModNameFromPath(p: string): string {
     .trim();
 }
 
-function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) {
-  const [vpkPath, setVpkPath] = useState<string>('');
-  const [name, setName] = useState<string>('');
+function ImportCustomModModal({
+  onClose,
+  onImport,
+  title = 'Import Custom Mod',
+  submitLabel = 'Import',
+  initialVpkPath = '',
+  initialName = '',
+  lockVpk = false,
+  vpkHelpText = 'The file will be copied into your addons folder and renamed with the next available pak## priority.',
+}: ImportCustomModModalProps) {
+  const [vpkPath, setVpkPath] = useState<string>(initialVpkPath);
+  const [name, setName] = useState<string>(initialName || (initialVpkPath ? deriveModNameFromPath(initialVpkPath) : ''));
   const [imagePath, setImagePath] = useState<string>('');
   const [thumbnailDataUrl, setThumbnailDataUrl] = useState<string>('');
   const [nsfw, setNsfw] = useState<boolean>(false);
@@ -2213,6 +3066,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
   };
 
   const pickVpk = async () => {
+    if (lockVpk) return;
     const picked = await showOpenDialog({
       title: 'Select VPK file',
       filters: [{ name: 'VPK files', extensions: ['vpk'] }],
@@ -2232,6 +3086,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
     e.preventDefault();
     e.stopPropagation();
     setVpkDragActive(false);
+    if (lockVpk) return;
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
     if (!/\.vpk$/i.test(file.name)) {
@@ -2298,7 +3153,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
             <FilePlus className="w-5 h-5" />
-            Import Custom Mod
+            {title}
           </h3>
           <button
             onClick={onClose}
@@ -2317,18 +3172,18 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
             <div
               role="button"
               tabIndex={0}
-              aria-label={vpkPath ? `VPK selected: ${vpkPath}. Press Enter to change.` : 'Drop a VPK file here or press Enter to browse'}
+              aria-label={vpkPath ? `VPK selected: ${vpkPath}${lockVpk ? '' : '. Press Enter to change.'}` : 'Drop a VPK file here or press Enter to browse'}
               onClick={pickVpk}
               onKeyDown={(e) => onZoneKeyDown(e, pickVpk)}
-              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(true); }}
-              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setVpkDragActive(true); }}
+              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (!lockVpk) setVpkDragActive(true); }}
+              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = lockVpk ? 'none' : 'copy'; if (!lockVpk) setVpkDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(false); }}
               onDrop={handleVpkDrop}
-              className={`relative flex flex-col items-center justify-center gap-1.5 px-4 py-5 rounded-lg border border-dashed text-center cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`relative flex flex-col items-center justify-center gap-1.5 px-4 py-5 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 vpkDragActive
                   ? 'border-accent bg-accent/10'
                   : vpkPath
-                    ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
+                    ? `border-accent/40 bg-bg-tertiary/60 ${lockVpk ? 'cursor-default' : 'cursor-pointer hover:bg-bg-tertiary'}`
                     : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
               }`}
             >
@@ -2339,7 +3194,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
                     {vpkPath.split(/[\\/]/).pop()}
                   </span>
                   <span className="text-xs text-text-secondary font-mono truncate max-w-full">{vpkPath}</span>
-                  <span className="text-xs text-accent">Click or drop another to replace</span>
+                  {!lockVpk && <span className="text-xs text-accent">Click or drop another to replace</span>}
                 </>
               ) : (
                 <>
@@ -2352,7 +3207,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
               )}
             </div>
             <p className="mt-1 text-xs text-text-secondary">
-              The file will be copied into your addons folder and renamed with the next available pak## priority.
+              {vpkHelpText}
             </p>
           </div>
 
@@ -2446,7 +3301,7 @@ function ImportCustomModModal({ onClose, onImport }: ImportCustomModModalProps) 
             className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            Import
+            {submitLabel}
           </button>
         </div>
       </div>

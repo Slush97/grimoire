@@ -1,4 +1,11 @@
-import type { Mod, AppSettings } from './mod';
+import type {
+    Mod,
+    AppSettings,
+    ModConflict,
+    UnknownModFilterGuess,
+    ApplyUnknownModMatchArgs,
+    ApplyUnknownCustomModArgs,
+} from './mod';
 import type {
     GameBananaModsResponse,
     GameBananaModDetails,
@@ -273,6 +280,10 @@ export interface ElectronAPI {
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
+    detectUnknownModFilters: (modId: string) => Promise<UnknownModFilterGuess>;
+    cancelUnknownModDetection: (modId: string) => Promise<void>;
+    applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
+    applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     backfillGameBananaFileId: (
       modId: string,
@@ -564,18 +575,6 @@ export interface ElectronAPI {
         checkApiHealth: () => Promise<unknown>;
         getApiInfo: () => Promise<unknown>;
     };
-}
-
-export interface ModConflict {
-    modA: string;
-    modAName: string;
-    modB: string;
-    modBName: string;
-    modAIdentity: string;
-    modBIdentity: string;
-    ignoreKey: string;
-    conflictType: 'priority' | 'file';
-    details: string;
 }
 
 export interface ProfileMod {

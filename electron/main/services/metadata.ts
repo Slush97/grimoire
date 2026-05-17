@@ -1,4 +1,8 @@
-import { readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from 'fs';
+import { createHash } from 'crypto';
+import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from 'fs';
+import { promises as fs } from 'fs';
+import { join } from 'path';
+import { getAddonsPath, getDisabledPath } from './deadlock';
 import { getMetadataPath } from '../utils/paths';
 
 export interface ModMetadata {
@@ -13,6 +17,7 @@ export interface ModMetadata {
     nsfw?: boolean;
     isArchived?: boolean;   // True when the downloaded GameBanana file is from the archived files list
     isMinaPreset?: boolean; // Flag for Mina presets we extracted from the 7z
+    sha256?: string;       // SHA-256 hash of the installed VPK file contents
     variantLabel?: string;  // User-provided label to disambiguate variants of the same mod
     fileDescription?: string;  // GameBanana file "header" (_sDescription) — author's per-file label, used as fallback when the user hasn't named the variant
     sourceFileName?: string;   // Original GameBanana filename stem (e.g. "galaxy_rem_gold") — used as a label fallback when the author didn't set a file header
@@ -73,6 +78,95 @@ export function setModMetadata(fileName: string, data: ModMetadata): void {
     const metadata = loadMetadata();
     metadata[fileName] = { ...metadata[fileName], ...data };
     saveMetadata(metadata);
+}
+
+/**
+ * Set metadata and attach a SHA-256 fingerprint for the installed VPK.
+ * Callers pass the path because metadata is keyed by logical pak filename and
+ * the same filename may exist in either addons or .disabled.
+ */
+export async function setModMetadataWithHash(
+    fileName: string,
+    data: ModMetadata,
+    filePath: string
+): Promise<void> {
+    const sha256 = await hashFileSha256(filePath);
+    setModMetadata(fileName, {
+        ...data,
+        sha256,
+    });
+}
+
+/**
+ * Backfill SHA-256 values for metadata written before hashes existed.
+ * This runs without renaming/moving files; entries whose VPK no longer exists
+ * are skipped and can still be pruned by the normal metadata cleanup path.
+ */
+export async function backfillMissingMetadataHashes(deadlockPath: string): Promise<number> {
+    const metadata = loadMetadata();
+    const missing = Object.entries(metadata).filter(([, data]) => !isValidSha256(data.sha256));
+    if (missing.length === 0) return 0;
+
+    const filesByName = await collectInstalledVpkPaths(deadlockPath);
+    let updated = 0;
+
+    for (const [fileName, data] of missing) {
+        const filePath = filesByName.get(fileName.toLowerCase());
+        if (!filePath) continue;
+
+        try {
+            data.sha256 = await hashFileSha256(filePath);
+            updated++;
+        } catch (error) {
+            console.warn(`[Metadata] Failed to backfill SHA-256 for ${fileName}:`, error);
+        }
+    }
+
+    if (updated > 0) {
+        saveMetadata(metadata);
+    }
+
+    return updated;
+}
+
+async function collectInstalledVpkPaths(deadlockPath: string): Promise<Map<string, string>> {
+    const filesByName = new Map<string, string>();
+
+    for (const folder of [getAddonsPath(deadlockPath), getDisabledPath(deadlockPath)]) {
+        let entries: import('fs').Dirent[];
+        try {
+            entries = await fs.readdir(folder, { withFileTypes: true });
+        } catch {
+            continue;
+        }
+
+        for (const entry of entries) {
+            if (!entry.isFile() || !entry.name.toLowerCase().endsWith('_dir.vpk')) continue;
+            const key = entry.name.toLowerCase();
+            if (!filesByName.has(key)) {
+                filesByName.set(key, join(folder, entry.name));
+            }
+        }
+    }
+
+    return filesByName;
+}
+
+function isValidSha256(value: string | undefined): boolean {
+    return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
+}
+
+async function hashFileSha256(filePath: string): Promise<string> {
+    const hash = createHash('sha256');
+
+    await new Promise<void>((resolve, reject) => {
+        const stream = createReadStream(filePath);
+        stream.on('data', (chunk) => hash.update(chunk));
+        stream.on('error', reject);
+        stream.on('end', resolve);
+    });
+
+    return hash.digest('hex');
 }
 
 /**

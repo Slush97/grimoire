@@ -8,6 +8,14 @@ import type {
 import type { SnapshotSummary, SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
 import type {
+    AppSettings,
+    ApplyUnknownCustomModArgs,
+    ApplyUnknownModMatchArgs,
+    Mod,
+    ModConflict,
+    UnknownModFilterGuess,
+} from '../../src/types/mod';
+import type {
     LikeResponse,
     ListProfilesResponse,
     MeResponse,
@@ -34,7 +42,15 @@ export interface ElectronAPI {
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
+    detectUnknownModFilters: (modId: string) => Promise<UnknownModFilterGuess>;
+    cancelUnknownModDetection: (modId: string) => Promise<void>;
+    applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
+    applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
+    backfillGameBananaFileId: (
+        modId: string,
+        payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
+    ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
@@ -338,47 +354,11 @@ type ScoreboardSortBy =
     | 'max_net_worth_per_match' | 'avg_net_worth_per_match' | 'net_worth'
     | 'max_player_damage_per_match' | 'avg_player_damage_per_match' | 'player_damage';
 
-// Minimal type stubs (full types are in renderer)
-interface AppSettings {
-    deadlockPath: string | null;
-    devMode: boolean;
-    devDeadlockPath: string | null;
-    hideNsfwPreviews: boolean;
-    hideOutdatedMods: boolean;
-    autoDisableSiblingVariants: boolean;
-    steamLaunchOptions: string;
-    activeProfileId: string | null;
-    autoSaveProfile: boolean;
-    experimentalStats: boolean;
-    experimentalCrosshair: boolean;
-    experimentalSocial: boolean;
-    hasCompletedSetup: boolean;
-}
-
 interface SteamLaunchOptionsStatus {
     available: boolean;
     configPath: string | null;
     currentValue: string | null;
     steamRunning: boolean;
-}
-
-interface Mod {
-    id: string;
-    name: string;
-    fileName: string;
-    path: string;
-    enabled: boolean;
-    priority: number;
-    size: number;
-    installedAt: string;
-    description?: string;
-    thumbnailUrl?: string;
-    gameBananaId?: number;
-    gameBananaFileId?: number;
-    categoryId?: number;
-    sourceSection?: string;
-    nsfw?: boolean;
-    isArchived?: boolean;
 }
 
 interface BrowseModsArgs {
@@ -603,18 +583,6 @@ interface GameBananaCollectionItemsResponse {
     perPage: number;
 }
 
-interface ModConflict {
-    modA: string;
-    modAName: string;
-    modB: string;
-    modBName: string;
-    modAIdentity: string;
-    modBIdentity: string;
-    ignoreKey: string;
-    conflictType: 'priority' | 'file';
-    details: string;
-}
-
 interface ProfileCrosshairSettings {
     pipGap: number;
     pipHeight: number;
@@ -778,6 +746,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),
     deleteMod: (modId: string) => ipcRenderer.invoke('delete-mod', modId),
+    detectUnknownModFilters: (modId: string) =>
+        ipcRenderer.invoke('detect-unknown-mod-filters', modId),
+    cancelUnknownModDetection: (modId: string) =>
+        ipcRenderer.invoke('cancel-unknown-mod-detection', modId),
+    applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) =>
+        ipcRenderer.invoke('apply-unknown-mod-match', modId, args),
+    applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) =>
+        ipcRenderer.invoke('apply-unknown-custom-mod', modId, args),
     setVariantLabel: (modId: string, label: string) =>
         ipcRenderer.invoke('set-variant-label', modId, label),
     backfillGameBananaFileId: (

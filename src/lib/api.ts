@@ -1,4 +1,4 @@
-import type { Mod, AppSettings } from '../types/mod';
+import type { Mod, AppSettings, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs } from '../types/mod';
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
@@ -57,6 +57,25 @@ export async function disableMod(modId: string): Promise<Mod> {
 
 export async function deleteMod(modId: string): Promise<void> {
   return window.electronAPI.deleteMod(modId);
+}
+
+export async function detectUnknownModFilters(modId: string): Promise<UnknownModFilterGuess> {
+  return window.electronAPI.detectUnknownModFilters(modId);
+}
+
+export async function cancelUnknownModDetection(modId: string): Promise<void> {
+  return window.electronAPI.cancelUnknownModDetection(modId);
+}
+
+export async function applyUnknownModMatch(modId: string, args: ApplyUnknownModMatchArgs): Promise<Mod> {
+  return window.electronAPI.applyUnknownModMatch(modId, args);
+}
+
+export async function applyUnknownCustomMod(modId: string, args: ApplyUnknownCustomModArgs): Promise<Mod> {
+  if (typeof window.electronAPI.applyUnknownCustomMod !== 'function') {
+    throw new Error('Make Custom Mod is not available in the current Electron preload. Restart pnpm dev so the new main/preload API is loaded.');
+  }
+  return window.electronAPI.applyUnknownCustomMod(modId, args);
 }
 
 export async function setVariantLabel(modId: string, label: string): Promise<Mod> {

@@ -49,6 +49,8 @@ import './ipc/diagnostics';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
+import { loadSettings } from './services/settings';
+import { backfillMissingMetadataHashes } from './services/metadata';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -68,6 +70,28 @@ function openExternalSafe(rawUrl: string): void {
         console.warn('[Main] blocked openExternal for scheme:', u.protocol);
     } catch {
         console.warn('[Main] blocked openExternal for malformed URL');
+    }
+}
+
+function getConfiguredDeadlockPath(): string | null {
+    const settings = loadSettings();
+    if (settings.devMode && settings.devDeadlockPath) {
+        return settings.devDeadlockPath;
+    }
+    return settings.deadlockPath;
+}
+
+async function backfillStartupMetadataHashes(): Promise<void> {
+    const deadlockPath = getConfiguredDeadlockPath();
+    if (!deadlockPath) return;
+
+    try {
+        const updated = await backfillMissingMetadataHashes(deadlockPath);
+        if (updated > 0) {
+            console.log(`[Metadata] Backfilled SHA-256 for ${updated} mod metadata entr${updated === 1 ? 'y' : 'ies'}`);
+        }
+    } catch (error) {
+        console.warn('[Metadata] Startup SHA-256 backfill failed:', error);
     }
 }
 
@@ -249,8 +273,11 @@ if (!gotTheLock) {
         void hydrateSocialSession();
 
         // Recover from any half-finished vanilla launch (app was closed mid-session,
-        // or grimoire crashed while the user was playing vanilla). Runs in background.
-        void runStartupRecovery();
+        // or grimoire crashed while the user was playing vanilla), then fill in
+        // SHA-256 metadata for older entries that were written before hashing.
+        void runStartupRecovery().finally(() => {
+            void backfillStartupMetadataHashes();
+        });
 
         // Initialize auto-updater (production only). Skip the background check
         // for apt/AUR/snap installs since the package manager owns updates.

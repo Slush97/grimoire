@@ -4,6 +4,7 @@ import { join, dirname } from 'path';
 import { createHash, randomBytes } from 'crypto';
 import { getAddonsPath, getDisabledPath } from './deadlock';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
+import { compareFileContents, fingerprintFile } from './fileMatch';
 
 /** Minimum VPK priority number */
 const MIN_VPK_PRIORITY = 1;
@@ -11,6 +12,8 @@ const MIN_VPK_PRIORITY = 1;
 const MAX_VPK_PRIORITY = 99;
 /** Default priority for mods without pak## prefix */
 const DEFAULT_MOD_PRIORITY = 50;
+
+type CollisionMetadataOwner = 'enabled' | 'disabled';
 
 export interface Mod {
     id: string;
@@ -31,6 +34,8 @@ export interface Mod {
     sourceSection?: string;
     nsfw?: boolean;
     isArchived?: boolean;
+    sha256?: string;
+    isUnknown?: boolean;
     /** User-given name for this VPK, used to disambiguate variants of the
      *  same GameBanana mod (e.g. "Red preset" vs "Blue preset"). Optional. */
     variantLabel?: string;
@@ -40,7 +45,7 @@ export interface Mod {
     fileDescription?: string;
     /** Original GameBanana filename stem (e.g. "galaxy_rem_gold"). Captured
      *  so variants from mods whose author left descriptions empty still get
-     *  a meaningful label — falls between fileDescription and the local
+     *  a meaningful label - falls between fileDescription and the local
      *  pakNN_dir.vpk filename in the picker's display chain. */
     sourceFileName?: string;
 }
@@ -109,8 +114,7 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
             const stats = await fs.stat(fullPath);
             if (!stats.isFile()) continue;
 
-            // Only process VPK files
-            if (!entry.endsWith('_dir.vpk') && !entry.endsWith('.vpk')) continue;
+            if (!isDeadlockModVpk(entry)) continue;
 
             const priority = parseVpkPriority(entry) ?? DEFAULT_MOD_PRIORITY;
 
@@ -139,6 +143,8 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
     const addonsPath = getAddonsPath(deadlockPath);
     const disabledPath = getDisabledPath(deadlockPath);
 
+    await reconcileEnabledDisabledCollisions(deadlockPath, addonsPath, disabledPath);
+
     const [enabledMods, disabledMods] = await Promise.all([
         scanFolder(addonsPath, true),
         scanFolder(disabledPath, false),
@@ -150,6 +156,164 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
     mods.sort((a, b) => a.priority - b.priority);
 
     return mods;
+}
+
+async function reconcileEnabledDisabledCollisions(
+    deadlockPath: string,
+    addonsPath: string,
+    disabledPath: string
+): Promise<void> {
+    if (!existsSync(addonsPath) || !existsSync(disabledPath)) return;
+
+    const [enabledEntries, disabledEntries] = await Promise.all([
+        listPrimaryVpkFiles(addonsPath),
+        listPrimaryVpkFiles(disabledPath),
+    ]);
+    const enabledByName = new Map(enabledEntries.map((entry) => [entry.toLowerCase(), entry]));
+
+    for (const disabledEntry of disabledEntries) {
+        const enabledEntry = enabledByName.get(disabledEntry.toLowerCase());
+        if (!enabledEntry) continue;
+
+        const identical = await sameFileContents(
+            join(addonsPath, enabledEntry),
+            join(disabledPath, disabledEntry)
+        );
+        if (identical) {
+            await fs.unlink(join(disabledPath, disabledEntry));
+            console.warn(
+                `[mods] Removed duplicate disabled VPK for ${enabledEntry}: ${disabledEntry}`
+            );
+            continue;
+        }
+
+        const priority = await findNextAvailablePriority(deadlockPath);
+        const metadata = getModMetadata(enabledEntry);
+        const owner = await getCollisionMetadataOwner(metadata?.sha256, join(disabledPath, disabledEntry));
+        const renamedFileName = await renameModFileToPriority(disabledPath, disabledEntry, priority);
+        moveCollisionMetadata(enabledEntry, renamedFileName, owner, metadata);
+        console.warn(
+            `[mods] Renamed conflicting disabled VPK ${disabledEntry} to ${renamedFileName}; contents differ from enabled copy.`
+        );
+    }
+}
+
+async function listPrimaryVpkFiles(folder: string): Promise<string[]> {
+    const entries = await fs.readdir(folder, { withFileTypes: true });
+    return entries
+        .filter((entry) => entry.isFile() && isDeadlockModVpk(entry.name))
+        .map((entry) => entry.name);
+}
+
+function isDeadlockModVpk(fileName: string): boolean {
+    return fileName.toLowerCase().endsWith('_dir.vpk');
+}
+
+async function sameFileContents(leftPath: string, rightPath: string): Promise<boolean> {
+    const comparison = await compareFileContents(leftPath, rightPath);
+    return comparison.matches;
+}
+
+function moveCollisionMetadata(
+    enabledFileName: string,
+    renamedFileName: string,
+    owner: CollisionMetadataOwner,
+    metadata: ReturnType<typeof getModMetadata>
+): void {
+    removeModMetadata(renamedFileName);
+    if (owner !== 'disabled' || !metadata) return;
+
+    setModMetadata(renamedFileName, metadata);
+    removeModMetadata(enabledFileName);
+}
+
+async function getCollisionMetadataOwner(
+    sha256: string | undefined,
+    disabledPath: string
+): Promise<CollisionMetadataOwner> {
+    if (!sha256) return 'enabled';
+
+    const disabledHash = await fingerprintFile(disabledPath);
+    return disabledHash.sha256.toLowerCase() === sha256.toLowerCase() ? 'disabled' : 'enabled';
+}
+
+async function renameModFileToPriority(
+    folder: string,
+    fileName: string,
+    priority: number
+): Promise<string> {
+    const finalName = fileNameForPriority(fileName, priority);
+    if (existsSync(join(folder, finalName))) {
+        throw new Error(`Cannot rename conflicting disabled mod: target already exists (${finalName})`);
+    }
+
+    await fs.rename(join(folder, fileName), join(folder, finalName));
+    return finalName;
+}
+
+function fileNameForPriority(fileName: string, priority: number): string {
+    const renamed = renameWithPriority(fileName, priority);
+    if (renamed !== fileName) return renamed;
+
+    const priorityStr = String(Math.min(MAX_VPK_PRIORITY, priority)).padStart(2, '0');
+    return `pak${priorityStr}_dir.vpk`;
+}
+
+async function moveModToFolder(
+    deadlockPath: string,
+    targetMod: Mod,
+    destinationFolder: string,
+    enabled: boolean
+): Promise<Mod> {
+    let destinationFileName = targetMod.fileName;
+    let collisionMetadata: ReturnType<typeof getModMetadata> | undefined;
+    let collisionMetadataOwner: CollisionMetadataOwner | undefined;
+    const destinationPath = join(destinationFolder, destinationFileName);
+    const hasConflict = targetMod.path !== destinationPath && existsSync(destinationPath);
+
+    if (hasConflict) {
+        const identical = await sameFileContents(
+            targetMod.path,
+            join(destinationFolder, destinationFileName)
+        );
+
+        if (identical) {
+            await fs.unlink(targetMod.path);
+            return {
+                ...targetMod,
+                enabled,
+                path: join(destinationFolder, destinationFileName),
+            };
+        }
+
+        const priority = await findNextAvailablePriority(deadlockPath);
+        collisionMetadata = getModMetadata(targetMod.fileName);
+        collisionMetadataOwner = await getCollisionMetadataOwner(
+            collisionMetadata?.sha256,
+            targetMod.path
+        );
+        destinationFileName = fileNameForPriority(targetMod.fileName, priority);
+    }
+
+    await fs.mkdir(destinationFolder, { recursive: true });
+    await fs.rename(targetMod.path, join(destinationFolder, destinationFileName));
+
+    if (destinationFileName !== targetMod.fileName) {
+        if (collisionMetadataOwner) {
+            moveCollisionMetadata(targetMod.fileName, destinationFileName, collisionMetadataOwner, collisionMetadata);
+        } else {
+            migrateModMetadata([{ from: targetMod.fileName, to: destinationFileName }]);
+        }
+    }
+
+    return {
+        ...targetMod,
+        id: generateModId(destinationFileName),
+        fileName: destinationFileName,
+        enabled,
+        priority: parseVpkPriority(destinationFileName) ?? targetMod.priority,
+        path: join(destinationFolder, destinationFileName),
+    };
 }
 
 /**
@@ -217,15 +381,7 @@ export async function enableMod(deadlockPath: string, modId: string): Promise<Mo
     }
 
     const addonsPath = getAddonsPath(deadlockPath);
-    const destPath = join(addonsPath, targetMod.fileName);
-
-    await fs.rename(targetMod.path, destPath);
-
-    return {
-        ...targetMod,
-        enabled: true,
-        path: destPath,
-    };
+    return moveModToFolder(deadlockPath, targetMod, addonsPath, true);
 }
 
 /**
@@ -244,19 +400,11 @@ export async function disableMod(deadlockPath: string, modId: string): Promise<M
     }
 
     const disabledPath = getDisabledPath(deadlockPath);
-    const destPath = join(disabledPath, targetMod.fileName);
-
-    await fs.rename(targetMod.path, destPath);
-
-    return {
-        ...targetMod,
-        enabled: false,
-        path: destPath,
-    };
+    return moveModToFolder(deadlockPath, targetMod, disabledPath, false);
 }
 
 /**
- * Delete a mod completely (including related VPK files) (async)
+ * Delete a mod completely (async)
  */
 export async function deleteMod(deadlockPath: string, modId: string): Promise<void> {
     const mods = await scanMods(deadlockPath);
@@ -266,36 +414,12 @@ export async function deleteMod(deadlockPath: string, modId: string): Promise<vo
         throw new Error(`Mod not found: ${modId}`);
     }
 
-    // Delete the main file
     await fs.unlink(targetMod.path);
-
-    // Also remove related VPK files (pak##_000.vpk, pak##_001.vpk, etc.)
-    const baseName = targetMod.fileName.replace(/_dir\.vpk$/, '');
-    const parentDir = join(targetMod.path, '..');
-
-    try {
-        const siblings = await fs.readdir(parentDir);
-        const deletePromises = siblings
-            .filter(sibling => sibling.startsWith(baseName) && sibling.endsWith('.vpk'))
-            .map(sibling => fs.unlink(join(parentDir, sibling)));
-        await Promise.all(deletePromises);
-    } catch {
-        // Ignore errors when cleaning up related files
-    }
 
     // Metadata is keyed by fileName. If we leave it behind, the next mod that
     // is assigned the same pakNN_dir.vpk slot will inherit the deleted mod's
     // gameBananaId, thumbnail, category, etc. via setModMetadata's merge.
     removeModMetadata(targetMod.fileName);
-}
-
-/**
- * Find all VPK sibling files for a given _dir.vpk (e.g. pak05_foo_000.vpk, pak05_foo_001.vpk)
- */
-async function findVpkSiblings(parentDir: string, dirFileName: string): Promise<string[]> {
-    const baseName = dirFileName.replace(/_dir\.vpk$/, '');
-    const entries = await fs.readdir(parentDir);
-    return entries.filter((e) => e.startsWith(`${baseName}_`) && e.endsWith('.vpk'));
 }
 
 /**
@@ -307,7 +431,7 @@ function renameWithPriority(fileName: string, priority: number): string {
 }
 
 /**
- * Set the priority of a mod by renaming it and all its VPK siblings (async).
+ * Set the priority of a mod by renaming its VPK file (async).
  * Also migrates metadata to the new filename.
  */
 export async function setModPriority(
@@ -329,22 +453,10 @@ export async function setModPriority(
         return targetMod;
     }
 
-    const siblings = await findVpkSiblings(parentDir, targetMod.fileName);
-
-    // Collision check across all siblings
-    for (const sibling of siblings) {
-        const newSiblingName = renameWithPriority(sibling, newPriority);
-        if (newSiblingName === sibling) continue;
-        if (existsSync(join(parentDir, newSiblingName))) {
-            throw new Error(`Priority ${newPriority} is already in use`);
-        }
+    if (existsSync(join(parentDir, newFileName))) {
+        throw new Error(`Priority ${newPriority} is already in use`);
     }
-
-    for (const sibling of siblings) {
-        const newSiblingName = renameWithPriority(sibling, newPriority);
-        if (newSiblingName === sibling) continue;
-        await fs.rename(join(parentDir, sibling), join(parentDir, newSiblingName));
-    }
+    await fs.rename(join(parentDir, targetMod.fileName), join(parentDir, newFileName));
 
     const oldMeta = getModMetadata(targetMod.fileName);
     if (oldMeta) {
@@ -408,19 +520,13 @@ export async function reorderMods(
     type RenameStep = { fromPath: string; tmpPath: string; finalPath: string };
     const steps: RenameStep[] = [];
 
-    for (const { mod, newPriority } of assignments) {
+    for (const { mod, newFileName } of assignments) {
         const parentDir = dirname(mod.path);
-        const siblings = await findVpkSiblings(parentDir, mod.fileName);
-
-        for (const sibling of siblings) {
-            const finalName = renameWithPriority(sibling, newPriority);
-            if (finalName === sibling) continue;
-            steps.push({
-                fromPath: join(parentDir, sibling),
-                tmpPath: join(parentDir, `tmp${tmpId}_${sibling}`),
-                finalPath: join(parentDir, finalName),
-            });
-        }
+        steps.push({
+            fromPath: join(parentDir, mod.fileName),
+            tmpPath: join(parentDir, `tmp${tmpId}_${mod.fileName}`),
+            finalPath: join(parentDir, newFileName),
+        });
     }
 
     const phase1Done: RenameStep[] = [];
@@ -509,26 +615,19 @@ export async function swapModPriority(
 async function directSwap(a: Mod, b: Mod): Promise<void> {
     const parentA = dirname(a.path);
     const parentB = dirname(b.path);
-    const aSiblings = await findVpkSiblings(parentA, a.fileName);
-    const bSiblings = await findVpkSiblings(parentB, b.fileName);
-
     const tmpId = randomBytes(4).toString('hex');
-    const steps: { from: string; tmp: string; final: string }[] = [];
-
-    for (const s of aSiblings) {
-        steps.push({
-            from: join(parentA, s),
-            tmp: join(parentA, `tmp${tmpId}_${s}`),
-            final: join(parentA, renameWithPriority(s, b.priority)),
-        });
-    }
-    for (const s of bSiblings) {
-        steps.push({
-            from: join(parentB, s),
-            tmp: join(parentB, `tmp${tmpId}_${s}`),
-            final: join(parentB, renameWithPriority(s, a.priority)),
-        });
-    }
+    const steps = [
+        {
+            from: join(parentA, a.fileName),
+            tmp: join(parentA, `tmp${tmpId}_${a.fileName}`),
+            final: join(parentA, renameWithPriority(a.fileName, b.priority)),
+        },
+        {
+            from: join(parentB, b.fileName),
+            tmp: join(parentB, `tmp${tmpId}_${b.fileName}`),
+            final: join(parentB, renameWithPriority(b.fileName, a.priority)),
+        },
+    ];
 
     for (const step of steps) await fs.rename(step.from, step.tmp);
     for (const step of steps) await fs.rename(step.tmp, step.final);

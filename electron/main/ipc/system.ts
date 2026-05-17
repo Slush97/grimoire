@@ -28,7 +28,7 @@ import { getAddonsPath, getDisabledPath, getCitadelPath } from '../services/dead
 import { getUserDataPath } from '../utils/paths';
 import {
     getModMetadata,
-    setModMetadata,
+    setModMetadataWithHash,
     deleteModMetadata,
 } from '../services/metadata';
 
@@ -384,14 +384,14 @@ ipcMain.handle(
             console.log('[applyMinaVariant] Installed preset to:', destPath);
 
             // Save metadata with isMinaPreset flag so we can identify it later
-            setModMetadata(destFileName, {
+            await setModMetadataWithHash(destFileName, {
                 modName: `Midnight Mina — ${presetLabel}`,
                 categoryId: heroCategoryId,
                 categoryName: 'Mina',
                 sourceSection: 'Mod',
                 nsfw: true,
                 isMinaPreset: true,  // Flag to identify this as a Mina preset we created
-            });
+            }, destPath);
 
         } finally {
             // Cleanup temp directory
