@@ -250,6 +250,23 @@ export async function openGameFolder(): Promise<void> {
   return window.electronAPI.openGameFolder();
 }
 
+// Diagnostics
+export async function getLogPath(): Promise<string> {
+  return window.electronAPI.diagnostics.getLogPath();
+}
+
+export async function openLogsFolder(): Promise<void> {
+  return window.electronAPI.diagnostics.openLogsFolder();
+}
+
+export async function saveDiagnosticReport(): Promise<{ path: string } | null> {
+  return window.electronAPI.diagnostics.saveReport();
+}
+
+export async function buildDiagnosticReport(description: string): Promise<string> {
+  return window.electronAPI.diagnostics.buildReport(description);
+}
+
 // Dialog helper for Settings page
 export async function showOpenDialog(options: {
   directory?: boolean;

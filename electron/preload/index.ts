@@ -171,6 +171,14 @@ export interface ElectronAPI {
         onStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
 
+    // Diagnostics (logs + bug-report bundle)
+    diagnostics: {
+        getLogPath: () => Promise<string>;
+        openLogsFolder: () => Promise<void>;
+        saveReport: () => Promise<{ path: string } | null>;
+        buildReport: (description: string) => Promise<string>;
+    };
+
     // Grimoire Social (publish + discover + likes). Session token lives in
     // the main process; this surface never returns it to the renderer.
     social: {
@@ -961,6 +969,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.on('updater:status', handler);
             return () => ipcRenderer.removeListener('updater:status', handler);
         },
+    },
+
+    // Diagnostics
+    diagnostics: {
+        getLogPath: () => ipcRenderer.invoke('diagnostics:getLogPath'),
+        openLogsFolder: () => ipcRenderer.invoke('diagnostics:openLogsFolder'),
+        saveReport: () => ipcRenderer.invoke('diagnostics:saveReport'),
+        buildReport: (description: string) => ipcRenderer.invoke('diagnostics:buildReport', description),
     },
 
     // Grimoire Social

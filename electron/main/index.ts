@@ -2,6 +2,14 @@ import { app, BrowserWindow, shell, session } from 'electron';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
+
+// Initialize the file logger before anything else so console.* calls in IPC
+// and service modules (imported below) flow into the rolling log file from
+// the very first line. The "Save diagnostic report" button in Settings hands
+// the user that file to attach to bug reports.
+import { initLogger } from './services/diagnostics';
+initLogger();
+
 import {
     GRIMOIRE_PROTOCOL,
     findGrimoireUrlInArgv,
@@ -36,6 +44,7 @@ import './ipc/stats';
 import './ipc/updater';
 import './ipc/launch';
 import './ipc/social';
+import './ipc/diagnostics';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';

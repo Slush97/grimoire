@@ -418,6 +418,14 @@ export interface ElectronAPI {
         onStatus: (callback: (status: UpdateStatus) => void) => () => void;
     };
 
+    // Diagnostics
+    diagnostics: {
+        getLogPath: () => Promise<string>;
+        openLogsFolder: () => Promise<void>;
+        saveReport: () => Promise<{ path: string } | null>;
+        buildReport: (description: string) => Promise<string>;
+    };
+
     // Grimoire Social
     social: {
         getSessionStatus: () => Promise<import('./social').SocialSessionStatus>;
