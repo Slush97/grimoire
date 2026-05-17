@@ -575,7 +575,7 @@ export default function ModDetailsModal({
               </section>
 
               <a
-                href={`https://gamebanana.com/mods/${mod.id}`}
+                href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="inline-flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
