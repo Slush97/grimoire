@@ -347,33 +347,118 @@ export default function Installed() {
         wasEnabled: m.enabled,
       }));
     if (snapshots.length === 0) return;
+
+    // Group by GameBanana mod id so we fetch fresh file metadata once per
+    // mod. Reusing each row's stored fileId would 404 whenever an author
+    // replaced their upload (new file id) — the most common cause of
+    // "update failed" reports.
+    const groups = new Map<number, typeof snapshots>();
+    for (const s of snapshots) {
+      const arr = groups.get(s.gameBananaId) ?? [];
+      arr.push(s);
+      groups.set(s.gameBananaId, arr);
+    }
+
     setUpdateAllProgress({ done: 0, total: snapshots.length });
     const failures: string[] = [];
-    for (let i = 0; i < snapshots.length; i++) {
-      const s = snapshots[i];
+    // Track the (gameBananaId, fileId) actually downloaded so re-enable can
+    // still find the new install even when we redirected a stale snapshot.
+    const completed: { gameBananaId: number; gameBananaFileId: number; wasEnabled: boolean; fileName: string }[] = [];
+    let progress = 0;
+
+    for (const [, group] of groups) {
+      let details: GameBananaModDetails;
       try {
-        await deleteMod(s.oldId);
-        await downloadMod(s.gameBananaId, s.gameBananaFileId, s.fileName, s.section, s.categoryId);
+        details = await getModDetails(group[0].gameBananaId, group[0].section);
       } catch (err) {
-        failures.push(`${s.fileName}: ${String(err)}`);
+        for (const s of group) {
+          failures.push(`${s.fileName}: failed to fetch mod details (${String(err)})`);
+          progress += 1;
+          setUpdateAllProgress({ done: progress, total: snapshots.length });
+        }
+        continue;
       }
-      setUpdateAllProgress({ done: i + 1, total: snapshots.length });
+
+      const liveFiles = details.files ?? [];
+      const liveFileIds = new Set(liveFiles.map((f) => f.id));
+
+      // Resolve every snapshot to a target file *before* any delete/download
+      // runs, so an unrecoverable row keeps its existing install rather than
+      // getting deleted into a failed re-download.
+      //
+      // Pass 1: rows whose stored fileId is still on GameBanana (genuine
+      // multi-file mods stay 1:1).
+      // Pass 2: rows whose fileId is gone. Fall back to a single-file
+      // consolidation only when the mod now ships exactly one file and no
+      // other row already claimed it.
+      type Resolution =
+        | { ok: true; snapshot: (typeof snapshots)[number]; fileId: number; fileName: string }
+        | { ok: false; snapshot: (typeof snapshots)[number]; reason: string };
+      const resolutions: Resolution[] = [];
+      const claimedIds = new Set<number>();
+      for (const s of group) {
+        if (liveFileIds.has(s.gameBananaFileId)) {
+          resolutions.push({ ok: true, snapshot: s, fileId: s.gameBananaFileId, fileName: s.fileName });
+          claimedIds.add(s.gameBananaFileId);
+        }
+      }
+      for (const s of group) {
+        if (liveFileIds.has(s.gameBananaFileId)) continue;
+        if (liveFiles.length === 1 && !claimedIds.has(liveFiles[0].id)) {
+          resolutions.push({ ok: true, snapshot: s, fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
+          claimedIds.add(liveFiles[0].id);
+        } else {
+          resolutions.push({
+            ok: false,
+            snapshot: s,
+            reason: 'file no longer on GameBanana; mod files changed. Reinstall from Browse.',
+          });
+        }
+      }
+
+      for (const r of resolutions) {
+        if (!r.ok) {
+          failures.push(`${r.snapshot.fileName}: ${r.reason}`);
+        } else {
+          try {
+            await deleteMod(r.snapshot.oldId);
+            await downloadMod(
+              r.snapshot.gameBananaId,
+              r.fileId,
+              r.fileName,
+              r.snapshot.section,
+              r.snapshot.categoryId,
+            );
+            completed.push({
+              gameBananaId: r.snapshot.gameBananaId,
+              gameBananaFileId: r.fileId,
+              wasEnabled: r.snapshot.wasEnabled,
+              fileName: r.fileName,
+            });
+          } catch (err) {
+            failures.push(`${r.snapshot.fileName}: ${String(err)}`);
+          }
+        }
+        progress += 1;
+        setUpdateAllProgress({ done: progress, total: snapshots.length });
+      }
     }
+
     // Refresh once so the new installs are in the store with their new ids,
-    // then re-enable anything that was enabled before. Match-by GB ids; the
+    // then re-enable anything that was enabled before. Match by GB ids; the
     // local mod id changes on reinstall.
     await loadMods();
     const refreshed = useAppStore.getState().mods;
-    for (const s of snapshots) {
-      if (!s.wasEnabled) continue;
+    for (const c of completed) {
+      if (!c.wasEnabled) continue;
       const newMod = refreshed.find(
-        (m) => m.gameBananaId === s.gameBananaId && m.gameBananaFileId === s.gameBananaFileId,
+        (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
       );
       if (newMod && !newMod.enabled) {
         try {
           await toggleMod(newMod.id);
         } catch (err) {
-          failures.push(`re-enable ${s.fileName}: ${String(err)}`);
+          failures.push(`re-enable ${c.fileName}: ${String(err)}`);
         }
       }
     }
