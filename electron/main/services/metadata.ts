@@ -90,10 +90,9 @@ export async function setModMetadataWithHash(
     data: ModMetadata,
     filePath: string
 ): Promise<void> {
-    const sha256 = await hashFileSha256(filePath);
     setModMetadata(fileName, {
         ...data,
-        sha256,
+        sha256: await hashFileSha256(filePath),
     });
 }
 
@@ -133,17 +132,9 @@ async function collectInstalledVpkPaths(deadlockPath: string): Promise<Map<strin
     const filesByName = new Map<string, string>();
 
     for (const folder of [getAddonsPath(deadlockPath), getDisabledPath(deadlockPath)]) {
-        let entries: import('fs').Dirent[];
-        try {
-            entries = await fs.readdir(folder, { withFileTypes: true });
-        } catch {
-            continue;
-        }
-
-        for (const entry of entries) {
-            if (!entry.isFile() || !entry.name.toLowerCase().endsWith('_dir.vpk')) continue;
+        for (const entry of await fs.readdir(folder, { withFileTypes: true }).catch(() => [])) {
             const key = entry.name.toLowerCase();
-            if (!filesByName.has(key)) {
+            if (entry.isFile() && key.endsWith('_dir.vpk') && !filesByName.has(key)) {
                 filesByName.set(key, join(folder, entry.name));
             }
         }
