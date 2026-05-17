@@ -10,7 +10,6 @@ import {
   Loader2,
   X,
   ExternalLink,
-  ShieldCheck,
   Upload,
   User as UserIcon,
 } from 'lucide-react';
@@ -233,11 +232,11 @@ export default function Discover() {
   );
 
 
-  // Top-right header action: either a sign-in CTA (signed-out) or the user
-  // chip (signed-in). The pulse class fires when a signed-out user clicks a
-  // card's like button so the right action is obvious.
+  // Page header action: either a sign-in CTA (signed-out) or the publish
+  // button + user chip (signed-in). The pulse ring fires when a signed-out
+  // user clicks a card's like button so the right action is obvious.
   const headerAction = signedIn && user ? (
-    <div className="flex items-center gap-2">
+    <>
       <Button
         size="sm"
         icon={Upload}
@@ -264,7 +263,7 @@ export default function Discover() {
           {user.display_name}
         </span>
       </div>
-    </div>
+    </>
   ) : (
     <div
       className={`flex items-center gap-2 rounded-md transition-shadow ${signInPulse ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary shadow-[0_0_0_4px_rgba(56,189,248,0.25)] animate-pulse' : ''}`}
@@ -287,16 +286,27 @@ export default function Discover() {
     </div>
   );
 
+  const headerDescription = (
+    <>
+      Mod profiles published by other Grimoire users.
+      {!signedIn && (
+        <span className="text-text-tertiary">
+          {' '}Sign in to like and publish; importing works without an account.
+        </span>
+      )}
+    </>
+  );
+
   return (
     <div className="h-full overflow-y-auto">
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div>
         <PageHeader
           title="Discover"
-          description="Mod profiles published by other Grimoire users."
-          className="border-b-0 pb-3"
+          description={headerDescription}
+          action={headerAction}
         />
-        <div className="flex items-end justify-between gap-3 border-b border-border flex-wrap">
+        <div className="flex items-center justify-between gap-3 border-b border-border">
           <div className="flex items-center gap-1">
             {BROWSE_TABS.map(({ key, label, icon: Icon }) => {
               const active = tab === key;
@@ -305,7 +315,7 @@ export default function Discover() {
                   key={key}
                   type="button"
                   onClick={() => setTab(key)}
-                  className={`px-4 py-2 -mb-px border-b-2 inline-flex items-center gap-2 text-sm transition-colors cursor-pointer ${
+                  className={`px-3 py-2 -mb-px border-b-2 inline-flex items-center gap-2 text-sm transition-colors cursor-pointer ${
                     active
                       ? 'border-accent text-text-primary'
                       : 'border-transparent text-text-secondary hover:text-text-primary'
@@ -320,7 +330,7 @@ export default function Discover() {
               <button
                 type="button"
                 onClick={() => setTab('mine')}
-                className={`px-4 py-2 -mb-px border-b-2 inline-flex items-center gap-2 text-sm transition-colors cursor-pointer ${
+                className={`px-3 py-2 -mb-px border-b-2 inline-flex items-center gap-2 text-sm transition-colors cursor-pointer ${
                   tab === 'mine'
                     ? 'border-accent text-text-primary'
                     : 'border-transparent text-text-secondary hover:text-text-primary'
@@ -331,14 +341,11 @@ export default function Discover() {
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3 pb-2">
-            {tab !== 'mine' && data && (
-              <span className="text-sm text-text-secondary">
-                {data.total} {data.total === 1 ? 'profile' : 'profiles'}
-              </span>
-            )}
-            {headerAction}
-          </div>
+          {tab !== 'mine' && data && (
+            <span className="text-xs text-text-tertiary tabular-nums pr-1">
+              {data.total} {data.total === 1 ? 'profile' : 'profiles'}
+            </span>
+          )}
         </div>
       </div>
 
@@ -362,12 +369,6 @@ export default function Discover() {
           >
             Dismiss
           </button>
-        </div>
-      )}
-      {!signedIn && (
-        <div className="text-[11px] text-text-tertiary flex items-center gap-1.5">
-          <ShieldCheck className="w-3.5 h-3.5" />
-          Sign in to like and publish. Importing works without an account.
         </div>
       )}
 
