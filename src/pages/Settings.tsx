@@ -9,6 +9,7 @@ import {
   createDevDeadlockPath,
   fixGameinfo,
   getGameinfoStatus,
+  openGameFolder,
   validateDeadlockPath,
   showOpenDialog,
 } from '../lib/api';
@@ -28,6 +29,8 @@ export default function Settings() {
   const [isCleaning, setIsCleaning] = useState(false);
   const [gameinfoStatus, setGameinfoStatus] = useState<string | null>(null);
   const [gameinfoConfigured, setGameinfoConfigured] = useState<boolean | null>(null);
+  const [gameinfoMissing, setGameinfoMissing] = useState(false);
+  const [gameinfoCandidates, setGameinfoCandidates] = useState<string[]>([]);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
   const [syncStatus, setSyncStatus] = useState<Record<string, { lastSync: number; count: number } | null> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
@@ -87,6 +90,8 @@ export default function Settings() {
       if (!activeDeadlockPath) {
         setGameinfoStatus(null);
         setGameinfoConfigured(null);
+        setGameinfoMissing(false);
+        setGameinfoCandidates([]);
         return;
       }
       try {
@@ -94,10 +99,14 @@ export default function Settings() {
         if (!active) return;
         setGameinfoStatus(status.message);
         setGameinfoConfigured(status.configured);
+        setGameinfoMissing(status.missing);
+        setGameinfoCandidates(status.candidates);
       } catch (err) {
         if (!active) return;
         setGameinfoStatus(String(err));
         setGameinfoConfigured(false);
+        setGameinfoMissing(false);
+        setGameinfoCandidates([]);
       }
     };
     loadStatus();
@@ -478,16 +487,39 @@ export default function Settings() {
                 <p className="text-xs text-text-secondary mt-1 max-w-md">
                   {gameinfoStatus ?? 'Checking gameinfo.gi status...'}
                 </p>
+                {gameinfoMissing && (
+                  <div className="mt-2 max-w-md space-y-1">
+                    <p className="text-xs text-text-secondary">
+                      In Steam: right-click Deadlock {'>'} Properties {'>'} Installed Files {'>'} Verify integrity of game files.
+                    </p>
+                    {gameinfoCandidates.length > 0 && (
+                      <p className="text-xs text-amber-300">
+                        Found nearby: {gameinfoCandidates.join(', ')}. Rename one to gameinfo.gi to restore.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
-              <Button
-                onClick={handleFixGameinfo}
-                disabled={isFixingGameinfo || !activeDeadlockPath}
-                isLoading={isFixingGameinfo}
-                variant={gameinfoConfigured ? 'secondary' : 'primary'}
-                icon={Wrench}
-              >
-                Fix Configuration
-              </Button>
+              {gameinfoMissing ? (
+                <Button
+                  onClick={openGameFolder}
+                  disabled={!activeDeadlockPath}
+                  variant="primary"
+                  icon={FolderOpen}
+                >
+                  Open Game Folder
+                </Button>
+              ) : (
+                <Button
+                  onClick={handleFixGameinfo}
+                  disabled={isFixingGameinfo || !activeDeadlockPath}
+                  isLoading={isFixingGameinfo}
+                  variant={gameinfoConfigured ? 'secondary' : 'primary'}
+                  icon={Wrench}
+                >
+                  Fix Configuration
+                </Button>
+              )}
             </div>
           </div>
         </Card>

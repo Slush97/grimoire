@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renameSync } from 'fs';
 import { join, extname } from 'path';
-import { getGameinfoPath, getAddonsPath, getDisabledPath } from './deadlock';
+import { getGameinfoPath, getAddonsPath, getDisabledPath, getCitadelPath } from './deadlock';
 
 // The canonical SearchPaths block for Deadlock with mod support
 const SEARCH_PATHS_BLOCK = `SearchPaths
@@ -19,6 +19,24 @@ const SEARCH_PATHS_BLOCK = `SearchPaths
 export interface GameinfoStatus {
     configured: boolean;
     message: string;
+    missing: boolean;
+    candidates: string[];
+}
+
+// Scan citadel/ for files named like gameinfo.* (case-insensitive, excluding
+// the canonical name itself). Surfaces backups another mod manager may have
+// left behind (e.g. gameinfo.gi.bak, gameinfo_orig.gi).
+function findGameinfoCandidates(deadlockPath: string): string[] {
+    const citadelPath = getCitadelPath(deadlockPath);
+    if (!existsSync(citadelPath)) return [];
+    try {
+        return readdirSync(citadelPath).filter((name) => {
+            const lower = name.toLowerCase();
+            return lower !== 'gameinfo.gi' && /^gameinfo[._]/.test(lower);
+        });
+    } catch {
+        return [];
+    }
 }
 
 export interface CleanupResult {
@@ -38,7 +56,9 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
     if (!existsSync(gameinfoPath)) {
         return {
             configured: false,
+            missing: true,
             message: 'gameinfo.gi not found',
+            candidates: findGameinfoCandidates(deadlockPath),
         };
     }
 
@@ -48,18 +68,24 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
         if (content.includes('citadel/addons')) {
             return {
                 configured: true,
+                missing: false,
                 message: 'Addon search paths are configured correctly',
+                candidates: [],
             };
         }
 
         return {
             configured: false,
+            missing: false,
             message: 'Addon search paths are missing from gameinfo.gi',
+            candidates: [],
         };
     } catch (err) {
         return {
             configured: false,
+            missing: false,
             message: `Failed to read gameinfo.gi: ${err}`,
+            candidates: [],
         };
     }
 }
@@ -74,7 +100,9 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
     if (!existsSync(gameinfoPath)) {
         return {
             configured: false,
+            missing: true,
             message: 'gameinfo.gi not found',
+            candidates: findGameinfoCandidates(deadlockPath),
         };
     }
 
@@ -85,7 +113,9 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         if (content.includes('citadel/addons')) {
             return {
                 configured: true,
+                missing: false,
                 message: 'Addon search paths were already configured',
+                candidates: [],
             };
         }
 
@@ -96,7 +126,9 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         if (!searchPathsRegex.test(content)) {
             return {
                 configured: false,
+                missing: false,
                 message: 'Could not find SearchPaths section in gameinfo.gi',
+                candidates: [],
             };
         }
 
@@ -107,12 +139,16 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
 
         return {
             configured: true,
+            missing: false,
             message: 'Successfully configured addon search paths',
+            candidates: [],
         };
     } catch (err) {
         return {
             configured: false,
+            missing: false,
             message: `Failed to fix gameinfo.gi: ${err}`,
+            candidates: [],
         };
     }
 }

@@ -24,7 +24,7 @@ import { spawn } from 'child_process';
 import { tmpdir } from 'os';
 import https from 'https';
 import http from 'http';
-import { getAddonsPath, getDisabledPath } from '../services/deadlock';
+import { getAddonsPath, getDisabledPath, getCitadelPath } from '../services/deadlock';
 import { getUserDataPath } from '../utils/paths';
 import {
     getModMetadata,
@@ -107,10 +107,25 @@ ipcMain.handle('get-gameinfo-status', (): GameinfoStatus => {
     if (!deadlockPath) {
         return {
             configured: false,
+            missing: false,
             message: 'No Deadlock path configured',
+            candidates: [],
         };
     }
     return getGameinfoStatus(deadlockPath);
+});
+
+// open-game-folder (opens the citadel/ directory so the user can inspect
+// gameinfo.gi siblings when it's missing)
+ipcMain.handle('open-game-folder', async (): Promise<void> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const error = await shell.openPath(getCitadelPath(deadlockPath));
+    if (error) {
+        throw new Error(error);
+    }
 });
 
 // Always on top
@@ -134,7 +149,9 @@ ipcMain.handle('fix-gameinfo', (): GameinfoStatus => {
     if (!deadlockPath) {
         return {
             configured: false,
+            missing: false,
             message: 'No Deadlock path configured',
+            candidates: [],
         };
     }
     return fixGameinfo(deadlockPath);
