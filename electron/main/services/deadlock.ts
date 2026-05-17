@@ -80,13 +80,24 @@ function readSteamLibraries(steamInstallPath: string): string[] {
 }
 
 /**
- * A path is a valid Deadlock installation iff gameinfo.gi is present. The
- * directory structure alone is insufficient because stale empty
- * game/citadel/ folders can survive a move-library or partial uninstall
- * and would otherwise masquerade as a real install.
+ * Strict check: gameinfo.gi is present. Used by auto-detect so we only
+ * claim to have "found" Deadlock when the install is actually usable.
+ * Stale empty game/citadel/ folders can survive a move-library or partial
+ * uninstall and would otherwise masquerade as a real install.
  */
 export function isValidDeadlockPath(path: string): boolean {
     return existsSync(join(path, 'game', 'citadel', 'gameinfo.gi'));
+}
+
+/**
+ * Loose check: the folder layout looks like a Deadlock install, even if
+ * gameinfo.gi is missing. Used by the manual path picker so a user whose
+ * gameinfo.gi was removed (antivirus, another mod manager, partial
+ * verify) can still configure Grimoire and reach the recovery UI in
+ * Settings.
+ */
+export function looksLikeDeadlockPath(path: string): boolean {
+    return existsSync(join(path, 'game', 'citadel'));
 }
 
 /**
