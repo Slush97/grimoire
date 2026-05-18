@@ -163,6 +163,14 @@ function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
   return [...compactState(true), ...compactState(false)];
 }
 
+/**
+ * Cache of "max non-archived live file id" per GameBanana mod id, populated
+ * by the update-detection effect. Module-scope so it survives page navigation
+ * within a session and lets variants of the same mod share one fetch.
+ * A value of null means the mod page returned no usable file list.
+ */
+const updateCheckCache = new Map<number, number | null>();
+
 export default function Installed() {
   const navigate = useNavigate();
   const {
@@ -754,32 +762,58 @@ export default function Installed() {
     }
   }, [mods]);
 
-  // Flag mods whose GameBanana dateModified is newer than when the user
-  // installed their copy. Uses the local mod cache (synced in the background)
-  // so this is cheap and works offline; staler cache just means fewer flags.
+  // Flag mods whose GameBanana page now hosts a file id newer than the one
+  // the user has installed. Comparing file ids (global monotonic) avoids the
+  // false positives we used to get from the submission-level dateModified,
+  // which ticks on any page edit (description, screenshots, tags) and not
+  // just on new file uploads. Same source of truth runUpdate already uses.
   useEffect(() => {
     let cancelled = false;
     const checkUpdates = async () => {
-      const targets = mods.filter((m) => !!m.gameBananaId && !!m.installedAt);
+      const targets = mods.filter(
+        (m) =>
+          !!m.gameBananaId &&
+          typeof m.gameBananaFileId === 'number' &&
+          m.gameBananaFileId > 0,
+      );
       if (targets.length === 0) {
         setUpdatesAvailable(new Set());
         return;
       }
-      const available = new Set<string>();
-      for (const mod of targets) {
-        if (cancelled) return;
-        try {
-          const cached = await window.electronAPI.getCachedMod(mod.gameBananaId!);
-          if (!cached) continue;
-          const installedTs = Math.floor(new Date(mod.installedAt).getTime() / 1000);
-          if (Number.isFinite(installedTs) && cached.dateModified > installedTs) {
-            available.add(mod.id);
-          }
-        } catch {
-          // Cache miss or backend error — just skip this mod.
+
+      // One fetch per GB mod id; variants share the result.
+      const uniqueIds = new Map<number, string>();
+      for (const m of targets) {
+        if (!uniqueIds.has(m.gameBananaId!)) {
+          uniqueIds.set(m.gameBananaId!, m.sourceSection ?? 'Mod');
         }
       }
-      if (!cancelled) setUpdatesAvailable(available);
+
+      await Promise.all(
+        Array.from(uniqueIds.entries()).map(async ([gbId, section]) => {
+          if (updateCheckCache.has(gbId)) return;
+          try {
+            const details = await getModDetails(gbId, section);
+            const liveIds = (details.files ?? [])
+              .filter((f) => !f.isArchived)
+              .map((f) => f.id);
+            updateCheckCache.set(gbId, liveIds.length > 0 ? Math.max(...liveIds) : null);
+          } catch {
+            // Network or API failure: leave uncached so a later mount retries.
+          }
+        }),
+      );
+
+      if (cancelled) return;
+      const available = new Set<string>();
+      for (const mod of targets) {
+        const maxLiveId = updateCheckCache.get(mod.gameBananaId!);
+        if (typeof maxLiveId !== 'number') continue;
+        if (maxLiveId > mod.gameBananaFileId!) {
+          available.add(mod.id);
+        }
+      }
+      setUpdatesAvailable(available);
     };
     checkUpdates();
     return () => {
