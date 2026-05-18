@@ -39,13 +39,10 @@ jobs:
       # pnpm-workspace.yaml resolves @grimoire/social-types from
       # ../grimoire-social/packages/*. Without this sibling checkout the
       # workspace dep fails to resolve and pnpm install bails out.
-      # WORKSPACE_PAT is a fine-grained PAT scoped to Slush97/grimoire-social
-      # with Contents:Read (private repo, default GITHUB_TOKEN can't read it).
       - name: Checkout grimoire-social (sibling for shared types)
         uses: actions/checkout@v4
         with:
           repository: Slush97/grimoire-social
-          token: ${{ secrets.WORKSPACE_PAT }}
           path: grimoire-social
           ref: main
 

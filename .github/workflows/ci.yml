@@ -19,16 +19,10 @@ jobs:
       # ../grimoire-social/packages/*. Local dev works because both repos sit
       # side-by-side; CI has to mirror that or every social import becomes an
       # implicit-any and the build fails on the workspace dep.
-      #
-      # grimoire-social is private, so the default GITHUB_TOKEN can't read it.
-      # WORKSPACE_PAT is a fine-grained PAT scoped to Slush97/grimoire-social
-      # with Contents:Read. Set it under
-      # https://github.com/Slush97/grimoire/settings/secrets/actions
       - name: Checkout grimoire-social (sibling for shared types)
         uses: actions/checkout@v4
         with:
           repository: Slush97/grimoire-social
-          token: ${{ secrets.WORKSPACE_PAT }}
           path: grimoire-social
           ref: main
 
