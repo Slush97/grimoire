@@ -116,7 +116,11 @@ interface AppState {
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
   detectDeadlock: () => Promise<string | null>;
-  loadMods: () => Promise<void>;
+  /** Reload the installed-mods list from the main process.
+   *  Pass `{ silent: true }` to refresh without toggling `modsLoading`,
+   *  so background refreshes (e.g. on window focus) don't replace the
+   *  page with the loading skeleton. */
+  loadMods: (opts?: { silent?: boolean }) => Promise<void>;
   toggleMod: (modId: string) => Promise<void>;
   deleteMod: (modId: string) => Promise<void>;
   setModPriority: (modId: string, priority: number) => Promise<void>;
@@ -189,14 +193,17 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Load mods from backend
-  loadMods: async () => {
-    set({ modsLoading: true, modsError: null });
+  // Load mods from backend.
+  // Silent refreshes (window focus, etc.) skip the loading flag so the UI
+  // doesn't flash the skeleton over already-rendered content.
+  loadMods: async (opts) => {
+    const silent = !!opts?.silent;
+    if (!silent) set({ modsLoading: true, modsError: null });
     try {
       const mods = await api.getMods();
-      set({ mods, modsLoading: false });
+      set(silent ? { mods, modsError: null } : { mods, modsLoading: false });
     } catch (err) {
-      set({ modsError: String(err), modsLoading: false });
+      set(silent ? { modsError: String(err) } : { modsError: String(err), modsLoading: false });
     }
   },
 

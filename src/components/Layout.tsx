@@ -89,6 +89,26 @@ export default function Layout() {
     checkFirstRun();
   }, []);
 
+  // Silent mod refresh when the window regains focus. Covers the case where
+  // the user drops a VPK into addons/ from a file manager while Grimoire is
+  // in the background — alt-tabbing back triggers a re-scan so the new file
+  // shows up without forcing a navigation. Throttled so rapid focus/blur
+  // (some WMs flicker on tooltip hover) doesn't spam the backend.
+  useEffect(() => {
+    let lastRun = 0;
+    const onFocus = () => {
+      const state = useAppStore.getState();
+      if (!getActiveDeadlockPath(state.settings)) return;
+      if (state.modsLoading) return;
+      const now = Date.now();
+      if (now - lastRun < 1500) return;
+      lastRun = now;
+      state.loadMods({ silent: true });
+    };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, []);
+
   useEffect(() => {
     const unsubscribe = window.electronAPI.onOneClickInstall((data) => {
       if (data.error) {
