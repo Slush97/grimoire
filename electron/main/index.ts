@@ -38,6 +38,7 @@ import './ipc/gamebanana';
 import './ipc/system';
 import './ipc/conflicts';
 import './ipc/profiles';
+import './ipc/snapshots';
 import './ipc/modDatabase';
 import './ipc/crosshairPresets';
 import './ipc/stats';

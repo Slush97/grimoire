@@ -414,6 +414,28 @@ export async function finalizePortableImport(args: {
 }
 
 // =====================
+// Snapshots API
+// =====================
+
+import type { SnapshotSummary, SnapshotTrigger } from '../types/snapshot';
+
+export async function createSnapshot(trigger: SnapshotTrigger): Promise<SnapshotSummary> {
+  return window.electronAPI.snapshots.create(trigger);
+}
+
+export async function listSnapshots(): Promise<SnapshotSummary[]> {
+  return window.electronAPI.snapshots.list();
+}
+
+export async function loadSnapshot(snapshotId: string): Promise<string> {
+  return window.electronAPI.snapshots.load(snapshotId);
+}
+
+export async function deleteSnapshot(snapshotId: string): Promise<void> {
+  return window.electronAPI.snapshots.delete(snapshotId);
+}
+
+// =====================
 // Grimoire Social API
 // =====================
 

@@ -69,6 +69,80 @@ export function decodeShareCode(code: string): string {
     return decompressed.toString('utf8');
 }
 
+/** Build a portable profile from the live installed mod set, without
+ *  requiring a saved Grimoire profile. Used by the snapshot service so we can
+ *  capture a recovery point even when no profile is selected. Local mods (no
+ *  gameBananaFileId) are skipped and reported via warnings so the caller can
+ *  log how many entries were dropped. */
+export async function buildPortableProfileFromInstalled(
+    deadlockPath: string,
+    profileName: string
+): Promise<PortableExportResult> {
+    const installed = await scanMods(deadlockPath);
+
+    const mods: PortableModEntry[] = [];
+    const warnings: string[] = [];
+
+    for (const installedMod of installed) {
+        const metadata = getModMetadata(installedMod.fileName);
+        const gbId = metadata?.gameBananaId ?? installedMod.gameBananaId;
+        const fileId = metadata?.gameBananaFileId ?? installedMod.gameBananaFileId;
+
+        if (!gbId || !fileId) {
+            const label = metadata?.modName || installedMod.name || installedMod.fileName;
+            warnings.push(`Skipped local mod: ${label}`);
+            continue;
+        }
+
+        const fileLabel =
+            metadata?.variantLabel ||
+            metadata?.fileDescription ||
+            metadata?.sourceFileName ||
+            undefined;
+
+        const vpkStem = vpkStemOf(installedMod.fileName);
+        mods.push({
+            source: 'gamebanana',
+            ref: {
+                submissionId: gbId,
+                fileId,
+                section: metadata?.sourceSection || 'Mod',
+                ...(vpkStem !== null ? { vpkStem } : {}),
+            },
+            enabled: installedMod.enabled,
+            priority: installedMod.priority,
+            hint: {
+                name: metadata?.modName || installedMod.name,
+                category: metadata?.categoryName,
+                fileLabel,
+                originalFileName: metadata?.sourceFileName,
+                thumbnailUrl: metadata?.thumbnailUrl,
+                nsfw: metadata?.nsfw,
+                isArchived: metadata?.isArchived,
+            },
+        });
+    }
+
+    const portable: PortableProfile = {
+        format: PORTABLE_PROFILE_FORMAT,
+        schemaVersion: PORTABLE_PROFILE_SCHEMA_VERSION,
+        game: {
+            steamAppId: DEADLOCK_STEAM_APP_ID,
+            gameBananaGameId: DEADLOCK_GAMEBANANA_GAME_ID,
+            name: 'Deadlock',
+        },
+        exportedAt: new Date().toISOString(),
+        exportedBy: { tool: 'grimoire', version: app.getVersion() },
+        profile: { name: profileName },
+        mods,
+    };
+
+    const json = JSON.stringify(portable, null, 2);
+    const shareCode = encodeShareCode(json);
+
+    return { profile: portable, json, shareCode, warnings };
+}
+
 /** Build a portable profile from a stored Grimoire profile. Local mods (no
  *  gameBananaFileId) are skipped and reported via warnings so the UI can tell
  *  the user without scanning the file again. */

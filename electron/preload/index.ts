@@ -5,6 +5,7 @@ import type {
     PortableResolutionReport,
     PortableResolvedMod,
 } from '../../src/types/portableProfile';
+import type { SnapshotSummary, SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
 import type {
     LikeResponse,
@@ -130,6 +131,15 @@ export interface ElectronAPI {
     parsePortableProfile: (input: string) => Promise<PortableProfile>;
     resolvePortableProfile: (profile: PortableProfile) => Promise<PortableResolutionReport>;
     finalizePortableImport: (args: { profile: PortableProfile; resolved: PortableResolvedMod[] }) => Promise<Profile>;
+
+    // Snapshots — automatic recovery points captured before risky operations
+    // (currently just mod updates). Restore re-uses the portable-import flow.
+    snapshots: {
+        create: (trigger: SnapshotTrigger) => Promise<SnapshotSummary>;
+        list: () => Promise<SnapshotSummary[]>;
+        load: (snapshotId: string) => Promise<string>;
+        delete: (snapshotId: string) => Promise<void>;
+    };
 
     // Mod Database (Local Cache)
     syncAllMods: () => Promise<{ success: boolean }>;
@@ -920,6 +930,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     resolvePortableProfile: (profile: PortableProfile) => ipcRenderer.invoke('resolve-portable-profile', profile),
     finalizePortableImport: (args: { profile: PortableProfile; resolved: PortableResolvedMod[] }) =>
         ipcRenderer.invoke('finalize-portable-import', args),
+
+    // Snapshots
+    snapshots: {
+        create: (trigger: SnapshotTrigger) => ipcRenderer.invoke('snapshot-create', trigger),
+        list: () => ipcRenderer.invoke('snapshot-list'),
+        load: (snapshotId: string) => ipcRenderer.invoke('snapshot-load', snapshotId),
+        delete: (snapshotId: string) => ipcRenderer.invoke('snapshot-delete', snapshotId),
+    },
 
     // Mod Database (Local Cache)
     syncAllMods: () => ipcRenderer.invoke('sync-all-mods'),
