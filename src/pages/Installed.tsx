@@ -23,7 +23,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import type { GameBananaModDetails } from '../types/gamebanana';
@@ -373,6 +373,9 @@ export default function Installed() {
     // still find the new install even when we redirected a stale snapshot.
     const completed: { gameBananaId: number; gameBananaFileId: number; wasEnabled: boolean; fileName: string }[] = [];
     let progress = 0;
+    // Guard so a multi-group update writes exactly one recovery snapshot, not
+    // one per group.
+    let snapshotTaken = false;
 
     for (const [, group] of groups) {
       let details: GameBananaModDetails;
@@ -421,6 +424,20 @@ export default function Installed() {
             snapshot: s,
             reason: 'file no longer on GameBanana; mod files changed. Reinstall from Browse.',
           });
+        }
+      }
+
+      // Capture a recovery snapshot before any delete runs in this group.
+      // We only snapshot once per runUpdate invocation (guarded by the
+      // `snapshotTaken` flag below), so a 50-mod update writes one file, not
+      // one per mod. Failure is non-fatal: a missing snapshot must not block
+      // the update the user just clicked.
+      if (!snapshotTaken && resolutions.some((r) => r.ok)) {
+        snapshotTaken = true;
+        try {
+          await createSnapshot('pre-update');
+        } catch (err) {
+          console.warn('[Update] failed to capture pre-update snapshot:', err);
         }
       }
 

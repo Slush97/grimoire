@@ -379,6 +379,17 @@ export interface ElectronAPI {
         resolved: import('./portableProfile').PortableResolvedMod[];
     }) => Promise<Profile>;
 
+    // Snapshots — automatic recovery points captured before risky operations
+    // (currently just mod updates). Restore re-uses the portable-import flow.
+    snapshots: {
+        create: (
+            trigger: import('./snapshot').SnapshotTrigger
+        ) => Promise<import('./snapshot').SnapshotSummary>;
+        list: () => Promise<import('./snapshot').SnapshotSummary[]>;
+        load: (snapshotId: string) => Promise<string>;
+        delete: (snapshotId: string) => Promise<void>;
+    };
+
     // Mod Database (Local Cache)
     syncAllMods: () => Promise<{ success: boolean }>;
     syncSection: (section: string) => Promise<{ success: boolean }>;
