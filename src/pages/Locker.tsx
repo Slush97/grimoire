@@ -640,6 +640,9 @@ function HeroGalleryCard({
         )}
         {renderSrc && fallbackStep < 3 && (
           <img
+            ref={(el) => {
+              if (el && el.complete && el.naturalWidth > 0) setRenderLoaded(true);
+            }}
             src={renderSrc}
             alt={hero.name}
             className={`absolute inset-0 h-full w-full object-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] scale-100 ${renderLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
@@ -689,6 +692,12 @@ function HeroGalleryCard({
               <div className="absolute inset-0 skeleton-shimmer bg-white/10 rounded-sm" aria-hidden />
             )}
             <img
+              ref={(el) => {
+                // Sub-100KB PNGs over file:// can finish loading before React
+                // attaches onLoad, leaving the image cached but stuck at
+                // opacity-0. Sync the state from img.complete on every mount.
+                if (el && el.complete && el.naturalWidth > 0) setNameLoaded(true);
+              }}
               src={namePath}
               alt={hero.name}
               className={`absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 scale-100 ${nameLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
