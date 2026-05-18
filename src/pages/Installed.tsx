@@ -399,6 +399,13 @@ export default function Installed() {
   const openUnknownModFix = (mod: Mod, mode: 'single' | 'bulk' = 'single') => {
     setUnknownFixMode(mode);
     setUnknownFilterGuess({ mod, loading: unknownFilterPendingIds.has(mod.id) });
+    // Auto-kick the search when there's no cached result and nothing in
+    // flight. Otherwise the user has to click Find inside the modal after
+    // already clicking Fix outside — one click too many, and confusing
+    // because the modal just sits idle.
+    if (!unknownFilterCache[mod.id] && !unknownFilterPendingIds.has(mod.id)) {
+      void inspectUnknownModFilters(mod, false, mode);
+    }
   };
 
   const applyUnknownMatch = async (mod: Mod, match: FoundUnknownMatch) => {
@@ -471,6 +478,10 @@ export default function Installed() {
     const first = unknowns[0];
     if (!first) return;
     openUnknownModFix(first, 'bulk');
+    // Kick searches for the rest in parallel so every row progresses while
+    // the user reviews the first one. The queue dedupes against pending/
+    // cached, so re-kicking the first mod here is a no-op.
+    findAllUnknownMods(unknowns);
   };
 
   const findAllUnknownMods = (unknowns: Mod[]) => {
