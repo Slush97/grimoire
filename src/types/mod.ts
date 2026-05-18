@@ -1,3 +1,30 @@
+export interface MergedModSource {
+  /** Filename of the source VPK after the merge — typically in `.disabled/`
+   *  because mergeMods disables sources to free their priority slots. */
+  fileName: string;
+  modName: string;
+  /** Source mod thumbnail at merge time. Captured here so the merged-mod
+   *  thumbnail collage survives the source being deleted. */
+  thumbnailUrl?: string;
+  gameBananaId?: number;
+  gameBananaFileId?: number;
+  enabledAtMergeTime: boolean;
+  priorityAtMergeTime: number;
+}
+
+export interface MergedModInfo {
+  /** Random ID generated at merge time. Surfaced for UI keys and logging;
+   *  the mod's normal `id` (md5 of filename) is what callers use to operate
+   *  on the merged mod itself. */
+  id: string;
+  createdAt: string;
+  /** Portable-profile share code (mp1:...) capturing the source list. This is
+   *  both the unroll fallback when source VPKs are missing AND the shareable
+   *  representation of this merged mod (paste into someone else's Grimoire). */
+  shareCode: string;
+  sources: MergedModSource[];
+}
+
 export interface Mod {
   id: string;
   name: string;
@@ -22,6 +49,25 @@ export interface Mod {
   variantLabel?: string;
   fileDescription?: string;
   sourceFileName?: string;
+  /** Set when this mod was produced by mergeMods. Carries the unroll payload
+   *  (share code + source list). */
+  merged?: MergedModInfo;
+}
+
+export interface MergeModsArgs {
+  modIds: string[];
+  name: string;
+  thumbnailDataUrl?: string;
+  strict?: boolean;
+}
+
+export interface UnmergeModResult {
+  recovered: Mod[];
+  /** Source filenames that were no longer on disk at unmerge time. The
+   *  renderer can offer the share code via the portable-profile import flow
+   *  to recover them. */
+  missingSourceFileNames: string[];
+  shareCode: string;
 }
 
 export interface UnknownModFilterGuess {

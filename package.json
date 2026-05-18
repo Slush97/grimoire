@@ -17,6 +17,8 @@
     ]
   },
   "scripts": {
+    "postinstall": "node scripts/fetch-vpkmerge.mjs",
+    "fetch-vpkmerge": "node scripts/fetch-vpkmerge.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

@@ -18,6 +18,9 @@ release/
 out/
 bin/
 
+# Fetched at install time by scripts/fetch-vpkmerge.mjs
+resources/vpkmerge/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
