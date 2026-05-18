@@ -403,7 +403,7 @@ export default function Installed() {
     // flight. Otherwise the user has to click Find inside the modal after
     // already clicking Fix outside — one click too many, and confusing
     // because the modal just sits idle.
-    if (!unknownFilterCache[mod.id] && !unknownFilterPendingIds.has(mod.id)) {
+    if (mode === 'single' && !unknownFilterCache[mod.id] && !unknownFilterPendingIds.has(mod.id)) {
       void inspectUnknownModFilters(mod, false, mode);
     }
   };
@@ -478,10 +478,6 @@ export default function Installed() {
     const first = unknowns[0];
     if (!first) return;
     openUnknownModFix(first, 'bulk');
-    // Kick searches for the rest in parallel so every row progresses while
-    // the user reviews the first one. The queue dedupes against pending/
-    // cached, so re-kicking the first mod here is a no-op.
-    findAllUnknownMods(unknowns);
   };
 
   const findAllUnknownMods = (unknowns: Mod[]) => {
@@ -2123,7 +2119,7 @@ function BulkUnknownFixModal({
               onClick={() => onFindAll(unknownMods)}
               title="Search every unknown mod that has not already been checked"
             >
-              Find all
+              Search all
             </Button>
             <button
               type="button"
