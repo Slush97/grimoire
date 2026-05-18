@@ -164,12 +164,12 @@ function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
 }
 
 /**
- * Cache of "max non-archived live file id" per GameBanana mod id, populated
- * by the update-detection effect. Module-scope so it survives page navigation
- * within a session and lets variants of the same mod share one fetch.
- * A value of null means the mod page returned no usable file list.
+ * Cache of the set of non-archived live file ids per GameBanana mod id,
+ * populated by the update-detection effect. Module-scope so it survives page
+ * navigation within a session and lets variants of the same mod share one
+ * fetch. A value of null means the mod page returned no usable file list.
  */
-const updateCheckCache = new Map<number, number | null>();
+const updateCheckCache = new Map<number, Set<number> | null>();
 
 export default function Installed() {
   const navigate = useNavigate();
@@ -762,11 +762,12 @@ export default function Installed() {
     }
   }, [mods]);
 
-  // Flag mods whose GameBanana page now hosts a file id newer than the one
-  // the user has installed. Comparing file ids (global monotonic) avoids the
-  // false positives we used to get from the submission-level dateModified,
-  // which ticks on any page edit (description, screenshots, tags) and not
-  // just on new file uploads. Same source of truth runUpdate already uses.
+  // Flag a mod when its stored gameBananaFileId is no longer in the live
+  // non-archived file list. That is the only case runUpdate can meaningfully
+  // act on: Pass 1 reinstalls when the id is still live (no real change), and
+  // Pass 2 only swaps when the id is gone and a single replacement exists.
+  // Matching that definition avoids false positives from page-only edits and
+  // from authors adding alternate variants alongside an installed file.
   useEffect(() => {
     let cancelled = false;
     const checkUpdates = async () => {
@@ -794,10 +795,12 @@ export default function Installed() {
           if (updateCheckCache.has(gbId)) return;
           try {
             const details = await getModDetails(gbId, section);
-            const liveIds = (details.files ?? [])
-              .filter((f) => !f.isArchived)
-              .map((f) => f.id);
-            updateCheckCache.set(gbId, liveIds.length > 0 ? Math.max(...liveIds) : null);
+            const liveIds = new Set(
+              (details.files ?? [])
+                .filter((f) => !f.isArchived)
+                .map((f) => f.id),
+            );
+            updateCheckCache.set(gbId, liveIds.size > 0 ? liveIds : null);
           } catch {
             // Network or API failure: leave uncached so a later mount retries.
           }
@@ -807,9 +810,9 @@ export default function Installed() {
       if (cancelled) return;
       const available = new Set<string>();
       for (const mod of targets) {
-        const maxLiveId = updateCheckCache.get(mod.gameBananaId!);
-        if (typeof maxLiveId !== 'number') continue;
-        if (maxLiveId > mod.gameBananaFileId!) {
+        const liveIds = updateCheckCache.get(mod.gameBananaId!);
+        if (!liveIds) continue;
+        if (!liveIds.has(mod.gameBananaFileId!)) {
           available.add(mod.id);
         }
       }
