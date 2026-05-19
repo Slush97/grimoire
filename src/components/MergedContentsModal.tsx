@@ -109,7 +109,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge 
             <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
               {merged.sources.map((src) => {
                 const gbHref = src.gameBananaId
-                  ? `https://gamebanana.com/${sectionForGb()}/${src.gameBananaId}`
+                  ? `https://gamebanana.com/${sectionForGb(src.section)}/${src.gameBananaId}`
                   : null;
                 return (
                   <li

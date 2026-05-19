@@ -1,6 +1,8 @@
 export interface MergedModSource {
-  /** Filename of the source VPK after the merge — typically in `.disabled/`
-   *  because mergeMods disables sources to free their priority slots. */
+  /** Filename of the source VPK after the merge: typically in `.disabled/`
+   *  because mergeMods disables sources to free their priority slots. May
+   *  drift if reconcile renames the file between merge and unmerge, which
+   *  is why `sha256AtMergeTime` exists as a content-identity fallback. */
   fileName: string;
   modName: string;
   /** Source mod thumbnail at merge time. Captured here so the merged-mod
@@ -8,8 +10,17 @@ export interface MergedModSource {
   thumbnailUrl?: string;
   gameBananaId?: number;
   gameBananaFileId?: number;
+  /** GameBanana section ("Mod" / "Sound" / etc.) for the source. Captured
+   *  so the contents modal can build the right gamebanana.com URL (mods
+   *  live under /mods/, sound mods under /sounds/). */
+  section?: string;
   enabledAtMergeTime: boolean;
   priorityAtMergeTime: number;
+  /** sha256 of the source VPK captured before disable. Used as a content-
+   *  identity fallback when the fileName lookup misses (e.g. reconcile
+   *  renamed the file after merge). Optional because legacy merges before
+   *  this field existed don't have it. */
+  sha256AtMergeTime?: string;
 }
 
 export interface MergedModInfo {

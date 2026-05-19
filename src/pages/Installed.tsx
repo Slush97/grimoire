@@ -244,7 +244,7 @@ export default function Installed() {
   const [unmergeTarget, setUnmergeTarget] = useState<Mod | null>(null);
   // Result of the most recent unmerge — surfaced when sources were missing on
   // disk so the user can recover via the share code.
-  const [unmergeResult, setUnmergeResult] = useState<{ mod: Mod; result: UnmergeModResult } | null>(null);
+  const [unmergeResult, setUnmergeResult] = useState<{ mod: Mod; result: UnmergeModResult; copied: boolean } | null>(null);
   // Brief inline confirmation when the share code is copied. Cleared on a
   // timer; null when no recent copy.
   const [copyToast, setCopyToast] = useState<string | null>(null);
@@ -871,9 +871,18 @@ export default function Installed() {
       await loadMods();
       // Surface the missing-sources recovery dialog only when something
       // actually went missing; the common case is a clean unmerge with
-      // every source restored.
+      // every source restored. We write the share code to the clipboard
+      // BEFORE opening the dialog so its "is on your clipboard now" copy
+      // is true regardless of whether the user clicks OK or Close.
       if (result.missingSourceFileNames.length > 0) {
-        setUnmergeResult({ mod: target, result });
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(result.shareCode);
+          copied = true;
+        } catch (err) {
+          console.error('[Installed] clipboard write failed:', err);
+        }
+        setUnmergeResult({ mod: target, result, copied });
       }
     } catch (err) {
       console.error('[Installed] unmerge failed:', err);
@@ -2046,8 +2055,9 @@ export default function Installed() {
                 {unmergeResult.result.missingSourceFileNames.length} could not be found on disk.
               </p>
               <p className="text-text-secondary">
-                The share code captured at merge time is on your clipboard now. Paste it into the
-                portable-profile import flow to re-download the missing sources from GameBanana.
+                {unmergeResult.copied
+                  ? 'The share code captured at merge time is on your clipboard now. Paste it into the portable-profile import flow to re-download the missing sources from GameBanana.'
+                  : 'Copying the share code to your clipboard failed. Click "Copy share code" below, then paste it into the portable-profile import flow to re-download the missing sources.'}
               </p>
               <ul className="text-xs text-text-secondary list-disc pl-5 max-h-24 overflow-y-auto">
                 {unmergeResult.result.missingSourceFileNames.map((fn) => (
@@ -2056,10 +2066,12 @@ export default function Installed() {
               </ul>
             </div>
           }
-          confirmLabel="OK"
+          confirmLabel={unmergeResult.copied ? 'OK' : 'Copy share code'}
           cancelLabel="Close"
           onConfirm={() => {
-            void navigator.clipboard.writeText(unmergeResult.result.shareCode);
+            if (!unmergeResult.copied) {
+              void navigator.clipboard.writeText(unmergeResult.result.shareCode);
+            }
             setUnmergeResult(null);
           }}
           onCancel={() => setUnmergeResult(null)}
