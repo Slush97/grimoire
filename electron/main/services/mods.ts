@@ -48,6 +48,9 @@ export interface Mod {
      *  a meaningful label - falls between fileDescription and the local
      *  pakNN_dir.vpk filename in the picker's display chain. */
     sourceFileName?: string;
+    /** Populated when this VPK was produced by mergeMods. The metadata
+     *  enricher reads this from the mod metadata sidecar. */
+    merged?: import('../../../src/types/mod').MergedModInfo;
 }
 
 /**
@@ -457,7 +460,17 @@ export async function setModPriority(
         return targetMod;
     }
 
-    if (existsSync(join(parentDir, newFileName))) {
+    // Check BOTH folders, not just parentDir. Otherwise the user could
+    // promote an enabled mod into a priority slot held by a disabled mod
+    // (e.g. an absorbed merge source), reconcile would then rename the
+    // disabled file on next scan, and any merged-mod manifest pointing at
+    // that disabled fileName would silently lose its source.
+    const addonsPath = getAddonsPath(deadlockPath);
+    const disabledPath = getDisabledPath(deadlockPath);
+    if (
+        existsSync(join(addonsPath, newFileName)) ||
+        existsSync(join(disabledPath, newFileName))
+    ) {
         throw new Error(`Priority ${newPriority} is already in use`);
     }
     await fs.rename(join(parentDir, targetMod.fileName), join(parentDir, newFileName));

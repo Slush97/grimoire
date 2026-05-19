@@ -5,6 +5,8 @@ import type {
     UnknownModFilterGuess,
     ApplyUnknownModMatchArgs,
     ApplyUnknownCustomModArgs,
+    MergeModsArgs,
+    UnmergeModResult,
 } from './mod';
 import type {
     GameBananaModsResponse,
@@ -294,6 +296,8 @@ export interface ElectronAPI {
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
+    mergeMods: (args: MergeModsArgs) => Promise<Mod>;
+    unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
 
     // Launch
     launchModded: () => Promise<void>;

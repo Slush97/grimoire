@@ -18,8 +18,9 @@ import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetada
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
+import { mergeMods, unmergeMod } from '../services/modMerger';
 import { getMainWindow } from '../index';
-import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs } from '../../../src/types/mod';
+import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, MergeModsArgs, UnmergeModResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -61,6 +62,7 @@ function enrichMod(mod: Mod): Mod {
             variantLabel: metadata.variantLabel,
             fileDescription: metadata.fileDescription,
             sourceFileName: metadata.sourceFileName,
+            merged: metadata.merged,
         };
     }
     return { ...mod, isUnknown };
@@ -445,6 +447,42 @@ ipcMain.handle(
 
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
+    }
+);
+
+// merge-mods — combine multiple installed VPKs into one via vpkmerge. Sources
+// are disabled (moved to .disabled/) so their priority slots free up; the
+// merged mod takes the next available pakNN slot. Manifest (source list +
+// portable-profile share code) is stored in the merged mod's metadata so
+// unmerge can either re-enable the originals or fall back to the share code.
+ipcMain.handle('merge-mods', async (_, args: MergeModsArgs): Promise<Mod> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const result = await mergeMods(deadlockPath, args.modIds, {
+        name: args.name,
+        thumbnailDataUrl: args.thumbnailDataUrl,
+        strict: args.strict,
+    });
+    return enrichMod(result.mod);
+});
+
+// unmerge-mod — reverse a merge by re-enabling sources still on disk and
+// deleting the merged VPK. Returns missing-source filenames + the share code
+// so the renderer can offer the portable-profile import flow for recovery.
+ipcMain.handle(
+    'unmerge-mod',
+    async (_, mergedModId: string): Promise<UnmergeModResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const result = await unmergeMod(deadlockPath, mergedModId);
+        return {
+            ...result,
+            recovered: result.recovered.map(enrichMod),
+        };
     }
 );
 

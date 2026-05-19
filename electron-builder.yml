@@ -34,6 +34,14 @@ asarUnpack:
   - node_modules/better-sqlite3/**/*
   - node_modules/node-unrar-js/**/*
   - node_modules/7zip-bin/**/*
+# vpkmerge CLI binary (fetched via scripts/fetch-vpkmerge.mjs) ships outside
+# the asar so the OS can execute it directly. Resolved at runtime via
+# process.resourcesPath.
+extraResources:
+  - from: resources/vpkmerge
+    to: vpkmerge
+    filter:
+      - "**/*"
 linux:
   target:
     - AppImage

@@ -21,6 +21,9 @@ export interface ModMetadata {
     variantLabel?: string;  // User-provided label to disambiguate variants of the same mod
     fileDescription?: string;  // GameBanana file "header" (_sDescription) — author's per-file label, used as fallback when the user hasn't named the variant
     sourceFileName?: string;   // Original GameBanana filename stem (e.g. "galaxy_rem_gold") — used as a label fallback when the author didn't set a file header
+    /** Set when this VPK was produced by mergeMods. The share code +
+     *  source list are the unroll payload. */
+    merged?: import('../../../src/types/mod').MergedModInfo;
 }
 
 export type ModMetadataMap = Record<string, ModMetadata>;

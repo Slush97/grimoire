@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs } from '../types/mod';
+import type { Mod, AppSettings, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, MergeModsArgs, UnmergeModResult } from '../types/mod';
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
@@ -110,6 +110,16 @@ export async function importCustomMod(args: {
 export async function readImageDataUrl(imagePath: string): Promise<string> {
   return window.electronAPI.readImageDataUrl(imagePath);
 }
+
+export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
+  return window.electronAPI.mergeMods(args);
+}
+
+export async function unmergeMod(mergedModId: string): Promise<UnmergeModResult> {
+  return window.electronAPI.unmergeMod(mergedModId);
+}
+
+export type { UnmergeModResult };
 
 // =====================
 // Launch API

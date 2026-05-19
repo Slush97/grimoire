@@ -22,11 +22,15 @@ import {
   CheckSquare,
   RotateCcw,
   Wrench,
+  Layers,
+  Scissors,
+  Share2,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod } from '../lib/api';
+import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, UnknownModFilterGuess } from '../types/mod';
 import type { GameBananaModDetails } from '../types/gamebanana';
@@ -34,6 +38,9 @@ import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import ModDetailsModal from '../components/ModDetailsModal';
 import VariantPickerModal from '../components/VariantPickerModal';
+import MergeModsModal from '../components/MergeModsModal';
+import MergedContentsModal from '../components/MergedContentsModal';
+import PriorityEditor from '../components/PriorityEditor';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
@@ -191,6 +198,21 @@ export default function Installed() {
     soundVolume,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
+
+  // Source mods absorbed into a merged VPK still live on disk (disabled) so
+  // unmerge can restore them, but the user shouldn't see them as separate
+  // cards: the merged mod is now the source of truth. Build the absorbed
+  // fileName set once and derive a filtered view; downstream rendering,
+  // reorder, and update checks all run off `visibleMods`.
+  const absorbedFileNames = new Set<string>();
+  for (const m of mods) {
+    if (m.merged?.sources) {
+      for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
+    }
+  }
+  const visibleMods = absorbedFileNames.size > 0
+    ? mods.filter((m) => !absorbedFileNames.has(m.fileName))
+    : mods;
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const stored = localStorage.getItem('installedViewMode');
     return stored === 'grid' || stored === 'compact' || stored === 'list' ? stored : 'grid';
@@ -213,6 +235,19 @@ export default function Installed() {
     isBulk?: boolean;
   } | null>(null);
   const [customUnknownMod, setCustomUnknownMod] = useState<Mod | null>(null);
+  // Sources for the in-progress merge. Non-null means the modal is open.
+  const [mergeSources, setMergeSources] = useState<Mod[] | null>(null);
+  // Merged mod whose contents are currently being inspected. Non-null means
+  // the contents modal is open.
+  const [mergedContentsMod, setMergedContentsMod] = useState<Mod | null>(null);
+  // Pending unmerge confirmation. Non-null means the confirm dialog is open.
+  const [unmergeTarget, setUnmergeTarget] = useState<Mod | null>(null);
+  // Result of the most recent unmerge — surfaced when sources were missing on
+  // disk so the user can recover via the share code.
+  const [unmergeResult, setUnmergeResult] = useState<{ mod: Mod; result: UnmergeModResult; copied: boolean } | null>(null);
+  // Brief inline confirmation when the share code is copied. Cleared on a
+  // timer; null when no recent copy.
+  const [copyToast, setCopyToast] = useState<string | null>(null);
 
   // Multi-select state. `selectedIds` always stores mod ids (variants of a
   // selected group expand to every variant id) so bulk handlers can iterate
@@ -802,6 +837,78 @@ export default function Installed() {
     });
   };
 
+  // Open the merge modal with the current selection. Skips sources that are
+  // themselves merged mods (the backend rejects those anyway) — surfacing it
+  // in the disabled state of the button is cleaner than letting the user
+  // submit and get an error.
+  const openBulkMerge = () => {
+    if (selectedMods.length < 2) return;
+    setMergeSources(selectedMods);
+  };
+
+  const handleMergeConfirm = async ({
+    modIds,
+    name,
+    strict,
+  }: {
+    modIds: string[];
+    name: string;
+    strict: boolean;
+  }) => {
+    if (!mergeSources) return;
+    await mergeMods({ modIds, name, strict });
+    setMergeSources(null);
+    await loadMods();
+    exitSelectMode();
+  };
+
+  const handleUnmergeConfirm = async () => {
+    if (!unmergeTarget) return;
+    const target = unmergeTarget;
+    setUnmergeTarget(null);
+    try {
+      const result = await unmergeMod(target.id);
+      await loadMods();
+      // Surface the missing-sources recovery dialog only when something
+      // actually went missing; the common case is a clean unmerge with
+      // every source restored. We write the share code to the clipboard
+      // BEFORE opening the dialog so its "is on your clipboard now" copy
+      // is true regardless of whether the user clicks OK or Close.
+      if (result.missingSourceFileNames.length > 0) {
+        let copied = false;
+        try {
+          await navigator.clipboard.writeText(result.shareCode);
+          copied = true;
+        } catch (err) {
+          console.error('[Installed] clipboard write failed:', err);
+        }
+        setUnmergeResult({ mod: target, result, copied });
+      }
+    } catch (err) {
+      console.error('[Installed] unmerge failed:', err);
+      setCopyToast(`Unmerge failed: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  const handleCopyShareCode = async (mod: Mod) => {
+    if (!mod.merged?.shareCode) return;
+    try {
+      await navigator.clipboard.writeText(mod.merged.shareCode);
+      setCopyToast('Share code copied');
+    } catch (err) {
+      console.error('[Installed] clipboard write failed:', err);
+      setCopyToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Auto-dismiss the copy toast after a short read time.
+  useEffect(() => {
+    if (!copyToast) return;
+    const id = window.setTimeout(() => setCopyToast(null), 2200);
+    return () => window.clearTimeout(id);
+  }, [copyToast]);
+
+
   /**
    * Flip a single variant's enabled state. Variants are independent — a
    * mod's model VPK and its voice-lines VPK (same archive) or its red and
@@ -862,8 +969,11 @@ export default function Installed() {
     if (source.id === neighbor.id) return;
     if (source.enabled !== neighbor.enabled) return;
 
-    const enabledMods = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
-    const disabledMods = mods.filter((m) => !m.enabled).sort((a, b) => a.priority - b.priority);
+    // Use `visibleMods` so absorbed merge sources aren't passed to
+    // reorderMods — their fileNames are recorded in the merged mod's
+    // manifest, and a rename would silently break unmerge recovery.
+    const enabledMods = visibleMods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
+    const disabledMods = visibleMods.filter((m) => !m.enabled).sort((a, b) => a.priority - b.priority);
     const section = source.enabled ? enabledMods : disabledMods;
     const next = section.slice();
     const srcIdx = next.findIndex((m) => m.id === source.id);
@@ -950,6 +1060,32 @@ export default function Installed() {
     }
   }, [activeDeadlockPath, loadMods]);
 
+  // Ctrl/Cmd+A: enter select mode (if not already) and select every visible
+  // mod after search filtering. Must live above the early returns below so
+  // the hook order is stable across renders. The handler reads the latest
+  // `selectAllVisible` and `selectMode` via refs that are assigned
+  // synchronously further down, after `selectAllVisible` is declared.
+  const selectAllVisibleRef = useRef<() => void>(() => {});
+  const selectModeRef = useRef(selectMode);
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return;
+      if (e.key !== 'a' && e.key !== 'A') return;
+      const target = e.target as HTMLElement | null;
+      const tag = target?.tagName?.toLowerCase();
+      // Don't hijack Ctrl+A while the user is in a text field: the search
+      // bar and any inline editors should keep their native select-all.
+      if (tag === 'input' || tag === 'textarea' || (target?.isContentEditable ?? false)) {
+        return;
+      }
+      e.preventDefault();
+      if (!selectModeRef.current) setSelectMode(true);
+      selectAllVisibleRef.current();
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   // Refresh the mod list whenever any download completes — covers 1-Click
   // protocol installs (no UI navigation triggers loadMods) and the regular
   // Browse → Download flow when the user is already on this page.
@@ -995,7 +1131,10 @@ export default function Installed() {
   useEffect(() => {
     let cancelled = false;
     const checkUpdates = async () => {
-      const targets = mods.filter(
+      // Absorbed merge sources are intentionally excluded: updating them on
+      // disk would leave the merged VPK stale, so we don't flag updates the
+      // user can't act on without unmerging first.
+      const targets = visibleMods.filter(
         (m) =>
           !!m.gameBananaId &&
           typeof m.gameBananaFileId === 'number' &&
@@ -1046,6 +1185,9 @@ export default function Installed() {
     return () => {
       cancelled = true;
     };
+    // `visibleMods` is derived from `mods` and changes only when `mods`
+    // does; listing it directly would re-fire on every render.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mods]);
 
   if (!activeDeadlockPath) {
@@ -1080,8 +1222,9 @@ export default function Installed() {
   }
 
   // Group variants sharing a GB mod id under a single card. Singletons and
-  // custom imports (no GB id) keep their old card behavior.
-  const allEntries = buildModEntries(mods);
+  // custom imports (no GB id) keep their old card behavior. Absorbed merge
+  // sources are excluded — they're represented by the merged mod card.
+  const allEntries = buildModEntries(visibleMods);
   const enabledEntries = allEntries
     .filter(isEntryEnabled)
     .sort((a, b) => entrySortPriority(a) - entrySortPriority(b));
@@ -1124,6 +1267,12 @@ export default function Installed() {
     }
     setSelectedIds(ids);
   };
+
+  // Keep the Ctrl/Cmd+A handler (installed above) pointed at the latest
+  // closures. Synchronous assignment (not useEffect) so the hook count stays
+  // stable across the early returns higher up.
+  selectAllVisibleRef.current = selectAllVisible;
+  selectModeRef.current = selectMode;
 
   const resetDragState = () => {
     setDraggingId(null);
@@ -1208,11 +1357,19 @@ export default function Installed() {
           conflicts={conflictMap.get(mod.id) || []}
           soundVolume={soundVolume}
           updateAvailable={updatesAvailable.has(mod.id)}
-          onOpenDetails={mod.gameBananaId ? () => openModDetails(mod) : undefined}
+          onOpenDetails={
+            mod.merged
+              ? () => setMergedContentsMod(mod)
+              : mod.gameBananaId
+                ? () => openModDetails(mod)
+                : undefined
+          }
           onToggle={() => toggleMod(mod.id)}
           onDelete={() => setModToDelete({ ids: [mod.id], name: mod.name, isGroup: false })}
           onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
           fixingUnknown={unknownFilterPendingIds.has(mod.id)}
+          onUnmerge={mod.merged ? () => setUnmergeTarget(mod) : undefined}
+          onCopyShareCode={mod.merged ? () => void handleCopyShareCode(mod) : undefined}
           selectMode={selectMode}
           selected={entrySelected}
           onSelectToggle={() => toggleEntrySelection(entry)}
@@ -1843,6 +2000,94 @@ export default function Installed() {
         />
       )}
 
+      {mergeSources && (
+        <MergeModsModal
+          sources={mergeSources}
+          hideNsfw={settings?.hideNsfwPreviews ?? false}
+          onCancel={() => setMergeSources(null)}
+          onConfirm={handleMergeConfirm}
+        />
+      )}
+
+      {mergedContentsMod && (
+        <MergedContentsModal
+          mod={mergedContentsMod}
+          hideNsfw={settings?.hideNsfwPreviews ?? false}
+          onClose={() => setMergedContentsMod(null)}
+          onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
+        />
+      )}
+
+      <ConfirmModal
+        isOpen={!!unmergeTarget}
+        title="Unmerge mod?"
+        message={
+          unmergeTarget ? (
+            <div className="space-y-2">
+              <p>
+                <span className="text-text-primary font-medium">{unmergeTarget.name}</span> will be deleted and
+                its {unmergeTarget.merged?.sources.length ?? 0} source mod
+                {(unmergeTarget.merged?.sources.length ?? 0) === 1 ? '' : 's'} will be restored.
+              </p>
+              <ul className="text-xs text-text-secondary list-disc pl-5">
+                {unmergeTarget.merged?.sources.map((s) => (
+                  <li key={s.fileName} className="truncate">{s.modName}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null
+        }
+        variant="danger"
+        confirmLabel="Unmerge"
+        onConfirm={() => void handleUnmergeConfirm()}
+        onCancel={() => setUnmergeTarget(null)}
+      />
+
+      {unmergeResult && (
+        <ConfirmModal
+          isOpen
+          title="Some sources were missing"
+          message={
+            <div className="space-y-2 text-sm">
+              <p>
+                {unmergeResult.result.recovered.length} source mod
+                {unmergeResult.result.recovered.length === 1 ? ' was' : 's were'} restored, but{' '}
+                {unmergeResult.result.missingSourceFileNames.length} could not be found on disk.
+              </p>
+              <p className="text-text-secondary">
+                {unmergeResult.copied
+                  ? 'The share code captured at merge time is on your clipboard now. Paste it into the portable-profile import flow to re-download the missing sources from GameBanana.'
+                  : 'Copying the share code to your clipboard failed. Click "Copy share code" below, then paste it into the portable-profile import flow to re-download the missing sources.'}
+              </p>
+              <ul className="text-xs text-text-secondary list-disc pl-5 max-h-24 overflow-y-auto">
+                {unmergeResult.result.missingSourceFileNames.map((fn) => (
+                  <li key={fn} className="font-mono truncate">{fn}</li>
+                ))}
+              </ul>
+            </div>
+          }
+          confirmLabel={unmergeResult.copied ? 'OK' : 'Copy share code'}
+          cancelLabel="Close"
+          onConfirm={() => {
+            if (!unmergeResult.copied) {
+              void navigator.clipboard.writeText(unmergeResult.result.shareCode);
+            }
+            setUnmergeResult(null);
+          }}
+          onCancel={() => setUnmergeResult(null)}
+        />
+      )}
+
+      {copyToast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] bg-bg-secondary border border-border rounded-lg shadow-lg shadow-black/40 px-4 py-2 text-sm text-text-primary animate-fade-in"
+        >
+          {copyToast}
+        </div>
+      )}
+
       {selectMode && (
         <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
           {bulkProgress ? (
@@ -1892,6 +2137,25 @@ export default function Installed() {
                 title={selectedEnabledCount === 0 ? 'No enabled mods selected' : `Disable ${selectedEnabledCount} mod${selectedEnabledCount === 1 ? '' : 's'}`}
               >
                 Disable{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={
+                  selectedMods.length < 2 ||
+                  selectedMods.some((m) => !!m.merged)
+                }
+                icon={Layers}
+                onClick={openBulkMerge}
+                title={
+                  selectedMods.length < 2
+                    ? 'Select 2+ mods to merge'
+                    : selectedMods.some((m) => !!m.merged)
+                      ? 'Cannot merge an already-merged mod. Unmerge it first.'
+                      : `Combine ${selectedMods.length} mods into one VPK`
+                }
+              >
+                Merge{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
               </Button>
               <Button
                 variant="danger"
@@ -2491,6 +2755,7 @@ interface ModCardProps {
     nsfw?: boolean;
     gameBananaId?: number;
     isUnknown?: boolean;
+    merged?: import('../types/mod').MergedModInfo;
   };
   viewMode: ViewMode;
   hideNsfwPreviews: boolean;
@@ -2502,6 +2767,10 @@ interface ModCardProps {
   onDelete: () => void;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
+  /** Open the unmerge confirm flow. Only meaningful when `mod.merged` is set. */
+  onUnmerge?: () => void;
+  /** Copy the merged mod's share code to the clipboard. */
+  onCopyShareCode?: () => void;
   /** When true, the card renders a selection checkbox overlay and clicks
    *  anywhere on the card route to `onSelectToggle` instead of opening
    *  details / firing toggle / delete. */
@@ -2541,6 +2810,8 @@ function ModCard({
   onDelete,
   onFixUnknown,
   fixingUnknown,
+  onUnmerge,
+  onCopyShareCode,
   selectMode,
   selected,
   onSelectToggle,
@@ -2585,15 +2856,25 @@ function ModCard({
       : `${base} top-2 bottom-2 -right-[3px] w-[3px]`;
   })();
 
+  const stateClasses = hasConflicts
+    ? 'bg-state-warning/5 border-state-warning/50'
+    : mod.enabled
+      ? 'bg-accent/5 border-accent/40'
+      : 'bg-bg-secondary/60 border-border/70 text-text-primary/80 hover:bg-bg-secondary hover:text-text-primary';
+
+  // Merged mods get a "stacked card" silhouette via two offset box-shadows
+  // that read as cards-behind-the-card. Uses only neutral surface/border
+  // tokens so it stays correct under any accent color the user picks.
+  // Suppressed in compact view (cards are too small for the offset to look
+  // intentional) and in list view (the card is a horizontal strip).
+  const mergedStackShadow =
+    mod.merged && viewMode === 'grid'
+      ? 'shadow-[3px_3px_0_0_var(--color-bg-secondary),3px_3px_0_1px_var(--color-border),6px_6px_0_0_var(--color-bg-secondary),6px_6px_0_1px_var(--color-border)] mr-1.5 mb-1.5'
+      : '';
+
   return (
     <div
-      className={`relative rounded-lg border transition-colors ${
-        hasConflicts
-          ? 'bg-state-warning/5 border-state-warning/50'
-          : mod.enabled
-            ? 'bg-accent/5 border-accent/40'
-            : 'bg-bg-secondary/60 border-border/70 text-text-primary/80 hover:bg-bg-secondary hover:text-text-primary'
-      } ${updateAvailable ? 'update-stripes' : ''} ${viewMode === 'compact' ? 'p-2 flex flex-col gap-2' : viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-start sm:items-center gap-3 p-3'} ${
+      className={`relative rounded-lg border transition-colors ${stateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${viewMode === 'compact' ? 'p-2 flex flex-col gap-2' : viewMode === 'grid' ? 'p-3 flex flex-col gap-3' : 'flex items-start sm:items-center gap-3 p-3'} ${
         isDragging ? 'opacity-40' : ''
       } ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
       draggable={draggable}
@@ -2675,14 +2956,12 @@ function ModCard({
           <>
             {mod.enabled && !selectMode && (
               <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1">
-                <Tag
-                  tone="accent"
+                <PriorityEditor
+                  modId={mod.id}
+                  modName={mod.name}
+                  priority={mod.priority}
                   variant="overlay"
-                  title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
-                  className="tabular-nums"
-                >
-                  Load #{mod.priority}
-                </Tag>
+                />
               </div>
             )}
             <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
@@ -2715,6 +2994,16 @@ function ModCard({
                   className="uppercase tracking-wide"
                 >
                   Update
+                </Tag>
+              )}
+              {mod.merged && (
+                <Tag
+                  variant="overlay"
+                  icon={Layers}
+                  title={`Merged from ${mod.merged.sources.length} mod${mod.merged.sources.length === 1 ? '' : 's'}. Open details to unmerge.`}
+                  className="border-white/20 text-white/90"
+                >
+                  Merged · {mod.merged.sources.length}
                 </Tag>
               )}
             </div>
@@ -2802,6 +3091,7 @@ function ModCard({
               hideNsfw={hideNsfwPreviews}
               className="w-full h-full"
               imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+              mergedSources={mod.merged?.sources}
             />
             {onOpenDetails && (
               <div className="pointer-events-none absolute inset-0 bg-black/0 transition-colors duration-200 group-hover:bg-black/20" />
@@ -2855,6 +3145,7 @@ function ModCard({
                 hideNsfw={hideNsfwPreviews}
                 className="w-full h-full"
                 imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+                mergedSources={mod.merged?.sources}
               />
             )}
             {onOpenDetails && (
@@ -2941,13 +3232,14 @@ function ModCard({
                 </Tag>
               )}
               {mod.enabled && (
-                <Tag
-                  tone="accent"
-                  title="Lower number loads first. When two mods overwrite the same file, the later-loaded mod wins."
-                  className="flex-shrink-0 tabular-nums"
-                >
-                  Load #{mod.priority}
-                </Tag>
+                <span className="flex-shrink-0">
+                  <PriorityEditor
+                    modId={mod.id}
+                    modName={mod.name}
+                    priority={mod.priority}
+                    variant="inline"
+                  />
+                </span>
               )}
             </div>
           )}
@@ -2994,6 +3286,34 @@ function ModCard({
                 ) : (
                   <Wrench className="w-4 h-4" />
                 )}
+              </button>
+            )}
+            {mod.merged && onCopyShareCode && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onCopyShareCode();
+                }}
+                className="p-1 text-text-secondary hover:text-accent transition-colors cursor-pointer"
+                title="Copy share code (paste into any Grimoire to import the sources)"
+                aria-label={`Copy share code for ${mod.name}`}
+              >
+                <Share2 className="w-4 h-4" />
+              </button>
+            )}
+            {mod.merged && onUnmerge && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onUnmerge();
+                }}
+                className="p-1 text-text-secondary hover:text-accent transition-colors cursor-pointer"
+                title="Unmerge (restore source mods)"
+                aria-label={`Unmerge ${mod.name}`}
+              >
+                <Scissors className="w-4 h-4" />
               </button>
             )}
             <button

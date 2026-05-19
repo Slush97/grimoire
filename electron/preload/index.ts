@@ -11,9 +11,11 @@ import type {
     AppSettings,
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
+    MergeModsArgs,
     Mod,
     ModConflict,
     UnknownModFilterGuess,
+    UnmergeModResult,
 } from '../../src/types/mod';
 import type {
     LikeResponse,
@@ -56,6 +58,8 @@ export interface ElectronAPI {
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
+    mergeMods: (args: MergeModsArgs) => Promise<Mod>;
+    unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
 
     // Launch
     launchModded: () => Promise<void>;
@@ -770,6 +774,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('import-custom-mod', args),
     readImageDataUrl: (imagePath: string) =>
         ipcRenderer.invoke('read-image-data-url', imagePath),
+    mergeMods: (args: MergeModsArgs) => ipcRenderer.invoke('merge-mods', args),
+    unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
 
     // Launch
     launchModded: () => ipcRenderer.invoke('launch-modded'),
