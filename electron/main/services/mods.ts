@@ -590,6 +590,23 @@ export async function reorderMods(
 }
 
 /**
+ * Dense-pack enabled mods to consecutive pak## slots in their current priority
+ * order, skipping any slot reserved by a disabled mod. Wraps reorderMods so
+ * callers (applyProfile, post-install, post-enable/disable) get a single
+ * two-phase rename instead of per-mod setModPriority cascades that fail on
+ * mid-operation slot collisions.
+ */
+export async function compactEnabledMods(deadlockPath: string): Promise<void> {
+    const mods = await scanMods(deadlockPath);
+    const orderedFileNames = mods
+        .filter((m) => m.enabled)
+        .sort((a, b) => a.priority - b.priority)
+        .map((m) => m.fileName);
+    if (orderedFileNames.length === 0) return;
+    await reorderMods(deadlockPath, orderedFileNames);
+}
+
+/**
  * Swap the priorities of two mods (async).
  */
 export async function swapModPriority(

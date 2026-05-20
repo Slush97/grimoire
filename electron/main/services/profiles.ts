@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
-import { scanMods, enableMod, disableMod, setModPriority } from './mods';
+import { scanMods, enableMod, disableMod, reorderMods } from './mods';
 import { getModMetadata } from './metadata';
 import { readAutoexec, writeAutoexec } from './autoexec';
 
@@ -275,19 +275,22 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         }
     }
 
-    // 1b. Apply priority order - rescan so we have up-to-date IDs/paths after enable/disable
+    // 1b. Apply priority order in a single two-phase pass via reorderMods.
+    // The previous implementation called setModPriority per mod and swallowed
+    // "Priority X is already in use" errors — common when switching between
+    // profiles, since the OTHER profile's mods still occupy the target slots
+    // until later iterations move them. reorderMods stages every rename via
+    // a tmp prefix first, so transient mid-loop collisions can't happen.
     const refreshedMods = await scanMods(deadlockPath);
-    const byFileName = new Map(refreshedMods.map((m) => [m.fileName, m]));
-    const orderedProfileMods = [...profile.mods].sort((a, b) => a.priority - b.priority);
-    for (const profileMod of orderedProfileMods) {
-        const current = byFileName.get(profileMod.fileName);
-        if (current && current.priority !== profileMod.priority) {
-            try {
-                await setModPriority(deadlockPath, current.id, profileMod.priority);
-            } catch (err) {
-                console.warn(`[applyProfile] Could not restore priority for ${profileMod.fileName}:`, err);
-            }
-        }
+    const enabledFileNames = new Set(
+        refreshedMods.filter((m) => m.enabled).map((m) => m.fileName)
+    );
+    const orderedFileNames = [...profile.mods]
+        .filter((pm) => pm.enabled && enabledFileNames.has(pm.fileName))
+        .sort((a, b) => a.priority - b.priority)
+        .map((pm) => pm.fileName);
+    if (orderedFileNames.length > 0) {
+        await reorderMods(deadlockPath, orderedFileNames);
     }
 
     // 2. Apply Autoexec & Crosshair
