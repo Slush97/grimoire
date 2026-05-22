@@ -529,10 +529,17 @@ export async function createProfileFromPortable(
         if (claimedVariants.has(fileName)) continue;
         claimedVariants.add(fileName);
 
+        // Persist the stable GameBanana ids alongside the fileName so
+        // applyProfile / buildPortableProfile can find this mod after a
+        // later reorder rotates its pakNN_ prefix. Without these, imported
+        // and snapshot-restored profiles regress to fileName-only lookups
+        // and re-export warns "Skipped local mod" the moment files move.
         profileMods.push({
             fileName,
             enabled: r.entry.enabled,
             priority: r.entry.priority,
+            gameBananaId: ref.submissionId,
+            gameBananaFileId: r.resolvedFileId,
         });
     }
 

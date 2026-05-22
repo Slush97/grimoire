@@ -324,9 +324,30 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     // currentMod.id → ProfileMod, when matched. Drives the enable/disable
     // loop and the reorder pass below.
     const profileModByCurrentId = new Map<string, ProfileMod>();
+    // Heal pre-stable-id and pre-fix portable-import profiles: any time we
+    // match a profileMod whose stable ids are missing to a current mod whose
+    // metadata has them, backfill onto the saved entry. Without this, the
+    // entry stays vulnerable to the next reorder rotating its pakNN_ prefix,
+    // at which point both applyProfile and buildPortableProfile lose it.
+    let healedAny = false;
     for (const profileMod of profile.mods) {
         const matched = resolveProfileMod(profileMod);
-        if (matched) profileModByCurrentId.set(matched.id, profileMod);
+        if (!matched) continue;
+        profileModByCurrentId.set(matched.id, profileMod);
+        if (typeof profileMod.gameBananaId === 'number' && typeof profileMod.gameBananaFileId === 'number') continue;
+        const matchedMeta = getModMetadata(matched.fileName);
+        if (typeof matchedMeta?.gameBananaId !== 'number' || typeof matchedMeta?.gameBananaFileId !== 'number') continue;
+        profileMod.gameBananaId = matchedMeta.gameBananaId;
+        profileMod.gameBananaFileId = matchedMeta.gameBananaFileId;
+        healedAny = true;
+    }
+    if (healedAny) {
+        const all = loadProfiles();
+        const idx = all.findIndex((p) => p.id === profileId);
+        if (idx !== -1) {
+            all[idx] = { ...all[idx], mods: profile.mods };
+            saveProfiles(all);
+        }
     }
 
     for (const mod of currentMods) {
