@@ -2872,6 +2872,7 @@ interface ModCardProps {
     nsfw?: boolean;
     gameBananaId?: number;
     isUnknown?: boolean;
+    lockerHero?: string;
     merged?: import('../types/mod').MergedModInfo;
   };
   viewMode: ViewMode;
