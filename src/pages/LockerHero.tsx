@@ -21,7 +21,6 @@ import {
   countLockerSkins,
   detectMinaTextures,
   findMinaVariant,
-  getLockerSkinKey,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
@@ -184,50 +183,23 @@ export default function LockerHero() {
     return null;
   };
 
+  // Both skins and sounds toggle independently in the Locker now. Users have
+  // valid reasons to layer multiple VPKs on the same hero (e.g. one mod
+  // touches textures, another touches weapons, another the voice). The Locker
+  // surfaces what's enabled; it doesn't enforce exclusivity. If two enabled
+  // mods truly conflict, that's the Conflicts page's job to flag.
   const setActiveSkin = async (modId: string) => {
     if (!hero) return;
     const heroModList = listForMod(modId);
-    if (!heroModList) return;
-    const clicked = heroModList.find((m) => m.id === modId);
-    if (!clicked) return;
-    const actions: Promise<void>[] = [];
-    if (clicked.enabled) {
-      // Click again on the active skin disables it (and any sibling variants
-      // currently enabled), returning the hero to the default in-game skin.
-      for (const mod of heroModList) {
-        if (mod.enabled) actions.push(toggleMod(mod.id));
-      }
-    } else {
-      for (const mod of heroModList) {
-        if (mod.id === modId) {
-          if (!mod.enabled) actions.push(toggleMod(mod.id));
-        } else if (mod.enabled) {
-          actions.push(toggleMod(mod.id));
-        }
-      }
-    }
-    await Promise.all(actions);
+    if (!heroModList?.some((m) => m.id === modId)) return;
+    await toggleMod(modId);
   };
 
-  // Toggle one variant within a group. Disables enabled mods from other groups
-  // for the hero, but leaves sibling variants in the same group alone so a
-  // model + voice-lines pair can stay co-enabled.
   const toggleHeroVariant = async (modId: string) => {
     if (!hero) return;
     const heroModList = listForMod(modId);
-    if (!heroModList) return;
-    const target = heroModList.find((m) => m.id === modId);
-    if (!target) return;
-    const groupKey = getLockerSkinKey(target);
-    const actions: Promise<void>[] = [];
-    for (const mod of heroModList) {
-      if (mod.id === modId) continue;
-      if (!mod.enabled) continue;
-      const otherKey = getLockerSkinKey(mod);
-      if (otherKey !== groupKey) actions.push(toggleMod(mod.id));
-    }
-    actions.push(toggleMod(modId));
-    await Promise.all(actions);
+    if (!heroModList?.some((m) => m.id === modId)) return;
+    await toggleMod(modId);
   };
 
   const applyMinaPreset = async (presetFileName: string) => {
