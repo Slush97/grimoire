@@ -585,6 +585,8 @@ export interface ProfileMod {
     fileName: string;
     enabled: boolean;
     priority: number;
+    gameBananaId?: number;
+    gameBananaFileId?: number;
 }
 
 export interface ProfileCrosshairSettings {

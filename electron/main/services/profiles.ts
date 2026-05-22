@@ -6,9 +6,17 @@ import { getModMetadata } from './metadata';
 import { readAutoexec, writeAutoexec } from './autoexec';
 
 export interface ProfileMod {
-    fileName: string;   // Use fileName as the stable identifier
+    /** Filename when the profile was saved. NOT stable across reorders or
+     *  collision-renames; use `gameBananaId` + `gameBananaFileId` as the
+     *  primary identifier when present, and fall back to `fileName` only for
+     *  pre-stable-id profiles or custom mods that lack GameBanana ids. */
+    fileName: string;
     enabled: boolean;
     priority: number;
+    /** Stable identity pair. Populated from metadata at save time so apply
+     *  can find the mod even if its fileName has changed since. */
+    gameBananaId?: number;
+    gameBananaFileId?: number;
 }
 
 export interface ProfileCrosshairSettings {
@@ -117,11 +125,7 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
     const profile: Profile = {
         id: generateProfileId(),
         name,
-        mods: enabledMods.map(mod => ({
-            fileName: mod.fileName,
-            enabled: true,  // Always true since we only save enabled mods
-            priority: mod.priority,
-        })),
+        mods: enabledMods.map(mod => toProfileMod(mod, true)),
         crosshair: crosshairSettings,
         autoexecCommands: autoexecData.commands,
         createdAt: now,
@@ -133,6 +137,24 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
     saveProfiles(profiles);
 
     return profile;
+}
+
+/**
+ * Build a ProfileMod from a current scanned Mod, attaching stable identifiers
+ * (GameBanana mod/file ids) from the metadata sidecar when available. These
+ * ids are what `applyProfile` resolves against so a mod can still be found
+ * after its fileName has changed (reorder, collision-rename, multi-vpk pick).
+ */
+function toProfileMod(mod: { fileName: string; priority: number }, enabled: boolean): ProfileMod {
+    const meta = getModMetadata(mod.fileName);
+    const out: ProfileMod = {
+        fileName: mod.fileName,
+        enabled,
+        priority: mod.priority,
+    };
+    if (typeof meta?.gameBananaId === 'number') out.gameBananaId = meta.gameBananaId;
+    if (typeof meta?.gameBananaFileId === 'number') out.gameBananaFileId = meta.gameBananaFileId;
+    return out;
 }
 
 /**
@@ -169,11 +191,7 @@ export async function createProfileFromGameBananaIds(
     const profile: Profile = {
         id: generateProfileId(),
         name,
-        mods: matching.map((mod) => ({
-            fileName: mod.fileName,
-            enabled: true,
-            priority: mod.priority,
-        })),
+        mods: matching.map((mod) => toProfileMod(mod, true)),
         autoexecCommands: autoexecData.commands,
         createdAt: now,
         updatedAt: now,
@@ -206,11 +224,7 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
 
     profiles[index] = {
         ...profiles[index],
-        mods: enabledMods.map(mod => ({
-            fileName: mod.fileName,
-            enabled: true,
-            priority: mod.priority,
-        })),
+        mods: enabledMods.map(mod => toProfileMod(mod, true)),
         // If crosshairSettings is passed, use it. If undefined/null, remove crosshair from profile.
         // This allows the frontend to explicitly control whether crosshair is included based on feature toggle.
         crosshair: crosshairSettings,
@@ -239,6 +253,52 @@ function generateCrosshairCommands(settings: ProfileCrosshairSettings): string {
 }
 
 /**
+ * Build a resolver that maps a ProfileMod to one of the current scanned mods.
+ *
+ * Tries stable id first (`gameBananaId` + `gameBananaFileId`) so a mod can be
+ * found after a fileName change. Falls back to fileName for pre-stable-id
+ * profiles and custom mods that lack GameBanana ids. Returns undefined when
+ * neither lookup hits, and callers treat that as "not in profile".
+ *
+ * Stable-id matches that resolve to the same current mod are deduped on a
+ * first-come basis so a profile with two entries pointing at the same
+ * archive (shouldn't happen but possible after manual edits) can't double-
+ * assign the same file.
+ */
+function buildProfileModResolver(
+    currentMods: Array<import('../../../src/types/mod').Mod>
+): (pm: ProfileMod) => import('../../../src/types/mod').Mod | undefined {
+    const byFileName = new Map<string, typeof currentMods[number]>();
+    const byGbFile = new Map<string, typeof currentMods[number]>();
+    for (const mod of currentMods) {
+        byFileName.set(mod.fileName, mod);
+        const meta = getModMetadata(mod.fileName);
+        const gbId = meta?.gameBananaId;
+        const fileId = meta?.gameBananaFileId;
+        if (typeof gbId === 'number' && typeof fileId === 'number') {
+            const key = `${gbId}:${fileId}`;
+            if (!byGbFile.has(key)) byGbFile.set(key, mod);
+        }
+    }
+    const claimed = new Set<string>();
+    return (pm: ProfileMod) => {
+        if (typeof pm.gameBananaId === 'number' && typeof pm.gameBananaFileId === 'number') {
+            const stable = byGbFile.get(`${pm.gameBananaId}:${pm.gameBananaFileId}`);
+            if (stable && !claimed.has(stable.id)) {
+                claimed.add(stable.id);
+                return stable;
+            }
+        }
+        const fallback = byFileName.get(pm.fileName);
+        if (fallback && !claimed.has(fallback.id)) {
+            claimed.add(fallback.id);
+            return fallback;
+        }
+        return undefined;
+    };
+}
+
+/**
  * Apply a profile - enable/disable mods, restore autoexec and crosshair
  */
 export async function applyProfile(deadlockPath: string, profileId: string): Promise<Profile> {
@@ -249,15 +309,28 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         throw new Error(`Profile not found: ${profileId}`);
     }
 
-    // 1. Apply Mods (enable/disable state)
+    // 1. Apply Mods (enable/disable state).
+    //
+    // Resolve each profile mod against the current scan by stable id
+    // (gameBananaId + gameBananaFileId) first, then fall back to fileName for
+    // pre-stable-id profiles and custom mods that lack GameBanana ids.
+    // fileName-keyed lookup alone breaks any time the user has reordered or
+    // collision-renamed since the profile was saved: the profile points at a
+    // pak## that no longer matches anything on disk, the mod gets treated as
+    // "not in profile" and is disabled (or skipped from the reorder pass).
     const currentMods = await scanMods(deadlockPath);
-    const profileModMap = new Map<string, ProfileMod>();
+    const resolveProfileMod = buildProfileModResolver(currentMods);
+
+    // currentMod.id → ProfileMod, when matched. Drives the enable/disable
+    // loop and the reorder pass below.
+    const profileModByCurrentId = new Map<string, ProfileMod>();
     for (const profileMod of profile.mods) {
-        profileModMap.set(profileMod.fileName, profileMod);
+        const matched = resolveProfileMod(profileMod);
+        if (matched) profileModByCurrentId.set(matched.id, profileMod);
     }
 
     for (const mod of currentMods) {
-        const profileMod = profileModMap.get(mod.fileName);
+        const profileMod = profileModByCurrentId.get(mod.id);
 
         if (profileMod) {
             if (profileMod.enabled !== mod.enabled) {
@@ -277,18 +350,26 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
 
     // 1b. Apply priority order in a single two-phase pass via reorderMods.
     // The previous implementation called setModPriority per mod and swallowed
-    // "Priority X is already in use" errors — common when switching between
+    // "Priority X is already in use" errors. Common when switching between
     // profiles, since the OTHER profile's mods still occupy the target slots
     // until later iterations move them. reorderMods stages every rename via
     // a tmp prefix first, so transient mid-loop collisions can't happen.
+    //
+    // Re-resolve after enable/disable: enableMod / disableMod may have
+    // renamed files (collision rename in moveModToFolder), so the previous
+    // resolver's id-to-mod mapping is stale.
     const refreshedMods = await scanMods(deadlockPath);
-    const enabledFileNames = new Set(
-        refreshedMods.filter((m) => m.enabled).map((m) => m.fileName)
-    );
-    const orderedFileNames = [...profile.mods]
-        .filter((pm) => pm.enabled && enabledFileNames.has(pm.fileName))
-        .sort((a, b) => a.priority - b.priority)
-        .map((pm) => pm.fileName);
+    const resolveAgainstRefreshed = buildProfileModResolver(refreshedMods);
+    const orderedFileNames: string[] = [];
+    const seen = new Set<string>();
+    for (const pm of [...profile.mods].sort((a, b) => a.priority - b.priority)) {
+        if (!pm.enabled) continue;
+        const matched = resolveAgainstRefreshed(pm);
+        if (!matched || !matched.enabled) continue;
+        if (seen.has(matched.fileName)) continue;
+        seen.add(matched.fileName);
+        orderedFileNames.push(matched.fileName);
+    }
     if (orderedFileNames.length > 0) {
         await reorderMods(deadlockPath, orderedFileNames);
     }

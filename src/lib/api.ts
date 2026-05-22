@@ -353,6 +353,10 @@ export interface ProfileMod {
   fileName: string;
   enabled: boolean;
   priority: number;
+  /** Stable identity. Populated at profile-save time from metadata; used by
+   *  applyProfile to resolve mods whose fileName has changed since save. */
+  gameBananaId?: number;
+  gameBananaFileId?: number;
 }
 
 export interface ProfileCrosshairSettings {
