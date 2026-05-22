@@ -1866,9 +1866,33 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         }
       />
 
-      {/* Info — moved to TOP for audio-preview sound cards so it stops covering the player */}
+      {/* Info: moved to TOP for audio-preview sound cards so it stops covering the player.
+          State tags (NSFW/Installed/Outdated) live inside this block too, on a row
+          ABOVE the title. The default top-left overlay covers the title text on this
+          variant because the title is anchored at top:0 instead of bottom:0. */}
       {isSoundSection && hasAudioPreview ? (
         <div className={`absolute top-0 left-0 right-0 pointer-events-none ${isCompact ? 'p-2.5 pr-10' : 'p-3 pr-12'}`}>
+          {(mod.nsfw || installed || isOutdated) && (
+            <div className="flex flex-wrap items-center gap-1 mb-1.5">
+              {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
+              {installed && (
+                <Tag tone="success" variant="overlay">
+                  <span aria-hidden>✓</span>
+                  Installed
+                </Tag>
+              )}
+              {!installed && isOutdated && (
+                <Tag
+                  tone="warning"
+                  variant="overlay"
+                  icon={AlertTriangle}
+                  title={`Last updated ${formatDate(mod.dateModified)}`}
+                >
+                  Outdated
+                </Tag>
+              )}
+            </div>
+          )}
           <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
           <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
             <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
@@ -1902,26 +1926,31 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
       )}
 
       {/* State tag stack — top-left. Stacks NSFW / INSTALLED / OUTDATED so the
-          card is decodable without relying on icon color alone. */}
-      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
-        {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
-        {installed && (
-          <Tag tone="success" variant="overlay">
-            <span aria-hidden>✓</span>
-            Installed
-          </Tag>
-        )}
-        {!installed && isOutdated && (
-          <Tag
-            tone="warning"
-            variant="overlay"
-            icon={AlertTriangle}
-            title={`Last updated ${formatDate(mod.dateModified)}`}
-          >
-            Outdated
-          </Tag>
-        )}
-      </div>
+          card is decodable without relying on icon color alone. Skipped for
+          sound+audio cards because those render the same tags inline above the
+          title (the title moves to top:0 on that variant and the absolute
+          overlay would cover it). */}
+      {!(isSoundSection && hasAudioPreview) && (
+        <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+          {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
+          {installed && (
+            <Tag tone="success" variant="overlay">
+              <span aria-hidden>✓</span>
+              Installed
+            </Tag>
+          )}
+          {!installed && isOutdated && (
+            <Tag
+              tone="warning"
+              variant="overlay"
+              icon={AlertTriangle}
+              title={`Last updated ${formatDate(mod.dateModified)}`}
+            >
+              Outdated
+            </Tag>
+          )}
+        </div>
+      )}
 
       {/* Audio preview + volume, pinned to bottom with its own pointer-events layer.
           z-20 keeps it above the gradient + any overlays so clicks always land.

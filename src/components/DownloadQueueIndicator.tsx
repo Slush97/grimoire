@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Loader2, X, ChevronUp } from 'lucide-react';
+import { Download, Loader2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import type { DownloadQueueItem, DownloadProgressData } from '../types/electron';
 
 interface DownloadQueueIndicatorProps {
@@ -205,7 +205,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                             aria-label="Collapse"
                             title="Collapse"
                         >
-                            <X className="h-3.5 w-3.5" />
+                            <ChevronDown className="h-4 w-4" />
                         </button>
                     </div>
 

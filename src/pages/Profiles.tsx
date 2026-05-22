@@ -574,18 +574,22 @@ export default function Profiles() {
 
                       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5">
                         <div className="flex items-center gap-2 flex-1 min-w-0 basis-full @sm/profile-card:basis-auto">
-                          {!isActive && (
-                            <Button
-                              size="sm"
-                              className="flex-1 min-w-0"
-                              onClick={() => handleApplyProfile(profile.id)}
-                              disabled={isApplying || isUpdating}
-                              isLoading={isApplying}
-                              icon={Play}
-                            >
-                              Apply
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            className="flex-1 min-w-0"
+                            onClick={() => handleApplyProfile(profile.id)}
+                            disabled={isApplying || isUpdating}
+                            isLoading={isApplying}
+                            icon={isActive ? RotateCcw : Play}
+                            variant={isActive ? 'secondary' : 'primary'}
+                            title={
+                              isActive
+                                ? 'Re-apply: snap mods back to this profile if they have drifted'
+                                : undefined
+                            }
+                          >
+                            {isActive ? 'Re-apply' : 'Apply'}
+                          </Button>
                           <Button
                             size="sm"
                             className="flex-1 min-w-0"
