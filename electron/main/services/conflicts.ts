@@ -1,5 +1,5 @@
 import { scanMods, Mod } from './mods';
-import { parseVpkDirectory } from './vpk';
+import { parseVpkDirectoryCached } from './vpk';
 import { loadSettings } from './settings';
 import { getModMetadata } from './metadata';
 
@@ -167,7 +167,7 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     // Parse VPK file lists
     const modFileLists = new Map<string, Set<string>>();
     for (const mod of enabledMods) {
-        const files = parseVpkDirectory(mod.path);
+        const files = parseVpkDirectoryCached(mod.path);
         if (files && files.length > 0) {
             modFileLists.set(mod.id, new Set(files));
         }

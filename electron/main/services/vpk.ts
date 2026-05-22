@@ -1,4 +1,4 @@
-import { openSync, readSync, closeSync, existsSync } from 'fs';
+import { openSync, readSync, closeSync, existsSync, statSync } from 'fs';
 import { heroForSoundCodename } from './heroSoundCodenames';
 
 /**
@@ -27,6 +27,50 @@ function readNullTerminatedString(buffer: Buffer, offset: number): { str: string
     }
     const str = buffer.slice(offset, end).toString('utf-8');
     return { str, bytesRead: end - offset + 1 }; // +1 for null terminator
+}
+
+// Cache parsed VPK file lists keyed by (path, mtime, size). Conflict
+// detection re-parses every enabled VPK on each scan, which previously
+// pinned the main process for hundreds of ms with 60+ mods. Invalidates
+// automatically when the file changes on disk; entries for deleted/missing
+// VPKs are dropped opportunistically.
+interface VpkCacheEntry {
+    mtimeMs: number;
+    size: number;
+    paths: string[] | null;
+}
+const vpkParseCache = new Map<string, VpkCacheEntry>();
+
+export function invalidateVpkParseCache(vpkPath?: string): void {
+    if (vpkPath) {
+        vpkParseCache.delete(vpkPath);
+    } else {
+        vpkParseCache.clear();
+    }
+}
+
+/**
+ * Parsed VPK file list with on-disk-aware caching. Re-uses the previous
+ * parse when (path, mtime, size) is unchanged; otherwise falls through to
+ * `parseVpkDirectory` and stores the fresh result.
+ */
+export function parseVpkDirectoryCached(vpkPath: string): string[] | null {
+    let stat;
+    try {
+        stat = statSync(vpkPath);
+    } catch {
+        vpkParseCache.delete(vpkPath);
+        return null;
+    }
+
+    const cached = vpkParseCache.get(vpkPath);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+        return cached.paths;
+    }
+
+    const paths = parseVpkDirectory(vpkPath);
+    vpkParseCache.set(vpkPath, { mtimeMs: stat.mtimeMs, size: stat.size, paths });
+    return paths;
 }
 
 /**

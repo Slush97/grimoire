@@ -335,8 +335,21 @@ export interface ModConflict {
   details: string;
 }
 
+// Conflict detection re-parses every enabled VPK on the main process, so
+// firing it twice for the same store update (Sidebar badge + Installed
+// page) doubled the freeze window. Concurrent callers share the in-flight
+// promise; once it resolves, the next call starts a fresh scan so any
+// state change since then is picked up immediately.
+let conflictsInFlight: Promise<ModConflict[]> | null = null;
+
 export async function getConflicts(): Promise<ModConflict[]> {
-  return window.electronAPI.getConflicts();
+  if (conflictsInFlight) return conflictsInFlight;
+  const promise = window.electronAPI.getConflicts();
+  conflictsInFlight = promise;
+  promise.finally(() => {
+    if (conflictsInFlight === promise) conflictsInFlight = null;
+  });
+  return promise;
 }
 
 export async function getIgnoredConflicts(): Promise<string[]> {
