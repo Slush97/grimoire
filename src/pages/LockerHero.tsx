@@ -184,12 +184,25 @@ export default function LockerHero() {
     return null;
   };
 
+  // Sounds don't need to be mutually exclusive within a hero: a player can
+  // reasonably want a voice-pack from one sound mod and ability sounds from
+  // another running together. Only the Skins section enforces single-active
+  // semantics (a hero can only wear one model at a time).
+  const isSoundMod = (modId: string) => soundList.some((m) => m.id === modId);
+
   const setActiveSkin = async (modId: string) => {
     if (!hero) return;
     const heroModList = listForMod(modId);
     if (!heroModList) return;
     const clicked = heroModList.find((m) => m.id === modId);
     if (!clicked) return;
+
+    // Sounds: just flip the one mod, leave every other enabled sound alone.
+    if (isSoundMod(modId)) {
+      await toggleMod(modId);
+      return;
+    }
+
     const actions: Promise<void>[] = [];
     if (clicked.enabled) {
       // Click again on the active skin disables it (and any sibling variants
@@ -209,15 +222,22 @@ export default function LockerHero() {
     await Promise.all(actions);
   };
 
-  // Toggle one variant within a group. Disables enabled mods from other groups
-  // for the hero, but leaves sibling variants in the same group alone so a
-  // model + voice-lines pair can stay co-enabled.
+  // Toggle one variant within a group. For skins, disables enabled mods from
+  // other groups for the hero (leaving sibling variants in the same group
+  // alone so a model + voice-lines pair stays co-enabled). For sounds, just
+  // toggles the clicked mod so several sound mods can run simultaneously.
   const toggleHeroVariant = async (modId: string) => {
     if (!hero) return;
     const heroModList = listForMod(modId);
     if (!heroModList) return;
     const target = heroModList.find((m) => m.id === modId);
     if (!target) return;
+
+    if (isSoundMod(modId)) {
+      await toggleMod(modId);
+      return;
+    }
+
     const groupKey = getLockerSkinKey(target);
     const actions: Promise<void>[] = [];
     for (const mod of heroModList) {
