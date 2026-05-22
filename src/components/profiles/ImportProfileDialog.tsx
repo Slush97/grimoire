@@ -70,10 +70,26 @@ interface RowState {
   progress?: { downloaded: number; total: number };
 }
 
-function gbId(mod: PortableResolvedMod): number | null {
+function gbSubmissionId(mod: PortableResolvedMod): number | null {
   if (mod.entry.source !== 'gamebanana') return null;
   const ref = mod.entry.ref as { submissionId?: number };
   return ref.submissionId ?? null;
+}
+
+// Composite tracking key for download events. A submission can appear several
+// times in one import (different file versions, or multi-VPK siblings); keying
+// by submissionId alone would cross-update unrelated rows. Multi-VPK siblings
+// genuinely share (submissionId, fileId) and SHOULD update together, since
+// they all ride on a single archive download.
+function rowKey(mod: PortableResolvedMod): string | null {
+  if (mod.entry.source !== 'gamebanana') return null;
+  const ref = mod.entry.ref as { submissionId?: number; fileId?: number };
+  if (ref.submissionId === undefined || ref.fileId === undefined) return null;
+  return `${ref.submissionId}:${ref.fileId}`;
+}
+
+function eventKey(modId: number, fileId: number): string {
+  return `${modId}:${fileId}`;
 }
 
 export default function ImportProfileDialog({
@@ -116,16 +132,16 @@ export default function ImportProfileDialog({
   const includeAutoexecRef = useRef(true);
   useEffect(() => { includeAutoexecRef.current = includeAutoexec; }, [includeAutoexec]);
 
-  const trackedIds = useMemo(() => {
-    const s = new Set<number>();
+  const trackedKeys = useMemo(() => {
+    const s = new Set<string>();
     for (const r of rows) {
-      const id = gbId(r.mod);
-      if (id !== null) s.add(id);
+      const k = rowKey(r.mod);
+      if (k !== null) s.add(k);
     }
     return s;
   }, [rows]);
-  const trackedIdsRef = useRef(trackedIds);
-  useEffect(() => { trackedIdsRef.current = trackedIds; }, [trackedIds]);
+  const trackedKeysRef = useRef(trackedKeys);
+  useEffect(() => { trackedKeysRef.current = trackedKeys; }, [trackedKeys]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -137,45 +153,50 @@ export default function ImportProfileDialog({
 
   // Listen for download events to drive row status during import.
   useEffect(() => {
-    const updateRowByGb = (id: number, patch: Partial<RowState>) => {
-      setRows((prev) => prev.map((r) => (gbId(r.mod) === id ? { ...r, ...patch } : r)));
+    const updateRowsByKey = (key: string, patch: Partial<RowState>) => {
+      setRows((prev) => prev.map((r) => (rowKey(r.mod) === key ? { ...r, ...patch } : r)));
     };
 
     const unsubQueue = window.electronAPI.onDownloadQueueUpdated((data) => {
-      const queuedSet = new Set(data.queue.map((q) => q.modId));
-      const currentId = data.currentDownload?.modId;
+      const queuedSet = new Set(data.queue.map((q) => eventKey(q.modId, q.fileId)));
+      const currentKey = data.currentDownload
+        ? eventKey(data.currentDownload.modId, data.currentDownload.fileId)
+        : null;
       setRows((prev) =>
         prev.map((r) => {
-          const id = gbId(r.mod);
-          if (id === null || !trackedIdsRef.current.has(id)) return r;
+          const k = rowKey(r.mod);
+          if (k === null || !trackedKeysRef.current.has(k)) return r;
           if (
             r.status === 'installed' ||
             r.status === 'already-installed' ||
             r.status === 'failed' ||
             r.status === 'skipped'
           ) return r;
-          if (currentId === id) return r.status === 'downloading' ? r : { ...r, status: 'downloading' };
-          if (queuedSet.has(id)) return r.status === 'queued' ? r : { ...r, status: 'queued' };
+          if (currentKey === k) return r.status === 'downloading' ? r : { ...r, status: 'downloading' };
+          if (queuedSet.has(k)) return r.status === 'queued' ? r : { ...r, status: 'queued' };
           return r;
         })
       );
     });
 
-    const unsubComplete = window.electronAPI.onDownloadComplete(({ modId }) => {
-      if (!trackedIdsRef.current.has(modId)) return;
-      updateRowByGb(modId, { status: 'installed', statusMessage: undefined });
+    const unsubComplete = window.electronAPI.onDownloadComplete(({ modId, fileId }) => {
+      const k = eventKey(modId, fileId);
+      if (!trackedKeysRef.current.has(k)) return;
+      updateRowsByKey(k, { status: 'installed', statusMessage: undefined });
     });
 
-    const unsubError = window.electronAPI.onDownloadError(({ modId, message }) => {
-      if (!trackedIdsRef.current.has(modId)) return;
-      updateRowByGb(modId, { status: 'failed', statusMessage: message });
+    const unsubError = window.electronAPI.onDownloadError(({ modId, fileId, message }) => {
+      const k = eventKey(modId, fileId);
+      if (!trackedKeysRef.current.has(k)) return;
+      updateRowsByKey(k, { status: 'failed', statusMessage: message });
     });
 
-    const unsubProgress = window.electronAPI.onDownloadProgress(({ modId, downloaded, total }) => {
-      if (!trackedIdsRef.current.has(modId)) return;
+    const unsubProgress = window.electronAPI.onDownloadProgress(({ modId, fileId, downloaded, total }) => {
+      const k = eventKey(modId, fileId);
+      if (!trackedKeysRef.current.has(k)) return;
       setRows((prev) =>
         prev.map((r) =>
-          gbId(r.mod) === modId
+          rowKey(r.mod) === k
             ? { ...r, progress: { downloaded, total } }
             : r
         )
@@ -295,6 +316,7 @@ export default function ImportProfileDialog({
       if (mod.entry.source !== 'gamebanana') continue;
       if (mod.resolvedFileId === undefined || !mod.resolvedFileName) continue;
       const ref = mod.entry.ref as { submissionId: number; section?: string };
+      const failKey = eventKey(ref.submissionId, mod.resolvedFileId);
       void downloadMod(
         ref.submissionId,
         mod.resolvedFileId,
@@ -304,7 +326,7 @@ export default function ImportProfileDialog({
         const message = err instanceof Error ? err.message : String(err);
         setRows((prev) =>
           prev.map((r) =>
-            gbId(r.mod) === ref.submissionId && r.status !== 'installed'
+            rowKey(r.mod) === failKey && r.status !== 'installed'
               ? { ...r, status: 'failed', statusMessage: message }
               : r
           )
@@ -672,7 +694,7 @@ export default function ImportProfileDialog({
                         />
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-medium text-text-primary truncate">
-                            {hint?.name ?? `Submission #${gbId(mod) ?? '?'}`}
+                            {hint?.name ?? `Submission #${gbSubmissionId(mod) ?? '?'}`}
                           </div>
                           <div className="text-xs text-text-secondary flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                             {hint?.category && <span className="truncate max-w-[12rem]">{hint.category}</span>}

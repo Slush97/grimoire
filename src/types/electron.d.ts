@@ -132,7 +132,7 @@ export interface DownloadEventData {
 export interface DownloadErrorData {
     modId: number;
     fileId: number;
-    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
+    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'CANCELLED_BY_USER' | 'UNKNOWN';
     message: string;
     helpUrl?: string;
 }
@@ -356,6 +356,7 @@ export interface ElectronAPI {
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
     getCurrentDownload: () => Promise<DownloadQueueItem | null>;
     removeFromQueue: (modId: number) => Promise<boolean>;
+    cancelActiveDownload: () => Promise<boolean>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
     // GameBanana 1-Click protocol handler

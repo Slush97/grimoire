@@ -166,6 +166,12 @@ const downloadQueue: QueuedDownload[] = [];
 let isProcessingQueue = false;
 let currentDownloadInfo: { modId: number; fileId: number; fileName: string } | null = null;
 
+// Cancellation handle for the in-flight phase of the current download. The
+// active phase (HTTP fetch, multi-VPK picker prompt) installs a teardown
+// function here; cancelActiveDownload() invokes it. Only one phase is active
+// at a time, so a single slot is enough.
+let currentCancelHandler: (() => void) | null = null;
+
 /**
  * Get the current download queue state for UI display
  */
@@ -222,10 +228,22 @@ export function downloadMod(
     args: DownloadModArgs,
     mainWindow: BrowserWindow | null
 ): Promise<DownloadInstallResult> {
-    // Check if this mod is already in the queue (prevent duplicates)
-    const alreadyQueued = downloadQueue.some(q => q.args.modId === args.modId);
-    if (alreadyQueued) {
-        console.log(`[downloadMod] Mod ${args.modId} already in queue, skipping`);
+    // Dedup at (modId, fileId), not modId alone: a single submission can have
+    // multiple files (Gold/Silver variants, lite/HD versions) and profile
+    // imports legitimately queue several of them back-to-back. Also check the
+    // in-progress download — handleConfirm fires its calls in one tick, so
+    // call N+1 races against processQueue having already shifted call N out.
+    const sameTarget = (q: QueuedDownload) =>
+        q.args.modId === args.modId && q.args.fileId === args.fileId;
+    if (downloadQueue.some(sameTarget)) {
+        console.log(`[downloadMod] Mod ${args.modId} file ${args.fileId} already queued, skipping`);
+        return Promise.resolve({ installedVpks: [] });
+    }
+    if (
+        currentDownloadInfo?.modId === args.modId &&
+        currentDownloadInfo?.fileId === args.fileId
+    ) {
+        console.log(`[downloadMod] Mod ${args.modId} file ${args.fileId} already downloading, skipping`);
         return Promise.resolve({ installedVpks: [] });
     }
 
@@ -330,8 +348,21 @@ async function processQueue(): Promise<void> {
                 : await executeDownload(item.deadlockPath, item.args, item.mainWindow);
             item.resolve(result);
         } catch (error) {
-            item.reject(error instanceof Error ? error : new Error(String(error)));
+            const err = error instanceof Error ? error : new Error(String(error));
+            // Surface user-cancellation so the renderer can clear the row.
+            // The multi-VPK-picker cancel path already emits download-error
+            // itself; this only covers HTTP-phase cancels which don't.
+            if (err.message === 'CANCELLED_BY_USER') {
+                item.mainWindow?.webContents.send('download-error', {
+                    modId: item.args.modId,
+                    fileId: item.args.fileId,
+                    errorCode: 'CANCELLED_BY_USER',
+                    message: 'Download cancelled.',
+                });
+            }
+            item.reject(err);
         }
+        currentCancelHandler = null;
         currentDownloadInfo = null;
     }
 
@@ -355,6 +386,18 @@ async function downloadFile(
         const protocol = url.startsWith('https') ? https : http;
         let connectionTimedOut = false;
         let responseTimedOut = false;
+        let userCancelled = false;
+        let settled = false;
+        let fileStream: ReturnType<typeof createWriteStream> | null = null;
+
+        // Wrap resolve/reject so a duplicate completion (e.g. cancel races
+        // against a normal finish event) only fires the outer promise once.
+        const finalize = (err: Error | null) => {
+            if (settled) return;
+            settled = true;
+            if (err) reject(err);
+            else resolve();
+        };
 
         const request = protocol.get(url, (response) => {
             // Clear connection timeout once we get a response
@@ -383,7 +426,7 @@ async function downloadFile(
             }
 
             if (response.statusCode !== 200) {
-                reject(new Error(`Download failed with status ${response.statusCode}`));
+                finalize(new Error(`Download failed with status ${response.statusCode}`));
                 return;
             }
 
@@ -401,16 +444,17 @@ async function downloadFile(
             let downloadedSize = 0;
             let lastProgressTime = Date.now();
 
-            const fileStream = createWriteStream(destPath);
+            fileStream = createWriteStream(destPath);
+            const stream = fileStream;
 
             // Set up response timeout - reset on each data chunk
             const checkStall = setInterval(() => {
                 if (Date.now() - lastProgressTime > 60000) { // 1 minute without data
                     responseTimedOut = true;
                     request.destroy();
-                    fileStream.close();
+                    stream.close();
                     clearInterval(checkStall);
-                    reject(new Error('Download stalled - no data received for 60 seconds'));
+                    finalize(new Error('Download stalled - no data received for 60 seconds'));
                 }
             }, 10000);
 
@@ -420,21 +464,27 @@ async function downloadFile(
                 onProgress(downloadedSize, totalSize);
             });
 
-            response.pipe(fileStream);
+            response.pipe(stream);
 
-            fileStream.on('finish', () => {
+            stream.on('finish', () => {
                 clearInterval(checkStall);
-                fileStream.close();
-                resolve();
+                stream.close();
+                currentCancelHandler = null;
+                finalize(null);
             });
 
-            fileStream.on('error', async (err) => {
+            stream.on('error', async (err) => {
                 clearInterval(checkStall);
-                fileStream.close();
+                stream.close();
+                currentCancelHandler = null;
                 if (existsSync(destPath)) {
                     await fs.unlink(destPath).catch(() => { });
                 }
-                reject(err);
+                if (userCancelled) {
+                    finalize(new Error('CANCELLED_BY_USER'));
+                    return;
+                }
+                finalize(err);
             });
         });
 
@@ -442,14 +492,41 @@ async function downloadFile(
         const connectionTimeoutId = setTimeout(() => {
             connectionTimedOut = true;
             request.destroy();
-            reject(new Error(`Download connection timed out after ${connectionTimeoutMs / 1000} seconds`));
+            finalize(new Error(`Download connection timed out after ${connectionTimeoutMs / 1000} seconds`));
         }, connectionTimeoutMs);
 
         request.on('error', (err) => {
             clearTimeout(connectionTimeoutId);
+            currentCancelHandler = null;
             if (connectionTimedOut || responseTimedOut) return;
-            reject(err);
+            if (userCancelled) {
+                finalize(new Error('CANCELLED_BY_USER'));
+                return;
+            }
+            finalize(err);
         });
+
+        // Register the cancel handler. request.destroy() alone is not enough:
+        // when the response is mid-pipe to fileStream, destroying the request
+        // may leave the write stream in a state where neither 'finish' nor
+        // 'error' fires, so the outer promise stays pending. Tear both down
+        // and reject explicitly.
+        currentCancelHandler = () => {
+            if (userCancelled) return;
+            userCancelled = true;
+            clearTimeout(connectionTimeoutId);
+            try { request.destroy(); } catch { /* already gone */ }
+            if (fileStream) {
+                try { fileStream.destroy(); } catch { /* already gone */ }
+            }
+            // Best-effort cleanup of the partial file. The stream 'error'
+            // handler also tries, but if the stream never fires we'd leak
+            // the partial.
+            if (existsSync(destPath)) {
+                fs.unlink(destPath).catch(() => { });
+            }
+            finalize(new Error('CANCELLED_BY_USER'));
+        };
     });
 }
 
@@ -891,7 +968,17 @@ function awaitMultiVpkPick(
     mainWindow: BrowserWindow | null
 ): Promise<{ selected: string[] } | null> {
     return new Promise((resolve) => {
-        pendingVpkPicks.set(requestId, resolve);
+        const wrappedResolve = (decision: { selected: string[] } | null) => {
+            currentCancelHandler = null;
+            resolve(decision);
+        };
+        pendingVpkPicks.set(requestId, wrappedResolve);
+        // Toast cancel mid-picker resolves the same null-decision path the
+        // picker modal's Cancel button uses, so the existing cleanup runs.
+        currentCancelHandler = () => {
+            pendingVpkPicks.delete(requestId);
+            wrappedResolve(null);
+        };
         mainWindow?.webContents.send('multi-vpk-pick', {
             requestId,
             modName,
@@ -899,6 +986,20 @@ function awaitMultiVpkPick(
             vpkLabels,
         });
     });
+}
+
+/**
+ * Cancel the in-flight download phase (HTTP fetch or multi-VPK picker prompt)
+ * for the currently-processing queue item. Returns true when a handler was
+ * available and invoked. Safe no-op when nothing is in flight or the active
+ * phase is non-cancellable (e.g. extracting, writing metadata).
+ */
+export function cancelActiveDownload(): boolean {
+    if (!currentCancelHandler) return false;
+    const handler = currentCancelHandler;
+    currentCancelHandler = null;
+    handler();
+    return true;
 }
 
 function awaitSuspiciousDecision(

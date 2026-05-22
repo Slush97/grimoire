@@ -17,7 +17,7 @@ import {
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
 } from '../services/gamebanana';
-import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, resolveSuspiciousFileDecision, resolveMultiVpkPick, DownloadModArgs } from '../services/download';
+import { downloadMod, getDownloadQueue, getCurrentDownload, removeFromQueue, cancelActiveDownload, resolveSuspiciousFileDecision, resolveMultiVpkPick, DownloadModArgs } from '../services/download';
 import { getMainWindow } from '../index';
 import { updateModNsfw } from '../services/modDatabase';
 
@@ -116,6 +116,11 @@ ipcMain.handle('get-current-download', () => {
 // remove-from-queue (cancel a queued download)
 ipcMain.handle('remove-from-queue', (_, modId: number): boolean => {
     return removeFromQueue(modId);
+});
+
+// cancel-active-download (abort the currently-running download)
+ipcMain.handle('cancel-active-download', (): boolean => {
+    return cancelActiveDownload();
 });
 
 // one-click-suspicious-response (renderer relays user's modal decision)
