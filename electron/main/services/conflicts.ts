@@ -1,5 +1,5 @@
 import { scanMods, Mod } from './mods';
-import { parseVpkDirectoryCached } from './vpk';
+import { parseVpkDirectoryCached, type VpkParseStats } from './vpk';
 import { loadSettings } from './settings';
 import { getModMetadata } from './metadata';
 
@@ -125,11 +125,19 @@ function createConflict(
  * Two mods conflict if they have overlapping file paths.
  */
 export async function detectConflicts(deadlockPath: string): Promise<ModConflict[]> {
+    // Track scan duration + cache hit rate so user-supplied diagnostic
+    // reports tell us whether the conflict scan is actually the thing
+    // freezing the main process on their machine. Without this we can
+    // only infer from code review.
+    const scanStart = Date.now();
+    const vpkStats: VpkParseStats = { hits: 0, misses: 0 };
+
     const mods = await scanMods(deadlockPath);
     const enabledMods = mods.filter(m => m.enabled);
     const conflicts: ModConflict[] = [];
 
     if (enabledMods.length < 2) {
+        console.log(`[detectConflicts] enabled=${enabledMods.length} took=${Date.now() - scanStart}ms (trivial)`);
         return [];
     }
 
@@ -167,7 +175,7 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     // Parse VPK file lists
     const modFileLists = new Map<string, Set<string>>();
     for (const mod of enabledMods) {
-        const files = parseVpkDirectoryCached(mod.path);
+        const files = parseVpkDirectoryCached(mod.path, vpkStats);
         if (files && files.length > 0) {
             modFileLists.set(mod.id, new Set(files));
         }
@@ -220,5 +228,11 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
             !ignored.has(conflictPairKey(c.modA, c.modB))
         );
 
+    console.log(
+        `[detectConflicts] enabled=${enabledMods.length} ` +
+        `pairs=${filtered.length} ` +
+        `vpkCache=${vpkStats.hits}/${vpkStats.hits + vpkStats.misses} ` +
+        `took=${Date.now() - scanStart}ms`
+    );
     return filtered;
 }
