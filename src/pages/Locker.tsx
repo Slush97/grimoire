@@ -211,9 +211,18 @@ export default function Locker() {
     // skin must not silently kill an enabled Geist voice pack.
     const skins = heroMods.map.get(heroId) ?? [];
     const sounds = heroSounds.map.get(heroId) ?? [];
-    const list = skins.some((m) => m.id === modId) ? skins : sounds;
+    const isSound = sounds.some((m) => m.id === modId);
+    const list = isSound ? sounds : skins;
     const selected = list.find((mod) => mod.id === modId);
     if (!selected) return;
+
+    // Sounds: just flip the one mod. A player can reasonably want a voice
+    // pack from one upload running alongside ability sounds from another,
+    // so the Sounds section doesn't enforce single-active semantics.
+    if (isSound) {
+      await toggleMod(modId);
+      return;
+    }
 
     const selectedSkinKey = getLockerSkinKey(selected);
     const selectedSkinFiles = list.filter((mod) => getLockerSkinKey(mod) === selectedSkinKey);
@@ -237,15 +246,24 @@ export default function Locker() {
     await Promise.all(actions);
   };
 
-  // Toggle one variant within a group. Disables enabled mods from other groups
-  // for the hero (so switching groups still feels exclusive), but leaves the
-  // target's siblings alone so users can co-enable e.g. a model + voice VPK.
+  // Toggle one variant within a group. For skins, disables enabled mods from
+  // other groups for the hero (so switching groups still feels exclusive),
+  // but leaves the target's siblings alone so users can co-enable e.g. a
+  // model + voice VPK. For sounds, just toggles the clicked mod so several
+  // sound mods can run simultaneously on the same hero.
   const toggleHeroVariant = async (heroId: number, modId: string) => {
     const skins = heroMods.map.get(heroId) ?? [];
     const sounds = heroSounds.map.get(heroId) ?? [];
-    const list = skins.some((m) => m.id === modId) ? skins : sounds;
+    const isSound = sounds.some((m) => m.id === modId);
+    const list = isSound ? sounds : skins;
     const target = list.find((m) => m.id === modId);
     if (!target) return;
+
+    if (isSound) {
+      await toggleMod(modId);
+      return;
+    }
+
     const groupKey = getLockerSkinKey(target);
     const actions: Promise<void>[] = [];
     for (const mod of list) {
