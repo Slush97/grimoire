@@ -49,12 +49,20 @@ export function invalidateVpkParseCache(vpkPath?: string): void {
     }
 }
 
+/** Optional counters callers can pass through a batch of cache lookups to
+ *  measure hit rate. Conflict detection uses this to log whether the cache
+ *  is doing its job on a given user's machine. */
+export interface VpkParseStats {
+    hits: number;
+    misses: number;
+}
+
 /**
  * Parsed VPK file list with on-disk-aware caching. Re-uses the previous
  * parse when (path, mtime, size) is unchanged; otherwise falls through to
  * `parseVpkDirectory` and stores the fresh result.
  */
-export function parseVpkDirectoryCached(vpkPath: string): string[] | null {
+export function parseVpkDirectoryCached(vpkPath: string, stats?: VpkParseStats): string[] | null {
     let stat;
     try {
         stat = statSync(vpkPath);
@@ -65,9 +73,11 @@ export function parseVpkDirectoryCached(vpkPath: string): string[] | null {
 
     const cached = vpkParseCache.get(vpkPath);
     if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+        if (stats) stats.hits++;
         return cached.paths;
     }
 
+    if (stats) stats.misses++;
     const paths = parseVpkDirectory(vpkPath);
     vpkParseCache.set(vpkPath, { mtimeMs: stat.mtimeMs, size: stat.size, paths });
     return paths;

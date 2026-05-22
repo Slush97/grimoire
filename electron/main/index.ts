@@ -10,6 +10,13 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { initLogger } from './services/diagnostics';
 initLogger();
 
+// Start the event-loop lag monitor right after the logger so its periodic
+// "[event-loop] blocked Xms" warnings land in the same rolling file. The
+// monitor only logs when the loop is genuinely stalled (>=100ms in a 10s
+// window), so it stays quiet on a healthy session.
+import { initEventLoopMonitor } from './services/eventLoopMonitor';
+initEventLoopMonitor();
+
 import {
     GRIMOIRE_PROTOCOL,
     findGrimoireUrlInArgv,
