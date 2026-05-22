@@ -184,6 +184,7 @@ export interface AppSettings {
   experimentalCrosshair: boolean;
   experimentalSocial: boolean;
   experimentalUnknownModMatching: boolean;
+  experimentalVpkMerger: boolean;
   hasCompletedSetup: boolean;
   ignoredConflicts: string[];
   ignoreConflictsByDefault: boolean;

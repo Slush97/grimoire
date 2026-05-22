@@ -22,6 +22,14 @@ export interface AppSettings {
      *  but the search/find buttons and bulk auto-find are hidden, leaving
      *  only the manual "Make Custom Mod" path. */
     experimentalUnknownModMatching: boolean;
+    /** Combine multiple installed mods into one VPK via the bundled vpkmerge
+     *  CLI. Off by default while the workflow gathers field signal. When off,
+     *  the Merge button is hidden from the Installed bulk-select toolbar, but
+     *  any merged mods that already exist remain fully interactive: their
+     *  MergedContentsModal opens, Unmerge still runs, absorbed sources stay
+     *  hidden from the list until unmerged. This avoids stranding sources
+     *  when a user creates a merge and later toggles the flag off. */
+    experimentalVpkMerger: boolean;
     hasCompletedSetup: boolean;      // First-run setup completed
     /** Mod pairs the user has dismissed in the Conflicts page. New entries use
      *  stable per-mod identities (GameBanana mod/file ids when available)
@@ -50,6 +58,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalCrosshair: false,
     experimentalSocial: false,
     experimentalUnknownModMatching: false,
+    experimentalVpkMerger: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,

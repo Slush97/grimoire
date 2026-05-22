@@ -904,6 +904,15 @@ export default function Settings() {
               label="Fix Unknown Mods"
               description="Auto-match unknown local VPKs against GameBanana to recover their names and thumbnails. Currently hits rate limits on larger libraries while we rework it. The manual Custom Mod path stays available either way."
             />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.experimentalVpkMerger ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalVpkMerger: checked })}
+              label="VPK Merger"
+              description="Combine 2+ installed mods into one VPK from the Installed page bulk-select toolbar. Includes Unmerge recovery via the merged mod's contents view. Any merges you create remain interactive even if you turn this off later."
+            />
           </div>
         </Card>
 

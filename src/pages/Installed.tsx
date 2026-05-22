@@ -1261,6 +1261,10 @@ export default function Installed() {
   // limited path. Gated behind an experimental toggle while it's being
   // reworked; when off, only the manual "Make Custom Mod" path is offered.
   const autoMatchEnabled = settings?.experimentalUnknownModMatching ?? false;
+  // VPK merger (bulk Merge action). Hidden by default while the feature
+  // gathers field signal. Existing merged mods stay interactive regardless
+  // of the flag so unmerge always works.
+  const vpkMergerEnabled = settings?.experimentalVpkMerger ?? false;
   const selectedUnknownState = unknownFilterGuess
     ? {
         mod: unknownFilterGuess.mod,
@@ -2216,25 +2220,27 @@ export default function Installed() {
               >
                 Disable{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                disabled={
-                  selectedMods.length < 2 ||
-                  selectedMods.some((m) => !!m.merged)
-                }
-                icon={Layers}
-                onClick={openBulkMerge}
-                title={
-                  selectedMods.length < 2
-                    ? 'Select 2+ mods to merge'
-                    : selectedMods.some((m) => !!m.merged)
-                      ? 'Cannot merge an already-merged mod. Unmerge it first.'
-                      : `Combine ${selectedMods.length} mods into one VPK`
-                }
-              >
-                Merge{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
-              </Button>
+              {vpkMergerEnabled && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={
+                    selectedMods.length < 2 ||
+                    selectedMods.some((m) => !!m.merged)
+                  }
+                  icon={Layers}
+                  onClick={openBulkMerge}
+                  title={
+                    selectedMods.length < 2
+                      ? 'Select 2+ mods to merge'
+                      : selectedMods.some((m) => !!m.merged)
+                        ? 'Cannot merge an already-merged mod. Unmerge it first.'
+                        : `Combine ${selectedMods.length} mods into one VPK`
+                  }
+                >
+                  Merge{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
+                </Button>
+              )}
               <Button
                 variant="danger"
                 size="sm"
