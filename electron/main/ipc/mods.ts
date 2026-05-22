@@ -15,6 +15,8 @@ import {
 } from '../services/mods';
 import { getAddonsPath } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
+import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
+import { inferHeroFromVpk } from '../services/vpk';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
@@ -36,7 +38,12 @@ function getActiveDeadlockPath(): string | null {
 }
 
 /**
- * Enrich mod with metadata
+ * Enrich mod with metadata.
+ *
+ * For Sound mods without a stored lockerHero, lazily infer one from the mod
+ * name and persist it. The infer call is cheap (substring + a few regexes per
+ * hero) but writing back means follow-up scans skip the work and the manual
+ * override path has a stable field to overwrite.
  */
 function enrichMod(mod: Mod): Mod {
     const metadata = getModMetadata(mod.fileName);
@@ -44,6 +51,25 @@ function enrichMod(mod: Mod): Mod {
         !metadata?.gameBananaId &&
         !(typeof metadata?.modName === 'string' && metadata.modName.trim().length > 0);
     if (metadata) {
+        let lockerHero = metadata.lockerHero;
+        if (!lockerHero && metadata.sourceSection === 'Sound') {
+            // Title match first because it's O(1) regex; only crack open the
+            // VPK if the title gave us nothing. The VPK path is authoritative
+            // (parses real Source 2 codenames like `ghost` → Lady Geist) but
+            // costs a disk read + directory tree parse per call.
+            let inferred = inferHeroFromTitle(metadata.modName || mod.name);
+            if (!inferred) {
+                try {
+                    inferred = inferHeroFromVpk(mod.path);
+                } catch (err) {
+                    console.warn(`[enrichMod] VPK hero inference failed for ${mod.fileName}:`, err);
+                }
+            }
+            if (inferred) {
+                setModMetadata(mod.fileName, { lockerHero: inferred });
+                lockerHero = inferred;
+            }
+        }
         return {
             ...mod,
             // Use the stored mod name from GameBanana if available
@@ -62,6 +88,7 @@ function enrichMod(mod: Mod): Mod {
             variantLabel: metadata.variantLabel,
             fileDescription: metadata.fileDescription,
             sourceFileName: metadata.sourceFileName,
+            lockerHero,
             merged: metadata.merged,
         };
     }
@@ -275,6 +302,30 @@ ipcMain.handle(
         const trimmed = label.trim();
         setModMetadata(target.fileName, {
             variantLabel: trimmed.length > 0 ? trimmed : undefined,
+        });
+        return enrichMod(target);
+    }
+);
+
+// set-mod-locker-hero — manual hero tag for the Locker. Pass null to clear
+// the override and fall back to categoryId / inferHeroFromTitle. Used from
+// the Locker's "unassigned" section when GameBanana left a mod under the
+// generic "Skins" parent (or when an author misspelled the hero name).
+ipcMain.handle(
+    'set-mod-locker-hero',
+    async (_, modId: string, heroName: string | null): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        const trimmed = heroName?.trim() ?? '';
+        setModMetadata(target.fileName, {
+            lockerHero: trimmed.length > 0 ? trimmed : undefined,
         });
         return enrichMod(target);
     }

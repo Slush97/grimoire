@@ -2955,8 +2955,11 @@ function ModCard({
   const variantStatusTitle = group
     ? `${enabledTitle || 'No files enabled'} - click card to choose files`
     : '';
+  // Prefer the persisted lockerHero (set by VPK content inference at
+  // download/scan time, more accurate than the title) and fall back to
+  // title matching for any Sound mod that hasn't been enriched yet.
   const listHeroName = viewMode === 'list' && mod.sourceSection === 'Sound'
-    ? inferHeroFromTitle(mod.name)
+    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
     : null;
   const listHeroRenderUrl = listHeroName ? getHeroRenderPath(listHeroName) : null;
   const listHeroFacePos = listHeroName ? getHeroFacePosition(listHeroName) : 50;
@@ -3133,10 +3136,11 @@ function ModCard({
         );
 
         if (isSoundCard) {
-          // Match Browse's Sound section: infer the hero from the mod title
-          // and reuse the locker render so the card carries the same hero
-          // art the user saw when they downloaded it.
-          const inferredHero = inferHeroFromTitle(mod.name);
+          // Prefer mod.lockerHero (persisted from VPK path inference: catches
+          // mods like "We don't talk Animal" whose title doesn't name the
+          // hero but whose VPK ships sounds/abilities/werewolf/*). Fall back
+          // to title matching for not-yet-enriched mods.
+          const inferredHero = mod.lockerHero ?? inferHeroFromTitle(mod.name);
           const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : null;
           const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 50;
           return (

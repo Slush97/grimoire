@@ -21,6 +21,14 @@ export interface ModMetadata {
     variantLabel?: string;  // User-provided label to disambiguate variants of the same mod
     fileDescription?: string;  // GameBanana file "header" (_sDescription) — author's per-file label, used as fallback when the user hasn't named the variant
     sourceFileName?: string;   // Original GameBanana filename stem (e.g. "galaxy_rem_gold") — used as a label fallback when the author didn't set a file header
+    /** Hero this mod belongs to in the Locker, by canonical hero name (e.g. "Lady Geist").
+     *  Two reasons to store it: (1) GameBanana sometimes leaves a Skin under the
+     *  generic "Skins" parent so categoryId never names a hero; (2) Sound mods
+     *  live under their own category tree entirely. Set automatically at download
+     *  time for Sound mods via inferHeroFromTitle, or manually by the user from
+     *  the Locker's unassigned section. Takes precedence over categoryId when
+     *  the locker maps mods to heroes. */
+    lockerHero?: string;
     /** Set when this VPK was produced by mergeMods. The share code +
      *  source list are the unroll payload. */
     merged?: import('../../../src/types/mod').MergedModInfo;

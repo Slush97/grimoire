@@ -1,4 +1,5 @@
 import { openSync, readSync, closeSync, existsSync } from 'fs';
+import { heroForSoundCodename } from './heroSoundCodenames';
 
 /**
  * VPK Header Structure (Version 2):
@@ -189,6 +190,63 @@ export function extractHeroFromPath(filePath: string): string | null {
     }
 
     return null;
+}
+
+/**
+ * Sound mod path patterns. Sound mods don't live under `sounds/heroes/`
+ * the way skin VPKs do: they live under `sounds/abilities/<codename>/aN_X/`
+ * or, more rarely, under `sounds/heroes/<codename>/`. The codename is
+ * Deadlock's sound-path namespace (e.g. `ghost` for Lady Geist, `hornet`
+ * for Vindicta), translated via HERO_SOUND_CODENAMES below.
+ *
+ * `soundevents/` files (e.g. `soundevents/citadel/hero_ghost.vsndevts_c`)
+ * are also a strong signal but live outside `sounds/`. We match those too.
+ */
+const SOUND_HERO_PATTERNS: RegExp[] = [
+    /(?:^|\/)sounds\/abilities\/([a-z0-9_]+)\//i,
+    /(?:^|\/)sounds\/heroes\/([a-z0-9_]+)\//i,
+    /(?:^|\/)sounds\/[^/]+\/hero_([a-z0-9_]+)\//i,
+    // `soundevents/citadel/hero_<codename>.vsndevts_c` (hero_ prefix on file).
+    /(?:^|\/)soundevents\/[^/]*\/hero_([a-z0-9_]+)\.vsndevts/i,
+    // `soundevents/hero/<codename>.vsndevts_c` (hero is the folder, file is
+    // just the codename). Observed on pak04 "We don't talk Animal" which
+    // ships soundevents/hero/werewolf.vsndevts_c.
+    /(?:^|\/)soundevents\/hero\/([a-z0-9_]+)\.vsndevts/i,
+];
+
+/**
+ * Inspect a VPK's path list for sound-mod payloads and return the display
+ * name of the hero they target. Returns null when no recognized hero
+ * codename appears, or when the VPK touches more than one hero (we'd
+ * rather leave that case to manual tagging than pick the wrong one).
+ */
+export function inferHeroFromVpkPaths(paths: string[]): string | null {
+    const heroes = new Set<string>();
+    for (const filePath of paths) {
+        for (const pattern of SOUND_HERO_PATTERNS) {
+            const match = filePath.match(pattern);
+            if (!match) continue;
+            const hero = heroForSoundCodename(match[1]);
+            if (hero) {
+                heroes.add(hero);
+                break;
+            }
+        }
+        // Bail early once we've already seen a conflict: no point scanning
+        // the rest of a large VPK if the answer is already "ambiguous."
+        if (heroes.size > 1) return null;
+    }
+    return heroes.size === 1 ? [...heroes][0] : null;
+}
+
+/**
+ * Convenience wrapper: parse the VPK directory and run the path-based
+ * inference. Returns null when the VPK can't be parsed or no hero matches.
+ */
+export function inferHeroFromVpk(vpkPath: string): string | null {
+    const paths = parseVpkDirectory(vpkPath);
+    if (!paths || paths.length === 0) return null;
+    return inferHeroFromVpkPaths(paths);
 }
 
 /**

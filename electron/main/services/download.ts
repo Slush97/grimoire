@@ -7,11 +7,12 @@ import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles } from './extract';
 import { randomUUID } from 'crypto';
 import { setModMetadataWithHash, getModMetadata } from './metadata';
+import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
 import { getUsedPriorities, scanMods, disableMod, enableMod } from './mods';
 import { validateDownloadUrl, validateFileSize } from './security';
 import { loadSettings } from './settings';
-import { getVpkLabels } from './vpk';
+import { getVpkLabels, inferHeroFromVpk } from './vpk';
 import https from 'https';
 import http from 'http';
 
@@ -103,6 +104,30 @@ async function cleanupDownloadWorkDir(workDir: string): Promise<void> {
 function normalizePathForCompare(filePath: string): string {
     const normalized = resolve(filePath);
     return process.platform === 'win32' ? normalized.toLowerCase() : normalized;
+}
+
+/**
+ * Per-VPK lockerHero stamp. Skin downloads ride on their GameBanana
+ * categoryId so this is a no-op for them. For Sound mods we prefer the
+ * caller's title-inferred lockerHero (cheap, already computed), and only
+ * fall back to cracking the VPK open when title inference missed.
+ * Sound mods with creative titles ("King Vondicta", "Low Honor kills...")
+ * still tag correctly because the underlying paths reference Source 2
+ * codenames like `hornet` / `inferno` / `synth`.
+ */
+function stampVpkLockerHero<T extends { lockerHero?: string }>(
+    base: T,
+    section: string | undefined,
+    vpkPath: string
+): T {
+    if (base.lockerHero || section !== 'Sound') return base;
+    try {
+        const vpkHero = inferHeroFromVpk(vpkPath);
+        if (vpkHero) return { ...base, lockerHero: vpkHero };
+    } catch (err) {
+        console.warn(`[download] VPK hero inference failed for ${vpkPath}:`, err);
+    }
+    return base;
 }
 
 async function moveFileWithoutOverwrite(sourcePath: string, destinationPath: string): Promise<void> {
@@ -574,6 +599,13 @@ async function executeDownload(
     // meaningful label even when the description is empty.
     const sourceFileNameStem = stripArchiveExtension(fileName);
 
+    // Auto-tag Sound mods with their hero so they show up in the per-hero
+    // Locker view. Sound mods don't have hero categoryIds on GameBanana, so the
+    // mod title is the only signal we have. Skin downloads keep their explicit
+    // categoryId and don't need this fallback.
+    const lockerHero =
+        section === 'Sound' ? inferHeroFromTitle(details.name) ?? undefined : undefined;
+
     const metadata = {
         modName: details.name,  // Store the actual mod name from GameBanana
         gameBananaId: modId,
@@ -587,6 +619,7 @@ async function executeDownload(
         isArchived: selectedFile?.isArchived ?? false,
         fileDescription: fileDescription && fileDescription.length > 0 ? fileDescription : undefined,
         sourceFileName: sourceFileNameStem.length > 0 ? sourceFileNameStem : undefined,
+        lockerHero,
     };
 
     let installedVpks: string[] = [];
@@ -738,7 +771,9 @@ async function executeDownload(
     console.log(`[downloadMod] Saving metadata for ${installedVpks.length} VPKs`);
     for (const vpkFileName of installedVpks) {
         console.log(`[downloadMod] Saving metadata for: ${vpkFileName}`);
-        await setModMetadataWithHash(vpkFileName, metadata, join(targetPath, vpkFileName));
+        const vpkPath = join(targetPath, vpkFileName);
+        const perVpkMetadata = stampVpkLockerHero(metadata, section, vpkPath);
+        await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
     // Auto-disable previously installed variants of the same GameBanana mod so
@@ -1081,8 +1116,11 @@ async function executeOneClickDownload(
     const oneClickSourceFileName = stripArchiveExtension(
         matchedFile?.fileName ?? responseFilename ?? fileName
     );
+    const oneClickModName = enriched?.name ?? fileName.replace(/\.(zip|7z|rar|vpk)$/i, '');
+    const oneClickLockerHero =
+        section === 'Sound' ? inferHeroFromTitle(oneClickModName) ?? undefined : undefined;
     const metadata = {
-        modName: enriched?.name ?? fileName.replace(/\.(zip|7z|rar|vpk)$/i, ''),
+        modName: oneClickModName,
         gameBananaId: realModId,
         gameBananaFileId: resolvedFileId,
         categoryId: enriched?.category?.id,
@@ -1097,6 +1135,7 @@ async function executeOneClickDownload(
                 ? oneClickFileDescription
                 : undefined,
         sourceFileName: oneClickSourceFileName.length > 0 ? oneClickSourceFileName : undefined,
+        lockerHero: oneClickLockerHero,
     };
 
     let installedVpks: string[] = [];
@@ -1190,7 +1229,9 @@ async function executeOneClickDownload(
     }
 
     for (const vpkFileName of installedVpks) {
-        await setModMetadataWithHash(vpkFileName, metadata, join(targetPath, vpkFileName));
+        const vpkPath = join(targetPath, vpkFileName);
+        const perVpkMetadata = stampVpkLockerHero(metadata, section, vpkPath);
+        await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
     mainWindow?.webContents.send('download-complete', { modId, fileId });

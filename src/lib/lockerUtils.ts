@@ -238,6 +238,36 @@ export function isLockerManagedMod(mod: Mod): boolean {
   return true;
 }
 
+/**
+ * GameBanana Sound subcategories that aren't per-hero. Killsounds and music
+ * stingers play across the whole match, announcer/UI sounds are global UX.
+ * These belong on Installed but would just sit in the Locker's "Unassigned"
+ * bucket forever (no hero to tag), so we drop them at the eligibility check
+ * instead. Lowercased for case-insensitive compare.
+ */
+const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
+  'killsounds',
+  'in-game music',
+  'music',
+  'announcer',
+  'ui',
+  'ui sounds',
+  'misc',
+]);
+
+/**
+ * Sound-section equivalent of isLockerManagedMod. Drops Sound mods whose
+ * GameBanana category is one of the global (non-hero) buckets — see
+ * GLOBAL_SOUND_CATEGORIES. Hero-specific subcategories (Abilities, VOs,
+ * etc.) flow through.
+ */
+export function isLockerManagedSound(mod: Mod): boolean {
+  if (mod.sourceSection !== 'Sound') return false;
+  const category = mod.categoryName?.trim().toLowerCase();
+  if (category && GLOBAL_SOUND_CATEGORIES.has(category)) return false;
+  return true;
+}
+
 export function getLockerSkinKey(mod: Mod): string {
   return typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0
     ? `gamebanana:${mod.gameBananaId}`
@@ -385,12 +415,26 @@ export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: 
   }
 
   for (const mod of mods) {
-    let categoryId = mod.categoryId;
+    let categoryId: number | undefined;
 
-    // If mod has a generic category (like "Skins" parent), try to infer from mod name
-    if (!categoryId || mod.categoryName?.toLowerCase() === 'skins') {
+    // 1. Manual override wins. Users tag a mod when GameBanana left it under
+    //    the generic "Skins" parent or when the title doesn't mention the hero.
+    if (mod.lockerHero) {
+      categoryId = heroNameToId.get(mod.lockerHero.toLowerCase());
+    }
+
+    // 2. Author-supplied categoryId is the next best signal, but skip it when
+    //    the category is "Skins" itself (the generic parent), since that
+    //    points at a virtual node, not a hero.
+    if (!categoryId && mod.categoryId && mod.categoryName?.toLowerCase() !== 'skins') {
+      categoryId = mod.categoryId;
+    }
+
+    // 3. Fall back to fuzzy match on the mod's display name. Same logic the
+    //    "Skins"-parent branch used to do; broadened to also fire when there's
+    //    no categoryId at all (sound mods, custom imports).
+    if (!categoryId) {
       const nameLower = mod.name?.toLowerCase() || '';
-      // Check for hero names in the mod name
       for (const [heroName, heroId] of heroNameToId) {
         if (nameLower.includes(heroName)) {
           categoryId = heroId;

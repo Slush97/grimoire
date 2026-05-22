@@ -60,6 +60,11 @@ export interface Mod {
   variantLabel?: string;
   fileDescription?: string;
   sourceFileName?: string;
+  /** Hero this mod belongs to in the Locker, by canonical hero name. Set
+   *  automatically at download time for Sound mods (inferHeroFromTitle) or
+   *  manually via the Locker's "Tag hero" affordance. Takes precedence over
+   *  categoryId when grouping mods into hero piles. */
+  lockerHero?: string;
   /** Set when this mod was produced by mergeMods. Carries the unroll payload
    *  (share code + source list). */
   merged?: MergedModInfo;

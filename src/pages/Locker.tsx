@@ -7,6 +7,7 @@ import {
   getGamebananaCategories,
   listMinaVariants,
   setMinaPreset,
+  setModLockerHero,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
@@ -32,6 +33,7 @@ import {
   groupLockerSkins,
   groupModsByCategory,
   isLockerManagedMod,
+  isLockerManagedSound,
   parseMinaVariant,
   readStoredFavorites,
   type HeroCategory,
@@ -144,13 +146,24 @@ export default function Locker() {
   const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
 
   const lockerMods = useMemo(() => mods.filter(isLockerManagedMod), [mods]);
+  const lockerSounds = useMemo(() => mods.filter(isLockerManagedSound), [mods]);
 
   // Calculate heroMods, passing heroList for name-based category inference
   const heroMods = useMemo(() => {
     return groupModsByCategory(lockerMods, baseHeroList);
   }, [lockerMods, baseHeroList]);
+  const heroSounds = useMemo(() => {
+    return groupModsByCategory(lockerSounds, baseHeroList);
+  }, [lockerSounds, baseHeroList]);
   const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
   const unassignedSkins = useMemo(() => groupLockerSkins(heroMods.unassigned), [heroMods]);
+  // Sound mods that couldn't be auto-mapped to a hero (e.g. inferHeroFromTitle
+  // didn't catch the hero name in the title). Surfaced in the same Unassigned
+  // section so users can tag them from one place.
+  const unassignedSounds = useMemo(
+    () => groupLockerSkins(heroSounds.unassigned),
+    [heroSounds]
+  );
 
   // Sorted hero list for display
   const heroList = useMemo(() => {
@@ -175,6 +188,10 @@ export default function Locker() {
     () => (selectedHero ? heroMods.map.get(selectedHero.id) ?? [] : []),
     [heroMods, selectedHero]
   );
+  const selectedHeroSoundList = useMemo(
+    () => (selectedHero ? heroSounds.map.get(selectedHero.id) ?? [] : []),
+    [heroSounds, selectedHero]
+  );
   const selectedHeroSkinCount = useMemo(
     () => countLockerSkins(selectedHeroMods),
     [selectedHeroMods]
@@ -189,7 +206,12 @@ export default function Locker() {
   );
 
   const setActiveSkin = async (heroId: number, modId: string) => {
-    const list = heroMods.map.get(heroId) ?? [];
+    // Pick the section list (skins vs sounds) that actually contains the
+    // clicked mod. Keeps cross-section toggles independent: picking a Geist
+    // skin must not silently kill an enabled Geist voice pack.
+    const skins = heroMods.map.get(heroId) ?? [];
+    const sounds = heroSounds.map.get(heroId) ?? [];
+    const list = skins.some((m) => m.id === modId) ? skins : sounds;
     const selected = list.find((mod) => mod.id === modId);
     if (!selected) return;
 
@@ -219,7 +241,9 @@ export default function Locker() {
   // for the hero (so switching groups still feels exclusive), but leaves the
   // target's siblings alone so users can co-enable e.g. a model + voice VPK.
   const toggleHeroVariant = async (heroId: number, modId: string) => {
-    const list = heroMods.map.get(heroId) ?? [];
+    const skins = heroMods.map.get(heroId) ?? [];
+    const sounds = heroSounds.map.get(heroId) ?? [];
+    const list = skins.some((m) => m.id === modId) ? skins : sounds;
     const target = list.find((m) => m.id === modId);
     if (!target) return;
     const groupKey = getLockerSkinKey(target);
@@ -232,6 +256,24 @@ export default function Locker() {
     }
     actions.push(toggleMod(modId));
     await Promise.all(actions);
+  };
+
+  // Sorted hero name list for the "tag as hero" dropdown on Unassigned cards.
+  // We use only heroes that have a GameBanana category, because that's the
+  // pool the locker grouping logic resolves names against; picking a hero
+  // outside this set would silently fail to move the mod.
+  const tagHeroOptions = useMemo(
+    () => [...baseHeroList].sort((a, b) => a.name.localeCompare(b.name)),
+    [baseHeroList]
+  );
+
+  const tagModHero = async (modId: string, heroName: string | null) => {
+    try {
+      await setModLockerHero(modId, heroName);
+      await loadMods();
+    } catch (err) {
+      console.error('[Locker] Failed to set lockerHero override:', err);
+    }
   };
 
   const applyMinaPreset = async (presetFileName: string) => {
@@ -325,16 +367,17 @@ export default function Locker() {
         stats={`${heroList.length} heroes • ${installedSkinCount} installed skins`}
         action={
           <div className="flex items-center gap-3">
-            {viewMode === 'gallery' && unassignedSkins.length > 0 && (
-              <button
-                onClick={() => setViewMode('list')}
-                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
-                title="Switch to List view to see unassigned mods"
-              >
-                <Layers className="w-3 h-3" />
-                {unassignedSkins.length} unassigned
-              </button>
-            )}
+            {viewMode === 'gallery' &&
+              unassignedSkins.length + unassignedSounds.length > 0 && (
+                <button
+                  onClick={() => setViewMode('list')}
+                  className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
+                  title="Switch to List view to see unassigned mods"
+                >
+                  <Layers className="w-3 h-3" />
+                  {unassignedSkins.length + unassignedSounds.length} unassigned
+                </button>
+              )}
             <ViewModeToggle
               value={viewMode}
               options={[
@@ -408,20 +451,26 @@ export default function Locker() {
         </div>
       )}
 
-      {viewMode === 'list' && unassignedSkins.length > 0 && (
+      {viewMode === 'list' && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
         <div className="space-y-3">
-          <SectionHeader>Unassigned Skins</SectionHeader>
+          <SectionHeader>Unassigned</SectionHeader>
+          <p className="text-xs text-text-secondary -mt-1">
+            These mods couldn't be matched to a hero automatically. Tag one to
+            move it into that hero's locker pile.
+          </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {unassignedSkins.map((skin) => {
+            {[...unassignedSkins, ...unassignedSounds].map((skin) => {
               const mod = skin.primary;
-              const subtitle = skin.variants.length > 1 ? `${skin.variants.length} files` : mod.fileName;
+              const subtitle =
+                skin.variants.length > 1 ? `${skin.variants.length} files` : mod.fileName;
+              const isSound = mod.sourceSection === 'Sound';
 
               return (
                 <div
                   key={skin.key}
                   className="bg-bg-secondary border border-border rounded-lg p-3 flex items-center gap-3 text-left"
                 >
-                  <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary">
+                  <div className="w-14 h-14 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
                     <ModThumbnail
                       src={mod.thumbnailUrl}
                       alt={mod.name}
@@ -435,9 +484,30 @@ export default function Locker() {
                       }
                     />
                   </div>
-                  <div className="min-w-0">
-                    <div className="font-medium truncate">{mod.name}</div>
-                    <div className="text-xs text-text-secondary truncate">{subtitle}</div>
+                  <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="font-medium truncate" title={mod.name}>
+                      {mod.name}
+                    </div>
+                    <div className="text-xs text-text-secondary truncate" title={subtitle}>
+                      {isSound ? 'Sound · ' : ''}
+                      {subtitle}
+                    </div>
+                    <select
+                      aria-label={`Tag ${mod.name} as a hero`}
+                      value={mod.lockerHero ?? ''}
+                      onChange={(event) => {
+                        const next = event.target.value;
+                        void tagModHero(mod.id, next.length > 0 ? next : null);
+                      }}
+                      className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs text-text-primary hover:border-accent/60 cursor-pointer"
+                    >
+                      <option value="">Tag as hero…</option>
+                      {tagHeroOptions.map((hero) => (
+                        <option key={hero.id} value={hero.name}>
+                          {hero.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
               );
@@ -455,7 +525,8 @@ export default function Locker() {
           <LockerHeroView
             key={selectedHero.id}
             hero={selectedHero}
-            list={selectedHeroMods}
+            skinList={selectedHeroMods}
+            soundList={selectedHeroSoundList}
             skinCount={selectedHeroSkinCount}
             isFavorite={favoriteHeroes.includes(selectedHero.id)}
             onBack={() => navigate('/locker')}

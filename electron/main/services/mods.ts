@@ -48,6 +48,10 @@ export interface Mod {
      *  a meaningful label - falls between fileDescription and the local
      *  pakNN_dir.vpk filename in the picker's display chain. */
     sourceFileName?: string;
+    /** Hero this mod belongs to in the Locker (canonical name). Either
+     *  auto-inferred at download time for Sound mods or manually set by the
+     *  user; takes precedence over categoryId in the locker grouping. */
+    lockerHero?: string;
     /** Populated when this VPK was produced by mergeMods. The metadata
      *  enricher reads this from the mod metadata sidecar. */
     merged?: import('../../../src/types/mod').MergedModInfo;

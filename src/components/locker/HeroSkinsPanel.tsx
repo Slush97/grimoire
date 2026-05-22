@@ -54,6 +54,17 @@ interface HeroSkinsPanelProps {
   onToggleVariant?: (modId: string) => void;
   hideNsfwPreviews?: boolean;
   categoryId?: number;
+  /** Render thumbnails as the hero portrait instead of the mod's uploader
+   *  thumbnail. Sound-section view uses this so the panel reads as the right
+   *  hero at a glance even though sound uploads usually carry a generic icon. */
+  useHeroPortraitThumbnails?: boolean;
+  /** Canonical hero name used when useHeroPortraitThumbnails is on. */
+  heroName?: string;
+  /** Show the DownloadableSkinsSection footer. Off for the Sounds tab,
+   *  which would otherwise surface Skin-category GameBanana results. */
+  showDownloadable?: boolean;
+  /** Message rendered when the mod list for this section is empty. */
+  emptyMessage?: string;
   minaPresets?: MinaPreset[];
   activeMinaPreset?: MinaPreset;
   minaTextures?: Mod[];
@@ -76,6 +87,10 @@ export default function HeroSkinsPanel({
   onToggleVariant,
   hideNsfwPreviews = false,
   categoryId,
+  useHeroPortraitThumbnails = false,
+  heroName,
+  showDownloadable = true,
+  emptyMessage = 'Download a skin for this hero to manage it here.',
   minaPresets = [],
   activeMinaPreset,
   minaTextures = [],
@@ -408,6 +423,9 @@ export default function HeroSkinsPanel({
                     alt={primary.name}
                     nsfw={primary.nsfw}
                     hideNsfw={hideNsfwPreviews}
+                    heroPortrait={
+                      useHeroPortraitThumbnails ? heroName : undefined
+                    }
                     className="w-full h-full"
                     fallback={
                       <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
@@ -484,12 +502,10 @@ export default function HeroSkinsPanel({
           );
         })
       ) : (
-        <div className="text-xs text-text-secondary">
-          Download a skin for this hero to manage it here.
-        </div>
+        <div className="text-xs text-text-secondary">{emptyMessage}</div>
       )}
 
-      {categoryId && <DownloadableSkinsSection categoryId={categoryId} />}
+      {showDownloadable && categoryId && <DownloadableSkinsSection categoryId={categoryId} />}
     </div>
   );
 }

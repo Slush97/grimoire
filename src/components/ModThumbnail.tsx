@@ -1,5 +1,6 @@
 import { EyeOff } from 'lucide-react';
 import type { MergedModSource } from '../types/mod';
+import { getHeroRenderPath } from '../lib/lockerUtils';
 
 interface ModThumbnailProps {
   src?: string;
@@ -9,6 +10,11 @@ interface ModThumbnailProps {
   className?: string;
   imageClassName?: string;
   fallback?: React.ReactNode;
+  /** Canonical Deadlock hero name (e.g. "Lady Geist"). When set, the hero's
+   *  render image is used instead of `src`. Sound mods use this so the locker
+   *  reads as "Geist sounds" at a glance rather than showing the uploader's
+   *  generic speaker icon. */
+  heroPortrait?: string;
   /** When present, render an N-up collage of the source thumbnails instead
    *  of the single `src` image. Used by merged mods. The single-image path
    *  is still used when the user uploaded an override thumbnail (we treat
@@ -24,14 +30,19 @@ export default function ModThumbnail({
   className = '',
   imageClassName = '',
   fallback,
+  heroPortrait,
   mergedSources,
 }: ModThumbnailProps) {
   const shouldBlur = nsfw && hideNsfw;
+  // Hero portrait wins over the uploader's thumbnail. NSFW blur is suppressed
+  // here because hero renders are official Valve art, not user uploads.
+  const resolvedSrc = heroPortrait ? getHeroRenderPath(heroPortrait) : src;
+  const resolvedBlur = heroPortrait ? false : shouldBlur;
 
   // Collage path: only when there's no explicit src and we have sources to
   // tile. The user-uploaded thumbnail (when set) always wins so they have a
   // way to override the collage if they don't like it.
-  if (!src && mergedSources && mergedSources.length > 0) {
+  if (!resolvedSrc && mergedSources && mergedSources.length > 0) {
     return (
       <MergedCollage
         sources={mergedSources}
@@ -42,7 +53,7 @@ export default function ModThumbnail({
     );
   }
 
-  if (!src) {
+  if (!resolvedSrc) {
     return (
       fallback ?? (
         <div className={`flex items-center justify-center text-text-secondary text-xs ${className}`}>
@@ -56,14 +67,14 @@ export default function ModThumbnail({
     <div className={`relative overflow-hidden ${className}`}>
       <div className={`w-full h-full ${imageClassName}`}>
         <img
-          src={src}
+          src={resolvedSrc}
           alt={alt}
           className={`block w-full h-full object-cover transition-[filter] duration-200 ${
-            shouldBlur ? 'blur-xl scale-110' : ''
+            resolvedBlur ? 'blur-xl scale-110' : ''
           }`}
         />
       </div>
-      {shouldBlur && (
+      {resolvedBlur && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/30">
           <EyeOff className="w-4 h-4 text-white/70" />
           <span className="text-[9px] text-white/70 mt-0.5">NSFW</span>
