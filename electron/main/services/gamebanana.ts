@@ -679,6 +679,42 @@ export async function fetchModDetails(
     };
 }
 
+export interface GameBananaModFileListEntry {
+    id: number;
+    isArchived: boolean;
+}
+
+export interface GameBananaModFileList {
+    id: number;
+    files: GameBananaModFileListEntry[];
+}
+
+interface ModFileListRaw {
+    _idRow: number;
+    _aFiles?: Array<{ _idRow: number; _bIsArchived?: boolean }>;
+}
+
+/**
+ * Slim variant of fetchModDetails that asks GameBanana for only the file list.
+ * The Installed page's update check uses this to scan every installed mod
+ * cheaply on mount - the full details payload (description, preview media,
+ * category) is wasteful when we only compare file ids.
+ */
+export async function fetchModFileList(
+    modId: number,
+    section = 'Mod'
+): Promise<GameBananaModFileList> {
+    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_aFiles`;
+    const raw = await fetchJson<ModFileListRaw>(url);
+    return {
+        id: raw._idRow,
+        files: (raw._aFiles ?? []).map((f) => ({
+            id: f._idRow,
+            isArchived: f._bIsArchived ?? false,
+        })),
+    };
+}
+
 function isVpkPath(path: string): boolean {
     const normalized = path.replace(/\\/g, '/').trim().toLowerCase();
     return normalized.endsWith('.vpk') && !normalized.endsWith('/');

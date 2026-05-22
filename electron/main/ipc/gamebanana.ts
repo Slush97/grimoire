@@ -5,6 +5,7 @@ import {
     fetchCategoryTree,
     fetchSubmissions,
     fetchModDetails,
+    fetchModFileList,
     fetchModComments,
     fetchCollection,
     fetchCollectionItems,
@@ -12,6 +13,7 @@ import {
     GameBananaCategoryNode,
     GameBananaModsResponse,
     GameBananaModDetails,
+    GameBananaModFileList,
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
 } from '../services/gamebanana';
@@ -79,6 +81,15 @@ ipcMain.handle(
         }
 
         return details;
+    }
+);
+
+// get-mod-file-list (slim variant used by the Installed-page update check)
+ipcMain.handle(
+    'get-mod-file-list',
+    async (_, args: GetModDetailsArgs): Promise<GameBananaModFileList> => {
+        const { modId, section = 'Mod' } = args;
+        return fetchModFileList(modId, section);
     }
 );
 

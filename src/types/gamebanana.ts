@@ -87,6 +87,11 @@ export interface GameBananaModDetails {
   previewMedia?: GameBananaPreviewMedia;
 }
 
+export interface GameBananaModFileList {
+  id: number;
+  files: Array<{ id: number; isArchived: boolean }>;
+}
+
 export interface GameBananaComment {
   id: number;
   text: string;

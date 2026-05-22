@@ -11,6 +11,7 @@ import type {
 import type {
     GameBananaModsResponse,
     GameBananaModDetails,
+    GameBananaModFileList,
     GameBananaSection,
     GameBananaCategoryNode,
     GameBananaCollection,
@@ -287,6 +288,7 @@ export interface ElectronAPI {
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
+    setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     backfillGameBananaFileId: (
       modId: string,
       payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -312,6 +314,7 @@ export interface ElectronAPI {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
+    getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: { modId: number; section?: string; page?: number }) => Promise<{ comments: Array<{ id: number; text: string; dateAdded: number; poster: { id: number; name: string; avatarUrl?: string } }>; totalCount: number }>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;

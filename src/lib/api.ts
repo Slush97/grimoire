@@ -2,6 +2,7 @@ import type { Mod, AppSettings, UnknownModFilterGuess, ApplyUnknownModMatchArgs,
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
+  GameBananaModFileList,
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaMod,
@@ -14,6 +15,7 @@ import type {
 export type {
   GameBananaModsResponse,
   GameBananaModDetails,
+  GameBananaModFileList,
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaMod,
@@ -77,6 +79,13 @@ export async function applyUnknownCustomMod(modId: string, args: ApplyUnknownCus
 
 export async function setVariantLabel(modId: string, label: string): Promise<Mod> {
   return window.electronAPI.setVariantLabel(modId, label);
+}
+
+export async function setModLockerHero(
+  modId: string,
+  heroName: string | null
+): Promise<Mod> {
+  return window.electronAPI.setModLockerHero(modId, heroName);
 }
 
 export async function backfillGameBananaFileId(
@@ -187,6 +196,10 @@ export async function browseMods(
   sort?: string
 ): Promise<GameBananaModsResponse> {
   return window.electronAPI.browseMods({ page, perPage, search, section, categoryId, sort });
+}
+
+export async function getModFileList(modId: number, section?: string): Promise<GameBananaModFileList> {
+  return window.electronAPI.getModFileList({ modId, section });
 }
 
 export async function getModDetails(modId: number, section?: string): Promise<GameBananaModDetails> {

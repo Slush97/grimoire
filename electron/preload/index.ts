@@ -49,6 +49,7 @@ export interface ElectronAPI {
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
+    setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -74,6 +75,7 @@ export interface ElectronAPI {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
+    getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
@@ -553,6 +555,11 @@ interface GameBananaModDetails {
     previewMedia?: unknown;
 }
 
+interface GameBananaModFileList {
+    id: number;
+    files: Array<{ id: number; isArchived: boolean }>;
+}
+
 interface GameBananaSection {
     pluralTitle: string;
     modelName: string;
@@ -760,6 +767,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('apply-unknown-custom-mod', modId, args),
     setVariantLabel: (modId: string, label: string) =>
         ipcRenderer.invoke('set-variant-label', modId, label),
+    setModLockerHero: (modId: string, heroName: string | null) =>
+        ipcRenderer.invoke('set-mod-locker-hero', modId, heroName),
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -795,6 +804,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),
     getModDetails: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-details', args),
+    getModFileList: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-file-list', args),
     getModComments: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-comments', args),
     downloadMod: (args: DownloadModArgs) => ipcRenderer.invoke('download-mod', args),
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
