@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from 'fs';
+import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync } from 'fs';
 import { promises as fs } from 'fs';
 import { join } from 'path';
 import { getAddonsPath, getDisabledPath } from './deadlock';
@@ -36,6 +36,19 @@ export interface ModMetadata {
 
 export type ModMetadataMap = Record<string, ModMetadata>;
 
+// In-memory cache of the parsed metadata.json. Without this, every enrichMod
+// call (one per installed mod) re-reads + re-parses the whole sidecar from
+// disk on the main thread; users with many mods see noticeable freezes on
+// import/get-mods. Invalidated via (mtimeMs, size) so external writes still
+// get picked up, and refreshed eagerly inside saveMetadata to avoid an
+// immediate re-read after we just wrote.
+interface MetadataCacheEntry {
+    mtimeMs: number;
+    size: number;
+    data: ModMetadataMap;
+}
+let metadataCache: MetadataCacheEntry | null = null;
+
 /**
  * Load mod metadata from disk
  */
@@ -43,14 +56,27 @@ export function loadMetadata(): ModMetadataMap {
     const path = getMetadataPath();
 
     if (!existsSync(path)) {
+        metadataCache = null;
         return {};
     }
 
     try {
+        const stat = statSync(path);
+        if (
+            metadataCache &&
+            metadataCache.mtimeMs === stat.mtimeMs &&
+            metadataCache.size === stat.size
+        ) {
+            return metadataCache.data;
+        }
+
         const content = readFileSync(path, 'utf-8');
-        return JSON.parse(content) as ModMetadataMap;
+        const data = JSON.parse(content) as ModMetadataMap;
+        metadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, data };
+        return data;
     } catch (error) {
         console.warn('[Metadata] Failed to load metadata, returning empty:', error);
+        metadataCache = null;
         return {};
     }
 }
@@ -66,6 +92,12 @@ export function saveMetadata(metadata: ModMetadataMap): void {
     try {
         writeFileSync(tempPath, JSON.stringify(metadata, null, 2), 'utf-8');
         renameSync(tempPath, path);
+        try {
+            const stat = statSync(path);
+            metadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, data: metadata };
+        } catch {
+            metadataCache = null;
+        }
     } catch (error) {
         try {
             if (existsSync(tempPath)) unlinkSync(tempPath);
