@@ -73,8 +73,18 @@ interface ItemRow {
   details?: GameBananaModDetails;
   detailsLoading?: boolean;
   detailsError?: string;
-  pickedFileId?: number;
+  // File ids the user explicitly checked. Empty means "fall back to the most
+  // popular file" so single-variant rows don't require interaction. Multi-
+  // select lets users grab e.g. several heroes from one Sounds listing.
+  pickedFileIds: number[];
   variantsOpen?: boolean;
+  // Per-file progress tracking. expectedFileIds is the snapshot taken at
+  // queue time (pickedFileIds or [primary]); installed/failed sets are
+  // populated by download events so the aggregate row status reflects all
+  // requested files, not just the first to finish.
+  expectedFileIds?: number[];
+  installedFileIds?: Set<number>;
+  failedFileIds?: Set<number>;
 }
 
 function classifySkip(item: GameBananaCollectionItem): SkipReason | undefined {
@@ -112,6 +122,7 @@ function buildRows(
       selectable: !skip,
       skip,
       status: skip ? 'idle' : initialStatus(item, installedIds, queuedIds),
+      pickedFileIds: [],
     };
   });
 }
@@ -240,14 +251,49 @@ export default function ImportCollectionModal({
       );
     });
 
-    const unsubComplete = window.electronAPI.onDownloadComplete(({ modId }) => {
+    const unsubComplete = window.electronAPI.onDownloadComplete(({ modId, fileId }) => {
       if (!trackedIdsRef.current.has(modId)) return;
-      updateRow(modId, { status: 'installed', statusMessage: undefined });
+      // Multi-variant: a row may expect several fileIds. Only flip the row
+      // to 'installed' once every expected file has landed; until then mark
+      // the file done and keep the aggregate status as 'downloading'.
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.item.id !== modId) return r;
+          const installed = new Set(r.installedFileIds ?? []);
+          installed.add(fileId);
+          const expected = r.expectedFileIds;
+          const allDone =
+            expected !== undefined &&
+            expected.length > 0 &&
+            expected.every((id) => installed.has(id));
+          return {
+            ...r,
+            installedFileIds: installed,
+            status: allDone ? 'installed' : r.status,
+            statusMessage: allDone ? undefined : r.statusMessage,
+          };
+        })
+      );
     });
 
-    const unsubError = window.electronAPI.onDownloadError(({ modId, message }) => {
+    const unsubError = window.electronAPI.onDownloadError(({ modId, fileId, message }) => {
       if (!trackedIdsRef.current.has(modId)) return;
-      updateRow(modId, { status: 'failed', statusMessage: message });
+      // Any file failing fails the whole row. Track which files failed so a
+      // future "retry just the failures" UX can target them, but flip the
+      // aggregate immediately so the user knows something went wrong.
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.item.id !== modId) return r;
+          const failed = new Set(r.failedFileIds ?? []);
+          failed.add(fileId);
+          return {
+            ...r,
+            failedFileIds: failed,
+            status: 'failed',
+            statusMessage: message,
+          };
+        })
+      );
     });
 
     return () => {
@@ -421,17 +467,34 @@ export default function ImportCollectionModal({
     [ensureDetails, updateRow]
   );
 
-  const pickVariant = useCallback(
+  // Toggle a file on or off in the row's pickedFileIds set. Empty set means
+  // "no explicit pick" and the queue falls back to the primary file; one or
+  // more picks means "download exactly these files". As soon as a row has at
+  // least one pick, we drop it from the variant-required banner.
+  const toggleVariantPick = useCallback(
     (row: ItemRow, file: GameBananaFile) => {
-      updateRow(row.item.id, { pickedFileId: file.id });
-      setNeedsVariantPicks((prev) => {
-        if (!prev.has(row.item.id)) return prev;
-        const next = new Set(prev);
-        next.delete(row.item.id);
-        return next;
-      });
+      let resultedInAtLeastOnePick = false;
+      setRows((prev) =>
+        prev.map((r) => {
+          if (r.item.id !== row.item.id) return r;
+          const has = r.pickedFileIds.includes(file.id);
+          const nextPicks = has
+            ? r.pickedFileIds.filter((id) => id !== file.id)
+            : [...r.pickedFileIds, file.id];
+          if (nextPicks.length > 0) resultedInAtLeastOnePick = true;
+          return { ...r, pickedFileIds: nextPicks };
+        })
+      );
+      if (resultedInAtLeastOnePick) {
+        setNeedsVariantPicks((prev) => {
+          if (!prev.has(row.item.id)) return prev;
+          const next = new Set(prev);
+          next.delete(row.item.id);
+          return next;
+        });
+      }
     },
-    [updateRow]
+    []
   );
 
   // Toggle "Show all variants". Turning on fetches details for every
@@ -479,15 +542,15 @@ export default function ImportCollectionModal({
     setVariantScanProgress(null);
   }, [showAllVariants, ensureDetails]);
 
-  // "Use most popular" escape hatch on the variant-required banner.
-  // Stamps each unresolved row with its primary file id so submission can
-  // proceed on the next Queue click without making the user pick manually.
+  // "Use most popular" escape hatch on the variant-required banner. Stamps
+  // each unresolved row with the primary file as its sole pick so submission
+  // proceeds on the next Queue click without forcing manual picks.
   const acceptDefaults = useCallback(() => {
     setRows((prev) =>
       prev.map((r) => {
         if (!needsVariantPicks.has(r.item.id)) return r;
         if (!r.details?.files || r.details.files.length === 0) return r;
-        return { ...r, pickedFileId: getPrimaryFile(r.details.files).id };
+        return { ...r, pickedFileIds: [getPrimaryFile(r.details.files).id] };
       })
     );
     setNeedsVariantPicks(new Set());
@@ -578,12 +641,14 @@ export default function ImportCollectionModal({
 
     // Re-read after pre-fetch: ensureDetails may have flipped some rows to
     // files-unavailable (auto-deselected) and others now carry their files.
+    // A multi-file row with no explicit pick is ambiguous; one or more picks
+    // resolves it (multi-select lets users grab several variants at once).
     const ambiguous = rowsRef.current.filter((r) => {
       if (!selected.has(r.item.id)) return false;
       if (r.status !== 'idle') return false;
       if (!r.selectable) return false;
       if (!r.details?.files || r.details.files.length <= 1) return false;
-      return r.pickedFileId === undefined;
+      return r.pickedFileIds.length === 0;
     });
 
     if (ambiguous.length > 0) {
@@ -607,7 +672,7 @@ export default function ImportCollectionModal({
     setNeedsVariantPicks(new Set());
 
     // Refresh the snapshot so each row carries its now-cached details and
-    // any pickedFileId the user set while the banner was up.
+    // any picks the user made while the banner was up.
     const toQueue = rowsRef.current.filter(
       (r) => selected.has(r.item.id) && r.status === 'idle' && r.selectable
     );
@@ -624,34 +689,52 @@ export default function ImportCollectionModal({
         continue;
       }
 
-      const file =
-        (row.pickedFileId !== undefined
-          ? details.files.find((f) => f.id === row.pickedFileId)
-          : undefined) ?? getPrimaryFile(details.files);
+      // Resolve the picked ids back to actual GameBananaFile objects (some
+      // could have disappeared between selection and queue), then fall back
+      // to the most-popular file when the row has no explicit picks.
+      const pickedFiles =
+        row.pickedFileIds.length > 0
+          ? row.pickedFileIds
+              .map((id) => details.files!.find((f) => f.id === id))
+              .filter((f): f is GameBananaFile => !!f)
+          : [];
+      const filesToFire =
+        pickedFiles.length > 0 ? pickedFiles : [getPrimaryFile(details.files)];
 
-      // Fire-and-forget: the main-process queue serializes downloads, and
-      // we drive UI state off its events. The catch is only to detect the
-      // user-cancellation rejection so we don't double-mark as failed.
-      updateRow(row.item.id, { status: 'queued', statusMessage: undefined });
-      void downloadMod(
-        row.item.id,
-        file.id,
-        file.fileName,
-        row.item.modelName,
-        row.item.rootCategory?.id
-      ).catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        if (message === 'Cancelled by user') {
-          // cancelRow / cancelAll already flipped the UI; nothing to do.
-          return;
-        }
-        // download-error event normally handles this, but if the rejection
-        // beats the event (or we lose the event), surface the failure.
-        const current = rowsRef.current.find((r) => r.item.id === row.item.id);
-        if (current && current.status !== 'failed' && current.status !== 'cancelled') {
-          updateRow(row.item.id, { status: 'failed', statusMessage: message });
-        }
+      // Snapshot expectations so download events can aggregate completion
+      // into a single row status even when multiple files share the modId.
+      updateRow(row.item.id, {
+        status: 'queued',
+        statusMessage: undefined,
+        expectedFileIds: filesToFire.map((f) => f.id),
+        installedFileIds: new Set<number>(),
+        failedFileIds: new Set<number>(),
       });
+
+      for (const file of filesToFire) {
+        // Fire-and-forget: the main-process queue serializes downloads, and
+        // we drive UI state off its events. The catch is only to detect the
+        // user-cancellation rejection so we don't double-mark as failed.
+        void downloadMod(
+          row.item.id,
+          file.id,
+          file.fileName,
+          row.item.modelName,
+          row.item.rootCategory?.id
+        ).catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          if (message === 'Cancelled by user') {
+            // cancelRow / cancelAll already flipped the UI; nothing to do.
+            return;
+          }
+          // download-error event normally handles this, but if the rejection
+          // beats the event (or we lose the event), surface the failure.
+          const current = rowsRef.current.find((r) => r.item.id === row.item.id);
+          if (current && current.status !== 'failed' && current.status !== 'cancelled') {
+            updateRow(row.item.id, { status: 'failed', statusMessage: message });
+          }
+        });
+      }
     }
 
     setSubmitting(false);
@@ -841,9 +924,17 @@ export default function ImportCollectionModal({
               const lockedRow = !row.selectable || row.status !== 'idle';
 
               const fileCount = row.details?.files?.length ?? 0;
-              const pickedFile = row.pickedFileId !== undefined && row.details?.files
-                ? row.details.files.find((f) => f.id === row.pickedFileId)
-                : undefined;
+              const pickedFiles = row.details?.files
+                ? row.pickedFileIds
+                    .map((id) => row.details!.files!.find((f) => f.id === id))
+                    .filter((f): f is GameBananaFile => !!f)
+                : [];
+              const pickedSummary =
+                pickedFiles.length === 1
+                  ? pickedFiles[0].fileName
+                  : pickedFiles.length > 1
+                    ? `${pickedFiles.length} variants picked`
+                    : null;
 
               return (
                 <li
@@ -912,9 +1003,12 @@ export default function ImportCollectionModal({
                             )}
                           </button>
                         )}
-                        {pickedFile && (
-                          <span className="text-accent truncate max-w-[260px]" title={pickedFile.fileName}>
-                            · {pickedFile.fileName}
+                        {pickedSummary && (
+                          <span
+                            className="text-accent truncate max-w-[260px]"
+                            title={pickedFiles.map((f) => f.fileName).join('\n')}
+                          >
+                            · {pickedSummary}
                           </span>
                         )}
                       </div>
@@ -986,12 +1080,19 @@ export default function ImportCollectionModal({
                         </div>
                       )}
                       {!row.detailsLoading && !row.detailsError && row.details?.files && row.details.files.length > 0 && (
-                        <ul className="space-y-1">
-                          {row.details.files.map((file) => {
-                            const isPicked =
-                              row.pickedFileId !== undefined
-                                ? row.pickedFileId === file.id
-                                : file.id === getPrimaryFile(row.details!.files!).id;
+                        <>
+                          {row.details.files.length > 1 && (
+                            <p className="text-[11px] text-text-tertiary mb-1.5">
+                              Check one or more variants. Leaving everything unchecked falls back to the most popular file.
+                            </p>
+                          )}
+                          <ul className="space-y-1">
+                            {row.details.files.map((file) => {
+                              const explicit = row.pickedFileIds.includes(file.id);
+                              const isDefault =
+                                row.pickedFileIds.length === 0 &&
+                                file.id === getPrimaryFile(row.details!.files!).id;
+                              const isPicked = explicit || isDefault;
                             return (
                               <li key={file.id}>
                                 <label
@@ -1002,10 +1103,9 @@ export default function ImportCollectionModal({
                                   }`}
                                 >
                                   <input
-                                    type="radio"
-                                    name={`variant-${row.item.id}`}
-                                    checked={isPicked}
-                                    onChange={() => pickVariant(row, file)}
+                                    type="checkbox"
+                                    checked={explicit}
+                                    onChange={() => toggleVariantPick(row, file)}
                                     className="accent-accent cursor-pointer"
                                   />
                                   <span className="truncate flex-1" title={file.fileName}>
@@ -1025,7 +1125,8 @@ export default function ImportCollectionModal({
                               </li>
                             );
                           })}
-                        </ul>
+                          </ul>
+                        </>
                       )}
                     </div>
                   )}

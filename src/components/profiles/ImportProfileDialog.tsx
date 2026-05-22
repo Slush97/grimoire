@@ -73,13 +73,19 @@ interface RowState {
   progress?: { downloaded: number; total: number };
   // Variant picker state. The profile pins a specific (submissionId, fileId),
   // but mods like LowPolyDox ship multiple files (full / lite / per-hero).
-  // Letting the user swap to a different file here means importing someone
-  // else's profile doesn't force their exact taste on you.
+  // Multi-select lets the user swap to a different file or grab several at
+  // once. Empty array means "use the resolver-picked file" (default).
   details?: GameBananaModDetails;
   detailsLoading?: boolean;
   detailsError?: string;
-  pickedFileId?: number;
+  pickedFileIds: number[];
   variantsOpen?: boolean;
+  // Per-file completion tracking. expectedFileIds snapshots what we fired
+  // off at queue time; installed/failed sets aggregate event results so the
+  // single visible row status correctly waits for every download.
+  expectedFileIds?: number[];
+  installedFileIds?: Set<number>;
+  failedFileIds?: Set<number>;
 }
 
 function gbSubmissionId(mod: PortableResolvedMod): number | null {
@@ -88,40 +94,41 @@ function gbSubmissionId(mod: PortableResolvedMod): number | null {
   return ref.submissionId ?? null;
 }
 
-// Pick the file the download pipeline should actually fetch for this row.
-// Picked > resolved (set by the resolver, may differ from the pinned id on
-// "upgraded" rows) > the pinned id from the profile entry.
-function effectiveFileId(r: RowState): number | undefined {
-  if (r.pickedFileId !== undefined) return r.pickedFileId;
-  if (r.mod.resolvedFileId !== undefined) return r.mod.resolvedFileId;
+// Files the download pipeline should fetch for this row. Picks (one or more)
+// override the resolver-picked file. Empty array on a default-state row means
+// "fall back to the resolved file" so single-variant rows don't need any
+// interaction.
+function effectiveFileIds(r: RowState): number[] {
+  if (r.pickedFileIds.length > 0) return r.pickedFileIds;
+  if (r.mod.resolvedFileId !== undefined) return [r.mod.resolvedFileId];
   if (r.mod.entry.source === 'gamebanana') {
     const ref = r.mod.entry.ref as { fileId?: number };
-    return ref.fileId;
+    if (ref.fileId !== undefined) return [ref.fileId];
   }
+  return [];
+}
+
+// Find the display/download name for a specific file id in this row. Falls
+// back to the resolver's name when the id matches the resolved file (handles
+// rows the user hasn't expanded yet).
+function fileNameForId(r: RowState, fileId: number): string | undefined {
+  if (r.details?.files) {
+    const f = r.details.files.find((file) => file.id === fileId);
+    if (f) return f.fileName;
+  }
+  if (fileId === r.mod.resolvedFileId) return r.mod.resolvedFileName;
   return undefined;
 }
 
-function effectiveFileName(r: RowState): string | undefined {
-  if (r.pickedFileId !== undefined && r.details?.files) {
-    const f = r.details.files.find((file) => file.id === r.pickedFileId);
-    if (f) return f.fileName;
-  }
-  return r.mod.resolvedFileName;
-}
-
-// Composite tracking key for download events. A submission can appear several
+// Composite tracking keys for download events. A submission can appear several
 // times in one import (different file versions, or multi-VPK siblings); keying
-// by submissionId alone would cross-update unrelated rows. Multi-VPK siblings
-// genuinely share (submissionId, fileId) and SHOULD update together, since
-// they all ride on a single archive download. Uses the effective fileId so a
-// user-picked variant flows through queue/complete/error matching.
-function rowKey(r: RowState): string | null {
-  if (r.mod.entry.source !== 'gamebanana') return null;
+// by submissionId alone would cross-update unrelated rows. Multi-select means
+// one row can expect events for several fileIds at once.
+function rowEventKeys(r: RowState): string[] {
+  if (r.mod.entry.source !== 'gamebanana') return [];
   const ref = r.mod.entry.ref as { submissionId?: number };
-  if (ref.submissionId === undefined) return null;
-  const fid = effectiveFileId(r);
-  if (fid === undefined) return null;
-  return `${ref.submissionId}:${fid}`;
+  if (ref.submissionId === undefined) return [];
+  return effectiveFileIds(r).map((fid) => `${ref.submissionId}:${fid}`);
 }
 
 function eventKey(modId: number, fileId: number): string {
@@ -171,8 +178,7 @@ export default function ImportProfileDialog({
   const trackedKeys = useMemo(() => {
     const s = new Set<string>();
     for (const r of rows) {
-      const k = rowKey(r);
-      if (k !== null) s.add(k);
+      for (const k of rowEventKeys(r)) s.add(k);
     }
     return s;
   }, [rows]);
@@ -189,9 +195,7 @@ export default function ImportProfileDialog({
 
   // Listen for download events to drive row status during import.
   useEffect(() => {
-    const updateRowsByKey = (key: string, patch: Partial<RowState>) => {
-      setRows((prev) => prev.map((r) => (rowKey(r) === key ? { ...r, ...patch } : r)));
-    };
+    const matches = (r: RowState, key: string) => rowEventKeys(r).includes(key);
 
     const unsubQueue = window.electronAPI.onDownloadQueueUpdated((data) => {
       const queuedSet = new Set(data.queue.map((q) => eventKey(q.modId, q.fileId)));
@@ -200,16 +204,21 @@ export default function ImportProfileDialog({
         : null;
       setRows((prev) =>
         prev.map((r) => {
-          const k = rowKey(r);
-          if (k === null || !trackedKeysRef.current.has(k)) return r;
+          const keys = rowEventKeys(r);
+          if (keys.length === 0) return r;
+          if (!keys.some((k) => trackedKeysRef.current.has(k))) return r;
           if (
             r.status === 'installed' ||
             r.status === 'already-installed' ||
             r.status === 'failed' ||
             r.status === 'skipped'
           ) return r;
-          if (currentKey === k) return r.status === 'downloading' ? r : { ...r, status: 'downloading' };
-          if (queuedSet.has(k)) return r.status === 'queued' ? r : { ...r, status: 'queued' };
+          if (currentKey && keys.includes(currentKey)) {
+            return r.status === 'downloading' ? r : { ...r, status: 'downloading' };
+          }
+          if (keys.some((k) => queuedSet.has(k))) {
+            return r.status === 'queued' ? r : { ...r, status: 'queued' };
+          }
           return r;
         })
       );
@@ -218,23 +227,51 @@ export default function ImportProfileDialog({
     const unsubComplete = window.electronAPI.onDownloadComplete(({ modId, fileId }) => {
       const k = eventKey(modId, fileId);
       if (!trackedKeysRef.current.has(k)) return;
-      updateRowsByKey(k, { status: 'installed', statusMessage: undefined });
+      // Multi-select: hold the row in flight until every expected file lands.
+      setRows((prev) =>
+        prev.map((r) => {
+          if (!matches(r, k)) return r;
+          const installed = new Set(r.installedFileIds ?? []);
+          installed.add(fileId);
+          const expected = r.expectedFileIds;
+          const allDone =
+            expected !== undefined &&
+            expected.length > 0 &&
+            expected.every((id) => installed.has(id));
+          return {
+            ...r,
+            installedFileIds: installed,
+            status: allDone ? 'installed' : r.status,
+            statusMessage: allDone ? undefined : r.statusMessage,
+          };
+        })
+      );
     });
 
     const unsubError = window.electronAPI.onDownloadError(({ modId, fileId, message }) => {
       const k = eventKey(modId, fileId);
       if (!trackedKeysRef.current.has(k)) return;
-      updateRowsByKey(k, { status: 'failed', statusMessage: message });
+      // Any file failing fails the whole row so the user sees something is
+      // wrong; the per-file set records which one in case we add retries.
+      setRows((prev) =>
+        prev.map((r) => {
+          if (!matches(r, k)) return r;
+          const failed = new Set(r.failedFileIds ?? []);
+          failed.add(fileId);
+          return { ...r, failedFileIds: failed, status: 'failed', statusMessage: message };
+        })
+      );
     });
 
     const unsubProgress = window.electronAPI.onDownloadProgress(({ modId, fileId, downloaded, total }) => {
       const k = eventKey(modId, fileId);
       if (!trackedKeysRef.current.has(k)) return;
+      // With multi-select, several files share a row. Showing the latest
+      // file's progress (rather than averaging) keeps the bar responsive:
+      // when one file finishes, the bar jumps to the next file starting.
       setRows((prev) =>
         prev.map((r) =>
-          rowKey(r) === k
-            ? { ...r, progress: { downloaded, total } }
-            : r
+          matches(r, k) ? { ...r, progress: { downloaded, total } } : r
         )
       );
     });
@@ -264,6 +301,7 @@ export default function ImportProfileDialog({
           mod,
           selected: mod.status !== 'unresolvable',
           status: mod.alreadyInstalled ? 'already-installed' : 'pending',
+          pickedFileIds: [],
         }))
       );
     } catch (err) {
@@ -370,19 +408,24 @@ export default function ImportProfileDialog({
     [ensureDetailsForRow, updateRowAt]
   );
 
-  const pickVariant = useCallback(
+  const toggleVariantPick = useCallback(
     (idx: number, file: GameBananaFile) => {
       setRows((prev) =>
         prev.map((r, i) => {
           if (i !== idx) return r;
-          const patch: RowState = { ...r, pickedFileId: file.id };
-          // Picking a different file than what's currently on disk means
-          // the on-disk match no longer represents the user's choice. Flip
-          // to pending so handleConfirm queues a download.
-          if (
-            r.status === 'already-installed' &&
-            file.id !== r.mod.resolvedFileId
-          ) {
+          const has = r.pickedFileIds.includes(file.id);
+          const nextPicks = has
+            ? r.pickedFileIds.filter((id) => id !== file.id)
+            : [...r.pickedFileIds, file.id];
+          const patch: RowState = { ...r, pickedFileIds: nextPicks };
+          // The on-disk match was only for the resolver's file. As soon as
+          // the user picks anything other than (or in addition to) that
+          // file, finalize will need fresh downloads, so flip out of the
+          // already-installed badge.
+          const matchesResolvedOnly =
+            nextPicks.length === 0 ||
+            (nextPicks.length === 1 && nextPicks[0] === r.mod.resolvedFileId);
+          if (r.status === 'already-installed' && !matchesResolvedOnly) {
             patch.status = 'pending';
           }
           return patch;
@@ -448,47 +491,59 @@ export default function ImportProfileDialog({
     setImporting(true);
     setFinalizeError(null);
 
-    const toDownload: RowState[] = [];
-    const startingRows = rowsRef.current.map((r) => {
+    // Build per-row download plan and start each row in its initial status.
+    // Default-state already-installed rows skip the download pipeline; rows
+    // with explicit picks always queue, even if some picked file happens to
+    // be on disk (the user's choice trumps the optimization).
+    const plan: { idx: number; fileIds: number[] }[] = [];
+    const startingRows = rowsRef.current.map((r, idx) => {
       if (!r.selected || r.mod.status === 'unresolvable') {
         return { ...r, status: 'skipped' as RowStatus };
       }
-      // The on-disk match is for the resolved file; if the user picked a
-      // different variant, we have to actually download it.
-      const pickedDiffers =
-        r.pickedFileId !== undefined && r.pickedFileId !== r.mod.resolvedFileId;
-      if (r.mod.alreadyInstalled && !pickedDiffers) {
-        // Selected and on disk — no work to do, keep the badge and let
-        // finalize wire the existing VPK into the new profile.
+      if (r.pickedFileIds.length === 0 && r.mod.alreadyInstalled) {
         return { ...r, status: 'already-installed' as RowStatus };
       }
-      toDownload.push(r);
-      return { ...r, status: 'queued' as RowStatus };
+      const fileIds = effectiveFileIds(r);
+      if (fileIds.length === 0) {
+        return { ...r, status: 'skipped' as RowStatus };
+      }
+      plan.push({ idx, fileIds });
+      return {
+        ...r,
+        status: 'queued' as RowStatus,
+        expectedFileIds: fileIds,
+        installedFileIds: new Set<number>(),
+        failedFileIds: new Set<number>(),
+      };
     });
     setRows(startingRows);
 
-    for (const row of toDownload) {
+    for (const { idx, fileIds } of plan) {
+      const row = startingRows[idx];
       if (row.mod.entry.source !== 'gamebanana') continue;
-      const fileId = effectiveFileId(row);
-      const fileName = effectiveFileName(row);
-      if (fileId === undefined || !fileName) continue;
       const ref = row.mod.entry.ref as { submissionId: number; section?: string };
-      const failKey = eventKey(ref.submissionId, fileId);
-      void downloadMod(
-        ref.submissionId,
-        fileId,
-        fileName,
-        ref.section || 'Mod'
-      ).catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : String(err);
-        setRows((prev) =>
-          prev.map((r) =>
-            rowKey(r) === failKey && r.status !== 'installed'
-              ? { ...r, status: 'failed', statusMessage: message }
-              : r
-          )
-        );
-      });
+      for (const fileId of fileIds) {
+        const fileName = fileNameForId(row, fileId);
+        if (!fileName) continue;
+        const failKey = eventKey(ref.submissionId, fileId);
+        void downloadMod(
+          ref.submissionId,
+          fileId,
+          fileName,
+          ref.section || 'Mod'
+        ).catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : String(err);
+          setRows((prev) =>
+            prev.map((r) => {
+              if (!rowEventKeys(r).includes(failKey)) return r;
+              if (r.status === 'installed') return r;
+              const failed = new Set(r.failedFileIds ?? []);
+              failed.add(fileId);
+              return { ...r, failedFileIds: failed, status: 'failed', statusMessage: message };
+            })
+          );
+        });
+      }
     }
   }, [parsed, report, activeDeadlockPath]);
 
@@ -513,19 +568,25 @@ export default function ImportProfileDialog({
       const installedEntries: PortableResolvedMod[] = [];
       for (const r of rowsRef.current) {
         if (r.status !== 'installed' && r.status !== 'already-installed') continue;
-        // When the user picked a different variant, finalize needs the
-        // picked fileId to find the VPK we just installed on disk.
-        const picked =
-          r.pickedFileId !== undefined &&
-          r.pickedFileId !== r.mod.resolvedFileId;
-        if (picked) {
+        // Default state: no picks made, fall through to the resolver's
+        // single (submissionId, resolvedFileId) so finalize wires the
+        // already-on-disk VPK into the new profile unchanged.
+        if (r.pickedFileIds.length === 0) {
+          installedEntries.push(r.mod);
+          continue;
+        }
+        // Picked one or more variants: synthesize a PortableResolvedMod per
+        // picked file so finalize can look up each on-disk VPK and add it.
+        // Skip ids we can't name (very rare: a file vanished between scan
+        // and download).
+        for (const fileId of r.pickedFileIds) {
+          const fileName = fileNameForId(r, fileId);
+          if (!fileName) continue;
           installedEntries.push({
             ...r.mod,
-            resolvedFileId: r.pickedFileId,
-            resolvedFileName: effectiveFileName(r) ?? r.mod.resolvedFileName,
+            resolvedFileId: fileId,
+            resolvedFileName: fileName,
           });
-        } else {
-          installedEntries.push(r.mod);
         }
       }
       try {
@@ -857,10 +918,17 @@ export default function ImportProfileDialog({
                   const fileCount = r.details?.files?.length ?? 0;
                   const canPickVariants =
                     !isUnresolvable && submissionId !== null;
-                  const pickedFile =
-                    r.pickedFileId !== undefined && r.details?.files
-                      ? r.details.files.find((f) => f.id === r.pickedFileId)
-                      : undefined;
+                  const pickedFiles = r.details?.files
+                    ? r.pickedFileIds
+                        .map((id) => r.details!.files!.find((f) => f.id === id))
+                        .filter((f): f is GameBananaFile => !!f)
+                    : [];
+                  const pickedSummary =
+                    pickedFiles.length === 1
+                      ? pickedFiles[0].fileName
+                      : pickedFiles.length > 1
+                        ? `${pickedFiles.length} variants picked`
+                        : null;
                   const progressPct =
                     r.status === 'downloading' && r.progress && r.progress.total > 0
                       ? Math.min(100, (r.progress.downloaded / r.progress.total) * 100)
@@ -928,12 +996,12 @@ export default function ImportProfileDialog({
                                 )}
                               </button>
                             )}
-                            {pickedFile && (
+                            {pickedSummary && (
                               <span
                                 className="text-accent truncate max-w-[14rem]"
-                                title={pickedFile.fileName}
+                                title={pickedFiles.map((f) => f.fileName).join('\n')}
                               >
-                                · {pickedFile.fileName}
+                                · {pickedSummary}
                               </span>
                             )}
                           </div>
@@ -1026,28 +1094,34 @@ export default function ImportProfileDialog({
                             </div>
                           )}
                           {!r.detailsLoading && !r.detailsError && r.details?.files && r.details.files.length > 0 && (
-                            <ul className="space-y-1">
-                              {r.details.files.map((file) => {
-                                const selectedId =
-                                  r.pickedFileId !== undefined ? r.pickedFileId : r.mod.resolvedFileId;
-                                const isPicked = selectedId === file.id;
-                                return (
-                                  <li key={file.id}>
-                                    <label
-                                      className={`flex items-center gap-2.5 px-3 py-1.5 rounded-sm cursor-pointer text-sm border ${
-                                        isPicked
-                                          ? 'bg-accent/10 border-accent/40 text-text-primary'
-                                          : 'border-transparent hover:bg-white/5 text-text-secondary'
-                                      }`}
-                                    >
-                                      <input
-                                        type="radio"
-                                        name={`variant-${idx}`}
-                                        checked={isPicked}
-                                        onChange={() => pickVariant(idx, file)}
-                                        disabled={importing}
-                                        className="accent-accent cursor-pointer disabled:cursor-default"
-                                      />
+                            <>
+                              {r.details.files.length > 1 && (
+                                <p className="text-[11px] text-text-tertiary mb-1.5">
+                                  Check one or more variants. Leaving everything unchecked uses the file pinned by the profile.
+                                </p>
+                              )}
+                              <ul className="space-y-1">
+                                {r.details.files.map((file) => {
+                                  const explicit = r.pickedFileIds.includes(file.id);
+                                  const isDefault =
+                                    r.pickedFileIds.length === 0 && file.id === r.mod.resolvedFileId;
+                                  const isPicked = explicit || isDefault;
+                                  return (
+                                    <li key={file.id}>
+                                      <label
+                                        className={`flex items-center gap-2.5 px-3 py-1.5 rounded-sm cursor-pointer text-sm border ${
+                                          isPicked
+                                            ? 'bg-accent/10 border-accent/40 text-text-primary'
+                                            : 'border-transparent hover:bg-white/5 text-text-secondary'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={explicit}
+                                          onChange={() => toggleVariantPick(idx, file)}
+                                          disabled={importing}
+                                          className="accent-accent cursor-pointer disabled:cursor-default"
+                                        />
                                       <span className="truncate flex-1" title={file.fileName}>
                                         {file.fileName}
                                       </span>
@@ -1067,7 +1141,8 @@ export default function ImportProfileDialog({
                                   </li>
                                 );
                               })}
-                            </ul>
+                              </ul>
+                            </>
                           )}
                         </div>
                       )}
