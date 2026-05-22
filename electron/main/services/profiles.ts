@@ -252,13 +252,27 @@ function generateCrosshairCommands(settings: ProfileCrosshairSettings): string {
     return commands.join('\n');
 }
 
+/** Outcome of resolving one ProfileMod against the current scan. The `via`
+ *  field lets callers (and the diagnostic log) distinguish a real stable-id
+ *  match from a best-effort fileName fallback, and surfaces the refused
+ *  fileName cross-match case that was the cause of the
+ *  "Profile apply misrecognizing mods to turn on" bug. */
+type ResolvedMatch =
+    | { mod: import('../../../src/types/mod').Mod; via: 'stable' | 'fileName' }
+    | { mod: undefined; via: 'miss' | 'refused-crossmatch'; candidateFileName?: string };
+
 /**
  * Build a resolver that maps a ProfileMod to one of the current scanned mods.
  *
  * Tries stable id first (`gameBananaId` + `gameBananaFileId`) so a mod can be
- * found after a fileName change. Falls back to fileName for pre-stable-id
- * profiles and custom mods that lack GameBanana ids. Returns undefined when
- * neither lookup hits, and callers treat that as "not in profile".
+ * found after a fileName change. Falls back to fileName ONLY when neither the
+ * profile entry nor the candidate currentMod carry GameBanana ids: this keeps
+ * local-to-local fileName matching working for custom mods, while refusing to
+ * cross-match a legacy stable-id-less profile entry to an unrelated
+ * GameBanana mod that just happens to occupy the same pakNN_ slot today. The
+ * unconditional fileName fallback used to silently enable the wrong mod after
+ * any reorder rotated pakNN_ prefixes (Discord #bugs:
+ * "Profile apply misrecognizing mods to turn on", 1.11.2).
  *
  * Stable-id matches that resolve to the same current mod are deduped on a
  * first-come basis so a profile with two entries pointing at the same
@@ -267,12 +281,14 @@ function generateCrosshairCommands(settings: ProfileCrosshairSettings): string {
  */
 function buildProfileModResolver(
     currentMods: Array<import('../../../src/types/mod').Mod>
-): (pm: ProfileMod) => import('../../../src/types/mod').Mod | undefined {
+): (pm: ProfileMod) => ResolvedMatch {
     const byFileName = new Map<string, typeof currentMods[number]>();
     const byGbFile = new Map<string, typeof currentMods[number]>();
+    const metaByFileName = new Map<string, ReturnType<typeof getModMetadata>>();
     for (const mod of currentMods) {
         byFileName.set(mod.fileName, mod);
         const meta = getModMetadata(mod.fileName);
+        metaByFileName.set(mod.fileName, meta);
         const gbId = meta?.gameBananaId;
         const fileId = meta?.gameBananaFileId;
         if (typeof gbId === 'number' && typeof fileId === 'number') {
@@ -281,21 +297,55 @@ function buildProfileModResolver(
         }
     }
     const claimed = new Set<string>();
-    return (pm: ProfileMod) => {
-        if (typeof pm.gameBananaId === 'number' && typeof pm.gameBananaFileId === 'number') {
+    return (pm: ProfileMod): ResolvedMatch => {
+        const profileHasStableIds =
+            typeof pm.gameBananaId === 'number' &&
+            typeof pm.gameBananaFileId === 'number';
+
+        if (profileHasStableIds) {
             const stable = byGbFile.get(`${pm.gameBananaId}:${pm.gameBananaFileId}`);
             if (stable && !claimed.has(stable.id)) {
                 claimed.add(stable.id);
-                return stable;
+                return { mod: stable, via: 'stable' };
             }
         }
+
         const fallback = byFileName.get(pm.fileName);
-        if (fallback && !claimed.has(fallback.id)) {
-            claimed.add(fallback.id);
-            return fallback;
+        if (!fallback || claimed.has(fallback.id)) {
+            return { mod: undefined, via: 'miss' };
         }
-        return undefined;
+
+        // Refuse the fileName fallback whenever either side carries GameBanana
+        // ids that the stable-id lookup couldn't reconcile. If both sides have
+        // ids that disagree (or the profile entry has ids but the candidate
+        // doesn't, or vice versa), the fileName collision is almost certainly
+        // a slot reuse after a reorder, not the same mod. Returning the
+        // candidate anyway is the bug we're fixing.
+        const candidateMeta = metaByFileName.get(fallback.fileName);
+        const candidateHasStableIds =
+            typeof candidateMeta?.gameBananaId === 'number' &&
+            typeof candidateMeta?.gameBananaFileId === 'number';
+        if (profileHasStableIds || candidateHasStableIds) {
+            return {
+                mod: undefined,
+                via: 'refused-crossmatch',
+                candidateFileName: fallback.fileName,
+            };
+        }
+
+        claimed.add(fallback.id);
+        return { mod: fallback, via: 'fileName' };
     };
+}
+
+/** One-line tag for a profile entry in diagnostic logs. We keep it compact so
+ *  a ~50-mod apply doesn't blow the rolling log budget, but include enough to
+ *  correlate with the metadata sidecar and the user's GameBanana page. */
+function describeProfileMod(pm: ProfileMod): string {
+    if (typeof pm.gameBananaId === 'number' && typeof pm.gameBananaFileId === 'number') {
+        return `gb=${pm.gameBananaId}:${pm.gameBananaFileId} (${pm.fileName})`;
+    }
+    return `local (${pm.fileName})`;
 }
 
 /**
@@ -309,65 +359,101 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         throw new Error(`Profile not found: ${profileId}`);
     }
 
+    const profileStableCount = profile.mods.filter(
+        (pm) =>
+            typeof pm.gameBananaId === 'number' &&
+            typeof pm.gameBananaFileId === 'number'
+    ).length;
+    console.log(
+        `[profiles] apply '${profile.name}' (id=${profile.id}): ` +
+        `${profile.mods.length} entries, ${profileStableCount} with stable ids`
+    );
+
     // 1. Apply Mods (enable/disable state).
     //
     // Resolve each profile mod against the current scan by stable id
-    // (gameBananaId + gameBananaFileId) first, then fall back to fileName for
-    // pre-stable-id profiles and custom mods that lack GameBanana ids.
-    // fileName-keyed lookup alone breaks any time the user has reordered or
-    // collision-renamed since the profile was saved: the profile points at a
-    // pak## that no longer matches anything on disk, the mod gets treated as
-    // "not in profile" and is disabled (or skipped from the reorder pass).
+    // (gameBananaId + gameBananaFileId) first, then by fileName ONLY when
+    // both sides are stable-id-less (custom mods + truly-local current
+    // mods). See buildProfileModResolver for the cross-match refusal that
+    // landed in response to "Profile apply misrecognizing mods to turn on".
     const currentMods = await scanMods(deadlockPath);
     const resolveProfileMod = buildProfileModResolver(currentMods);
 
     // currentMod.id → ProfileMod, when matched. Drives the enable/disable
     // loop and the reorder pass below.
     const profileModByCurrentId = new Map<string, ProfileMod>();
-    // Heal pre-stable-id and pre-fix portable-import profiles: any time we
-    // match a profileMod whose stable ids are missing to a current mod whose
-    // metadata has them, backfill onto the saved entry. Without this, the
-    // entry stays vulnerable to the next reorder rotating its pakNN_ prefix,
-    // at which point both applyProfile and buildPortableProfile lose it.
-    let healedAny = false;
+    let stableHits = 0;
+    let fileNameHits = 0;
+    let unmatched = 0;
+    let refusedCrossmatches = 0;
     for (const profileMod of profile.mods) {
-        const matched = resolveProfileMod(profileMod);
-        if (!matched) continue;
-        profileModByCurrentId.set(matched.id, profileMod);
-        if (typeof profileMod.gameBananaId === 'number' && typeof profileMod.gameBananaFileId === 'number') continue;
-        const matchedMeta = getModMetadata(matched.fileName);
-        if (typeof matchedMeta?.gameBananaId !== 'number' || typeof matchedMeta?.gameBananaFileId !== 'number') continue;
-        profileMod.gameBananaId = matchedMeta.gameBananaId;
-        profileMod.gameBananaFileId = matchedMeta.gameBananaFileId;
-        healedAny = true;
-    }
-    if (healedAny) {
-        const all = loadProfiles();
-        const idx = all.findIndex((p) => p.id === profileId);
-        if (idx !== -1) {
-            all[idx] = { ...all[idx], mods: profile.mods };
-            saveProfiles(all);
+        const resolution = resolveProfileMod(profileMod);
+        if (resolution.mod !== undefined) {
+            profileModByCurrentId.set(resolution.mod.id, profileMod);
+            if (resolution.via === 'stable') {
+                stableHits++;
+                console.log(
+                    `[profiles] resolve stable: ${describeProfileMod(profileMod)} ` +
+                    `-> ${resolution.mod.fileName}`
+                );
+            } else {
+                fileNameHits++;
+                console.log(
+                    `[profiles] resolve fileName (local-to-local): ` +
+                    `${describeProfileMod(profileMod)} -> ${resolution.mod.fileName}`
+                );
+            }
+        } else if (resolution.via === 'refused-crossmatch') {
+            refusedCrossmatches++;
+            console.warn(
+                `[profiles] resolve refused: ${describeProfileMod(profileMod)} ` +
+                `would have cross-matched current mod ${resolution.candidateFileName} ` +
+                `(stable-id mismatch). Entry left unmatched to avoid enabling the wrong mod.`
+            );
+        } else {
+            unmatched++;
+            console.log(
+                `[profiles] resolve miss: ${describeProfileMod(profileMod)} ` +
+                `(mod not currently installed)`
+            );
         }
     }
+    console.log(
+        `[profiles] resolution summary: ${stableHits} stable, ${fileNameHits} fileName, ` +
+        `${refusedCrossmatches} refused, ${unmatched} unmatched`
+    );
 
+    let enabledCount = 0;
+    let disabledCount = 0;
+    let orphanedDisabledCount = 0;
     for (const mod of currentMods) {
         const profileMod = profileModByCurrentId.get(mod.id);
 
         if (profileMod) {
             if (profileMod.enabled !== mod.enabled) {
                 if (profileMod.enabled) {
+                    console.log(`[profiles] toggle enable: ${mod.fileName}`);
                     await enableMod(deadlockPath, mod.id);
+                    enabledCount++;
                 } else {
+                    console.log(`[profiles] toggle disable: ${mod.fileName}`);
                     await disableMod(deadlockPath, mod.id);
+                    disabledCount++;
                 }
             }
         } else {
             // Mod wasn't in the profile - disable it
             if (mod.enabled) {
+                console.log(`[profiles] toggle disable (not in profile): ${mod.fileName}`);
                 await disableMod(deadlockPath, mod.id);
+                orphanedDisabledCount++;
             }
         }
     }
+    console.log(
+        `[profiles] toggle summary: ${enabledCount} enabled, ${disabledCount} disabled, ` +
+        `${orphanedDisabledCount} disabled-not-in-profile`
+    );
 
     // 1b. Apply priority order in a single two-phase pass via reorderMods.
     // The previous implementation called setModPriority per mod and swallowed
@@ -383,16 +469,31 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     const resolveAgainstRefreshed = buildProfileModResolver(refreshedMods);
     const orderedFileNames: string[] = [];
     const seen = new Set<string>();
+    let reorderSkippedDisabled = 0;
+    let reorderSkippedUnmatched = 0;
     for (const pm of [...profile.mods].sort((a, b) => a.priority - b.priority)) {
         if (!pm.enabled) continue;
-        const matched = resolveAgainstRefreshed(pm);
-        if (!matched || !matched.enabled) continue;
-        if (seen.has(matched.fileName)) continue;
-        seen.add(matched.fileName);
-        orderedFileNames.push(matched.fileName);
+        const resolution = resolveAgainstRefreshed(pm);
+        if (resolution.mod === undefined) {
+            reorderSkippedUnmatched++;
+            continue;
+        }
+        if (!resolution.mod.enabled) {
+            reorderSkippedDisabled++;
+            continue;
+        }
+        if (seen.has(resolution.mod.fileName)) continue;
+        seen.add(resolution.mod.fileName);
+        orderedFileNames.push(resolution.mod.fileName);
     }
     if (orderedFileNames.length > 0) {
+        console.log(
+            `[profiles] reorder: ${orderedFileNames.length} mods -> pak01..pak${orderedFileNames.length} ` +
+            `(skipped ${reorderSkippedUnmatched} unmatched, ${reorderSkippedDisabled} disabled)`
+        );
         await reorderMods(deadlockPath, orderedFileNames);
+    } else {
+        console.log(`[profiles] reorder: nothing to reorder`);
     }
 
     // 2. Apply Autoexec & Crosshair
@@ -410,6 +511,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
 
     writeAutoexec(deadlockPath, currentAutoexec);
 
+    console.log(`[profiles] apply '${profile.name}' complete`);
     return profile;
 }
 
