@@ -70,7 +70,12 @@ function getProfileModGroups(
 
   for (const profileMod of profileMods) {
     const mod = modByFileName.get(profileMod.fileName);
-    const key = mod?.gameBananaId ? `gamebanana:${mod.gameBananaId}` : `file:${profileMod.fileName}`;
+    // Prefer the saved stable id over the live scan: a multi-VPK pair whose
+    // pakNN_ prefix shifted since save would otherwise miss in modByFileName
+    // and split into two file:<fileName> groups, inflating the displayed
+    // count by one per stranded sibling.
+    const gbId = profileMod.gameBananaId ?? mod?.gameBananaId;
+    const key = gbId ? `gamebanana:${gbId}` : `file:${profileMod.fileName}`;
     const group = groups.get(key) ?? {
       key,
       name: mod?.name || fallbackFileLabel(profileMod.fileName),
