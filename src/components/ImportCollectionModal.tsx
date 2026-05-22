@@ -154,6 +154,19 @@ export default function ImportCollectionModal({
   // stays interactive (cancel buttons, variant pickers for not-yet-queued
   // rows, etc.).
   const [submitting, setSubmitting] = useState(false);
+  // Selected mods that have multiple downloadable files and no manual pick.
+  // Populated when the user clicks Queue; submission is blocked while this
+  // set is non-empty so the user is forced to choose instead of silently
+  // getting the most-downloaded variant.
+  const [needsVariantPicks, setNeedsVariantPicks] = useState<Set<number>>(new Set());
+  // Whether the user has opted into seeing every variant up-front. Off by
+  // default to avoid the API-spam cost on large collections. When on, we
+  // fetch details for every selectable row and auto-expand pickers for any
+  // mod with multiple files (e.g. LowPolyDox: full / lite / per-hero).
+  const [showAllVariants, setShowAllVariants] = useState(false);
+  const [variantScanProgress, setVariantScanProgress] = useState<
+    { done: number; total: number } | null
+  >(null);
   // Snapshot of which ids were submitted in the active batch. Determines
   // which mods belong in a post-install profile if the user opts in.
   const [batchIds, setBatchIds] = useState<Set<number>>(new Set());
@@ -174,6 +187,17 @@ export default function ImportCollectionModal({
   useEffect(() => {
     rowsRef.current = rows;
   }, [rows]);
+
+  // Per-row DOM refs so we can scroll the first ambiguous-variant row into
+  // view when the banner appears.
+  const rowRefs = useRef<Map<number, HTMLLIElement>>(new Map());
+  const setRowRef = useCallback(
+    (id: number) => (el: HTMLLIElement | null) => {
+      if (el) rowRefs.current.set(id, el);
+      else rowRefs.current.delete(id);
+    },
+    []
+  );
 
   // Track which mod ids this modal owns so global queue events don't bleed
   // into rows that came from elsewhere (e.g. the user kicked off a download
@@ -400,9 +424,74 @@ export default function ImportCollectionModal({
   const pickVariant = useCallback(
     (row: ItemRow, file: GameBananaFile) => {
       updateRow(row.item.id, { pickedFileId: file.id });
+      setNeedsVariantPicks((prev) => {
+        if (!prev.has(row.item.id)) return prev;
+        const next = new Set(prev);
+        next.delete(row.item.id);
+        return next;
+      });
     },
     [updateRow]
   );
+
+  // Toggle "Show all variants". Turning on fetches details for every
+  // selectable row that doesn't have them yet and opens the inline picker
+  // for any mod with more than one file. Turning off collapses everything
+  // we expanded. Per-row state set by individual chevron clicks is left
+  // alone (the user's explicit action wins).
+  const handleToggleShowAllVariants = useCallback(async () => {
+    if (showAllVariants) {
+      setShowAllVariants(false);
+      setRows((prev) =>
+        prev.map((r) =>
+          r.selectable && r.variantsOpen && (r.details?.files?.length ?? 0) > 1
+            ? { ...r, variantsOpen: false }
+            : r
+        )
+      );
+      return;
+    }
+
+    setShowAllVariants(true);
+    const targets = rowsRef.current.filter(
+      (r) => r.selectable && !r.details && !r.detailsLoading
+    );
+    setVariantScanProgress({ done: 0, total: targets.length });
+
+    let done = 0;
+    await Promise.all(
+      targets.map(async (r) => {
+        await ensureDetails(r);
+        done += 1;
+        setVariantScanProgress({ done, total: targets.length });
+      })
+    );
+
+    setRows((prev) =>
+      prev.map((r) => {
+        if (!r.selectable) return r;
+        if ((r.details?.files?.length ?? 0) > 1) {
+          return r.variantsOpen ? r : { ...r, variantsOpen: true };
+        }
+        return r;
+      })
+    );
+    setVariantScanProgress(null);
+  }, [showAllVariants, ensureDetails]);
+
+  // "Use most popular" escape hatch on the variant-required banner.
+  // Stamps each unresolved row with its primary file id so submission can
+  // proceed on the next Queue click without making the user pick manually.
+  const acceptDefaults = useCallback(() => {
+    setRows((prev) =>
+      prev.map((r) => {
+        if (!needsVariantPicks.has(r.item.id)) return r;
+        if (!r.details?.files || r.details.files.length === 0) return r;
+        return { ...r, pickedFileId: getPrimaryFile(r.details.files).id };
+      })
+    );
+    setNeedsVariantPicks(new Set());
+  }, [needsVariantPicks]);
 
   // ───────── Selection ─────────
 
@@ -470,23 +559,64 @@ export default function ImportCollectionModal({
     setSubmitting(true);
     setProfileStatus({ kind: 'idle' });
     const token = ++submitTokenRef.current;
-    const toQueue = rowsRef.current.filter(
+    const initialQueue = rowsRef.current.filter(
       (r) => selected.has(r.item.id) && r.status === 'idle'
+    );
+
+    // Pre-fetch details for every selected row we don't have yet so we can
+    // detect variant ambiguity up-front. ensureDetails is cache-aware and
+    // its underlying API calls are rate-limited in the main process, so a
+    // big collection just trickles instead of hammering GameBanana.
+    const needsFetch = initialQueue.filter((r) => !r.details);
+    if (needsFetch.length > 0) {
+      await Promise.all(needsFetch.map((r) => ensureDetails(r)));
+      if (submitTokenRef.current !== token) {
+        setSubmitting(false);
+        return;
+      }
+    }
+
+    // Re-read after pre-fetch: ensureDetails may have flipped some rows to
+    // files-unavailable (auto-deselected) and others now carry their files.
+    const ambiguous = rowsRef.current.filter((r) => {
+      if (!selected.has(r.item.id)) return false;
+      if (r.status !== 'idle') return false;
+      if (!r.selectable) return false;
+      if (!r.details?.files || r.details.files.length <= 1) return false;
+      return r.pickedFileId === undefined;
+    });
+
+    if (ambiguous.length > 0) {
+      const ambiguousIds = new Set(ambiguous.map((r) => r.item.id));
+      setRows((prev) =>
+        prev.map((r) =>
+          ambiguousIds.has(r.item.id) && !r.variantsOpen
+            ? { ...r, variantsOpen: true }
+            : r
+        )
+      );
+      setNeedsVariantPicks(ambiguousIds);
+      requestAnimationFrame(() => {
+        const firstEl = rowRefs.current.get(ambiguous[0].item.id);
+        if (firstEl) firstEl.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      });
+      setSubmitting(false);
+      return;
+    }
+
+    setNeedsVariantPicks(new Set());
+
+    // Refresh the snapshot so each row carries its now-cached details and
+    // any pickedFileId the user set while the banner was up.
+    const toQueue = rowsRef.current.filter(
+      (r) => selected.has(r.item.id) && r.status === 'idle' && r.selectable
     );
     setBatchIds(new Set(toQueue.map((r) => r.item.id)));
 
     for (const row of toQueue) {
       if (submitTokenRef.current !== token) break;
 
-      // Resolve files if we don't have them cached yet, needed to map
-      // pickedFileId (or the default primary) to a real GameBananaFile.
-      let details = row.details ?? null;
-      if (!details) {
-        updateRow(row.item.id, { status: 'resolving' });
-        details = await ensureDetails(row);
-        if (submitTokenRef.current !== token) break;
-      }
-
+      const details = row.details;
       if (!details?.files || details.files.length === 0) {
         // ensureDetails already marked this row unavailable (and removed it
         // from the selected set) when it discovered the empty file list, so
@@ -646,19 +776,61 @@ export default function ImportCollectionModal({
           )}
 
           {rows.length > 0 && (
-            <div className="px-6 py-3 sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10">
-              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
-                <input
-                  type="checkbox"
-                  checked={allEligibleSelected}
-                  onChange={toggleSelectAll}
-                  disabled={eligibleRows.length === 0}
-                  className="accent-accent cursor-pointer"
-                />
-                <span>
-                  {allEligibleSelected ? 'Deselect all' : `Select all (${eligibleRows.length})`}
-                </span>
-              </label>
+            <div className="sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10">
+              <div className="px-6 py-3 flex items-center justify-between gap-3">
+                <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
+                  <input
+                    type="checkbox"
+                    checked={allEligibleSelected}
+                    onChange={toggleSelectAll}
+                    disabled={eligibleRows.length === 0}
+                    className="accent-accent cursor-pointer"
+                  />
+                  <span>
+                    {allEligibleSelected ? 'Deselect all' : `Select all (${eligibleRows.length})`}
+                  </span>
+                </label>
+                <button
+                  type="button"
+                  onClick={() => void handleToggleShowAllVariants()}
+                  disabled={variantScanProgress !== null}
+                  className="text-xs inline-flex items-center gap-1.5 px-2 py-1 rounded-sm border border-white/10 text-text-secondary hover:text-text-primary hover:border-white/20 disabled:opacity-60 disabled:cursor-default cursor-pointer"
+                  title="Fetch every selectable mod's file list and expand any with multiple variants"
+                >
+                  {variantScanProgress ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>
+                        Loading variants {variantScanProgress.done}/{variantScanProgress.total}
+                      </span>
+                    </>
+                  ) : showAllVariants ? (
+                    <>
+                      <ChevronDown className="w-3.5 h-3.5" />
+                      <span>Hide all variants</span>
+                    </>
+                  ) : (
+                    <>
+                      <ChevronRight className="w-3.5 h-3.5" />
+                      <span>Show all variants</span>
+                    </>
+                  )}
+                </button>
+              </div>
+              {needsVariantPicks.size > 0 && (
+                <div className="px-6 py-2.5 bg-amber-500/10 border-t border-amber-500/30 flex items-center justify-between gap-3">
+                  <div className="text-sm text-amber-200 flex items-center gap-2 min-w-0">
+                    <AlertTriangle className="w-4 h-4 flex-shrink-0" />
+                    <span>
+                      Pick a variant for {needsVariantPicks.size} mod
+                      {needsVariantPicks.size === 1 ? '' : 's'} before queueing.
+                    </span>
+                  </div>
+                  <Button size="sm" variant="secondary" onClick={acceptDefaults}>
+                    Use most popular
+                  </Button>
+                </div>
+              )}
             </div>
           )}
 
@@ -674,7 +846,13 @@ export default function ImportCollectionModal({
                 : undefined;
 
               return (
-                <li key={row.item.id} className="px-6 py-4">
+                <li
+                  key={row.item.id}
+                  ref={setRowRef(row.item.id)}
+                  className={`px-6 py-4 transition-colors ${
+                    needsVariantPicks.has(row.item.id) ? 'bg-amber-500/5' : ''
+                  }`}
+                >
                   <div className="flex items-center gap-4">
                     <input
                       type="checkbox"

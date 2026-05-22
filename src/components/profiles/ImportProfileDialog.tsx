@@ -9,6 +9,7 @@ import {
   FileText,
   Terminal,
   ChevronDown,
+  ChevronRight,
 } from 'lucide-react';
 import { Button } from '../common/ui';
 import ModThumbnail from '../ModThumbnail';
@@ -18,6 +19,7 @@ import {
   resolvePortableProfile,
   finalizePortableImport,
   downloadMod,
+  getModDetails,
   type SocialProfileDetail,
 } from '../../lib/api';
 import type {
@@ -25,6 +27,7 @@ import type {
   PortableResolutionReport,
   PortableResolvedMod,
 } from '../../types/portableProfile';
+import type { GameBananaFile, GameBananaModDetails } from '../../types/gamebanana';
 
 interface ImportProfileDialogProps {
   activeDeadlockPath: string | null;
@@ -68,6 +71,15 @@ interface RowState {
   status: RowStatus;
   statusMessage?: string;
   progress?: { downloaded: number; total: number };
+  // Variant picker state. The profile pins a specific (submissionId, fileId),
+  // but mods like LowPolyDox ship multiple files (full / lite / per-hero).
+  // Letting the user swap to a different file here means importing someone
+  // else's profile doesn't force their exact taste on you.
+  details?: GameBananaModDetails;
+  detailsLoading?: boolean;
+  detailsError?: string;
+  pickedFileId?: number;
+  variantsOpen?: boolean;
 }
 
 function gbSubmissionId(mod: PortableResolvedMod): number | null {
@@ -76,16 +88,40 @@ function gbSubmissionId(mod: PortableResolvedMod): number | null {
   return ref.submissionId ?? null;
 }
 
+// Pick the file the download pipeline should actually fetch for this row.
+// Picked > resolved (set by the resolver, may differ from the pinned id on
+// "upgraded" rows) > the pinned id from the profile entry.
+function effectiveFileId(r: RowState): number | undefined {
+  if (r.pickedFileId !== undefined) return r.pickedFileId;
+  if (r.mod.resolvedFileId !== undefined) return r.mod.resolvedFileId;
+  if (r.mod.entry.source === 'gamebanana') {
+    const ref = r.mod.entry.ref as { fileId?: number };
+    return ref.fileId;
+  }
+  return undefined;
+}
+
+function effectiveFileName(r: RowState): string | undefined {
+  if (r.pickedFileId !== undefined && r.details?.files) {
+    const f = r.details.files.find((file) => file.id === r.pickedFileId);
+    if (f) return f.fileName;
+  }
+  return r.mod.resolvedFileName;
+}
+
 // Composite tracking key for download events. A submission can appear several
 // times in one import (different file versions, or multi-VPK siblings); keying
 // by submissionId alone would cross-update unrelated rows. Multi-VPK siblings
 // genuinely share (submissionId, fileId) and SHOULD update together, since
-// they all ride on a single archive download.
-function rowKey(mod: PortableResolvedMod): string | null {
-  if (mod.entry.source !== 'gamebanana') return null;
-  const ref = mod.entry.ref as { submissionId?: number; fileId?: number };
-  if (ref.submissionId === undefined || ref.fileId === undefined) return null;
-  return `${ref.submissionId}:${ref.fileId}`;
+// they all ride on a single archive download. Uses the effective fileId so a
+// user-picked variant flows through queue/complete/error matching.
+function rowKey(r: RowState): string | null {
+  if (r.mod.entry.source !== 'gamebanana') return null;
+  const ref = r.mod.entry.ref as { submissionId?: number };
+  if (ref.submissionId === undefined) return null;
+  const fid = effectiveFileId(r);
+  if (fid === undefined) return null;
+  return `${ref.submissionId}:${fid}`;
 }
 
 function eventKey(modId: number, fileId: number): string {
@@ -135,7 +171,7 @@ export default function ImportProfileDialog({
   const trackedKeys = useMemo(() => {
     const s = new Set<string>();
     for (const r of rows) {
-      const k = rowKey(r.mod);
+      const k = rowKey(r);
       if (k !== null) s.add(k);
     }
     return s;
@@ -154,7 +190,7 @@ export default function ImportProfileDialog({
   // Listen for download events to drive row status during import.
   useEffect(() => {
     const updateRowsByKey = (key: string, patch: Partial<RowState>) => {
-      setRows((prev) => prev.map((r) => (rowKey(r.mod) === key ? { ...r, ...patch } : r)));
+      setRows((prev) => prev.map((r) => (rowKey(r) === key ? { ...r, ...patch } : r)));
     };
 
     const unsubQueue = window.electronAPI.onDownloadQueueUpdated((data) => {
@@ -164,7 +200,7 @@ export default function ImportProfileDialog({
         : null;
       setRows((prev) =>
         prev.map((r) => {
-          const k = rowKey(r.mod);
+          const k = rowKey(r);
           if (k === null || !trackedKeysRef.current.has(k)) return r;
           if (
             r.status === 'installed' ||
@@ -196,7 +232,7 @@ export default function ImportProfileDialog({
       if (!trackedKeysRef.current.has(k)) return;
       setRows((prev) =>
         prev.map((r) =>
-          rowKey(r.mod) === k
+          rowKey(r) === k
             ? { ...r, progress: { downloaded, total } }
             : r
         )
@@ -292,41 +328,162 @@ export default function ImportProfileDialog({
     });
   }, []);
 
+  const updateRowAt = useCallback((idx: number, patch: Partial<RowState>) => {
+    setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
+  }, []);
+
+  // Fetch the GameBanana mod details for a row so we can show its full file
+  // list. Cached on the row so subsequent opens are instant.
+  const ensureDetailsForRow = useCallback(
+    async (idx: number): Promise<GameBananaModDetails | null> => {
+      const row = rowsRef.current[idx];
+      if (!row) return null;
+      if (row.details) return row.details;
+      if (row.detailsLoading) return null;
+      const submissionId = gbSubmissionId(row.mod);
+      if (submissionId === null) return null;
+      const ref = row.mod.entry.ref as { section?: string };
+      updateRowAt(idx, { detailsLoading: true, detailsError: undefined });
+      try {
+        const details = await getModDetails(submissionId, ref.section || 'Mod');
+        updateRowAt(idx, { details, detailsLoading: false });
+        return details;
+      } catch (err) {
+        updateRowAt(idx, {
+          detailsLoading: false,
+          detailsError: err instanceof Error ? err.message : String(err),
+        });
+        return null;
+      }
+    },
+    [updateRowAt]
+  );
+
+  const toggleVariants = useCallback(
+    async (idx: number) => {
+      const row = rowsRef.current[idx];
+      if (!row) return;
+      const opening = !row.variantsOpen;
+      updateRowAt(idx, { variantsOpen: opening });
+      if (opening) await ensureDetailsForRow(idx);
+    },
+    [ensureDetailsForRow, updateRowAt]
+  );
+
+  const pickVariant = useCallback(
+    (idx: number, file: GameBananaFile) => {
+      setRows((prev) =>
+        prev.map((r, i) => {
+          if (i !== idx) return r;
+          const patch: RowState = { ...r, pickedFileId: file.id };
+          // Picking a different file than what's currently on disk means
+          // the on-disk match no longer represents the user's choice. Flip
+          // to pending so handleConfirm queues a download.
+          if (
+            r.status === 'already-installed' &&
+            file.id !== r.mod.resolvedFileId
+          ) {
+            patch.status = 'pending';
+          }
+          return patch;
+        })
+      );
+    },
+    []
+  );
+
+  // Whether the user has opted into seeing every variant up-front. Mirrors
+  // the same toggle on the collection import modal.
+  const [showAllVariants, setShowAllVariants] = useState(false);
+  const [variantScanProgress, setVariantScanProgress] = useState<
+    { done: number; total: number } | null
+  >(null);
+
+  const handleToggleShowAllVariants = useCallback(async () => {
+    if (showAllVariants) {
+      setShowAllVariants(false);
+      setRows((prev) =>
+        prev.map((r) =>
+          r.variantsOpen && (r.details?.files?.length ?? 0) > 1
+            ? { ...r, variantsOpen: false }
+            : r
+        )
+      );
+      return;
+    }
+
+    setShowAllVariants(true);
+    const targets: number[] = [];
+    rowsRef.current.forEach((r, idx) => {
+      if (r.mod.status === 'unresolvable') return;
+      if (r.details || r.detailsLoading) return;
+      if (gbSubmissionId(r.mod) === null) return;
+      targets.push(idx);
+    });
+    setVariantScanProgress({ done: 0, total: targets.length });
+
+    let done = 0;
+    await Promise.all(
+      targets.map(async (idx) => {
+        await ensureDetailsForRow(idx);
+        done += 1;
+        setVariantScanProgress({ done, total: targets.length });
+      })
+    );
+
+    setRows((prev) =>
+      prev.map((r) => {
+        if (r.mod.status === 'unresolvable') return r;
+        if ((r.details?.files?.length ?? 0) > 1) {
+          return r.variantsOpen ? r : { ...r, variantsOpen: true };
+        }
+        return r;
+      })
+    );
+    setVariantScanProgress(null);
+  }, [showAllVariants, ensureDetailsForRow]);
+
   const handleConfirm = useCallback(async () => {
     if (!parsed || !report || !activeDeadlockPath) return;
     setImporting(true);
     setFinalizeError(null);
 
-    const toDownload: PortableResolvedMod[] = [];
+    const toDownload: RowState[] = [];
     const startingRows = rowsRef.current.map((r) => {
       if (!r.selected || r.mod.status === 'unresolvable') {
         return { ...r, status: 'skipped' as RowStatus };
       }
-      if (r.mod.alreadyInstalled) {
+      // The on-disk match is for the resolved file; if the user picked a
+      // different variant, we have to actually download it.
+      const pickedDiffers =
+        r.pickedFileId !== undefined && r.pickedFileId !== r.mod.resolvedFileId;
+      if (r.mod.alreadyInstalled && !pickedDiffers) {
         // Selected and on disk — no work to do, keep the badge and let
         // finalize wire the existing VPK into the new profile.
         return { ...r, status: 'already-installed' as RowStatus };
       }
-      toDownload.push(r.mod);
+      toDownload.push(r);
       return { ...r, status: 'queued' as RowStatus };
     });
     setRows(startingRows);
 
-    for (const mod of toDownload) {
-      if (mod.entry.source !== 'gamebanana') continue;
-      if (mod.resolvedFileId === undefined || !mod.resolvedFileName) continue;
-      const ref = mod.entry.ref as { submissionId: number; section?: string };
-      const failKey = eventKey(ref.submissionId, mod.resolvedFileId);
+    for (const row of toDownload) {
+      if (row.mod.entry.source !== 'gamebanana') continue;
+      const fileId = effectiveFileId(row);
+      const fileName = effectiveFileName(row);
+      if (fileId === undefined || !fileName) continue;
+      const ref = row.mod.entry.ref as { submissionId: number; section?: string };
+      const failKey = eventKey(ref.submissionId, fileId);
       void downloadMod(
         ref.submissionId,
-        mod.resolvedFileId,
-        mod.resolvedFileName,
+        fileId,
+        fileName,
         ref.section || 'Mod'
       ).catch((err: unknown) => {
         const message = err instanceof Error ? err.message : String(err);
         setRows((prev) =>
           prev.map((r) =>
-            rowKey(r.mod) === failKey && r.status !== 'installed'
+            rowKey(r) === failKey && r.status !== 'installed'
               ? { ...r, status: 'failed', statusMessage: message }
               : r
           )
@@ -355,7 +512,19 @@ export default function ImportProfileDialog({
     (async () => {
       const installedEntries: PortableResolvedMod[] = [];
       for (const r of rowsRef.current) {
-        if (r.status === 'installed' || r.status === 'already-installed') {
+        if (r.status !== 'installed' && r.status !== 'already-installed') continue;
+        // When the user picked a different variant, finalize needs the
+        // picked fileId to find the VPK we just installed on disk.
+        const picked =
+          r.pickedFileId !== undefined &&
+          r.pickedFileId !== r.mod.resolvedFileId;
+        if (picked) {
+          installedEntries.push({
+            ...r.mod,
+            resolvedFileId: r.pickedFileId,
+            resolvedFileName: effectiveFileName(r) ?? r.mod.resolvedFileName,
+          });
+        } else {
           installedEntries.push(r.mod);
         }
       }
@@ -610,7 +779,7 @@ export default function ImportProfileDialog({
               })()
             ) : null}
 
-            <div className="px-4 sm:px-6 py-2 sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10 flex items-center justify-between gap-2">
+            <div className="px-4 sm:px-6 py-2 sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10 flex items-center justify-between gap-2 flex-wrap">
               <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer min-w-0">
                 <input
                   type="checkbox"
@@ -625,6 +794,32 @@ export default function ImportProfileDialog({
                     : `Select all (${selectableCount})`}
                 </span>
               </label>
+              <button
+                type="button"
+                onClick={() => void handleToggleShowAllVariants()}
+                disabled={importing || variantScanProgress !== null || selectableCount === 0}
+                className="text-xs inline-flex items-center gap-1.5 px-2 py-1 rounded-sm border border-white/10 text-text-secondary hover:text-text-primary hover:border-white/20 disabled:opacity-60 disabled:cursor-default cursor-pointer"
+                title="Fetch every mod's file list so you can swap to a different variant than the one pinned in the profile"
+              >
+                {variantScanProgress ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>
+                      Loading variants {variantScanProgress.done}/{variantScanProgress.total}
+                    </span>
+                  </>
+                ) : showAllVariants ? (
+                  <>
+                    <ChevronDown className="w-3.5 h-3.5" />
+                    <span>Hide all variants</span>
+                  </>
+                ) : (
+                  <>
+                    <ChevronRight className="w-3.5 h-3.5" />
+                    <span>Show all variants</span>
+                  </>
+                )}
+              </button>
               <div className="flex flex-wrap items-center gap-1.5 text-[11px] justify-end flex-shrink-0">
                 <span className="px-1.5 py-0.5 rounded-sm bg-green-500/10 text-green-300 border border-green-500/20">
                   {report.exactCount} exact
@@ -658,6 +853,14 @@ export default function ImportProfileDialog({
                   const mod = r.mod;
                   const hint = mod.entry.hint;
                   const isUnresolvable = mod.status === 'unresolvable';
+                  const submissionId = gbSubmissionId(mod);
+                  const fileCount = r.details?.files?.length ?? 0;
+                  const canPickVariants =
+                    !isUnresolvable && submissionId !== null;
+                  const pickedFile =
+                    r.pickedFileId !== undefined && r.details?.files
+                      ? r.details.files.find((f) => f.id === r.pickedFileId)
+                      : undefined;
                   const progressPct =
                     r.status === 'downloading' && r.progress && r.progress.total > 0
                       ? Math.min(100, (r.progress.downloaded / r.progress.total) * 100)
@@ -701,6 +904,38 @@ export default function ImportProfileDialog({
                             {hint?.fileLabel && <span className="hidden sm:inline">· {hint.fileLabel}</span>}
                             <span>· p{mod.entry.priority}</span>
                             {!mod.entry.enabled && <span className="text-text-tertiary">· disabled</span>}
+                            {canPickVariants && (
+                              <button
+                                type="button"
+                                onClick={() => void toggleVariants(idx)}
+                                disabled={importing}
+                                className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm hover:text-text-primary hover:bg-white/5 disabled:opacity-50 disabled:cursor-default cursor-pointer"
+                                title="Choose a different variant from this mod"
+                              >
+                                {r.variantsOpen ? (
+                                  <ChevronDown className="w-3 h-3" />
+                                ) : (
+                                  <ChevronRight className="w-3 h-3" />
+                                )}
+                                {r.detailsLoading ? (
+                                  <Loader2 className="w-3 h-3 animate-spin" />
+                                ) : fileCount > 1 ? (
+                                  <span>{fileCount} variants</span>
+                                ) : fileCount === 1 ? (
+                                  <span>1 file</span>
+                                ) : (
+                                  <span>Variants</span>
+                                )}
+                              </button>
+                            )}
+                            {pickedFile && (
+                              <span
+                                className="text-accent truncate max-w-[14rem]"
+                                title={pickedFile.fileName}
+                              >
+                                · {pickedFile.fileName}
+                              </span>
+                            )}
                           </div>
                           {mod.status === 'upgraded' && (
                             <div className="text-xs text-blue-300 mt-1 inline-flex items-center gap-1">
@@ -767,6 +1002,75 @@ export default function ImportProfileDialog({
                           )}
                         </div>
                       </div>
+
+                      {r.variantsOpen && (
+                        <div className="ml-[68px] sm:ml-[104px] mt-2 mb-1">
+                          {r.detailsLoading && (
+                            <div className="text-xs text-text-secondary flex items-center gap-1.5">
+                              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                              Loading files...
+                            </div>
+                          )}
+                          {r.detailsError && (
+                            <div className="text-xs text-red-400 flex items-center gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5" />
+                              {r.detailsError}
+                            </div>
+                          )}
+                          {!r.detailsLoading && !r.detailsError && r.details && (!r.details.files || r.details.files.length === 0) && (
+                            <div className="text-xs text-text-tertiary flex items-start gap-1.5">
+                              <AlertTriangle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
+                              <span>
+                                GameBanana returned no downloadable files for this mod.
+                              </span>
+                            </div>
+                          )}
+                          {!r.detailsLoading && !r.detailsError && r.details?.files && r.details.files.length > 0 && (
+                            <ul className="space-y-1">
+                              {r.details.files.map((file) => {
+                                const selectedId =
+                                  r.pickedFileId !== undefined ? r.pickedFileId : r.mod.resolvedFileId;
+                                const isPicked = selectedId === file.id;
+                                return (
+                                  <li key={file.id}>
+                                    <label
+                                      className={`flex items-center gap-2.5 px-3 py-1.5 rounded-sm cursor-pointer text-sm border ${
+                                        isPicked
+                                          ? 'bg-accent/10 border-accent/40 text-text-primary'
+                                          : 'border-transparent hover:bg-white/5 text-text-secondary'
+                                      }`}
+                                    >
+                                      <input
+                                        type="radio"
+                                        name={`variant-${idx}`}
+                                        checked={isPicked}
+                                        onChange={() => pickVariant(idx, file)}
+                                        disabled={importing}
+                                        className="accent-accent cursor-pointer disabled:cursor-default"
+                                      />
+                                      <span className="truncate flex-1" title={file.fileName}>
+                                        {file.fileName}
+                                      </span>
+                                      {file.isArchived && (
+                                        <span className="text-text-tertiary text-[11px] uppercase tracking-wide">
+                                          archived
+                                        </span>
+                                      )}
+                                      <span
+                                        className="text-text-tertiary text-xs tabular-nums inline-flex items-center gap-1"
+                                        title={`${file.downloadCount.toLocaleString()} downloads`}
+                                      >
+                                        <Download className="w-3 h-3" />
+                                        {file.downloadCount.toLocaleString()}
+                                      </span>
+                                    </label>
+                                  </li>
+                                );
+                              })}
+                            </ul>
+                          )}
+                        </div>
+                      )}
                     </li>
                   );
                 })}
