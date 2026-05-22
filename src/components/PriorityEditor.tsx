@@ -8,6 +8,10 @@ interface Props {
   modName: string;
   priority: number;
   variant?: 'overlay' | 'inline';
+  /** Override the default single-rename commit path. Provided by Installed.tsx
+   *  so collisions with same-section mods rebuild the order via reorderMods
+   *  (insert-and-shift) instead of throwing "already in use". */
+  onCommit?: (newPriority: number) => Promise<void>;
 }
 
 /**
@@ -25,6 +29,7 @@ export default function PriorityEditor({
   modName,
   priority,
   variant = 'inline',
+  onCommit,
 }: Props) {
   const loadMods = useAppStore((s) => s.loadMods);
   const [editing, setEditing] = useState(false);
@@ -61,8 +66,12 @@ export default function PriorityEditor({
     if (n === priority) return cancel();
     setBusy(true);
     try {
-      await setModPriority(modId, n);
-      await loadMods();
+      if (onCommit) {
+        await onCommit(n);
+      } else {
+        await setModPriority(modId, n);
+        await loadMods();
+      }
       setEditing(false);
       setError(null);
     } catch (err) {
@@ -123,18 +132,27 @@ export default function PriorityEditor({
     );
   }
 
+  // Rendered as a span+role=button rather than a <button> because this widget
+  // sits inside the ModCard's outer "view details" <button>; nesting buttons
+  // is invalid HTML and React 19 surfaces it as a hydration warning.
   return (
-    <button
-      type="button"
+    <span
+      role="button"
+      tabIndex={0}
       onClick={startEdit}
       onContextMenu={startEdit}
-      className="cursor-text appearance-none bg-transparent border-0 p-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 rounded-sm"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          startEdit(e);
+        }
+      }}
+      className="inline-flex cursor-text focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 rounded-sm"
       title={`Load #${priority}. Click (or right-click) to retype. Lower numbers load first.`}
       aria-label={`Load order ${priority}. Click to change.`}
     >
       <Tag tone="accent" variant={variant} className="tabular-nums">
         Load #{priority}
       </Tag>
-    </button>
+    </span>
   );
 }

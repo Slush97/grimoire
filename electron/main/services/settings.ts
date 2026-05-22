@@ -15,6 +15,13 @@ export interface AppSettings {
     experimentalStats: boolean;
     experimentalCrosshair: boolean;
     experimentalSocial: boolean;     // Grimoire Social: Discover page + publish/account UI
+    /** Auto-match unknown local VPKs against GameBanana (CRC-32 + filter
+     *  search). Off by default while the matching path is reworked: the
+     *  current implementation hits GameBanana rate limits hard on libraries
+     *  with many unknown files. When off, the "Fix unknown" UI still opens
+     *  but the search/find buttons and bulk auto-find are hidden, leaving
+     *  only the manual "Make Custom Mod" path. */
+    experimentalUnknownModMatching: boolean;
     hasCompletedSetup: boolean;      // First-run setup completed
     /** Mod pairs the user has dismissed in the Conflicts page. New entries use
      *  stable per-mod identities (GameBanana mod/file ids when available)
@@ -42,6 +49,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalStats: false,
     experimentalCrosshair: false,
     experimentalSocial: false,
+    experimentalUnknownModMatching: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,

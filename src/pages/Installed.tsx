@@ -25,11 +25,12 @@ import {
   Layers,
   Scissors,
   Share2,
+  Beaker,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, setModPriority as apiSetModPriority, reorderMods as apiReorderMods } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, UnknownModFilterGuess } from '../types/mod';
@@ -437,8 +438,13 @@ export default function Installed() {
     // Auto-kick the search when there's no cached result and nothing in
     // flight. Otherwise the user has to click Find inside the modal after
     // already clicking Fix outside — one click too many, and confusing
-    // because the modal just sits idle.
-    if (!unknownFilterCache[mod.id] && !unknownFilterPendingIds.has(mod.id)) {
+    // because the modal just sits idle. Suppressed when the experimental
+    // matcher is disabled (the modal opens straight to the custom-mod path).
+    if (
+      autoMatchEnabled &&
+      !unknownFilterCache[mod.id] &&
+      !unknownFilterPendingIds.has(mod.id)
+    ) {
       void inspectUnknownModFilters(mod, false, mode);
     }
   };
@@ -515,8 +521,13 @@ export default function Installed() {
     openUnknownModFix(first, 'bulk');
     // Kick searches for the rest in parallel so every row progresses while
     // the user reviews the first one. The queue dedupes against pending/
-    // cached, so re-kicking the first mod here is a no-op.
-    findAllUnknownMods(unknowns);
+    // cached, so re-kicking the first mod here is a no-op. Gated behind the
+    // experimental flag while the matcher is being reworked. Without it the
+    // bulk modal just lists the unknowns so the user can route each one to
+    // the manual custom-mod path.
+    if (autoMatchEnabled) {
+      findAllUnknownMods(unknowns);
+    }
   };
 
   const findAllUnknownMods = (unknowns: Mod[]) => {
@@ -1236,6 +1247,10 @@ export default function Installed() {
   const unknownMods = mods
     .filter((mod) => mod.isUnknown)
     .sort((a, b) => a.priority - b.priority);
+  // Auto-matching against GameBanana (CRC + filter search) is the rate-
+  // limited path. Gated behind an experimental toggle while it's being
+  // reworked; when off, only the manual "Make Custom Mod" path is offered.
+  const autoMatchEnabled = settings?.experimentalUnknownModMatching ?? false;
   const selectedUnknownState = unknownFilterGuess
     ? {
         mod: unknownFilterGuess.mod,
@@ -1328,6 +1343,55 @@ export default function Installed() {
   };
 
   /**
+   * Commit a typed priority from the right-click Load editor. When the target
+   * slot is held by another enabled mod we can't just rename (the file would
+   * collide), so we rebuild the enabled-section order with this mod inserted
+   * before the collider and hand it to reorderMods. That mirrors drag-and-drop
+   * semantics: typing `N` is "drop me onto whoever owns N". When the slot is
+   * free we fall back to a single rename so the user gets the exact number
+   * they typed, even if disabled mods occupy nearby slots.
+   *
+   * Calls the API directly (not the store wrappers) so errors propagate back
+   * to PriorityEditor for inline display instead of being swallowed into
+   * modsError.
+   */
+  const commitPriorityForMod = async (modId: string, newPriority: number): Promise<void> => {
+    const mod = mods.find((m) => m.id === modId);
+    if (!mod) throw new Error('Mod not found');
+    if (mod.priority === newPriority) return;
+
+    const collider = mods.find(
+      (m) => m.id !== modId && m.enabled && m.priority === newPriority
+    );
+
+    if (!collider) {
+      await apiSetModPriority(modId, newPriority);
+      await loadMods();
+      return;
+    }
+
+    const enabled = mods
+      .filter((m) => m.enabled)
+      .sort((a, b) => a.priority - b.priority);
+    const withoutMoved = enabled.filter((m) => m.id !== modId);
+    const insertIdx = withoutMoved.findIndex((m) => m.id === collider.id);
+    if (insertIdx === -1) {
+      // Defensive: collider must be enabled, so this shouldn't trigger.
+      // Fall back to the single rename so the user still gets feedback.
+      await apiSetModPriority(modId, newPriority);
+      await loadMods();
+      return;
+    }
+    const reordered = [
+      ...withoutMoved.slice(0, insertIdx),
+      mod,
+      ...withoutMoved.slice(insertIdx),
+    ];
+    await apiReorderMods(reordered.map((m) => m.fileName));
+    await loadMods();
+  };
+
+  /**
    * Render a single entry as a ModCard. Centralizes both the "single mod"
    * and "grouped variants" paths so the enabled/disabled sections don't
    * each carry a 40-line inline JSX block.
@@ -1368,6 +1432,7 @@ export default function Installed() {
           onDelete={() => setModToDelete({ ids: [mod.id], name: mod.name, isGroup: false })}
           onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
           fixingUnknown={unknownFilterPendingIds.has(mod.id)}
+          onCommitPriority={(p) => commitPriorityForMod(mod.id, p)}
           onUnmerge={mod.merged ? () => setUnmergeTarget(mod) : undefined}
           onCopyShareCode={mod.merged ? () => void handleCopyShareCode(mod) : undefined}
           selectMode={selectMode}
@@ -1447,6 +1512,7 @@ export default function Installed() {
             isGroup: true,
           })
         }
+        onCommitPriority={(p) => commitPriorityForMod(entry.primary.id, p)}
         selectMode={selectMode}
         selected={entrySelected}
         onSelectToggle={() => toggleEntrySelection(entry)}
@@ -1937,6 +2003,7 @@ export default function Installed() {
         <UnknownFilterGuessModal
           state={selectedUnknownState}
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          autoMatchEnabled={autoMatchEnabled}
           onApplyMatch={applyUnknownMatch}
           onViewMatch={viewUnknownMatch}
           onMakeCustom={makeUnknownCustomMod}
@@ -1952,6 +2019,7 @@ export default function Installed() {
           unknownMods={unknownMods}
           state={selectedUnknownState}
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          autoMatchEnabled={autoMatchEnabled}
           cache={unknownFilterCache}
           pendingIds={unknownFilterPendingIds}
           errors={unknownFilterErrors}
@@ -2240,6 +2308,7 @@ function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
 function UnknownFilterGuessModal({
   state,
   hideNsfwPreviews,
+  autoMatchEnabled,
   onApplyMatch,
   onViewMatch,
   onMakeCustom,
@@ -2256,6 +2325,7 @@ function UnknownFilterGuessModal({
     cancelled?: boolean;
   };
   hideNsfwPreviews: boolean;
+  autoMatchEnabled: boolean;
   onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
   onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
   onMakeCustom: (mod: Mod) => void;
@@ -2302,6 +2372,7 @@ function UnknownFilterGuessModal({
           key={mod.id}
           state={state}
           hideNsfwPreviews={hideNsfwPreviews}
+          autoMatchEnabled={autoMatchEnabled}
           onApplyMatch={onApplyMatch}
           onViewMatch={onViewMatch}
           onMakeCustom={onMakeCustom}
@@ -2319,6 +2390,7 @@ function BulkUnknownFixModal({
   unknownMods,
   state,
   hideNsfwPreviews,
+  autoMatchEnabled,
   cache,
   pendingIds,
   errors,
@@ -2341,6 +2413,7 @@ function BulkUnknownFixModal({
     cancelled?: boolean;
   };
   hideNsfwPreviews: boolean;
+  autoMatchEnabled: boolean;
   cache: Record<string, UnknownModFilterGuess>;
   pendingIds: Set<string>;
   errors: Record<string, string>;
@@ -2379,16 +2452,18 @@ function BulkUnknownFixModal({
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
-            <Button
-              variant="primary"
-              size="sm"
-              icon={Search}
-              disabled={findableCount === 0}
-              onClick={() => onFindAll(unknownMods)}
-              title="Search every unknown mod that has not already been checked"
-            >
-              Find all
-            </Button>
+            {autoMatchEnabled && (
+              <Button
+                variant="primary"
+                size="sm"
+                icon={Search}
+                disabled={findableCount === 0}
+                onClick={() => onFindAll(unknownMods)}
+                title="Search every unknown mod that has not already been checked"
+              >
+                Find all
+              </Button>
+            )}
             <button
               type="button"
               onClick={onClose}
@@ -2453,6 +2528,7 @@ function BulkUnknownFixModal({
             key={state.mod.id}
             state={state}
             hideNsfwPreviews={hideNsfwPreviews}
+            autoMatchEnabled={autoMatchEnabled}
             onApplyMatch={onApplyMatch}
             onViewMatch={onViewMatch}
             onMakeCustom={onMakeCustom}
@@ -2469,6 +2545,7 @@ function BulkUnknownFixModal({
 function UnknownMatchPanel({
   state,
   hideNsfwPreviews,
+  autoMatchEnabled,
   onApplyMatch,
   onViewMatch,
   onMakeCustom,
@@ -2484,6 +2561,7 @@ function UnknownMatchPanel({
     cancelled?: boolean;
   };
   hideNsfwPreviews: boolean;
+  autoMatchEnabled: boolean;
   onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
   onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
   onMakeCustom: (mod: Mod) => void;
@@ -2561,7 +2639,7 @@ function UnknownMatchPanel({
           applying={applying}
           onApply={() => void handleApply(foundMatch)}
           onView={() => onViewMatch(mod, foundMatch)}
-          onRetry={handleRetry}
+          onRetry={autoMatchEnabled ? handleRetry : undefined}
         />
       )}
 
@@ -2593,14 +2671,16 @@ function UnknownMatchPanel({
             </div>
           </div>
           <div className="border-t border-white/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={RotateCcw}
-              onClick={handleRetry}
-            >
-              Retry
-            </Button>
+            {autoMatchEnabled && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={RotateCcw}
+                onClick={handleRetry}
+              >
+                Retry
+              </Button>
+            )}
             {match.status !== 'error' && (
               <Button
                 variant="secondary"
@@ -2615,7 +2695,7 @@ function UnknownMatchPanel({
         </div>
       )}
 
-      {!loading && !error && !result && (
+      {!loading && !error && !result && autoMatchEnabled && (
         <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             {cancelled ? (
@@ -2633,6 +2713,29 @@ function UnknownMatchPanel({
           >
             Search
           </Button>
+        </div>
+      )}
+
+      {!loading && !error && !result && !autoMatchEnabled && (
+        <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 space-y-3">
+          <div className="flex items-start gap-3 text-sm text-text-secondary">
+            <Beaker className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+            <span>
+              Automatic GameBanana matching is off. It hits rate limits on larger
+              libraries; we're reworking it. Enable it under Settings (Experimental
+              Features) once you're ready to retry, or add custom metadata below.
+            </span>
+          </div>
+          <div className="flex justify-end">
+            <Button
+              variant="primary"
+              size="sm"
+              icon={FilePlus}
+              onClick={() => onMakeCustom(mod)}
+            >
+              Make Custom Mod
+            </Button>
+          </div>
         </div>
       )}
     </div>
@@ -2658,7 +2761,9 @@ function UnknownMatchCard({
   applying: boolean;
   onApply: () => void;
   onView: () => void;
-  onRetry: () => void;
+  /** Omitted when the experimental matcher is disabled (nothing to retry
+   *  against), so the card hides the Retry button entirely. */
+  onRetry?: () => void;
 }) {
   return (
     <div className="rounded-md border border-state-success/35 bg-state-success/10 overflow-hidden">
@@ -2716,15 +2821,17 @@ function UnknownMatchCard({
         >
           View Mod
         </Button>
-        <Button
-          variant="secondary"
-          size="sm"
-          icon={RotateCcw}
-          disabled={applying}
-          onClick={onRetry}
-        >
-          Retry
-        </Button>
+        {onRetry && (
+          <Button
+            variant="secondary"
+            size="sm"
+            icon={RotateCcw}
+            disabled={applying}
+            onClick={onRetry}
+          >
+            Retry
+          </Button>
+        )}
         <Button
           variant="success"
           size="sm"
@@ -2767,6 +2874,9 @@ interface ModCardProps {
   onDelete: () => void;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
+  /** Collision-tolerant priority commit. Passed through to PriorityEditor so
+   *  retyping an already-used slot insert-shifts instead of throwing. */
+  onCommitPriority?: (newPriority: number) => Promise<void>;
   /** Open the unmerge confirm flow. Only meaningful when `mod.merged` is set. */
   onUnmerge?: () => void;
   /** Copy the merged mod's share code to the clipboard. */
@@ -2810,6 +2920,7 @@ function ModCard({
   onDelete,
   onFixUnknown,
   fixingUnknown,
+  onCommitPriority,
   onUnmerge,
   onCopyShareCode,
   selectMode,
@@ -2961,6 +3072,7 @@ function ModCard({
                   modName={mod.name}
                   priority={mod.priority}
                   variant="overlay"
+                  onCommit={onCommitPriority}
                 />
               </div>
             )}
@@ -3238,6 +3350,7 @@ function ModCard({
                     modName={mod.name}
                     priority={mod.priority}
                     variant="inline"
+                    onCommit={onCommitPriority}
                   />
                 </span>
               )}

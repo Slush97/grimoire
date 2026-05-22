@@ -895,6 +895,15 @@ export default function Settings() {
               label="Grimoire Social"
               description="Sign in with Steam to publish profiles and browse uploads from other players in Discover."
             />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.experimentalUnknownModMatching ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalUnknownModMatching: checked })}
+              label="Fix Unknown Mods"
+              description="Auto-match unknown local VPKs against GameBanana to recover their names and thumbnails. Currently hits rate limits on larger libraries while we rework it. The manual Custom Mod path stays available either way."
+            />
           </div>
         </Card>
 
