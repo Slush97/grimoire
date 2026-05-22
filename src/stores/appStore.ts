@@ -22,7 +22,10 @@ export interface BrowseUiState {
   viewMode: BrowseViewMode;
   sort: BrowseSortOption;
   section: string;
-  heroCategoryId: number | 'all';
+  // 'none' is a Sound-only pseudo-hero: "show me sound mods whose title
+  // doesn't resolve to any known hero" (item sounds, UI, music, etc.).
+  // For Mod section it collapses to 'all' since every Skin lives under a hero.
+  heroCategoryId: number | 'all' | 'none';
   categoryId: number | 'all';
 }
 

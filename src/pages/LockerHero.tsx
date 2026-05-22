@@ -555,7 +555,7 @@ export function LockerHeroView({
               heroName={hero.name}
               emptyMessage={
                 activeSection === 'sounds'
-                  ? 'No sound mods tagged for this hero yet. Tag one from the Locker.'
+                  ? 'No sound mods tagged for this hero yet. Tag one from Installed (multi-select → Tag).'
                   : 'Download a skin for this hero to manage it here.'
               }
               minaPresets={activeSection === 'skins' ? minaPresets : []}

@@ -26,6 +26,7 @@ import {
   Scissors,
   Share2,
   Beaker,
+  Tag as TagIcon,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -42,7 +43,8 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES } from '../lib/lockerUtils';
+import { setModLockerHero } from '../lib/api';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
@@ -259,7 +261,7 @@ export default function Installed() {
   // action bar swaps its buttons for a "Enabling 2/5…" line so users see
   // incremental progress on large selections.
   const [bulkProgress, setBulkProgress] = useState<{
-    verb: 'Enabling' | 'Disabling';
+    verb: 'Enabling' | 'Disabling' | 'Tagging';
     done: number;
     total: number;
   } | null>(null);
@@ -836,6 +838,48 @@ export default function Installed() {
     }
     setBulkProgress(null);
     exitSelectMode();
+  };
+
+  // Bulk lockerHero retag. Writes the manual tag for every selected mod and
+  // refreshes — Locker grouping picks the change up on its next mods read.
+  // Pass null to clear the manual tag and fall back to title/category inference.
+  const [tagMenuOpen, setTagMenuOpen] = useState(false);
+  const tagMenuRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!tagMenuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (tagMenuRef.current && !tagMenuRef.current.contains(e.target as Node)) {
+        setTagMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setTagMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [tagMenuOpen]);
+
+  const handleBulkTag = async (heroName: string | null) => {
+    if (selectedMods.length === 0) return;
+    setTagMenuOpen(false);
+    const targets = [...selectedMods];
+    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        await setModLockerHero(targets[i].id, heroName);
+        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
+      }
+      await loadMods();
+    } catch (err) {
+      console.error('[Installed] Bulk tag failed:', err);
+    } finally {
+      setBulkProgress(null);
+      exitSelectMode();
+    }
   };
 
   const openBulkDeleteConfirm = () => {
@@ -2241,6 +2285,48 @@ export default function Installed() {
                   Merge{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
                 </Button>
               )}
+              <div className="relative" ref={tagMenuRef}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={selectedMods.length === 0}
+                  icon={TagIcon}
+                  onClick={() => setTagMenuOpen((v) => !v)}
+                  title={
+                    selectedMods.length === 0
+                      ? 'Select mods to tag for the Locker'
+                      : `Tag ${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'} for a hero in the Locker`
+                  }
+                >
+                  Tag{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
+                </Button>
+                {tagMenuOpen && selectedMods.length > 0 && (
+                  <div
+                    role="dialog"
+                    aria-label="Tag selected mods for a hero"
+                    className="absolute bottom-full mb-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => handleBulkTag(null)}
+                      className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary cursor-pointer"
+                    >
+                      Clear manual tag
+                    </button>
+                    <div className="my-1 h-px bg-border" />
+                    {HERO_NAMES.map((name) => (
+                      <button
+                        key={name}
+                        type="button"
+                        onClick={() => handleBulkTag(name)}
+                        className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-primary cursor-pointer"
+                      >
+                        {name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <Button
                 variant="danger"
                 size="sm"

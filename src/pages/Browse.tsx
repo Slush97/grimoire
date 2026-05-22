@@ -167,7 +167,7 @@ export default function Browse() {
   const setViewMode = useCallback((v: ViewMode) => setBrowseUi({ viewMode: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
-  const setHeroCategoryId = useCallback((v: number | 'all') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
+  const setHeroCategoryId = useCallback((v: number | 'all' | 'none') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
   const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
 
   // Hydrate from session cache on mount so navigating away + back doesn't
@@ -313,8 +313,11 @@ export default function Browse() {
     fetchInitialQueueState();
   }, []);
 
+  // 'none' = client-side post-filter for Sound mods without a hero in the
+  // title. The fetch path sees it as "no category filter" so the API doesn't
+  // get a nonsense id; the actual exclusion happens against displayMods.
   const effectiveCategoryId =
-    heroCategoryId === 'all'
+    heroCategoryId === 'all' || heroCategoryId === 'none'
       ? (categoryId === 'all' ? undefined : categoryId)
       : heroCategoryId;
 
@@ -1144,9 +1147,16 @@ export default function Browse() {
 
   // Just use all loaded mods - infinite scroll handles pagination.
   // Hide outdated mods if the user has opted in.
-  const displayMods = settings?.hideOutdatedMods
+  let displayMods = settings?.hideOutdatedMods
     ? mods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified))
     : mods;
+  // "(No hero)" Sound filter — GameBanana Sound categories don't carry hero
+  // metadata, so hero association is purely from the title. When the user
+  // picks the pseudo-hero "none", drop anything whose title matches a known
+  // hero so they see item/UI/music/announcer sounds only.
+  if (section === 'Sound' && heroCategoryId === 'none') {
+    displayMods = displayMods.filter((m) => inferHeroFromTitle(m.name) === null);
+  }
 
   if (!activeDeadlockPath) {
     return (
@@ -1401,7 +1411,7 @@ export default function Browse() {
 
                   {filtersOpen && (
                     <div
-                      className="absolute right-0 top-full mt-2 z-20 w-72 bg-bg-secondary border border-border rounded-lg shadow-xl p-4 animate-fade-in"
+                      className="absolute right-0 top-full mt-2 z-50 w-72 bg-bg-secondary border border-border rounded-lg shadow-xl p-4 animate-fade-in"
                       role="dialog"
                       aria-label="Filters"
                     >
@@ -1427,10 +1437,18 @@ export default function Browse() {
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Hero</span>
                             <select
                               value={String(heroCategoryId)}
-                              onChange={(e) => setHeroCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                              onChange={(e) => {
+                                const v = e.target.value;
+                                if (v === 'all') setHeroCategoryId('all');
+                                else if (v === 'none') setHeroCategoryId('none');
+                                else setHeroCategoryId(Number(v));
+                              }}
                               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">All Heroes</option>
+                              {section === 'Sound' && (
+                                <option value="none">No hero (item / UI / music)</option>
+                              )}
                               {heroOptions.map((hero) => (
                                 <option key={hero.id} value={String(hero.id)}>{hero.label}</option>
                               ))}
