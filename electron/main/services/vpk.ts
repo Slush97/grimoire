@@ -296,9 +296,13 @@ export function inferHeroFromVpkPaths(paths: string[]): string | null {
 /**
  * Convenience wrapper: parse the VPK directory and run the path-based
  * inference. Returns null when the VPK can't be parsed or no hero matches.
+ *
+ * Uses the cached parser because enrichMod calls this once per Sound mod on
+ * every scan, and failed inferences are not persisted: without the cache we
+ * re-open the same VPK on every get-mods, import, enable, and reorder.
  */
 export function inferHeroFromVpk(vpkPath: string): string | null {
-    const paths = parseVpkDirectory(vpkPath);
+    const paths = parseVpkDirectoryCached(vpkPath);
     if (!paths || paths.length === 0) return null;
     return inferHeroFromVpkPaths(paths);
 }
