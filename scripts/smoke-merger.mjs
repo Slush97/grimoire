@@ -15,7 +15,7 @@
 import { spawn } from 'node:child_process';
 import { gzipSync, gunzipSync } from 'node:zlib';
 import { createHash } from 'node:crypto';
-import { promises as fs, existsSync, openSync, readSync, closeSync } from 'node:fs';
+import { promises as fs, existsSync, openSync, readSync, closeSync, readdirSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -26,13 +26,65 @@ const SMOKE_DIR = '/tmp/grimoire-smoke';
 const ADDONS = join(SMOKE_DIR, 'addons');
 const VPKMERGE = join(REPO, 'resources', 'vpkmerge', 'vpkmerge-linux-x86_64');
 
-const DEADLOCK_ADDONS = '/home/esoc/.steam/steam/steamapps/common/Deadlock/game/citadel/addons';
-// Smallest two real mods on disk. Smoke-test stays fast and never touches
-// the real install (we copy out to /tmp).
-const SOURCE_MODS = [
-    `${DEADLOCK_ADDONS}/.disabled/pak12_dir.vpk`,
-    `${DEADLOCK_ADDONS}/.disabled/pak02_dir.vpk`,
-];
+// Where to look for real VPKs. Override with GRIMOIRE_DEADLOCK_ADDONS for
+// non-standard installs (or to point at a fixture directory in CI).
+const DEADLOCK_ADDONS = process.env.GRIMOIRE_DEADLOCK_ADDONS
+    || '/home/esoc/.steam/steam/steamapps/common/Deadlock/game/citadel/addons';
+
+/** Pick the two smallest pak##_dir.vpk files from addons/ and addons/.disabled/.
+ *  Smallest-first keeps the smoke test fast: a couple of single-asset mods is
+ *  enough to validate vpkmerge spawn shape. Override the whole pair with
+ *  GRIMOIRE_SMOKE_SOURCE_MODS=path1,path2 if you want specific files.
+ *  Never touches the real install: caller copies these out to /tmp. */
+function discoverSourceMods() {
+    const override = process.env.GRIMOIRE_SMOKE_SOURCE_MODS;
+    if (override) {
+        const paths = override.split(',').map((p) => p.trim()).filter(Boolean);
+        if (paths.length < 2) {
+            throw new Error('GRIMOIRE_SMOKE_SOURCE_MODS must list at least 2 comma-separated paths');
+        }
+        return paths.slice(0, 2);
+    }
+
+    const candidates = [];
+    for (const root of [DEADLOCK_ADDONS, join(DEADLOCK_ADDONS, '.disabled')]) {
+        if (!existsSync(root)) continue;
+        for (const name of readdirSync(root)) {
+            if (!/^pak\d+_dir\.vpk$/.test(name)) continue;
+            const p = join(root, name);
+            try { candidates.push({ path: p, size: statSync(p).size }); } catch { /* ignore */ }
+        }
+    }
+    if (candidates.length < 2) {
+        throw new Error(
+            `Need at least 2 pak##_dir.vpk files in ${DEADLOCK_ADDONS} (or its .disabled/), ` +
+            `found ${candidates.length}. Set GRIMOIRE_DEADLOCK_ADDONS or GRIMOIRE_SMOKE_SOURCE_MODS.`
+        );
+    }
+    candidates.sort((a, b) => a.size - b.size);
+    return [candidates[0].path, candidates[1].path];
+}
+
+let SOURCE_MODS = [];
+
+/** Read the prod inflate cap straight out of portableProfile.ts so this script
+ *  can't silently lie about which cap it's verifying. Single source of truth
+ *  for the value; the assertion message and the local decoder's
+ *  maxOutputLength both derive from this. */
+async function readProdShareCodeCap() {
+    const path = join(REPO, 'electron', 'main', 'services', 'portableProfile.ts');
+    const src = await fs.readFile(path, 'utf8');
+    const m = src.match(/MAX_INFLATED_SHARE_CODE_BYTES\s*=\s*(\d+)\s*\*\s*(\d+)\s*;/);
+    if (!m) {
+        throw new Error(
+            `Could not parse MAX_INFLATED_SHARE_CODE_BYTES from ${path}. ` +
+            `If the literal form changed, update readProdShareCodeCap().`
+        );
+    }
+    return parseInt(m[1], 10) * parseInt(m[2], 10);
+}
+
+let PROD_SHARE_CODE_CAP = 0;
 
 function ok(msg)   { console.log(`  \x1b[32m✓\x1b[0m ${msg}`); }
 function fail(msg) { console.log(`  \x1b[31m✗\x1b[0m ${msg}`); process.exitCode = 1; }
@@ -51,7 +103,7 @@ function encodeShareCode(json) {
 }
 function decodeShareCode(code) {
     if (!code.startsWith('mp1:')) throw new Error('missing mp1: prefix');
-    return gunzipSync(base64UrlDecode(code.slice(4)), { maxOutputLength: 16 * 1024 }).toString('utf8');
+    return gunzipSync(base64UrlDecode(code.slice(4)), { maxOutputLength: PROD_SHARE_CODE_CAP }).toString('utf8');
 }
 
 function runVpkmerge(args) {
@@ -208,7 +260,7 @@ function testShareCodeRoundtrip() {
         fail('bomb payload was accepted (size cap not enforced)');
     } catch (err) {
         if (err.message.toLowerCase().includes('output') || err.message.toLowerCase().includes('size') || err.message.toLowerCase().includes('large')) {
-            ok('oversized payload rejected by 16KB output cap');
+            ok(`oversized payload rejected by ${Math.round(PROD_SHARE_CODE_CAP / 1024)}KB output cap`);
         } else {
             fail(`bomb test failed with unexpected error: ${err.message}`);
         }
@@ -222,12 +274,11 @@ async function main() {
         fail(`vpkmerge binary not at ${VPKMERGE}. Run \`pnpm fetch-vpkmerge\` first.`);
         return;
     }
-    for (const src of SOURCE_MODS) {
-        if (!existsSync(src)) {
-            fail(`Source mod missing: ${src}`);
-            return;
-        }
-    }
+
+    PROD_SHARE_CODE_CAP = await readProdShareCodeCap();
+    SOURCE_MODS = discoverSourceMods();
+    ok(`prod inflate cap: ${PROD_SHARE_CODE_CAP / 1024} KB (parsed from portableProfile.ts)`);
+    ok(`source mods: ${SOURCE_MODS.map((p) => p.split('/').slice(-2).join('/')).join(', ')}`);
 
     await setup();
     try {
