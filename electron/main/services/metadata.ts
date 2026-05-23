@@ -32,6 +32,12 @@ export interface ModMetadata {
     /** Set when this VPK was produced by mergeMods. The share code +
      *  source list are the unroll payload. */
     merged?: import('../../../src/types/mod').MergedModInfo;
+    /** Manual opt-out from update detection. When true, the renderer
+     *  excludes this mod from the "update available" check even if the
+     *  installed gameBananaFileId is gone from the live file list. Useful
+     *  when the user wants to stay on a specific version after the author
+     *  replaces or rearranges files. */
+    ignoreUpdates?: boolean;
 }
 
 export type ModMetadataMap = Record<string, ModMetadata>;

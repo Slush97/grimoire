@@ -90,6 +90,7 @@ function enrichMod(mod: Mod): Mod {
             sourceFileName: metadata.sourceFileName,
             lockerHero,
             merged: metadata.merged,
+            ignoreUpdates: metadata.ignoreUpdates,
         };
     }
     return { ...mod, isUnknown };
@@ -326,6 +327,28 @@ ipcMain.handle(
         const trimmed = heroName?.trim() ?? '';
         setModMetadata(target.fileName, {
             lockerHero: trimmed.length > 0 ? trimmed : undefined,
+        });
+        return enrichMod(target);
+    }
+);
+
+// set-mod-ignore-updates — manual opt-out from the update-available flag.
+// Pass false to clear and resume normal update detection. Stored alongside
+// other per-mod metadata so it survives priority renames.
+ipcMain.handle(
+    'set-mod-ignore-updates',
+    async (_, modId: string, ignore: boolean): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        setModMetadata(target.fileName, {
+            ignoreUpdates: ignore ? true : undefined,
         });
         return enrichMod(target);
     }

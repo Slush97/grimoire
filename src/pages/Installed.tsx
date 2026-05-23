@@ -31,7 +31,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, setModPriority as apiSetModPriority, reorderMods as apiReorderMods } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, setModPriority as apiSetModPriority, reorderMods as apiReorderMods, setModIgnoreUpdates } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, UnknownModFilterGuess } from '../types/mod';
@@ -299,6 +299,7 @@ export default function Installed() {
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
   const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
+  const [detailsIgnoreUpdates, setDetailsIgnoreUpdates] = useState(false);
   const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
   // GameBanana fileIds of enabled files in the group. Drives the "Active"
   // badges in the details modal when multiple files are enabled together.
@@ -345,6 +346,7 @@ export default function Installed() {
     setDetailsInstalledFileIds(siblingFileIds);
     setDetailsActiveFileIds(activeFileIds);
     setDetailsUpdateAvailable(updatesAvailable.has(m.id));
+    setDetailsIgnoreUpdates(!!m.ignoreUpdates);
     setDetailsDates(null);
     try {
       const [details, cached] = await Promise.all([
@@ -366,9 +368,28 @@ export default function Installed() {
     setDetailsMod(null);
     setDetailsError(null);
     setDetailsUpdateAvailable(false);
+    setDetailsIgnoreUpdates(false);
     setDetailsSourceModId(null);
     setDetailsActiveFileIds(new Set());
     setDetailsDates(null);
+  };
+
+  // Flip the ignoreUpdates flag for the currently-open installed mod and
+  // refresh the mods store so the next updatesAvailable recompute (driven by
+  // the [mods] useEffect) picks the new flag up. Optimistically toggle the
+  // local state first so the pill flips immediately even if the IPC + scan
+  // round-trip is slow.
+  const handleToggleIgnoreUpdates = async () => {
+    if (!detailsSourceModId) return;
+    const next = !detailsIgnoreUpdates;
+    setDetailsIgnoreUpdates(next);
+    try {
+      await setModIgnoreUpdates(detailsSourceModId, next);
+      await loadMods({ silent: true });
+    } catch (err) {
+      console.error('[Installed] toggle ignoreUpdates failed:', err);
+      setDetailsIgnoreUpdates(!next);
+    }
   };
 
   const inspectUnknownModFilters = async (
@@ -1199,11 +1220,15 @@ export default function Installed() {
       // Absorbed merge sources are intentionally excluded: updating them on
       // disk would leave the merged VPK stale, so we don't flag updates the
       // user can't act on without unmerging first.
+      // Mods with `ignoreUpdates` set are excluded too: the user pinned the
+      // installed version on purpose (e.g. the author replaced the file with
+      // one they don't want) and shouldn't see the pulse.
       const targets = visibleMods.filter(
         (m) =>
           !!m.gameBananaId &&
           typeof m.gameBananaFileId === 'number' &&
-          m.gameBananaFileId > 0,
+          m.gameBananaFileId > 0 &&
+          !m.ignoreUpdates,
       );
       if (targets.length === 0) {
         setUpdatesAvailable(new Set());
@@ -2062,6 +2087,8 @@ export default function Installed() {
           dateAdded={detailsDates?.dateAdded}
           dateModified={detailsDates?.dateModified}
           updateAvailable={detailsUpdateAvailable}
+          ignoreUpdates={detailsIgnoreUpdates}
+          onToggleIgnoreUpdates={handleToggleIgnoreUpdates}
           onClose={closeModDetails}
           onDownload={handleDetailsDownload}
         />

@@ -68,6 +68,9 @@ export interface Mod {
   /** Set when this mod was produced by mergeMods. Carries the unroll payload
    *  (share code + source list). */
   merged?: MergedModInfo;
+  /** User opted out of the "update available" flag for this mod. Persisted
+   *  in metadata; toggled from the mod details modal. */
+  ignoreUpdates?: boolean;
 }
 
 export interface MergeModsArgs {

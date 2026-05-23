@@ -55,6 +55,9 @@ export interface Mod {
     /** Populated when this VPK was produced by mergeMods. The metadata
      *  enricher reads this from the mod metadata sidecar. */
     merged?: import('../../../src/types/mod').MergedModInfo;
+    /** User opted out of the "update available" flag for this mod. The
+     *  enricher reads this from the mod metadata sidecar. */
+    ignoreUpdates?: boolean;
 }
 
 /**

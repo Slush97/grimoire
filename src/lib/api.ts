@@ -88,6 +88,13 @@ export async function setModLockerHero(
   return window.electronAPI.setModLockerHero(modId, heroName);
 }
 
+export async function setModIgnoreUpdates(
+  modId: string,
+  ignore: boolean
+): Promise<Mod> {
+  return window.electronAPI.setModIgnoreUpdates(modId, ignore);
+}
+
 export async function backfillGameBananaFileId(
   modId: string,
   payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }

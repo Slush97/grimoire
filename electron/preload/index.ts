@@ -50,6 +50,7 @@ export interface ElectronAPI {
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
+    setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
@@ -770,6 +771,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-variant-label', modId, label),
     setModLockerHero: (modId: string, heroName: string | null) =>
         ipcRenderer.invoke('set-mod-locker-hero', modId, heroName),
+    setModIgnoreUpdates: (modId: string, ignore: boolean) =>
+        ipcRenderer.invoke('set-mod-ignore-updates', modId, ignore),
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }

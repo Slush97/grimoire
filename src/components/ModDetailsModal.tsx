@@ -15,6 +15,8 @@ import {
   CheckCircle2,
   Power,
   Maximize2,
+  BellOff,
+  Bell,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type { GameBananaModDetails, GameBananaComment, GameBananaFile } from '../types/gamebanana';
@@ -47,6 +49,11 @@ interface ModDetailsModalProps {
   dateAdded?: number;
   dateModified?: number;
   updateAvailable?: boolean;
+  /** When provided, render a toggle next to the Update/Installed badge that
+   *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
+   *  installed-mod path; Browse leaves both undefined. */
+  ignoreUpdates?: boolean;
+  onToggleIgnoreUpdates?: () => void;
   onClose: () => void;
   onDownload: (fileId: number, fileName: string) => void;
 }
@@ -66,6 +73,8 @@ export default function ModDetailsModal({
   dateAdded,
   dateModified,
   updateAvailable,
+  ignoreUpdates,
+  onToggleIgnoreUpdates,
   onClose,
   onDownload,
 }: ModDetailsModalProps) {
@@ -310,6 +319,38 @@ export default function ModDetailsModal({
                 <CheckCircle2 className="w-2.5 h-2.5" />
                 Installed
               </span>
+            )}
+            {/* Only surface the ignore-updates pill in the installed-mod
+                context (handler provided) and when it's actually relevant:
+                either there's an update available now, or the user already
+                opted out and might want to re-enable detection. */}
+            {onToggleIgnoreUpdates && installed && (ignoreUpdates || updateAvailable) && (
+              <button
+                type="button"
+                onClick={onToggleIgnoreUpdates}
+                className={
+                  ignoreUpdates
+                    ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'
+                    : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent hover:border-accent/40 transition-colors'
+                }
+                title={
+                  ignoreUpdates
+                    ? 'Currently ignoring updates for this mod. Click to resume detection.'
+                    : 'Stop flagging updates for this mod (you can re-enable later).'
+                }
+              >
+                {ignoreUpdates ? (
+                  <>
+                    <BellOff className="w-2.5 h-2.5" />
+                    Updates ignored
+                  </>
+                ) : (
+                  <>
+                    <Bell className="w-2.5 h-2.5" />
+                    Ignore updates
+                  </>
+                )}
+              </button>
             )}
             {outdated && (
               <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 border border-yellow-500/40">
