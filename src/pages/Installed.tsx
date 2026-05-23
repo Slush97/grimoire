@@ -724,6 +724,16 @@ export default function Installed() {
       }
     }
 
+    // Drop touched gbIds from the update-check cache before we re-derive
+    // the updatesAvailable set. The cache is module-scoped and never expires
+    // otherwise, so the post-update useEffect would otherwise reuse the same
+    // liveIds snapshot that flagged the mod in the first place and the
+    // "update available" pulse would stick around on the freshly installed
+    // file.
+    for (const gbId of groups.keys()) {
+      updateCheckCache.delete(gbId);
+    }
+
     // Refresh once so the new installs are in the store with their new ids,
     // then re-enable anything that was enabled before. Match by GB ids; the
     // local mod id changes on reinstall.
