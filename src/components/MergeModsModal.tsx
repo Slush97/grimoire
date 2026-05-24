@@ -18,8 +18,9 @@ interface Props {
  * variant per group enters the merge, because variants of the same mod
  * occupy the same in-game file paths and would just override each other.
  *
- * The merger itself sorts inputs by priority so the highest-priority source
- * wins on collisions (matches Deadlock's higher-pakNN-wins behavior).
+ * The merger itself orders inputs by priority so the highest-priority source
+ * (the lowest pakNN) wins on collisions, matching Deadlock's lower-pakNN-wins
+ * behavior.
  *
  * No thumbnail upload here. Users can override the merged mod's thumbnail
  * from the mod details modal after the fact if they want to.
@@ -238,7 +239,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
             <span>
               Strict mode
               <span className="block text-xs text-text-secondary mt-0.5">
-                Abort if two mods touch the same file path. Off by default (later/higher-priority wins).
+                Abort if two mods touch the same file path. Off by default (higher-priority mod wins).
               </span>
             </span>
           </label>
