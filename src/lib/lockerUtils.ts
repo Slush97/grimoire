@@ -132,12 +132,29 @@ export function heroAssetBaseName(name: string): string {
   return name.trim().replace(/\s+/g, '_');
 }
 
+export function heroIconAssetName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 export function getHeroRenderPath(name: string): string {
   return getAssetPath(`/locker/heroes/${heroAssetBaseName(name)}_Render.png`);
 }
 
 export function getHeroNamePath(name: string): string {
   return getAssetPath(`/locker/names/${heroAssetBaseName(name)}_name.png`);
+}
+
+export function getHeroIconPath(name: string): string {
+  return getAssetPath(`/heroes/icons/${heroIconAssetName(name)}.png`);
+}
+
+export function getHeroChipIconPath(name: string): string {
+  return getAssetPath(`/heroes/chip-icons/${heroIconAssetName(name)}.png`);
 }
 
 export function getHeroWikiUrl(name: string): string {

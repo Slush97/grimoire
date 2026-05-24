@@ -19,6 +19,7 @@
   "scripts": {
     "postinstall": "node scripts/fetch-vpkmerge.mjs",
     "fetch-vpkmerge": "node scripts/fetch-vpkmerge.mjs",
+    "fetch-hero-icons": "node scripts/fetch-hero-icons.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",

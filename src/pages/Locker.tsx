@@ -20,6 +20,7 @@ import type { GlobalModType, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
 import { Tag } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
+import { HeroSelect } from '../components/common/HeroSelect';
 import {
   FAVORITE_HEROES_KEY,
   GLOBAL_MOD_TYPE_LABELS,
@@ -670,22 +671,22 @@ export default function Locker() {
                       {isSound ? 'Sound · ' : ''}
                       {subtitle}
                     </div>
-                    <select
-                      aria-label={`Tag ${mod.name} as a hero`}
+                    <HeroSelect
+                      ariaLabel={`Tag ${mod.name} as a hero`}
                       value={mod.lockerHero ?? ''}
-                      onChange={(event) => {
-                        const next = event.target.value;
+                      onChange={(next) => {
                         void tagModHero(mod.id, next.length > 0 ? next : null);
                       }}
-                      className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs text-text-primary hover:border-accent/60 cursor-pointer"
-                    >
-                      <option value="">Tag as hero…</option>
-                      {tagHeroOptions.map((hero) => (
-                        <option key={hero.id} value={hero.name}>
-                          {hero.name}
-                        </option>
-                      ))}
-                    </select>
+                      size="sm"
+                      options={[
+                        { value: '', label: 'Tag as hero...', muted: true },
+                        ...tagHeroOptions.map((hero) => ({
+                          value: hero.name,
+                          label: hero.name,
+                          heroName: hero.name,
+                        })),
+                      ]}
+                    />
                   </div>
                 </div>
               );

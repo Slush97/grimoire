@@ -25,7 +25,6 @@ import {
   Share2,
   Beaker,
   PowerOff,
-  Sparkles,
   Tag as TagIcon,
   Pencil,
   MoreHorizontal,
@@ -45,7 +44,7 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS } from '../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS } from '../lib/lockerUtils';
 import { setModGlobalType } from '../lib/api';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
@@ -1083,6 +1082,26 @@ export default function Installed() {
     }
   };
 
+  const handleBulkClearTag = async () => {
+    if (selectedMods.length === 0) return;
+    setTagMenuOpen(false);
+    const targets = [...selectedMods];
+    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        await setModLockerHero(targets[i].id, null);
+        await setModGlobalType(targets[i].id, null);
+        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
+      }
+      await loadMods();
+    } catch (err) {
+      console.error('[Installed] Bulk tag clear failed:', err);
+    } finally {
+      setBulkProgress(null);
+      exitSelectMode();
+    }
+  };
+
   // Bulk-assign a Global (non-hero) cosmetic type to the selection, used when
   // the VPK-path classifier missed a mod or filed it wrong. Mirrors handleBulkTag
   // but writes the globalType axis; the main-process handler clears any hero tag.
@@ -1895,6 +1914,9 @@ export default function Installed() {
           onDelete={() => setModToDelete({ ids: [mod.id], name: mod.name, isGroup: false })}
           onEditLocal={!mod.gameBananaId ? () => setLocalEditMod(mod) : undefined}
           onTagLocker={(heroName) => setModLockerHero(mod.id, heroName)}
+          onTagGlobal={async (globalType) => {
+            await setModGlobalType(mod.id, globalType);
+          }}
           onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
           fixingUnknown={unknownFilterPendingIds.has(mod.id)}
           onCommitPriority={(p) => commitPriorityForMod(mod.id, p)}
@@ -2009,6 +2031,11 @@ export default function Installed() {
         onTagLocker={async (heroName) => {
           for (const variant of entry.variants) {
             await setModLockerHero(variant.id, heroName);
+          }
+        }}
+        onTagGlobal={async (globalType) => {
+          for (const variant of entry.variants) {
+            await setModGlobalType(variant.id, globalType);
           }
         }}
         onCommitPriority={(p) => commitPriorityForMod(entry.primary.id, p)}
@@ -2785,10 +2812,10 @@ export default function Installed() {
                   >
                     <button
                       type="button"
-                      onClick={() => handleBulkTag(null)}
+                      onClick={() => handleBulkClearTag()}
                       className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary cursor-pointer"
                     >
-                      Clear hero tag
+                      Clear Locker tag
                     </button>
                     <div className="my-1 h-px bg-border" />
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
@@ -2813,9 +2840,9 @@ export default function Installed() {
                         key={name}
                         type="button"
                         onClick={() => handleBulkTag(name)}
-                        className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-primary cursor-pointer"
+                        className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary cursor-pointer"
                       >
-                        {name}
+                        <HeroTagLabel heroName={name} />
                       </button>
                     ))}
                   </div>
@@ -3460,6 +3487,7 @@ interface ModCardProps {
     isUnknown?: boolean;
     lockerHero?: string;
     lockerHeroSource?: Mod['lockerHeroSource'];
+    globalType?: GlobalModType;
     merged?: import('../types/mod').MergedModInfo;
   };
   viewMode: ViewMode;
@@ -3472,6 +3500,7 @@ interface ModCardProps {
   onDelete: () => void;
   onEditLocal?: () => void;
   onTagLocker?: (heroName: string | null) => void | Promise<void>;
+  onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
   /** Collision-tolerant priority commit. Passed through to PriorityEditor so
@@ -3678,6 +3707,9 @@ interface ModListRowContentProps {
   metaChipClasses: string;
   manualTagChipClasses: string;
   inferredTagChipClasses: string;
+  dangerInlineChipClasses: string;
+  accentInlineChipClasses: string;
+  tagIconClassName: string;
   technicalMetaClasses: string;
   actions: ReactNode;
 }
@@ -3697,27 +3729,79 @@ function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
   }
 }
 
+function ChipText({ children }: { children: ReactNode }) {
+  return <span className="relative -top-[0.5px] min-w-0 truncate leading-[14px]">{children}</span>;
+}
+
+function HeroTagLabel({ heroName, iconClassName = 'h-4 w-4' }: { heroName: string; iconClassName?: string }) {
+  return (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle leading-none">
+      <img
+        src={getHeroChipIconPath(heroName)}
+        alt=""
+        aria-hidden="true"
+        className={`${iconClassName} block flex-shrink-0 rounded-full object-cover`}
+        loading="lazy"
+      />
+      <ChipText>{heroName}</ChipText>
+    </span>
+  );
+}
+
+function heroNameForLabel(label?: string): string | null {
+  if (!label) return null;
+  const needle = label.trim().toLowerCase();
+  return HERO_NAMES.find((name) => name.toLowerCase() === needle) ?? null;
+}
+
+function CategoryChip({
+  label,
+  className,
+  iconClassName = 'h-4 w-4',
+}: {
+  label: string;
+  className: string;
+  iconClassName?: string;
+}) {
+  const heroName = heroNameForLabel(label);
+  return (
+    <span className={className} title={label}>
+      {heroName ? (
+        <HeroTagLabel heroName={heroName} iconClassName={iconClassName} />
+      ) : (
+        <ChipText>{label}</ChipText>
+      )}
+    </span>
+  );
+}
+
+function MetaTextChip({ label, className, title }: { label: string; className: string; title?: string }) {
+  return (
+    <span className={className} title={title ?? label}>
+      <ChipText>{label}</ChipText>
+    </span>
+  );
+}
+
 function LockerHeroChip({
   mod,
   manualTagChipClasses,
   inferredTagChipClasses,
+  iconClassName = 'h-4 w-4',
 }: {
   mod: { lockerHero?: string; lockerHeroSource?: Mod['lockerHeroSource'] };
   manualTagChipClasses: string;
   inferredTagChipClasses: string;
+  iconClassName?: string;
 }) {
   if (!mod.lockerHero) return null;
   const isManual = mod.lockerHeroSource === 'manual';
-  const Icon = isManual ? TagIcon : Sparkles;
   return (
     <span
       className={isManual ? manualTagChipClasses : inferredTagChipClasses}
       title={`${lockerHeroSourceLabel(mod.lockerHeroSource)}: ${mod.lockerHero}`}
     >
-      <span className="flex h-3 w-3 flex-shrink-0 items-center justify-center" aria-hidden>
-        <Icon className="h-[11px] w-[11px]" strokeWidth={2.25} />
-      </span>
-      {mod.lockerHero}
+      <HeroTagLabel heroName={mod.lockerHero} iconClassName={iconClassName} />
     </span>
   );
 }
@@ -3735,6 +3819,9 @@ function ModListRowContent({
   metaChipClasses,
   manualTagChipClasses,
   inferredTagChipClasses,
+  dangerInlineChipClasses,
+  accentInlineChipClasses,
+  tagIconClassName,
   technicalMetaClasses,
   actions,
 }: ModListRowContentProps) {
@@ -3773,7 +3860,7 @@ function ModListRowContent({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative h-11 w-[72px] flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
+        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
         aria-label={canOpen ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined}
@@ -3807,29 +3894,37 @@ function ModListRowContent({
         )}
       </button>
 
-      <div className="min-w-0">
-        <h3 className="min-w-0 truncate text-[14px] font-medium leading-5 text-text-primary" title={mod.name}>
+      <div className="grid min-w-0 grid-rows-[22px_24px]">
+        <h3 className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary" title={mod.name}>
           {mod.name}
         </h3>
-        <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-text-secondary">
-          {mod.categoryName && <span className={metaChipClasses}>{mod.categoryName}</span>}
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-[11px] leading-[24px] text-text-secondary">
           <LockerHeroChip
             mod={mod}
             manualTagChipClasses={manualTagChipClasses}
             inferredTagChipClasses={inferredTagChipClasses}
+            iconClassName={tagIconClassName}
           />
-          {mod.nsfw && <Tag tone="danger" className="flex-shrink-0">18+</Tag>}
+          {mod.categoryName && (
+            <CategoryChip
+              label={mod.categoryName}
+              className={metaChipClasses}
+              iconClassName={tagIconClassName}
+            />
+          )}
+          {mod.nsfw && (
+            <MetaTextChip label="18+" className={dangerInlineChipClasses} />
+          )}
           <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
           <span className="flex-shrink-0 tabular-nums" title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}>
             {formatRelativeDate(mod.installedAt)}
           </span>
           {group && (
-            <span
-              className="flex-shrink-0 rounded-sm border border-accent/25 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-accent"
+            <MetaTextChip
+              label={`${variantStatusLabel} files`}
+              className={accentInlineChipClasses}
               title={variantStatusTitle}
-            >
-              {variantStatusLabel} files
-            </span>
+            />
           )}
           {!group && (
             <span className={technicalMetaClasses} title={mod.fileName}>
@@ -3839,7 +3934,7 @@ function ModListRowContent({
         </div>
       </div>
 
-      <div className="ml-auto flex min-w-0 items-center justify-end gap-2">
+      <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
         {isSound && (
           <div
             className="hidden w-48 min-w-0 flex-shrink items-center rounded-md border border-white/[0.06] bg-bg-secondary/45 px-2 py-1 opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 lg:flex"
@@ -3874,6 +3969,7 @@ function ModCard({
   onDelete,
   onEditLocal,
   onTagLocker,
+  onTagGlobal,
   onFixUnknown,
   fixingUnknown,
   onCommitPriority,
@@ -3946,6 +4042,39 @@ function ModCard({
     }
   };
 
+  const applyGlobalTag = async (globalType: GlobalModType) => {
+    if (!onTagGlobal || menuBusy) return;
+    setMenuBusy(true);
+    setMenuError(null);
+    try {
+      await onTagGlobal(globalType);
+      setMenuOpen(false);
+      setTagPickerOpen(false);
+    } catch (err) {
+      console.error('[Installed] Failed to set global locker tag:', err);
+      setMenuError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMenuBusy(false);
+    }
+  };
+
+  const clearLockerTag = async () => {
+    if (menuBusy) return;
+    setMenuBusy(true);
+    setMenuError(null);
+    try {
+      await onTagLocker?.(null);
+      await onTagGlobal?.(null);
+      setMenuOpen(false);
+      setTagPickerOpen(false);
+    } catch (err) {
+      console.error('[Installed] Failed to clear locker tag:', err);
+      setMenuError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMenuBusy(false);
+    }
+  };
+
   const indicatorClasses = (() => {
     if (!isDropTarget || !dropPosition) return '';
     const base = 'absolute z-20 bg-accent pointer-events-none rounded-full shadow-[0_0_0_3px_var(--color-bg-primary),0_0_18px_rgba(255,122,47,0.45)]';
@@ -3983,15 +4112,29 @@ function ModCard({
     mod.merged && viewMode === 'grid'
       ? 'shadow-[3px_3px_0_0_var(--color-bg-secondary),3px_3px_0_1px_var(--color-border),6px_6px_0_0_var(--color-bg-secondary),6px_6px_0_1px_var(--color-border)] mr-1.5 mb-1.5'
       : '';
-  const metaChipClasses = 'inline-flex h-[18px] min-w-0 max-w-full items-center overflow-hidden truncate rounded border border-white/[0.06] bg-bg-tertiary/65 px-1.5 text-[11px] leading-none text-text-secondary/80';
-  const manualTagChipClasses = 'inline-flex h-[18px] min-w-0 max-w-full items-center gap-1 overflow-hidden truncate rounded border border-accent/30 bg-accent/10 pl-[5px] pr-1.5 text-[11px] leading-[18px] text-accent';
-  const inferredTagChipClasses = 'inline-flex h-[18px] min-w-0 max-w-full items-center gap-1 overflow-hidden truncate rounded border border-sky-400/25 bg-sky-400/10 pl-[5px] pr-1.5 text-[11px] leading-[18px] text-sky-200/90';
+  const chipMaxClass =
+    viewMode === 'compact' ? 'max-w-[152px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
+  const chipSizeClasses =
+    viewMode === 'list'
+      ? 'h-6 rounded-[7px] px-2 text-[11px]'
+      : viewMode === 'compact'
+        ? 'h-[26px] rounded-lg px-2 text-[12px]'
+        : 'h-7 rounded-lg px-2.5 text-[12px]';
+  const tagIconClassName =
+    viewMode === 'list' ? 'h-[18px] w-[18px]' : viewMode === 'compact' ? 'h-5 w-5' : 'h-[22px] w-[22px]';
+  const baseChipClasses = `inline-flex min-w-0 ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
+  const metaChipClasses = `${baseChipClasses} border border-white/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
+  const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
+  const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
+  const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
+  const accentInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-accent/30 bg-accent/10 text-accent tabular-nums`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
   const menuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary focus:outline-none focus-visible:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50';
   const dangerMenuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-state-danger hover:bg-state-danger/10 focus:outline-none focus-visible:bg-state-danger/10 disabled:cursor-not-allowed disabled:opacity-50';
-  const toggleClasses = `relative h-5 w-10 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary ${
-    mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border hover:border-white/20'
+  const toggleHitboxClasses = 'inline-flex h-9 w-12 items-center justify-center rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary';
+  const toggleTrackClasses = `relative h-6 w-11 rounded-full transition-colors duration-200 ${
+    mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border group-hover/toggle:border-white/20'
   }`;
   const dragSourceClasses =
     draggable && !selectMode ? 'cursor-grab active:cursor-grabbing' : '';
@@ -4005,11 +4148,12 @@ function ModCard({
       ? mod.thumbnailUrl
       : null;
   const shellClasses = isList
-    ? 'grid min-h-[62px] grid-cols-[48px_72px_minmax(0,1fr)_auto] items-center gap-2 px-3.5 py-2'
+    ? 'grid min-h-[58px] grid-cols-[52px_64px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-0'
     : 'flex flex-col gap-0 p-2.5';
   const mediaSpacingClasses = 'mb-2';
   const titleClasses = 'text-[15px] font-medium leading-[19px]';
-  const gridTagsClasses = 'h-[22px] flex-nowrap overflow-hidden';
+  const gridTagsClasses = viewMode === 'compact' ? 'min-h-[26px] flex-wrap' : 'min-h-7 flex-wrap';
+  const showCategoryChip = viewMode !== 'compact' || !mod.lockerHero;
   const actions = (
     <div className="ml-auto flex items-center gap-1">
       <div className="relative" ref={menuRef} data-card-action="true">
@@ -4069,7 +4213,7 @@ function ModCard({
                 View details
               </button>
             )}
-            {onTagLocker && (
+            {(onTagLocker || onTagGlobal) && (
               <>
                 <button
                   type="button"
@@ -4081,22 +4225,50 @@ function ModCard({
                   className={menuItemClasses}
                 >
                   <TagIcon className="w-3.5 h-3.5" />
-                  Set hero
+                  Set Locker tag
                 </button>
                 {tagPickerOpen && (
-                  <div className="my-1 max-h-56 overflow-y-auto rounded-md border border-border bg-bg-primary/40 p-1">
+                  <div className="my-1 max-h-64 overflow-y-auto rounded-md border border-border bg-bg-primary/40 p-1">
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation();
-                        void applyLockerTag(null);
+                        void clearLockerTag();
                       }}
-                      disabled={menuBusy || mod.lockerHeroSource !== 'manual'}
+                      disabled={menuBusy || (!mod.lockerHero && !mod.globalType)}
                       className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Clear manual tag
+                      Clear Locker tag
                     </button>
                     <div className="my-1 h-px bg-border" />
+                    {onTagGlobal && (
+                      <>
+                        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                          Global
+                        </div>
+                        {GLOBAL_MOD_TYPE_ORDER.map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void applyGlobalTag(type);
+                            }}
+                            disabled={menuBusy}
+                            className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50 ${
+                              mod.globalType === type ? 'text-accent' : 'text-text-primary'
+                            }`}
+                          >
+                            <span className="truncate">{GLOBAL_MOD_TYPE_LABELS[type]}</span>
+                            {mod.globalType === type && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                          </button>
+                        ))}
+                        <div className="my-1 h-px bg-border" />
+                      </>
+                    )}
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                      Hero
+                    </div>
                     {HERO_NAMES.map((heroName) => (
                       <button
                         key={heroName}
@@ -4114,8 +4286,8 @@ function ModCard({
                             : 'text-text-primary'
                         }`}
                       >
-                        <span>{heroName}</span>
-                        {mod.lockerHero === heroName && <Check className="w-3.5 h-3.5" />}
+                        <HeroTagLabel heroName={heroName} />
+                        {mod.lockerHero === heroName && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
                       </button>
                     ))}
                   </div>
@@ -4189,21 +4361,22 @@ function ModCard({
           </div>
         )}
       </div>
-      <button
-        onClick={onToggle}
-        aria-pressed={mod.enabled}
-        aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
-        title={mod.enabled ? 'Disable mod' : 'Enable mod'}
-        className={toggleClasses}
-        data-card-action="true"
-      >
-        <span
-          className={`absolute top-[2px] left-[2px] h-4 w-4 rounded-full bg-text-primary shadow-sm transition-transform duration-200 ${
-            mod.enabled ? 'translate-x-5' : 'translate-x-0'
-          }`}
-          aria-hidden
-        />
-      </button>
+        <button
+          onClick={onToggle}
+          aria-pressed={mod.enabled}
+          aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
+          title={mod.enabled ? 'Disable mod' : 'Enable mod'}
+          className={`${toggleHitboxClasses} group/toggle`}
+          data-card-action="true"
+        >
+          <span className={toggleTrackClasses} aria-hidden>
+            <span
+              className={`absolute top-[2px] left-[2px] h-5 w-5 rounded-full bg-text-primary shadow-sm transition-transform duration-200 ${
+                mod.enabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </span>
+        </button>
     </div>
   );
   return (
@@ -4357,6 +4530,9 @@ function ModCard({
             metaChipClasses={metaChipClasses}
             manualTagChipClasses={manualTagChipClasses}
             inferredTagChipClasses={inferredTagChipClasses}
+            dangerInlineChipClasses={dangerInlineChipClasses}
+            accentInlineChipClasses={accentInlineChipClasses}
+            tagIconClassName={tagIconClassName}
             technicalMetaClasses={technicalMetaClasses}
             actions={actions}
           />
@@ -4456,7 +4632,7 @@ function ModCard({
         );
         })()}
 
-        <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 px-0.5">
+        <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-0.5 pt-1">
         <div className="min-w-0">
           <div className="min-w-0">
             <h3
@@ -4467,27 +4643,31 @@ function ModCard({
             </h3>
           </div>
           <div
-            className={`mt-1.5 flex items-center gap-1.5 text-xs text-text-secondary min-w-0 ${gridTagsClasses}`}
+            className={`mt-2 flex items-center gap-1.5 text-xs text-text-secondary min-w-0 ${gridTagsClasses}`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
-            {mod.categoryName && (
-              <span className={metaChipClasses}>{mod.categoryName}</span>
-            )}
             <LockerHeroChip
               mod={mod}
               manualTagChipClasses={manualTagChipClasses}
               inferredTagChipClasses={inferredTagChipClasses}
+              iconClassName={tagIconClassName}
             />
+            {showCategoryChip && mod.categoryName && (
+              <CategoryChip
+                label={mod.categoryName}
+                className={metaChipClasses}
+                iconClassName={tagIconClassName}
+              />
+            )}
             {mod.nsfw && (
-              <Tag tone="danger" className="flex-shrink-0">18+</Tag>
+              <MetaTextChip label="18+" className={dangerInlineChipClasses} />
             )}
             {group && (
-              <span
-                className="flex-shrink-0 rounded-sm border border-accent/25 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-accent"
+              <MetaTextChip
+                label={`${variantStatusLabel} files`}
+                className={accentInlineChipClasses}
                 title={variantStatusTitle}
-              >
-                {variantStatusLabel} files
-              </span>
+              />
             )}
             <span
               className="ml-auto flex-shrink-0 pl-1.5 text-[11px] tabular-nums text-text-secondary/55 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
@@ -4498,7 +4678,7 @@ function ModCard({
           </div>
         </div>
 
-        <div className="flex h-6 flex-shrink-0 items-center justify-end gap-2 self-end pr-1 pb-0.5">
+        <div className="flex flex-shrink-0 items-center justify-end gap-2 self-center pr-1">
           {actions}
         </div>
       </div>

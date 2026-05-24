@@ -41,6 +41,7 @@ import { useAppStore } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
+import { HeroSelect } from '../components/common/HeroSelect';
 import { Button, Tag } from '../components/common/ui';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
@@ -1435,24 +1436,26 @@ export default function Browse() {
                         {heroOptions.length > 0 && (
                           <label className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Hero</span>
-                            <select
+                            <HeroSelect
+                              ariaLabel="Filter by hero"
                               value={String(heroCategoryId)}
-                              onChange={(e) => {
-                                const v = e.target.value;
+                              onChange={(v) => {
                                 if (v === 'all') setHeroCategoryId('all');
                                 else if (v === 'none') setHeroCategoryId('none');
                                 else setHeroCategoryId(Number(v));
                               }}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
-                            >
-                              <option value="all">All Heroes</option>
-                              {section === 'Sound' && (
-                                <option value="none">No hero (item / UI / music)</option>
-                              )}
-                              {heroOptions.map((hero) => (
-                                <option key={hero.id} value={String(hero.id)}>{hero.label}</option>
-                              ))}
-                            </select>
+                              options={[
+                                { value: 'all', label: 'All Heroes', muted: true },
+                                ...(section === 'Sound'
+                                  ? [{ value: 'none', label: 'No hero (item / UI / music)', muted: true }]
+                                  : []),
+                                ...heroOptions.map((hero) => ({
+                                  value: String(hero.id),
+                                  label: hero.label,
+                                  heroName: hero.label,
+                                })),
+                              ]}
+                            />
                           </label>
                         )}
 
