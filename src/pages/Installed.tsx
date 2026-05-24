@@ -4160,7 +4160,7 @@ function ModCard({
       ? 'flex flex-col gap-0 p-2'
       : 'flex flex-col gap-0 p-2.5';
   const mediaSpacingClasses = isCompact ? 'mb-2' : 'mb-2.5';
-  const mediaFrameClasses = isCompact ? 'aspect-[2/1]' : 'aspect-video';
+  const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
   const audioOverlayClasses = isCompact
     ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer'
     : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2.5 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer';
@@ -4170,8 +4170,12 @@ function ModCard({
   const titleClasses = isCompact
     ? 'text-[14px] font-semibold leading-[18px] min-h-[36px] overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]'
     : 'text-[15px] font-medium leading-[19px] truncate';
-  const gridTagsClasses = viewMode === 'compact' ? 'min-h-[26px] flex-wrap' : 'min-h-7 flex-wrap';
+  const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'min-h-7 flex-wrap';
   const showCategoryChip = viewMode !== 'compact' || !mod.lockerHero;
+  const compactBaseChipCount =
+    (mod.lockerHero ? 1 : 0) + (showCategoryChip && mod.categoryName ? 1 : 0);
+  const showNsfwChip = !!mod.nsfw && (!isCompact || compactBaseChipCount < 2);
+  const showGroupChip = !!group && (!isCompact || compactBaseChipCount + (showNsfwChip ? 1 : 0) < 2);
   const actions = (
     <div className="ml-auto flex items-center gap-1">
       <div className="relative" ref={menuRef} data-card-action="true">
@@ -4661,10 +4665,10 @@ function ModCard({
             {mod.name}
           </h3>
           <div
-            className={`${isCompact ? 'mt-1.5' : 'mt-2'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3`}
+            className={`${isCompact ? 'mt-1.5 h-8' : 'mt-2'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
-            <div className={`flex min-w-0 items-center gap-1.5 text-xs text-text-secondary ${gridTagsClasses}`}>
+            <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
               <LockerHeroChip
                 mod={mod}
                 manualTagChipClasses={manualTagChipClasses}
@@ -4678,25 +4682,27 @@ function ModCard({
                   iconClassName={tagIconClassName}
                 />
               )}
-              {mod.nsfw && (
+              {showNsfwChip && (
                 <MetaTextChip label="18+" className={dangerInlineChipClasses} />
               )}
-              {group && (
+              {showGroupChip && (
                 <MetaTextChip
                   label={`${variantStatusLabel} files`}
                   className={accentInlineChipClasses}
                   title={variantStatusTitle}
                 />
               )}
-              <span
-                className="flex-shrink-0 pl-1.5 text-[11px] tabular-nums text-text-secondary/55 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
-                title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
-              >
-                {formatRelativeDate(mod.installedAt)}
-              </span>
+              {!isCompact && (
+                <span
+                  className="flex-shrink-0 pl-1.5 text-[11px] tabular-nums text-text-secondary/55 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
+                  title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
+                >
+                  {formatRelativeDate(mod.installedAt)}
+                </span>
+              )}
             </div>
 
-            <div className="flex flex-shrink-0 items-center justify-end gap-2 pr-1">
+            <div className={`flex flex-shrink-0 items-center justify-end gap-2 ${isCompact ? '' : 'pr-1'}`}>
               {actions}
             </div>
           </div>

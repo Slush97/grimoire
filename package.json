@@ -20,6 +20,7 @@
     "postinstall": "node scripts/fetch-vpkmerge.mjs",
     "fetch-vpkmerge": "node scripts/fetch-vpkmerge.mjs",
     "fetch-hero-icons": "node scripts/fetch-hero-icons.mjs",
+    "generate-hero-chip-icons": "node scripts/generate-hero-chip-icons.mjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
