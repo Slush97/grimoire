@@ -151,8 +151,8 @@ export interface MergeOptions {
      *  from the source mod thumbnails. */
     thumbnailDataUrl?: string;
     /** Pass --strict to vpkmerge so any file-path collision aborts the merge
-     *  instead of silently letting later inputs win. Off by default to match
-     *  Deadlock's runtime "higher pakNN loads later, last write wins" model. */
+     *  instead of silently picking a winner. Off by default to match Deadlock's
+     *  runtime model, where the LOWER pakNN wins a file collision. */
     strict?: boolean;
 }
 
@@ -184,10 +184,11 @@ export async function mergeMods(
         sources.push(found);
     }
 
-    // Sort by priority ascending so the highest-priority source is last in
-    // the vpkmerge argv. vpkmerge's last-input-wins matches Deadlock's
-    // higher-pakNN-loads-later override semantics.
-    sources.sort((a, b) => a.priority - b.priority);
+    // In Deadlock a LOWER pakNN wins a file collision (pak09 overrides pak10),
+    // so the lowest-pakNN source is the highest priority. vpkmerge is
+    // last-input-wins, so sort DESCENDING to put that highest-priority
+    // (lowest-pakNN) source LAST in the argv and reproduce the in-game winner.
+    sources.sort((a, b) => b.priority - a.priority);
 
     // Hash every source BEFORE any filesystem mutation. sha256AtMergeTime
     // is the content-identity fallback unmerge uses when the manifest
