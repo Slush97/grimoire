@@ -2127,28 +2127,40 @@ export default function Installed() {
 
   return (
     <div className="px-4 py-5 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="relative flex-1 min-w-[12rem] max-w-md">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search installed..."
-                className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-full`}
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  title="Clear search"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
+      <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 bg-bg-primary/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80 sm:-mx-6 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="relative flex-1 min-w-[12rem] max-w-md">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search installed..."
+              className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-full`}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                title="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {statusButtons}
+            {!searchNeedle && (
+              <button
+                type="button"
+                onClick={fixOrder}
+                title="Renumber all installed mods 1, 2, 3, ... to tidy priority slots"
+                className="text-[10px] uppercase tracking-wider px-2.5 py-1 border border-white/10 hover:border-accent/50 bg-white/[0.02] hover:bg-accent/10 text-text-secondary hover:text-text-primary rounded-full transition-colors cursor-pointer"
+              >
+                Fix Order
+              </button>
+            )}
             <Button
               variant="secondary"
               onClick={() => setImportOpen(true)}
@@ -2184,7 +2196,8 @@ export default function Installed() {
               ]}
               onChange={setViewMode}
             />
-            </div>
+          </div>
+        </div>
       </div>
 
       {searchNeedle && totalMatches === 0 && (
@@ -2204,19 +2217,6 @@ export default function Installed() {
         <div className="mb-6">
           <div className="flex items-baseline justify-between mb-[14px]">
             <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">Enabled</SectionHeader>
-            <div className="flex items-center gap-4">
-              {statusButtons}
-              {!searchNeedle && (
-                <button
-                  type="button"
-                  onClick={fixOrder}
-                  title="Renumber all installed mods 1, 2, 3, … to tidy priority slots"
-                  className="text-[10px] uppercase tracking-wider px-2.5 py-1 border border-white/10 hover:border-accent/50 bg-white/[0.02] hover:bg-accent/10 text-text-secondary hover:text-text-primary rounded-full transition-colors cursor-pointer"
-                >
-                  Fix Order
-                </button>
-              )}
-            </div>
           </div>
           <div
             className={
