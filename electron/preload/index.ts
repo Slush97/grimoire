@@ -779,6 +779,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-mod-locker-hero', modId, heroName),
     getHeroPortraits: (heroName: string) =>
         ipcRenderer.invoke('get-hero-portraits', heroName),
+    applyHeroCard: (heroName: string, sourceFileName: string) =>
+        ipcRenderer.invoke('apply-hero-card', heroName, sourceFileName),
+    revertHeroCard: (heroName: string) =>
+        ipcRenderer.invoke('revert-hero-card', heroName),
+    getActiveHeroCard: (heroName: string) =>
+        ipcRenderer.invoke('get-active-hero-card', heroName),
     setModGlobalType: (modId: string, globalType: GlobalModType | null) =>
         ipcRenderer.invoke('set-mod-global-type', modId, globalType),
     setModIgnoreUpdates: (modId: string, ignore: boolean) =>

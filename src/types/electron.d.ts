@@ -9,6 +9,7 @@ import type {
     EditLocalModArgs,
     MergeModsArgs,
     UnmergeModResult,
+    ApplyHeroCardResult,
 } from './mod';
 import type {
     GameBananaModsResponse,
@@ -294,6 +295,11 @@ export interface ElectronAPI {
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;
+    applyHeroCard: (heroName: string, sourceFileName: string) => Promise<ApplyHeroCardResult>;
+    revertHeroCard: (heroName: string) => Promise<ApplyHeroCardResult>;
+    getActiveHeroCard: (
+        heroName: string
+    ) => Promise<{ sourceFileName: string; variants: string[] } | null>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (

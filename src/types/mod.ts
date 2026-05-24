@@ -37,6 +37,49 @@ export interface MergedModInfo {
 }
 
 /**
+ * One hero-card choice inside the Locker cosmetics VPK. The user picked this
+ * hero's card art out of `source` (a mod they may or may not otherwise run);
+ * the rebuild splits just this hero's `panorama/images/heroes/<codename>_`
+ * files out of the source and folds them into the consolidated VPK.
+ */
+export interface LockerCardSelection {
+  heroCodename: string;
+  heroName: string;
+  /** Variant tokens captured from the source (e.g. ["card","vertical","mm"]).
+   *  Informational: the split takes the whole per-hero panorama prefix. */
+  variants: string[];
+  source: {
+    /** Source VPK filename at apply time. May drift if reconcile renames it;
+     *  `sha256AtApplyTime` is the content-identity fallback for relocation. */
+    fileName: string;
+    modName?: string;
+    gameBananaId?: number;
+    sha256AtApplyTime: string;
+  };
+  addedAt: string;
+}
+
+/**
+ * Manifest stamped on the single Locker-managed cosmetics VPK that holds every
+ * applied hero card. Its presence marks the VPK as Locker-managed so the rest
+ * of the UI (Installed, Locker piles, Conflicts, profile export) hides it.
+ * Rebuilt automatically on every apply/revert; unlike `merged`, there is no
+ * user-facing unmerge.
+ */
+export interface LockerCosmeticsInfo {
+  /** One entry per hero, keyed by heroCodename. */
+  cards: LockerCardSelection[];
+  rebuiltAt: string;
+}
+
+export interface ApplyHeroCardResult {
+  /** Source VPK filename now providing this hero's card, or null if reverted. */
+  activeSourceFileName: string | null;
+  /** Selections dropped because their source VPK was gone at rebuild time. */
+  missingSourceFileNames: string[];
+}
+
+/**
  * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
  * alongside the per-hero piles. Derived from the VPK file tree by
  * `classifyGlobalModType` (electron/main/services/vpk.ts), since GameBanana's
@@ -86,6 +129,9 @@ export interface Mod {
   /** Set when this mod was produced by mergeMods. Carries the unroll payload
    *  (share code + source list). */
   merged?: MergedModInfo;
+  /** Set on the single Locker-managed cosmetics VPK that holds applied hero
+   *  cards. Other surfaces treat a truthy value as "hide this artifact". */
+  lockerCosmetics?: LockerCosmeticsInfo;
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;

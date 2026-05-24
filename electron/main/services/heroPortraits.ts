@@ -27,6 +27,13 @@ const CODENAME_BY_HERO: Readonly<Record<string, string>> = Object.fromEntries(
     Object.entries(HERO_SOUND_CODENAMES).map(([codename, display]) => [display, codename])
 );
 
+/** Resolve a hero display name (e.g. "Vindicta") to its panorama/sound codename
+ *  (e.g. "hornet"), or undefined when the name is unknown. Shared with the
+ *  card-apply pipeline so both halves agree on the codename mapping. */
+export function codenameForHero(heroName: string): string | undefined {
+    return CODENAME_BY_HERO[heroName];
+}
+
 function sanitize(value: string): string {
     return value.replace(/[^a-zA-Z0-9_-]+/g, '_');
 }
@@ -71,7 +78,7 @@ export async function getHeroPortraits(
     deadlockPath: string,
     heroName: string
 ): Promise<HeroPortrait[]> {
-    const codename = CODENAME_BY_HERO[heroName];
+    const codename = codenameForHero(heroName);
     if (!codename) return [];
     // Surface a clear error early if the bundled binary is missing/too old.
     vpkmergeBinaryPath();

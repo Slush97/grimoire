@@ -318,9 +318,12 @@ export default function Installed() {
       for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
     }
   }
-  const visibleMods = absorbedFileNames.size > 0
-    ? mods.filter((m) => !absorbedFileNames.has(m.fileName))
-    : mods;
+  // The Locker cosmetics VPK is a Locker-managed artifact (applied hero cards),
+  // not a user-installed mod, so it never shows as a card here. It's managed
+  // entirely from the Locker's Hero Card picker.
+  const visibleMods = mods.filter(
+    (m) => !m.lockerCosmetics && !absorbedFileNames.has(m.fileName)
+  );
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const stored = localStorage.getItem('installedViewMode');
     return stored === 'grid' || stored === 'compact' || stored === 'list' ? stored : 'grid';

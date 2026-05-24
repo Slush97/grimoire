@@ -244,6 +244,10 @@ export function detectMinaTextures(mods: Mod[]) {
 }
 
 export function isLockerManagedMod(mod: Mod): boolean {
+  // The Locker cosmetics VPK (applied hero cards) is a managed artifact, never
+  // a hero skin card in its own right.
+  if (mod.lockerCosmetics) return false;
+
   // A manual Locker hero tag is an explicit user intent to manage this VPK as
   // a hero skin, including custom local imports that do not have GameBanana
   // section metadata.

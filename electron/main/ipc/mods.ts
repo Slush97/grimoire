@@ -111,6 +111,7 @@ function enrichMod(mod: Mod): Mod {
             lockerHeroSource,
             globalType: globalType ?? undefined,
             merged: metadata.merged,
+            lockerCosmetics: metadata.lockerCosmetics,
             ignoreUpdates: metadata.ignoreUpdates,
         };
     }
