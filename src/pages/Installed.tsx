@@ -1241,6 +1241,24 @@ export default function Installed() {
   }, [draggingId]);
 
   useEffect(() => {
+    return () => {
+      cleanupActiveDragPreview();
+      if (autoScrollRafRef.current !== null) {
+        cancelAnimationFrame(autoScrollRafRef.current);
+        autoScrollRafRef.current = null;
+      }
+      if (layoutAnimationRafRef.current !== null) {
+        cancelAnimationFrame(layoutAnimationRafRef.current);
+        layoutAnimationRafRef.current = null;
+      }
+      if (draftMoveRafRef.current !== null) {
+        cancelAnimationFrame(draftMoveRafRef.current);
+        draftMoveRafRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
@@ -3700,17 +3718,6 @@ function ModCard({
   const variantStatusTitle = group
     ? `${enabledTitle || 'No files enabled'} - click card to choose files`
     : '';
-  // Prefer the persisted lockerHero (set by VPK content inference at
-  // download/scan time, more accurate than the title) and fall back to
-  // title matching for any Sound mod that hasn't been enriched yet.
-  const listHeroName = viewMode === 'list' && mod.sourceSection === 'Sound'
-    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
-    : null;
-  const listHeroRenderUrl = listHeroName ? getHeroRenderPath(listHeroName) : null;
-  const listHeroFacePos = listHeroName ? getHeroFacePosition(listHeroName) : 50;
-  const hasListTags =
-    viewMode === 'list' &&
-    (hasConflicts || mod.isUnknown || mod.sourceSection === 'Sound' || mod.nsfw || updateAvailable || mod.enabled);
   const hasUtilityActions = mod.isUnknown || (mod.merged && (!!onCopyShareCode || !!onUnmerge));
 
   const indicatorClasses = (() => {
@@ -3757,9 +3764,6 @@ function ModCard({
   const shellClasses = isList
     ? 'grid min-h-[62px] grid-cols-[48px_72px_minmax(0,1fr)_auto] items-center gap-2 px-3.5 py-2'
     : 'flex flex-col gap-0 p-3';
-  const actionAreaClasses = isList
-    ? 'flex-row items-center justify-end gap-2 self-center'
-    : 'h-6 items-center justify-end gap-2 self-end pr-1 pb-0.5';
   const mediaSpacingClasses = 'mb-3';
   const titleClasses = 'h-10 text-[15px] font-semibold leading-[19px] [-webkit-line-clamp:2]';
   const gridTagsClasses = 'h-[22px] flex-nowrap overflow-hidden';
@@ -4072,82 +4076,21 @@ function ModCard({
         );
         })()}
 
-        <div className={viewMode !== 'list' ? 'mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 px-0.5' : 'contents'}>
-        {viewMode === 'list' && (
-          <div className="flex min-w-0 items-center justify-start">
-            {mod.enabled && !selectMode ? (
-              <span data-card-action="true">
-                <PriorityEditor
-                  modId={mod.id}
-                  modName={mod.name}
-                  priority={mod.priority}
-                  variant="inline"
-                  onCommit={onCommitPriority}
-                />
-              </span>
-            ) : (
-              <span className="inline-flex h-5 items-center rounded border border-white/[0.06] bg-bg-tertiary/60 px-1.5 text-[11px] font-semibold text-text-secondary/70">
-                Off
-              </span>
-            )}
+        <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 px-0.5">
+        <div className="min-w-0">
+          <div className="min-w-0">
+            <h3
+              className={`min-w-0 overflow-hidden text-text-primary [display:-webkit-box] [-webkit-box-orient:vertical] ${
+                titleClasses
+              }`}
+              title={mod.name}
+            >
+              {mod.name}
+            </h3>
           </div>
-        )}
-        {viewMode === 'list' && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onOpenDetails?.();
-            }}
-            disabled={!onOpenDetails}
-            className="group relative h-[52px] w-[76px] flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer md:h-14 md:w-[88px]"
-            title={onOpenDetails ? (isGroupCard ? 'Choose files' : 'View mod details') : undefined}
-            aria-label={onOpenDetails ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined}
-          >
-            {listHeroRenderUrl ? (
-              <img
-                src={listHeroRenderUrl}
-                alt={listHeroName ?? mod.name}
-                className="block w-full h-full object-cover origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
-                style={{ objectPosition: `${listHeroFacePos}% 25%` }}
-              />
-            ) : (
-              <ModThumbnail
-                src={mod.thumbnailUrl}
-                alt={mod.name}
-                nsfw={mod.nsfw}
-                hideNsfw={hideNsfwPreviews}
-                className="w-full h-full"
-                imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
-                mergedSources={mod.merged?.sources}
-              />
-            )}
-            {onOpenDetails && (
-              <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/20" />
-            )}
-          </button>
-        )}
-
-        <div className={`flex-1 min-w-0 ${viewMode === 'list' ? '' : 'min-w-0'}`}>
-          {viewMode === 'list' ? (
-            <h3 className="min-w-0 truncate text-[14px] font-semibold leading-5 text-text-primary" title={mod.name}>{mod.name}</h3>
-          ) : (
-            <div className="min-w-0">
-              <h3
-                className={`min-w-0 overflow-hidden text-text-primary [display:-webkit-box] [-webkit-box-orient:vertical] ${
-                  titleClasses
-                }`}
-                title={mod.name}
-              >
-                {mod.name}
-              </h3>
-            </div>
-          )}
           <div
-            className={`flex items-center gap-1.5 text-xs text-text-secondary min-w-0 ${
-              viewMode === 'list' ? 'mt-1 flex-nowrap overflow-hidden' : `mt-2 ${gridTagsClasses}`
-            }`}
-            title={viewMode !== 'list' ? `${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}` : undefined}
+            className={`mt-2 flex items-center gap-1.5 text-xs text-text-secondary min-w-0 ${gridTagsClasses}`}
+            title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             {mod.categoryName && (
               <span className={metaChipClasses}>{mod.categoryName}</span>
@@ -4160,17 +4103,6 @@ function ModCard({
             {mod.nsfw && (
               <Tag tone="danger" className="flex-shrink-0">18+</Tag>
             )}
-            {viewMode === 'list' && (
-              <>
-                <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
-                <span
-                  className="flex-shrink-0 tabular-nums"
-                  title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
-                >
-                  {formatRelativeDate(mod.installedAt)}
-                </span>
-              </>
-            )}
             {group && (
               <span
                 className="flex-shrink-0 rounded-sm border border-accent/25 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-accent"
@@ -4179,144 +4111,11 @@ function ModCard({
                 {variantStatusLabel} files
               </span>
             )}
-            {viewMode === 'list' && !group && (
-              <span
-                className={technicalMetaClasses}
-                title={mod.fileName}
-              >
-                {mod.fileName}
-              </span>
-            )}
           </div>
-          {hasListTags && (
-            <div className="mt-2 flex flex-wrap items-center gap-1.5 min-w-0">
-              {hasConflicts && (
-                <Tag tone="warning" icon={AlertTriangle} className="flex-shrink-0">
-                  Conflict
-                </Tag>
-              )}
-              {mod.isUnknown && (
-                <Tag
-                  icon={Wrench}
-                  title="This local mod has no saved GameBanana or custom metadata"
-                  className="flex-shrink-0 bg-cyan-400/10 border-cyan-300/40 text-cyan-200"
-                >
-                  Unknown
-                </Tag>
-              )}
-              {updateAvailable && (
-                <Tag
-                  tone="accent"
-                  icon={Download}
-                  title="A newer version is available on GameBanana"
-                  className="flex-shrink-0 uppercase tracking-wide"
-                >
-                  Update
-                </Tag>
-              )}
-            </div>
-          )}
         </div>
 
-        <div
-          className={`flex flex-shrink-0 ${
-            actionAreaClasses
-          }`}
-        >
-          {viewMode === 'list' && mod.sourceSection === 'Sound' && mod.audioUrl && (
-            <div
-              className="hidden w-56 flex-shrink-0 items-center opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 xl:flex"
-              onClick={(e) => e.stopPropagation()}
-              data-card-action="true"
-            >
-              <AudioPreviewPlayer
-                src={mod.audioUrl}
-                compact
-                volume={soundVolume}
-                className="w-full border border-white/[0.08] bg-bg-secondary/70"
-              />
-            </div>
-          )}
-          <div className="ml-auto flex items-center gap-1">
-            {hasUtilityActions && (
-              <div
-                className={`flex items-center gap-1 rounded-md border border-border/60 bg-bg-secondary/45 p-0.5 transition-opacity duration-200 ${viewMode === 'list' ? '' : 'opacity-0 group-hover/card:opacity-90 focus-within:opacity-100'}`}
-                data-card-action="true"
-              >
-                {mod.isUnknown && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onFixUnknown?.();
-                    }}
-                    disabled={!onFixUnknown}
-                    className={utilityActionClasses}
-                    title="Fix unknown mod"
-                    aria-label={`Fix unknown mod ${mod.name}`}
-                  >
-                    {fixingUnknown ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Wrench className="w-4 h-4" />
-                    )}
-                  </button>
-                )}
-                {mod.merged && onCopyShareCode && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onCopyShareCode();
-                    }}
-                    className={utilityActionClasses}
-                    title="Copy share code (paste into any Grimoire to import the sources)"
-                    aria-label={`Copy share code for ${mod.name}`}
-                  >
-                    <Share2 className="w-4 h-4" />
-                  </button>
-                )}
-                {mod.merged && onUnmerge && (
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onUnmerge();
-                    }}
-                    className={utilityActionClasses}
-                    title="Unmerge (restore source mods)"
-                    aria-label={`Unmerge ${mod.name}`}
-                  >
-                    <Scissors className="w-4 h-4" />
-                  </button>
-                )}
-              </div>
-            )}
-            <button
-              onClick={onDelete}
-              className={deleteActionClasses}
-              title="Delete mod"
-              aria-label={`Delete ${mod.name}`}
-              data-card-action="true"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
-            <button
-              onClick={onToggle}
-              aria-pressed={mod.enabled}
-              aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
-              title={mod.enabled ? 'Disable mod' : 'Enable mod'}
-              className={toggleClasses}
-              data-card-action="true"
-            >
-              <span
-                className={`absolute top-[2px] left-[2px] h-4 w-4 rounded-full bg-text-primary shadow-sm transition-transform duration-200 ${
-                  mod.enabled ? 'translate-x-5' : 'translate-x-0'
-                }`}
-                aria-hidden
-              />
-            </button>
-          </div>
+        <div className="flex h-6 flex-shrink-0 items-center justify-end gap-2 self-end pr-1 pb-0.5">
+          {actions}
         </div>
       </div>
       </>
