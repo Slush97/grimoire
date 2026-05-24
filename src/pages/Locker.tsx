@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Layers, Music, Shield, Shirt, Star } from 'lucide-react';
+import { ChevronDown, ChevronsDownUp, ChevronsUpDown, Layers, Music, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -52,6 +52,20 @@ export default function Locker() {
     const stored = localStorage.getItem('lockerViewMode');
     return stored === 'list' ? 'list' : 'gallery';
   });
+  // List-view accordion state. Empty set = every hero collapsed (the default),
+  // so the list reads as a compact set of rows until the user opens one.
+  const [expandedHeroes, setExpandedHeroes] = useState<Set<number>>(() => new Set());
+  const toggleHeroExpanded = useCallback((heroId: number) => {
+    setExpandedHeroes((prev) => {
+      const next = new Set(prev);
+      if (next.has(heroId)) {
+        next.delete(heroId);
+      } else {
+        next.add(heroId);
+      }
+      return next;
+    });
+  }, []);
   // Seed from localStorage synchronously so the value is present on the very
   // first render. A useEffect-driven load would race against the save effect
   // under StrictMode: the save closure captures `[]`, clobbers localStorage,
@@ -155,6 +169,7 @@ export default function Locker() {
     return groupModsByCategory(lockerSounds, baseHeroList);
   }, [lockerSounds, baseHeroList]);
   const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
+  const installedSoundCount = useMemo(() => countLockerSkins(lockerSounds), [lockerSounds]);
   const unassignedSkins = useMemo(() => groupLockerSkins(heroMods.unassigned), [heroMods]);
   // Sound mods that couldn't be auto-mapped to a hero (e.g. inferHeroFromTitle
   // didn't catch the hero name in the title). Surfaced in the same Unassigned
@@ -179,6 +194,15 @@ export default function Locker() {
       return a.name.localeCompare(b.name);
     });
   }, [baseHeroList, favoriteHeroes, heroMods]);
+  const allExpanded =
+    heroList.length > 0 && heroList.every((hero) => expandedHeroes.has(hero.id));
+  const toggleExpandAll = useCallback(() => {
+    setExpandedHeroes((prev) => {
+      const everyOpen =
+        heroList.length > 0 && heroList.every((hero) => prev.has(hero.id));
+      return everyOpen ? new Set() : new Set(heroList.map((hero) => hero.id));
+    });
+  }, [heroList]);
   const selectedHero = selectedHeroId === null
     ? null
     : heroList.find((hero) => hero.id === selectedHeroId) ?? null;
@@ -323,7 +347,15 @@ export default function Locker() {
       <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-text-secondary">
-          {`${heroList.length} heroes • ${installedSkinCount} installed skins`}
+          {[
+            `${heroList.length} heroes`,
+            `${installedSkinCount} skin${installedSkinCount !== 1 ? 's' : ''}`,
+            installedSoundCount > 0
+              ? `${installedSoundCount} sound${installedSoundCount !== 1 ? 's' : ''}`
+              : null,
+          ]
+            .filter(Boolean)
+            .join(' • ')}
         </div>
         <div className="flex items-center gap-3">
           {viewMode === 'gallery' &&
@@ -337,6 +369,20 @@ export default function Locker() {
                 {unassignedSkins.length + unassignedSounds.length} unassigned
               </button>
             )}
+          {viewMode === 'list' && heroList.length > 0 && (
+            <button
+              onClick={toggleExpandAll}
+              className="flex items-center gap-1.5 self-stretch rounded-sm border border-border bg-bg-secondary px-3 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
+              title={allExpanded ? 'Collapse all heroes' : 'Expand all heroes'}
+            >
+              {allExpanded ? (
+                <ChevronsDownUp className="w-4 h-4" />
+              ) : (
+                <ChevronsUpDown className="w-4 h-4" />
+              )}
+              {allExpanded ? 'Collapse all' : 'Expand all'}
+            </button>
+          )}
           <ViewModeToggle
             value={viewMode}
             options={[
@@ -381,6 +427,8 @@ export default function Locker() {
               hero={hero}
               mods={heroMods.map.get(hero.id) ?? []}
               sounds={heroSounds.map.get(hero.id) ?? []}
+              expanded={expandedHeroes.has(hero.id)}
+              onToggleExpanded={() => toggleHeroExpanded(hero.id)}
               onSelect={(modId) => setActiveSkin(hero.id, modId)}
               onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
               isFavorite={favoriteHeroes.includes(hero.id)}
@@ -545,6 +593,8 @@ interface HeroCardProps {
   hero: HeroCategory;
   mods: Mod[];
   sounds: Mod[];
+  expanded: boolean;
+  onToggleExpanded: () => void;
   onSelect: (modId: string) => void;
   onToggleVariant: (modId: string) => void;
   isFavorite: boolean;
@@ -775,6 +825,8 @@ function HeroCard({
   hero,
   mods,
   sounds,
+  expanded,
+  onToggleExpanded,
   onSelect,
   onToggleVariant,
   isFavorite,
@@ -797,8 +849,10 @@ function HeroCard({
 }: HeroCardProps) {
   const localUrl = getHeroRenderPath(hero.name);
   const wikiUrl = getHeroWikiUrl(hero.name);
-  const [iconSrc, setIconSrc] = useState(() => localUrl);
-  const [fallbackStep, setFallbackStep] = useState(0);
+  const facePositionX = getHeroFacePosition(hero.name);
+  // Background art fallback chain mirrors the gallery card: local render ->
+  // wiki render -> GameBanana icon -> none (solid panel).
+  const [bgFallbackStep, setBgFallbackStep] = useState(0);
   const [section, setSection] = useState<'skins' | 'sounds'>('skins');
   const skinCount = useMemo(() => countLockerSkins(mods), [mods]);
   const soundCount = useMemo(() => countLockerSkins(sounds), [sounds]);
@@ -808,56 +862,96 @@ function HeroCard({
   const activeSection = section === 'sounds' && !hasSounds ? 'skins' : section;
   const activeList = activeSection === 'sounds' ? sounds : mods;
 
-  const handleError = () => {
-    if (fallbackStep === 0) {
-      setIconSrc(wikiUrl);
-      setFallbackStep(1);
+  const bgSrc =
+    bgFallbackStep === 0
+      ? localUrl
+      : bgFallbackStep === 1
+        ? wikiUrl
+        : bgFallbackStep === 2
+          ? (hero.iconUrl ?? '')
+          : '';
+
+  const handleBgError = () => {
+    if (bgFallbackStep === 0) {
+      setBgFallbackStep(1);
       return;
     }
-    if (fallbackStep === 1 && hero.iconUrl) {
-      setIconSrc(hero.iconUrl);
-      setFallbackStep(2);
+    if (bgFallbackStep === 1 && hero.iconUrl) {
+      setBgFallbackStep(2);
       return;
     }
-    setIconSrc('');
-    setFallbackStep(3);
+    setBgFallbackStep(3);
   };
 
+  const countLabel =
+    skinCount === 0 && soundCount === 0
+      ? 'No skins installed'
+      : [
+          skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : null,
+          soundCount > 0 ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}` : null,
+        ]
+          .filter(Boolean)
+          .join(' · ');
+
   return (
-    <div className="bg-bg-secondary border border-border rounded-lg overflow-hidden">
-      <div className="flex items-center gap-3 p-3 border-b border-border">
-        <div className="w-12 h-12 rounded-md overflow-hidden bg-bg-tertiary flex items-center justify-center">
-          {iconSrc ? (
-            <img src={iconSrc} alt={hero.name} className="w-full h-full object-cover" onError={handleError} />
-          ) : (
-            <span className="text-xs text-text-secondary">{hero.name.slice(0, 2).toUpperCase()}</span>
-          )}
-        </div>
-        <div className="min-w-0">
-          <div className="font-semibold truncate">{hero.name}</div>
-          <div className="text-xs text-text-secondary">
-            {skinCount === 0 && soundCount === 0
-              ? 'No skins installed'
-              : [
-                  skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : null,
-                  soundCount > 0 ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}` : null,
-                ]
-                  .filter(Boolean)
-                  .join(' · ')}
+    <div className="group relative overflow-hidden rounded-lg border border-border bg-bg-secondary">
+      {/* Hero art bleeds behind the whole card; a gradient keeps the left side
+          (where the text sits) dark enough to read, fading toward the portrait
+          on the right. The expanded body lays a frosted-glass panel over it. */}
+      {bgSrc && (
+        <img
+          src={bgSrc}
+          alt=""
+          aria-hidden
+          loading="lazy"
+          decoding="async"
+          onError={handleBgError}
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          style={{ objectPosition: `${facePositionX}% 18%` }}
+        />
+      )}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
+      />
+
+      {/* Clickable header row toggles the dropdown. The favorite star is a
+          separate sibling button so we don't nest interactive controls. */}
+      <div className="relative z-10 flex items-stretch">
+        <button
+          type="button"
+          onClick={onToggleExpanded}
+          aria-expanded={expanded}
+          className="flex min-w-0 flex-1 items-center gap-3 p-3 text-left cursor-pointer"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold truncate drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
+              {hero.name}
+            </div>
+            <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+              {countLabel}
+            </div>
           </div>
-        </div>
+          <ChevronDown
+            className={`w-4 h-4 flex-shrink-0 text-text-secondary transition-transform duration-200 ${
+              expanded ? 'rotate-180' : ''
+            }`}
+          />
+        </button>
         <button
           type="button"
           onClick={onToggleFavorite}
-          className={`ml-auto p-2 rounded-md transition-colors ${isFavorite ? 'text-yellow-400' : 'text-text-secondary hover:text-text-primary'
-            }`}
+          className={`px-3 flex items-center transition-colors cursor-pointer ${
+            isFavorite ? 'text-yellow-400' : 'text-text-secondary hover:text-text-primary'
+          }`}
           title={isFavorite ? 'Unfavorite' : 'Favorite'}
         >
-          <Star className="w-4 h-4" />
+          <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
         </button>
       </div>
 
-      <div className="p-3 space-y-3">
+      {expanded && (
+      <div className="relative z-10 p-3 space-y-3 border-t border-border/70">
         {/* Section toggle: only when this hero has at least one Sound mod, so
             skins-only heroes don't get an empty Sounds tab. Mirrors the detail
             view (LockerHeroView). */}
@@ -926,6 +1020,7 @@ function HeroCard({
           onApplyMinaVariant={activeSection === 'skins' ? onApplyMinaVariant : undefined}
         />
       </div>
+      )}
     </div>
   );
 }
