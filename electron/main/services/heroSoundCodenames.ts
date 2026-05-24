@@ -48,6 +48,20 @@ export const HERO_SOUND_CODENAMES: Readonly<Record<string, string>> = {
     werewolf: 'Silver',
     wrecker: 'Wrecker',
     yamato: 'Yamato',
+    // Released heroes appended after the original table. Their sound mods had
+    // no VPK-path inference here, so they never auto-tagged to a hero and went
+    // missing from the Locker. Sound-path codename == class_name for these (the
+    // abrams/mokrill divergence does not apply). Verified present in real
+    // installed sound mods: familiar (Rem, 38 files), frank (Victor), priest
+    // (Venator), necro (Graves).
+    doorman: 'Doorman',
+    familiar: 'Rem',
+    frank: 'Victor',
+    magician: 'Sinclair',
+    necro: 'Graves',
+    priest: 'Venator',
+    warden: 'Warden',
+    wraith: 'Wraith',
 };
 
 /**

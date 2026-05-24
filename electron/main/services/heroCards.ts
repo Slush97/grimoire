@@ -27,7 +27,7 @@ import {
 import { scanMods, reorderMods, findNextAvailablePriority } from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
-import { codenameForHero } from './heroPortraits';
+import { codenamesForHero } from './heroPortraits';
 import type {
     ApplyHeroCardResult,
     LockerCardSelection,
@@ -107,24 +107,31 @@ async function locateSource(
     return null;
 }
 
-/** Paths under this hero's card prefix that the VPK actually ships. Matched
- *  case-insensitively (Deadlock VPK paths are lowercase by convention). */
-function heroCardPaths(vpkPath: string, codename: string): string[] {
+/** Every card prefix a hero's art might be filed under (current class_name +
+ *  legacy aliases). */
+function heroCardPrefixes(heroName: string): string[] {
+    return codenamesForHero(heroName).map(cardPrefix);
+}
+
+/** Paths under any of this hero's card prefixes that the VPK actually ships.
+ *  Matched case-insensitively (Deadlock VPK paths are lowercase by convention). */
+function heroCardPaths(vpkPath: string, heroName: string): string[] {
     const tree = parseVpkDirectoryCached(vpkPath);
     if (!tree) return [];
-    const prefix = cardPrefix(codename);
-    return tree.filter((p) => p.toLowerCase().startsWith(prefix));
+    const prefixes = heroCardPrefixes(heroName);
+    return tree.filter((p) => prefixes.some((pre) => p.toLowerCase().startsWith(pre)));
 }
 
 /** Distinct variant tokens (card, vertical, mm, ...) derived from the matched
  *  card filenames. Informational for the manifest; the split takes the whole
  *  per-hero prefix regardless. */
-function variantsFor(cardPaths: string[], codename: string): string[] {
+function variantsFor(cardPaths: string[], heroName: string): string[] {
+    const leads = codenamesForHero(heroName).map((c) => `${c}_`);
     const variants = new Set<string>();
-    const lead = `${codename}_`;
     for (const p of cardPaths) {
         const base = (p.split('/').pop() ?? '').toLowerCase().replace(/\.[^.]+$/, '');
-        if (base.startsWith(lead)) {
+        const lead = leads.find((l) => base.startsWith(l));
+        if (lead) {
             const v = base.slice(lead.length);
             if (v) variants.add(v);
         }
@@ -159,7 +166,7 @@ async function rebuildLockerCosmetics(
     const missing: string[] = [];
     for (const sel of desired) {
         const src = await locateSource(vpks, sel.source.fileName, sel.source.sha256AtApplyTime);
-        if (!src || heroCardPaths(src.path, sel.heroCodename).length === 0) {
+        if (!src || heroCardPaths(src.path, sel.heroName).length === 0) {
             missing.push(sel.source.fileName);
             continue;
         }
@@ -192,7 +199,7 @@ async function rebuildLockerCosmetics(
             const planPath = join(planDir, `plan${i}.json`);
             await fs.writeFile(
                 planPath,
-                JSON.stringify({ outputs: [{ path: chunkPath, prefixes: [cardPrefix(sel.heroCodename)] }] })
+                JSON.stringify({ outputs: [{ path: chunkPath, prefixes: heroCardPrefixes(sel.heroName) }] })
             );
             await runVpkmerge(['split', '--plan', planPath, src.path], 120000);
             await verifyVpkOutput(chunkPath);
@@ -258,13 +265,13 @@ async function ensureCosmeticsWins(
     const cosmetics = mods.find((m) => m.fileName === cosmeticsFileName);
     if (!cosmetics || !cosmetics.enabled) return;
 
-    const codenames = cards.map((c) => c.heroCodename);
+    const prefixes = cards.flatMap((c) => heroCardPrefixes(c.heroName));
     const competesForCards = (vpkPath: string): boolean => {
         const tree = parseVpkDirectoryCached(vpkPath);
         if (!tree) return false;
         return tree.some((p) => {
             const lower = p.toLowerCase();
-            return codenames.some((cn) => lower.startsWith(cardPrefix(cn)));
+            return prefixes.some((pre) => lower.startsWith(pre));
         });
     };
 
@@ -291,14 +298,15 @@ export async function applyHeroCard(
     sourceFileName: string
 ): Promise<ApplyHeroCardResult> {
     vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
-    const codename = codenameForHero(heroName);
-    if (!codename) throw new Error(`Unknown hero: ${heroName}`);
+    const codenames = codenamesForHero(heroName);
+    if (codenames.length === 0) throw new Error(`Unknown hero: ${heroName}`);
+    const primaryCodename = codenames[0];
 
     const vpks = await listAddonVpks(deadlockPath);
     const src = vpks.find((v) => v.fileName === sourceFileName);
     if (!src) throw new Error(`Source mod not found: ${sourceFileName}`);
 
-    const cardPaths = heroCardPaths(src.path, codename);
+    const cardPaths = heroCardPaths(src.path, heroName);
     if (cardPaths.length === 0) {
         throw new Error(`${basename(sourceFileName)} has no card art for ${heroName}.`);
     }
@@ -306,9 +314,9 @@ export async function applyHeroCard(
     const fp = await fingerprintFile(src.path);
     const srcMeta = getModMetadata(src.fileName);
     const selection: LockerCardSelection = {
-        heroCodename: codename,
+        heroCodename: primaryCodename,
         heroName,
-        variants: variantsFor(cardPaths, codename),
+        variants: variantsFor(cardPaths, heroName),
         source: {
             fileName: src.fileName,
             modName: srcMeta?.modName,
@@ -319,7 +327,7 @@ export async function applyHeroCard(
     };
 
     const current = findCosmeticsVpk(vpks)?.info.cards ?? [];
-    const next = [...current.filter((c) => c.heroCodename !== codename), selection];
+    const next = [...current.filter((c) => c.heroCodename !== primaryCodename), selection];
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
     return {
         activeSourceFileName: missing.includes(src.fileName) ? null : src.fileName,
@@ -332,14 +340,15 @@ export async function revertHeroCard(
     deadlockPath: string,
     heroName: string
 ): Promise<ApplyHeroCardResult> {
-    const codename = codenameForHero(heroName);
-    if (!codename) throw new Error(`Unknown hero: ${heroName}`);
+    const codenames = codenamesForHero(heroName);
+    if (codenames.length === 0) throw new Error(`Unknown hero: ${heroName}`);
+    const primaryCodename = codenames[0];
 
     const vpks = await listAddonVpks(deadlockPath);
     const existing = findCosmeticsVpk(vpks);
     if (!existing) return { activeSourceFileName: null, missingSourceFileNames: [] };
 
-    const next = existing.info.cards.filter((c) => c.heroCodename !== codename);
+    const next = existing.info.cards.filter((c) => c.heroCodename !== primaryCodename);
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
     return { activeSourceFileName: null, missingSourceFileNames: missing };
 }
@@ -349,9 +358,10 @@ export async function getActiveHeroCard(
     deadlockPath: string,
     heroName: string
 ): Promise<{ sourceFileName: string; variants: string[] } | null> {
-    const codename = codenameForHero(heroName);
-    if (!codename) return null;
+    const codenames = codenamesForHero(heroName);
+    if (codenames.length === 0) return null;
+    const primaryCodename = codenames[0];
     const vpks = await listAddonVpks(deadlockPath);
-    const card = findCosmeticsVpk(vpks)?.info.cards.find((c) => c.heroCodename === codename);
+    const card = findCosmeticsVpk(vpks)?.info.cards.find((c) => c.heroCodename === primaryCodename);
     return card ? { sourceFileName: card.source.fileName, variants: card.variants } : null;
 }
