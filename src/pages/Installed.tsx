@@ -282,6 +282,7 @@ function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
  * fetch. A value of null means the mod page returned no usable file list.
  */
 const updateCheckCache = new Map<number, Set<number> | null>();
+let installedPageScrollTop = 0;
 
 export default function Installed() {
   const navigate = useNavigate();
@@ -302,7 +303,6 @@ export default function Installed() {
     setVariantLabel,
     importCustomMod,
     soundVolume,
-    installedScrollTop,
     setInstalledScrollTop,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
@@ -432,21 +432,29 @@ export default function Installed() {
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateAllProgress, setUpdateAllProgress] = useState<{ done: number; total: number } | null>(null);
   const [updateAllError, setUpdateAllError] = useState<string | null>(null);
-  const initialInstalledScrollTopRef = useRef(installedScrollTop);
-  const latestInstalledScrollTopRef = useRef(installedScrollTop);
+  const latestInstalledScrollTopRef = useRef(
+    installedPageScrollTop || useAppStore.getState().installedScrollTop
+  );
 
   useLayoutEffect(() => {
-    const main = document.querySelector('main');
-    const initialScrollTop = initialInstalledScrollTopRef.current;
-    if (!main || initialScrollTop <= 0) return;
-    main.scrollTop = initialScrollTop;
-  }, []);
+    const restoreScroll = () => {
+      const main = document.querySelector('main');
+      const target = installedPageScrollTop || useAppStore.getState().installedScrollTop;
+      if (!main || target <= 0) return;
+      main.scrollTop = target;
+      latestInstalledScrollTopRef.current = target;
+    };
+    restoreScroll();
+    const frame = window.requestAnimationFrame(restoreScroll);
+    return () => window.cancelAnimationFrame(frame);
+  }, [mods.length]);
 
   useEffect(() => {
     const main = document.querySelector('main');
     if (!main) return;
     const onScroll = () => {
       latestInstalledScrollTopRef.current = main.scrollTop;
+      installedPageScrollTop = main.scrollTop;
     };
     main.addEventListener('scroll', onScroll, { passive: true });
     return () => {
@@ -2157,7 +2165,7 @@ export default function Installed() {
   ) : null;
 
   return (
-    <div className="px-4 py-5 sm:px-6">
+    <div className="px-4 pb-5 sm:px-6">
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 bg-bg-primary/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80 sm:-mx-6 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="relative flex-1 min-w-[12rem] max-w-md">
