@@ -186,14 +186,18 @@ export default function Locker() {
       const bFav = favoriteHeroes.includes(b.id);
       // Favorites first
       if (aFav !== bFav) return aFav ? -1 : 1;
-      // Then heroes with skins
-      const aHasSkins = countLockerSkins(heroMods.map.get(a.id) ?? []) > 0;
-      const bHasSkins = countLockerSkins(heroMods.map.get(b.id) ?? []) > 0;
-      if (aHasSkins !== bHasSkins) return aHasSkins ? -1 : 1;
+      // Then heroes with any locker content (skins or sounds)
+      const aHasContent =
+        countLockerSkins(heroMods.map.get(a.id) ?? []) > 0 ||
+        countLockerSkins(heroSounds.map.get(a.id) ?? []) > 0;
+      const bHasContent =
+        countLockerSkins(heroMods.map.get(b.id) ?? []) > 0 ||
+        countLockerSkins(heroSounds.map.get(b.id) ?? []) > 0;
+      if (aHasContent !== bHasContent) return aHasContent ? -1 : 1;
       // Then alphabetically
       return a.name.localeCompare(b.name);
     });
-  }, [baseHeroList, favoriteHeroes, heroMods]);
+  }, [baseHeroList, favoriteHeroes, heroMods, heroSounds]);
   const allExpanded =
     heroList.length > 0 && heroList.every((hero) => expandedHeroes.has(hero.id));
   const toggleExpandAll = useCallback(() => {

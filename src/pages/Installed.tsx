@@ -10,7 +10,6 @@ import {
   X,
   ImagePlus,
   Search,
-  Volume2,
   Download,
   Info,
   UploadCloud,
@@ -3649,11 +3648,6 @@ function ModListRowContent({
         </h3>
         <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-text-secondary">
           {mod.categoryName && <span className={metaChipClasses}>{mod.categoryName}</span>}
-          {isSound && (
-            <Tag tone="info" icon={Volume2} className="flex-shrink-0">
-              Sound
-            </Tag>
-          )}
           {mod.nsfw && <Tag tone="danger" className="flex-shrink-0">18+</Tag>}
           <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
           <span className="flex-shrink-0 tabular-nums" title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}>
@@ -4146,11 +4140,6 @@ function ModCard({
           >
             {mod.categoryName && (
               <span className={metaChipClasses}>{mod.categoryName}</span>
-            )}
-            {mod.sourceSection === 'Sound' && (
-              <Tag tone="info" icon={Volume2} className="flex-shrink-0">
-                Sound
-              </Tag>
             )}
             {mod.nsfw && (
               <Tag tone="danger" className="flex-shrink-0">18+</Tag>
