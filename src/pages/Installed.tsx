@@ -3544,6 +3544,9 @@ interface ModMediaPreviewProps {
   soundVolume: number;
   overlayBadges: ReactNode;
   mediaSpacingClasses: string;
+  mediaFrameClasses: string;
+  audioOverlayClasses: string;
+  audioPlayerClassName: string;
   onOpenDetails?: () => void;
   isGroupCard: boolean;
 }
@@ -3579,6 +3582,9 @@ function ModMediaPreview({
   soundVolume,
   overlayBadges,
   mediaSpacingClasses,
+  mediaFrameClasses,
+  audioOverlayClasses,
+  audioPlayerClassName,
   onOpenDetails,
   isGroupCard,
 }: ModMediaPreviewProps) {
@@ -3632,7 +3638,7 @@ function ModMediaPreview({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden block border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
+        className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden block border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
         aria-label={detailsLabel}
         data-card-action="true"
         draggable={false}
@@ -3648,7 +3654,7 @@ function ModMediaPreview({
   }
 
   return (
-    <div className={`group relative w-full aspect-video overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] ${mediaSpacingClasses}`}>
+    <div className={`group relative w-full ${mediaFrameClasses} overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] ${mediaSpacingClasses}`}>
       <button
         type="button"
         onClick={(e) => {
@@ -3672,7 +3678,7 @@ function ModMediaPreview({
       </button>
       {overlayBadges}
       <div
-        className="absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2.5 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer"
+        className={audioOverlayClasses}
         data-card-action="true"
         draggable={false}
         onClick={(e) => e.stopPropagation()}
@@ -3687,7 +3693,7 @@ function ModMediaPreview({
           compact
           variant="inline"
           volume={soundVolume}
-          className="w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]"
+          className={audioPlayerClassName}
         />
       </div>
     </div>
@@ -4141,6 +4147,7 @@ function ModCard({
   const draggingPlaceholderClasses =
     'border-dashed border-accent/45 bg-bg-tertiary/25 shadow-none opacity-100';
   const isList = viewMode === 'list';
+  const isCompact = viewMode === 'compact';
   // Cover-art source for the glass backdrop. Skipped when NSFW previews are
   // hidden so we never bleed hidden imagery, even blurred.
   const glassBackdropUrl =
@@ -4149,9 +4156,20 @@ function ModCard({
       : null;
   const shellClasses = isList
     ? 'grid min-h-[58px] grid-cols-[52px_64px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-0'
-    : 'flex flex-col gap-0 p-2.5';
-  const mediaSpacingClasses = 'mb-2';
-  const titleClasses = 'text-[15px] font-medium leading-[19px]';
+    : isCompact
+      ? 'flex flex-col gap-0 p-2'
+      : 'flex flex-col gap-0 p-2.5';
+  const mediaSpacingClasses = isCompact ? 'mb-2' : 'mb-2.5';
+  const mediaFrameClasses = isCompact ? 'aspect-[2/1]' : 'aspect-video';
+  const audioOverlayClasses = isCompact
+    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer'
+    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2.5 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer';
+  const audioPlayerClassName = isCompact
+    ? 'w-full gap-2 [&>button:first-of-type]:h-6 [&>button:first-of-type]:w-6 [&>div]:h-1 [&>span]:text-[10px]'
+    : 'w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]';
+  const titleClasses = isCompact
+    ? 'text-[14px] font-semibold leading-[18px] min-h-[36px] overflow-hidden [display:-webkit-box] [-webkit-line-clamp:2] [-webkit-box-orient:vertical]'
+    : 'text-[15px] font-medium leading-[19px] truncate';
   const gridTagsClasses = viewMode === 'compact' ? 'min-h-[26px] flex-wrap' : 'min-h-7 flex-wrap';
   const showCategoryChip = viewMode !== 'compact' || !mod.lockerHero;
   const actions = (
@@ -4626,62 +4644,63 @@ function ModCard({
             soundVolume={soundVolume}
             overlayBadges={overlayBadges}
             mediaSpacingClasses={mediaSpacingClasses}
+            mediaFrameClasses={mediaFrameClasses}
+            audioOverlayClasses={audioOverlayClasses}
+            audioPlayerClassName={audioPlayerClassName}
             onOpenDetails={onOpenDetails}
             isGroupCard={isGroupCard}
           />
         );
         })()}
 
-        <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 px-0.5 pt-1">
-        <div className="min-w-0">
-          <div className="min-w-0">
-            <h3
-              className={`min-w-0 truncate text-text-primary ${titleClasses}`}
-              title={mod.name}
-            >
-              {mod.name}
-            </h3>
-          </div>
+        <div className="mt-auto min-w-0 px-0.5">
+          <h3
+            className={`min-w-0 text-text-primary ${titleClasses}`}
+            title={mod.name}
+          >
+            {mod.name}
+          </h3>
           <div
-            className={`mt-2 flex items-center gap-1.5 text-xs text-text-secondary min-w-0 ${gridTagsClasses}`}
+            className={`${isCompact ? 'mt-1.5' : 'mt-2'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
-            <LockerHeroChip
-              mod={mod}
-              manualTagChipClasses={manualTagChipClasses}
-              inferredTagChipClasses={inferredTagChipClasses}
-              iconClassName={tagIconClassName}
-            />
-            {showCategoryChip && mod.categoryName && (
-              <CategoryChip
-                label={mod.categoryName}
-                className={metaChipClasses}
+            <div className={`flex min-w-0 items-center gap-1.5 text-xs text-text-secondary ${gridTagsClasses}`}>
+              <LockerHeroChip
+                mod={mod}
+                manualTagChipClasses={manualTagChipClasses}
+                inferredTagChipClasses={inferredTagChipClasses}
                 iconClassName={tagIconClassName}
               />
-            )}
-            {mod.nsfw && (
-              <MetaTextChip label="18+" className={dangerInlineChipClasses} />
-            )}
-            {group && (
-              <MetaTextChip
-                label={`${variantStatusLabel} files`}
-                className={accentInlineChipClasses}
-                title={variantStatusTitle}
-              />
-            )}
-            <span
-              className="ml-auto flex-shrink-0 pl-1.5 text-[11px] tabular-nums text-text-secondary/55 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
-              title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
-            >
-              {formatRelativeDate(mod.installedAt)}
-            </span>
+              {showCategoryChip && mod.categoryName && (
+                <CategoryChip
+                  label={mod.categoryName}
+                  className={metaChipClasses}
+                  iconClassName={tagIconClassName}
+                />
+              )}
+              {mod.nsfw && (
+                <MetaTextChip label="18+" className={dangerInlineChipClasses} />
+              )}
+              {group && (
+                <MetaTextChip
+                  label={`${variantStatusLabel} files`}
+                  className={accentInlineChipClasses}
+                  title={variantStatusTitle}
+                />
+              )}
+              <span
+                className="flex-shrink-0 pl-1.5 text-[11px] tabular-nums text-text-secondary/55 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
+                title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
+              >
+                {formatRelativeDate(mod.installedAt)}
+              </span>
+            </div>
+
+            <div className="flex flex-shrink-0 items-center justify-end gap-2 pr-1">
+              {actions}
+            </div>
           </div>
         </div>
-
-        <div className="flex flex-shrink-0 items-center justify-end gap-2 self-center pr-1">
-          {actions}
-        </div>
-      </div>
       </>
         )}
       </div>
