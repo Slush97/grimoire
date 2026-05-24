@@ -21,7 +21,7 @@ import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { useSocialStore } from '../stores/socialStore';
 import { Card, Badge, Button } from '../components/common/ui';
-import { ConfirmModal, EmptyState, PageHeader } from '../components/common/PageComponents';
+import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
@@ -377,12 +377,6 @@ export default function Profiles() {
 
   return (
     <div className="p-6 h-full max-w-5xl mx-auto w-full flex flex-col overflow-hidden">
-      <PageHeader
-        title="Profiles"
-        description="Save and restore your mod configurations"
-        className="mb-6 shrink-0"
-      />
-
       <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
         <div className="space-y-6 pr-1">
           {error && (

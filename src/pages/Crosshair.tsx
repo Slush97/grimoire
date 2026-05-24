@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Copy, Check, RotateCcw, Crosshair as CrosshairIcon, Save, Trash2, Play, Pin, XCircle } from 'lucide-react';
+import { Copy, Check, RotateCcw, Save, Trash2, Play, Pin, XCircle } from 'lucide-react';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import { getSettings } from '../lib/api';
@@ -186,16 +186,6 @@ export default function Crosshair() {
 
     return (
         <div className="p-6 space-y-6">
-            <div className="flex items-center gap-3">
-                <div className="p-3 bg-accent/10 rounded-xl">
-                    <CrosshairIcon className="w-8 h-8 text-accent" />
-                </div>
-                <div>
-                    <h1 className="text-2xl md:text-3xl font-bold font-reaver tracking-wide">Crosshair Designer</h1>
-                    <p className="text-sm text-text-secondary">Customize your in-game crosshair appearance</p>
-                </div>
-            </div>
-
             <div className="flex flex-col lg:flex-row gap-6">
                 {/* Left Panel - Settings */}
                 <div className="w-full lg:w-1/3 flex flex-col gap-6">

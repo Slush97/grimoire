@@ -15,7 +15,7 @@ import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
-import { PageHeader, ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
+import { ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
 import { Skeleton } from '../components/common/Skeleton';
 import {
   FAVORITE_HEROES_KEY,
@@ -294,10 +294,6 @@ export default function Locker() {
   if (modsLoading || categoriesLoading) {
     return (
       <div className="p-6 space-y-6">
-        <PageHeader
-          title="Hero Locker"
-          description="Manage hero-specific mods"
-        />
         <div
           className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3"
           aria-busy="true"
@@ -325,34 +321,32 @@ export default function Locker() {
   return (
     <>
       <div className="p-6 space-y-6">
-      <PageHeader
-        title="Hero Locker"
-        description="Manage hero-specific mods"
-        stats={`${heroList.length} heroes • ${installedSkinCount} installed skins`}
-        action={
-          <div className="flex items-center gap-3">
-            {viewMode === 'gallery' &&
-              unassignedSkins.length + unassignedSounds.length > 0 && (
-                <button
-                  onClick={() => setViewMode('list')}
-                  className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
-                  title="Switch to List view to see unassigned mods"
-                >
-                  <Layers className="w-3 h-3" />
-                  {unassignedSkins.length + unassignedSounds.length} unassigned
-                </button>
-              )}
-            <ViewModeToggle
-              value={viewMode}
-              options={[
-                { value: 'gallery', label: 'Gallery' },
-                { value: 'list', label: 'List' },
-              ]}
-              onChange={(mode) => setViewMode(mode as 'gallery' | 'list')}
-            />
-          </div>
-        }
-      />
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="text-sm text-text-secondary">
+          {`${heroList.length} heroes • ${installedSkinCount} installed skins`}
+        </div>
+        <div className="flex items-center gap-3">
+          {viewMode === 'gallery' &&
+            unassignedSkins.length + unassignedSounds.length > 0 && (
+              <button
+                onClick={() => setViewMode('list')}
+                className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
+                title="Switch to List view to see unassigned mods"
+              >
+                <Layers className="w-3 h-3" />
+                {unassignedSkins.length + unassignedSounds.length} unassigned
+              </button>
+            )}
+          <ViewModeToggle
+            value={viewMode}
+            options={[
+              { value: 'gallery', label: 'Gallery' },
+              { value: 'list', label: 'List' },
+            ]}
+            onChange={(mode) => setViewMode(mode as 'gallery' | 'list')}
+          />
+        </div>
+      </div>
 
       {heroList.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-text-secondary">

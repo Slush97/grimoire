@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle, Rocket } from 'lucide-react';
 import { getSettings, setSettings } from '../lib/api';
 import { Card, Badge, Button } from '../components/common/ui';
-import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
+import { ConfirmModal } from '../components/common/PageComponents';
 import type { AppSettings } from '../types/mod';
 import type { SteamLaunchOptionsStatus } from '../types/electron';
 
@@ -213,12 +213,6 @@ export default function Autoexec() {
 
     return (
         <div className="flex flex-col min-h-0 flex-1 p-6 space-y-6 overflow-auto">
-            <PageHeader
-                title="Autoexec Commands"
-                description="Manage startup commands and game configuration"
-                className="shrink-0"
-            />
-
             <div className="flex flex-col lg:flex-row flex-1 gap-6 min-h-0 overflow-auto">
                 {/* Left Panel - Command Presets */}
                 <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-hidden order-2 lg:order-1">

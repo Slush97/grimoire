@@ -46,7 +46,7 @@ import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES 
 import { setModLockerHero } from '../lib/api';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
-import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
+import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
@@ -2065,10 +2065,7 @@ export default function Installed() {
 
   return (
     <div className="px-4 py-5 sm:px-6">
-      <PageHeader
-        title="Installed Mods"
-        action={
-          <div className="flex items-center gap-3">
+      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
               <input
@@ -2124,10 +2121,7 @@ export default function Installed() {
               ]}
               onChange={setViewMode}
             />
-          </div>
-        }
-        className="mb-4 !flex-nowrap"
-      />
+      </div>
 
       {searchNeedle && totalMatches === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
