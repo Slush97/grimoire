@@ -12,6 +12,13 @@ const MIN_VPK_PRIORITY = 1;
 const MAX_VPK_PRIORITY = 99;
 /** Default priority for mods without pak## prefix */
 const DEFAULT_MOD_PRIORITY = 50;
+/**
+ * Thrown by enableMod when all 99 enabled (pakNN) slots are taken. The renderer
+ * matches on the "99 mods enabled" phrase to surface this as a non-fatal toast
+ * instead of the full-page error screen, so keep that substring stable.
+ */
+export const ENABLE_LIMIT_MESSAGE =
+    'You can have at most 99 mods enabled at once. Disable one to make room.';
 
 type CollisionMetadataOwner = 'enabled' | 'disabled';
 
@@ -103,6 +110,96 @@ function extractModName(filename: string): string {
         .filter((word) => word.length > 0)
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
         .join(' ');
+}
+
+/**
+ * Build a free-form, unique filename for a mod living in the .disabled/ folder.
+ *
+ * Disabled VPKs are not loaded by the game, so they don't need a pakNN load-order
+ * slot. Naming them free-form (a) lifts the 99-name cap on the disabled library
+ * and (b) keeps the enabled (pakNN) and disabled namespaces disjoint, so
+ * `md5(fileName)` stays globally unique with no identity/metadata migration.
+ *
+ * The readable stem comes from the file's own name when it has one; for an
+ * enabled mod (always a bare pakNN with no descriptive stem) we fall back to the
+ * `preferredName` the caller pulls from metadata (the mod's display name), so a
+ * disabled file reads like `glamorous_geist_dir.vpk` instead of `mod_12ce`. A
+ * short token is appended only to stay unique, and the result is guaranteed not
+ * to parse back as a pakNN slot.
+ */
+export function makeDisabledFileName(
+    sourceFileName: string,
+    taken: Set<string>,
+    preferredName?: string
+): string {
+    // The file's own stem, minus any pak## load-order prefix (disabled files
+    // carry no slot). Empty for bare pakNN names, which is the disable case.
+    let stem = sourceFileName.replace(/_dir\.vpk$/i, '').replace(/\.vpk$/i, '');
+    stem = stem.replace(/^pak\d{2}_?/i, '').trim();
+
+    let base = slugify(stem) || slugify(preferredName ?? '') || 'mod';
+    // Guard against a base that still starts with "pak<digit>": parseVpkPriority
+    // is lenient (it reads chars 3-4 and parseInts them), so "pak1_foo" would be
+    // read back as slot 1 and loop forever below. Prefix it out of that shape.
+    if (/^pak\d/i.test(base)) base = `mod_${base}`;
+
+    const build = (suffix: string) => `${base}${suffix}_dir.vpk`;
+    let candidate = build('');
+    while (parseVpkPriority(candidate) !== null || taken.has(candidate.toLowerCase())) {
+        candidate = build(`_${randomBytes(2).toString('hex')}`);
+    }
+    return candidate;
+}
+
+/**
+ * Lowercase a display string into a filesystem-safe, pakNN-free filename stem:
+ * non-alphanumerics collapse to underscores, edges trimmed, length capped.
+ */
+function slugify(value: string): string {
+    const s = value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    return s.slice(0, 48).replace(/_+$/, '');
+}
+
+/**
+ * The set of pakNN load-order numbers currently used by files in one folder.
+ * Free-form (disabled) filenames don't parse as pakNN, so they're excluded.
+ */
+async function folderPakNumbers(folder: string): Promise<Set<number>> {
+    const nums = new Set<number>();
+    if (!existsSync(folder)) return nums;
+    for (const entry of await fs.readdir(folder)) {
+        const priority = parseVpkPriority(entry);
+        if (priority !== null) nums.add(priority);
+    }
+    return nums;
+}
+
+/**
+ * Choose an enabled (pakNN) slot for a mod being enabled. Tries the preferred
+ * numbers in order (remembered last-priority, then the mod's own legacy number)
+ * and otherwise takes the lowest free slot. Throws the cap error when all 99 are
+ * taken. `forbidden` must include every addons number plus every OTHER disabled
+ * pakNN, so enabling can never collide an id with a still-disabled mod.
+ */
+function pickEnableSlot(forbidden: Set<number>, preferred: Array<number | undefined>): number {
+    for (const p of preferred) {
+        if (
+            p != null &&
+            Number.isInteger(p) &&
+            p >= MIN_VPK_PRIORITY &&
+            p <= MAX_VPK_PRIORITY &&
+            !forbidden.has(p)
+        ) {
+            return p;
+        }
+    }
+    for (let p = MIN_VPK_PRIORITY; p <= MAX_VPK_PRIORITY; p++) {
+        if (!forbidden.has(p)) return p;
+    }
+    throw new Error(ENABLE_LIMIT_MESSAGE);
 }
 
 /**
@@ -273,51 +370,32 @@ function fileNameForPriority(fileName: string, priority: number): string {
     return `pak${priorityStr}_dir.vpk`;
 }
 
-async function moveModToFolder(
-    deadlockPath: string,
+/**
+ * Move a mod to a folder under an explicit destination filename, migrating its
+ * metadata to follow the rename. Callers compute a collision-free destination
+ * (enableMod picks a free pakNN slot; disableMod mints a free-form unique name),
+ * so this is a straight rename - no slot-conflict healing needed here.
+ *
+ * `rememberPriority`, set on disable, is stashed in metadata BEFORE the rename
+ * so it travels with the migrated entry and can be restored on the next enable.
+ */
+async function moveModToFolderAs(
     targetMod: Mod,
     destinationFolder: string,
-    enabled: boolean
+    destinationFileName: string,
+    enabled: boolean,
+    rememberPriority?: number
 ): Promise<Mod> {
-    let destinationFileName = targetMod.fileName;
-    let collisionMetadata: ReturnType<typeof getModMetadata> | undefined;
-    let collisionMetadataOwner: CollisionMetadataOwner | undefined;
-    const destinationPath = join(destinationFolder, destinationFileName);
-    const hasConflict = targetMod.path !== destinationPath && existsSync(destinationPath);
-
-    if (hasConflict) {
-        const identical = await sameFileContents(
-            targetMod.path,
-            join(destinationFolder, destinationFileName)
-        );
-
-        if (identical) {
-            await fs.unlink(targetMod.path);
-            return {
-                ...targetMod,
-                enabled,
-                path: join(destinationFolder, destinationFileName),
-            };
-        }
-
-        const priority = await findNextAvailablePriority(deadlockPath);
-        collisionMetadata = getModMetadata(targetMod.fileName);
-        collisionMetadataOwner = await getCollisionMetadataOwner(
-            collisionMetadata?.sha256,
-            targetMod.path
-        );
-        destinationFileName = fileNameForPriority(targetMod.fileName, priority);
+    if (rememberPriority != null) {
+        setModMetadata(targetMod.fileName, { lastPriority: rememberPriority });
     }
 
     await fs.mkdir(destinationFolder, { recursive: true });
-    await fs.rename(targetMod.path, join(destinationFolder, destinationFileName));
+    const destinationPath = join(destinationFolder, destinationFileName);
+    await fs.rename(targetMod.path, destinationPath);
 
     if (destinationFileName !== targetMod.fileName) {
-        if (collisionMetadataOwner) {
-            moveCollisionMetadata(targetMod.fileName, destinationFileName, collisionMetadataOwner, collisionMetadata);
-        } else {
-            migrateModMetadata([{ from: targetMod.fileName, to: destinationFileName }]);
-        }
+        migrateModMetadata([{ from: targetMod.fileName, to: destinationFileName }]);
     }
 
     return {
@@ -326,7 +404,7 @@ async function moveModToFolder(
         fileName: destinationFileName,
         enabled,
         priority: parseVpkPriority(destinationFileName) ?? targetMod.priority,
-        path: join(destinationFolder, destinationFileName),
+        path: destinationPath,
     };
 }
 
@@ -373,7 +451,7 @@ export async function findNextAvailablePriority(deadlockPath: string, startFrom 
 
     // If all numbers up to 99 are taken, this is an error
     if (priority >= MAX_VPK_PRIORITY && usedPriorities.has(MAX_VPK_PRIORITY)) {
-        throw new Error('No available priority slots (all 1-99 are used)');
+        throw new Error(ENABLE_LIMIT_MESSAGE);
     }
 
     return priority;
@@ -395,7 +473,25 @@ export async function enableMod(deadlockPath: string, modId: string): Promise<Mo
     }
 
     const addonsPath = getAddonsPath(deadlockPath);
-    return moveModToFolder(deadlockPath, targetMod, addonsPath, true);
+    const disabledPath = getDisabledPath(deadlockPath);
+
+    // The destination slot must avoid every number already enabled, plus every
+    // OTHER disabled mod that still carries a legacy pakNN name (so the enabled
+    // copy can't share an id with a still-disabled file). The mod we're moving
+    // out is excluded from that disabled set.
+    const addonsUsed = await folderPakNumbers(addonsPath);
+    const disabledUsed = await folderPakNumbers(disabledPath);
+    const ownNumber = parseVpkPriority(targetMod.fileName);
+    if (ownNumber !== null) disabledUsed.delete(ownNumber);
+    const forbidden = new Set<number>([...addonsUsed, ...disabledUsed]);
+
+    // Prefer the slot the mod last held, then its own legacy number, so a
+    // re-enable returns it to roughly its old load-order position when free.
+    const meta = getModMetadata(targetMod.fileName);
+    const slot = pickEnableSlot(forbidden, [meta?.lastPriority, ownNumber ?? undefined]);
+    const destinationFileName = `pak${String(slot).padStart(2, '0')}_dir.vpk`;
+
+    return moveModToFolderAs(targetMod, addonsPath, destinationFileName, true);
 }
 
 /**
@@ -414,7 +510,20 @@ export async function disableMod(deadlockPath: string, modId: string): Promise<M
     }
 
     const disabledPath = getDisabledPath(deadlockPath);
-    return moveModToFolder(deadlockPath, targetMod, disabledPath, false);
+
+    // Disabled mods carry no load-order slot, so give them a free-form unique
+    // name (lifting the 99-name cap on the disabled library) and remember the
+    // priority they held so re-enabling can restore it.
+    const taken = existsSync(disabledPath)
+        ? new Set((await fs.readdir(disabledPath)).map((n) => n.toLowerCase()))
+        : new Set<string>();
+    // Name the disabled file after the mod's display name (an enabled mod's own
+    // filename is a bare pakNN with nothing readable to keep).
+    const meta = getModMetadata(targetMod.fileName);
+    const preferredName = meta?.modName ?? meta?.sourceFileName ?? meta?.variantLabel;
+    const destinationFileName = makeDisabledFileName(targetMod.fileName, taken, preferredName);
+
+    return moveModToFolderAs(targetMod, disabledPath, destinationFileName, false, targetMod.priority);
 }
 
 /**
@@ -519,16 +628,23 @@ export async function reorderMods(
     }
 
     const targetSet = new Set(orderedFileNames);
-    const reserved = new Set(
-        allMods.filter((m) => !targetSet.has(m.fileName)).map((m) => m.priority)
-    );
+    // Reserve only genuine pakNN slots held by mods outside the reorder list:
+    // enabled mods not being moved, plus any legacy disabled mod still named
+    // pakNN. Free-form disabled mods carry no slot (their parsed priority is
+    // null and they only report DEFAULT_MOD_PRIORITY), so they reserve nothing.
+    const reserved = new Set<number>();
+    for (const m of allMods) {
+        if (targetSet.has(m.fileName)) continue;
+        const slot = parseVpkPriority(m.fileName);
+        if (slot !== null) reserved.add(slot);
+    }
 
     const assignments: { mod: Mod; newPriority: number; newFileName: string }[] = [];
     let cursor = MIN_VPK_PRIORITY;
     for (const fileName of orderedFileNames) {
         while (reserved.has(cursor) && cursor <= MAX_VPK_PRIORITY) cursor++;
         if (cursor > MAX_VPK_PRIORITY) {
-            throw new Error('No available priority slots (all 1-99 are used)');
+            throw new Error(ENABLE_LIMIT_MESSAGE);
         }
         const mod = modByFileName.get(fileName)!;
         const newFileName = renameWithPriority(fileName, cursor);

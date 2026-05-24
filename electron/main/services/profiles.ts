@@ -17,6 +17,11 @@ export interface ProfileMod {
      *  can find the mod even if its fileName has changed since. */
     gameBananaId?: number;
     gameBananaFileId?: number;
+    /** Content fingerprint, populated from metadata at save time. The identity
+     *  of last resort for custom/local mods that carry no GameBanana ids: it
+     *  survives a fileName change (reorder, or the free-form rename a mod gets
+     *  when disabled), so apply can still re-enable the right local mod. */
+    sha256?: string;
 }
 
 export interface ProfileCrosshairSettings {
@@ -154,6 +159,7 @@ function toProfileMod(mod: { fileName: string; priority: number }, enabled: bool
     };
     if (typeof meta?.gameBananaId === 'number') out.gameBananaId = meta.gameBananaId;
     if (typeof meta?.gameBananaFileId === 'number') out.gameBananaFileId = meta.gameBananaFileId;
+    if (typeof meta?.sha256 === 'string') out.sha256 = meta.sha256;
     return out;
 }
 
@@ -284,6 +290,7 @@ function buildProfileModResolver(
 ): (pm: ProfileMod) => ResolvedMatch {
     const byFileName = new Map<string, typeof currentMods[number]>();
     const byGbFile = new Map<string, typeof currentMods[number]>();
+    const bySha256 = new Map<string, typeof currentMods[number]>();
     const metaByFileName = new Map<string, ReturnType<typeof getModMetadata>>();
     for (const mod of currentMods) {
         byFileName.set(mod.fileName, mod);
@@ -294,6 +301,9 @@ function buildProfileModResolver(
         if (typeof gbId === 'number' && typeof fileId === 'number') {
             const key = `${gbId}:${fileId}`;
             if (!byGbFile.has(key)) byGbFile.set(key, mod);
+        }
+        if (typeof meta?.sha256 === 'string' && !bySha256.has(meta.sha256)) {
+            bySha256.set(meta.sha256, mod);
         }
     }
     const claimed = new Set<string>();
@@ -307,6 +317,18 @@ function buildProfileModResolver(
             if (stable && !claimed.has(stable.id)) {
                 claimed.add(stable.id);
                 return { mod: stable, via: 'stable' };
+            }
+        }
+
+        // Content fingerprint: a reliable identity that survives a fileName
+        // change, so it's tried before the (slot-reuse-prone) fileName fallback.
+        // Mainly rescues custom/local mods after they've been renamed free-form
+        // by a disable, which no plain-fileName lookup could match.
+        if (typeof pm.sha256 === 'string') {
+            const byHash = bySha256.get(pm.sha256);
+            if (byHash && !claimed.has(byHash.id)) {
+                claimed.add(byHash.id);
+                return { mod: byHash, via: 'stable' };
             }
         }
 
@@ -426,29 +448,35 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     let enabledCount = 0;
     let disabledCount = 0;
     let orphanedDisabledCount = 0;
-    for (const mod of currentMods) {
-        const profileMod = profileModByCurrentId.get(mod.id);
 
+    // Two passes, disables BEFORE enables. The disabled library is uncapped now,
+    // so a profile that swaps a large enabled set for a large disabled one could,
+    // in a single interleaved pass, enable past the 99 active-slot ceiling before
+    // freeing the slots it's about to vacate - throwing mid-apply and leaving a
+    // half-applied profile. Freeing first guarantees every slot the profile needs
+    // is available, and the enable pass can never exceed 99 (a profile holds at
+    // most 99 enabled mods). The two passes act on disjoint sets of currentMods
+    // (was-enabled vs was-disabled), so the snapshot ids stay valid across both.
+    for (const mod of currentMods) {
+        if (!mod.enabled) continue;
+        const profileMod = profileModByCurrentId.get(mod.id);
+        if (profileMod && profileMod.enabled) continue; // keep it enabled
+        await disableMod(deadlockPath, mod.id);
         if (profileMod) {
-            if (profileMod.enabled !== mod.enabled) {
-                if (profileMod.enabled) {
-                    console.log(`[profiles] toggle enable: ${mod.fileName}`);
-                    await enableMod(deadlockPath, mod.id);
-                    enabledCount++;
-                } else {
-                    console.log(`[profiles] toggle disable: ${mod.fileName}`);
-                    await disableMod(deadlockPath, mod.id);
-                    disabledCount++;
-                }
-            }
+            console.log(`[profiles] toggle disable: ${mod.fileName}`);
+            disabledCount++;
         } else {
-            // Mod wasn't in the profile - disable it
-            if (mod.enabled) {
-                console.log(`[profiles] toggle disable (not in profile): ${mod.fileName}`);
-                await disableMod(deadlockPath, mod.id);
-                orphanedDisabledCount++;
-            }
+            console.log(`[profiles] toggle disable (not in profile): ${mod.fileName}`);
+            orphanedDisabledCount++;
         }
+    }
+    for (const mod of currentMods) {
+        if (mod.enabled) continue;
+        const profileMod = profileModByCurrentId.get(mod.id);
+        if (!profileMod || !profileMod.enabled) continue;
+        console.log(`[profiles] toggle enable: ${mod.fileName}`);
+        await enableMod(deadlockPath, mod.id);
+        enabledCount++;
     }
     console.log(
         `[profiles] toggle summary: ${enabledCount} enabled, ${disabledCount} disabled, ` +
@@ -462,9 +490,9 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     // until later iterations move them. reorderMods stages every rename via
     // a tmp prefix first, so transient mid-loop collisions can't happen.
     //
-    // Re-resolve after enable/disable: enableMod / disableMod may have
-    // renamed files (collision rename in moveModToFolder), so the previous
-    // resolver's id-to-mod mapping is stale.
+    // Re-resolve after enable/disable: enableMod assigns a fresh pakNN slot and
+    // disableMod renames to a free-form name, so the previous resolver's
+    // id-to-mod (and fileName) mapping is stale.
     const refreshedMods = await scanMods(deadlockPath);
     const resolveAgainstRefreshed = buildProfileModResolver(refreshedMods);
     const orderedFileNames: string[] = [];
