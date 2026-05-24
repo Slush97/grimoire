@@ -121,6 +121,31 @@ body {
   background: var(--color-accent);
 }
 
+/* Scrollbar variant for panels that sit over imagery (the Locker hero detail
+   and Global drill-in shells use a feathered frosted-glass background with a
+   transparent panel). The default solid bg-secondary track would paint a hard
+   vertical strip over that feather; this keeps the track clear and renders the
+   thumb as a slim translucent bar so the glass shows through behind it. */
+.scrollbar-glass {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.scrollbar-glass::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-glass::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+
+.scrollbar-glass::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.32);
+  background-clip: padding-box;
+}
+
 /* Font utility classes */
 .font-radiance {
   font-family: var(--font-radiance);

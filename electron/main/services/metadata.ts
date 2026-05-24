@@ -29,6 +29,13 @@ export interface ModMetadata {
      *  the Locker's unassigned section. Takes precedence over categoryId when
      *  the locker maps mods to heroes. */
     lockerHero?: string;
+    /** Global (non-hero) cosmetic category, classified from the VPK file tree
+     *  (see classifyGlobalModType in vpk.ts). Tri-state: a GlobalModType when
+     *  the mod is a recognized global cosmetic, `null` when we classified it
+     *  and it is NOT one (a hero skin or unrecognized), and `undefined` when it
+     *  has not been classified yet. The null sentinel lets enrichMod skip
+     *  re-parsing every skin's VPK on subsequent scans. */
+    globalType?: import('../../../src/types/mod').GlobalModType | null;
     /** Set when this VPK was produced by mergeMods. The share code +
      *  source list are the unroll payload. */
     merged?: import('../../../src/types/mod').MergedModInfo;

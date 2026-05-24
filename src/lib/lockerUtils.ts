@@ -1,5 +1,5 @@
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import type { Mod } from '../types/mod';
+import type { GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
@@ -400,6 +400,61 @@ export function findMinaVariant(
       variant.garter === selection.garter &&
       variant.dress === selection.dress
   );
+}
+
+/**
+ * Display labels for the global (non-hero) cosmetic types. The "Icons &
+ * Portraits" merge is deliberate: icon packs and "portrait" packs write the
+ * same panorama/images/heroes files, so they're one category (see
+ * classifyGlobalModType).
+ */
+export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
+  'soul-container': 'Soul Containers',
+  hideout: 'Hideout',
+  icons: 'Icon Packs',
+  hud: 'HUD',
+};
+
+/** Carousel/section order for the global types. */
+export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
+  'soul-container',
+  'hideout',
+  'icons',
+  'hud',
+];
+
+export type GlobalModGroups = Record<GlobalModType, Mod[]>;
+
+/**
+ * Bucket mods by their classified global type. Mods with no globalType (hero
+ * cosmetics and anything that matched no signal) are simply omitted. Each
+ * bucket sorts enabled mods first (so the active ones are always at the top),
+ * then by priority within each enabled/disabled half.
+ */
+export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
+  const groups: GlobalModGroups = {
+    'soul-container': [],
+    hideout: [],
+    icons: [],
+    hud: [],
+  };
+  for (const mod of mods) {
+    if (mod.globalType && groups[mod.globalType]) {
+      groups[mod.globalType].push(mod);
+    }
+  }
+  for (const type of GLOBAL_MOD_TYPE_ORDER) {
+    groups[type].sort((a, b) => {
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+      return a.priority - b.priority;
+    });
+  }
+  return groups;
+}
+
+/** Total number of mods classified into any global type. */
+export function countGlobalMods(mods: Mod[]): number {
+  return mods.reduce((n, mod) => (mod.globalType ? n + 1 : n), 0);
 }
 
 export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: string }[]) {

@@ -1,5 +1,6 @@
 import { openSync, readSync, closeSync, existsSync, statSync } from 'fs';
 import { heroForSoundCodename } from './heroSoundCodenames';
+import type { GlobalModType } from '../../../src/types/mod';
 
 /**
  * VPK Header Structure (Version 2):
@@ -305,6 +306,106 @@ export function inferHeroFromVpk(vpkPath: string): string | null {
     const paths = parseVpkDirectoryCached(vpkPath);
     if (!paths || paths.length === 0) return null;
     return inferHeroFromVpkPaths(paths);
+}
+
+/**
+ * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
+ * alongside the per-hero piles. Detected from the VPK file tree because
+ * GameBanana's category labels are unreliable here: hideout portraits land in
+ * "Other/Misc", icon packs split between "Character HUD" and the hero's own
+ * name, and "QOL Lock" is tagged HUD but is really an announcer framework.
+ * The path signals below were verified against real installed mods.
+ * The GlobalModType union is shared from src/types/mod so the renderer's
+ * Locker grouping/UI agrees with this classifier.
+ */
+
+/**
+ * Hero skin / ability payload. A VPK touching any of these is a hero cosmetic
+ * and belongs on the Locker's hero axis, NOT a global slide — even if it also
+ * ships a few incidental icons. This guard is what keeps a skin bundle like
+ * "Yamato redesign" (mostly models/heroes_staging + particles/abilities, with
+ * 9 stray panorama/images/heroes icons) out of the Icons & Portraits bucket.
+ */
+const HERO_PAYLOAD_PATTERNS: RegExp[] = [
+    /(?:^|\/)models\/heroes(?:_wip|_staging)?\//i,
+    /(?:^|\/)materials\/(?:models\/)?heroes(?:_wip|_staging)?\//i,
+    /(?:^|\/)particles\/(?:heroes(?:_wip|_staging)?|abilities)\//i,
+];
+
+/**
+ * Model-based global signals are unambiguous: the file root names the type.
+ *   soul-container  models/props_gameplay/soul_container/   (7/7 mods)
+ *   hideout         models/hideout/                         (the 3D displays)
+ *   hud             panorama/layout|styles|images/hud/       (.vxml_c/.vcss_c)
+ * The icons case is special (see classifyGlobalModType) because the same
+ * panorama/images/heroes/ folder holds both global packs and single-hero art.
+ */
+const SOUL_CONTAINER_PATTERN = /(?:^|\/)models\/props_gameplay\/soul_container\//i;
+const HIDEOUT_PATTERN = /(?:^|\/)models\/hideout\//i;
+const HUD_PATTERN = /(?:^|\/)panorama\/(?:layout|styles|images\/hud)\//i;
+const HERO_IMAGE_PREFIX = /(?:^|\/)panorama\/images\/heroes\//i;
+
+/**
+ * Distinct hero codenames referenced by panorama/images/heroes files. The
+ * codename is the FILENAME prefix (before the first underscore), e.g.
+ * `drifter_card_psd` -> `drifter` (`vampirebat` = Mina, `archer` = Grey Talon).
+ * We key off the filename rather than the path segment after `heroes/` because
+ * some packs nest art in subfolders like `heroes/backgrounds/drifter_bg_psd` —
+ * counting the `backgrounds` folder as a hero would wrongly tip a single-hero
+ * mod over into the multi-hero "pack" bucket.
+ *
+ * We only need the cardinality, never the display name: a file set spanning
+ * many heroes is a global icon pack; a single hero's cards/portraits belong to
+ * that hero.
+ */
+function heroImageCodenames(paths: string[]): Set<string> {
+    const codenames = new Set<string>();
+    for (const p of paths) {
+        if (!HERO_IMAGE_PREFIX.test(p)) continue;
+        const basename = p.split('/').pop() ?? '';
+        const codename = basename.toLowerCase().split('_')[0];
+        if (codename) codenames.add(codename);
+    }
+    return codenames;
+}
+
+/**
+ * Classify a VPK's file tree as one of the global (non-hero) cosmetic types,
+ * or null when it's a hero cosmetic / unrecognized. Mirrors
+ * inferHeroFromVpkPaths: returns a single confident answer or nothing.
+ *
+ * The panorama/images/heroes case is decided by hero CARDINALITY, not the
+ * folder alone: a pack that reskins MANY heroes' cards is a global "Icons &
+ * Portraits" pack, but a file set for a SINGLE hero is that hero's portrait/
+ * card (often shipped alongside a skin) and belongs on the hero axis — so we
+ * return null and let the per-hero grouping claim it.
+ */
+export function classifyGlobalModType(paths: string[]): GlobalModType | null {
+    if (paths.length === 0) return null;
+    // Hero skin / ability payload wins outright: those belong on the hero axis.
+    if (paths.some((p) => HERO_PAYLOAD_PATTERNS.some((re) => re.test(p)))) {
+        return null;
+    }
+    if (paths.some((p) => SOUL_CONTAINER_PATTERN.test(p))) return 'soul-container';
+    if (paths.some((p) => HIDEOUT_PATTERN.test(p))) return 'hideout';
+
+    const heroImages = heroImageCodenames(paths);
+    if (heroImages.size >= 2) return 'icons'; // multi-hero pack = global
+    if (heroImages.size === 1) return null; // one hero = that hero's content
+
+    if (paths.some((p) => HUD_PATTERN.test(p))) return 'hud';
+    return null;
+}
+
+/**
+ * Convenience wrapper: parse the VPK directory (cached) and classify. Returns
+ * null when the VPK can't be parsed or matches no global type. Cached because,
+ * like inferHeroFromVpk, this runs once per mod on every scan.
+ */
+export function classifyGlobalModFromVpk(vpkPath: string): GlobalModType | null {
+    const paths = parseVpkDirectoryCached(vpkPath);
+    if (!paths || paths.length === 0) return null;
+    return classifyGlobalModType(paths);
 }
 
 /**

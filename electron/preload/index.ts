@@ -11,6 +11,7 @@ import type {
     AppSettings,
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
+    GlobalModType,
     MergeModsArgs,
     Mod,
     ModConflict,
@@ -50,6 +51,7 @@ export interface ElectronAPI {
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
+    setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (
         modId: string,
@@ -771,6 +773,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-variant-label', modId, label),
     setModLockerHero: (modId: string, heroName: string | null) =>
         ipcRenderer.invoke('set-mod-locker-hero', modId, heroName),
+    setModGlobalType: (modId: string, globalType: GlobalModType | null) =>
+        ipcRenderer.invoke('set-mod-global-type', modId, globalType),
     setModIgnoreUpdates: (modId: string, ignore: boolean) =>
         ipcRenderer.invoke('set-mod-ignore-updates', modId, ignore),
     backfillGameBananaFileId: (

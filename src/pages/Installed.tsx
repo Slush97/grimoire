@@ -33,7 +33,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, setModPriority as apiSetModPriority, reorderMods as apiReorderMods, setModIgnoreUpdates } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, UnknownModFilterGuess } from '../types/mod';
+import type { Mod, GlobalModType, UnknownModFilterGuess } from '../types/mod';
 import type { GameBananaModDetails } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
@@ -42,8 +42,8 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES } from '../lib/lockerUtils';
-import { setModLockerHero } from '../lib/api';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS } from '../lib/lockerUtils';
+import { setModLockerHero, setModGlobalType } from '../lib/api';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
@@ -1016,6 +1016,28 @@ export default function Installed() {
       await loadMods();
     } catch (err) {
       console.error('[Installed] Bulk tag failed:', err);
+    } finally {
+      setBulkProgress(null);
+      exitSelectMode();
+    }
+  };
+
+  // Bulk-assign a Global (non-hero) cosmetic type to the selection, used when
+  // the VPK-path classifier missed a mod or filed it wrong. Mirrors handleBulkTag
+  // but writes the globalType axis; the main-process handler clears any hero tag.
+  const handleBulkTagGlobal = async (globalType: GlobalModType) => {
+    if (selectedMods.length === 0) return;
+    setTagMenuOpen(false);
+    const targets = [...selectedMods];
+    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        await setModGlobalType(targets[i].id, globalType);
+        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
+      }
+      await loadMods();
+    } catch (err) {
+      console.error('[Installed] Bulk global tag failed:', err);
     } finally {
       setBulkProgress(null);
       exitSelectMode();
@@ -2671,7 +2693,7 @@ export default function Installed() {
                   title={
                     selectedMods.length === 0
                       ? 'Select mods to tag for the Locker'
-                      : `Tag ${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'} for a hero in the Locker`
+                      : `Tag ${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'} for a hero or Global category in the Locker`
                   }
                 >
                   Tag{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
@@ -2679,7 +2701,7 @@ export default function Installed() {
                 {tagMenuOpen && selectedMods.length > 0 && (
                   <div
                     role="dialog"
-                    aria-label="Tag selected mods for a hero"
+                    aria-label="Tag selected mods for the Locker"
                     className="absolute bottom-full mb-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
                   >
                     <button
@@ -2687,9 +2709,26 @@ export default function Installed() {
                       onClick={() => handleBulkTag(null)}
                       className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary cursor-pointer"
                     >
-                      Clear manual tag
+                      Clear hero tag
                     </button>
                     <div className="my-1 h-px bg-border" />
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                      Global
+                    </div>
+                    {GLOBAL_MOD_TYPE_ORDER.map((type) => (
+                      <button
+                        key={type}
+                        type="button"
+                        onClick={() => handleBulkTagGlobal(type)}
+                        className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-primary cursor-pointer"
+                      >
+                        {GLOBAL_MOD_TYPE_LABELS[type]}
+                      </button>
+                    ))}
+                    <div className="my-1 h-px bg-border" />
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                      Hero
+                    </div>
                     {HERO_NAMES.map((name) => (
                       <button
                         key={name}

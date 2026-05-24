@@ -1,27 +1,33 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ChevronDown, ChevronsDownUp, ChevronsUpDown, Layers, Music, Shield, Shirt, Star } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Layers, MoreVertical, Music, PowerOff, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
   getGamebananaCategories,
   listMinaVariants,
   setMinaPreset,
+  setModGlobalType,
   setModLockerHero,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import type { Mod } from '../types/mod';
+import type { GlobalModType, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
+import { Tag } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
 import {
   FAVORITE_HEROES_KEY,
+  GLOBAL_MOD_TYPE_LABELS,
+  GLOBAL_MOD_TYPE_ORDER,
   MINA_ARCHIVE_DEFAULT,
   buildHeroList,
   buildMinaPresets,
+  countGlobalMods,
   countLockerSkins,
   detectMinaTextures,
   findMinaVariant,
@@ -29,12 +35,14 @@ import {
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
+  groupGlobalMods,
   groupLockerSkins,
   groupModsByCategory,
   isLockerManagedMod,
   isLockerManagedSound,
   parseMinaVariant,
   readStoredFavorites,
+  type GlobalModGroups,
   type HeroCategory,
   type MinaPreset,
   type MinaSelection,
@@ -99,6 +107,17 @@ export default function Locker() {
     }
   }, [activeDeadlockPath, loadMods]);
 
+  // Refresh on any completed download so a newly-installed mod (and its
+  // freshly-classified globalType) surfaces here without leaving the page,
+  // matching the Installed page's behavior.
+  useEffect(() => {
+    if (!activeDeadlockPath) return;
+    const unsubscribe = window.electronAPI.onDownloadComplete(() => {
+      loadMods();
+    });
+    return unsubscribe;
+  }, [activeDeadlockPath, loadMods]);
+
   useEffect(() => {
     let active = true;
     const loadCategories = async () => {
@@ -154,12 +173,32 @@ export default function Locker() {
     }
     return Number(selectedHeroRouteParam);
   }, [selectedHeroRouteParam]);
+  const globalSelected = useMemo(
+    () => /^\/locker\/global\/?$/.test(location.pathname),
+    [location.pathname]
+  );
 
   // Build basic hero list first (needed for mod categorization)
   const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
 
-  const lockerMods = useMemo(() => mods.filter(isLockerManagedMod), [mods]);
-  const lockerSounds = useMemo(() => mods.filter(isLockerManagedSound), [mods]);
+  // Global-typed mods live on their own axis (the Global card / drill-in), so
+  // keep them out of the hero grouping entirely. Without this a fuzzy name
+  // match would file e.g. "Lowpoly Holliday Soul Container" into Holliday's
+  // pile instead of Soul Containers.
+  const lockerMods = useMemo(
+    () => mods.filter((m) => isLockerManagedMod(m) && !m.globalType),
+    [mods]
+  );
+  const lockerSounds = useMemo(
+    () => mods.filter((m) => isLockerManagedSound(m) && !m.globalType),
+    [mods]
+  );
+  const globalGroups = useMemo(() => groupGlobalMods(mods), [mods]);
+  const globalCount = useMemo(() => countGlobalMods(mods), [mods]);
+  const globalTypeCount = useMemo(
+    () => GLOBAL_MOD_TYPE_ORDER.filter((type) => globalGroups[type].length > 0).length,
+    [globalGroups]
+  );
 
   // Calculate heroMods, passing heroList for name-based category inference
   const heroMods = useMemo(() => {
@@ -265,6 +304,17 @@ export default function Locker() {
       await loadMods();
     } catch (err) {
       console.error('[Locker] Failed to set lockerHero override:', err);
+    }
+  };
+
+  // Manual override for the Global axis: reassign a mod to another global type,
+  // or pass null to drop it off the Global axis entirely (see set-mod-global-type).
+  const tagModGlobalType = async (modId: string, globalType: GlobalModType | null) => {
+    try {
+      await setModGlobalType(modId, globalType);
+      await loadMods();
+    } catch (err) {
+      console.error('[Locker] Failed to set globalType override:', err);
     }
   };
 
@@ -405,6 +455,13 @@ export default function Locker() {
         </div>
       ) : viewMode === 'gallery' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+          {globalCount > 0 && (
+            <GlobalGalleryCard
+              count={globalCount}
+              typeCount={globalTypeCount}
+              onNavigate={() => navigate('/locker/global')}
+            />
+          )}
           {heroList.map((hero) => (
             <HeroGalleryCard
               key={hero.id}
@@ -425,6 +482,37 @@ export default function Locker() {
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+          {globalCount > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate('/locker/global')}
+              className="group relative flex items-center gap-3 overflow-hidden rounded-lg border border-accent/40 bg-bg-secondary p-4 text-left transition-colors hover:border-accent/70"
+            >
+              {/* Environment art bleeds behind the card; the left-to-right
+                  gradient keeps the text side dark, mirroring the list-view
+                  hero cards. */}
+              <img
+                src={GLOBAL_BG}
+                alt=""
+                aria-hidden
+                className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
+              />
+              <div
+                aria-hidden
+                className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
+              />
+              <div className="relative z-10 min-w-0 flex-1">
+                <div className="font-semibold text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
+                  Global
+                </div>
+                <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+                  {globalCount} mod{globalCount !== 1 ? 's' : ''} · {globalTypeCount} categor
+                  {globalTypeCount !== 1 ? 'ies' : 'y'}
+                </div>
+              </div>
+              <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
+            </button>
+          )}
           {heroList.map((hero) => (
             <HeroCard
               key={hero.id}
@@ -588,6 +676,21 @@ export default function Locker() {
           </div>
         </div>
       )}
+
+      {globalSelected && (
+        <div
+          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
+          style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
+        >
+          <LockerGlobalView
+            groups={globalGroups}
+            hideNsfw={settings?.hideNsfwPreviews ?? false}
+            onBack={() => navigate('/locker')}
+            onToggle={toggleMod}
+            onSetGlobalType={tagModGlobalType}
+          />
+        </div>
+      )}
     </>
   );
 }
@@ -627,6 +730,404 @@ interface HeroGalleryCardProps {
   isFavorite: boolean;
   onNavigate: () => void;
   onToggleFavorite: () => void;
+}
+
+const GLOBAL_BG = getAssetPath('/locker/global-bg.webp');
+
+interface GlobalGalleryCardProps {
+  count: number;
+  typeCount: number;
+  onNavigate: () => void;
+}
+
+/**
+ * Gallery tile for the global (non-hero) cosmetics, sized to match the hero
+ * cards. Heroes have render art; Global leans on the environment backdrop +
+ * an icon for its own identity. Clicking drills into LockerGlobalView.
+ */
+function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardProps) {
+  return (
+    <div
+      onClick={onNavigate}
+      className="group relative w-full cursor-pointer overflow-hidden rounded-2xl border border-accent/40 bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
+    >
+      <div className="relative aspect-[3/4]">
+        <img
+          src={GLOBAL_BG}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover object-center transition-transform duration-500 group-hover:scale-[1.06]"
+        />
+        {/* Subtle top highlight for depth, matching the hero cards. */}
+        <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
+        <div className="absolute left-2 top-2 z-20 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+          {count} mod{count !== 1 ? 's' : ''}
+        </div>
+      </div>
+      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 sm:p-3">
+        <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+          Global
+        </div>
+        <div className="text-[11px] text-white/70">
+          {typeCount} categor{typeCount !== 1 ? 'ies' : 'y'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface LockerGlobalViewProps {
+  groups: GlobalModGroups;
+  hideNsfw: boolean;
+  onBack: () => void;
+  onToggle: (modId: string) => void | Promise<unknown>;
+  /** Reassign a mod to another global type, or null to drop it off the axis. */
+  onSetGlobalType: (modId: string, globalType: GlobalModType | null) => void | Promise<unknown>;
+}
+
+/**
+ * Drill-in panel for the Global card: a Deadlock environment backdrop under a
+ * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
+ * art + blur language). Selecting a tile reveals that type's toggleable mods.
+ */
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType }: LockerGlobalViewProps) {
+  const available = GLOBAL_MOD_TYPE_ORDER.filter((type) => groups[type].length > 0);
+  const [selectedType, setSelectedType] = useState<GlobalModType>(
+    () => available[0] ?? 'soul-container'
+  );
+  // Open retag menu, anchored in viewport coords (fixed-positioned) so it never
+  // clips against the scrolling card pane. Null when closed.
+  const [retagMenu, setRetagMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  // Close the menu on any scroll / resize / Escape — a fixed menu would
+  // otherwise float away from its anchor once the pane scrolls.
+  useEffect(() => {
+    if (!retagMenu) return;
+    const close = () => setRetagMenu(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setRetagMenu(null);
+    };
+    window.addEventListener('scroll', close, true);
+    window.addEventListener('resize', close);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('scroll', close, true);
+      window.removeEventListener('resize', close);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [retagMenu]);
+  // Guard against the selected type emptying out (e.g. last mod deleted) by
+  // falling back to the first non-empty type at render time.
+  const activeType = groups[selectedType]?.length ? selectedType : available[0];
+  const activeMods = activeType ? groups[activeType] : [];
+  const total = GLOBAL_MOD_TYPE_ORDER.reduce((sum, type) => sum + groups[type].length, 0);
+
+  return (
+    <div className="relative flex h-full overflow-hidden">
+      {/* Background art (Deadlock environment), full-bleed behind both panels.
+          A moderate overlay keeps the right-pane cards legible; the bottom
+          gradient adds depth, matching the LockerHeroView shell. */}
+      <div className="absolute inset-0 overflow-hidden bg-bg-primary">
+        <img
+          src={GLOBAL_BG}
+          alt=""
+          aria-hidden
+          className="absolute inset-0 h-full w-full object-cover object-center animate-hero-zoom-in"
+        />
+        <div className="absolute inset-0 bg-bg-primary/55" />
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+      </div>
+
+      {/* Progressive frosted-glass background — the same feathered, hard-edge-free
+          treatment as LockerHeroView. Three stacked blur layers, each masked with
+          a longer taper so the effective blur softens from heavy to clear instead
+          of stopping on a border. The container is far wider than the sidebar so
+          the gradient has runway to feather all the way out. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[560px] xl:w-[620px]"
+      >
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(48px) saturate(135%)',
+            WebkitBackdropFilter: 'blur(48px) saturate(135%)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 18%, transparent 92%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 18%, transparent 92%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 12%, transparent 72%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 12%, transparent 72%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            backdropFilter: 'blur(10px)',
+            WebkitBackdropFilter: 'blur(10px)',
+            WebkitMaskImage: 'linear-gradient(to right, black 0%, black 8%, transparent 52%)',
+            maskImage: 'linear-gradient(to right, black 0%, black 8%, transparent 52%)',
+          }}
+        />
+        <div
+          className="absolute inset-0"
+          style={{
+            background:
+              'linear-gradient(to right, var(--color-bg-secondary) 0%, rgba(26,26,26,0.95) 28%, rgba(26,26,26,0.75) 50%, rgba(26,26,26,0.4) 70%, rgba(26,26,26,0.15) 85%, transparent 96%)',
+          }}
+        />
+      </div>
+
+      {/* Left sidebar: type selector. Transparent on lg so the feathered glass
+          above shows through; slides in like the hero panel. */}
+      <div className="relative z-10 flex w-[260px] flex-shrink-0 flex-col gap-6 overflow-y-auto scrollbar-glass bg-bg-secondary p-6 animate-slide-in-left lg:w-[300px] lg:bg-transparent xl:w-[340px]">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back
+        </button>
+
+        <div className="flex items-baseline gap-2">
+          <h2 className="text-lg font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+            Global
+          </h2>
+          <span className="text-xs text-white/60">
+            {total} mod{total !== 1 ? 's' : ''}
+          </span>
+        </div>
+
+        <nav className="flex flex-col gap-1.5">
+          {GLOBAL_MOD_TYPE_ORDER.map((type) => {
+            const items = groups[type];
+            const isActive = type === activeType;
+            const isEmpty = items.length === 0;
+            return (
+              <button
+                key={type}
+                type="button"
+                disabled={isEmpty}
+                onClick={() => setSelectedType(type)}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  isEmpty
+                    ? 'cursor-default border-transparent opacity-40'
+                    : isActive
+                      ? 'border-accent/60 bg-accent/15'
+                      : 'border-transparent hover:bg-white/10'
+                }`}
+              >
+                <span className="flex-1 truncate text-sm font-medium text-white">
+                  {GLOBAL_MOD_TYPE_LABELS[type]}
+                </span>
+                <span className="text-xs text-white/50">{items.length}</span>
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Right pane: the selected type's mods as cards */}
+      <div className="relative z-10 flex-1 overflow-y-auto scrollbar-glass">
+        <div className="space-y-4 p-6">
+          {activeType ? (
+            <>
+              <div className="flex items-baseline gap-2">
+                <h3 className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+                  {GLOBAL_MOD_TYPE_LABELS[activeType]}
+                </h3>
+                <span className="text-xs text-white/60">
+                  {activeMods.length} mod{activeMods.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+              <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
+                {activeMods.map((mod) => {
+                  // Skipped when NSFW previews are hidden so we never bleed
+                  // hidden imagery into the glass tint, even blurred.
+                  const glassBackdropUrl =
+                    mod.thumbnailUrl && !(mod.nsfw && hideNsfw) ? mod.thumbnailUrl : null;
+                  return (
+                    <div
+                      key={mod.id}
+                      className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
+                        mod.enabled
+                          ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)] hover:bg-accent/[0.12]'
+                          : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
+                      }`}
+                    >
+                      {/* Glass backdrop: a blurred copy of the cover art bleeds
+                          behind the card so it's tinted by its own thumbnail,
+                          matching the Installed grid cards. */}
+                      {glassBackdropUrl && (
+                        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
+                          <img
+                            src={glassBackdropUrl}
+                            alt=""
+                            aria-hidden
+                            draggable={false}
+                            className={`h-full w-full scale-[1.35] object-cover blur-2xl saturate-[1.4] transition-opacity duration-200 ${
+                              mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
+                            }`}
+                          />
+                          <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f0f]/45 via-[#0f0f0f]/65 to-[#0f0f0f]/[0.88]" />
+                        </div>
+                      )}
+
+                      {/* Media: aspect-video cover. */}
+                      <div className="relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] bg-bg-tertiary">
+                        <div
+                          className={`h-full w-full transition-[filter,opacity] duration-200 ${
+                            mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
+                          }`}
+                        >
+                          <ModThumbnail
+                            src={mod.thumbnailUrl}
+                            alt={mod.name}
+                            nsfw={mod.nsfw}
+                            hideNsfw={hideNsfw}
+                            className="h-full w-full"
+                            imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-hover/card:scale-[1.03]"
+                            fallback={
+                              <div className="flex h-full w-full items-center justify-center text-xs text-text-secondary">
+                                No preview
+                              </div>
+                            }
+                          />
+                        </div>
+                        <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover/card:bg-bg-primary/20" />
+                        {!mod.enabled && (
+                          <div className="pointer-events-none absolute left-2 top-2 z-10 flex h-5 items-start">
+                            <Tag
+                              tone="neutral"
+                              variant="overlay"
+                              icon={PowerOff}
+                              title="This mod is disabled and not loaded in-game"
+                            >
+                              Disabled
+                            </Tag>
+                          </div>
+                        )}
+                        {/* Retag control: sits above the full-card toggle overlay
+                            (z-20 > z-10) and stops propagation so opening it never
+                            also toggles the mod. */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const r = e.currentTarget.getBoundingClientRect();
+                            const MENU_W = 208;
+                            const MENU_H = 220;
+                            const x = Math.max(
+                              8,
+                              Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)
+                            );
+                            const y =
+                              r.bottom + MENU_H > window.innerHeight
+                                ? Math.max(8, r.top - MENU_H - 4)
+                                : r.bottom + 4;
+                            setRetagMenu({ id: mod.id, x, y });
+                          }}
+                          aria-label={`Change category for ${mod.name}`}
+                          title="Change category"
+                          className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                        >
+                          <MoreVertical className="h-4 w-4" />
+                        </button>
+                      </div>
+
+                      {/* Title only — the whole card is the enable/disable control. */}
+                      <div className="mt-auto px-0.5">
+                        <h3
+                          className="min-w-0 truncate text-[15px] font-semibold leading-[19px] text-text-primary"
+                          title={mod.name}
+                        >
+                          {mod.name}
+                        </h3>
+                      </div>
+
+                      {/* Full-card click target: clicking anywhere enables/disables
+                          the mod. Kept as a transparent overlay (not a wrapping
+                          button) so the heading/markup stays valid. */}
+                      <button
+                        type="button"
+                        onClick={() => onToggle(mod.id)}
+                        aria-pressed={mod.enabled}
+                        aria-label={mod.enabled ? `Disable ${mod.name}` : `Enable ${mod.name}`}
+                        title={mod.enabled ? 'Click to disable' : 'Click to enable'}
+                        className="absolute inset-0 z-10 cursor-pointer rounded-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          ) : (
+            <p className="text-sm text-white/70">No global (non-hero) cosmetics installed yet.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Retag menu (fixed-positioned, anchored at the kebab's viewport coords so
+          it never clips against the scrolling pane). */}
+      {retagMenu && (
+        <>
+          <div
+            className="fixed inset-0 z-[59]"
+            aria-hidden
+            onClick={() => setRetagMenu(null)}
+          />
+          <div
+            role="menu"
+            aria-label="Change global category"
+            className="fixed z-[60] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
+            style={{ top: retagMenu.y, left: retagMenu.x }}
+          >
+            <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+              Move to category
+            </div>
+            {GLOBAL_MOD_TYPE_ORDER.map((type) => {
+              const isCurrent = type === activeType;
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    if (!isCurrent) void onSetGlobalType(retagMenu.id, type);
+                    setRetagMenu(null);
+                  }}
+                  className={`flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs cursor-pointer hover:bg-bg-tertiary ${
+                    isCurrent ? 'text-accent' : 'text-text-primary'
+                  }`}
+                >
+                  {GLOBAL_MOD_TYPE_LABELS[type]}
+                  {isCurrent && <Check className="h-3.5 w-3.5" />}
+                </button>
+              );
+            })}
+            <div className="my-1 h-px bg-border" />
+            <button
+              type="button"
+              role="menuitem"
+              onClick={() => {
+                void onSetGlobalType(retagMenu.id, null);
+                setRetagMenu(null);
+              }}
+              className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
+            >
+              Remove from Global
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
 }
 
 function HeroGallerySkeleton() {

@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, MergeModsArgs, UnmergeModResult } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, MergeModsArgs, UnmergeModResult } from '../types/mod';
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
@@ -86,6 +86,13 @@ export async function setModLockerHero(
   heroName: string | null
 ): Promise<Mod> {
   return window.electronAPI.setModLockerHero(modId, heroName);
+}
+
+export async function setModGlobalType(
+  modId: string,
+  globalType: GlobalModType | null
+): Promise<Mod> {
+  return window.electronAPI.setModGlobalType(modId, globalType);
 }
 
 export async function setModIgnoreUpdates(

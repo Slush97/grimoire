@@ -456,7 +456,7 @@ export function LockerHeroView({
       </div>
 
       {/* Left Panel - Skin Selection */}
-      <div className="relative z-10 w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto bg-bg-secondary lg:bg-transparent animate-slide-in-left">
+      <div className="relative z-10 w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto scrollbar-glass bg-bg-secondary lg:bg-transparent animate-slide-in-left">
         <div className="relative z-10 p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between gap-3">

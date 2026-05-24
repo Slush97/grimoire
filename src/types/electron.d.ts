@@ -1,6 +1,7 @@
 import type {
     Mod,
     AppSettings,
+    GlobalModType,
     ModConflict,
     UnknownModFilterGuess,
     ApplyUnknownModMatchArgs,
@@ -289,6 +290,7 @@ export interface ElectronAPI {
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
+    setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (
       modId: string,

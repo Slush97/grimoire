@@ -16,13 +16,13 @@ import {
 import { getAddonsPath } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
-import { inferHeroFromVpk } from '../services/vpk';
+import { inferHeroFromVpk, classifyGlobalModFromVpk } from '../services/vpk';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
 import { mergeMods, unmergeMod } from '../services/modMerger';
 import { getMainWindow } from '../index';
-import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, MergeModsArgs, UnmergeModResult } from '../../../src/types/mod';
+import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, GlobalModType, MergeModsArgs, UnmergeModResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -70,6 +70,21 @@ function enrichMod(mod: Mod): Mod {
                 lockerHero = inferred;
             }
         }
+        // Global (non-hero) cosmetic type. Classified once from the VPK tree
+        // then persisted (including the null "checked, not global" result) so
+        // later scans skip the parse. The classifier guards out hero payloads,
+        // so a real skin resolves to null and stays on the hero axis.
+        let globalType = metadata.globalType;
+        if (globalType === undefined) {
+            let classified: ReturnType<typeof classifyGlobalModFromVpk> = null;
+            try {
+                classified = classifyGlobalModFromVpk(mod.path);
+            } catch (err) {
+                console.warn(`[enrichMod] VPK global-type classification failed for ${mod.fileName}:`, err);
+            }
+            setModMetadata(mod.fileName, { globalType: classified });
+            globalType = classified;
+        }
         return {
             ...mod,
             // Use the stored mod name from GameBanana if available
@@ -89,6 +104,7 @@ function enrichMod(mod: Mod): Mod {
             fileDescription: metadata.fileDescription,
             sourceFileName: metadata.sourceFileName,
             lockerHero,
+            globalType: globalType ?? undefined,
             merged: metadata.merged,
             ignoreUpdates: metadata.ignoreUpdates,
         };
@@ -327,6 +343,35 @@ ipcMain.handle(
         const trimmed = heroName?.trim() ?? '';
         setModMetadata(target.fileName, {
             lockerHero: trimmed.length > 0 ? trimmed : undefined,
+        });
+        return enrichMod(target);
+    }
+);
+
+// set-mod-global-type — manual override for the Locker's Global axis, used when
+// the VPK-path classifier (classifyGlobalModType) misses a mod or files it
+// under the wrong type. Pass a GlobalModType to assign it (this also clears any
+// hero tag, since a mod lives on either the hero axis or the global axis, never
+// both). Pass null to force it OFF the global axis: we persist the explicit null
+// so the classifier doesn't just re-add it on the next scan. The stored value
+// wins over auto-classification because enrichMod only classifies when
+// globalType is undefined.
+ipcMain.handle(
+    'set-mod-global-type',
+    async (_, modId: string, globalType: GlobalModType | null): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        setModMetadata(target.fileName, {
+            globalType,
+            // Assigning a global type moves the mod off the hero axis.
+            ...(globalType ? { lockerHero: undefined } : {}),
         });
         return enrichMod(target);
     }

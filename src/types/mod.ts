@@ -36,6 +36,15 @@ export interface MergedModInfo {
   sources: MergedModSource[];
 }
 
+/**
+ * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
+ * alongside the per-hero piles. Derived from the VPK file tree by
+ * `classifyGlobalModType` (electron/main/services/vpk.ts), since GameBanana's
+ * category labels are unreliable for these. Shared here so the classifier
+ * (main) and the Locker grouping/UI (renderer) agree on the union.
+ */
+export type GlobalModType = 'soul-container' | 'hideout' | 'icons' | 'hud';
+
 export interface Mod {
   id: string;
   name: string;
@@ -65,6 +74,12 @@ export interface Mod {
    *  manually via the Locker's "Tag hero" affordance. Takes precedence over
    *  categoryId when grouping mods into hero piles. */
   lockerHero?: string;
+  /** Global (non-hero) cosmetic category this mod belongs to in the Locker,
+   *  classified from its VPK file tree (see GlobalModType). Mutually exclusive
+   *  with hero content: the classifier returns null for hero skins/abilities,
+   *  so a mod with a globalType set is never also a hero cosmetic. Undefined
+   *  for hero mods and for anything that matched no global signal. */
+  globalType?: GlobalModType;
   /** Set when this mod was produced by mergeMods. Carries the unroll payload
    *  (share code + source list). */
   merged?: MergedModInfo;
