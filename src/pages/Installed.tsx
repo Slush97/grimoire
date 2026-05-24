@@ -3726,6 +3726,11 @@ function ModListRowContent({
         </h3>
         <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-text-secondary">
           {mod.categoryName && <span className={metaChipClasses}>{mod.categoryName}</span>}
+          {mod.lockerHero && (
+            <span className={metaChipClasses} title={`Manual Locker tag: ${mod.lockerHero}`}>
+              {mod.lockerHero}
+            </span>
+          )}
           {mod.nsfw && <Tag tone="danger" className="flex-shrink-0">18+</Tag>}
           <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
           <span className="flex-shrink-0 tabular-nums" title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}>
@@ -4233,6 +4238,11 @@ function ModCard({
           >
             {mod.categoryName && (
               <span className={metaChipClasses}>{mod.categoryName}</span>
+            )}
+            {mod.lockerHero && (
+              <span className={metaChipClasses} title={`Manual Locker tag: ${mod.lockerHero}`}>
+                {mod.lockerHero}
+              </span>
             )}
             {mod.nsfw && (
               <Tag tone="danger" className="flex-shrink-0">18+</Tag>

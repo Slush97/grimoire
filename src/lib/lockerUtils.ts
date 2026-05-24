@@ -227,7 +227,10 @@ export function detectMinaTextures(mods: Mod[]) {
 }
 
 export function isLockerManagedMod(mod: Mod): boolean {
-  if (mod.sourceSection !== 'Mod') return false;
+  // A manual Locker hero tag is an explicit user intent to manage this VPK as
+  // a hero skin, including custom local imports that do not have GameBanana
+  // section metadata.
+  if (mod.sourceSection !== 'Mod' && !mod.lockerHero) return false;
 
   const lower = mod.fileName.toLowerCase();
   // Internal Midnight Mina preset files are managed by the custom variants UI,
