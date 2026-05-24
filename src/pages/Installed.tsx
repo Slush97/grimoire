@@ -25,6 +25,7 @@ import {
   Scissors,
   Share2,
   Beaker,
+  PowerOff,
   Tag as TagIcon,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
@@ -3434,6 +3435,12 @@ function ModMediaPreview({
 }: ModMediaPreviewProps) {
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
   const canOpen = !!onOpenDetails;
+  // Desaturate + dim the cover art for disabled mods so an "off" card reads
+  // differently at a glance. Applied to a wrapper around the media only, so
+  // overlay badges (Disabled/Update/Conflict) keep their color.
+  const mediaDisabledClass = mod.enabled
+    ? ''
+    : 'grayscale-[0.6] opacity-[0.7] transition-[filter,opacity] duration-200';
   const detailsLabel = canOpen ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined;
   // Prefer an explicit mod thumbnail. For sound-only mods without one, fall
   // back to the inferred hero render before using the waveform placeholder.
@@ -3482,7 +3489,7 @@ function ModMediaPreview({
         draggable={false}
         onDragStart={stopMediaDrag}
       >
-        {image}
+        <div className={`h-full w-full ${mediaDisabledClass}`}>{image}</div>
         {canOpen && (
           <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover:bg-bg-primary/20" />
         )}
@@ -3506,7 +3513,7 @@ function ModMediaPreview({
         draggable={false}
         onDragStart={stopMediaDrag}
       >
-        {soundMedia}
+        <div className={`h-full w-full ${mediaDisabledClass}`}>{soundMedia}</div>
         {(mod.thumbnailUrl || soundHeroRenderUrl) && (
           <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-bg-primary/80 via-bg-primary/25 to-transparent" />
         )}
@@ -3602,7 +3609,9 @@ function ModListRowContent({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className="group relative h-11 w-[72px] flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer"
+        className={`group relative h-11 w-[72px] flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
+          mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
+        }`}
         aria-label={canOpen ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined}
         data-card-action="true"
         draggable={false}
@@ -4053,6 +4062,13 @@ function ModCard({
                   variant="overlay"
                   onCommit={onCommitPriority}
                 />
+              </div>
+            )}
+            {!mod.enabled && !selectMode && (
+              <div className="absolute top-2 left-2 z-10 flex h-5 items-start">
+                <Tag tone="neutral" variant="overlay" icon={PowerOff} title="This mod is disabled and not loaded in-game">
+                  Disabled
+                </Tag>
               </div>
             )}
               <div className="absolute top-2 right-2 z-10 flex flex-col items-end gap-1">
