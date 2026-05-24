@@ -354,7 +354,9 @@ export function LockerHeroView({
   // sound for this hero) drop back to skins so the panel isn't stuck empty.
   const activeSection = section === 'sounds' && !hasSounds ? 'skins' : section;
   const activeList = activeSection === 'sounds' ? soundList : skinList;
-  const soundCount = soundList.length;
+  // Group sound variants the same way skins are counted so the count matches
+  // the gallery/list cards and the grouped rows rendered below.
+  const soundCount = countLockerSkins(soundList);
 
   const renderSrc =
     renderFallbackStep === 0

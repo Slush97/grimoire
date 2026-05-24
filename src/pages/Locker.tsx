@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { Layers, Shield, Star } from 'lucide-react';
+import { Layers, Music, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -360,6 +360,7 @@ export default function Locker() {
               key={hero.id}
               hero={hero}
               skinCount={countLockerSkins(heroMods.map.get(hero.id) ?? [])}
+              soundCount={countLockerSkins(heroSounds.map.get(hero.id) ?? [])}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onNavigate={() => goToHero(hero)}
               onToggleFavorite={() =>
@@ -379,6 +380,7 @@ export default function Locker() {
               key={hero.id}
               hero={hero}
               mods={heroMods.map.get(hero.id) ?? []}
+              sounds={heroSounds.map.get(hero.id) ?? []}
               onSelect={(modId) => setActiveSkin(hero.id, modId)}
               onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
               isFavorite={favoriteHeroes.includes(hero.id)}
@@ -542,6 +544,7 @@ export default function Locker() {
 interface HeroCardProps {
   hero: HeroCategory;
   mods: Mod[];
+  sounds: Mod[];
   onSelect: (modId: string) => void;
   onToggleVariant: (modId: string) => void;
   isFavorite: boolean;
@@ -566,6 +569,7 @@ interface HeroCardProps {
 interface HeroGalleryCardProps {
   hero: HeroCategory;
   skinCount: number;
+  soundCount: number;
   isFavorite: boolean;
   onNavigate: () => void;
   onToggleFavorite: () => void;
@@ -587,6 +591,7 @@ function HeroGallerySkeleton() {
 function HeroGalleryCard({
   hero,
   skinCount,
+  soundCount,
   isFavorite,
   onNavigate,
   onToggleFavorite,
@@ -712,6 +717,30 @@ function HeroGalleryCard({
       >
         <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
       </button>
+      {(skinCount > 0 || soundCount > 0) && (
+        <div className="absolute left-2 top-2 z-20 flex items-center gap-2 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+          {skinCount > 0 && (
+            <span
+              className="flex items-center gap-1"
+              title={`${skinCount} skin${skinCount !== 1 ? 's' : ''}`}
+              aria-label={`${skinCount} skin${skinCount !== 1 ? 's' : ''}`}
+            >
+              <Shirt className="w-3 h-3" />
+              {skinCount}
+            </span>
+          )}
+          {soundCount > 0 && (
+            <span
+              className="flex items-center gap-1"
+              title={`${soundCount} sound${soundCount !== 1 ? 's' : ''}`}
+              aria-label={`${soundCount} sound${soundCount !== 1 ? 's' : ''}`}
+            >
+              <Music className="w-3 h-3" />
+              {soundCount}
+            </span>
+          )}
+        </div>
+      )}
       <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex flex-col items-end text-right">
         {nameFailed ? (
           <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
@@ -737,11 +766,6 @@ function HeroGalleryCard({
             />
           </div>
         )}
-        {skinCount > 0 && (
-          <div className="mt-1 text-[10px] text-white/70">
-            {skinCount} skin{skinCount !== 1 ? 's' : ''}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -750,6 +774,7 @@ function HeroGalleryCard({
 function HeroCard({
   hero,
   mods,
+  sounds,
   onSelect,
   onToggleVariant,
   isFavorite,
@@ -774,7 +799,14 @@ function HeroCard({
   const wikiUrl = getHeroWikiUrl(hero.name);
   const [iconSrc, setIconSrc] = useState(() => localUrl);
   const [fallbackStep, setFallbackStep] = useState(0);
+  const [section, setSection] = useState<'skins' | 'sounds'>('skins');
   const skinCount = useMemo(() => countLockerSkins(mods), [mods]);
+  const soundCount = useMemo(() => countLockerSkins(sounds), [sounds]);
+  const hasSounds = sounds.length > 0;
+  // Drop back to skins if the active section empties out (e.g. last sound for
+  // this hero got deleted/untagged) so the panel never sticks on empty.
+  const activeSection = section === 'sounds' && !hasSounds ? 'skins' : section;
+  const activeList = activeSection === 'sounds' ? sounds : mods;
 
   const handleError = () => {
     if (fallbackStep === 0) {
@@ -804,7 +836,14 @@ function HeroCard({
         <div className="min-w-0">
           <div className="font-semibold truncate">{hero.name}</div>
           <div className="text-xs text-text-secondary">
-            {skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins installed'}
+            {skinCount === 0 && soundCount === 0
+              ? 'No skins installed'
+              : [
+                  skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : null,
+                  soundCount > 0 ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
           </div>
         </div>
         <button
@@ -818,26 +857,73 @@ function HeroCard({
         </button>
       </div>
 
-      <div className="p-3">
+      <div className="p-3 space-y-3">
+        {/* Section toggle: only when this hero has at least one Sound mod, so
+            skins-only heroes don't get an empty Sounds tab. Mirrors the detail
+            view (LockerHeroView). */}
+        {hasSounds && (
+          <div
+            role="tablist"
+            aria-label="Section"
+            className="inline-flex items-center rounded-full border border-border bg-bg-tertiary p-0.5 text-xs"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'skins'}
+              onClick={() => setSection('skins')}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                activeSection === 'skins'
+                  ? 'bg-accent/15 text-text-primary border border-accent/40'
+                  : 'text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
+            >
+              <Shirt className="w-3.5 h-3.5" />
+              Skins
+            </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'sounds'}
+              onClick={() => setSection('sounds')}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                activeSection === 'sounds'
+                  ? 'bg-accent/15 text-text-primary border border-accent/40'
+                  : 'text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
+            >
+              <Music className="w-3.5 h-3.5" />
+              Sounds
+            </button>
+          </div>
+        )}
         <HeroSkinsPanel
-          mods={mods}
+          mods={activeList}
           onSelect={onSelect}
           onToggleVariant={onToggleVariant}
           hideNsfwPreviews={hideNsfwPreviews}
-          minaPresets={minaPresets}
-          activeMinaPreset={activeMinaPreset}
-          minaTextures={minaTextures}
-          onApplyMinaPreset={onApplyMinaPreset}
-          minaArchivePath={minaArchivePath}
-          onMinaArchivePathChange={onMinaArchivePathChange}
-          minaVariants={minaVariants}
-          minaVariantsLoading={minaVariantsLoading}
-          minaVariantsError={minaVariantsError}
-          onLoadMinaVariants={onLoadMinaVariants}
-          minaSelection={minaSelection}
-          onMinaSelectionChange={onMinaSelectionChange}
-          selectedMinaVariant={selectedMinaVariant}
-          onApplyMinaVariant={onApplyMinaVariant}
+          showDownloadable={activeSection === 'skins'}
+          useHeroPortraitThumbnails={activeSection === 'sounds'}
+          heroName={hero.name}
+          emptyMessage={
+            activeSection === 'sounds'
+              ? 'No sound mods tagged for this hero yet. Tag one from Installed (multi-select → Tag).'
+              : 'Download a skin for this hero to manage it here.'
+          }
+          minaPresets={activeSection === 'skins' ? minaPresets : []}
+          activeMinaPreset={activeSection === 'skins' ? activeMinaPreset : undefined}
+          minaTextures={activeSection === 'skins' ? minaTextures : []}
+          onApplyMinaPreset={activeSection === 'skins' ? onApplyMinaPreset : undefined}
+          minaArchivePath={activeSection === 'skins' ? minaArchivePath : undefined}
+          onMinaArchivePathChange={activeSection === 'skins' ? onMinaArchivePathChange : undefined}
+          minaVariants={activeSection === 'skins' ? minaVariants : []}
+          minaVariantsLoading={activeSection === 'skins' ? minaVariantsLoading : false}
+          minaVariantsError={activeSection === 'skins' ? minaVariantsError : null}
+          onLoadMinaVariants={activeSection === 'skins' ? onLoadMinaVariants : undefined}
+          minaSelection={activeSection === 'skins' ? minaSelection : undefined}
+          onMinaSelectionChange={activeSection === 'skins' ? onMinaSelectionChange : undefined}
+          selectedMinaVariant={activeSection === 'skins' ? selectedMinaVariant : undefined}
+          onApplyMinaVariant={activeSection === 'skins' ? onApplyMinaVariant : undefined}
         />
       </div>
     </div>
