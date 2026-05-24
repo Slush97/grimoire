@@ -43,7 +43,6 @@ export function HeroSelect({
   size = 'md',
 }: HeroSelectProps) {
   const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(0);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
@@ -68,11 +67,7 @@ export function HeroSelect({
   }, [open]);
 
   useEffect(() => {
-    if (!open) {
-      setActiveIndex(selectedIndex);
-      return;
-    }
-    setActiveIndex(selectedIndex);
+    if (!open) return;
     window.requestAnimationFrame(() => {
       optionRefs.current[selectedIndex]?.focus();
     });
@@ -87,7 +82,6 @@ export function HeroSelect({
   const focusOption = (index: number) => {
     if (options.length === 0) return;
     const nextIndex = (index + options.length) % options.length;
-    setActiveIndex(nextIndex);
     optionRefs.current[nextIndex]?.focus();
   };
 
@@ -95,22 +89,21 @@ export function HeroSelect({
     if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
       event.preventDefault();
       setOpen(true);
-      setActiveIndex(selectedIndex);
       window.requestAnimationFrame(() => {
         optionRefs.current[selectedIndex]?.focus();
       });
     }
   };
 
-  const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, optionValue: string) => {
+  const handleOptionKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, optionValue: string, index: number) => {
     switch (event.key) {
       case 'ArrowDown':
         event.preventDefault();
-        focusOption(activeIndex + 1);
+        focusOption(index + 1);
         break;
       case 'ArrowUp':
         event.preventDefault();
-        focusOption(activeIndex - 1);
+        focusOption(index - 1);
         break;
       case 'Home':
         event.preventDefault();
@@ -176,8 +169,7 @@ export function HeroSelect({
                 onClick={() => {
                   selectOption(option.value);
                 }}
-                onFocus={() => setActiveIndex(index)}
-                onKeyDown={(event) => handleOptionKeyDown(event, option.value)}
+                onKeyDown={(event) => handleOptionKeyDown(event, option.value, index)}
                 className={`w-full h-8 px-2.5 flex items-center gap-2 text-left text-xs cursor-pointer ${
                   active
                     ? 'bg-accent text-bg-primary'
