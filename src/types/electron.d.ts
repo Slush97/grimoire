@@ -19,6 +19,7 @@ import type {
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
 } from './gamebanana';
+import type { HeroPortrait } from './portrait';
 
 export interface BrowseModsArgs {
     page: number;
@@ -292,6 +293,7 @@ export interface ElectronAPI {
     editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
+    getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (

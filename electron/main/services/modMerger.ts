@@ -32,7 +32,7 @@ const VPKMERGE_BINARY_BY_PLATFORM: Record<SupportedPlatform, string> = {
  * the repo's resources/; in a packaged build electron-builder's
  * extraResources places it at process.resourcesPath/vpkmerge/.
  */
-function vpkmergeBinaryPath(): string {
+export function vpkmergeBinaryPath(): string {
     const key = `${process.platform}-${process.arch}` as SupportedPlatform;
     const assetName = VPKMERGE_BINARY_BY_PLATFORM[key];
     if (!assetName) {
@@ -52,7 +52,7 @@ function vpkmergeBinaryPath(): string {
     return full;
 }
 
-function runVpkmerge(args: string[], timeoutMs = 300000): Promise<void> {
+export function runVpkmerge(args: string[], timeoutMs = 300000): Promise<void> {
     return new Promise((resolve, reject) => {
         const bin = vpkmergeBinaryPath();
         const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });

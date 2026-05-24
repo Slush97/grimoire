@@ -11,6 +11,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import HeroCardPicker from '../components/locker/HeroCardPicker';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import {
@@ -584,6 +585,9 @@ export function LockerHeroView({
               onApplyMinaVariant={activeSection === 'skins' ? onApplyMinaVariant : undefined}
             />
           </div>
+
+          {/* Hero card / portrait picker (experimental prototype) */}
+          <HeroCardPicker heroName={hero.name} />
 
         </div>
       </div>
