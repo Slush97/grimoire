@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Layers, Star, Music, Shirt } from 'lucide-react';
+import { ArrowLeft, Layers, Star, Music, Shirt, Images } from 'lucide-react';
 import { Skeleton } from '../components/common/Skeleton';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -349,7 +349,7 @@ export function LockerHeroView({
 }: LockerHeroViewProps) {
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
-  const [section, setSection] = useState<'skins' | 'sounds'>('skins');
+  const [section, setSection] = useState<'skins' | 'sounds' | 'cards'>('skins');
   const hasSounds = soundList.length > 0;
   // If the active section runs out of mods (e.g. user deleted their last
   // sound for this hero) drop back to skins so the panel isn't stuck empty.
@@ -496,38 +496,40 @@ export function LockerHeroView({
               />
             )}
             <span className="text-sm text-text-secondary">
-              {activeSection === 'sounds'
-                ? soundCount > 0
-                  ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}`
-                  : 'No sounds'
-                : skinCount > 0
-                  ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}`
-                  : 'No skins'}
+              {activeSection === 'cards'
+                ? 'Card art'
+                : activeSection === 'sounds'
+                  ? soundCount > 0
+                    ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}`
+                    : 'No sounds'
+                  : skinCount > 0
+                    ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}`
+                    : 'No skins'}
             </span>
           </div>
 
-          {/* Section toggle: only when this hero has at least one Sound mod;
-              the toggle would be empty noise for heroes with skins-only piles. */}
-          {hasSounds && (
-            <div
-              role="tablist"
-              aria-label="Section"
-              className="inline-flex items-center rounded-full border border-border bg-bg-tertiary p-0.5 text-xs"
+          {/* Section toggle. Skins and Cards are always available; Sounds only
+              shows when this hero has at least one tagged Sound mod. */}
+          <div
+            role="tablist"
+            aria-label="Section"
+            className="inline-flex items-center rounded-full border border-border bg-bg-tertiary p-0.5 text-xs"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'skins'}
+              onClick={() => setSection('skins')}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                activeSection === 'skins'
+                  ? 'bg-accent/15 text-text-primary border border-accent/40'
+                  : 'text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
             >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={activeSection === 'skins'}
-                onClick={() => setSection('skins')}
-                className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
-                  activeSection === 'skins'
-                    ? 'bg-accent/15 text-text-primary border border-accent/40'
-                    : 'text-text-secondary hover:text-text-primary border border-transparent'
-                }`}
-              >
-                <Shirt className="w-3.5 h-3.5" />
-                Skins
-              </button>
+              <Shirt className="w-3.5 h-3.5" />
+              Skins
+            </button>
+            {hasSounds && (
               <button
                 type="button"
                 role="tab"
@@ -542,11 +544,28 @@ export function LockerHeroView({
                 <Music className="w-3.5 h-3.5" />
                 Sounds
               </button>
-            </div>
-          )}
+            )}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'cards'}
+              onClick={() => setSection('cards')}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                activeSection === 'cards'
+                  ? 'bg-accent/15 text-text-primary border border-accent/40'
+                  : 'text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
+            >
+              <Images className="w-3.5 h-3.5" />
+              Cards
+            </button>
+          </div>
 
-          {/* Skin / Sound Selection */}
+          {/* Skin / Sound / Card selection */}
           <div className="space-y-4">
+            {activeSection === 'cards' ? (
+              <HeroCardPicker heroName={hero.name} />
+            ) : (
             <HeroSkinsPanel
               mods={activeList}
               onSelect={onSelect}
@@ -584,10 +603,8 @@ export function LockerHeroView({
               }
               onApplyMinaVariant={activeSection === 'skins' ? onApplyMinaVariant : undefined}
             />
+            )}
           </div>
-
-          {/* Hero card / portrait picker (experimental prototype) */}
-          <HeroCardPicker heroName={hero.name} />
 
         </div>
       </div>
