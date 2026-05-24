@@ -15,7 +15,8 @@ nothing to the game.
 
 APPLY is the missing half: make the chosen card the one Deadlock actually shows,
 independent of which skin (or none) is active for that hero, and let the user
-revert or swap cleanly.
+revert or swap cleanly, without proliferating VPKs against the ~100-VPK mount
+limit.
 
 ## Why this needs a design and not just "enable the mod"
 
@@ -30,13 +31,34 @@ Card art rarely ships alone:
 So APPLY must be surgical: peel out exactly one hero's panorama files and make
 just those win, leaving skin selection and other heroes untouched.
 
+## Decided model: one consolidated Locker cosmetics VPK
+
+Every applied card lives in a SINGLE Locker-managed VPK (call it the Locker
+cosmetics VPK), rebuilt from a selection set whenever a card is applied,
+swapped, or reverted. It wins in-game purely by sitting at a low pakNN.
+
+Why this and not "merge the card into each hero's skin VPK":
+
+- **Decoupled lifecycle.** Changing or disabling a skin never touches cards, and
+  a card has a home even when the hero has no active skin (cards are independent
+  of skins).
+- **One slot for all cards.** Per-hero card paths are disjoint
+  (`<codenameA>_` vs `<codenameB>_`), so every chosen card coexists in one VPK
+  with zero collisions. N applied cards cost 1 enabled slot, not N.
+- **Composes by slot, not by merge.** A card in a low-pakNN VPK beats a
+  skin+card bundle for that path via Deadlock's lowest-pakNN-wins rule, so we
+  never have to rebuild a skin VPK to make a card win.
+
+The only thing per-skin merge would buy is saving ~1 slot per hero, not worth
+the coupling churn and the no-skin breakage.
+
 ## Primitives we build on (all verified in code)
 
 - **Load model.** Deadlock mounts addon VPKs; on a file-path collision the
   LOWER pakNN wins (pak01 beats pak02). The lowest-pakNN VPK that ships a path
   is the one the game uses. Confirmed by `modMerger.ts` (the merge sorts so the
-  lowest-pakNN source lands last in vpkmerge's last-input-wins argv) and the
-  commit `c8bf075`.
+  lowest-pakNN source lands last in vpkmerge's last-input-wins argv) and commit
+  `c8bf075`.
 - **`vpkmerge split`** (shipped, vpkmerge `main`). Routes entries from one input
   VPK into N outputs by path predicate, copying the compiled bytes unchanged.
   Plan JSON:
@@ -44,105 +66,102 @@ just those win, leaving skin selection and other heroes untouched.
   {
     "outputs": [
       { "path": "<abs out.vpk>", "prefixes": ["panorama/images/heroes/hornet_"] }
-    ],
-    "residual": "<abs residual.vpk>"
+    ]
   }
   ```
-  Predicate is `AnyPrefix` (case-sensitive `startsWith`). Unmatched entries go to
-  `residual` if given, else are dropped. `--strict` errors on multi-output match;
-  default routes each path to the first matching output.
-  This is the right tool: it emits the raw `.vtex_c` the game loads. (`portrait`
-  re-encodes to PNG and is only for the preview grid.)
-- **Slot + metadata machinery** (in `mods.ts` / `metadata.ts` / `modMerger.ts`):
-  `findNextAvailablePriority`, `reorderMods`, `setModPriority`, `enableMod`,
+  Predicate is `AnyPrefix` (case-sensitive `startsWith`). Unmatched entries are
+  dropped when no `residual` is given. This emits the raw `.vtex_c` the game
+  loads. (`portrait` re-encodes to PNG and is only for the preview grid.)
+- **`vpkmerge merge`** (shipped). Combines >= 2 input VPKs into one,
+  last-input-wins on collision, `--strict` to refuse on any collision. We use
+  `--strict` when combining per-hero card chunks: the chunks are disjoint by
+  construction (one selection per hero), so a collision means a bug.
+- **Slot + metadata machinery** (`mods.ts` / `metadata.ts` / `modMerger.ts`):
+  `findNextAvailablePriority`, `reorderMods`, `setModPriority`,
   `reserveOutputSlot` (TOCTOU-safe slot claim), `verifyVpkOutput` (VPK magic
-  check), the `merged` sidecar manifest pattern, and `migrateModMetadata`.
-  The card-override feature reuses all of these rather than inventing new ones.
+  check), the `merged` sidecar manifest pattern, `migrateModMetadata`. The
+  cosmetics VPK reuses all of these.
 
-## The APPLY pipeline
+## State: the selection set
 
-Inputs: `heroName`, the chosen source VPK `A` (the picker already knows the
-source `modFileName` per card), and the deadlock path.
-
-1. **Resolve codename** for `heroName` via the reversed `HERO_SOUND_CODENAMES`
-   table (same lookup `heroPortraits.ts` already does).
-2. **Locate `A` on disk** (enabled `addons/` or parked `.disabled/`). A disabled
-   source is fine: we copy out of it, it stays disabled. This is the feature's
-   payoff (apply a card from a mod you do not otherwise run).
-3. **Build the split plan.** One output, prefix
-   `panorama/images/heroes/<codename>_`, NO residual (we want only this hero's
-   card files; everything else is dropped). The trailing `_` keeps the prefix
-   from leaking into a different hero whose codename shares a stem, and matches
-   the `<codename>_<variant>` and `<codename>_card_psd/` folder conventions.
-   Scope = the whole per-hero panorama set from `A` (card, vertical, mm, sm,
-   critical, gloat) so the minimap and card identities stay consistent. See
-   open decision (1) if we want single-variant scope instead.
-4. **Allocate and reserve the output slot.** Compute a winning pakNN (algorithm
-   below), then `reserveOutputSlot` it before spawning vpkmerge, exactly as
-   `mergeMods` does.
-5. **Run** `vpkmerge split --plan <plan.json> <A>` and `verifyVpkOutput` the
-   result. On any failure, unlink the partial output (mirrors `mergeMods`).
-6. **Stamp metadata** on the new fileName: an `appliedCard` manifest (shape
-   below). Its presence also marks the VPK as a Locker-managed override artifact
-   so other surfaces hide it (see "Hiding override VPKs").
-7. **Rescan**, return the updated mod list.
-
-### Deterministic priority (the slot algorithm)
-
-A card override only has to outrank the few VPKs that actually ship the same
-`panorama/images/heroes/<codename>` path. Find those competitors among ENABLED
-mods with `parseVpkDirectoryCached` (the prototype already prefilters this way):
-
-- **No enabled competitor:** place the override at `findNextAvailablePriority`.
-  It wins by being the only owner of the path. Done, no reorder.
-- **Competitors exist:** the override must sit at a pakNN strictly below
-  `min(competitor slots)`. If a free slot below that minimum exists, take it.
-  Otherwise do a targeted `reorderMods`: insert the override immediately ahead
-  of the lowest competitor and shift that competitor (and anything between) up
-  by one. Reusing `reorderMods` keeps the two-phase rename + metadata migration
-  guarantees; we only touch the affected band, not the whole load order.
-
-This is the minimal, honest version of memory thread (1) ("pak01 priority by
-convention"): we do not reserve a global low band, we just guarantee the
-override outranks its specific collision set.
-
-### `appliedCard` manifest
-
-Add to `ModMetadata` (and surface on `Mod` via `enrichMod`, exactly like
-`merged`):
+The source of truth is a manifest stored in the metadata sidecar keyed by the
+cosmetics VPK fileName (mirrors how `merged` is stored). Its presence also marks
+the VPK as Locker-managed so other surfaces hide it.
 
 ```ts
-interface AppliedCardInfo {
-  heroCodename: string;       // "hornet"
-  heroName: string;           // "Vindicta"
-  variants: string[];         // captured variants, e.g. ["card","vertical","mm"]
+interface LockerCardSelection {
+  heroCodename: string;        // "hornet"
+  heroName: string;            // "Vindicta"
+  variants: string[];          // captured variants, e.g. ["card","vertical","mm"]
   source: {
-    fileName: string;         // source VPK name at apply time
+    fileName: string;          // source VPK name at apply time
     modName?: string;
     gameBananaId?: number;
-    sha256AtApplyTime: string; // content identity, for repair/rebuild + dedupe
+    sha256AtApplyTime: string; // content identity, to relocate a renamed source
   };
-  createdAt: string;
+  addedAt: string;
+}
+
+interface LockerCosmeticsInfo {
+  cards: LockerCardSelection[]; // one entry per hero (keyed by heroCodename)
+  rebuiltAt: string;
 }
 ```
 
-`sha256AtApplyTime` lets a future rebuild or "repair" step re-locate the source
-by content if it was renamed (same trick `unmergeMod` uses for its sources).
+Add `lockerCosmetics?: LockerCosmeticsInfo` to `ModMetadata`, surfaced on `Mod`
+via `enrichMod` like `merged`. This is a distinct type from `merged`: the
+cosmetics VPK is rebuilt automatically and must NOT show the user-facing
+unmerge UI.
 
-### REVERT and REPLACE
+## The rebuild operation (the heart of it)
 
-- **Revert** (hero X back to default): find the override VPK by
-  `appliedCard.heroCodename`, `deleteMod` it (unlinks + `removeModMetadata`).
-  The game falls back to whatever else ships the card (the active skin bundle,
-  or the Valve default). No reorder needed; deleting only frees a slot.
-- **Replace** (pick a different card for hero X): revert the existing override,
-  then apply the new one. One override VPK per hero at a time is the invariant.
+`rebuildLockerCosmetics(deadlockPath, selections)` is the one operation; apply,
+swap, and revert are all just "edit the selection set, then rebuild".
 
-## Hiding override VPKs from other surfaces (cross-cutting cost)
+1. **Empty set:** delete the cosmetics VPK and its metadata. Done.
+2. For each selection, **locate its source VPK** on disk (enabled or
+   `.disabled/`) by fileName, falling back to `sha256AtApplyTime` if renamed
+   (same recovery `unmergeMod` uses). A source that is gone is dropped from the
+   set with a warning (report it, like unmerge's `missingSourceFileNames`).
+3. **Split each source** into a temp VPK under `userData`, prefix
+   `panorama/images/heroes/<codename>_`, no residual (card files only). The
+   trailing `_` keeps the prefix from leaking into a hero whose codename shares
+   a stem and matches the `<codename>_<variant>` / `<codename>_card_psd/`
+   conventions. Scope = the whole per-hero panorama set from that source (card,
+   vertical, mm, sm, critical, gloat) so card and minimap stay consistent; see
+   open decision (1) for single-variant scope.
+4. **Combine** to a temp output VPK:
+   - 0 sources left: see step 1.
+   - 1 source: the single split output IS the cosmetics VPK (skip merge,
+     `merge` requires >= 2 inputs).
+   - >= 2 sources: `vpkmerge merge --strict <temps...> <tempOut>` (disjoint by
+     construction, so strict should never fire).
+5. **Verify** (`verifyVpkOutput`) the temp output, then **swap it into the
+   cosmetics slot atomically** (write to temp, reserve/replace the slot, rename
+   in). Reuse `reserveOutputSlot` for the slot claim.
+6. **Slot to win:** keep the cosmetics VPK at a pakNN below every enabled
+   competitor that ships any included `panorama/images/heroes/<codename>_` path
+   (found via `parseVpkDirectoryCached`, as the prototype already prefilters).
+   With one stable VPK this is: if a competitor sits below it, `reorderMods` the
+   cosmetics VPK just under the lowest competitor; otherwise leave it. Usually
+   there are zero or one competitors per hero (the active skin bundle, an
+   enabled multi-hero icon pack).
+7. **Stamp** `lockerCosmetics` with the (possibly pruned) selection set and
+   `rebuiltAt`. Clean up temp files.
 
-The override is a real `pakNN_dir.vpk` in `addons/`, so without filtering it
-would appear as a mystery mod in Installed, the Locker skins/sounds lists,
-Conflicts, and profile export. Treat "metadata has `appliedCard`" as the hide
+### Apply / swap / revert
+
+- **Apply** (hero X from source A): upsert the hero-X entry into the set
+  (keyed by codename, so it replaces any prior choice for X), rebuild.
+- **Revert** (hero X to default): remove hero X from the set, rebuild. The game
+  falls back to whatever else ships the card (active skin bundle, or Valve
+  default).
+- **Swap** is just apply with a different source.
+
+## Hiding the cosmetics VPK from other surfaces (cross-cutting cost)
+
+The cosmetics VPK is a real `pakNN_dir.vpk` in `addons/`, so without filtering
+it appears as a mystery mod. Treat "metadata has `lockerCosmetics`" as the hide
 signal and filter it out in:
 
 - `src/pages/Installed.tsx` (mod list)
@@ -150,65 +169,48 @@ signal and filter it out in:
   lands in a hero's skin/sound pile or the "Unassigned" bucket)
 - Conflicts scanning (`electron/main/services/conflicts.ts`)
 - Portable profile export (`modMerger.ts` `buildPortableForSources`,
-  `portableProfile.ts`) so overrides are not shared as if they were mods
+  `portableProfile.ts`) so it is not shared as if it were a mod
 
-This is the largest surface-area cost of the feature and the main reason to
-design before coding. `merged` mods are NOT hidden today (they are first-class),
-so there is no existing filter to piggyback on; this is new plumbing.
-
-## Scale path: consolidated roll-up (memory thread 2)
-
-One override VPK per applied card consumes one enabled slot each. A user who
-sets cards for 20 heroes burns 20 of the ~99 slots. Because card overrides for
-different heroes touch DISJOINT paths (`<codenameA>_` vs `<codenameB>_`), they
-can be merged with zero collisions into a single consolidated VPK:
-
-- Persist the selection set (hero -> {sourceFileName, sha256, variants}) in a
-  manifest.
-- On any change, split each selected source into a temp VPK (card paths only),
-  `merge` them all into one `pakNN_dir.vpk` at a single winning slot, swap it in
-  atomically.
-
-Recommend shipping the one-VPK-per-card model first (simpler, trivially
-reversible) and moving to the consolidated build only if slot pressure shows up
-in practice. The `appliedCard` manifest is forward-compatible with both.
+Only ONE VPK to hide (vs one per card), but `merged` mods are NOT hidden today,
+so this is still new plumbing with no existing filter to piggyback on. This is
+the biggest part of the work and the main reason to design before coding.
 
 ## Failure handling and edge cases
 
-- Source VPK deleted between preview and apply: split fails, surface a friendly
-  error, no slot leaked (we unlink the reserved output on failure).
-- `vpkmerge` binary missing/too old (no `split`): `vpkmergeBinaryPath()` already
-  throws a clear message; the picker surfaces it.
+- Source VPK deleted between preview and apply (or since last rebuild): dropped
+  from the set with a reported warning; the rebuild still succeeds for the rest.
+- `vpkmerge` binary missing/too old (no `split`/`merge`): `vpkmergeBinaryPath()`
+  already throws a clear message; the picker surfaces it.
 - 99-slot limit reached: `reserveOutputSlot`/`findNextAvailablePriority` already
-  throw `ENABLE_LIMIT_MESSAGE`; reuse it.
+  throw `ENABLE_LIMIT_MESSAGE`; reuse it. The cosmetics VPK keeps its slot
+  across rebuilds, so steady state adds at most one slot.
 - Unsupported card format in the source: only affects the PREVIEW (morphic
   decode); APPLY copies bytes regardless of format, so an undecodable preview
-  can still be applied. Decide whether to allow applying a card we could not
-  preview (recommend: yes, with a generic tile).
-- In-game verification: split output is an unsigned v2 VPK, same as `merge`
-  output which is confirmed to mount. Still verify a real card swap in-game once
-  before calling this done.
+  can still be applied. See open decision (3).
+- In-game verification: split/merge output is an unsigned v2 VPK, same as
+  existing `merge` output which is confirmed to mount. Still verify a real card
+  swap in-game once before calling this done.
 
 ## Open decisions
 
-1. **Variant scope:** apply the whole per-hero panorama set from the chosen
+1. **Variant scope:** capture the whole per-hero panorama set from the chosen
    source (recommended, keeps card + minimap consistent) vs only the single
    previewed variant.
-2. **Override model:** one VPK per applied card (recommended for v1) vs the
-   consolidated roll-up from the start.
+2. **Roll-up model:** RESOLVED. One consolidated Locker cosmetics VPK (see
+   "Decided model" above).
 3. **Apply an unpreviewable card?** Allow applying when morphic could not decode
-   the preview (recommended yes) vs hide it.
+   the preview (recommended yes, show a generic tile) vs hide it.
 
 ## Phased implementation plan
 
-- **Phase 1 (apply/revert core):** `applyHeroCard` / `revertHeroCard` in a new
-  `heroPortraits` sibling (or extend it); `AppliedCardInfo` on
-  `ModMetadata`/`Mod`; the split + slot + verify + metadata steps; IPC +
-  preload + `api.ts`; wire the picker's selection to apply/revert.
-- **Phase 2 (hygiene):** hide override VPKs across Installed / Locker /
+- **Phase 1 (rebuild core, main process):** `LockerCosmeticsInfo` /
+  `LockerCardSelection` on `ModMetadata`/`Mod`; `rebuildLockerCosmetics` plus
+  `applyHeroCard` / `revertHeroCard` wrappers (split + merge + verify + slot +
+  manifest); IPC + preload + `api.ts`.
+- **Phase 2 (hygiene):** hide the cosmetics VPK across Installed / Locker /
   Conflicts / profile export.
-- **Phase 3 (polish):** show the active card as selected on load (read back the
-  `appliedCard` manifest), "Reset to default" affordance, error toasts.
-- **Phase 4 (scale, optional):** consolidated roll-up VPK.
+- **Phase 3 (UI):** wire the picker's selection to apply/revert, reflect the
+  active card on load by reading back `lockerCosmetics`, add a "Reset to
+  default" affordance and error toasts.
 
-Phases 1 and 2 ship together (without 2 the override pollutes the UI).
+Phases 1 and 2 ship together (without 2 the cosmetics VPK pollutes the UI).
