@@ -219,6 +219,7 @@ interface FileRaw {
     _nFilesize: number;
     _sDownloadUrl: string;
     _nDownloadCount: number;
+    _tsDateAdded?: number;
     _sDescription?: string;
     _bIsArchived?: boolean;
     _sMd5Checksum?: string;
@@ -660,6 +661,7 @@ export async function fetchModDetails(
             fileSize: f._nFilesize,
             downloadUrl: f._sDownloadUrl,
             downloadCount: f._nDownloadCount,
+            dateAdded: f._tsDateAdded,
             description: f._sDescription,
             isArchived: f._bIsArchived ?? false,
         })),

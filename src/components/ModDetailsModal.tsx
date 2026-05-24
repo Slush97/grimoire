@@ -7,6 +7,7 @@ import {
   ExternalLink,
   AlertTriangle,
   Clock,
+  RefreshCw,
   X,
   ChevronLeft,
   ChevronRight,
@@ -242,6 +243,18 @@ export default function ModDetailsModal({
             <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
             <span className="opacity-50">-</span>
             <span>{file.downloadCount.toLocaleString()} downloads</span>
+            {file.dateAdded && file.dateAdded > 0 && (
+              <>
+                <span className="opacity-50">-</span>
+                <span
+                  className="flex items-center gap-1"
+                  title={`Uploaded ${formatDate(file.dateAdded)} ${new Date(file.dateAdded * 1000).toLocaleTimeString()}`}
+                >
+                  <Clock className="w-3 h-3" />
+                  {formatDate(file.dateAdded)}
+                </span>
+              </>
+            )}
           </div>
           {isDownloadingThis && pct !== null && (
             <div className="mt-2 h-1 w-full rounded-full bg-bg-secondary overflow-hidden">
@@ -379,19 +392,26 @@ export default function ModDetailsModal({
             return (
               <div className="hidden md:flex items-center gap-3 text-xs text-text-secondary flex-shrink-0">
                 {addedStr && (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1" title={`Uploaded ${addedStr}`}>
                     <Clock className="w-3 h-3" />
+                    <span className="text-text-tertiary">Added</span>
                     <span className="text-text-primary">{addedStr}</span>
                   </span>
                 )}
                 {showModified && (
-                  <span className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}>
-                    <Clock className="w-3 h-3" />
+                  <span
+                    className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}
+                    title={outdated
+                      ? `Last updated ${modifiedStr} (may be outdated for the current game version)`
+                      : `Last updated ${modifiedStr}`}
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span className={outdated ? 'text-yellow-300/80' : 'text-text-tertiary'}>Updated</span>
                     <span className={outdated ? 'text-yellow-300' : 'text-text-primary'}>{modifiedStr}</span>
                   </span>
                 )}
                 {totalDownloads > 0 && (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1" title={`${totalDownloads.toLocaleString()} downloads`}>
                     <Download className="w-3 h-3" />
                     <span className="text-text-primary">{totalDownloads.toLocaleString()}</span>
                   </span>

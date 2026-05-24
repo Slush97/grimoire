@@ -15,6 +15,7 @@ import {
   showOpenDialog,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
@@ -244,6 +245,12 @@ export default function Settings() {
   const handleIgnoreConflictsByDefaultChange = async (checked: boolean) => {
     if (settings) {
       await saveSettings({ ...settings, ignoreConflictsByDefault: checked });
+    }
+  };
+
+  const handleDateFormatChange = async (format: 'MM/DD/YYYY' | 'DD/MM/YYYY') => {
+    if (settings && settings.dateFormat !== format) {
+      await saveSettings({ ...settings, dateFormat: format });
     }
   };
 
@@ -860,6 +867,36 @@ export default function Settings() {
                   {settings.devDeadlockPath}
                 </div>
               )}
+            </div>
+
+            <div className="h-px bg-white/5" />
+
+            <div>
+              <label className="text-sm font-medium text-text-primary block">Date Format</label>
+              <p className="text-xs text-text-secondary mt-0.5 mb-2">
+                How upload and update dates are shown on mods and files.
+              </p>
+              <div className="inline-flex rounded-md border border-white/10 overflow-hidden">
+                {(['MM/DD/YYYY', 'DD/MM/YYYY'] as const).map((fmt, i) => {
+                  const active = (settings?.dateFormat ?? 'MM/DD/YYYY') === fmt;
+                  return (
+                    <button
+                      key={fmt}
+                      onClick={() => handleDateFormatChange(fmt)}
+                      className={`px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                        i > 0 ? 'border-l border-white/10' : ''
+                      } ${
+                        active
+                          ? 'bg-accent/20 text-text-primary'
+                          : 'bg-bg-tertiary text-text-secondary hover:bg-white/5'
+                      }`}
+                    >
+                      {fmt}
+                      <span className="ml-2 text-xs text-text-tertiary">{formatDateParts(new Date(), fmt)}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </Card>

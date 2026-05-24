@@ -42,6 +42,8 @@ export interface AppSettings {
     /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
      *  focus rings throughout the app. */
     accentColor: string;
+    /** Order used to render absolute dates (mod/file upload + update dates). */
+    dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY';
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -63,6 +65,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,
     accentColor: '#f97316',
+    dateFormat: 'MM/DD/YYYY',
 };
 
 /**
