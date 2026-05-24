@@ -3957,7 +3957,7 @@ function ModCard({
     >
       {indicatorClasses && <div className={indicatorClasses} />}
 
-      <div className={isDragging ? 'pointer-events-none opacity-0' : isList ? 'contents' : ''}>
+      <div className={isDragging ? (isList ? 'hidden' : 'pointer-events-none opacity-0') : isList ? 'contents' : ''}>
         {selectMode && (
         <>
           {/* Full-card click target. Sits above thumbnail button, toggle, and
