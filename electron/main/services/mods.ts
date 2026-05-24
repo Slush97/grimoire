@@ -59,6 +59,8 @@ export interface Mod {
      *  auto-inferred at download time for Sound mods or manually set by the
      *  user; takes precedence over categoryId in the locker grouping. */
     lockerHero?: string;
+    /** Provenance for lockerHero. Missing values are legacy inferred tags. */
+    lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource;
     /** Populated when this VPK was produced by mergeMods. The metadata
      *  enricher reads this from the mod metadata sidecar. */
     merged?: import('../../../src/types/mod').MergedModInfo;

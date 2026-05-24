@@ -44,6 +44,7 @@ export interface MergedModInfo {
  * (main) and the Locker grouping/UI (renderer) agree on the union.
  */
 export type GlobalModType = 'soul-container' | 'hideout' | 'icons' | 'hud';
+export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 export interface Mod {
   id: string;
@@ -74,6 +75,8 @@ export interface Mod {
    *  manually via the Locker's "Tag hero" affordance. Takes precedence over
    *  categoryId when grouping mods into hero piles. */
   lockerHero?: string;
+  /** Where lockerHero came from. Missing means legacy/inferred metadata. */
+  lockerHeroSource?: LockerHeroSource;
   /** Global (non-hero) cosmetic category this mod belongs to in the Locker,
    *  classified from its VPK file tree (see GlobalModType). Mutually exclusive
    *  with hero content: the classifier returns null for hero skins/abilities,
@@ -159,6 +162,12 @@ export interface ApplyUnknownModMatchArgs {
 }
 
 export interface ApplyUnknownCustomModArgs {
+  name: string;
+  thumbnailDataUrl?: string;
+  nsfw?: boolean;
+}
+
+export interface EditLocalModArgs {
   name: string;
   thumbnailDataUrl?: string;
   nsfw?: boolean;

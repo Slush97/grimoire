@@ -22,7 +22,7 @@ import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services
 import { downloadMod } from '../services/download';
 import { mergeMods, unmergeMod } from '../services/modMerger';
 import { getMainWindow } from '../index';
-import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, GlobalModType, MergeModsArgs, UnmergeModResult } from '../../../src/types/mod';
+import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, EditLocalModArgs, GlobalModType, MergeModsArgs, UnmergeModResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -52,22 +52,26 @@ function enrichMod(mod: Mod): Mod {
         !(typeof metadata?.modName === 'string' && metadata.modName.trim().length > 0);
     if (metadata) {
         let lockerHero = metadata.lockerHero;
+        let lockerHeroSource = metadata.lockerHeroSource;
         if (!lockerHero && metadata.sourceSection === 'Sound') {
             // Title match first because it's O(1) regex; only crack open the
             // VPK if the title gave us nothing. The VPK path is authoritative
             // (parses real Source 2 codenames like `ghost` → Lady Geist) but
             // costs a disk read + directory tree parse per call.
             let inferred = inferHeroFromTitle(metadata.modName || mod.name);
+            let inferredSource: typeof lockerHeroSource = inferred ? 'title' : undefined;
             if (!inferred) {
                 try {
                     inferred = inferHeroFromVpk(mod.path);
+                    inferredSource = inferred ? 'vpk' : undefined;
                 } catch (err) {
                     console.warn(`[enrichMod] VPK hero inference failed for ${mod.fileName}:`, err);
                 }
             }
             if (inferred) {
-                setModMetadata(mod.fileName, { lockerHero: inferred });
+                setModMetadata(mod.fileName, { lockerHero: inferred, lockerHeroSource: inferredSource });
                 lockerHero = inferred;
+                lockerHeroSource = inferredSource;
             }
         }
         // Global (non-hero) cosmetic type. Classified once from the VPK tree
@@ -104,6 +108,7 @@ function enrichMod(mod: Mod): Mod {
             fileDescription: metadata.fileDescription,
             sourceFileName: metadata.sourceFileName,
             lockerHero,
+            lockerHeroSource,
             globalType: globalType ?? undefined,
             merged: metadata.merged,
             ignoreUpdates: metadata.ignoreUpdates,
@@ -300,7 +305,41 @@ ipcMain.handle(
     }
 );
 
-// set-variant-label — user-facing rename of a single VPK (the "variant"
+// edit-local-mod - local/custom VPKs keep engine-safe pakNN filenames, so
+// edits update the human-readable metadata shown in Grimoire.
+ipcMain.handle(
+    'edit-local-mod',
+    async (_, modId: string, args: EditLocalModArgs): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const trimmed = args?.name?.trim() ?? '';
+        if (!trimmed) {
+            throw new Error('A name is required');
+        }
+
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        const existing = getModMetadata(target.fileName) ?? {};
+        if (typeof existing.gameBananaId === 'number' && existing.gameBananaId > 0) {
+            throw new Error('Only local mods can be renamed');
+        }
+
+        await setModMetadataWithHash(target.fileName, {
+            modName: trimmed,
+            thumbnailUrl: args.thumbnailDataUrl,
+            nsfw: !!args.nsfw,
+        }, target.path);
+
+        return enrichMod(target);
+    }
+);
+
+// set-variant-label - user-facing rename of a single VPK (the "variant"
 // inside a grouped mod). Stored alongside the mod's other metadata so it
 // survives priority renames via migrateModMetadata. An empty string clears
 // the label and falls back to the filename-derived display.
@@ -343,6 +382,8 @@ ipcMain.handle(
         const trimmed = heroName?.trim() ?? '';
         setModMetadata(target.fileName, {
             lockerHero: trimmed.length > 0 ? trimmed : undefined,
+            lockerHeroSource: trimmed.length > 0 ? 'manual' : undefined,
+            ...(trimmed.length > 0 ? { globalType: undefined } : {}),
         });
         return enrichMod(target);
     }
@@ -371,7 +412,7 @@ ipcMain.handle(
         setModMetadata(target.fileName, {
             globalType,
             // Assigning a global type moves the mod off the hero axis.
-            ...(globalType ? { lockerHero: undefined } : {}),
+            ...(globalType ? { lockerHero: undefined, lockerHeroSource: undefined } : {}),
         });
         return enrichMod(target);
     }

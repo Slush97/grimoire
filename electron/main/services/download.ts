@@ -115,7 +115,7 @@ function normalizePathForCompare(filePath: string): string {
  * still tag correctly because the underlying paths reference Source 2
  * codenames like `hornet` / `inferno` / `synth`.
  */
-function stampVpkLockerHero<T extends { lockerHero?: string }>(
+function stampVpkLockerHero<T extends { lockerHero?: string; lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource }>(
     base: T,
     section: string | undefined,
     vpkPath: string
@@ -123,7 +123,7 @@ function stampVpkLockerHero<T extends { lockerHero?: string }>(
     if (base.lockerHero || section !== 'Sound') return base;
     try {
         const vpkHero = inferHeroFromVpk(vpkPath);
-        if (vpkHero) return { ...base, lockerHero: vpkHero };
+        if (vpkHero) return { ...base, lockerHero: vpkHero, lockerHeroSource: 'download-vpk' };
     } catch (err) {
         console.warn(`[download] VPK hero inference failed for ${vpkPath}:`, err);
     }
@@ -660,6 +660,7 @@ async function executeDownload(
     // categoryId and don't need this fallback.
     const lockerHero =
         section === 'Sound' ? inferHeroFromTitle(details.name) ?? undefined : undefined;
+    const lockerHeroSource = lockerHero ? 'download-title' : undefined;
 
     const metadata = {
         modName: details.name,  // Store the actual mod name from GameBanana
@@ -675,6 +676,7 @@ async function executeDownload(
         fileDescription: fileDescription && fileDescription.length > 0 ? fileDescription : undefined,
         sourceFileName: sourceFileNameStem.length > 0 ? sourceFileNameStem : undefined,
         lockerHero,
+        lockerHeroSource,
     };
 
     let installedVpks: string[] = [];
@@ -1215,6 +1217,7 @@ async function executeOneClickDownload(
                 : undefined,
         sourceFileName: oneClickSourceFileName.length > 0 ? oneClickSourceFileName : undefined,
         lockerHero: oneClickLockerHero,
+        lockerHeroSource: oneClickLockerHero ? 'download-title' : undefined,
     };
 
     let installedVpks: string[] = [];

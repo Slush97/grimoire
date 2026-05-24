@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import {
   Package,
   Loader2,
@@ -26,6 +26,8 @@ import {
   Beaker,
   PowerOff,
   Tag as TagIcon,
+  Pencil,
+  MoreHorizontal,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -42,8 +44,8 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS } from '../lib/lockerUtils';
-import { setModLockerHero, setModGlobalType } from '../lib/api';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS } from '../lib/lockerUtils';
+import { setModGlobalType } from '../lib/api';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
@@ -280,6 +282,7 @@ function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
  * fetch. A value of null means the mod page returned no usable file list.
  */
 const updateCheckCache = new Map<number, Set<number> | null>();
+let installedPageScrollTop = 0;
 
 export default function Installed() {
   const navigate = useNavigate();
@@ -295,9 +298,12 @@ export default function Installed() {
     toggleMod,
     deleteMod,
     reorderMods,
+    editLocalMod,
+    setModLockerHero,
     setVariantLabel,
     importCustomMod,
     soundVolume,
+    setInstalledScrollTop,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
 
@@ -336,6 +342,7 @@ export default function Installed() {
     isGroup: boolean;
     isBulk?: boolean;
   } | null>(null);
+  const [localEditMod, setLocalEditMod] = useState<Mod | null>(null);
   const [customUnknownMod, setCustomUnknownMod] = useState<Mod | null>(null);
   // Sources for the in-progress merge. Non-null means the modal is open.
   const [mergeSources, setMergeSources] = useState<Mod[] | null>(null);
@@ -425,6 +432,37 @@ export default function Installed() {
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateAllProgress, setUpdateAllProgress] = useState<{ done: number; total: number } | null>(null);
   const [updateAllError, setUpdateAllError] = useState<string | null>(null);
+  const installedScrollRef = useRef<HTMLDivElement | null>(null);
+  const latestInstalledScrollTopRef = useRef(
+    installedPageScrollTop || useAppStore.getState().installedScrollTop
+  );
+
+  useLayoutEffect(() => {
+    const restoreScroll = () => {
+      const container = installedScrollRef.current;
+      const target = installedPageScrollTop || useAppStore.getState().installedScrollTop;
+      if (!container || target <= 0) return;
+      container.scrollTop = target;
+      latestInstalledScrollTopRef.current = target;
+    };
+    restoreScroll();
+    const frame = window.requestAnimationFrame(restoreScroll);
+    return () => window.cancelAnimationFrame(frame);
+  }, [modsLoading, mods.length]);
+
+  useEffect(() => {
+    const container = installedScrollRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      latestInstalledScrollTopRef.current = container.scrollTop;
+      installedPageScrollTop = container.scrollTop;
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      setInstalledScrollTop(latestInstalledScrollTopRef.current);
+    };
+  }, [setInstalledScrollTop]);
 
   const openModDetails = async (m: typeof mods[number]) => {
     if (!m.gameBananaId) return;
@@ -696,6 +734,29 @@ export default function Installed() {
   const makeUnknownCustomMod = (mod: Mod) => {
     closeUnknownFix();
     setCustomUnknownMod(mod);
+  };
+
+  const editLocalInstalledMod = async (mod: Mod, args: { name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => {
+    await editLocalMod(mod.id, args);
+    setUnknownFilterCache((prev) => {
+      if (!prev[mod.id]) return prev;
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
+    setUnknownFilterErrors((prev) => {
+      if (!prev[mod.id]) return prev;
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
+    delete unknownRequestIdsRef.current[mod.id];
+    setUnknownFilterPendingIds((prev) => {
+      if (!prev.has(mod.id)) return prev;
+      const next = new Set(prev);
+      next.delete(mod.id);
+      return next;
+    });
   };
 
   const handleDetailsDownload = async (fileId: number, fileName: string) => {
@@ -1013,9 +1074,28 @@ export default function Installed() {
         await setModLockerHero(targets[i].id, heroName);
         setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
       }
-      await loadMods();
     } catch (err) {
       console.error('[Installed] Bulk tag failed:', err);
+    } finally {
+      setBulkProgress(null);
+      exitSelectMode();
+    }
+  };
+
+  const handleBulkClearTag = async () => {
+    if (selectedMods.length === 0) return;
+    setTagMenuOpen(false);
+    const targets = [...selectedMods];
+    setBulkProgress({ verb: 'Tagging', done: 0, total: targets.length });
+    try {
+      for (let i = 0; i < targets.length; i++) {
+        await setModLockerHero(targets[i].id, null);
+        await setModGlobalType(targets[i].id, null);
+        setBulkProgress({ verb: 'Tagging', done: i + 1, total: targets.length });
+      }
+      await loadMods();
+    } catch (err) {
+      console.error('[Installed] Bulk tag clear failed:', err);
     } finally {
       setBulkProgress(null);
       exitSelectMode();
@@ -1236,26 +1316,26 @@ export default function Installed() {
     await reorderVariantTo(target, neighbor, direction === 'up' ? 'before' : 'after');
   };
 
-  // Auto-scroll the main content container while drag-reordering. Native HTML
+  // Auto-scroll the installed-page container while drag-reordering. Native HTML
   // drag-and-drop doesn't fire pointer events, so we hook `dragover` at the
   // window and start a rAF loop whenever the cursor is near the top/bottom
   // edge of the scroll container.
   useEffect(() => {
     if (!draggingId) return;
-    const main = document.querySelector('main');
-    if (!main) return;
+    const container = installedScrollRef.current;
+    if (!container) return;
     const EDGE = 80;
     const MAX_STEP = 18;
     let pointerY = -1;
 
     const tick = () => {
-      const rect = main.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
       const fromTop = pointerY - rect.top;
       const fromBottom = rect.bottom - pointerY;
       let dy = 0;
       if (fromTop >= 0 && fromTop < EDGE) dy = -Math.round(((EDGE - fromTop) / EDGE) * MAX_STEP);
       else if (fromBottom >= 0 && fromBottom < EDGE) dy = Math.round(((EDGE - fromBottom) / EDGE) * MAX_STEP);
-      if (dy !== 0) main.scrollBy({ top: dy });
+      if (dy !== 0) container.scrollBy({ top: dy });
       autoScrollRafRef.current = requestAnimationFrame(tick);
     };
 
@@ -1299,7 +1379,7 @@ export default function Installed() {
 
   useEffect(() => {
     if (activeDeadlockPath) {
-      loadMods();
+      loadMods({ silent: useAppStore.getState().modsLoaded });
     }
   }, [activeDeadlockPath, loadMods]);
 
@@ -1832,6 +1912,11 @@ export default function Installed() {
           }
           onToggle={() => toggleMod(mod.id)}
           onDelete={() => setModToDelete({ ids: [mod.id], name: mod.name, isGroup: false })}
+          onEditLocal={!mod.gameBananaId ? () => setLocalEditMod(mod) : undefined}
+          onTagLocker={(heroName) => setModLockerHero(mod.id, heroName)}
+          onTagGlobal={async (globalType) => {
+            await setModGlobalType(mod.id, globalType);
+          }}
           onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
           fixingUnknown={unknownFilterPendingIds.has(mod.id)}
           onCommitPriority={(p) => commitPriorityForMod(mod.id, p)}
@@ -1943,6 +2028,16 @@ export default function Installed() {
             isGroup: true,
           })
         }
+        onTagLocker={async (heroName) => {
+          for (const variant of entry.variants) {
+            await setModLockerHero(variant.id, heroName);
+          }
+        }}
+        onTagGlobal={async (globalType) => {
+          for (const variant of entry.variants) {
+            await setModGlobalType(variant.id, globalType);
+          }
+        }}
         onCommitPriority={(p) => commitPriorityForMod(entry.primary.id, p)}
         selectMode={selectMode}
         selected={entrySelected}
@@ -2099,29 +2194,41 @@ export default function Installed() {
   ) : null;
 
   return (
-    <div className="px-4 py-5 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="relative flex-1 min-w-[12rem] max-w-md">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search installed..."
-                className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-full`}
-              />
-              {search && (
-                <button
-                  type="button"
-                  onClick={() => setSearch('')}
-                  title="Clear search"
-                  className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
+    <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
+      <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 bg-bg-primary/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80 sm:-mx-6 sm:px-6">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="relative flex-1 min-w-[12rem] max-w-md">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search installed..."
+              className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-full`}
+            />
+            {search && (
+              <button
+                type="button"
+                onClick={() => setSearch('')}
+                title="Clear search"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            {statusButtons}
+            {!searchNeedle && (
+              <button
+                type="button"
+                onClick={fixOrder}
+                title="Renumber all installed mods 1, 2, 3, ... to tidy priority slots"
+                className="text-[10px] uppercase tracking-wider px-2.5 py-1 border border-white/10 hover:border-accent/50 bg-white/[0.02] hover:bg-accent/10 text-text-secondary hover:text-text-primary rounded-full transition-colors cursor-pointer"
+              >
+                Fix Order
+              </button>
+            )}
             <Button
               variant="secondary"
               onClick={() => setImportOpen(true)}
@@ -2157,7 +2264,8 @@ export default function Installed() {
               ]}
               onChange={setViewMode}
             />
-            </div>
+          </div>
+        </div>
       </div>
 
       {searchNeedle && totalMatches === 0 && (
@@ -2177,19 +2285,6 @@ export default function Installed() {
         <div className="mb-6">
           <div className="flex items-baseline justify-between mb-[14px]">
             <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">Enabled</SectionHeader>
-            <div className="flex items-center gap-4">
-              {statusButtons}
-              {!searchNeedle && (
-                <button
-                  type="button"
-                  onClick={fixOrder}
-                  title="Renumber all installed mods 1, 2, 3, … to tidy priority slots"
-                  className="text-[10px] uppercase tracking-wider px-2.5 py-1 border border-white/10 hover:border-accent/50 bg-white/[0.02] hover:bg-accent/10 text-text-secondary hover:text-text-primary rounded-full transition-colors cursor-pointer"
-                >
-                  Fix Order
-                </button>
-              )}
-            </div>
           </div>
           <div
             className={
@@ -2330,6 +2425,17 @@ export default function Installed() {
           onClose={() => setImportOpen(false)}
           onImport={async (args) => {
             await importCustomMod(args);
+          }}
+        />
+      )}
+
+      {localEditMod && (
+        <EditLocalModModal
+          mod={localEditMod}
+          onClose={() => setLocalEditMod(null)}
+          onSave={async (args) => {
+            await editLocalInstalledMod(localEditMod, args);
+            setLocalEditMod(null);
           }}
         />
       )}
@@ -2706,10 +2812,10 @@ export default function Installed() {
                   >
                     <button
                       type="button"
-                      onClick={() => handleBulkTag(null)}
+                      onClick={() => handleBulkClearTag()}
                       className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary cursor-pointer"
                     >
-                      Clear hero tag
+                      Clear Locker tag
                     </button>
                     <div className="my-1 h-px bg-border" />
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
@@ -2734,9 +2840,9 @@ export default function Installed() {
                         key={name}
                         type="button"
                         onClick={() => handleBulkTag(name)}
-                        className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-primary cursor-pointer"
+                        className="flex w-full items-center rounded px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary cursor-pointer"
                       >
-                        {name}
+                        <HeroTagLabel heroName={name} />
                       </button>
                     ))}
                   </div>
@@ -3380,6 +3486,8 @@ interface ModCardProps {
     gameBananaId?: number;
     isUnknown?: boolean;
     lockerHero?: string;
+    lockerHeroSource?: Mod['lockerHeroSource'];
+    globalType?: GlobalModType;
     merged?: import('../types/mod').MergedModInfo;
   };
   viewMode: ViewMode;
@@ -3390,6 +3498,9 @@ interface ModCardProps {
   onOpenDetails?: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  onEditLocal?: () => void;
+  onTagLocker?: (heroName: string | null) => void | Promise<void>;
+  onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
   /** Collision-tolerant priority commit. Passed through to PriorityEditor so
@@ -3433,6 +3544,9 @@ interface ModMediaPreviewProps {
   soundVolume: number;
   overlayBadges: ReactNode;
   mediaSpacingClasses: string;
+  mediaFrameClasses: string;
+  audioOverlayClasses: string;
+  audioPlayerClassName: string;
   onOpenDetails?: () => void;
   isGroupCard: boolean;
 }
@@ -3468,6 +3582,9 @@ function ModMediaPreview({
   soundVolume,
   overlayBadges,
   mediaSpacingClasses,
+  mediaFrameClasses,
+  audioOverlayClasses,
+  audioPlayerClassName,
   onOpenDetails,
   isGroupCard,
 }: ModMediaPreviewProps) {
@@ -3521,7 +3638,7 @@ function ModMediaPreview({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden block border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
+        className={`group relative w-full ${mediaFrameClasses} bg-bg-tertiary rounded-lg overflow-hidden block border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer ${mediaSpacingClasses}`}
         aria-label={detailsLabel}
         data-card-action="true"
         draggable={false}
@@ -3537,7 +3654,7 @@ function ModMediaPreview({
   }
 
   return (
-    <div className={`group relative w-full aspect-video overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] ${mediaSpacingClasses}`}>
+    <div className={`group relative w-full ${mediaFrameClasses} overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] ${mediaSpacingClasses}`}>
       <button
         type="button"
         onClick={(e) => {
@@ -3561,7 +3678,7 @@ function ModMediaPreview({
       </button>
       {overlayBadges}
       <div
-        className="absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2.5 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer"
+        className={audioOverlayClasses}
         data-card-action="true"
         draggable={false}
         onClick={(e) => e.stopPropagation()}
@@ -3576,7 +3693,7 @@ function ModMediaPreview({
           compact
           variant="inline"
           volume={soundVolume}
-          className="w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]"
+          className={audioPlayerClassName}
         />
       </div>
     </div>
@@ -3594,8 +3711,105 @@ interface ModListRowContentProps {
   variantStatusLabel: string | null;
   variantStatusTitle: string;
   metaChipClasses: string;
+  manualTagChipClasses: string;
+  inferredTagChipClasses: string;
+  dangerInlineChipClasses: string;
+  accentInlineChipClasses: string;
+  tagIconClassName: string;
   technicalMetaClasses: string;
   actions: ReactNode;
+}
+
+function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
+  switch (source) {
+    case 'manual':
+      return 'Manual override';
+    case 'download-title':
+    case 'title':
+      return 'Inferred from title';
+    case 'download-vpk':
+    case 'vpk':
+      return 'Inferred from VPK files';
+    default:
+      return 'Inferred by Grimoire';
+  }
+}
+
+function ChipText({ children }: { children: ReactNode }) {
+  return <span className="relative top-[1.5px] min-w-0 truncate leading-[14px]">{children}</span>;
+}
+
+function HeroTagLabel({ heroName, iconClassName = 'h-4 w-4' }: { heroName: string; iconClassName?: string }) {
+  return (
+    <span className="inline-flex min-w-0 max-w-full items-center gap-1.5 align-middle leading-none">
+      <img
+        src={getHeroChipIconPath(heroName)}
+        alt=""
+        aria-hidden="true"
+        className={`${iconClassName} block flex-shrink-0 rounded-full object-cover`}
+        loading="lazy"
+      />
+      <ChipText>{heroName}</ChipText>
+    </span>
+  );
+}
+
+function heroNameForLabel(label?: string): string | null {
+  if (!label) return null;
+  const needle = label.trim().toLowerCase();
+  return HERO_NAMES.find((name) => name.toLowerCase() === needle) ?? null;
+}
+
+function CategoryChip({
+  label,
+  className,
+  iconClassName = 'h-4 w-4',
+}: {
+  label: string;
+  className: string;
+  iconClassName?: string;
+}) {
+  const heroName = heroNameForLabel(label);
+  return (
+    <span className={className} title={label}>
+      {heroName ? (
+        <HeroTagLabel heroName={heroName} iconClassName={iconClassName} />
+      ) : (
+        <ChipText>{label}</ChipText>
+      )}
+    </span>
+  );
+}
+
+function MetaTextChip({ label, className, title }: { label: string; className: string; title?: string }) {
+  return (
+    <span className={className} title={title ?? label}>
+      <ChipText>{label}</ChipText>
+    </span>
+  );
+}
+
+function LockerHeroChip({
+  mod,
+  manualTagChipClasses,
+  inferredTagChipClasses,
+  iconClassName = 'h-4 w-4',
+}: {
+  mod: { lockerHero?: string; lockerHeroSource?: Mod['lockerHeroSource'] };
+  manualTagChipClasses: string;
+  inferredTagChipClasses: string;
+  iconClassName?: string;
+}) {
+  if (!mod.lockerHero) return null;
+  const isManual = mod.lockerHeroSource === 'manual';
+  return (
+    <span
+      className={isManual ? manualTagChipClasses : inferredTagChipClasses}
+      title={`${lockerHeroSourceLabel(mod.lockerHeroSource)}: ${mod.lockerHero}`}
+    >
+      <HeroTagLabel heroName={mod.lockerHero} iconClassName={iconClassName} />
+    </span>
+  );
 }
 
 function ModListRowContent({
@@ -3609,6 +3823,11 @@ function ModListRowContent({
   variantStatusLabel,
   variantStatusTitle,
   metaChipClasses,
+  manualTagChipClasses,
+  inferredTagChipClasses,
+  dangerInlineChipClasses,
+  accentInlineChipClasses,
+  tagIconClassName,
   technicalMetaClasses,
   actions,
 }: ModListRowContentProps) {
@@ -3647,7 +3866,7 @@ function ModListRowContent({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative h-11 w-[72px] flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
+        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
         aria-label={canOpen ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined}
@@ -3681,24 +3900,37 @@ function ModListRowContent({
         )}
       </button>
 
-      <div className="min-w-0">
-        <h3 className="min-w-0 truncate text-[14px] font-semibold leading-5 text-text-primary" title={mod.name}>
+      <div className="grid min-w-0 grid-rows-[22px_24px]">
+        <h3 className="min-w-0 truncate text-[13px] font-semibold leading-[22px] text-text-primary" title={mod.name}>
           {mod.name}
         </h3>
-        <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-text-secondary">
-          {mod.categoryName && <span className={metaChipClasses}>{mod.categoryName}</span>}
-          {mod.nsfw && <Tag tone="danger" className="flex-shrink-0">18+</Tag>}
+        <div className="flex min-w-0 items-center gap-2 overflow-hidden whitespace-nowrap text-[11px] leading-[24px] text-text-secondary">
+          <LockerHeroChip
+            mod={mod}
+            manualTagChipClasses={manualTagChipClasses}
+            inferredTagChipClasses={inferredTagChipClasses}
+            iconClassName={tagIconClassName}
+          />
+          {mod.categoryName && (
+            <CategoryChip
+              label={mod.categoryName}
+              className={metaChipClasses}
+              iconClassName={tagIconClassName}
+            />
+          )}
+          {mod.nsfw && (
+            <MetaTextChip label="18+" className={dangerInlineChipClasses} />
+          )}
           <span className="flex-shrink-0">{formatBytes(mod.size)}</span>
           <span className="flex-shrink-0 tabular-nums" title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}>
             {formatRelativeDate(mod.installedAt)}
           </span>
           {group && (
-            <span
-              className="flex-shrink-0 rounded-sm border border-accent/25 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-accent"
+            <MetaTextChip
+              label={`${variantStatusLabel} files`}
+              className={accentInlineChipClasses}
               title={variantStatusTitle}
-            >
-              {variantStatusLabel} files
-            </span>
+            />
           )}
           {!group && (
             <span className={technicalMetaClasses} title={mod.fileName}>
@@ -3708,7 +3940,7 @@ function ModListRowContent({
         </div>
       </div>
 
-      <div className="ml-auto flex min-w-0 items-center justify-end gap-2">
+      <div className="ml-auto flex min-w-0 items-center justify-end gap-3">
         {isSound && (
           <div
             className="hidden w-48 min-w-0 flex-shrink items-center rounded-md border border-white/[0.06] bg-bg-secondary/45 px-2 py-1 opacity-85 transition-opacity duration-200 group-hover/card:opacity-100 lg:flex"
@@ -3741,6 +3973,9 @@ function ModCard({
   onOpenDetails,
   onToggle,
   onDelete,
+  onEditLocal,
+  onTagLocker,
+  onTagGlobal,
   onFixUnknown,
   fixingUnknown,
   onCommitPriority,
@@ -3769,7 +4004,82 @@ function ModCard({
   const variantStatusTitle = group
     ? `${enabledTitle || 'No files enabled'} - click card to choose files`
     : '';
-  const hasUtilityActions = mod.isUnknown || (mod.merged && (!!onCopyShareCode || !!onUnmerge));
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [menuBusy, setMenuBusy] = useState(false);
+  const [menuError, setMenuError] = useState<string | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
+        setMenuOpen(false);
+        setTagPickerOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setMenuOpen(false);
+        setTagPickerOpen(false);
+      }
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [menuOpen]);
+
+  const applyLockerTag = async (heroName: string | null) => {
+    if (!onTagLocker || menuBusy) return;
+    setMenuBusy(true);
+    setMenuError(null);
+    try {
+      await onTagLocker(heroName);
+      setMenuOpen(false);
+      setTagPickerOpen(false);
+    } catch (err) {
+      console.error('[Installed] Failed to set locker hero:', err);
+      setMenuError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMenuBusy(false);
+    }
+  };
+
+  const applyGlobalTag = async (globalType: GlobalModType) => {
+    if (!onTagGlobal || menuBusy) return;
+    setMenuBusy(true);
+    setMenuError(null);
+    try {
+      await onTagGlobal(globalType);
+      setMenuOpen(false);
+      setTagPickerOpen(false);
+    } catch (err) {
+      console.error('[Installed] Failed to set global locker tag:', err);
+      setMenuError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMenuBusy(false);
+    }
+  };
+
+  const clearLockerTag = async () => {
+    if (menuBusy) return;
+    setMenuBusy(true);
+    setMenuError(null);
+    try {
+      await onTagLocker?.(null);
+      await onTagGlobal?.(null);
+      setMenuOpen(false);
+      setTagPickerOpen(false);
+    } catch (err) {
+      console.error('[Installed] Failed to clear locker tag:', err);
+      setMenuError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMenuBusy(false);
+    }
+  };
 
   const indicatorClasses = (() => {
     if (!isDropTarget || !dropPosition) return '';
@@ -3808,19 +4118,36 @@ function ModCard({
     mod.merged && viewMode === 'grid'
       ? 'shadow-[3px_3px_0_0_var(--color-bg-secondary),3px_3px_0_1px_var(--color-border),6px_6px_0_0_var(--color-bg-secondary),6px_6px_0_1px_var(--color-border)] mr-1.5 mb-1.5'
       : '';
-  const metaChipClasses = 'inline-flex h-[18px] min-w-0 max-w-full items-center overflow-hidden truncate rounded border border-white/[0.06] bg-bg-tertiary/65 px-1.5 text-[11px] leading-none text-text-secondary/80';
+  const chipMaxClass =
+    viewMode === 'compact' ? 'max-w-[152px]' : viewMode === 'list' ? 'max-w-[148px]' : 'max-w-[170px]';
+  const chipSizeClasses =
+    viewMode === 'list'
+      ? 'h-6 rounded-[7px] px-2 text-[11px]'
+      : viewMode === 'compact'
+        ? 'h-[26px] rounded-lg px-2 text-[12px]'
+        : 'h-7 rounded-lg px-2.5 text-[12px]';
+  const tagIconClassName =
+    viewMode === 'list' ? 'h-[18px] w-[18px]' : viewMode === 'compact' ? 'h-5 w-5' : 'h-[22px] w-[22px]';
+  const baseChipClasses = `inline-flex min-w-0 ${chipMaxClass} ${chipSizeClasses} items-center overflow-hidden font-semibold leading-none`;
+  const metaChipClasses = `${baseChipClasses} border border-white/[0.06] bg-bg-tertiary/65 text-text-secondary/80`;
+  const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
+  const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
+  const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
+  const accentInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-accent/30 bg-accent/10 text-accent tabular-nums`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
-  const actionRevealClasses = 'opacity-0 group-hover/card:opacity-70 focus:opacity-100 hover:opacity-100 focus-within:opacity-100';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
-  const deleteActionClasses = `inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-state-danger/10 hover:text-state-danger focus:outline-none focus-visible:ring-2 focus-visible:ring-state-danger/70 cursor-pointer ${actionRevealClasses}`;
-  const toggleClasses = `relative h-5 w-10 rounded-full transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary ${
-    mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border hover:border-white/20'
+  const menuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary focus:outline-none focus-visible:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50';
+  const dangerMenuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-state-danger hover:bg-state-danger/10 focus:outline-none focus-visible:bg-state-danger/10 disabled:cursor-not-allowed disabled:opacity-50';
+  const toggleHitboxClasses = 'inline-flex h-7 w-12 items-center justify-center rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary';
+  const toggleTrackClasses = `relative h-6 w-11 rounded-full transition-colors duration-200 ${
+    mod.enabled ? 'bg-accent shadow-[0_0_0_1px_rgba(255,122,47,0.25)]' : 'bg-bg-tertiary border border-border group-hover/toggle:border-white/20'
   }`;
   const dragSourceClasses =
     draggable && !selectMode ? 'cursor-grab active:cursor-grabbing' : '';
   const draggingPlaceholderClasses =
     'border-dashed border-accent/45 bg-bg-tertiary/25 shadow-none opacity-100';
   const isList = viewMode === 'list';
+  const isCompact = viewMode === 'compact';
   // Cover-art source for the glass backdrop. Skipped when NSFW previews are
   // hidden so we never bleed hidden imagery, even blurred.
   const glassBackdropUrl =
@@ -3828,91 +4155,250 @@ function ModCard({
       ? mod.thumbnailUrl
       : null;
   const shellClasses = isList
-    ? 'grid min-h-[62px] grid-cols-[48px_72px_minmax(0,1fr)_auto] items-center gap-2 px-3.5 py-2'
-    : 'flex flex-col gap-0 p-2.5';
+    ? 'grid min-h-[58px] grid-cols-[52px_64px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-0'
+    : isCompact
+      ? 'flex flex-col gap-0 p-2'
+      : 'flex flex-col gap-0 p-2.5';
   const mediaSpacingClasses = 'mb-2';
-  const titleClasses = 'text-[15px] font-semibold leading-[19px]';
-  const gridTagsClasses = 'h-[22px] flex-nowrap overflow-hidden';
+  const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
+  const audioOverlayClasses = isCompact
+    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer'
+    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2.5 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer';
+  const audioPlayerClassName = isCompact
+    ? 'w-full gap-2 [&>button:first-of-type]:h-6 [&>button:first-of-type]:w-6 [&>div]:h-1 [&>span]:text-[10px]'
+    : 'w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]';
+  const titleClasses = isCompact
+    ? 'text-[14px] font-semibold leading-[18px] truncate'
+    : 'text-[15px] font-medium leading-[19px] truncate';
+  const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'h-7 flex-nowrap';
+  const showCategoryChip = viewMode !== 'compact' || !mod.lockerHero;
+  const compactBaseChipCount =
+    (mod.lockerHero ? 1 : 0) + (showCategoryChip && mod.categoryName ? 1 : 0);
+  const showNsfwChip = !!mod.nsfw && (!isCompact || compactBaseChipCount < 2);
+  const showGroupChip = !!group && (!isCompact || compactBaseChipCount + (showNsfwChip ? 1 : 0) < 2);
   const actions = (
     <div className="ml-auto flex items-center gap-1">
-      {hasUtilityActions && (
-        <div
-          className={`flex items-center gap-1 rounded-md border border-border/60 bg-bg-secondary/45 p-0.5 transition-opacity duration-200 ${isList ? '' : 'opacity-0 group-hover/card:opacity-90 focus-within:opacity-100'}`}
+      <div className="relative" ref={menuRef} data-card-action="true">
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setMenuOpen((open) => !open);
+            setTagPickerOpen(false);
+            setMenuError(null);
+          }}
+          className={`${utilityActionClasses} ${isList ? '' : 'opacity-0 group-hover/card:opacity-90 focus:opacity-100 aria-expanded:opacity-100'}`}
+          title="More actions"
+          aria-label={`More actions for ${mod.name}`}
+          aria-expanded={menuOpen}
           data-card-action="true"
         >
-          {mod.isUnknown && (
+          <MoreHorizontal className="w-4 h-4" />
+        </button>
+        {menuOpen && (
+          <div
+            role="menu"
+            className="absolute bottom-full right-0 z-[70] mb-2 w-56 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
+          >
+            {menuError && (
+              <div className="mb-1 rounded-md border border-state-danger/30 bg-state-danger/10 px-2 py-1.5 text-xs text-state-danger">
+                {menuError}
+              </div>
+            )}
+            {onEditLocal && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onEditLocal();
+                }}
+                className={menuItemClasses}
+              >
+                <Pencil className="w-3.5 h-3.5" />
+                Edit
+              </button>
+            )}
+            {onOpenDetails && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onOpenDetails();
+                }}
+                className={menuItemClasses}
+              >
+                <Info className="w-3.5 h-3.5" />
+                View details
+              </button>
+            )}
+            {(onTagLocker || onTagGlobal) && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setTagPickerOpen((open) => !open);
+                  }}
+                  className={menuItemClasses}
+                >
+                  <TagIcon className="w-3.5 h-3.5" />
+                  Set Locker tag
+                </button>
+                {tagPickerOpen && (
+                  <div className="my-1 max-h-64 overflow-y-auto rounded-md border border-border bg-bg-primary/40 p-1">
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void clearLockerTag();
+                      }}
+                      disabled={menuBusy || (!mod.lockerHero && !mod.globalType)}
+                      className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      Clear Locker tag
+                    </button>
+                    <div className="my-1 h-px bg-border" />
+                    {onTagGlobal && (
+                      <>
+                        <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                          Global
+                        </div>
+                        {GLOBAL_MOD_TYPE_ORDER.map((type) => (
+                          <button
+                            key={type}
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              void applyGlobalTag(type);
+                            }}
+                            disabled={menuBusy}
+                            className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50 ${
+                              mod.globalType === type ? 'text-accent' : 'text-text-primary'
+                            }`}
+                          >
+                            <span className="truncate">{GLOBAL_MOD_TYPE_LABELS[type]}</span>
+                            {mod.globalType === type && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                          </button>
+                        ))}
+                        <div className="my-1 h-px bg-border" />
+                      </>
+                    )}
+                    <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
+                      Hero
+                    </div>
+                    {HERO_NAMES.map((heroName) => (
+                      <button
+                        key={heroName}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          void applyLockerTag(heroName);
+                        }}
+                        disabled={menuBusy}
+                        className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50 ${
+                          mod.lockerHero === heroName
+                            ? mod.lockerHeroSource === 'manual'
+                              ? 'text-accent'
+                              : 'text-sky-200'
+                            : 'text-text-primary'
+                        }`}
+                      >
+                        <HeroTagLabel heroName={heroName} />
+                        {mod.lockerHero === heroName && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </>
+            )}
+            {mod.isUnknown && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onFixUnknown?.();
+                }}
+                disabled={!onFixUnknown}
+                className={menuItemClasses}
+              >
+                {fixingUnknown ? (
+                  <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                ) : (
+                  <Wrench className="w-3.5 h-3.5" />
+                )}
+                Fix unknown match
+              </button>
+            )}
+            {mod.merged && onCopyShareCode && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onCopyShareCode();
+                }}
+                className={menuItemClasses}
+              >
+                <Share2 className="w-3.5 h-3.5" />
+                Copy share code
+              </button>
+            )}
+            {mod.merged && onUnmerge && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onUnmerge();
+                }}
+                className={menuItemClasses}
+              >
+                <Scissors className="w-3.5 h-3.5" />
+                Unmerge
+              </button>
+            )}
+            <div className="my-1 h-px bg-border" />
             <button
               type="button"
+              role="menuitem"
               onClick={(e) => {
                 e.stopPropagation();
-                onFixUnknown?.();
+                setMenuOpen(false);
+                onDelete();
               }}
-              disabled={!onFixUnknown}
-              className={utilityActionClasses}
-              title="Fix unknown mod"
-              aria-label={`Fix unknown mod ${mod.name}`}
+              className={dangerMenuItemClasses}
             >
-              {fixingUnknown ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Wrench className="w-4 h-4" />
-              )}
+              <Trash2 className="w-3.5 h-3.5" />
+              Delete
             </button>
-          )}
-          {mod.merged && onCopyShareCode && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onCopyShareCode();
-              }}
-              className={utilityActionClasses}
-              title="Copy share code (paste into any Grimoire to import the sources)"
-              aria-label={`Copy share code for ${mod.name}`}
-            >
-              <Share2 className="w-4 h-4" />
-            </button>
-          )}
-          {mod.merged && onUnmerge && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                onUnmerge();
-              }}
-              className={utilityActionClasses}
-              title="Unmerge (restore source mods)"
-              aria-label={`Unmerge ${mod.name}`}
-            >
-              <Scissors className="w-4 h-4" />
-            </button>
-          )}
-        </div>
-      )}
-      <button
-        onClick={onDelete}
-        className={deleteActionClasses}
-        title="Delete mod"
-        aria-label={`Delete ${mod.name}`}
-        data-card-action="true"
-      >
-        <Trash2 className="w-4 h-4" />
-      </button>
-      <button
-        onClick={onToggle}
-        aria-pressed={mod.enabled}
-        aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
-        title={mod.enabled ? 'Disable mod' : 'Enable mod'}
-        className={toggleClasses}
-        data-card-action="true"
-      >
-        <span
-          className={`absolute top-[2px] left-[2px] h-4 w-4 rounded-full bg-text-primary shadow-sm transition-transform duration-200 ${
-            mod.enabled ? 'translate-x-5' : 'translate-x-0'
-          }`}
-          aria-hidden
-        />
-      </button>
+          </div>
+        )}
+      </div>
+        <button
+          onClick={onToggle}
+          aria-pressed={mod.enabled}
+          aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
+          title={mod.enabled ? 'Disable mod' : 'Enable mod'}
+          className={`${toggleHitboxClasses} group/toggle`}
+          data-card-action="true"
+        >
+          <span className={toggleTrackClasses} aria-hidden>
+            <span
+              className={`absolute top-[2px] left-[2px] h-5 w-5 rounded-full bg-text-primary shadow-sm transition-transform duration-200 ${
+                mod.enabled ? 'translate-x-5' : 'translate-x-0'
+              }`}
+            />
+          </span>
+        </button>
     </div>
   );
   return (
@@ -4064,6 +4550,11 @@ function ModCard({
             variantStatusLabel={variantStatusLabel}
             variantStatusTitle={variantStatusTitle}
             metaChipClasses={metaChipClasses}
+            manualTagChipClasses={manualTagChipClasses}
+            inferredTagChipClasses={inferredTagChipClasses}
+            dangerInlineChipClasses={dangerInlineChipClasses}
+            accentInlineChipClasses={accentInlineChipClasses}
+            tagIconClassName={tagIconClassName}
             technicalMetaClasses={technicalMetaClasses}
             actions={actions}
           />
@@ -4157,57 +4648,280 @@ function ModCard({
             soundVolume={soundVolume}
             overlayBadges={overlayBadges}
             mediaSpacingClasses={mediaSpacingClasses}
+            mediaFrameClasses={mediaFrameClasses}
+            audioOverlayClasses={audioOverlayClasses}
+            audioPlayerClassName={audioPlayerClassName}
             onOpenDetails={onOpenDetails}
             isGroupCard={isGroupCard}
           />
         );
         })()}
 
-        <div className="mt-auto grid grid-cols-[minmax(0,1fr)_auto] items-end gap-x-3 px-0.5">
-        <div className="min-w-0">
-          <div className="min-w-0">
-            <h3
-              className={`min-w-0 truncate text-text-primary ${titleClasses}`}
-              title={mod.name}
-            >
-              {mod.name}
-            </h3>
-          </div>
+        <div className="mt-auto min-w-0 px-0.5">
+          <h3
+            className={`min-w-0 text-text-primary ${titleClasses}`}
+            title={mod.name}
+          >
+            {mod.name}
+          </h3>
           <div
-            className={`mt-1.5 flex items-center gap-1.5 text-xs text-text-secondary min-w-0 ${gridTagsClasses}`}
+            className={`${isCompact ? 'mt-1.5 h-7' : 'mt-1.5'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
-            {mod.categoryName && (
-              <span className={metaChipClasses}>{mod.categoryName}</span>
-            )}
-            {mod.nsfw && (
-              <Tag tone="danger" className="flex-shrink-0">18+</Tag>
-            )}
-            {group && (
-              <span
-                className="flex-shrink-0 rounded-sm border border-accent/25 bg-accent/10 px-1.5 py-0.5 text-[11px] font-medium tabular-nums text-accent"
-                title={variantStatusTitle}
-              >
-                {variantStatusLabel} files
-              </span>
-            )}
-            <span
-              className="ml-auto flex-shrink-0 pl-1.5 text-[11px] tabular-nums text-text-secondary/55 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
-              title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
-            >
-              {formatRelativeDate(mod.installedAt)}
-            </span>
+            <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
+              <LockerHeroChip
+                mod={mod}
+                manualTagChipClasses={manualTagChipClasses}
+                inferredTagChipClasses={inferredTagChipClasses}
+                iconClassName={tagIconClassName}
+              />
+              {showCategoryChip && mod.categoryName && (
+                <CategoryChip
+                  label={mod.categoryName}
+                  className={metaChipClasses}
+                  iconClassName={tagIconClassName}
+                />
+              )}
+              {showNsfwChip && (
+                <MetaTextChip label="18+" className={dangerInlineChipClasses} />
+              )}
+              {showGroupChip && (
+                <MetaTextChip
+                  label={`${variantStatusLabel} files`}
+                  className={accentInlineChipClasses}
+                  title={variantStatusTitle}
+                />
+              )}
+              {!isCompact && (
+                <span
+                  className="flex-shrink-0 pl-1.5 text-[11px] tabular-nums text-text-secondary/55 opacity-0 transition-opacity duration-200 group-hover/card:opacity-100"
+                  title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
+                >
+                  {formatRelativeDate(mod.installedAt)}
+                </span>
+              )}
+            </div>
+
+            <div className={`flex flex-shrink-0 items-center justify-end gap-2 ${isCompact ? '' : 'pr-1'}`}>
+              {actions}
+            </div>
           </div>
         </div>
-
-        <div className="flex h-6 flex-shrink-0 items-center justify-end gap-2 self-end pr-1 pb-0.5">
-          {actions}
-        </div>
-      </div>
       </>
         )}
       </div>
 
+    </div>
+  );
+}
+
+interface EditLocalModModalProps {
+  mod: Mod;
+  onClose: () => void;
+  onSave: (args: { name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
+}
+
+function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
+  const [name, setName] = useState(mod.name);
+  const [imagePath, setImagePath] = useState('');
+  const [thumbnailDataUrl, setThumbnailDataUrl] = useState(mod.thumbnailUrl ?? '');
+  const [nsfw, setNsfw] = useState(!!mod.nsfw);
+  const [imgDragActive, setImgDragActive] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = name.trim();
+
+  const acceptImagePath = async (picked: string) => {
+    setImagePath(picked);
+    setError(null);
+    try {
+      const dataUrl = await readImageDataUrl(picked);
+      setThumbnailDataUrl(dataUrl);
+    } catch (err) {
+      setThumbnailDataUrl(mod.thumbnailUrl ?? '');
+      setError(`Couldn't read image: ${String(err)}`);
+    }
+  };
+
+  const pickImage = async () => {
+    const picked = await showOpenDialog({
+      title: 'Select thumbnail image',
+      filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
+    });
+    if (picked) await acceptImagePath(picked);
+  };
+
+  const handleImageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setImgDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!IMAGE_EXTS.includes(ext)) {
+      setError(`Expected an image (${IMAGE_EXTS.join(', ')}) - got "${file.name}".`);
+      return;
+    }
+    const path = window.electronAPI.getDroppedFilePath(file);
+    if (!path) {
+      setError('Could not resolve the dropped image path.');
+      return;
+    }
+    await acceptImagePath(path);
+  };
+
+  const onZoneKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      action();
+    }
+  };
+
+  const submit = async () => {
+    if (!trimmed || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        name: trimmed,
+        thumbnailDataUrl: thumbnailDataUrl || undefined,
+        nsfw,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/75 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-accent/25 bg-accent/10 text-accent">
+            <Pencil className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-text-primary">Edit mod</h3>
+            <p className="mt-1 text-sm text-text-secondary">
+              Change the name, image, or NSFW mark.
+            </p>
+          </div>
+        </div>
+
+        <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="local-mod-name">
+          Name
+        </label>
+        <input
+          id="local-mod-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
+            if (e.key === 'Escape') onClose();
+          }}
+          autoFocus
+          className="mt-2 w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/60 focus:border-accent focus:ring-2 focus:ring-accent/25"
+          placeholder="Mod name"
+        />
+        <p className="mt-2 truncate text-xs text-text-secondary" title={mod.fileName}>
+          File: {mod.fileName}
+        </p>
+
+        <div className="mt-5">
+          <label className="block text-sm font-medium text-text-primary mb-1.5">
+            Image
+          </label>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={thumbnailDataUrl ? 'Image selected. Press Enter to change.' : 'Drop an image here or press Enter to browse'}
+            onClick={pickImage}
+            onKeyDown={(e) => onZoneKeyDown(e, pickImage)}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(true); }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
+            onDrop={handleImageDrop}
+            className={`flex items-center gap-3 p-3 rounded-lg border border-dashed cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              imgDragActive
+                ? 'border-accent bg-accent/10'
+                : thumbnailDataUrl
+                  ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
+                  : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+            }`}
+          >
+            <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
+              {thumbnailDataUrl ? (
+                <img src={thumbnailDataUrl} alt="Thumbnail preview" className="w-full h-full object-cover" />
+              ) : (
+                <ImagePlus className="w-5 h-5" aria-hidden />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              {imagePath ? (
+                <>
+                  <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
+                  <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
+                  <div className="text-xs text-accent mt-0.5">Click or drop another to replace</div>
+                </>
+              ) : thumbnailDataUrl ? (
+                <>
+                  <div className="text-sm text-text-primary font-medium">Current image</div>
+                  <div className="text-xs text-text-secondary">Click or drop to replace</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-sm text-text-primary font-medium">Drop an image here</div>
+                  <div className="text-xs text-text-secondary">or click to browse - {IMAGE_EXTS.join(', ')}</div>
+                </>
+              )}
+            </div>
+          </div>
+          {thumbnailDataUrl && (
+            <button
+              type="button"
+              onClick={() => {
+                setImagePath('');
+                setThumbnailDataUrl('');
+              }}
+              className="mt-2 text-xs text-text-secondary hover:text-text-primary cursor-pointer"
+            >
+              Remove image
+            </button>
+          )}
+        </div>
+
+        <label className="mt-5 flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={nsfw}
+            onChange={(e) => setNsfw(e.target.checked)}
+            className="w-4 h-4 accent-accent cursor-pointer"
+          />
+          NSFW
+        </label>
+
+        {error && (
+          <div className="mt-4 rounded-md border border-state-danger/35 bg-state-danger/10 px-3 py-2 text-sm text-state-danger">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={submit} isLoading={saving} disabled={!trimmed}>
+            Save
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

@@ -132,12 +132,29 @@ export function heroAssetBaseName(name: string): string {
   return name.trim().replace(/\s+/g, '_');
 }
 
+export function heroIconAssetName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 export function getHeroRenderPath(name: string): string {
   return getAssetPath(`/locker/heroes/${heroAssetBaseName(name)}_Render.png`);
 }
 
 export function getHeroNamePath(name: string): string {
   return getAssetPath(`/locker/names/${heroAssetBaseName(name)}_name.png`);
+}
+
+export function getHeroIconPath(name: string): string {
+  return getAssetPath(`/heroes/icons/${heroIconAssetName(name)}.png`);
+}
+
+export function getHeroChipIconPath(name: string): string {
+  return getAssetPath(`/heroes/chip-icons/${heroIconAssetName(name)}.png`);
 }
 
 export function getHeroWikiUrl(name: string): string {
@@ -227,7 +244,10 @@ export function detectMinaTextures(mods: Mod[]) {
 }
 
 export function isLockerManagedMod(mod: Mod): boolean {
-  if (mod.sourceSection !== 'Mod') return false;
+  // A manual Locker hero tag is an explicit user intent to manage this VPK as
+  // a hero skin, including custom local imports that do not have GameBanana
+  // section metadata.
+  if (mod.sourceSection !== 'Mod' && !mod.lockerHero) return false;
 
   const lower = mod.fileName.toLowerCase();
   // Internal Midnight Mina preset files are managed by the custom variants UI,

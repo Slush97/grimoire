@@ -12,6 +12,7 @@ import type {
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
     GlobalModType,
+    EditLocalModArgs,
     MergeModsArgs,
     Mod,
     ModConflict,
@@ -49,6 +50,7 @@ export interface ElectronAPI {
     cancelUnknownModDetection: (modId: string) => Promise<void>;
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
+    editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
@@ -769,6 +771,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('apply-unknown-mod-match', modId, args),
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) =>
         ipcRenderer.invoke('apply-unknown-custom-mod', modId, args),
+    editLocalMod: (modId: string, args: EditLocalModArgs) =>
+        ipcRenderer.invoke('edit-local-mod', modId, args),
     setVariantLabel: (modId: string, label: string) =>
         ipcRenderer.invoke('set-variant-label', modId, label),
     setModLockerHero: (modId: string, heroName: string | null) =>

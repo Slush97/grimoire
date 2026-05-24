@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Layers, MoreVertical, Music, PowerOff, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
@@ -20,6 +20,7 @@ import type { GlobalModType, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
 import { Tag } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
+import { HeroSelect } from '../components/common/HeroSelect';
 import {
   FAVORITE_HEROES_KEY,
   GLOBAL_MOD_TYPE_LABELS,
@@ -49,11 +50,41 @@ import {
   type MinaVariant,
 } from '../lib/lockerUtils';
 
+let lockerPageScrollTop = 0;
+let lockerCategoriesCache: GameBananaCategoryNode[] | null = null;
+const lockerLoadedImageUrls = new Set<string>();
+const lockerLoadingImageUrls = new Set<string>();
+const lockerImageListeners = new Set<() => void>();
+
+function rememberLockerImageLoaded(src: string | undefined) {
+  if (!src || lockerLoadedImageUrls.has(src)) return;
+  lockerLoadedImageUrls.add(src);
+  for (const listener of lockerImageListeners) listener();
+}
+
+function prewarmLockerImage(src: string | undefined) {
+  if (!src || typeof window === 'undefined') return;
+  if (lockerLoadedImageUrls.has(src) || lockerLoadingImageUrls.has(src)) return;
+  lockerLoadingImageUrls.add(src);
+  const image = new Image();
+  image.decoding = 'async';
+  image.onload = () => {
+    lockerLoadingImageUrls.delete(src);
+    rememberLockerImageLoaded(src);
+  };
+  image.onerror = () => {
+    lockerLoadingImageUrls.delete(src);
+  };
+  image.src = src;
+}
+
 export default function Locker() {
   const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
-  const [categories, setCategories] = useState<GameBananaCategoryNode[]>([]);
+  const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
+    () => lockerCategoriesCache ?? []
+  );
   const [categoriesLoading, setCategoriesLoading] = useState(false);
   const [categoriesError, setCategoriesError] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<'gallery' | 'list'>(() => {
@@ -97,13 +128,16 @@ export default function Locker() {
     garter: 'Default',
     dress: 'Default',
   });
+  const lockerScrollRef = useRef<HTMLDivElement | null>(null);
+  const latestLockerScrollTopRef = useRef(lockerPageScrollTop);
+
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
 
   useEffect(() => {
     if (activeDeadlockPath) {
-      loadMods();
+      loadMods({ silent: useAppStore.getState().modsLoaded });
     }
   }, [activeDeadlockPath, loadMods]);
 
@@ -121,10 +155,12 @@ export default function Locker() {
   useEffect(() => {
     let active = true;
     const loadCategories = async () => {
-      setCategoriesLoading(true);
+      const hasCache = lockerCategoriesCache !== null;
+      if (!hasCache) setCategoriesLoading(true);
       setCategoriesError(null);
       try {
         const data = await getGamebananaCategories('ModCategory');
+        lockerCategoriesCache = data;
         if (!active) return;
         setCategories(data);
       } catch (err) {
@@ -132,7 +168,7 @@ export default function Locker() {
           setCategoriesError(String(err));
         }
       } finally {
-        if (active) {
+        if (active && !hasCache) {
           setCategoriesLoading(false);
         }
       }
@@ -271,6 +307,49 @@ export default function Locker() {
     [minaVariants, minaSelection]
   );
 
+  useEffect(() => {
+    for (const hero of heroList) {
+      prewarmLockerImage(getHeroRenderPath(hero.name));
+      prewarmLockerImage(getHeroNamePath(hero.name));
+    }
+  }, [heroList]);
+
+  useLayoutEffect(() => {
+    let frame: number | null = null;
+    let attempts = 0;
+    const restoreScroll = () => {
+      const container = lockerScrollRef.current;
+      if (!container || lockerPageScrollTop <= 0) return;
+      const maxScrollTop = Math.max(0, container.scrollHeight - container.clientHeight);
+      if (maxScrollTop <= 0 && attempts < 8) {
+        attempts += 1;
+        frame = window.requestAnimationFrame(restoreScroll);
+        return;
+      }
+      const target = Math.min(lockerPageScrollTop, maxScrollTop);
+      container.scrollTop = target;
+      latestLockerScrollTopRef.current = lockerPageScrollTop;
+    };
+    restoreScroll();
+    frame = window.requestAnimationFrame(restoreScroll);
+    return () => {
+      if (frame !== null) window.cancelAnimationFrame(frame);
+    };
+  }, [modsLoading, categoriesLoading, heroList.length, viewMode]);
+
+  useEffect(() => {
+    const container = lockerScrollRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      latestLockerScrollTopRef.current = container.scrollTop;
+      lockerPageScrollTop = container.scrollTop;
+    };
+    container.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+    };
+  }, [modsLoading, categoriesLoading]);
+
   // Both skins and sounds toggle independently. Users layering multiple VPKs
   // on the same hero (textures + weapons + voice) is a valid workflow; the
   // Locker reflects what's enabled rather than enforcing one-at-a-time. Real
@@ -301,7 +380,7 @@ export default function Locker() {
   const tagModHero = async (modId: string, heroName: string | null) => {
     try {
       await setModLockerHero(modId, heroName);
-      await loadMods();
+      await loadMods({ silent: true });
     } catch (err) {
       console.error('[Locker] Failed to set lockerHero override:', err);
     }
@@ -321,7 +400,7 @@ export default function Locker() {
   const applyMinaPreset = async (presetFileName: string) => {
     try {
       await setMinaPreset(presetFileName);
-      await loadMods();
+      await loadMods({ silent: true });
     } catch (err) {
       setCategoriesError(String(err));
     }
@@ -353,7 +432,7 @@ export default function Locker() {
         selectedMinaVariant.label,
         heroList.find((hero) => hero.name === 'Mina')?.id
       );
-      await loadMods();
+      await loadMods({ silent: true });
     } catch (err) {
       setMinaVariantsError(String(err));
     }
@@ -397,7 +476,7 @@ export default function Locker() {
   }
 
   return (
-    <>
+    <div ref={lockerScrollRef} className="h-full overflow-y-auto">
       <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-text-secondary">
@@ -592,22 +671,22 @@ export default function Locker() {
                       {isSound ? 'Sound · ' : ''}
                       {subtitle}
                     </div>
-                    <select
-                      aria-label={`Tag ${mod.name} as a hero`}
+                    <HeroSelect
+                      ariaLabel={`Tag ${mod.name} as a hero`}
                       value={mod.lockerHero ?? ''}
-                      onChange={(event) => {
-                        const next = event.target.value;
+                      onChange={(next) => {
                         void tagModHero(mod.id, next.length > 0 ? next : null);
                       }}
-                      className="w-full bg-bg-tertiary border border-border rounded-md px-2 py-1 text-xs text-text-primary hover:border-accent/60 cursor-pointer"
-                    >
-                      <option value="">Tag as hero…</option>
-                      {tagHeroOptions.map((hero) => (
-                        <option key={hero.id} value={hero.name}>
-                          {hero.name}
-                        </option>
-                      ))}
-                    </select>
+                      size="sm"
+                      options={[
+                        { value: '', label: 'Tag as hero...', muted: true },
+                        ...tagHeroOptions.map((hero) => ({
+                          value: hero.name,
+                          label: hero.name,
+                          heroName: hero.name,
+                        })),
+                      ]}
+                    />
                   </div>
                 </div>
               );
@@ -676,7 +755,6 @@ export default function Locker() {
           </div>
         </div>
       )}
-
       {globalSelected && (
         <div
           className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in transition-[left] duration-200 ease-out"
@@ -691,7 +769,7 @@ export default function Locker() {
           />
         </div>
       )}
-    </>
+    </div>
   );
 }
 
@@ -750,7 +828,6 @@ function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardPr
     <div
       onClick={onNavigate}
       className="group relative w-full cursor-pointer overflow-hidden rounded-2xl border border-accent/40 bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
     >
       <div className="relative aspect-[3/4]">
         <img
@@ -1157,47 +1234,31 @@ function HeroGalleryCard({
   const facePositionX = getHeroFacePosition(hero.name);
   const [fallbackStep, setFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
-  const [hasIntersected, setHasIntersected] = useState(false);
-  const [renderLoaded, setRenderLoaded] = useState(false);
-  const [nameLoaded, setNameLoaded] = useState(false);
-  const cardRef = useRef<HTMLDivElement | null>(null);
+  const [, setImageCacheVersion] = useState(0);
 
-  // Card art loads once IntersectionObserver sees it scroll into view, or
-  // immediately on platforms without IntersectionObserver. Derived rather
-  // than chained setState-in-effects.
-  const supportsIntersectionObserver =
-    typeof window !== 'undefined' && 'IntersectionObserver' in window;
-  const isVisible = hasIntersected || !supportsIntersectionObserver;
-
-  const renderSrc = !isVisible
-    ? ''
-    : fallbackStep === 0
-      ? renderLocal
-      : fallbackStep === 1
-        ? wikiUrl
-        : fallbackStep === 2
-          ? (hero.iconUrl ?? '')
-          : '';
+  const renderSrc = fallbackStep === 0
+    ? renderLocal
+    : fallbackStep === 1
+      ? wikiUrl
+      : fallbackStep === 2
+        ? (hero.iconUrl ?? '')
+        : '';
+  const isRenderReady = !!renderSrc && lockerLoadedImageUrls.has(renderSrc);
 
   useEffect(() => {
-    if (isVisible) return;
-    const node = cardRef.current;
-    if (!node) return;
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          setHasIntersected(true);
-          observer.disconnect();
-        }
-      },
-      { rootMargin: '200px' }
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [isVisible]);
+    const tick = () => setImageCacheVersion((version) => version + 1);
+    lockerImageListeners.add(tick);
+    return () => {
+      lockerImageListeners.delete(tick);
+    };
+  }, []);
+
+  useEffect(() => {
+    prewarmLockerImage(renderSrc);
+    prewarmLockerImage(namePath);
+  }, [namePath, renderSrc]);
 
   const handleRenderError = () => {
-    setRenderLoaded(false);
     if (fallbackStep === 0) {
       setFallbackStep(1);
       return;
@@ -1212,38 +1273,37 @@ function HeroGalleryCard({
   return (
     <div
       onClick={onNavigate}
-      ref={cardRef}
       className="group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
-      style={{ contentVisibility: 'auto', containIntrinsicSize: '0 200px' }}
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
       <div className="relative aspect-[3/4]">
-        {/* Shimmer shows whenever the image hasn't decoded yet or we're
-            still waiting for the IntersectionObserver to reveal the card.
-            Always painted at least once because we don't short-circuit
-            onLoad based on img.complete — locally-bundled images would
-            otherwise skip the skeleton entirely. */}
-        {!renderLoaded && fallbackStep < 3 && (
+        {!isRenderReady && fallbackStep < 3 && (
           <div className="absolute inset-0 skeleton-shimmer bg-bg-tertiary" aria-hidden />
         )}
         {renderSrc && fallbackStep < 3 && (
-          <img
-            ref={(el) => {
-              if (el && el.complete && el.naturalWidth > 0) setRenderLoaded(true);
-            }}
-            src={renderSrc}
-            alt={hero.name}
-            className={`absolute inset-0 h-full w-full object-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] scale-100 ${renderLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
-            style={{
-              objectPosition: `${facePositionX}% 20%`,
-              imageRendering: 'auto',
-              transform: 'translateZ(0)',
-            }}
-            decoding="async"
-            onLoad={() => setRenderLoaded(true)}
-            onError={handleRenderError}
-          />
+          <>
+            <div
+              className="absolute inset-0 h-full w-full bg-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] scale-100 transition-transform duration-500"
+              style={{
+                backgroundImage: `url(${JSON.stringify(renderSrc)})`,
+                backgroundPosition: `${facePositionX}% 20%`,
+                imageRendering: 'auto',
+                transform: 'translateZ(0)',
+              }}
+              aria-label={hero.name}
+              role="img"
+            />
+            <img
+              src={renderSrc}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute h-px w-px opacity-0"
+              decoding="async"
+              onLoad={() => rememberLockerImageLoaded(renderSrc)}
+              onError={handleRenderError}
+            />
+          </>
         )}
         {fallbackStep === 3 && (
           <div className="absolute inset-0 flex items-center justify-center text-text-secondary">
@@ -1301,22 +1361,14 @@ function HeroGalleryCard({
           <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
         ) : (
           <div className="relative w-[70%] h-6 sm:h-7 ml-auto">
-            {!nameLoaded && (
-              <div className="absolute inset-0 skeleton-shimmer bg-white/10 rounded-sm" aria-hidden />
-            )}
             <img
-              ref={(el) => {
-                // Sub-100KB PNGs over file:// can finish loading before React
-                // attaches onLoad, leaving the image cached but stuck at
-                // opacity-0. Sync the state from img.complete on every mount.
-                if (el && el.complete && el.naturalWidth > 0) setNameLoaded(true);
-              }}
               src={namePath}
               alt={hero.name}
-              className={`absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 scale-100 ${nameLoaded ? 'opacity-100' : 'opacity-0'} transition-[opacity,transform] duration-500`}
+              className="absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 scale-100 transition-transform duration-300"
               style={{ transform: 'translateZ(0)' }}
-              decoding="async"
-              onLoad={() => setNameLoaded(true)}
+              decoding="sync"
+              loading="eager"
+              onLoad={() => rememberLockerImageLoaded(namePath)}
               onError={() => setNameFailed(true)}
             />
           </div>
@@ -1408,8 +1460,8 @@ function HeroCard({
           src={bgSrc}
           alt=""
           aria-hidden
-          loading="lazy"
           decoding="async"
+          onLoad={() => rememberLockerImageLoaded(bgSrc)}
           onError={handleBgError}
           className="pointer-events-none absolute inset-0 h-full w-full object-cover"
           style={{ objectPosition: `${facePositionX}% 18%` }}

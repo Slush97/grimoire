@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Mod, AppSettings } from '../types/mod';
+import type { Mod, AppSettings, EditLocalModArgs } from '../types/mod';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import * as api from '../lib/api';
@@ -100,6 +100,7 @@ interface AppState {
 
   // Mods
   mods: Mod[];
+  modsLoaded: boolean;
   modsLoading: boolean;
   modsError: string | null;
   // Non-fatal, transient message (e.g. hitting the 99-enabled cap). Shown as a
@@ -119,6 +120,10 @@ interface AppState {
   // the user left it instead of refetching + scrolling to top.
   browseSession: BrowseSessionCache | null;
 
+  // Installed-page scroll position. Kept in memory so returning from another
+  // tab can restore the page without persisting UI session state to disk.
+  installedScrollTop: number;
+
   // Actions
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -136,6 +141,8 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedFileNames: string[]) => Promise<void>;
+  editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
+  setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
   importCustomMod: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
 
@@ -153,6 +160,7 @@ interface AppState {
 
   // Browse session cache (loaded mods + scroll position)
   setBrowseSession: (cache: BrowseSessionCache | null) => void;
+  setInstalledScrollTop: (scrollTop: number) => void;
 }
 
 // The main process throws this exact phrase from every "can't add a 100th
@@ -168,6 +176,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settingsLoading: false,
   settingsError: null,
   mods: [],
+  modsLoaded: false,
   modsLoading: false,
   modsError: null,
   modsNotice: null,
@@ -175,6 +184,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   soundVolume: 0.7,
   browseUi: { ...DEFAULT_BROWSE_UI },
   browseSession: null,
+  installedScrollTop: 0,
 
   // Load settings from backend
   loadSettings: async () => {
@@ -221,7 +231,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!silent) set({ modsLoading: true, modsError: null });
     try {
       const mods = await api.getMods();
-      set(silent ? { mods, modsError: null } : { mods, modsLoading: false });
+      set(silent ? { mods, modsLoaded: true, modsError: null } : { mods, modsLoaded: true, modsLoading: false });
     } catch (err) {
       set(silent ? { modsError: String(err) } : { modsError: String(err), modsLoading: false });
     }
@@ -313,6 +323,20 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  editLocalMod: async (modId: string, args: EditLocalModArgs) => {
+    const updated = await api.editLocalMod(modId, args);
+    set({
+      mods: get().mods.map((m) => (m.id === modId ? updated : m)),
+    });
+  },
+
+  setModLockerHero: async (modId: string, heroName: string | null) => {
+    const updated = await api.setModLockerHero(modId, heroName);
+    set({
+      mods: get().mods.map((m) => (m.id === modId ? updated : m)),
+    });
+  },
+
   setVariantLabel: async (modId: string, label: string) => {
     try {
       const updated = await api.setVariantLabel(modId, label);
@@ -390,6 +414,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setBrowseSession: (cache: BrowseSessionCache | null) => {
     set({ browseSession: cache });
+  },
+
+  setInstalledScrollTop: (scrollTop: number) => {
+    set({ installedScrollTop: Math.max(0, scrollTop) });
   },
 }));
 
