@@ -2065,15 +2065,15 @@ export default function Installed() {
 
   return (
     <div className="px-4 py-5 sm:px-6">
-      <div className="mb-4 flex flex-wrap items-center justify-end gap-3">
-            <div className="relative">
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div className="relative flex-1 min-w-[12rem] max-w-md">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 placeholder="Search installed..."
-                className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-40`}
+                className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-full`}
               />
               {search && (
                 <button
@@ -2086,22 +2086,23 @@ export default function Installed() {
                 </button>
               )}
             </div>
+            <div className="flex flex-wrap items-center gap-3">
             <Button
               variant="secondary"
               onClick={() => setImportOpen(true)}
               icon={FilePlus}
-              title="Import a VPK from disk with a custom name and thumbnail"
-            >
-              Add Custom Mod
-            </Button>
+              className="!px-2.5"
+              aria-label="Add custom mod"
+              title="Add custom mod: import a VPK from disk with a custom name and thumbnail"
+            />
             <Button
               variant="secondary"
               onClick={() => openModsFolder().catch(() => {})}
               icon={FolderOpen}
+              className="!px-2.5"
+              aria-label="Open mods folder"
               title="Open mods folder"
-            >
-              Open Folder
-            </Button>
+            />
             <Button
               variant={selectMode ? 'primary' : 'secondary'}
               onClick={() => (selectMode ? exitSelectMode() : setSelectMode(true))}
@@ -2121,6 +2122,7 @@ export default function Installed() {
               ]}
               onChange={setViewMode}
             />
+            </div>
       </div>
 
       {searchNeedle && totalMatches === 0 && (
