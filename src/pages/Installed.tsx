@@ -3721,7 +3721,7 @@ function ModListRowContent({
       </button>
 
       <div className="min-w-0">
-        <h3 className="min-w-0 truncate text-[14px] font-semibold leading-5 text-text-primary" title={mod.name}>
+        <h3 className="min-w-0 truncate text-[14px] font-medium leading-5 text-text-primary" title={mod.name}>
           {mod.name}
         </h3>
         <div className="mt-1 flex min-w-0 items-center gap-1.5 overflow-hidden whitespace-nowrap text-xs text-text-secondary">
@@ -3871,7 +3871,7 @@ function ModCard({
     ? 'grid min-h-[62px] grid-cols-[48px_72px_minmax(0,1fr)_auto] items-center gap-2 px-3.5 py-2'
     : 'flex flex-col gap-0 p-2.5';
   const mediaSpacingClasses = 'mb-2';
-  const titleClasses = 'text-[15px] font-semibold leading-[19px]';
+  const titleClasses = 'text-[15px] font-medium leading-[19px]';
   const gridTagsClasses = 'h-[22px] flex-nowrap overflow-hidden';
   const actions = (
     <div className="ml-auto flex items-center gap-1">
