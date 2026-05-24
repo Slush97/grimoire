@@ -3741,7 +3741,7 @@ function ModCard({
     mod.merged && viewMode === 'grid'
       ? 'shadow-[3px_3px_0_0_var(--color-bg-secondary),3px_3px_0_1px_var(--color-border),6px_6px_0_0_var(--color-bg-secondary),6px_6px_0_1px_var(--color-border)] mr-1.5 mb-1.5'
       : '';
-  const metaChipClasses = 'inline-flex h-[18px] flex-shrink-0 items-center rounded border border-white/[0.06] bg-bg-tertiary/65 px-1.5 text-[11px] leading-none text-text-secondary/80';
+  const metaChipClasses = 'inline-flex h-[18px] min-w-0 max-w-full items-center overflow-hidden truncate rounded border border-white/[0.06] bg-bg-tertiary/65 px-1.5 text-[11px] leading-none text-text-secondary/80';
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
   const actionRevealClasses = 'opacity-0 group-hover/card:opacity-70 focus:opacity-100 hover:opacity-100 focus-within:opacity-100';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
