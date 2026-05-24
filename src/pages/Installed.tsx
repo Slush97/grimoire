@@ -4147,11 +4147,6 @@ function ModCard({
             {mod.categoryName && (
               <span className={metaChipClasses}>{mod.categoryName}</span>
             )}
-            {mod.sourceSection === 'Sound' && (
-              <Tag tone="info" icon={Volume2} className="flex-shrink-0">
-                Sound
-              </Tag>
-            )}
             {mod.nsfw && (
               <Tag tone="danger" className="flex-shrink-0">18+</Tag>
             )}
