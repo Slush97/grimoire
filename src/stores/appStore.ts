@@ -101,6 +101,9 @@ interface AppState {
   mods: Mod[];
   modsLoading: boolean;
   modsError: string | null;
+  // Non-fatal, transient message (e.g. hitting the 99-enabled cap). Shown as a
+  // toast rather than replacing the page the way modsError does.
+  modsNotice: string | null;
 
   // Download counts cache (mod id -> { downloadCount, timestamp })
   downloadCountsCache: Map<number, CacheEntry<number>>;
@@ -124,7 +127,10 @@ interface AppState {
    *  so background refreshes (e.g. on window focus) don't replace the
    *  page with the loading skeleton. */
   loadMods: (opts?: { silent?: boolean }) => Promise<void>;
-  toggleMod: (modId: string) => Promise<void>;
+  /** Returns false when the toggle was blocked (e.g. the 99-enabled cap), so
+   *  batch callers can stop early. */
+  toggleMod: (modId: string) => Promise<boolean>;
+  clearModsNotice: () => void;
   deleteMod: (modId: string) => Promise<void>;
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
@@ -148,6 +154,13 @@ interface AppState {
   setBrowseSession: (cache: BrowseSessionCache | null) => void;
 }
 
+// The main process throws this exact phrase from every "can't add a 100th
+// active mod" path (enable, reorder/compact, local import, merge). We surface
+// it as a transient toast instead of the full-page modsError screen.
+const ENABLE_CAP_NOTICE =
+  'You can have at most 99 mods enabled at once. Disable one to make room.';
+const isEnableCapError = (err: unknown): boolean => /99 mods enabled/.test(String(err));
+
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
   settings: null,
@@ -156,6 +169,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   mods: [],
   modsLoading: false,
   modsError: null,
+  modsNotice: null,
   downloadCountsCache: new Map(),
   soundVolume: 0.7,
   browseUi: { ...DEFAULT_BROWSE_UI },
@@ -213,7 +227,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // Toggle mod enabled/disabled
   toggleMod: async (modId: string) => {
     const mod = get().mods.find((m) => m.id === modId);
-    if (!mod) return;
+    if (!mod) return false;
 
     try {
       const updatedMod = mod.enabled
@@ -223,10 +237,20 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({
         mods: get().mods.map((m) => (m.id === modId ? updatedMod : m)),
       });
+      return true;
     } catch (err) {
+      // The 99-enabled cap is an expected, recoverable outcome - surface it as
+      // a transient notice (toast) instead of the full-page modsError screen.
+      if (isEnableCapError(err)) {
+        set({ modsNotice: ENABLE_CAP_NOTICE });
+        return false;
+      }
       set({ modsError: String(err) });
+      return false;
     }
   },
+
+  clearModsNotice: () => set({ modsNotice: null }),
 
   // Delete a mod.
   // "Mod not found" is treated as idempotent success: the file is already
@@ -268,6 +292,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const updated = await api.swapModPriority(modIdA, modIdB);
       set({ mods: updated });
     } catch (err) {
+      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); return; }
       set({ modsError: String(err) });
     }
   },
@@ -279,7 +304,8 @@ export const useAppStore = create<AppState>((set, get) => ({
       const updated = await api.reorderMods(orderedFileNames);
       set({ mods: updated });
     } catch (err) {
-      set({ modsError: String(err) });
+      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      else { set({ modsError: String(err) }); }
       get().loadMods();
     }
   },
@@ -300,7 +326,11 @@ export const useAppStore = create<AppState>((set, get) => ({
       const updated = await api.importCustomMod(args);
       set({ mods: updated });
     } catch (err) {
-      set({ modsError: String(err) });
+      // At the 99-active cap, importing (which lands enabled) can't claim a
+      // slot. Toast it rather than blanking the page; still rethrow so the
+      // import dialog knows it failed.
+      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      else { set({ modsError: String(err) }); }
       throw err;
     }
   },

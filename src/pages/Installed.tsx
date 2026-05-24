@@ -288,6 +288,8 @@ export default function Installed() {
     mods,
     modsLoading,
     modsError,
+    modsNotice,
+    clearModsNotice,
     loadSettings,
     loadMods,
     toggleMod,
@@ -953,8 +955,11 @@ export default function Installed() {
     }
     setBulkProgress({ verb: 'Enabling', done: 0, total: targets.length });
     for (let i = 0; i < targets.length; i++) {
-      await toggleMod(targets[i].id);
+      const ok = await toggleMod(targets[i].id);
       setBulkProgress({ verb: 'Enabling', done: i + 1, total: targets.length });
+      // Stop the batch as soon as we hit the 99-enabled cap rather than firing
+      // a failing enable for every remaining selection.
+      if (!ok) break;
     }
     setBulkProgress(null);
     exitSelectMode();
@@ -1097,6 +1102,14 @@ export default function Installed() {
     const id = window.setTimeout(() => setCopyToast(null), 2200);
     return () => window.clearTimeout(id);
   }, [copyToast]);
+
+  // Surface a non-fatal store notice (e.g. the 99-enabled cap) through the same
+  // transient toast, then clear it from the store so it doesn't re-fire.
+  useEffect(() => {
+    if (!modsNotice) return;
+    setCopyToast(modsNotice);
+    clearModsNotice();
+  }, [modsNotice, clearModsNotice]);
 
 
   /**
@@ -2578,7 +2591,7 @@ export default function Installed() {
       )}
 
       {selectMode && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
           {bulkProgress ? (
             <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />

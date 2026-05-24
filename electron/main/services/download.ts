@@ -9,7 +9,7 @@ import { randomUUID } from 'crypto';
 import { setModMetadataWithHash, getModMetadata } from './metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { fetchModDetails, GameBananaModDetails } from './gamebanana';
-import { getUsedPriorities, scanMods, disableMod, enableMod } from './mods';
+import { makeDisabledFileName, scanMods, disableMod, enableMod } from './mods';
 import { validateDownloadUrl, validateFileSize } from './security';
 import { loadSettings } from './settings';
 import { getVpkLabels, inferHeroFromVpk } from './vpk';
@@ -531,55 +531,33 @@ async function downloadFile(
 }
 
 /**
- * Rename VPK files to avoid priority conflicts (async)
- * Checks BOTH addons AND disabled folders to avoid overwriting disabled mods
- * Returns the list of renamed VPK filenames
+ * Stage extracted VPKs into the disabled folder under free-form, unique names
+ * (async). New mods are installed disabled and a disabled mod holds no pakNN
+ * load-order slot, so installs don't consume the 99 enabled slots and the
+ * library is effectively uncapped. A real pakNN slot is assigned later, on
+ * enable. Returns the final filenames.
  */
 async function renameVpksToAvoidConflicts(
-    deadlockPath: string,
+    _deadlockPath: string,
     targetPath: string,
-    extractedVpks: string[]
+    extractedVpks: string[],
+    nameHint?: string
 ): Promise<string[]> {
-    // Get used priorities from BOTH addons and disabled folders
-    const usedPriorities = await getUsedPriorities(deadlockPath);
+    const taken = existsSync(targetPath)
+        ? new Set((await fs.readdir(targetPath)).map((n) => n.toLowerCase()))
+        : new Set<string>();
     const renamedFiles: string[] = [];
-
-    const getNextAvailablePriority = () => {
-        let newPriority = 1;
-        while (usedPriorities.has(newPriority) && newPriority < 99) {
-            newPriority++;
-        }
-        if (newPriority >= 99 && usedPriorities.has(99)) {
-            throw new Error('No available priority slots (all 1-99 are used)');
-        }
-        return newPriority;
-    };
 
     for (const vpkPath of extractedVpks) {
         const fileName = basename(vpkPath);
-        let finalFileName: string;
+        // Prefer the extracted VPK's own descriptive name; for bare pakNN
+        // downloads fall back to the mod's GameBanana name so the disabled file
+        // is still readable on disk.
+        const finalFileName = makeDisabledFileName(fileName, taken, nameHint);
+        taken.add(finalFileName.toLowerCase());
 
-        // Check if this VPK has a priority that conflicts
-        const match = fileName.match(/^pak(\d{2})_/);
-        if (match) {
-            const currentPriority = parseInt(match[1], 10);
-
-            if (usedPriorities.has(currentPriority)) {
-                const newPriority = getNextAvailablePriority();
-                finalFileName = `pak${String(newPriority).padStart(2, '0')}_dir.vpk`;
-
-                console.log(`[renameVpks] Renaming ${fileName} to ${finalFileName} to avoid conflict`);
-                usedPriorities.add(newPriority);
-            } else {
-                usedPriorities.add(currentPriority);
-                finalFileName = fileName;
-            }
-        } else {
-            const newPriority = getNextAvailablePriority();
-            finalFileName = `pak${String(newPriority).padStart(2, '0')}_dir.vpk`;
-
-            console.log(`[renameVpks] Renaming ${fileName} to ${finalFileName} to add priority`);
-            usedPriorities.add(newPriority);
+        if (finalFileName !== fileName) {
+            console.log(`[renameVpks] Installing ${fileName} as ${finalFileName} (disabled)`);
         }
 
         await moveFileWithoutOverwrite(vpkPath, join(targetPath, finalFileName));
@@ -747,7 +725,7 @@ async function executeDownload(
         console.log(`[downloadMod] Extracted ${extractedVpks.length} VPK files:`, extractedVpks);
 
         // Rename VPKs to avoid conflicts
-        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks);
+        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, details.name);
 
         if (isMidnightMina && installedVpks.length > 1) {
             // Special handling for Midnight Mina:
@@ -841,7 +819,7 @@ async function executeDownload(
         }
     } else if (extname(downloadPath).toLowerCase() === '.vpk') {
         // Direct VPK download
-        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath]);
+        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath], details.name);
     }
 
     // Save metadata for each installed VPK
@@ -1273,7 +1251,7 @@ async function executeOneClickDownload(
             throw extractError;
         }
 
-        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks);
+        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, oneClickModName);
 
         // Multi-VPK 1-Click archive: prompt the user instead of silently
         // dropping all but the first entry. Same shape as the regular
@@ -1326,7 +1304,7 @@ async function executeOneClickDownload(
             await fs.unlink(downloadPath);
         }
     } else if (extname(downloadPath).toLowerCase() === '.vpk') {
-        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath]);
+        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath], oneClickModName);
     }
 
     for (const vpkFileName of installedVpks) {
