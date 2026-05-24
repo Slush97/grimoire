@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Mod, AppSettings } from '../types/mod';
+import type { Mod, AppSettings, EditLocalModArgs } from '../types/mod';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import * as api from '../lib/api';
@@ -136,6 +136,7 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedFileNames: string[]) => Promise<void>;
+  editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
   importCustomMod: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
 
@@ -310,6 +311,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else { set({ modsError: String(err) }); }
       get().loadMods();
+    }
+  },
+
+  editLocalMod: async (modId: string, args: EditLocalModArgs) => {
+    try {
+      const updated = await api.editLocalMod(modId, args);
+      set({
+        mods: get().mods.map((m) => (m.id === modId ? updated : m)),
+      });
+    } catch (err) {
+      set({ modsError: String(err) });
+      throw err;
     }
   },
 

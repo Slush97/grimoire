@@ -26,6 +26,7 @@ import {
   Beaker,
   PowerOff,
   Tag as TagIcon,
+  Pencil,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -295,6 +296,7 @@ export default function Installed() {
     toggleMod,
     deleteMod,
     reorderMods,
+    editLocalMod,
     setVariantLabel,
     importCustomMod,
     soundVolume,
@@ -336,6 +338,7 @@ export default function Installed() {
     isGroup: boolean;
     isBulk?: boolean;
   } | null>(null);
+  const [localEditMod, setLocalEditMod] = useState<Mod | null>(null);
   const [customUnknownMod, setCustomUnknownMod] = useState<Mod | null>(null);
   // Sources for the in-progress merge. Non-null means the modal is open.
   const [mergeSources, setMergeSources] = useState<Mod[] | null>(null);
@@ -696,6 +699,29 @@ export default function Installed() {
   const makeUnknownCustomMod = (mod: Mod) => {
     closeUnknownFix();
     setCustomUnknownMod(mod);
+  };
+
+  const editLocalInstalledMod = async (mod: Mod, args: { name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => {
+    await editLocalMod(mod.id, args);
+    setUnknownFilterCache((prev) => {
+      if (!prev[mod.id]) return prev;
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
+    setUnknownFilterErrors((prev) => {
+      if (!prev[mod.id]) return prev;
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
+    delete unknownRequestIdsRef.current[mod.id];
+    setUnknownFilterPendingIds((prev) => {
+      if (!prev.has(mod.id)) return prev;
+      const next = new Set(prev);
+      next.delete(mod.id);
+      return next;
+    });
   };
 
   const handleDetailsDownload = async (fileId: number, fileName: string) => {
@@ -1832,6 +1858,7 @@ export default function Installed() {
           }
           onToggle={() => toggleMod(mod.id)}
           onDelete={() => setModToDelete({ ids: [mod.id], name: mod.name, isGroup: false })}
+          onEditLocal={!mod.gameBananaId ? () => setLocalEditMod(mod) : undefined}
           onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
           fixingUnknown={unknownFilterPendingIds.has(mod.id)}
           onCommitPriority={(p) => commitPriorityForMod(mod.id, p)}
@@ -2330,6 +2357,17 @@ export default function Installed() {
           onClose={() => setImportOpen(false)}
           onImport={async (args) => {
             await importCustomMod(args);
+          }}
+        />
+      )}
+
+      {localEditMod && (
+        <EditLocalModModal
+          mod={localEditMod}
+          onClose={() => setLocalEditMod(null)}
+          onSave={async (args) => {
+            await editLocalInstalledMod(localEditMod, args);
+            setLocalEditMod(null);
           }}
         />
       )}
@@ -3390,6 +3428,7 @@ interface ModCardProps {
   onOpenDetails?: () => void;
   onToggle: () => void;
   onDelete: () => void;
+  onEditLocal?: () => void;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
   /** Collision-tolerant priority commit. Passed through to PriorityEditor so
@@ -3741,6 +3780,7 @@ function ModCard({
   onOpenDetails,
   onToggle,
   onDelete,
+  onEditLocal,
   onFixUnknown,
   fixingUnknown,
   onCommitPriority,
@@ -3769,7 +3809,7 @@ function ModCard({
   const variantStatusTitle = group
     ? `${enabledTitle || 'No files enabled'} - click card to choose files`
     : '';
-  const hasUtilityActions = mod.isUnknown || (mod.merged && (!!onCopyShareCode || !!onUnmerge));
+  const hasUtilityActions = !!onEditLocal || mod.isUnknown || (mod.merged && (!!onCopyShareCode || !!onUnmerge));
 
   const indicatorClasses = (() => {
     if (!isDropTarget || !dropPosition) return '';
@@ -3840,6 +3880,20 @@ function ModCard({
           className={`flex items-center gap-1 rounded-md border border-border/60 bg-bg-secondary/45 p-0.5 transition-opacity duration-200 ${isList ? '' : 'opacity-0 group-hover/card:opacity-90 focus-within:opacity-100'}`}
           data-card-action="true"
         >
+          {onEditLocal && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onEditLocal();
+              }}
+              className={utilityActionClasses}
+              title="Edit local mod"
+              aria-label={`Edit local mod ${mod.name}`}
+            >
+              <Pencil className="w-4 h-4" />
+            </button>
+          )}
           {mod.isUnknown && (
             <button
               type="button"
@@ -4208,6 +4262,217 @@ function ModCard({
         )}
       </div>
 
+    </div>
+  );
+}
+
+interface EditLocalModModalProps {
+  mod: Mod;
+  onClose: () => void;
+  onSave: (args: { name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
+}
+
+function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
+  const [name, setName] = useState(mod.name);
+  const [imagePath, setImagePath] = useState('');
+  const [thumbnailDataUrl, setThumbnailDataUrl] = useState(mod.thumbnailUrl ?? '');
+  const [nsfw, setNsfw] = useState(!!mod.nsfw);
+  const [imgDragActive, setImgDragActive] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const trimmed = name.trim();
+
+  const acceptImagePath = async (picked: string) => {
+    setImagePath(picked);
+    setError(null);
+    try {
+      const dataUrl = await readImageDataUrl(picked);
+      setThumbnailDataUrl(dataUrl);
+    } catch (err) {
+      setThumbnailDataUrl(mod.thumbnailUrl ?? '');
+      setError(`Couldn't read image: ${String(err)}`);
+    }
+  };
+
+  const pickImage = async () => {
+    const picked = await showOpenDialog({
+      title: 'Select thumbnail image',
+      filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
+    });
+    if (picked) await acceptImagePath(picked);
+  };
+
+  const handleImageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setImgDragActive(false);
+    const file = e.dataTransfer.files?.[0];
+    if (!file) return;
+    const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
+    if (!IMAGE_EXTS.includes(ext)) {
+      setError(`Expected an image (${IMAGE_EXTS.join(', ')}) - got "${file.name}".`);
+      return;
+    }
+    const path = window.electronAPI.getDroppedFilePath(file);
+    if (!path) {
+      setError('Could not resolve the dropped image path.');
+      return;
+    }
+    await acceptImagePath(path);
+  };
+
+  const onZoneKeyDown = (e: React.KeyboardEvent, action: () => void) => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      action();
+    }
+  };
+
+  const submit = async () => {
+    if (!trimmed || saving) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await onSave({
+        name: trimmed,
+        thumbnailDataUrl: thumbnailDataUrl || undefined,
+        nsfw,
+      });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/75 p-4 backdrop-blur-sm"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-md border border-accent/25 bg-accent/10 text-accent">
+            <Pencil className="h-4 w-4" />
+          </div>
+          <div className="min-w-0">
+            <h3 className="text-lg font-semibold text-text-primary">Edit local mod</h3>
+            <p className="mt-1 text-sm text-text-secondary">
+              Update the local metadata shown in Grimoire. The VPK filename stays engine-safe.
+            </p>
+          </div>
+        </div>
+
+        <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="local-mod-name">
+          Name
+        </label>
+        <input
+          id="local-mod-name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void submit();
+            if (e.key === 'Escape') onClose();
+          }}
+          autoFocus
+          className="mt-2 w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/60 focus:border-accent focus:ring-2 focus:ring-accent/25"
+          placeholder="Mod name"
+        />
+        <p className="mt-2 truncate text-xs text-text-secondary" title={mod.fileName}>
+          {mod.fileName}
+        </p>
+
+        <div className="mt-5">
+          <label className="block text-sm font-medium text-text-primary mb-1.5">
+            Thumbnail image <span className="text-text-secondary font-normal">(optional)</span>
+          </label>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label={thumbnailDataUrl ? 'Thumbnail selected. Press Enter to change.' : 'Drop an image here or press Enter to browse'}
+            onClick={pickImage}
+            onKeyDown={(e) => onZoneKeyDown(e, pickImage)}
+            onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(true); }}
+            onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
+            onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
+            onDrop={handleImageDrop}
+            className={`flex items-center gap-3 p-3 rounded-lg border border-dashed cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              imgDragActive
+                ? 'border-accent bg-accent/10'
+                : thumbnailDataUrl
+                  ? 'border-accent/40 bg-bg-tertiary/60 hover:bg-bg-tertiary'
+                  : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
+            }`}
+          >
+            <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
+              {thumbnailDataUrl ? (
+                <img src={thumbnailDataUrl} alt="Thumbnail preview" className="w-full h-full object-cover" />
+              ) : (
+                <ImagePlus className="w-5 h-5" aria-hidden />
+              )}
+            </div>
+            <div className="flex-1 min-w-0">
+              {imagePath ? (
+                <>
+                  <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
+                  <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
+                  <div className="text-xs text-accent mt-0.5">Click or drop another to replace</div>
+                </>
+              ) : thumbnailDataUrl ? (
+                <>
+                  <div className="text-sm text-text-primary font-medium">Current thumbnail</div>
+                  <div className="text-xs text-text-secondary">Click or drop an image to replace</div>
+                </>
+              ) : (
+                <>
+                  <div className="text-sm text-text-primary font-medium">Drop an image here</div>
+                  <div className="text-xs text-text-secondary">or click to browse - {IMAGE_EXTS.join(', ')}</div>
+                </>
+              )}
+            </div>
+          </div>
+          {thumbnailDataUrl && (
+            <button
+              type="button"
+              onClick={() => {
+                setImagePath('');
+                setThumbnailDataUrl('');
+              }}
+              className="mt-2 text-xs text-text-secondary hover:text-text-primary cursor-pointer"
+            >
+              Remove thumbnail
+            </button>
+          )}
+        </div>
+
+        <label className="mt-5 flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
+          <input
+            type="checkbox"
+            checked={nsfw}
+            onChange={(e) => setNsfw(e.target.checked)}
+            className="w-4 h-4 accent-accent cursor-pointer"
+          />
+          Mark as NSFW
+        </label>
+
+        {error && (
+          <div className="mt-4 rounded-md border border-state-danger/35 bg-state-danger/10 px-3 py-2 text-sm text-state-danger">
+            {error}
+          </div>
+        )}
+
+        <div className="mt-5 flex justify-end gap-2">
+          <Button variant="secondary" onClick={onClose} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={submit} isLoading={saving} disabled={!trimmed}>
+            Save
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }

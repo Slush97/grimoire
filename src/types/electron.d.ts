@@ -6,6 +6,7 @@ import type {
     UnknownModFilterGuess,
     ApplyUnknownModMatchArgs,
     ApplyUnknownCustomModArgs,
+    EditLocalModArgs,
     MergeModsArgs,
     UnmergeModResult,
 } from './mod';
@@ -288,6 +289,7 @@ export interface ElectronAPI {
     cancelUnknownModDetection: (modId: string) => Promise<void>;
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
+    editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;

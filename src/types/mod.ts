@@ -164,6 +164,12 @@ export interface ApplyUnknownCustomModArgs {
   nsfw?: boolean;
 }
 
+export interface EditLocalModArgs {
+  name: string;
+  thumbnailDataUrl?: string;
+  nsfw?: boolean;
+}
+
 export interface Profile {
   id: string;
   name: string;

@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, MergeModsArgs, UnmergeModResult } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult } from '../types/mod';
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
@@ -75,6 +75,10 @@ export async function applyUnknownModMatch(modId: string, args: ApplyUnknownModM
 
 export async function applyUnknownCustomMod(modId: string, args: ApplyUnknownCustomModArgs): Promise<Mod> {
   return window.electronAPI.applyUnknownCustomMod(modId, args);
+}
+
+export async function editLocalMod(modId: string, args: EditLocalModArgs): Promise<Mod> {
+  return window.electronAPI.editLocalMod(modId, args);
 }
 
 export async function setVariantLabel(modId: string, label: string): Promise<Mod> {

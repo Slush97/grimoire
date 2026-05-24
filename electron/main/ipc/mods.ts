@@ -22,7 +22,7 @@ import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services
 import { downloadMod } from '../services/download';
 import { mergeMods, unmergeMod } from '../services/modMerger';
 import { getMainWindow } from '../index';
-import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, GlobalModType, MergeModsArgs, UnmergeModResult } from '../../../src/types/mod';
+import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, EditLocalModArgs, GlobalModType, MergeModsArgs, UnmergeModResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -300,7 +300,41 @@ ipcMain.handle(
     }
 );
 
-// set-variant-label — user-facing rename of a single VPK (the "variant"
+// edit-local-mod - local/custom VPKs keep engine-safe pakNN filenames, so
+// edits update the human-readable metadata shown in Grimoire.
+ipcMain.handle(
+    'edit-local-mod',
+    async (_, modId: string, args: EditLocalModArgs): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const trimmed = args?.name?.trim() ?? '';
+        if (!trimmed) {
+            throw new Error('A name is required');
+        }
+
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        const existing = getModMetadata(target.fileName) ?? {};
+        if (typeof existing.gameBananaId === 'number' && existing.gameBananaId > 0) {
+            throw new Error('Only local mods can be renamed');
+        }
+
+        await setModMetadataWithHash(target.fileName, {
+            modName: trimmed,
+            thumbnailUrl: args.thumbnailDataUrl,
+            nsfw: !!args.nsfw,
+        }, target.path);
+
+        return enrichMod(target);
+    }
+);
+
+// set-variant-label - user-facing rename of a single VPK (the "variant"
 // inside a grouped mod). Stored alongside the mod's other metadata so it
 // survives priority renames via migrateModMetadata. An empty string clears
 // the label and falls back to the filename-derived display.
