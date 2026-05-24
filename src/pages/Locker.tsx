@@ -103,7 +103,7 @@ export default function Locker() {
 
   useEffect(() => {
     if (activeDeadlockPath) {
-      loadMods();
+      loadMods({ silent: useAppStore.getState().modsLoaded });
     }
   }, [activeDeadlockPath, loadMods]);
 

@@ -432,33 +432,34 @@ export default function Installed() {
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateAllProgress, setUpdateAllProgress] = useState<{ done: number; total: number } | null>(null);
   const [updateAllError, setUpdateAllError] = useState<string | null>(null);
+  const installedScrollRef = useRef<HTMLDivElement | null>(null);
   const latestInstalledScrollTopRef = useRef(
     installedPageScrollTop || useAppStore.getState().installedScrollTop
   );
 
   useLayoutEffect(() => {
     const restoreScroll = () => {
-      const main = document.querySelector('main');
+      const container = installedScrollRef.current;
       const target = installedPageScrollTop || useAppStore.getState().installedScrollTop;
-      if (!main || target <= 0) return;
-      main.scrollTop = target;
+      if (!container || target <= 0) return;
+      container.scrollTop = target;
       latestInstalledScrollTopRef.current = target;
     };
     restoreScroll();
     const frame = window.requestAnimationFrame(restoreScroll);
     return () => window.cancelAnimationFrame(frame);
-  }, [mods.length]);
+  }, [modsLoading, mods.length]);
 
   useEffect(() => {
-    const main = document.querySelector('main');
-    if (!main) return;
+    const container = installedScrollRef.current;
+    if (!container) return;
     const onScroll = () => {
-      latestInstalledScrollTopRef.current = main.scrollTop;
-      installedPageScrollTop = main.scrollTop;
+      latestInstalledScrollTopRef.current = container.scrollTop;
+      installedPageScrollTop = container.scrollTop;
     };
-    main.addEventListener('scroll', onScroll, { passive: true });
+    container.addEventListener('scroll', onScroll, { passive: true });
     return () => {
-      main.removeEventListener('scroll', onScroll);
+      container.removeEventListener('scroll', onScroll);
       setInstalledScrollTop(latestInstalledScrollTopRef.current);
     };
   }, [setInstalledScrollTop]);
@@ -1295,26 +1296,26 @@ export default function Installed() {
     await reorderVariantTo(target, neighbor, direction === 'up' ? 'before' : 'after');
   };
 
-  // Auto-scroll the main content container while drag-reordering. Native HTML
+  // Auto-scroll the installed-page container while drag-reordering. Native HTML
   // drag-and-drop doesn't fire pointer events, so we hook `dragover` at the
   // window and start a rAF loop whenever the cursor is near the top/bottom
   // edge of the scroll container.
   useEffect(() => {
     if (!draggingId) return;
-    const main = document.querySelector('main');
-    if (!main) return;
+    const container = installedScrollRef.current;
+    if (!container) return;
     const EDGE = 80;
     const MAX_STEP = 18;
     let pointerY = -1;
 
     const tick = () => {
-      const rect = main.getBoundingClientRect();
+      const rect = container.getBoundingClientRect();
       const fromTop = pointerY - rect.top;
       const fromBottom = rect.bottom - pointerY;
       let dy = 0;
       if (fromTop >= 0 && fromTop < EDGE) dy = -Math.round(((EDGE - fromTop) / EDGE) * MAX_STEP);
       else if (fromBottom >= 0 && fromBottom < EDGE) dy = Math.round(((EDGE - fromBottom) / EDGE) * MAX_STEP);
-      if (dy !== 0) main.scrollBy({ top: dy });
+      if (dy !== 0) container.scrollBy({ top: dy });
       autoScrollRafRef.current = requestAnimationFrame(tick);
     };
 
@@ -1358,7 +1359,7 @@ export default function Installed() {
 
   useEffect(() => {
     if (activeDeadlockPath) {
-      loadMods();
+      loadMods({ silent: useAppStore.getState().modsLoaded });
     }
   }, [activeDeadlockPath, loadMods]);
 
@@ -2165,7 +2166,7 @@ export default function Installed() {
   ) : null;
 
   return (
-    <div className="px-4 pb-5 sm:px-6">
+    <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 bg-bg-primary/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80 sm:-mx-6 sm:px-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="relative flex-1 min-w-[12rem] max-w-md">

@@ -100,6 +100,7 @@ interface AppState {
 
   // Mods
   mods: Mod[];
+  modsLoaded: boolean;
   modsLoading: boolean;
   modsError: string | null;
   // Non-fatal, transient message (e.g. hitting the 99-enabled cap). Shown as a
@@ -119,8 +120,8 @@ interface AppState {
   // the user left it instead of refetching + scrolling to top.
   browseSession: BrowseSessionCache | null;
 
-  // Installed-page scroll position. The page uses Layout's shared <main>
-  // scroller, so keep this tiny session value in the store across navigation.
+  // Installed-page scroll position. Kept in memory so returning from another
+  // tab can restore the page without persisting UI session state to disk.
   installedScrollTop: number;
 
   // Actions
@@ -175,6 +176,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   settingsLoading: false,
   settingsError: null,
   mods: [],
+  modsLoaded: false,
   modsLoading: false,
   modsError: null,
   modsNotice: null,
@@ -229,7 +231,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     if (!silent) set({ modsLoading: true, modsError: null });
     try {
       const mods = await api.getMods();
-      set(silent ? { mods, modsError: null } : { mods, modsLoading: false });
+      set(silent ? { mods, modsLoaded: true, modsError: null } : { mods, modsLoaded: true, modsLoading: false });
     } catch (err) {
       set(silent ? { modsError: String(err) } : { modsError: String(err), modsLoading: false });
     }
