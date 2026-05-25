@@ -885,18 +885,24 @@ export default function Installed() {
         continue;
       }
 
-      const liveFiles = details.files ?? [];
+      // Consider only current (non-archived) files, mirroring the update-check
+      // effect below. An author's most common "update" is to archive the old
+      // version and upload a new current file; counting archived files as live
+      // would let the installed-but-now-archived row match Pass 1 1:1, so we'd
+      // re-download the same stale file (the mod stays flagged "update
+      // available" forever and "Update all" silently no-ops).
+      const liveFiles = (details.files ?? []).filter((f) => !f.isArchived);
       const liveFileIds = new Set(liveFiles.map((f) => f.id));
 
       // Resolve every snapshot to a target file *before* any delete/download
       // runs, so an unrecoverable row keeps its existing install rather than
       // getting deleted into a failed re-download.
       //
-      // Pass 1: rows whose stored fileId is still on GameBanana (genuine
-      // multi-file mods stay 1:1).
-      // Pass 2: rows whose fileId is gone. Fall back to a single-file
-      // consolidation only when the mod now ships exactly one file and no
-      // other row already claimed it.
+      // Pass 1: rows whose stored fileId is still a current file on GameBanana
+      // (genuine multi-file mods stay 1:1).
+      // Pass 2: rows whose fileId is gone or archived. Fall back to a
+      // single-file consolidation only when the mod now ships exactly one
+      // current file and no other row already claimed it.
       type Resolution =
         | { ok: true; snapshot: (typeof snapshots)[number]; fileId: number; fileName: string }
         | { ok: false; snapshot: (typeof snapshots)[number]; reason: string };
