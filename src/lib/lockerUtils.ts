@@ -248,6 +248,13 @@ export function isLockerManagedMod(mod: Mod): boolean {
   // a hero skin card in its own right.
   if (mod.lockerCosmetics) return false;
 
+  // Sound-section mods are the Sounds tab's domain (see isLockerManagedSound),
+  // never hero skins. They get an auto hero-tag at download time, so guard on
+  // the section explicitly before the lockerHero escape hatch below — otherwise
+  // a hero-tagged sound (e.g. a "Seven Ult Sound Replacer") falls through that
+  // hatch and surfaces in the Skins pile.
+  if (mod.sourceSection === 'Sound') return false;
+
   // A manual Locker hero tag is an explicit user intent to manage this VPK as
   // a hero skin, including custom local imports that do not have GameBanana
   // section metadata.
@@ -287,6 +294,13 @@ const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
  */
 export function isLockerManagedSound(mod: Mod): boolean {
   if (mod.sourceSection !== 'Sound') return false;
+  // An explicit hero tag (auto-set from the title at download, or set by hand)
+  // means this sound is hero-specific and belongs in that hero's Sounds tab,
+  // even when GameBanana filed it under a global music/UI category. The
+  // GLOBAL_SOUND_CATEGORIES drop exists only for sounds with no hero to tag;
+  // without this short-circuit, a "Seven Ult Sound Replacer" categorized as
+  // "In-Game Music" gets dropped here and then mis-surfaces under Skins.
+  if (mod.lockerHero) return true;
   const category = mod.categoryName?.trim().toLowerCase();
   if (category && GLOBAL_SOUND_CATEGORIES.has(category)) return false;
   return true;
