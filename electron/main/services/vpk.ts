@@ -344,6 +344,11 @@ const SOUL_CONTAINER_PATTERN = /(?:^|\/)models\/props_gameplay\/soul_container\/
 const HIDEOUT_PATTERN = /(?:^|\/)models\/hideout\//i;
 const HUD_PATTERN = /(?:^|\/)panorama\/(?:layout|styles|images\/hud)\//i;
 const HERO_IMAGE_PREFIX = /(?:^|\/)panorama\/images\/heroes\//i;
+// `sounds/mods/` is the file-level home for global SFX / announcer frameworks
+// (QOL Lock and its announcer packs). Distinct from hero SFX, which live under
+// `sounds/abilities|heroes|vo/<codename>/` (SOUND_HERO_PATTERNS), so this never
+// catches a hero-tied sound.
+const ANNOUNCER_PATTERN = /(?:^|\/)sounds\/mods\//i;
 
 /**
  * Distinct hero codenames referenced by panorama/images/heroes files. The
@@ -394,6 +399,7 @@ export function classifyGlobalModType(paths: string[]): GlobalModType | null {
     if (heroImages.size === 1) return null; // one hero = that hero's content
 
     if (paths.some((p) => HUD_PATTERN.test(p))) return 'hud';
+    if (paths.some((p) => ANNOUNCER_PATTERN.test(p))) return 'announcer';
     return null;
 }
 

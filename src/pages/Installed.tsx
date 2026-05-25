@@ -318,9 +318,12 @@ export default function Installed() {
       for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
     }
   }
-  const visibleMods = absorbedFileNames.size > 0
-    ? mods.filter((m) => !absorbedFileNames.has(m.fileName))
-    : mods;
+  // The Locker cosmetics VPK is a Locker-managed artifact (applied hero cards),
+  // not a user-installed mod, so it never shows as a card here. It's managed
+  // entirely from the Locker's Hero Card picker.
+  const visibleMods = mods.filter(
+    (m) => !m.lockerCosmetics && !absorbedFileNames.has(m.fileName)
+  );
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const stored = localStorage.getItem('installedViewMode');
     return stored === 'grid' || stored === 'compact' || stored === 'list' ? stored : 'grid';
@@ -2289,9 +2292,9 @@ export default function Installed() {
           <div
             className={
               viewMode === 'compact'
-                ? 'grid [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))] gap-3'
+                ? 'grid [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))] gap-3'
                 : viewMode === 'grid'
-                  ? 'grid [grid-template-columns:repeat(auto-fill,minmax(360px,1fr))] gap-4'
+                  ? 'grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-4'
                   : 'space-y-1.5'
             }
           >
@@ -2310,9 +2313,9 @@ export default function Installed() {
           <div
             className={
               viewMode === 'compact'
-                ? 'grid [grid-template-columns:repeat(auto-fill,minmax(260px,1fr))] gap-3'
+                ? 'grid [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))] gap-3'
                 : viewMode === 'grid'
-                  ? 'grid [grid-template-columns:repeat(auto-fill,minmax(360px,1fr))] gap-4'
+                  ? 'grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-4'
                   : 'space-y-1.5'
             }
           >
@@ -2891,9 +2894,9 @@ function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
       <div
         className={
           viewMode === 'compact'
-            ? 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-2'
+            ? 'grid [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))] gap-3'
             : viewMode === 'grid'
-              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4'
+              ? 'grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-4'
               : 'space-y-2'
         }
       >

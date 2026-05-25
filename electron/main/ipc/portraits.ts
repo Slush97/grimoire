@@ -1,0 +1,51 @@
+import { ipcMain } from 'electron';
+import { loadSettings } from '../services/settings';
+import { getHeroPortraits } from '../services/heroPortraits';
+import { applyHeroCard, revertHeroCard, getActiveHeroCard } from '../services/heroCards';
+import type { HeroPortrait } from '../../../src/types/portrait';
+import type { ApplyHeroCardResult } from '../../../src/types/mod';
+
+/** Active Deadlock install path (dev override wins, same as ipc/mods.ts). */
+function getActiveDeadlockPath(): string | null {
+    const settings = loadSettings();
+    if (settings.devMode && settings.devDeadlockPath) {
+        return settings.devDeadlockPath;
+    }
+    return settings.deadlockPath;
+}
+
+ipcMain.handle(
+    'get-hero-portraits',
+    async (_, heroName: string): Promise<HeroPortrait[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) return [];
+        return getHeroPortraits(deadlockPath, heroName);
+    }
+);
+
+ipcMain.handle(
+    'apply-hero-card',
+    async (_, heroName: string, sourceFileName: string): Promise<ApplyHeroCardResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return applyHeroCard(deadlockPath, heroName, sourceFileName);
+    }
+);
+
+ipcMain.handle(
+    'revert-hero-card',
+    async (_, heroName: string): Promise<ApplyHeroCardResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return revertHeroCard(deadlockPath, heroName);
+    }
+);
+
+ipcMain.handle(
+    'get-active-hero-card',
+    async (_, heroName: string): Promise<{ sourceFileName: string; variants: string[] } | null> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) return null;
+        return getActiveHeroCard(deadlockPath, heroName);
+    }
+);

@@ -3,6 +3,7 @@ import { ChevronDown } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, type MinaPreset, type MinaSelection, type MinaVariant } from '../../lib/lockerUtils';
 import ModThumbnail from '../ModThumbnail';
+import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { Skeleton } from '../common/Skeleton';
 
@@ -461,6 +462,20 @@ export default function HeroSkinsPanel({
                   <span className="text-xs text-accent font-semibold">Active</span>
                 )}
               </button>
+              {/* Sound preview. All variants of one GameBanana submission share
+                  the same preview clip, so the group's primary audioUrl is the
+                  representative sample. Rendered as a sibling of the toggle
+                  button (not nested) so its own click handlers can stopPropagation
+                  without fighting the card toggle. */}
+              {primary.sourceSection === 'Sound' && primary.audioUrl && (
+                <div
+                  className="px-3 pb-3"
+                  onClick={(e) => e.stopPropagation()}
+                  onMouseDown={(e) => e.stopPropagation()}
+                >
+                  <AudioPreviewPlayer src={primary.audioUrl} compact />
+                </div>
+              )}
               {isMulti && (
                 <div
                   className={`flex flex-wrap items-center gap-1.5 px-2.5 pb-2.5 pt-2 border-t ${

@@ -244,6 +244,17 @@ export function detectMinaTextures(mods: Mod[]) {
 }
 
 export function isLockerManagedMod(mod: Mod): boolean {
+  // The Locker cosmetics VPK (applied hero cards) is a managed artifact, never
+  // a hero skin card in its own right.
+  if (mod.lockerCosmetics) return false;
+
+  // Sound-section mods are the Sounds tab's domain (see isLockerManagedSound),
+  // never hero skins. They get an auto hero-tag at download time, so guard on
+  // the section explicitly before the lockerHero escape hatch below — otherwise
+  // a hero-tagged sound (e.g. a "Seven Ult Sound Replacer") falls through that
+  // hatch and surfaces in the Skins pile.
+  if (mod.sourceSection === 'Sound') return false;
+
   // A manual Locker hero tag is an explicit user intent to manage this VPK as
   // a hero skin, including custom local imports that do not have GameBanana
   // section metadata.
@@ -283,9 +294,72 @@ const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
  */
 export function isLockerManagedSound(mod: Mod): boolean {
   if (mod.sourceSection !== 'Sound') return false;
+  // An explicit hero tag (auto-set from the title at download, or set by hand)
+  // means this sound is hero-specific and belongs in that hero's Sounds tab,
+  // even when GameBanana filed it under a global music/UI category. The
+  // GLOBAL_SOUND_CATEGORIES drop exists only for sounds with no hero to tag;
+  // without this short-circuit, a "Seven Ult Sound Replacer" categorized as
+  // "In-Game Music" gets dropped here and then mis-surfaces under Skins.
+  if (mod.lockerHero) return true;
   const category = mod.categoryName?.trim().toLowerCase();
   if (category && GLOBAL_SOUND_CATEGORIES.has(category)) return false;
   return true;
+}
+
+/**
+ * Lowercased GameBanana category name for the Killstreak Music sound category
+ * (cat 5895 — see docs/gamebanana_categories_reference.md).
+ */
+const KILLSTREAK_MUSIC_CATEGORY = 'killstreak music';
+
+/**
+ * True for Sound mods filed under GameBanana's "Killstreak Music" category.
+ * This music plays match-wide (no hero), so the Locker treats it as a global
+ * type on the Global card rather than per-hero sounds. Used by
+ * getEffectiveGlobalType; kept narrow (category only) on purpose.
+ */
+export function isKillstreakMusicSound(mod: Mod): boolean {
+  return (
+    mod.sourceSection === 'Sound' &&
+    mod.categoryName?.trim().toLowerCase() === KILLSTREAK_MUSIC_CATEGORY
+  );
+}
+
+/** Lowercased GameBanana "Announcer" sound category name. */
+const ANNOUNCER_CATEGORY = 'announcer';
+
+/**
+ * True for Sound mods filed under GameBanana's "Announcer" category. These play
+ * match-wide with no hero, so the Locker surfaces them on the Global card's
+ * Announcer / SFX slide rather than dropping them (GLOBAL_SOUND_CATEGORIES) or
+ * mis-filing them under a hero. Path-classifiable announcer frameworks (QOL
+ * Lock, `sounds/mods/`) already carry a 'announcer' globalType from the
+ * main-process classifier; this rescues the sound-only packs that don't.
+ */
+export function isAnnouncerSound(mod: Mod): boolean {
+  return (
+    mod.sourceSection === 'Sound' &&
+    mod.categoryName?.trim().toLowerCase() === ANNOUNCER_CATEGORY
+  );
+}
+
+/**
+ * A mod's effective Locker global type. Prefers the persisted globalType (the
+ * VPK-path classification, or a manual override set via the Global card's
+ * retag menu), then derives 'killstreak-music' from the GameBanana category.
+ *
+ * Killstreak music can't be path-classified (a Sound VPK is just `sounds/`),
+ * so it's derived here instead of in the main-process classifier. Deriving it
+ * live also means it lights up for mods that were already installed before the
+ * category existed, with no metadata migration. A manual override still wins,
+ * since `mod.globalType` is checked first.
+ */
+export function getEffectiveGlobalType(mod: Mod): GlobalModType | undefined {
+  if (mod.globalType) return mod.globalType;
+  if (isKillstreakMusicSound(mod)) return 'killstreak-music';
+  // A hero tag wins: hero-tied SFX belong on that hero's Sounds tab, not here.
+  if (!mod.lockerHero && isAnnouncerSound(mod)) return 'announcer';
+  return undefined;
 }
 
 export function getLockerSkinKey(mod: Mod): string {
@@ -433,6 +507,8 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   hideout: 'Hideout',
   icons: 'Icon Packs',
   hud: 'HUD',
+  announcer: 'Announcer / SFX',
+  'killstreak-music': 'Killstreak Music',
 };
 
 /** Carousel/section order for the global types. */
@@ -441,6 +517,8 @@ export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'hideout',
   'icons',
   'hud',
+  'announcer',
+  'killstreak-music',
 ];
 
 export type GlobalModGroups = Record<GlobalModType, Mod[]>;
@@ -457,10 +535,13 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     hideout: [],
     icons: [],
     hud: [],
+    announcer: [],
+    'killstreak-music': [],
   };
   for (const mod of mods) {
-    if (mod.globalType && groups[mod.globalType]) {
-      groups[mod.globalType].push(mod);
+    const type = getEffectiveGlobalType(mod);
+    if (type && groups[type]) {
+      groups[type].push(mod);
     }
   }
   for (const type of GLOBAL_MOD_TYPE_ORDER) {
@@ -474,7 +555,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
 
 /** Total number of mods classified into any global type. */
 export function countGlobalMods(mods: Mod[]): number {
-  return mods.reduce((n, mod) => (mod.globalType ? n + 1 : n), 0);
+  return mods.reduce((n, mod) => (getEffectiveGlobalType(mod) ? n + 1 : n), 0);
 }
 
 export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: string }[]) {

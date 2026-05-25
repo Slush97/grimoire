@@ -41,6 +41,10 @@ export interface ModMetadata {
     /** Set when this VPK was produced by mergeMods. The share code +
      *  source list are the unroll payload. */
     merged?: import('../../../src/types/mod').MergedModInfo;
+    /** Set on the single Locker cosmetics VPK that holds applied hero cards.
+     *  The card selection set; rebuilt on every apply/revert. Presence marks
+     *  the VPK as Locker-managed so other surfaces hide it. */
+    lockerCosmetics?: import('../../../src/types/mod').LockerCosmeticsInfo;
     /** Load-order slot this mod last held while enabled. Disabled mods now
      *  get free-form filenames (no pakNN), so the priority is no longer encoded
      *  in the name; we stash it here on disable and try to restore it on enable
