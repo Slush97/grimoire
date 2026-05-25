@@ -615,7 +615,7 @@ export default function Locker() {
                     : [...prev, hero.id]
                 )
               }
-              hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+              hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
               minaPresets={hero.name === 'Mina' ? minaPresets : []}
               activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
               minaTextures={hero.name === 'Mina' ? minaTextures : []}
@@ -659,7 +659,7 @@ export default function Locker() {
                       src={mod.thumbnailUrl}
                       alt={mod.name}
                       nsfw={mod.nsfw}
-                      hideNsfw={settings?.hideNsfwPreviews ?? false}
+                      hideNsfw={settings?.hideNsfwPreviews ?? true}
                       className="w-full h-full"
                       fallback={
                         <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
@@ -723,7 +723,7 @@ export default function Locker() {
             }
             onSelect={(modId) => setActiveSkin(selectedHero.id, modId)}
             onToggleVariant={(modId) => toggleHeroVariant(selectedHero.id, modId)}
-            hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+            hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
             minaPresets={selectedHero.name === 'Mina' ? minaPresets : []}
             activeMinaPreset={selectedHero.name === 'Mina' ? activeMinaPreset : undefined}
             minaTextures={selectedHero.name === 'Mina' ? minaTextures : []}
@@ -767,7 +767,7 @@ export default function Locker() {
         >
           <LockerGlobalView
             groups={globalGroups}
-            hideNsfw={settings?.hideNsfwPreviews ?? false}
+            hideNsfw={settings?.hideNsfwPreviews ?? true}
             onBack={() => navigate('/locker')}
             onToggle={toggleMod}
             onSetGlobalType={tagModGlobalType}

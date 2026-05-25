@@ -50,7 +50,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     deadlockPath: null,
     devMode: false,
     devDeadlockPath: null,
-    hideNsfwPreviews: false,
+    hideNsfwPreviews: true,
     hideOutdatedMods: false,
     autoDisableSiblingVariants: true,
     steamLaunchOptions: '',

@@ -1901,7 +1901,7 @@ export default function Installed() {
           key={entry.key}
           mod={mod}
           viewMode={viewMode}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           conflicts={conflictMap.get(mod.id) || []}
           soundVolume={soundVolume}
           updateAvailable={updatesAvailable.has(mod.id)}
@@ -2017,7 +2017,7 @@ export default function Installed() {
           ),
         }}
         viewMode={viewMode}
-        hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+        hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
         conflicts={aggregateConflicts}
         soundVolume={soundVolume}
         updateAvailable={anyUpdateAvailable}
@@ -2553,7 +2553,7 @@ export default function Installed() {
           downloadingFileId={null}
           extracting={false}
           progress={null}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           dateAdded={detailsDates?.dateAdded}
           dateModified={detailsDates?.dateModified}
           updateAvailable={detailsUpdateAvailable}
@@ -2567,7 +2567,7 @@ export default function Installed() {
       {selectedUnknownState && unknownFixMode === 'single' && (
         <UnknownFilterGuessModal
           state={selectedUnknownState}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           autoMatchEnabled={autoMatchEnabled}
           onApplyMatch={applyUnknownMatch}
           onViewMatch={viewUnknownMatch}
@@ -2583,7 +2583,7 @@ export default function Installed() {
         <BulkUnknownFixModal
           unknownMods={unknownMods}
           state={selectedUnknownState}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           autoMatchEnabled={autoMatchEnabled}
           cache={unknownFilterCache}
           pendingIds={unknownFilterPendingIds}
@@ -2636,7 +2636,7 @@ export default function Installed() {
       {mergeSources && (
         <MergeModsModal
           sources={mergeSources}
-          hideNsfw={settings?.hideNsfwPreviews ?? false}
+          hideNsfw={settings?.hideNsfwPreviews ?? true}
           onCancel={() => setMergeSources(null)}
           onConfirm={handleMergeConfirm}
         />
@@ -2645,7 +2645,7 @@ export default function Installed() {
       {mergedContentsMod && (
         <MergedContentsModal
           mod={mergedContentsMod}
-          hideNsfw={settings?.hideNsfwPreviews ?? false}
+          hideNsfw={settings?.hideNsfwPreviews ?? true}
           onClose={() => setMergedContentsMod(null)}
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
         />

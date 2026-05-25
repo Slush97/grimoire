@@ -875,7 +875,7 @@ export default function Profiles() {
       {showImport && (
         <ImportProfileDialog
           activeDeadlockPath={getActiveDeadlockPath(settings)}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           onClose={() => setShowImport(false)}
           onImported={() => { void loadProfileList({ silent: true }); void loadMods(); }}
         />
@@ -886,7 +886,7 @@ export default function Profiles() {
       {restoringSnapshotJson !== null && (
         <ImportProfileDialog
           activeDeadlockPath={getActiveDeadlockPath(settings)}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           initialInput={restoringSnapshotJson}
           onClose={() => setRestoringSnapshotJson(null)}
           onImported={() => { void loadProfileList({ silent: true }); void loadMods(); }}

@@ -302,7 +302,7 @@ export default function LockerHero() {
       }
       onSelect={setActiveSkin}
       onToggleVariant={toggleHeroVariant}
-      hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+      hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
       minaPresets={hero.name === 'Mina' ? minaPresets : []}
       activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
       minaTextures={hero.name === 'Mina' ? minaTextures : []}
