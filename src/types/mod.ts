@@ -81,12 +81,16 @@ export interface ApplyHeroCardResult {
 
 /**
  * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
- * alongside the per-hero piles. Derived from the VPK file tree by
+ * alongside the per-hero piles. Most are derived from the VPK file tree by
  * `classifyGlobalModType` (electron/main/services/vpk.ts), since GameBanana's
- * category labels are unreliable for these. Shared here so the classifier
- * (main) and the Locker grouping/UI (renderer) agree on the union.
+ * category labels are unreliable for them. The exception is 'killstreak-music':
+ * a Sound mod's VPK is just `sounds/`, so it can't be path-classified, and is
+ * instead derived from the GameBanana "Killstreak Music" category (cat 5895)
+ * by `getEffectiveGlobalType` in the renderer (src/lib/lockerUtils.ts). Shared
+ * here so the classifier (main) and the Locker grouping/UI (renderer) agree on
+ * the union.
  */
-export type GlobalModType = 'soul-container' | 'hideout' | 'icons' | 'hud';
+export type GlobalModType = 'soul-container' | 'hideout' | 'icons' | 'hud' | 'killstreak-music';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 export interface Mod {

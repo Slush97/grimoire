@@ -15,6 +15,7 @@ import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
+import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { GlobalModType, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
@@ -32,6 +33,7 @@ import {
   countLockerSkins,
   detectMinaTextures,
   findMinaVariant,
+  getEffectiveGlobalType,
   getHeroFacePosition,
   getHeroNamePath,
   getHeroRenderPath,
@@ -222,11 +224,14 @@ export default function Locker() {
   // match would file e.g. "Lowpoly Holliday Soul Container" into Holliday's
   // pile instead of Soul Containers.
   const lockerMods = useMemo(
-    () => mods.filter((m) => isLockerManagedMod(m) && !m.globalType),
+    () => mods.filter((m) => isLockerManagedMod(m) && !getEffectiveGlobalType(m)),
     [mods]
   );
+  // Killstreak Music sounds are global (match-wide, no hero), so keep them off
+  // the per-hero Sounds axis even when GameBanana filed them under a hero or
+  // inferHeroFromTitle tagged one. getEffectiveGlobalType reflects that routing.
   const lockerSounds = useMemo(
-    () => mods.filter((m) => isLockerManagedSound(m) && !m.globalType),
+    () => mods.filter((m) => isLockerManagedSound(m) && !getEffectiveGlobalType(m)),
     [mods]
   );
   const globalGroups = useMemo(() => groupGlobalMods(mods), [mods]);
@@ -1092,30 +1097,35 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                         )}
                         {/* Retag control: sits above the full-card toggle overlay
                             (z-20 > z-10) and stops propagation so opening it never
-                            also toggles the mod. */}
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            const r = e.currentTarget.getBoundingClientRect();
-                            const MENU_W = 208;
-                            const MENU_H = 220;
-                            const x = Math.max(
-                              8,
-                              Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)
-                            );
-                            const y =
-                              r.bottom + MENU_H > window.innerHeight
-                                ? Math.max(8, r.top - MENU_H - 4)
-                                : r.bottom + 4;
-                            setRetagMenu({ id: mod.id, x, y });
-                          }}
-                          aria-label={`Change category for ${mod.name}`}
-                          title="Change category"
-                          className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
+                            also toggles the mod. Hidden for Killstreak Music: that
+                            type is derived from the GameBanana category, not a
+                            manual assignment, and the sound belongs to no hero, so
+                            there's nowhere meaningful to retag it. */}
+                        {activeType !== 'killstreak-music' && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              const r = e.currentTarget.getBoundingClientRect();
+                              const MENU_W = 208;
+                              const MENU_H = 220;
+                              const x = Math.max(
+                                8,
+                                Math.min(r.right - MENU_W, window.innerWidth - MENU_W - 8)
+                              );
+                              const y =
+                                r.bottom + MENU_H > window.innerHeight
+                                  ? Math.max(8, r.top - MENU_H - 4)
+                                  : r.bottom + 4;
+                              setRetagMenu({ id: mod.id, x, y });
+                            }}
+                            aria-label={`Change category for ${mod.name}`}
+                            title="Change category"
+                            className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                          >
+                            <MoreVertical className="h-4 w-4" />
+                          </button>
+                        )}
                       </div>
 
                       {/* Title only — the whole card is the enable/disable control. */}
@@ -1127,6 +1137,20 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                           {mod.name}
                         </h3>
                       </div>
+
+                      {/* Audio preview for sound-backed global mods (Killstreak
+                          Music). Sits above the full-card toggle overlay (z-20 >
+                          z-10) and stops propagation so play/seek never also
+                          toggles the mod, mirroring the hero Sounds tab. */}
+                      {mod.audioUrl && (
+                        <div
+                          className="relative z-20 mt-2 px-0.5"
+                          onClick={(e) => e.stopPropagation()}
+                          onMouseDown={(e) => e.stopPropagation()}
+                        >
+                          <AudioPreviewPlayer src={mod.audioUrl} compact />
+                        </div>
+                      )}
 
                       {/* Full-card click target: clicking anywhere enables/disables
                           the mod. Kept as a transparent overlay (not a wrapping
@@ -1168,7 +1192,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
             <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
               Move to category
             </div>
-            {GLOBAL_MOD_TYPE_ORDER.map((type) => {
+            {/* Killstreak Music is derived from the GameBanana category, not a
+                manual destination, so it's not offered as a move target. */}
+            {GLOBAL_MOD_TYPE_ORDER.filter((type) => type !== 'killstreak-music').map((type) => {
               const isCurrent = type === activeType;
               return (
                 <button

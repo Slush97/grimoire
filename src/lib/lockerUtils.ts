@@ -306,6 +306,42 @@ export function isLockerManagedSound(mod: Mod): boolean {
   return true;
 }
 
+/**
+ * Lowercased GameBanana category name for the Killstreak Music sound category
+ * (cat 5895 — see docs/gamebanana_categories_reference.md).
+ */
+const KILLSTREAK_MUSIC_CATEGORY = 'killstreak music';
+
+/**
+ * True for Sound mods filed under GameBanana's "Killstreak Music" category.
+ * This music plays match-wide (no hero), so the Locker treats it as a global
+ * type on the Global card rather than per-hero sounds. Used by
+ * getEffectiveGlobalType; kept narrow (category only) on purpose.
+ */
+export function isKillstreakMusicSound(mod: Mod): boolean {
+  return (
+    mod.sourceSection === 'Sound' &&
+    mod.categoryName?.trim().toLowerCase() === KILLSTREAK_MUSIC_CATEGORY
+  );
+}
+
+/**
+ * A mod's effective Locker global type. Prefers the persisted globalType (the
+ * VPK-path classification, or a manual override set via the Global card's
+ * retag menu), then derives 'killstreak-music' from the GameBanana category.
+ *
+ * Killstreak music can't be path-classified (a Sound VPK is just `sounds/`),
+ * so it's derived here instead of in the main-process classifier. Deriving it
+ * live also means it lights up for mods that were already installed before the
+ * category existed, with no metadata migration. A manual override still wins,
+ * since `mod.globalType` is checked first.
+ */
+export function getEffectiveGlobalType(mod: Mod): GlobalModType | undefined {
+  if (mod.globalType) return mod.globalType;
+  if (isKillstreakMusicSound(mod)) return 'killstreak-music';
+  return undefined;
+}
+
 export function getLockerSkinKey(mod: Mod): string {
   return typeof mod.gameBananaId === 'number' && mod.gameBananaId > 0
     ? `gamebanana:${mod.gameBananaId}`
@@ -451,6 +487,7 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   hideout: 'Hideout',
   icons: 'Icon Packs',
   hud: 'HUD',
+  'killstreak-music': 'Killstreak Music',
 };
 
 /** Carousel/section order for the global types. */
@@ -459,6 +496,7 @@ export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'hideout',
   'icons',
   'hud',
+  'killstreak-music',
 ];
 
 export type GlobalModGroups = Record<GlobalModType, Mod[]>;
@@ -475,10 +513,12 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     hideout: [],
     icons: [],
     hud: [],
+    'killstreak-music': [],
   };
   for (const mod of mods) {
-    if (mod.globalType && groups[mod.globalType]) {
-      groups[mod.globalType].push(mod);
+    const type = getEffectiveGlobalType(mod);
+    if (type && groups[type]) {
+      groups[type].push(mod);
     }
   }
   for (const type of GLOBAL_MOD_TYPE_ORDER) {
@@ -492,7 +532,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
 
 /** Total number of mods classified into any global type. */
 export function countGlobalMods(mods: Mod[]): number {
-  return mods.reduce((n, mod) => (mod.globalType ? n + 1 : n), 0);
+  return mods.reduce((n, mod) => (getEffectiveGlobalType(mod) ? n + 1 : n), 0);
 }
 
 export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: string }[]) {
