@@ -839,8 +839,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.autoDisableSiblingVariants ?? true}
               onChange={handleAutoDisableSiblingsChange}
-              label="Auto-disable older variants on re-download"
-              description="When you re-download a GameBanana mod with a different file, automatically disable the previously installed variant. Disable this if you want to keep multiple variants enabled at once."
+              label="Switch variants instead of stacking them"
+              description="When you install a different file of a mod you already have enabled, disable the previous variant so only the new one is active. Turn off to keep multiple variants of the same mod enabled at once. (Updates always replace the old file regardless of this setting.)"
             />
 
             <div className="h-px bg-white/5" />

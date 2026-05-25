@@ -833,12 +833,15 @@ async function executeDownload(
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
-    // Auto-disable previously installed variants of the same GameBanana mod so
-    // the newest pick is the active one. Avoids file-conflict warnings between
-    // sibling variants and matches the "Browse vs Installed" expectation that
-    // re-downloading swaps which variant is active without losing the others.
+    // Switching variants: when the user installs a different file of a mod they
+    // already have enabled, disable the previously-enabled sibling so only the
+    // new pick is active. Avoids file-conflict warnings between sibling variants
+    // (they usually touch the same in-game files). This only matters for non-
+    // update installs (Browse, one-click, collection import); the explicit
+    // update paths delete the old file before downloading, so there is no
+    // enabled sibling left for this to act on.
     // Opt-out: settings.autoDisableSiblingVariants = false keeps every variant
-    // enabled (user may rely on intentional overlap between mods).
+    // enabled (e.g. a mod page whose separate files are meant to run together).
     const settings = loadSettings();
     if (settings.autoDisableSiblingVariants !== false) {
         try {
