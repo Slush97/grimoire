@@ -325,6 +325,24 @@ export function isKillstreakMusicSound(mod: Mod): boolean {
   );
 }
 
+/** Lowercased GameBanana "Announcer" sound category name. */
+const ANNOUNCER_CATEGORY = 'announcer';
+
+/**
+ * True for Sound mods filed under GameBanana's "Announcer" category. These play
+ * match-wide with no hero, so the Locker surfaces them on the Global card's
+ * Announcer / SFX slide rather than dropping them (GLOBAL_SOUND_CATEGORIES) or
+ * mis-filing them under a hero. Path-classifiable announcer frameworks (QOL
+ * Lock, `sounds/mods/`) already carry a 'announcer' globalType from the
+ * main-process classifier; this rescues the sound-only packs that don't.
+ */
+export function isAnnouncerSound(mod: Mod): boolean {
+  return (
+    mod.sourceSection === 'Sound' &&
+    mod.categoryName?.trim().toLowerCase() === ANNOUNCER_CATEGORY
+  );
+}
+
 /**
  * A mod's effective Locker global type. Prefers the persisted globalType (the
  * VPK-path classification, or a manual override set via the Global card's
@@ -339,6 +357,8 @@ export function isKillstreakMusicSound(mod: Mod): boolean {
 export function getEffectiveGlobalType(mod: Mod): GlobalModType | undefined {
   if (mod.globalType) return mod.globalType;
   if (isKillstreakMusicSound(mod)) return 'killstreak-music';
+  // A hero tag wins: hero-tied SFX belong on that hero's Sounds tab, not here.
+  if (!mod.lockerHero && isAnnouncerSound(mod)) return 'announcer';
   return undefined;
 }
 
@@ -487,6 +507,7 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   hideout: 'Hideout',
   icons: 'Icon Packs',
   hud: 'HUD',
+  announcer: 'Announcer / SFX',
   'killstreak-music': 'Killstreak Music',
 };
 
@@ -496,6 +517,7 @@ export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'hideout',
   'icons',
   'hud',
+  'announcer',
   'killstreak-music',
 ];
 
@@ -513,6 +535,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     hideout: [],
     icons: [],
     hud: [],
+    announcer: [],
     'killstreak-music': [],
   };
   for (const mod of mods) {
