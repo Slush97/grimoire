@@ -169,9 +169,15 @@ export default function ModDetailsModal({
     setCurrentImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
   };
 
-  const actionLabel = (fileId: number) => {
-    if (updateAvailable && installedFileIds.has(fileId)) return 'Update';
+  const actionLabel = (fileId: number, archived = false) => {
+    // A file you already own re-downloads itself = "Reinstall". A not-installed
+    // current file shown while an update is available is the update target:
+    // clicking it replaces the now-superseded installed version, so call it
+    // "Update". Archived files are never update targets (they're the old ones).
+    // Browse never sets updateAvailable, so its non-installed files stay
+    // "Install" (Browse adds files, it doesn't replace).
     if (installedFileIds.has(fileId)) return 'Reinstall';
+    if (updateAvailable && !archived) return 'Update';
     return 'Install';
   };
 
@@ -183,7 +189,10 @@ export default function ModDetailsModal({
 
   const renderFileRow = (file: GameBananaFile, archived = false) => {
     const isInstalled = installedFileIds.has(file.id);
-    const isUpdate = updateAvailable && isInstalled;
+    // Highlight the update *target* (the new, not-yet-installed current file),
+    // not the superseded file the user currently has, so the accent points at
+    // the row they should click to update. Archived files are never targets.
+    const isUpdate = !!updateAvailable && !isInstalled && !archived;
     const isActive = activeFileIds.has(file.id);
     const isDownloadingThis = downloadingFileId === file.id;
     const installedFileState = installedFileStates?.get(file.id);
@@ -295,7 +304,7 @@ export default function ModDetailsModal({
           ) : (
             <>
               <Download className="w-4 h-4" />
-              {actionLabel(file.id)}
+              {actionLabel(file.id, archived)}
             </>
           )}
         </button>

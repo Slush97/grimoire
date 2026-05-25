@@ -765,14 +765,63 @@ export default function Installed() {
   const handleDetailsDownload = async (fileId: number, fileName: string) => {
     if (!detailsMod) return;
     try {
-      // Same-file picks (true reinstall/update) replace the source install;
-      // different-file picks add a new entry and the download backend will
-      // auto-disable any prior enabled sibling files of the same GameBanana mod.
+      // Decide whether this pick replaces the source install or adds a sibling:
+      //  - same-file pick = a true reinstall -> replace.
+      //  - different-file pick when the source has an update available = a
+      //    version update -> delete the old version like "Update all" does, so
+      //    the superseded file isn't left lingering (disabled) on disk.
+      //  - different-file pick with no update available = an intentional variant
+      //    add -> leave the source in place (the download backend auto-disables
+      //    the prior enabled sibling instead of deleting it).
       const sourceMod = detailsSourceModId ? mods.find((m) => m.id === detailsSourceModId) : null;
-      if (sourceMod && sourceMod.gameBananaFileId === fileId) {
+      const pickedIsArchived = !!detailsMod.files?.find((f) => f.id === fileId)?.isArchived;
+      const isReinstall = !!sourceMod && sourceMod.gameBananaFileId === fileId;
+      // A not-installed, non-archived file picked while the source has an update
+      // available is the update target. Guard on !installed so clicking a
+      // *different* file the user already owns (a second variant) reinstalls it
+      // rather than deleting the source; guard on !archived so picking an old
+      // file from the archived list never replaces a newer install.
+      const isUpdate =
+        !!sourceMod &&
+        detailsUpdateAvailable &&
+        !detailsInstalledFileIds.has(fileId) &&
+        !pickedIsArchived;
+      const replacing = isReinstall || isUpdate;
+      const restoreEnabled = replacing && !!sourceMod?.enabled;
+
+      if (replacing && sourceMod) {
+        // Snapshot before the destructive delete so the user can roll back,
+        // matching runUpdate's pre-update snapshot. Non-fatal on failure: a
+        // missing snapshot must not block the update the user just asked for.
+        try {
+          await createSnapshot('pre-update');
+        } catch (err) {
+          console.warn('[Update] failed to capture pre-update snapshot:', err);
+        }
         await deleteMod(sourceMod.id);
       }
+
       await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
+
+      // Deleting the source removes the only enabled sibling, so the backend's
+      // auto-disable promotion never fires and the freshly downloaded file stays
+      // in /disabled. Re-enable it so an update/reinstall preserves the source's
+      // enabled state instead of silently turning the mod off. (Match by GB ids;
+      // the local mod id changes on reinstall.)
+      if (restoreEnabled) {
+        await loadMods();
+        const newMod = useAppStore
+          .getState()
+          .mods.find((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
+        if (newMod && !newMod.enabled) {
+          try {
+            await toggleMod(newMod.id);
+          } catch (err) {
+            console.warn('[Update] failed to re-enable updated mod:', err);
+          }
+        }
+      }
+
       closeModDetails();
       loadMods();
     } catch (err) {
