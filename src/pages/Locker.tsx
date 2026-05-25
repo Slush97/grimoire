@@ -832,7 +832,7 @@ function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardPr
   return (
     <div
       onClick={onNavigate}
-      className="group relative w-full cursor-pointer overflow-hidden rounded-2xl border border-accent/40 bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+      className="group relative w-full cursor-pointer overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
     >
       <div className="relative aspect-[3/4]">
         <img
@@ -847,11 +847,11 @@ function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardPr
           {count} mod{count !== 1 ? 's' : ''}
         </div>
       </div>
-      <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-2 sm:p-3">
-        <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+      <div className="absolute inset-x-0 bottom-0 flex flex-col items-end bg-gradient-to-t from-black/70 to-transparent p-2 text-right sm:p-3">
+        <div className="font-reaver text-lg leading-tight tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           Global
         </div>
-        <div className="text-[11px] text-white/70">
+        <div className="text-[11px] text-white/70 drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           {typeCount} categor{typeCount !== 1 ? 'ies' : 'y'}
         </div>
       </div>
