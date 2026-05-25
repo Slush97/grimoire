@@ -819,7 +819,7 @@ export default function Settings() {
         <Card title="Preferences" icon={Shield}>
           <div className="space-y-6">
             <Toggle
-              checked={settings?.hideNsfwPreviews ?? false}
+              checked={settings?.hideNsfwPreviews ?? true}
               onChange={handleHideNsfwChange}
               label="Hide NSFW Content"
               description="Blur thumbnail images for mods marked as NSFW."

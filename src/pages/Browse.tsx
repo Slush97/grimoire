@@ -1563,7 +1563,7 @@ export default function Browse() {
                     section={section}
                     volume={soundVolume}
                     onVolumeChange={setSoundVolume}
-                    hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+                    hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
                     isPlaying={playingModId === mod.id}
                     onPlayingChange={(playing) => {
                       setPlayingModId((prev) => {
@@ -1608,7 +1608,7 @@ export default function Browse() {
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
           extracting={extracting}
           progress={downloadProgress}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           dateAdded={selectedModDates?.dateAdded}
           dateModified={selectedModDates?.dateModified}
           onClose={() => setSelectedMod(null)}
@@ -1618,7 +1618,7 @@ export default function Browse() {
 
       {collectionModalOpen && (
         <ImportCollectionModal
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           installedIds={installedIds}
           queuedIds={new Set(downloadQueue.map((q) => q.modId))}
           activeDeadlockPath={activeDeadlockPath}
@@ -1629,7 +1629,7 @@ export default function Browse() {
       {importProfileOpen && (
         <ImportProfileDialog
           activeDeadlockPath={activeDeadlockPath}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           onClose={() => setImportProfileOpen(false)}
           onImported={() => { void loadMods(); }}
         />
