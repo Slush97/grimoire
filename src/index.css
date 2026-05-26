@@ -130,10 +130,10 @@ body {
   scrollbar-color: transparent transparent;
 }
 
-/* Reveal the thumb only while the pointer is over the panel, so at rest no bar
-   sits over the hero art. The 10px gutter is still reserved either way, so the
-   content never shifts when the thumb fades in. */
-.scrollbar-glass:hover {
+/* Reveal the thumb only while the panel is actively scrolling (the `is-scrolling`
+   class is toggled by initAutoHideScrollbars), so at rest nothing sits over the
+   hero art. The gutter is reserved either way, so content never shifts. */
+.scrollbar-glass.is-scrolling {
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
 
@@ -148,13 +148,13 @@ body {
   border-radius: 9999px;
 }
 
-.scrollbar-glass:hover::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+.scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
   background-clip: padding-box;
 }
 
-.scrollbar-glass:hover::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.32);
+.scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
   background-clip: padding-box;
 }
 
