@@ -17,8 +17,20 @@
 
 - Windows: `Grimoire-Setup-x.y.z.exe`
 - Linux: `.AppImage` or `.deb`
-- Debian / Ubuntu (apt, auto-updates): add the repo, then `sudo apt install grimoire` (setup steps in [docs/apt-repo.md](docs/apt-repo.md))
 - Arch Linux: `yay -S grimoire-bin` ([AUR](https://aur.archlinux.org/packages/grimoire-bin))
+
+### Debian / Ubuntu (apt)
+
+Install and stay updated through apt:
+
+```bash
+sudo install -d -m 0755 /etc/apt/keyrings
+curl -fsSL https://apt.grimoiremods.com/grimoire.gpg | sudo tee /etc/apt/keyrings/grimoire.gpg >/dev/null
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/grimoire.gpg] https://apt.grimoiremods.com stable main" | sudo tee /etc/apt/sources.list.d/grimoire.list >/dev/null
+sudo apt update && sudo apt install grimoire
+```
+
+Afterwards `sudo apt upgrade` keeps it current. More detail: [docs/apt-repo.md](docs/apt-repo.md).
 
 Requires Deadlock installed via Steam.
 
