@@ -244,3 +244,41 @@ export function abilitySoundClipsForSlot(
     }
     return out;
 }
+
+/**
+ * Soundevents event names whose clip lists reference any of `clipPaths`. Drives
+ * the per-ability volume/pitch layer: given a hero's decoded soundevents (the
+ * `vpkmerge soundevents ... --from-vpk` JSON, an object keyed by event name) and
+ * the exact `.vsnd_c` clip paths chosen for an ability slot, this finds the
+ * events to retune with `--set EVENT/volume|pitch`.
+ *
+ * Soundevents reference clips with the `.vsnd` extension while VPK paths carry
+ * `.vsnd_c`, so the trailing `_c` is stripped before comparing (case-insensitive).
+ * An event can hold several clip arrays (`vsnd_files`, `vsnd_files_last_shot`,
+ * multi-track `track_N.track_vsnd_files`), so every field whose key mentions
+ * `vsnd_files` is scanned.
+ */
+export function eventsForClips(
+    events: Record<string, Record<string, unknown>>,
+    clipPaths: string[],
+): string[] {
+    const wanted = new Set(
+        clipPaths.map((p) => p.replace(/\.vsnd_c$/i, '.vsnd').toLowerCase()),
+    );
+    if (wanted.size === 0) return [];
+    const out: string[] = [];
+    for (const [name, event] of Object.entries(events)) {
+        if (eventReferencesClip(event, wanted)) out.push(name);
+    }
+    return out;
+}
+
+function eventReferencesClip(event: Record<string, unknown>, wanted: Set<string>): boolean {
+    for (const [key, value] of Object.entries(event)) {
+        if (!/vsnd_files/i.test(key) || !Array.isArray(value)) continue;
+        for (const clip of value) {
+            if (typeof clip === 'string' && wanted.has(clip.toLowerCase())) return true;
+        }
+    }
+    return false;
+}

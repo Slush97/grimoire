@@ -80,6 +80,22 @@ export interface ApplyHeroCardResult {
 }
 
 /**
+ * Optional per-ability volume/pitch retune, applied on top of the chosen clips
+ * via the soundevents codec. Absent (or all-neutral) means the clips play at
+ * their native level. Empty when the bundled vpkmerge lacks the soundevents
+ * packer (pre-v0.4.0).
+ */
+export interface AbilitySoundParams {
+  /** Volume offset in dB added to each retuned event's level (0 = unchanged).
+   *  Soundevents `volume` is an absolute dB field; this offset is layered onto
+   *  the event's current value at synthesis time. */
+  volumeDb?: number;
+  /** Pitch multiplier written to each retuned event (1 = unchanged). Matches the
+   *  soundevents `pitch` field (a multiplier; vanilla values cluster around 1). */
+  pitch?: number;
+}
+
+/**
  * One per-(hero, ability) sound choice inside the Locker sound VPK. The user
  * picked this ability's sound out of `source`; the rebuild splits just that
  * ability's clip paths out of the source and folds them into the consolidated
@@ -91,6 +107,8 @@ export interface LockerSoundSelection {
   slot: AbilitySlot;
   /** Exact `.vsnd_c` paths extracted from the source for this ability. */
   clipPaths: string[];
+  /** Optional volume/pitch retune for this ability (see AbilitySoundParams). */
+  params?: AbilitySoundParams;
   source: {
     /** Source VPK filename at apply time; `sha256AtApplyTime` relocates it if
      *  reconcile renamed it (same recovery heroCards uses). */
@@ -119,6 +137,14 @@ export interface ApplyHeroSoundResult {
   activeSourceFileName: string | null;
   /** Selections dropped because their source VPK was gone at rebuild time. */
   missingSourceFileNames: string[];
+}
+
+/** The source (and any volume/pitch retune) applied for one ability slot, read
+ *  back so the picker can reflect the active pick + slider positions. */
+export interface ActiveHeroSound {
+  slot: AbilitySlot;
+  sourceFileName: string;
+  params?: AbilitySoundParams;
 }
 
 /**

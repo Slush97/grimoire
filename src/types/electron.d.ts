@@ -13,6 +13,8 @@ import type {
     ApplyHeroCardResult,
     HeroAbilitySlot,
     AbilitySlot,
+    AbilitySoundParams,
+    ActiveHeroSound,
     ApplyHeroSoundResult,
 } from './mod';
 import type {
@@ -308,12 +310,11 @@ export interface ElectronAPI {
     applyHeroSound: (
         heroName: string,
         slot: AbilitySlot,
-        sourceFileName: string
+        sourceFileName: string,
+        params?: AbilitySoundParams
     ) => Promise<ApplyHeroSoundResult>;
     revertHeroSound: (heroName: string, slot: AbilitySlot) => Promise<ApplyHeroSoundResult>;
-    getActiveHeroSounds: (
-        heroName: string
-    ) => Promise<Array<{ slot: AbilitySlot; sourceFileName: string }>>;
+    getActiveHeroSounds: (heroName: string) => Promise<ActiveHeroSound[]>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (

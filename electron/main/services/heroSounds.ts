@@ -17,20 +17,22 @@
  * Deadlock restart to take effect. Param control (volume/pitch via the
  * soundevents codec) is a later layer on top of this clip-choice pipeline.
  */
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import { getAddonsPath, getDisabledPath } from './deadlock';
+import { getAddonsPath, getDisabledPath, getCitadelPath } from './deadlock';
 import { parseVpkDirectoryCached, invalidateVpkParseCache } from './vpk';
-import { runVpkmerge, vpkmergeBinaryPath, verifyVpkOutput, reserveOutputSlot } from './modMerger';
+import { runVpkmerge, runVpkmergeStdout, vpkmergeBinaryPath, verifyVpkOutput, reserveOutputSlot } from './modMerger';
 import { scanMods, reorderMods, findNextAvailablePriority } from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { soundCodenameForHero } from './heroSoundCodenames';
-import { abilitySoundClipsForSlot } from './abilitySounds';
+import { abilitySoundClipsForSlot, eventsForClips } from './abilitySounds';
 import type {
     AbilitySlot,
+    AbilitySoundParams,
+    ActiveHeroSound,
     ApplyHeroSoundResult,
     LockerSoundSelection,
     LockerSoundsInfo,
@@ -101,6 +103,75 @@ interface RebuildResult {
     missing: string[];
 }
 
+/** Whether a params object actually changes anything (non-zero dB / non-unity
+ *  pitch). All-neutral params are treated as "no retune". */
+function hasParams(p?: AbilitySoundParams): boolean {
+    return (
+        !!p &&
+        ((p.volumeDb !== undefined && p.volumeDb !== 0) ||
+            (p.pitch !== undefined && p.pitch !== 1))
+    );
+}
+
+/**
+ * Build a one-file VPK at `outPath` containing a modified
+ * `soundevents/hero/<codename>.vsndevts_c`, for the per-ability volume/pitch
+ * layer: decode the hero's VANILLA soundevents from the game pak, find each
+ * param-bearing selection's events (by clip reference), `--set` their volume
+ * (offset onto the current dB) and/or pitch (absolute multiplier), then
+ * `--encode-vpk` the result. All of a hero's edits merge into ONE soundevents
+ * file (one per hero path). Returns false (and writes nothing) when there's no
+ * game pak, no vanilla soundevents for the hero, or no event matched a clip.
+ *
+ * NOTE: --encode-vpk requires vpkmerge >= v0.4.0 (the soundevents packer). With
+ * an older pinned binary this call fails; the caller treats a failed synthesis
+ * as "no retune" so the clip pick still applies.
+ */
+async function synthesizeHeroSoundeventsChunk(
+    deadlockPath: string,
+    codename: string,
+    paramSelections: LockerSoundSelection[],
+    outPath: string,
+): Promise<boolean> {
+    const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+    if (!existsSync(pak01)) return false;
+    const entry = `soundevents/hero/${codename}.vsndevts_c`;
+
+    let events: Record<string, Record<string, unknown>>;
+    try {
+        const json = await runVpkmergeStdout(['soundevents', entry, '--from-vpk', pak01]);
+        events = JSON.parse(json);
+    } catch {
+        return false; // in-dev hero with no vanilla soundevents, or decode failed
+    }
+
+    // "EVENT/field" -> value. Last write wins if two selections touch one event
+    // (rare across slots). Volume is layered onto the event's current dB; pitch
+    // is written as the absolute multiplier.
+    const sets = new Map<string, string>();
+    for (const sel of paramSelections) {
+        const p = sel.params;
+        if (!p) continue;
+        for (const ev of eventsForClips(events, sel.clipPaths)) {
+            if (p.volumeDb !== undefined && p.volumeDb !== 0) {
+                const current = typeof events[ev]?.volume === 'number' ? (events[ev].volume as number) : 0;
+                sets.set(`${ev}/volume`, String(current + p.volumeDb));
+            }
+            if (p.pitch !== undefined && p.pitch !== 1) {
+                sets.set(`${ev}/pitch`, String(p.pitch));
+            }
+        }
+    }
+    if (sets.size === 0) return false;
+
+    const args = ['soundevents', entry, '--from-vpk', pak01];
+    for (const [field, value] of sets) args.push('--set', `${field}=${value}`);
+    args.push('--encode-vpk', outPath);
+    await runVpkmerge(args, 120000);
+    await verifyVpkOutput(outPath);
+    return true;
+}
+
 /**
  * Rebuild the consolidated Locker sound VPK from `desired`. Apply/revert are
  * "edit the set, then rebuild": re-derive each selection's clip paths from its
@@ -158,6 +229,31 @@ async function rebuildLockerSounds(
             await runVpkmerge(['split', '--plan', planPath, src.path], 120000);
             await verifyVpkOutput(chunkPath);
             chunkPaths.push(chunkPath);
+        }
+
+        // Per-ability volume/pitch: one modified hero soundevents per hero that
+        // has a param-bearing selection, folded into the same VPK. Its path
+        // (soundevents/hero/<codename>.vsndevts_c) is disjoint from the clip
+        // paths, so --strict stays happy. A failed synthesis (old binary, no
+        // game pak, no matching event) is non-fatal: the clip pick still applies.
+        const paramByHero = new Map<string, LockerSoundSelection[]>();
+        for (const sel of valid) {
+            if (!hasParams(sel.params)) continue;
+            const arr = paramByHero.get(sel.heroCodename) ?? [];
+            arr.push(sel);
+            paramByHero.set(sel.heroCodename, arr);
+        }
+        let sndIdx = 0;
+        for (const [codename, sels] of paramByHero) {
+            const chunkPath = join(addonsPath, `${tag}.snd${sndIdx++}.vpk`);
+            try {
+                if (await synthesizeHeroSoundeventsChunk(deadlockPath, codename, sels, chunkPath)) {
+                    chunkPaths.push(chunkPath);
+                }
+            } catch (err) {
+                console.warn(`[heroSounds] soundevents synthesis failed for ${codename}:`, err);
+                await fs.unlink(chunkPath).catch(() => {});
+            }
         }
 
         if (chunkPaths.length === 1) {
@@ -254,6 +350,7 @@ export async function applyHeroSound(
     heroName: string,
     slot: AbilitySlot,
     sourceFileName: string,
+    params?: AbilitySoundParams,
 ): Promise<ApplyHeroSoundResult> {
     vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
     const codename = soundCodenameForHero(heroName);
@@ -275,6 +372,9 @@ export async function applyHeroSound(
         heroCodename: codename,
         slot,
         clipPaths,
+        // Only persist params when they actually retune something, so an
+        // all-neutral pick stays a pure clip selection (and reverts cleanly).
+        ...(hasParams(params) ? { params } : {}),
         source: {
             fileName: src.fileName,
             modName: srcMeta?.modName,
@@ -316,11 +416,12 @@ export async function revertHeroSound(
     return { activeSourceFileName: null, missingSourceFileNames: missing };
 }
 
-/** The source applied for each of a hero's ability slots (to reflect in the picker). */
+/** The source (and any volume/pitch retune) applied for each of a hero's ability
+ *  slots, to reflect in the picker. */
 export async function getActiveHeroSounds(
     deadlockPath: string,
     heroName: string,
-): Promise<Array<{ slot: AbilitySlot; sourceFileName: string }>> {
+): Promise<ActiveHeroSound[]> {
     const codename = soundCodenameForHero(heroName);
     if (!codename) return [];
     const vpks = await listAddonVpks(deadlockPath);
@@ -328,5 +429,5 @@ export async function getActiveHeroSounds(
     if (!info) return [];
     return info.sounds
         .filter((s) => s.heroCodename === codename)
-        .map((s) => ({ slot: s.slot, sourceFileName: s.source.fileName }));
+        .map((s) => ({ slot: s.slot, sourceFileName: s.source.fileName, params: s.params }));
 }

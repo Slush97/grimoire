@@ -2,7 +2,13 @@ import { ipcMain } from 'electron';
 import { loadSettings } from '../services/settings';
 import { getHeroAbilitySlots } from '../services/abilitySounds';
 import { applyHeroSound, revertHeroSound, getActiveHeroSounds } from '../services/heroSounds';
-import type { AbilitySlot, ApplyHeroSoundResult, HeroAbilitySlot } from '../../../src/types/mod';
+import type {
+    AbilitySlot,
+    AbilitySoundParams,
+    ActiveHeroSound,
+    ApplyHeroSoundResult,
+    HeroAbilitySlot,
+} from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as ipc/portraits.ts). */
 function getActiveDeadlockPath(): string | null {
@@ -26,10 +32,16 @@ ipcMain.handle(
 // revert a slot, and read back which source each slot currently uses.
 ipcMain.handle(
     'apply-hero-sound',
-    async (_, heroName: string, slot: AbilitySlot, sourceFileName: string): Promise<ApplyHeroSoundResult> => {
+    async (
+        _,
+        heroName: string,
+        slot: AbilitySlot,
+        sourceFileName: string,
+        params?: AbilitySoundParams,
+    ): Promise<ApplyHeroSoundResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return applyHeroSound(deadlockPath, heroName, slot, sourceFileName);
+        return applyHeroSound(deadlockPath, heroName, slot, sourceFileName, params);
     },
 );
 
@@ -44,7 +56,7 @@ ipcMain.handle(
 
 ipcMain.handle(
     'get-active-hero-sounds',
-    async (_, heroName: string): Promise<Array<{ slot: AbilitySlot; sourceFileName: string }>> => {
+    async (_, heroName: string): Promise<ActiveHeroSound[]> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) return [];
         return getActiveHeroSounds(deadlockPath, heroName);

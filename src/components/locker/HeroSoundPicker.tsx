@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Music, Loader2, AlertCircle, Check, Volume2, RefreshCw } from 'lucide-react';
 import {
   applyHeroSound,
@@ -9,7 +9,7 @@ import {
 } from '../../lib/api';
 import { useAppStore } from '../../stores/appStore';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
-import type { Mod, HeroAbilitySlot, AbilitySlot } from '../../types/mod';
+import type { Mod, HeroAbilitySlot, AbilitySlot, AbilitySoundParams } from '../../types/mod';
 
 interface HeroSoundPickerProps {
   heroName: string;
@@ -19,6 +19,13 @@ interface HeroSoundPickerProps {
    *  / unclassified sounds) that can't be sliced to a single ability. */
   onSelect: (modId: string) => void;
 }
+
+const VOLUME_MIN = -12;
+const VOLUME_MAX = 12;
+const PITCH_MIN = 0.5;
+const PITCH_MAX = 2;
+/** Re-apply (rebuild the VPK) this long after the last slider move. */
+const PARAM_COMMIT_DELAY_MS = 600;
 
 /** Ability slots this mod provides a sound for, under the given hero. Empty when
  *  the mod has no classified ability sound for this hero (VO-only, unclassified,
@@ -55,10 +62,84 @@ function AbilityIcon({ slot }: { slot: HeroAbilitySlot }) {
   );
 }
 
+/** Volume (dB) + pitch sliders for the applied source of one ability slot. The
+ *  panel stops click/mousedown propagation so dragging never triggers the row's
+ *  pick/revert button (it's a sibling of that button, not nested in it). */
+function ParamSliders({
+  params,
+  saving,
+  disabled,
+  onChange,
+}: {
+  params: AbilitySoundParams;
+  saving: boolean;
+  disabled: boolean;
+  onChange: (next: AbilitySoundParams) => void;
+}) {
+  const volumeDb = params.volumeDb ?? 0;
+  const pitch = params.pitch ?? 1;
+  const dirty = volumeDb !== 0 || pitch !== 1;
+  return (
+    <div
+      className="space-y-2 border-t border-border/50 px-2.5 py-2"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div className="flex items-center gap-2">
+        <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">Volume</span>
+        <input
+          type="range"
+          min={VOLUME_MIN}
+          max={VOLUME_MAX}
+          step={1}
+          value={volumeDb}
+          disabled={disabled}
+          onChange={(e) => onChange({ ...params, volumeDb: Number(e.target.value) })}
+          className="h-1 flex-1 cursor-pointer accent-accent disabled:cursor-not-allowed"
+        />
+        <span className="w-12 text-right text-[10px] tabular-nums text-text-secondary">
+          {volumeDb > 0 ? `+${volumeDb}` : volumeDb} dB
+        </span>
+      </div>
+      <div className="flex items-center gap-2">
+        <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">Pitch</span>
+        <input
+          type="range"
+          min={PITCH_MIN}
+          max={PITCH_MAX}
+          step={0.05}
+          value={pitch}
+          disabled={disabled}
+          onChange={(e) => onChange({ ...params, pitch: Number(e.target.value) })}
+          className="h-1 flex-1 cursor-pointer accent-accent disabled:cursor-not-allowed"
+        />
+        <span className="w-12 text-right text-[10px] tabular-nums text-text-secondary">
+          {pitch.toFixed(2)}x
+        </span>
+      </div>
+      <div className="flex items-center justify-between">
+        <span className="text-[9px] text-text-secondary/70">
+          {saving ? 'Saving...' : 'Applies on release'}
+        </span>
+        {dirty && !disabled && (
+          <button
+            type="button"
+            onClick={() => onChange({ volumeDb: 0, pitch: 1 })}
+            className="text-[9px] font-semibold uppercase tracking-wide text-accent hover:underline"
+          >
+            Reset
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /** One selectable source for a single ability slot. Clicking applies this
  *  source's clips for the slot into the Locker sound VPK; clicking the active
  *  one reverts the slot. The source mod's own enabled state is irrelevant (the
- *  clips are copied at apply time), so this never toggles the mod. */
+ *  clips are copied at apply time), so this never toggles the mod. When active,
+ *  it also exposes the volume/pitch sliders. */
 function SoundSourceRow({
   mod,
   heroName,
@@ -66,7 +147,10 @@ function SoundSourceRow({
   isActive,
   isBusy,
   anyBusy,
+  params,
+  saving,
   onPick,
+  onParamChange,
 }: {
   mod: Mod;
   heroName: string;
@@ -74,7 +158,10 @@ function SoundSourceRow({
   isActive: boolean;
   isBusy: boolean;
   anyBusy: boolean;
+  params: AbilitySoundParams;
+  saving: boolean;
   onPick: () => void;
+  onParamChange: (next: AbilitySoundParams) => void;
 }) {
   const otherSlots = slotsForMod(mod, heroName).filter((s) => s !== slot);
   return (
@@ -123,6 +210,9 @@ function SoundSourceRow({
         >
           <AudioPreviewPlayer src={mod.audioUrl} compact variant="inline" />
         </div>
+      )}
+      {isActive && (
+        <ParamSliders params={params} saving={saving} disabled={anyBusy} onChange={onParamChange} />
       )}
     </div>
   );
@@ -191,8 +281,10 @@ function SoundToggleRow({
  * affects (slot 1-3 + ultimate), classified from the mod's VPK file tree. Each
  * ability is a SELECT: pick one source and that ability's clips are sliced out
  * of it into a single Locker-managed sound VPK that wins by load order; pick the
- * applied source again to revert. Sounds not tied to a single ability (VO,
- * unclassified) fall into "Other" and stay whole-mod toggles.
+ * applied source again to revert. The applied source also exposes volume/pitch
+ * sliders, retuned via the soundevents codec into that same VPK. Sounds not tied
+ * to a single ability (VO, unclassified) fall into "Other" and stay whole-mod
+ * toggles.
  */
 export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroSoundPickerProps) {
   const loadMods = useAppStore((s) => s.loadMods);
@@ -204,13 +296,19 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
   const [error, setError] = useState<string | null>(null);
   // Source VPK filename currently applied for each ability slot.
   const [activeBySlot, setActiveBySlot] = useState<Map<AbilitySlot, string>>(new Map());
+  // Volume/pitch retune currently applied for each slot (slider positions).
+  const [paramsBySlot, setParamsBySlot] = useState<Map<AbilitySlot, AbilitySoundParams>>(new Map());
   // `${slot}:${fileName}` of the row mid-apply/revert (drives its spinner).
   const [busyKey, setBusyKey] = useState<string | null>(null);
+  // Slot whose params are mid-commit (debounced re-apply in flight).
+  const [savingSlot, setSavingSlot] = useState<AbilitySlot | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
-  // Set once the user applies/reverts a sound this session, so the restart hint
+  // Set once the user applies/reverts/retunes this session, so the restart hint
   // shows. Sound addons mount only at game start.
   const [changed, setChanged] = useState(false);
   const [gameRunning, setGameRunning] = useState(false);
+  // Per-slot debounce timers for the slider re-apply.
+  const commitTimers = useRef<Map<AbilitySlot, ReturnType<typeof setTimeout>>>(new Map());
 
   useEffect(() => {
     let active = true;
@@ -223,6 +321,13 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
         if (!active) return;
         setSlots(list);
         setActiveBySlot(new Map(activeSounds.map((a) => [a.slot, a.sourceFileName])));
+        setParamsBySlot(
+          new Map(
+            activeSounds
+              .filter((a) => a.params)
+              .map((a) => [a.slot, a.params as AbilitySoundParams]),
+          ),
+        );
         setGameRunning(status.running);
       })
       .catch((err) => {
@@ -236,8 +341,25 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
     };
   }, [heroName]);
 
+  // Drop any pending slider re-apply on unmount (the picker remounts per hero).
+  useEffect(() => {
+    const timers = commitTimers.current;
+    return () => {
+      for (const t of timers.values()) clearTimeout(t);
+      timers.clear();
+    };
+  }, []);
+
+  const refreshGameRunning = async () => {
+    try {
+      setGameRunning((await getGameRunningStatus()).running);
+    } catch {
+      // keep the prior value
+    }
+  };
+
   const handlePick = async (slot: AbilitySlot, mod: Mod) => {
-    if (busyKey) return;
+    if (busyKey || savingSlot !== null) return;
     setBusyKey(`${slot}:${mod.fileName}`);
     setActionError(null);
     try {
@@ -257,21 +379,62 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
           return next;
         });
       }
+      // A fresh pick / revert resets that slot's retune to neutral.
+      setParamsBySlot((prev) => {
+        const next = new Map(prev);
+        next.delete(slot);
+        return next;
+      });
       setChanged(true);
       // The rebuild changed the Locker sound VPK and possibly the load order;
       // refresh the shared mod list so Installed/Locker stay in sync.
       await loadMods({ silent: true });
-      // A restart is only actually needed if the game is running right now.
-      try {
-        setGameRunning((await getGameRunningStatus()).running);
-      } catch {
-        // keep the prior value
-      }
+      await refreshGameRunning();
     } catch (err) {
       setActionError(String(err));
     } finally {
       setBusyKey(null);
     }
+  };
+
+  // Re-apply the active source for `slot` with the latest slider params. The
+  // backend rebuild is heavy, so the actual call is debounced by the caller.
+  const commitParams = async (slot: AbilitySlot, sourceFileName: string, params: AbilitySoundParams) => {
+    setSavingSlot(slot);
+    setActionError(null);
+    try {
+      const result = await applyHeroSound(heroName, slot, sourceFileName, params);
+      setActiveBySlot((prev) => {
+        const next = new Map(prev);
+        if (result.activeSourceFileName) next.set(slot, result.activeSourceFileName);
+        else next.delete(slot);
+        return next;
+      });
+      setChanged(true);
+      await loadMods({ silent: true });
+      await refreshGameRunning();
+    } catch (err) {
+      setActionError(String(err));
+    } finally {
+      setSavingSlot((prev) => (prev === slot ? null : prev));
+    }
+  };
+
+  const handleParamChange = (slot: AbilitySlot, next: AbilitySoundParams) => {
+    // Reflect the slider immediately; debounce the (heavy) rebuild.
+    setParamsBySlot((prev) => new Map(prev).set(slot, next));
+    const sourceFileName = activeBySlot.get(slot);
+    if (!sourceFileName) return;
+    const timers = commitTimers.current;
+    const pending = timers.get(slot);
+    if (pending) clearTimeout(pending);
+    timers.set(
+      slot,
+      setTimeout(() => {
+        timers.delete(slot);
+        void commitParams(slot, sourceFileName, next);
+      }, PARAM_COMMIT_DELAY_MS),
+    );
   };
 
   // Bucket each sound mod under every ability slot it covers; mods with no
@@ -295,6 +458,8 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
     return { bySlot, other };
   }, [soundList, heroName]);
 
+  const anyBusy = busyKey !== null || savingSlot !== null;
+
   return (
     <section className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-center gap-2">
@@ -307,7 +472,8 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
       <p className="text-xs text-text-secondary">
         Your tagged sound mods for {heroName}, grouped by the ability each one changes. Pick one
         source per ability and it's isolated into a single Locker-managed sound that wins over your
-        other mods; pick the applied source again to revert.
+        other mods; pick the applied source again to revert. Tune the applied source's volume and
+        pitch with the sliders.
       </p>
 
       {changed && (
@@ -385,8 +551,11 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
                         slot={slot.slot}
                         isActive={activeSource === mod.fileName}
                         isBusy={busyKey === `${slot.slot}:${mod.fileName}`}
-                        anyBusy={busyKey !== null}
+                        anyBusy={anyBusy}
+                        params={paramsBySlot.get(slot.slot) ?? {}}
+                        saving={savingSlot === slot.slot}
                         onPick={() => handlePick(slot.slot, mod)}
+                        onParamChange={(next) => handleParamChange(slot.slot, next)}
                       />
                     ))}
                   </div>

@@ -93,6 +93,47 @@ export function runVpkmerge(args: string[], timeoutMs = 300000): Promise<void> {
     });
 }
 
+/**
+ * Like runVpkmerge but resolves with the process stdout. Used by the soundevents
+ * decode (`soundevents <entry> --from-vpk <vpk>`), which prints JSON to stdout
+ * and a human summary to stderr.
+ */
+export function runVpkmergeStdout(args: string[], timeoutMs = 120000): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const bin = vpkmergeBinaryPath();
+        const proc = spawn(bin, args, { stdio: ['ignore', 'pipe', 'pipe'] });
+        let stderr = '';
+        let stdout = '';
+        let killed = false;
+
+        const timeoutId = setTimeout(() => {
+            killed = true;
+            proc.kill('SIGTERM');
+            setTimeout(() => {
+                if (!proc.killed) proc.kill('SIGKILL');
+            }, 5000);
+            reject(new Error(`vpkmerge timed out after ${timeoutMs / 1000} seconds`));
+        }, timeoutMs);
+
+        proc.stdout?.on('data', (d) => { stdout += d.toString(); });
+        proc.stderr?.on('data', (d) => { stderr += d.toString(); });
+        proc.on('close', (code) => {
+            clearTimeout(timeoutId);
+            if (killed) return;
+            if (code === 0) {
+                resolve(stdout);
+            } else {
+                reject(new Error(`vpkmerge exited with code ${code}: ${stderr || stdout || '(no output)'}`));
+            }
+        });
+        proc.on('error', (err) => {
+            clearTimeout(timeoutId);
+            if (killed) return;
+            reject(new Error(`Failed to spawn vpkmerge: ${err.message}`));
+        });
+    });
+}
+
 async function hashFile(path: string): Promise<string> {
     const hash = createHash('sha256');
     hash.update(await fs.readFile(path));
