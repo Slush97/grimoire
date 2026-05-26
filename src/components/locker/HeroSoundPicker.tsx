@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Music, Loader2, AlertCircle, Check, Volume2 } from 'lucide-react';
 import { getHeroAbilitySlots } from '../../lib/api';
+import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import type { Mod, HeroAbilitySlot, AbilitySlot } from '../../types/mod';
 
 interface HeroSoundPickerProps {
@@ -61,33 +62,50 @@ function SoundModRow({
 }) {
   const otherSlots = slotsForMod(mod, heroName).filter((s) => s !== currentSlot);
   return (
-    <button
-      type="button"
-      onClick={() => onSelect(mod.id)}
-      title={mod.fileName}
-      className={`flex w-full items-center justify-between gap-2 rounded border px-2.5 py-1.5 text-left text-xs backdrop-blur-sm transition-colors cursor-pointer ${
+    <div
+      className={`overflow-hidden rounded border backdrop-blur-sm transition-colors ${
         mod.enabled
-          ? 'border-accent/60 bg-accent/10 text-text-primary'
-          : 'border-border bg-bg-secondary/70 text-text-secondary hover:border-accent/50 hover:text-text-primary'
+          ? 'border-accent/60 bg-accent/10'
+          : 'border-border bg-bg-secondary/70 hover:border-accent/50'
       }`}
     >
-      <span className="flex min-w-0 items-center gap-1.5">
-        <Volume2 className="h-3 w-3 flex-shrink-0 opacity-70" />
-        <span className="truncate">{modLabel(mod)}</span>
-        {otherSlots.length > 0 && (
-          <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-secondary">
-            also a{otherSlots.join(', a')}
-          </span>
-        )}
-      </span>
-      {mod.enabled ? (
-        <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
-          <Check className="h-2.5 w-2.5" /> On
+      <button
+        type="button"
+        onClick={() => onSelect(mod.id)}
+        title={mod.fileName}
+        className={`flex w-full items-center justify-between gap-2 px-2.5 py-1.5 text-left text-xs cursor-pointer ${
+          mod.enabled ? 'text-text-primary' : 'text-text-secondary hover:text-text-primary'
+        }`}
+      >
+        <span className="flex min-w-0 items-center gap-1.5">
+          <Volume2 className="h-3 w-3 flex-shrink-0 opacity-70" />
+          <span className="truncate">{modLabel(mod)}</span>
+          {otherSlots.length > 0 && (
+            <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-secondary">
+              also a{otherSlots.join(', a')}
+            </span>
+          )}
         </span>
-      ) : (
-        <span className="flex-shrink-0 text-[9px] uppercase tracking-wide text-text-secondary">Off</span>
+        {mod.enabled ? (
+          <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+            <Check className="h-2.5 w-2.5" /> On
+          </span>
+        ) : (
+          <span className="flex-shrink-0 text-[9px] uppercase tracking-wide text-text-secondary">Off</span>
+        )}
+      </button>
+      {/* GameBanana preview clip. Sibling of the toggle (not nested) so its own
+          controls stopPropagation without fighting the enable toggle. */}
+      {mod.audioUrl && (
+        <div
+          className="px-2.5 pb-2"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <AudioPreviewPlayer src={mod.audioUrl} compact variant="inline" />
+        </div>
       )}
-    </button>
+    </div>
   );
 }
 
