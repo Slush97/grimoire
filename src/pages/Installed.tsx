@@ -2773,7 +2773,11 @@ export default function Installed() {
       )}
 
       {selectMode && (
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-50 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
+        // z-40 keeps this floating bar above the page + sticky header (z-30)
+        // but below modal overlays (z-50), so an open modal's backdrop dims it
+        // like the rest of the page instead of the bar painting over the modal
+        // (e.g. the variant picker overlapping it in a short window).
+        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
           {bulkProgress ? (
             <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
