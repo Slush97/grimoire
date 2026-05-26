@@ -162,10 +162,19 @@ export default function LockerHero() {
     () => (hero ? heroSkinsByHero.map.get(hero.id) ?? [] : []),
     [hero, heroSkinsByHero]
   );
-  const soundList = useMemo(
-    () => (hero ? heroSoundsByHero.map.get(hero.id) ?? [] : []),
-    [hero, heroSoundsByHero]
-  );
+  const soundList = useMemo(() => {
+    if (!hero) return [];
+    const tagged = heroSoundsByHero.map.get(hero.id) ?? [];
+    // Also surface any installed mod whose VPK ships ability sounds for this
+    // hero, even when it isn't a Sound-section mod: many skins bundle ability
+    // sounds. The classifier (mod.abilitySounds) attributes per hero, matched
+    // on display name; dedupe against the already-tagged Sound mods.
+    const seen = new Set(tagged.map((m) => m.id));
+    const bundled = mods.filter(
+      (m) => !seen.has(m.id) && m.abilitySounds?.perHero.some((h) => h.hero === hero.name)
+    );
+    return bundled.length > 0 ? [...tagged, ...bundled] : tagged;
+  }, [hero, heroSoundsByHero, mods]);
   const skinCount = useMemo(() => countLockerSkins(skinList), [skinList]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
