@@ -18,11 +18,17 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // query, view mode, and filters all reset when switching pages.
 export type BrowseSortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 export type BrowseViewMode = 'grid' | 'compact' | 'dense' | 'list';
+export type BrowseNsfwFilter = 'all' | 'sfw' | 'nsfw';
+export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month';
 export interface BrowseUiState {
   search: string;
   viewMode: BrowseViewMode;
   sort: BrowseSortOption;
   section: string;
+  // Content-rating filter and recency window. Both route browsing through the
+  // local catalog mirror (see useLocalSearch in Browse.tsx).
+  nsfw: BrowseNsfwFilter;
+  addedWithin: BrowseTimeRange;
   // 'none' is a Sound-only pseudo-hero: "show me sound mods whose title
   // doesn't resolve to any known hero" (item sounds, UI, music, etc.).
   // For Mod section it collapses to 'all' since every Skin lives under a hero.
@@ -69,6 +75,8 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   viewMode: readPersistedViewMode(),
   sort: readPersistedSort(),
   section: 'Mod',
+  nsfw: 'all',
+  addedWithin: 'all',
   heroCategoryId: 'all',
   categoryId: 'all',
 };

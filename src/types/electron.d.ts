@@ -202,6 +202,8 @@ export interface SearchLocalModsOptions {
     heroName?: string;
     skinsCategoryId?: number;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
+    nsfw?: 'all' | 'sfw' | 'nsfw';
+    addedWithin?: 'all' | 'today' | 'week' | 'month';
     limit?: number;
     offset?: number;
 }

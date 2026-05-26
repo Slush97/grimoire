@@ -39,6 +39,7 @@ import type {
 } from '../types/gamebanana';
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
 import { useAppStore } from '../stores/appStore';
+import type { BrowseNsfwFilter, BrowseTimeRange } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
@@ -162,11 +163,13 @@ export default function Browse() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, viewMode, sort, section, heroCategoryId, categoryId } = browseUi;
+  const { search, viewMode, sort, section, nsfw, addedWithin, heroCategoryId, categoryId } = browseUi;
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
   const setViewMode = useCallback((v: ViewMode) => setBrowseUi({ viewMode: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
+  const setNsfw = useCallback((v: BrowseNsfwFilter) => setBrowseUi({ nsfw: v }), [setBrowseUi]);
+  const setAddedWithin = useCallback((v: BrowseTimeRange) => setBrowseUi({ addedWithin: v }), [setBrowseUi]);
   const setHeroCategoryId = useCallback((v: number | 'all' | 'none') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
   const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
 
@@ -415,14 +418,18 @@ export default function Browse() {
   const useLocalSearch = useMemo(() => {
     const hasSearchQuery = debouncedSearch.trim().length > 0;
     const hasHeroFilter = heroCategoryId !== 'all';
-    return (hasSearchQuery || hasHeroFilter) && hasLocalCache && !localSearchFailed;
-  }, [debouncedSearch, heroCategoryId, hasLocalCache, localSearchFailed]);
+    // NSFW and recency filters only the local catalog mirror can satisfy: the
+    // live API enriches NSFW after the fact and doesn't window by date, so route
+    // those through local search (the cache is a full mirror of the index).
+    const hasContentFilter = nsfw !== 'all' || addedWithin !== 'all';
+    return (hasSearchQuery || hasHeroFilter || hasContentFilter) && hasLocalCache && !localSearchFailed;
+  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, hasLocalCache, localSearchFailed]);
 
   // Reset the failure flag whenever the user changes filters so a one-off
   // backend error doesn't permanently disable local search.
   useEffect(() => {
     setLocalSearchFailed(false);
-  }, [debouncedSearch, heroCategoryId, section]);
+  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section]);
 
   const fetchMods = useCallback(async () => {
     // Don't fetch from API if we're using local search
@@ -431,7 +438,7 @@ export default function Browse() {
     // we already loaded. Covers cache hydration on mount AND React
     // StrictMode's double-effect setup. Set BEFORE the network call so
     // a second setup hitting this line sees the stamp and returns.
-    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}`;
+    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}`;
     if (lastFetchedStampRef.current === stamp) return;
     lastFetchedStampRef.current = stamp;
 
@@ -500,6 +507,8 @@ export default function Browse() {
     perPage,
     effectiveCategoryId,
     heroCategoryId,
+    nsfw,
+    addedWithin,
     useLocalSearch,
   ]);
 
@@ -507,7 +516,7 @@ export default function Browse() {
   const searchLocal = useCallback(async () => {
     // Same value-compare gate as fetchMods so the shared stamp prevents
     // re-fetching cached state and survives StrictMode double-mount.
-    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}`;
+    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}`;
     if (lastFetchedStampRef.current === stamp) return;
     lastFetchedStampRef.current = stamp;
     // Same anti-flash logic as fetchMods: skeleton only on truly empty first
@@ -552,6 +561,8 @@ export default function Browse() {
         heroName: selectedHeroName,
         skinsCategoryId: skinsCat?.id,
         sortBy: sortMap[sort] || 'relevance',
+        nsfw,
+        addedWithin,
         limit: perPage,
         offset: (page - 1) * perPage,
       });
@@ -601,7 +612,7 @@ export default function Browse() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, modCategories]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, nsfw, addedWithin, modCategories]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
@@ -609,10 +620,10 @@ export default function Browse() {
   // StrictMode's double-effect run (the second setup sees the same stamp
   // and short-circuits, instead of consuming a one-shot skip flag).
   const lastResetFiltersRef = useRef<string | null>(
-    `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${perPage}`
+    `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${nsfw}|${addedWithin}|${perPage}`
   );
   useEffect(() => {
-    const current = `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${perPage}`;
+    const current = `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${nsfw}|${addedWithin}|${perPage}`;
     if (lastResetFiltersRef.current === current) return;
     lastResetFiltersRef.current = current;
     // Reset pagination when filters change but keep previous results visible
@@ -620,7 +631,7 @@ export default function Browse() {
     // skeleton flash on every keystroke pre-debounce.
     setPage(1);
     setHasMore(true);
-  }, [debouncedSearch, sort, section, effectiveCategoryId, perPage]);
+  }, [debouncedSearch, sort, section, effectiveCategoryId, nsfw, addedWithin, perPage]);
 
   useEffect(() => {
     let active = true;
@@ -1404,10 +1415,12 @@ export default function Browse() {
 
             {/* Filters popover — houses hero + category selectors. Collapses two
                 always-visible dropdowns into one control with an active-count badge. */}
-            {(heroOptions.length > 0 || categoryOptions.length > 0) && (() => {
+            {(heroOptions.length > 0 || categoryOptions.length > 0 || hasLocalCache) && (() => {
               const filterCount =
                 (heroCategoryId !== 'all' ? 1 : 0) +
-                (categoryId !== 'all' ? 1 : 0);
+                (categoryId !== 'all' ? 1 : 0) +
+                (nsfw !== 'all' ? 1 : 0) +
+                (addedWithin !== 'all' ? 1 : 0);
               return (
                 <div className="relative" ref={filtersRef}>
                   <button
@@ -1444,6 +1457,8 @@ export default function Browse() {
                             onClick={() => {
                               setHeroCategoryId('all');
                               setCategoryId('all');
+                              setNsfw('all');
+                              setAddedWithin('all');
                             }}
                             className="text-xs text-text-secondary hover:text-accent cursor-pointer"
                           >
@@ -1496,6 +1511,39 @@ export default function Browse() {
                             {heroCategoryId !== 'all' && (
                               <span className="block text-[11px] text-text-tertiary mt-1">Hero filter overrides categories.</span>
                             )}
+                          </label>
+                        )}
+
+                        {/* Content rating + recency are served by the local catalog
+                            mirror, so they only show once it's available. */}
+                        {hasLocalCache && (
+                          <label className="block">
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Content</span>
+                            <select
+                              value={nsfw}
+                              onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
+                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                            >
+                              <option value="all">All</option>
+                              <option value="sfw">SFW only</option>
+                              <option value="nsfw">NSFW only</option>
+                            </select>
+                          </label>
+                        )}
+
+                        {hasLocalCache && (
+                          <label className="block">
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Added</span>
+                            <select
+                              value={addedWithin}
+                              onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
+                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                            >
+                              <option value="all">Any time</option>
+                              <option value="today">Today</option>
+                              <option value="week">This week</option>
+                              <option value="month">This month</option>
+                            </select>
                           </label>
                         )}
                       </div>
