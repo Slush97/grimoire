@@ -96,6 +96,57 @@ export interface ApplyHeroCardResult {
 export type GlobalModType = 'soul-container' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
+/** Deadlock ability slot. 1-3 are the signature abilities; 4 is the ultimate. */
+export type AbilitySlot = 1 | 2 | 3 | 4;
+
+/** Reference metadata for one hero ability slot (from deadlock-api). */
+export interface AbilitySlotMeta {
+  /** Internal ability name used in sound paths (e.g. "storm_cloud"). */
+  token: string;
+  /** Localized display name (e.g. "Storm Cloud"). */
+  display: string;
+  /** deadlock-api ability icon URL, or null when unknown. */
+  image: string | null;
+}
+
+/**
+ * One hero's ability-sound footprint inside a single mod. A mod can touch more
+ * than one hero (usually a dominant hero plus a stray copy-pasted file), so the
+ * classifier attributes each sound FILE to its (hero, slot) and reports per-hero
+ * contributions rather than collapsing to a single hero.
+ */
+export interface HeroAbilityContribution {
+  /** Canonical hero display name (e.g. "Seven"). */
+  hero: string;
+  /** Count of ability SFX files resolved to each slot. */
+  slots: Partial<Record<AbilitySlot, number>>;
+  /** Ability SFX files under this hero that matched no slot. */
+  unclassified: number;
+  /** Voice-over files under this hero (sounds/vo/<codename>/), not slotted. */
+  voFiles: number;
+  /** Total sound files attributed to this hero (SFX + VO). */
+  total: number;
+}
+
+/**
+ * Result of classifying a sound mod's VPK file list by hero + ability slot.
+ * Drives the per-ability sound picker: which abilities a mod offers a sound for.
+ */
+export interface AbilitySoundClassification {
+  /** Hero with the most attributed files, or null if no hero sound matched. */
+  dominantHero: string | null;
+  /** Per-hero footprint, sorted by total files descending. */
+  perHero: HeroAbilityContribution[];
+  /** True when the mod ships its own hero soundevents (.vsndevts_c). Such a
+   *  mod can repoint/retune events, so its sounds may not mix losslessly with
+   *  another vsndevts mod for the same hero (one file per hero path). */
+  shipsHeroVsndevts: boolean;
+  /** Total ability SFX files (sounds/abilities/<codename>/) seen. */
+  abilitySoundFiles: number;
+  /** Total voice-over files (sounds/vo/<codename>/) seen. */
+  voSoundFiles: number;
+}
+
 export interface Mod {
   id: string;
   name: string;
