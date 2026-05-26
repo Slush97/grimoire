@@ -127,6 +127,13 @@ body {
    vertical strip over that feather; this keeps the track clear and renders the
    thumb as a slim translucent bar so the glass shows through behind it. */
 .scrollbar-glass {
+  scrollbar-color: transparent transparent;
+}
+
+/* Reveal the thumb only while the pointer is over the panel, so at rest no bar
+   sits over the hero art. The 10px gutter is still reserved either way, so the
+   content never shifts when the thumb fades in. */
+.scrollbar-glass:hover {
   scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
 }
 
@@ -135,13 +142,18 @@ body {
 }
 
 .scrollbar-glass::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.18);
+  background: transparent;
   border: 2px solid transparent;
   background-clip: padding-box;
   border-radius: 9999px;
 }
 
-.scrollbar-glass::-webkit-scrollbar-thumb:hover {
+.scrollbar-glass:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  background-clip: padding-box;
+}
+
+.scrollbar-glass:hover::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.32);
   background-clip: padding-box;
 }
