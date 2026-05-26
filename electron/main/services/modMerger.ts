@@ -4,7 +4,7 @@ import { spawn } from 'child_process';
 import { randomUUID, createHash } from 'crypto';
 import { app } from 'electron';
 import { getAddonsPath } from './deadlock';
-import { scanMods, disableMod, enableMod, findNextAvailablePriority, type Mod } from './mods';
+import { scanMods, disableMod, enableMod, setModPriority, findNextAvailablePriority, type Mod } from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { encodeShareCode } from './portableProfile';
@@ -14,7 +14,12 @@ import {
     type PortableProfile,
     type PortableModEntry,
 } from '../../../src/types/portableProfile';
-import type { MergedModInfo, MergedModSource, UnmergeModResult } from '../../../src/types/mod';
+import type {
+    MergedModInfo,
+    MergedModSource,
+    UnmergeModResult,
+    ExtractMergeSourceResult,
+} from '../../../src/types/mod';
 
 const DEADLOCK_STEAM_APP_ID = 1422450;
 const DEADLOCK_GAMEBANANA_GAME_ID = 20948;
@@ -337,6 +342,67 @@ function buildPortableForSources(sources: Mod[], profileName: string): PortableP
     };
 }
 
+interface SourceLocator {
+    /** Find a manifest source on disk and mark it consumed so a later lookup
+     *  can't claim the same file. Returns undefined when nothing matches. */
+    locate(src: MergedModSource): Promise<Mod | undefined>;
+}
+
+/**
+ * Build a one-shot locator that maps merged-mod manifest entries back to the
+ * VPKs still on disk. Resolution order per source: disabled folder by exact
+ * fileName, then a sha256 content match in the disabled folder (covers a
+ * reconcile rename), then a sha256 match in the enabled folder (covers a
+ * partial-disable or a user re-enable). Each on-disk file is claimed at most
+ * once. Hashes are cached and prefer the metadata-recorded sha256 over a fresh
+ * fingerprint. `candidates` should exclude the merged mod itself.
+ */
+function makeSourceLocator(candidates: Mod[]): SourceLocator {
+    const disabledCandidates = candidates.filter((m) => !m.enabled);
+    const enabledCandidates = candidates.filter((m) => m.enabled);
+
+    const hashCache = new Map<string, string>();
+    const getHash = async (mod: Mod): Promise<string> => {
+        const cached = hashCache.get(mod.fileName);
+        if (cached) return cached;
+        const fromMeta = getModMetadata(mod.fileName)?.sha256;
+        if (fromMeta) {
+            const lower = fromMeta.toLowerCase();
+            hashCache.set(mod.fileName, lower);
+            return lower;
+        }
+        const fp = await fingerprintFile(mod.path);
+        const lower = fp.sha256.toLowerCase();
+        hashCache.set(mod.fileName, lower);
+        return lower;
+    };
+
+    const consumedIds = new Set<string>();
+
+    const matchBySha = async (pool: Mod[], wanted: string): Promise<Mod | undefined> => {
+        for (const m of pool) {
+            if (consumedIds.has(m.id)) continue;
+            if ((await getHash(m)) === wanted) return m;
+        }
+        return undefined;
+    };
+
+    return {
+        async locate(src: MergedModSource): Promise<Mod | undefined> {
+            let onDisk: Mod | undefined = disabledCandidates.find(
+                (m) => !consumedIds.has(m.id) && m.fileName === src.fileName
+            );
+            if (!onDisk && src.sha256AtMergeTime) {
+                const wanted = src.sha256AtMergeTime.toLowerCase();
+                onDisk = (await matchBySha(disabledCandidates, wanted))
+                    ?? (await matchBySha(enabledCandidates, wanted));
+            }
+            if (onDisk) consumedIds.add(onDisk.id);
+            return onDisk;
+        },
+    };
+}
+
 /**
  * Reverse a merge: re-enable the source VPKs (if they're still on disk) and
  * delete the merged VPK. Sources that are missing are reported via
@@ -357,80 +423,19 @@ export async function unmergeMod(
     }
     const manifest = meta.merged;
 
-    // Candidates for source recovery, split by folder. Absorbed sources
-    // should live in `.disabled/` so we look there first; the `enabled`
-    // fallback handles partial-disable failures and external tampering.
-    // The merged mod itself is filtered out so the target VPK can never
-    // be misidentified as one of its own sources.
-    const otherMods = installed.filter((m) => m.id !== target.id);
-    const disabledCandidates: Mod[] = otherMods.filter((m) => !m.enabled);
-    const enabledCandidates: Mod[] = otherMods.filter((m) => m.enabled);
-
-    // Lazy fileName -> sha256 cache (lowercased) so we hash each candidate
-    // at most once across the loop. Prefers the metadata-recorded hash
-    // (set at install / merge time) over a fresh fingerprint.
-    const hashCache = new Map<string, string>();
-    const getHash = async (mod: Mod): Promise<string> => {
-        const cached = hashCache.get(mod.fileName);
-        if (cached) return cached;
-        const fromMeta = getModMetadata(mod.fileName)?.sha256;
-        if (fromMeta) {
-            const lower = fromMeta.toLowerCase();
-            hashCache.set(mod.fileName, lower);
-            return lower;
-        }
-        const fp = await fingerprintFile(mod.path);
-        const lower = fp.sha256.toLowerCase();
-        hashCache.set(mod.fileName, lower);
-        return lower;
-    };
-
-    const consumedIds = new Set<string>();
+    // Recover each source from disk via the shared locator (disabled folder by
+    // fileName, then a content-hash fallback, then the enabled folder). The
+    // merged mod itself is excluded so it can't be misidentified as a source.
+    const locator = makeSourceLocator(installed.filter((m) => m.id !== target.id));
     const recovered: Mod[] = [];
     const missingSourceFileNames: string[] = [];
 
     for (const src of manifest.sources) {
-        // 1. Happy path: disabled folder, fileName matches the manifest.
-        let onDisk: Mod | undefined = disabledCandidates.find(
-            (m) => !consumedIds.has(m.id) && m.fileName === src.fileName
-        );
-
-        // 2. Content fallback: disabled folder, sha256 matches. Covers the
-        //    case where reconcileEnabledDisabledCollisions renamed the
-        //    source between merge and unmerge.
-        if (!onDisk && src.sha256AtMergeTime) {
-            const wanted = src.sha256AtMergeTime.toLowerCase();
-            for (const m of disabledCandidates) {
-                if (consumedIds.has(m.id)) continue;
-                if ((await getHash(m)) === wanted) {
-                    onDisk = m;
-                    break;
-                }
-            }
-        }
-
-        // 3. Content fallback in the enabled folder. Covers partial-disable
-        //    failures (merge wrote the manifest but didn't finish disabling
-        //    every source) and user-driven re-enables. The source is
-        //    already enabled, so we leave it where it is.
-        if (!onDisk && src.sha256AtMergeTime) {
-            const wanted = src.sha256AtMergeTime.toLowerCase();
-            for (const m of enabledCandidates) {
-                if (consumedIds.has(m.id)) continue;
-                if ((await getHash(m)) === wanted) {
-                    onDisk = m;
-                    break;
-                }
-            }
-        }
-
+        const onDisk = await locator.locate(src);
         if (!onDisk) {
             missingSourceFileNames.push(src.fileName);
             continue;
         }
-
-        consumedIds.add(onDisk.id);
-
         if (src.enabledAtMergeTime && !onDisk.enabled) {
             recovered.push(await enableMod(deadlockPath, onDisk.id));
         } else {
@@ -446,4 +451,155 @@ export async function unmergeMod(
         missingSourceFileNames,
         shareCode: manifest.shareCode,
     };
+}
+
+/**
+ * Pull a single source VPK out of a merged mod and restore it as a standalone
+ * mod, without dissolving the whole merge. The remaining sources are re-merged
+ * into a fresh VPK that reclaims the original's load-order slot, so the merge
+ * keeps its priority.
+ *
+ * When extracting would leave fewer than two sources behind, a "merge of one"
+ * is meaningless, so the merge collapses: the lone survivor is restored too and
+ * the merged VPK is deleted (a normal full unmerge for what's left).
+ */
+export async function extractMergeSource(
+    deadlockPath: string,
+    mergedModId: string,
+    sourceFileName: string
+): Promise<ExtractMergeSourceResult> {
+    const installed = await scanMods(deadlockPath);
+    const target = installed.find((m) => m.id === mergedModId);
+    if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
+
+    const meta = getModMetadata(target.fileName);
+    if (!meta?.merged) {
+        throw new Error(`"${meta?.modName || target.name}" is not a merged mod.`);
+    }
+    const manifest = meta.merged;
+
+    const removedSnapshot = manifest.sources.find((s) => s.fileName === sourceFileName);
+    if (!removedSnapshot) {
+        throw new Error(`"${sourceFileName}" is not a source of this merge.`);
+    }
+    const remainingSnapshots = manifest.sources.filter((s) => s.fileName !== sourceFileName);
+
+    const locator = makeSourceLocator(installed.filter((m) => m.id !== target.id));
+
+    // Locate the source being extracted first so it can't be claimed as one of
+    // the remaining sources. Missing-on-disk is tolerated: its content drops
+    // from the rebuild regardless, there's just nothing left to restore.
+    const removedOnDisk = await locator.locate(removedSnapshot);
+
+    const restored: Mod[] = [];
+
+    // Restore the extracted source to its pre-merge enabled state. Deferred
+    // until after the rebuild/collapse so the slot math below sees a stable
+    // disabled set.
+    const restoreExtracted = async (): Promise<void> => {
+        if (!removedOnDisk) return;
+        if (removedSnapshot.enabledAtMergeTime && !removedOnDisk.enabled) {
+            restored.push(await enableMod(deadlockPath, removedOnDisk.id));
+        } else {
+            restored.push(removedOnDisk);
+        }
+    };
+
+    // ---- Collapse: fewer than two sources would remain, so fully unmerge. ----
+    if (remainingSnapshots.length < 2) {
+        const survivor = remainingSnapshots[0];
+        if (survivor) {
+            const onDisk = await locator.locate(survivor);
+            if (onDisk) {
+                if (survivor.enabledAtMergeTime && !onDisk.enabled) {
+                    restored.push(await enableMod(deadlockPath, onDisk.id));
+                } else {
+                    restored.push(onDisk);
+                }
+            }
+        }
+        await fs.unlink(target.path);
+        removeModMetadata(target.fileName);
+        await restoreExtracted();
+        return { collapsed: true, merged: null, restored };
+    }
+
+    // ---- Rebuild: re-merge the remaining sources into a fresh VPK. ----
+    // Every remaining source must be present on disk to faithfully reproduce
+    // the merge; refuse rather than silently dropping a source's content.
+    const remainingOnDisk: Mod[] = [];
+    const missing: string[] = [];
+    for (const snap of remainingSnapshots) {
+        const onDisk = await locator.locate(snap);
+        if (onDisk) remainingOnDisk.push(onDisk);
+        else missing.push(snap.modName || snap.fileName);
+    }
+    if (missing.length > 0) {
+        throw new Error(
+            `Can't rebuild the merge: ${missing.join(', ')} ${missing.length === 1 ? 'is' : 'are'} no longer on disk. Unmerge instead to recover what's left.`
+        );
+    }
+
+    // Order DESCENDING by merge-time priority so the highest-priority (lowest
+    // pakNN) source lands LAST in argv; vpkmerge is last-input-wins, matching
+    // mergeMods and Deadlock's lower-pakNN-wins collision rule. (remainingOnDisk
+    // is index-aligned with remainingSnapshots: the missing check above
+    // guarantees every snapshot resolved.)
+    const ordered = remainingOnDisk
+        .map((mod, i) => ({ mod, priority: remainingSnapshots[i].priorityAtMergeTime }))
+        .sort((a, b) => b.priority - a.priority)
+        .map((p) => p.mod);
+
+    const rebuildPriority = await findNextAvailablePriority(deadlockPath);
+    const rebuildFileName = `pak${String(rebuildPriority).padStart(2, '0')}_dir.vpk`;
+    const addonsPath = getAddonsPath(deadlockPath);
+    const rebuildPath = join(addonsPath, rebuildFileName);
+
+    await reserveOutputSlot(rebuildPath);
+    try {
+        await runVpkmerge([rebuildPath, ...ordered.map((m) => m.path)]);
+        await verifyVpkOutput(rebuildPath);
+    } catch (err) {
+        try { await fs.unlink(rebuildPath); } catch { /* ignore partial-output cleanup */ }
+        throw err;
+    }
+
+    // Fresh manifest: keep the surviving source snapshots (still accurate),
+    // regenerate the share code from the on-disk survivors, preserve createdAt.
+    const portable = buildPortableForSources(remainingOnDisk, meta.modName || target.name);
+    const newManifest: MergedModInfo = {
+        id: manifest.id,
+        createdAt: manifest.createdAt,
+        shareCode: encodeShareCode(JSON.stringify(portable)),
+        sources: remainingSnapshots,
+    };
+    const sha256 = await hashFile(rebuildPath);
+    removeModMetadata(rebuildFileName); // scrub any orphan from a prior slot occupant
+    setModMetadata(rebuildFileName, {
+        modName: meta.modName,
+        thumbnailUrl: meta.thumbnailUrl,
+        sha256,
+        merged: newManifest,
+    });
+
+    // Delete the old merged VPK to free its slot, then move the rebuilt VPK
+    // back into that slot so the merge keeps its load-order position.
+    const originalPriority = target.priority;
+    await fs.unlink(target.path);
+    removeModMetadata(target.fileName);
+
+    const afterBuild = await scanMods(deadlockPath);
+    const rebuilt = afterBuild.find((m) => m.fileName === rebuildFileName);
+    if (!rebuilt) {
+        throw new Error('Rebuilt merged VPK was created but could not be located in the rescan.');
+    }
+    const reslotted = await setModPriority(deadlockPath, rebuilt.id, originalPriority);
+
+    await restoreExtracted();
+
+    // Re-read so the returned merged mod reflects its final on-disk filename
+    // (setModPriority renamed it); the IPC layer enriches it with the manifest.
+    const finalScan = await scanMods(deadlockPath);
+    const finalMerged = finalScan.find((m) => m.fileName === reslotted.fileName) ?? reslotted;
+    return { collapsed: false, merged: finalMerged, restored };
 }

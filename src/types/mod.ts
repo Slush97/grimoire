@@ -160,6 +160,18 @@ export interface UnmergeModResult {
   shareCode: string;
 }
 
+export interface ExtractMergeSourceResult {
+  /** True when extracting the source left fewer than 2 behind, so the whole
+   *  merge was dissolved (the merged VPK is gone) rather than rebuilt. */
+  collapsed: boolean;
+  /** The rebuilt merged mod (same load-order slot as before). Null when the
+   *  merge collapsed. */
+  merged: Mod | null;
+  /** Mods that are now standalone again: the extracted source plus any source
+   *  restored when the merge collapsed. */
+  restored: Mod[];
+}
+
 export interface UnknownModFilterGuess {
   modId: string;
   fileName: string;

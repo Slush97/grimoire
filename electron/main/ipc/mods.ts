@@ -20,9 +20,9 @@ import { inferHeroFromVpk, classifyGlobalModFromVpk } from '../services/vpk';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
-import { mergeMods, unmergeMod } from '../services/modMerger';
+import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { getMainWindow } from '../index';
-import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, EditLocalModArgs, GlobalModType, MergeModsArgs, UnmergeModResult } from '../../../src/types/mod';
+import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, EditLocalModArgs, GlobalModType, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -647,6 +647,29 @@ ipcMain.handle(
         return {
             ...result,
             recovered: result.recovered.map(enrichMod),
+        };
+    }
+);
+
+// extract-merge-source — pull one source out of a merged VPK and restore it as
+// a standalone mod. The remaining sources are re-merged in place (or the merge
+// dissolves when fewer than two would remain).
+ipcMain.handle(
+    'extract-merge-source',
+    async (
+        _,
+        mergedModId: string,
+        sourceFileName: string
+    ): Promise<ExtractMergeSourceResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const result = await extractMergeSource(deadlockPath, mergedModId, sourceFileName);
+        return {
+            ...result,
+            merged: result.merged ? enrichMod(result.merged) : null,
+            restored: result.restored.map(enrichMod),
         };
     }
 );

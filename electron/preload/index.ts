@@ -16,6 +16,7 @@ import type {
     MergeModsArgs,
     Mod,
     ModConflict,
+    ExtractMergeSourceResult,
     UnknownModFilterGuess,
     UnmergeModResult,
 } from '../../src/types/mod';
@@ -66,6 +67,7 @@ export interface ElectronAPI {
     readImageDataUrl: (imagePath: string) => Promise<string>;
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
+    extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
 
     // Launch
     launchModded: () => Promise<void>;
@@ -805,6 +807,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('read-image-data-url', imagePath),
     mergeMods: (args: MergeModsArgs) => ipcRenderer.invoke('merge-mods', args),
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
+    extractMergeSource: (mergedModId: string, sourceFileName: string) =>
+        ipcRenderer.invoke('extract-merge-source', mergedModId, sourceFileName),
 
     // Launch
     launchModded: () => ipcRenderer.invoke('launch-modded'),

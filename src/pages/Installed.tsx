@@ -32,10 +32,10 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, setModPriority as apiSetModPriority, reorderMods as apiReorderMods, setModIgnoreUpdates } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, extractMergeSource, setModPriority as apiSetModPriority, reorderMods as apiReorderMods, setModIgnoreUpdates } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, GlobalModType, UnknownModFilterGuess } from '../types/mod';
+import type { Mod, GlobalModType, UnknownModFilterGuess, MergedModSource } from '../types/mod';
 import type { GameBananaModDetails } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
@@ -1254,6 +1254,23 @@ export default function Installed() {
       console.error('[Installed] clipboard write failed:', err);
       setCopyToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`);
     }
+  };
+
+  // Extract one source out of the open merged mod back to a standalone mod.
+  // Errors propagate to the modal, which surfaces them inline; on success we
+  // refresh the mod list and either re-sync the modal with the rebuilt merge or
+  // close it when the merge collapsed (fewer than two sources left).
+  const handleExtractMergeSource = async (source: MergedModSource) => {
+    if (!mergedContentsMod) return;
+    const result = await extractMergeSource(mergedContentsMod.id, source.fileName);
+    await loadMods({ silent: true });
+    if (result.collapsed) {
+      setMergedContentsMod(null);
+      setCopyToast(`Merge dissolved (extracted ${source.modName})`);
+      return;
+    }
+    setMergedContentsMod(result.merged);
+    setCopyToast(`Extracted ${source.modName}`);
   };
 
   // Auto-dismiss the copy toast after a short read time.
@@ -2699,6 +2716,7 @@ export default function Installed() {
           hideNsfw={settings?.hideNsfwPreviews ?? true}
           onClose={() => setMergedContentsMod(null)}
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
+          onExtractSource={handleExtractMergeSource}
         />
       )}
 
@@ -4418,20 +4436,27 @@ function ModCard({
                 Unmerge
               </button>
             )}
-            <div className="my-1 h-px bg-border" />
-            <button
-              type="button"
-              role="menuitem"
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen(false);
-                onDelete();
-              }}
-              className={dangerMenuItemClasses}
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-              Delete
-            </button>
+            {/* A merged mod is removed via Unmerge (which deletes the merged VPK
+                and restores its sources), so a raw Delete alongside it would be
+                redundant and confusing. Non-merged mods keep Delete. */}
+            {!mod.merged && (
+              <>
+                <div className="my-1 h-px bg-border" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setMenuOpen(false);
+                    onDelete();
+                  }}
+                  className={dangerMenuItemClasses}
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Delete
+                </button>
+              </>
+            )}
           </div>
         )}
       </div>

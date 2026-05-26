@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ApplyHeroCardResult } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult } from '../types/mod';
 import type { HeroPortrait } from '../types/portrait';
 import type {
   GameBananaModsResponse,
@@ -168,7 +168,14 @@ export async function unmergeMod(mergedModId: string): Promise<UnmergeModResult>
   return window.electronAPI.unmergeMod(mergedModId);
 }
 
-export type { UnmergeModResult };
+export async function extractMergeSource(
+  mergedModId: string,
+  sourceFileName: string,
+): Promise<ExtractMergeSourceResult> {
+  return window.electronAPI.extractMergeSource(mergedModId, sourceFileName);
+}
+
+export type { UnmergeModResult, ExtractMergeSourceResult };
 
 // =====================
 // Launch API

@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Layers, X, ExternalLink, Share2, Scissors, Check } from 'lucide-react';
-import type { Mod } from '../types/mod';
+import { Layers, X, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle } from 'lucide-react';
+import type { Mod, MergedModSource } from '../types/mod';
 import ModThumbnail from './ModThumbnail';
 import { Button, Tag } from './common/ui';
 import { formatRelativeDate } from '../lib/dates';
@@ -10,24 +10,44 @@ interface Props {
   hideNsfw?: boolean;
   onClose: () => void;
   onUnmerge?: () => void;
+  /** Pull one source out of the merge, restoring it as a standalone mod.
+   *  Omitted to render the list read-only. */
+  onExtractSource?: (source: MergedModSource) => Promise<void>;
 }
 
 /**
- * Read-only view of what a merged VPK contains. Lists every source mod with
- * its thumbnail, the priority/enabled state captured at merge time, and a
- * GameBanana link when one exists. Also surfaces the share code (with a copy
- * button) and an Unmerge shortcut.
+ * View of what a merged VPK contains. Lists every source mod with its
+ * thumbnail and the priority/enabled state captured at merge time. Each source
+ * can be extracted back to a standalone mod; the footer surfaces the share code
+ * (with a copy button) and an Unmerge shortcut.
  */
-export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge }: Props) {
+export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge, onExtractSource }: Props) {
   const [copied, setCopied] = useState(false);
+  // The fileName of the source row currently being extracted, and the last
+  // error surfaced by an extract.
+  const [busyFileName, setBusyFileName] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const merged = mod.merged;
   // Render nothing if the prop is malformed rather than throwing; the parent
   // only opens this modal when `mod.merged` is truthy so this is defensive.
   if (!merged) return null;
 
-  const sectionForGb = (section?: string): string => {
-    const s = (section || 'Mod').toLowerCase();
-    return s === 'sound' ? 'sounds' : 'mods';
+  const canExtract = !!onExtractSource;
+
+  const handleExtract = async (src: MergedModSource) => {
+    if (!onExtractSource || busyFileName) return;
+    setActionError(null);
+    setBusyFileName(src.fileName);
+    try {
+      // The parent runs the IPC, refreshes mods, and then either re-syncs this
+      // modal's `mod` prop with the rebuilt merge (fewer sources) or closes it
+      // when the merge collapsed. Nothing else to do on success here.
+      await onExtractSource(src);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusyFileName(null);
+    }
   };
 
   const handleCopy = async () => {
@@ -103,18 +123,25 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge 
           </div>
 
           <div>
-            <div className="text-xs uppercase tracking-wide text-text-secondary mb-1.5">
-              Sources ({merged.sources.length})
+            <div className="flex items-center justify-between mb-1.5">
+              <div className="text-xs uppercase tracking-wide text-text-secondary">
+                Sources ({merged.sources.length})
+              </div>
+              {canExtract && merged.sources.length === 2 && (
+                <div className="text-[11px] text-amber-400/90">
+                  Extracting one dissolves the merge
+                </div>
+              )}
             </div>
             <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
               {merged.sources.map((src) => {
-                const gbHref = src.gameBananaId
-                  ? `https://gamebanana.com/${sectionForGb(src.section)}/${src.gameBananaId}`
-                  : null;
+                const busy = busyFileName === src.fileName;
+                // Dim and lock other rows while an extract is in flight.
+                const rowLocked = busyFileName !== null && !busy;
                 return (
                   <li
                     key={src.fileName}
-                    className="flex items-center gap-3 px-2 py-2 rounded bg-bg-tertiary/50 border border-border/60"
+                    className={`flex items-center gap-3 px-2 py-2 rounded bg-bg-tertiary/50 border border-border/60 ${rowLocked ? 'opacity-50' : ''}`}
                   >
                     <div className="w-12 h-12 flex-shrink-0 rounded overflow-hidden bg-bg-tertiary">
                       <ModThumbnail
@@ -147,30 +174,33 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge 
                           off
                         </span>
                       )}
-                      {gbHref ? (
-                        <a
-                          href={gbHref}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="p-1 text-text-secondary hover:text-accent transition-colors"
-                          title="View on GameBanana"
-                          aria-label={`View ${src.modName} on GameBanana`}
+                      {canExtract && (
+                        <button
+                          onClick={() => void handleExtract(src)}
+                          disabled={rowLocked}
+                          className="p-1 ml-0.5 text-text-secondary hover:text-accent transition-colors rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                          title="Extract: pull this out as its own mod"
+                          aria-label={`Extract ${src.modName}`}
                         >
-                          <ExternalLink className="w-4 h-4" />
-                        </a>
-                      ) : (
-                        <span
-                          className="text-[10px] uppercase tracking-wide text-text-secondary/70 px-1.5 py-0.5 rounded border border-border"
-                          title="Local mod — not in the share code"
-                        >
-                          local
-                        </span>
+                          {busy ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            <PackageOpen className="w-4 h-4" />
+                          )}
+                        </button>
                       )}
                     </div>
                   </li>
                 );
               })}
             </ul>
+
+            {actionError && (
+              <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mt-2">
+                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <div>{actionError}</div>
+              </div>
+            )}
           </div>
         </div>
 

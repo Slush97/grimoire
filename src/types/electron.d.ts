@@ -9,6 +9,7 @@ import type {
     EditLocalModArgs,
     MergeModsArgs,
     UnmergeModResult,
+    ExtractMergeSourceResult,
     ApplyHeroCardResult,
 } from './mod';
 import type {
@@ -313,6 +314,7 @@ export interface ElectronAPI {
     readImageDataUrl: (imagePath: string) => Promise<string>;
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
+    extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
 
     // Launch
     launchModded: () => Promise<void>;
