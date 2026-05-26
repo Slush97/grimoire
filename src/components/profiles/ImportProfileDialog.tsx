@@ -163,8 +163,37 @@ export default function ImportProfileDialog({
   const [includeAutoexec, setIncludeAutoexec] = useState(true);
   const [autoexecExpanded, setAutoexecExpanded] = useState(false);
 
+  // Per-import filter: when on, NSFW mods are treated as locked (deselected,
+  // never imported, shown as "Skipped: NSFW"). Off by default; a one-off
+  // choice rather than a saved setting.
+  const [skipNsfw, setSkipNsfw] = useState(false);
+
   const rowsRef = useRef<RowState[]>([]);
   useEffect(() => { rowsRef.current = rows; }, [rows]);
+
+  // A row can't be imported when it's unresolvable or when the per-import
+  // NSFW filter is on and the mod is flagged NSFW in the profile hint.
+  const isRowBlocked = useCallback(
+    (r: RowState) => r.mod.status === 'unresolvable' || (skipNsfw && !!r.mod.entry.hint?.nsfw),
+    [skipNsfw]
+  );
+
+  // Turning the NSFW filter on deselects any NSFW rows so they can't be
+  // imported. Turning it back off leaves selection alone (Select all re-adds).
+  useEffect(() => {
+    if (!skipNsfw) return;
+    setRows((prev) => {
+      let changed = false;
+      const next = prev.map((r) => {
+        if (r.selected && r.mod.entry.hint?.nsfw) {
+          changed = true;
+          return { ...r, selected: false };
+        }
+        return r;
+      });
+      return changed ? next : prev;
+    });
+  }, [skipNsfw]);
 
   // Mirror the editable name so the finalize effect can read it without
   // depending on profileName: depending on it would re-trigger the finalize
@@ -299,7 +328,8 @@ export default function ImportProfileDialog({
       setRows(
         r.resolved.map((mod) => ({
           mod,
-          selected: mod.status !== 'unresolvable',
+          selected:
+            mod.status !== 'unresolvable' && !(skipNsfw && !!mod.entry.hint?.nsfw),
           status: mod.alreadyInstalled ? 'already-installed' : 'pending',
           pickedFileIds: [],
         }))
@@ -309,7 +339,7 @@ export default function ImportProfileDialog({
     } finally {
       setResolving(false);
     }
-  }, [input]);
+  }, [input, skipNsfw]);
 
   const handleFile = useCallback(async (file: File) => {
     const text = await file.text();
@@ -358,13 +388,13 @@ export default function ImportProfileDialog({
 
   const toggleAll = useCallback(() => {
     setRows((prev) => {
-      const selectable = prev.filter((r) => r.mod.status !== 'unresolvable');
+      const selectable = prev.filter((r) => !isRowBlocked(r));
       const allOn = selectable.every((r) => r.selected);
       return prev.map((r) =>
-        r.mod.status === 'unresolvable' ? r : { ...r, selected: !allOn }
+        isRowBlocked(r) ? { ...r, selected: false } : { ...r, selected: !allOn }
       );
     });
-  }, []);
+  }, [isRowBlocked]);
 
   const updateRowAt = useCallback((idx: number, patch: Partial<RowState>) => {
     setRows((prev) => prev.map((r, i) => (i === idx ? { ...r, ...patch } : r)));
@@ -497,7 +527,7 @@ export default function ImportProfileDialog({
     // be on disk (the user's choice trumps the optimization).
     const plan: { idx: number; fileIds: number[] }[] = [];
     const startingRows = rowsRef.current.map((r, idx) => {
-      if (!r.selected || r.mod.status === 'unresolvable') {
+      if (!r.selected || isRowBlocked(r)) {
         return { ...r, status: 'skipped' as RowStatus };
       }
       if (r.pickedFileIds.length === 0 && r.mod.alreadyInstalled) {
@@ -545,7 +575,7 @@ export default function ImportProfileDialog({
         });
       }
     }
-  }, [parsed, report, activeDeadlockPath]);
+  }, [parsed, report, activeDeadlockPath, isRowBlocked]);
 
   const downloadsSettled = useMemo(() => {
     if (!importing) return false;
@@ -630,8 +660,8 @@ export default function ImportProfileDialog({
     return c;
   }, [rows]);
 
-  const selectableCount = rows.filter((r) => r.mod.status !== 'unresolvable').length;
-  const selectedCount = rows.filter((r) => r.selected).length;
+  const selectableCount = rows.filter((r) => !isRowBlocked(r)).length;
+  const selectedCount = rows.filter((r) => r.selected && !isRowBlocked(r)).length;
 
   // Tri-state UI. Important: there's a transient window inside handleParse
   // where parsed is set but report is not yet (we awaited parse, are now
@@ -841,20 +871,32 @@ export default function ImportProfileDialog({
             ) : null}
 
             <div className="px-4 sm:px-6 py-2 sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10 flex items-center justify-between gap-2 flex-wrap">
-              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer min-w-0">
-                <input
-                  type="checkbox"
-                  checked={selectableCount > 0 && selectedCount === selectableCount}
-                  onChange={toggleAll}
-                  disabled={selectableCount === 0 || importing}
-                  className="accent-accent cursor-pointer flex-shrink-0"
-                />
-                <span className="truncate">
-                  {selectedCount === selectableCount && selectableCount > 0
-                    ? 'Deselect all'
-                    : `Select all (${selectableCount})`}
-                </span>
-              </label>
+              <div className="flex items-center gap-4 min-w-0">
+                <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer min-w-0">
+                  <input
+                    type="checkbox"
+                    checked={selectableCount > 0 && selectedCount === selectableCount}
+                    onChange={toggleAll}
+                    disabled={selectableCount === 0 || importing}
+                    className="accent-accent cursor-pointer flex-shrink-0"
+                  />
+                  <span className="truncate">
+                    {selectedCount === selectableCount && selectableCount > 0
+                      ? 'Deselect all'
+                      : `Select all (${selectableCount})`}
+                  </span>
+                </label>
+                <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
+                  <input
+                    type="checkbox"
+                    checked={skipNsfw}
+                    onChange={(e) => setSkipNsfw(e.target.checked)}
+                    disabled={importing}
+                    className="accent-accent cursor-pointer flex-shrink-0"
+                  />
+                  <span>Skip NSFW</span>
+                </label>
+              </div>
               <button
                 type="button"
                 onClick={() => void handleToggleShowAllVariants()}
@@ -914,6 +956,8 @@ export default function ImportProfileDialog({
                   const mod = r.mod;
                   const hint = mod.entry.hint;
                   const isUnresolvable = mod.status === 'unresolvable';
+                  const nsfwBlocked = skipNsfw && !!hint?.nsfw && !isUnresolvable;
+                  const blocked = isRowBlocked(r);
                   const submissionId = gbSubmissionId(mod);
                   const fileCount = r.details?.files?.length ?? 0;
                   const canPickVariants =
@@ -950,9 +994,9 @@ export default function ImportProfileDialog({
                       <div className="flex items-center gap-3 sm:gap-4">
                         <input
                           type="checkbox"
-                          checked={r.selected}
+                          checked={r.selected && !blocked}
                           onChange={() => toggleRow(idx)}
-                          disabled={isUnresolvable || importing}
+                          disabled={blocked || importing}
                           className="w-4 h-4 accent-accent cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
                           aria-label={`Toggle ${hint?.name ?? 'mod'}`}
                         />
@@ -972,6 +1016,7 @@ export default function ImportProfileDialog({
                             {hint?.fileLabel && <span className="hidden sm:inline">· {hint.fileLabel}</span>}
                             <span>· p{mod.entry.priority}</span>
                             {!mod.entry.enabled && <span className="text-text-tertiary">· disabled</span>}
+                            {nsfwBlocked && <span className="text-text-tertiary">· NSFW skipped</span>}
                             {canPickVariants && (
                               <button
                                 type="button"

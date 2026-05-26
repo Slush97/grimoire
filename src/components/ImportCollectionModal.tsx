@@ -160,6 +160,10 @@ export default function ImportCollectionModal({
   const [loadingItems, setLoadingItems] = useState(false);
   const [resolveError, setResolveError] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<number>>(new Set());
+  // Per-import filter: when on, NSFW items are treated as skipped (shown with
+  // an "NSFW" reason, deselected, and never queued). Off by default; a one-off
+  // choice rather than a saved setting.
+  const [skipNsfw, setSkipNsfw] = useState(false);
   // We use a separate "submitting" flag rather than blocking on the
   // submission loop — once items are in the main-process queue, the modal
   // stays interactive (cancel buttons, variant pickers for not-yet-queued
@@ -558,14 +562,37 @@ export default function ImportCollectionModal({
 
   // ───────── Selection ─────────
 
+  // A row can't be queued when it carries a structural skip (wrong game,
+  // unsupported type, no files) or when the per-import NSFW filter is on and
+  // the item is NSFW.
+  const isRowBlocked = useCallback(
+    (r: ItemRow) => !r.selectable || (skipNsfw && r.item.nsfw),
+    [skipNsfw]
+  );
+
+  // Turning the NSFW filter on drops any already-selected NSFW rows so they
+  // can't slip into the queue. Turning it back off leaves selection as-is
+  // (the user can Select all to re-add them).
+  useEffect(() => {
+    if (!skipNsfw) return;
+    setSelected((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const r of rowsRef.current) {
+        if (r.item.nsfw && next.delete(r.item.id)) changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [skipNsfw]);
+
   const eligibleRows = useMemo(
-    () => rows.filter((r) => r.selectable && r.status === 'idle'),
-    [rows]
+    () => rows.filter((r) => !isRowBlocked(r) && r.status === 'idle'),
+    [rows, isRowBlocked]
   );
 
   const skippedCount = useMemo(
-    () => rows.filter((r) => !r.selectable).length,
-    [rows]
+    () => rows.filter((r) => isRowBlocked(r)).length,
+    [rows, isRowBlocked]
   );
 
   const allEligibleSelected =
@@ -623,7 +650,7 @@ export default function ImportCollectionModal({
     setProfileStatus({ kind: 'idle' });
     const token = ++submitTokenRef.current;
     const initialQueue = rowsRef.current.filter(
-      (r) => selected.has(r.item.id) && r.status === 'idle'
+      (r) => selected.has(r.item.id) && r.status === 'idle' && !(skipNsfw && r.item.nsfw)
     );
 
     // Pre-fetch details for every selected row we don't have yet so we can
@@ -674,7 +701,7 @@ export default function ImportCollectionModal({
     // Refresh the snapshot so each row carries its now-cached details and
     // any picks the user made while the banner was up.
     const toQueue = rowsRef.current.filter(
-      (r) => selected.has(r.item.id) && r.status === 'idle' && r.selectable
+      (r) => selected.has(r.item.id) && r.status === 'idle' && r.selectable && !(skipNsfw && r.item.nsfw)
     );
     setBatchIds(new Set(toQueue.map((r) => r.item.id)));
 
@@ -738,7 +765,7 @@ export default function ImportCollectionModal({
     }
 
     setSubmitting(false);
-  }, [activeDeadlockPath, ensureDetails, selected, updateRow]);
+  }, [activeDeadlockPath, ensureDetails, selected, skipNsfw, updateRow]);
 
   // ───────── Footer summary ─────────
 
@@ -861,18 +888,29 @@ export default function ImportCollectionModal({
           {rows.length > 0 && (
             <div className="sticky top-0 bg-bg-secondary/95 backdrop-blur border-b border-white/5 z-10">
               <div className="px-6 py-3 flex items-center justify-between gap-3">
-                <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
-                  <input
-                    type="checkbox"
-                    checked={allEligibleSelected}
-                    onChange={toggleSelectAll}
-                    disabled={eligibleRows.length === 0}
-                    className="accent-accent cursor-pointer"
-                  />
-                  <span>
-                    {allEligibleSelected ? 'Deselect all' : `Select all (${eligibleRows.length})`}
-                  </span>
-                </label>
+                <div className="flex items-center gap-4">
+                  <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
+                    <input
+                      type="checkbox"
+                      checked={allEligibleSelected}
+                      onChange={toggleSelectAll}
+                      disabled={eligibleRows.length === 0}
+                      className="accent-accent cursor-pointer"
+                    />
+                    <span>
+                      {allEligibleSelected ? 'Deselect all' : `Select all (${eligibleRows.length})`}
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
+                    <input
+                      type="checkbox"
+                      checked={skipNsfw}
+                      onChange={(e) => setSkipNsfw(e.target.checked)}
+                      className="accent-accent cursor-pointer"
+                    />
+                    <span>Skip NSFW</span>
+                  </label>
+                </div>
                 <button
                   type="button"
                   onClick={() => void handleToggleShowAllVariants()}
@@ -920,8 +958,9 @@ export default function ImportCollectionModal({
           <ul className="divide-y divide-white/5">
             {rows.map((row) => {
               const thumb = previewThumb(row.item.previewMedia);
-              const checked = selected.has(row.item.id);
-              const lockedRow = !row.selectable || row.status !== 'idle';
+              const nsfwSkipped = skipNsfw && row.item.nsfw && !row.skip;
+              const checked = selected.has(row.item.id) && !isRowBlocked(row);
+              const lockedRow = isRowBlocked(row) || row.status !== 'idle';
 
               const fileCount = row.details?.files?.length ?? 0;
               const pickedFiles = row.details?.files
@@ -1019,6 +1058,8 @@ export default function ImportCollectionModal({
                     <div className="text-sm flex-shrink-0 text-right">
                       {row.skip ? (
                         <span className="text-text-tertiary">{skipReasonLabel(row.skip)}</span>
+                      ) : nsfwSkipped ? (
+                        <span className="text-text-tertiary">Skipped: NSFW</span>
                       ) : row.status === 'installed' ? (
                         <span className="text-green-400 inline-flex items-center gap-1.5 justify-end">
                           <CheckCircle2 className="w-4 h-4" /> Installed
