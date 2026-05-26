@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot } from '../types/mod';
 import type { HeroPortrait } from '../types/portrait';
 import type {
   GameBananaModsResponse,
@@ -95,6 +95,10 @@ export async function setModLockerHero(
 
 export async function getHeroPortraits(heroName: string): Promise<HeroPortrait[]> {
   return window.electronAPI.getHeroPortraits(heroName);
+}
+
+export async function getHeroAbilitySlots(heroName: string): Promise<HeroAbilitySlot[]> {
+  return window.electronAPI.getHeroAbilitySlots(heroName);
 }
 
 export async function applyHeroCard(

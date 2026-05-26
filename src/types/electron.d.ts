@@ -11,6 +11,7 @@ import type {
     UnmergeModResult,
     ExtractMergeSourceResult,
     ApplyHeroCardResult,
+    HeroAbilitySlot,
 } from './mod';
 import type {
     GameBananaModsResponse,
@@ -296,6 +297,7 @@ export interface ElectronAPI {
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;
+    getHeroAbilitySlots: (heroName: string) => Promise<HeroAbilitySlot[]>;
     applyHeroCard: (heroName: string, sourceFileName: string) => Promise<ApplyHeroCardResult>;
     revertHeroCard: (heroName: string) => Promise<ApplyHeroCardResult>;
     getActiveHeroCard: (

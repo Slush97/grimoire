@@ -109,6 +109,11 @@ export interface AbilitySlotMeta {
   image: string | null;
 }
 
+/** One hero ability slot for the picker UI: the slot number plus its metadata. */
+export interface HeroAbilitySlot extends AbilitySlotMeta {
+  slot: AbilitySlot;
+}
+
 /**
  * One hero's ability-sound footprint inside a single mod. A mod can touch more
  * than one hero (usually a dominant hero plus a stray copy-pasted file), so the
@@ -190,6 +195,11 @@ export interface Mod {
   /** Set on the single Locker-managed cosmetics VPK that holds applied hero
    *  cards. Other surfaces treat a truthy value as "hide this artifact". */
   lockerCosmetics?: LockerCosmeticsInfo;
+  /** Per-ability sound footprint, classified from the VPK file tree for mods
+   *  that ship hero ability sounds (see classifyAbilitySounds). Undefined when
+   *  not yet classified or the mod has no recognized hero ability sounds.
+   *  Drives the per-ability sound picker. */
+  abilitySounds?: AbilitySoundClassification;
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;

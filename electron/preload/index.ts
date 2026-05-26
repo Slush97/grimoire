@@ -781,6 +781,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-mod-locker-hero', modId, heroName),
     getHeroPortraits: (heroName: string) =>
         ipcRenderer.invoke('get-hero-portraits', heroName),
+    getHeroAbilitySlots: (heroName: string) =>
+        ipcRenderer.invoke('get-hero-ability-slots', heroName),
     applyHeroCard: (heroName: string, sourceFileName: string) =>
         ipcRenderer.invoke('apply-hero-card', heroName, sourceFileName),
     revertHeroCard: (heroName: string) =>

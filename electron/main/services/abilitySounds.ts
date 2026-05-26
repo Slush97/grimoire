@@ -2,8 +2,9 @@ import type {
     AbilitySlot,
     AbilitySoundClassification,
     HeroAbilityContribution,
+    HeroAbilitySlot,
 } from '../../../src/types/mod';
-import { heroForSoundCodename } from './heroSoundCodenames';
+import { heroForSoundCodename, soundCodenameForHero } from './heroSoundCodenames';
 import {
     HERO_ABILITY_SLOTS,
     LEGACY_SOUND_CODENAME_MERGE,
@@ -199,4 +200,22 @@ export function classifyAbilitySoundsFromVpk(vpkPath: string): AbilitySoundClass
     const paths = parseVpkDirectoryCached(vpkPath);
     if (!paths) return null;
     return classifyAbilitySounds(paths);
+}
+
+/**
+ * The four ability slots for a hero (by display name), with display name and
+ * icon, ordered slot 1-4. Reference data for the per-ability sound picker.
+ * Empty when the hero is unknown or has no slot table (e.g. in-dev heroes).
+ */
+export function getHeroAbilitySlots(heroName: string): HeroAbilitySlot[] {
+    const codename = soundCodenameForHero(heroName);
+    if (!codename) return [];
+    const slots = HERO_ABILITY_SLOTS[codename];
+    if (!slots) return [];
+    const out: HeroAbilitySlot[] = [];
+    for (const slot of [1, 2, 3, 4] as const) {
+        const meta = slots[slot];
+        if (meta) out.push({ slot, ...meta });
+    }
+    return out;
 }
