@@ -80,6 +80,48 @@ export interface ApplyHeroCardResult {
 }
 
 /**
+ * One per-(hero, ability) sound choice inside the Locker sound VPK. The user
+ * picked this ability's sound out of `source`; the rebuild splits just that
+ * ability's clip paths out of the source and folds them into the consolidated
+ * VPK. (Slot 4 = ultimate; see AbilitySlot.)
+ */
+export interface LockerSoundSelection {
+  heroName: string;
+  heroCodename: string;
+  slot: AbilitySlot;
+  /** Exact `.vsnd_c` paths extracted from the source for this ability. */
+  clipPaths: string[];
+  source: {
+    /** Source VPK filename at apply time; `sha256AtApplyTime` relocates it if
+     *  reconcile renamed it (same recovery heroCards uses). */
+    fileName: string;
+    modName?: string;
+    gameBananaId?: number;
+    sha256AtApplyTime: string;
+  };
+  addedAt: string;
+}
+
+/**
+ * Manifest on the single Locker-managed sound VPK that holds every applied
+ * per-ability sound. Presence marks the VPK as Locker-managed so other surfaces
+ * hide it. Rebuilt on every apply/revert; no user-facing unmerge. Separate from
+ * lockerCosmetics (cards): disjoint paths, independent lifecycle.
+ */
+export interface LockerSoundsInfo {
+  /** One entry per (heroCodename, slot). */
+  sounds: LockerSoundSelection[];
+  rebuiltAt: string;
+}
+
+export interface ApplyHeroSoundResult {
+  /** Source VPK filename now providing this ability's sound, or null if reverted. */
+  activeSourceFileName: string | null;
+  /** Selections dropped because their source VPK was gone at rebuild time. */
+  missingSourceFileNames: string[];
+}
+
+/**
  * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
  * alongside the per-hero piles. Most are derived from the VPK file tree by
  * `classifyGlobalModType` (electron/main/services/vpk.ts), since GameBanana's

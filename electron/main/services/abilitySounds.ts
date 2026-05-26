@@ -219,3 +219,28 @@ export function getHeroAbilitySlots(heroName: string): HeroAbilitySlot[] {
     }
     return out;
 }
+
+/**
+ * The exact `sounds/abilities/<codename>/...` clip paths in a VPK that belong to
+ * one ability slot for a hero. This is what the apply pipeline extracts (via
+ * `vpkmerge split` with each full path as a predicate) to isolate one ability's
+ * sound out of a mod that may touch several. Empty when the hero is unknown or
+ * the VPK has no clips for that slot.
+ */
+export function abilitySoundClipsForSlot(
+    vpkPath: string,
+    heroName: string,
+    slot: AbilitySlot,
+): string[] {
+    const codename = soundCodenameForHero(heroName);
+    if (!codename) return [];
+    const paths = parseVpkDirectoryCached(vpkPath);
+    if (!paths) return [];
+    const out: string[] = [];
+    for (const path of paths) {
+        const match = path.match(ABILITY_PATH);
+        if (!match || canonicalCodename(match[1]) !== codename) continue;
+        if (resolveAbilitySlot(codename, path)?.slot === slot) out.push(path);
+    }
+    return out;
+}
