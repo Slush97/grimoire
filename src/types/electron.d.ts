@@ -12,6 +12,8 @@ import type {
     ExtractMergeSourceResult,
     ApplyHeroCardResult,
     HeroAbilitySlot,
+    AbilitySlot,
+    ApplyHeroSoundResult,
 } from './mod';
 import type {
     GameBananaModsResponse,
@@ -303,6 +305,15 @@ export interface ElectronAPI {
     getActiveHeroCard: (
         heroName: string
     ) => Promise<{ sourceFileName: string; variants: string[] } | null>;
+    applyHeroSound: (
+        heroName: string,
+        slot: AbilitySlot,
+        sourceFileName: string
+    ) => Promise<ApplyHeroSoundResult>;
+    revertHeroSound: (heroName: string, slot: AbilitySlot) => Promise<ApplyHeroSoundResult>;
+    getActiveHeroSounds: (
+        heroName: string
+    ) => Promise<Array<{ slot: AbilitySlot; sourceFileName: string }>>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (

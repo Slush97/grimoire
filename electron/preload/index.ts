@@ -8,6 +8,7 @@ import type {
 import type { SnapshotSummary, SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
 import type {
+    AbilitySlot,
     AppSettings,
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
@@ -789,6 +790,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('revert-hero-card', heroName),
     getActiveHeroCard: (heroName: string) =>
         ipcRenderer.invoke('get-active-hero-card', heroName),
+    applyHeroSound: (heroName: string, slot: AbilitySlot, sourceFileName: string) =>
+        ipcRenderer.invoke('apply-hero-sound', heroName, slot, sourceFileName),
+    revertHeroSound: (heroName: string, slot: AbilitySlot) =>
+        ipcRenderer.invoke('revert-hero-sound', heroName, slot),
+    getActiveHeroSounds: (heroName: string) =>
+        ipcRenderer.invoke('get-active-hero-sounds', heroName),
     setModGlobalType: (modId: string, globalType: GlobalModType | null) =>
         ipcRenderer.invoke('set-mod-global-type', modId, globalType),
     setModIgnoreUpdates: (modId: string, ignore: boolean) =>
