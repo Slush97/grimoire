@@ -586,7 +586,7 @@ async function executeDownload(
         throw new Error(
             'This mod has no downloadable files on GameBanana. It may have been ' +
             'revoked (copyright, moderation) or the author removed the file. ' +
-            'The catalog entry will clear on the next sync.'
+            'Open the mod page in Browse to check for a current version.'
         );
     }
 
