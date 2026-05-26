@@ -958,17 +958,24 @@ export default function Browse() {
   const handleDownload = async (fileId: number, fileName: string) => {
     if (!selectedMod || !activeDeadlockPath) return;
 
-    setDownloading({ modId: selectedMod.id, fileId });
-    setDownloadProgress({ downloaded: 0, total: 0 });
-    setExtracting(false);
+    // The first file claims the active slot (shows progress); additional clicks
+    // queue behind it. The backend's download-queue-updated event is the source
+    // of truth for what's queued, so don't clobber the active progress UI here.
+    if (!downloading) {
+      setDownloading({ modId: selectedMod.id, fileId });
+      setDownloadProgress({ downloaded: 0, total: 0 });
+      setExtracting(false);
+    }
 
     try {
       await downloadMod(selectedMod.id, fileId, fileName, section, effectiveCategoryId);
     } catch (err) {
       setError(String(err));
-      setDownloading(null);
-      setDownloadProgress(null);
-      setExtracting(false);
+      // Reset the active UI only if the file that failed is the active one.
+      // Functional update reads fresh state, not this closure's snapshot.
+      setDownloading((cur) =>
+        cur && cur.modId === selectedMod.id && cur.fileId === fileId ? null : cur
+      );
     }
   };
 
@@ -1724,6 +1731,7 @@ export default function Browse() {
           installedFileStates={installedFileStates}
           onEnableFile={(modId) => toggleMod(modId)}
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
+          queuedFileIds={new Set(downloadQueue.filter((q) => q.modId === selectedMod.id).map((q) => q.fileId))}
           extracting={extracting}
           progress={downloadProgress}
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
