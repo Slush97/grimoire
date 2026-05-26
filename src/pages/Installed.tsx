@@ -318,11 +318,12 @@ export default function Installed() {
       for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
     }
   }
-  // The Locker cosmetics VPK is a Locker-managed artifact (applied hero cards),
-  // not a user-installed mod, so it never shows as a card here. It's managed
-  // entirely from the Locker's Hero Card picker.
+  // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
+  // (applied per-ability sounds) are Locker-managed artifacts, not user-
+  // installed mods, so they never show as cards here. They're managed entirely
+  // from the Locker's Hero Card / Sounds pickers.
   const visibleMods = mods.filter(
-    (m) => !m.lockerCosmetics && !absorbedFileNames.has(m.fileName)
+    (m) => !m.lockerCosmetics && !m.lockerSounds && !absorbedFileNames.has(m.fileName)
   );
   const [viewMode, setViewMode] = useState<ViewMode>(() => {
     const stored = localStorage.getItem('installedViewMode');

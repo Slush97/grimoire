@@ -187,9 +187,17 @@ async function rebuildLockerSounds(
         invalidateVpkParseCache(destPath);
 
         const info: LockerSoundsInfo = { sounds: valid, rebuiltAt: new Date().toISOString() };
-        // globalType: null keeps it off the Locker Global axis (enrichMod skips
-        // classification when metadata already carries a result).
-        setModMetadata(destFileName, { modName: 'Locker Sounds', lockerSounds: info, globalType: null });
+        // globalType: null keeps it off the Locker Global axis, and
+        // abilitySounds: null keeps this VPK out of the sound picker's own source
+        // list (it ships ability clips, so without the sentinel enrichMod would
+        // classify it and re-offer it as a selectable source). enrichMod skips
+        // both classifications when metadata already carries a result.
+        setModMetadata(destFileName, {
+            modName: 'Locker Sounds',
+            lockerSounds: info,
+            globalType: null,
+            abilitySounds: null,
+        });
 
         await ensureSoundsWins(deadlockPath, destFileName, valid);
         return { fileName: destFileName, missing };

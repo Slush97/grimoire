@@ -131,6 +131,7 @@ function enrichMod(mod: Mod): Mod {
             globalType: globalType ?? undefined,
             merged: metadata.merged,
             lockerCosmetics: metadata.lockerCosmetics,
+            lockerSounds: metadata.lockerSounds,
             abilitySounds: abilitySounds ?? undefined,
             ignoreUpdates: metadata.ignoreUpdates,
         };

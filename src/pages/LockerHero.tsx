@@ -171,7 +171,11 @@ export default function LockerHero() {
     // on display name; dedupe against the already-tagged Sound mods.
     const seen = new Set(tagged.map((m) => m.id));
     const bundled = mods.filter(
-      (m) => !seen.has(m.id) && m.abilitySounds?.perHero.some((h) => h.hero === hero.name)
+      (m) =>
+        !seen.has(m.id) &&
+        // Never offer the Locker's own sound VPK as a selectable source.
+        !m.lockerSounds &&
+        m.abilitySounds?.perHero.some((h) => h.hero === hero.name)
     );
     return bundled.length > 0 ? [...tagged, ...bundled] : tagged;
   }, [hero, heroSoundsByHero, mods]);

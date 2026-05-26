@@ -133,10 +133,14 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     const vpkStats: VpkParseStats = { hits: 0, misses: 0 };
 
     const mods = await scanMods(deadlockPath);
-    // The Locker cosmetics VPK deliberately overrides the card paths of the
-    // skin/icon mods it pulled from (that's how a chosen card wins), so it would
-    // otherwise report a file conflict against every source. Exclude it.
-    const enabledMods = mods.filter(m => m.enabled && !getModMetadata(m.fileName)?.lockerCosmetics);
+    // The Locker cosmetics VPK and the Locker sound VPK deliberately override
+    // the paths of the mods they pulled from (that's how a chosen card / sound
+    // wins), so they would otherwise report a file conflict against every
+    // source. Exclude them.
+    const enabledMods = mods.filter(m => {
+        const meta = getModMetadata(m.fileName);
+        return m.enabled && !meta?.lockerCosmetics && !meta?.lockerSounds;
+    });
     const conflicts: ModConflict[] = [];
 
     if (enabledMods.length < 2) {

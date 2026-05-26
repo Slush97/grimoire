@@ -237,6 +237,10 @@ export interface Mod {
   /** Set on the single Locker-managed cosmetics VPK that holds applied hero
    *  cards. Other surfaces treat a truthy value as "hide this artifact". */
   lockerCosmetics?: LockerCosmeticsInfo;
+  /** Set on the single Locker-managed sound VPK that holds applied per-ability
+   *  sounds. Like lockerCosmetics, a truthy value means "hide this artifact"
+   *  (it's a Locker output, not a user-installed mod). */
+  lockerSounds?: LockerSoundsInfo;
   /** Per-ability sound footprint, classified from the VPK file tree for mods
    *  that ship hero ability sounds (see classifyAbilitySounds). Undefined when
    *  not yet classified or the mod has no recognized hero ability sounds.
