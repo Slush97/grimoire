@@ -17,7 +17,7 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // survives navigation away from /browse and back — user complaint: search
 // query, view mode, and filters all reset when switching pages.
 export type BrowseSortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
-export type BrowseViewMode = 'grid' | 'compact' | 'list';
+export type BrowseViewMode = 'grid' | 'compact' | 'dense' | 'list';
 export interface BrowseUiState {
   search: string;
   viewMode: BrowseViewMode;
@@ -37,7 +37,7 @@ export interface BrowseUiState {
 const VIEW_MODE_KEY = 'browseViewMode';
 const SORT_KEY = 'browseSort';
 
-const VIEW_MODES: BrowseViewMode[] = ['grid', 'compact', 'list'];
+const VIEW_MODES: BrowseViewMode[] = ['grid', 'compact', 'dense', 'list'];
 const SORT_OPTIONS: BrowseSortOption[] = ['default', 'popular', 'recent', 'updated', 'views', 'name'];
 
 function readPersistedViewMode(): BrowseViewMode {

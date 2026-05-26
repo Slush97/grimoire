@@ -10,6 +10,7 @@ import {
   RefreshCw,
   LayoutGrid,
   Grid3x3,
+  Grip,
   List,
   AlertTriangle,
   Clock,
@@ -51,19 +52,17 @@ import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../l
 
 const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
-type ViewMode = 'grid' | 'compact' | 'list';
+type ViewMode = 'grid' | 'compact' | 'dense' | 'list';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
 // Persist filter UI inputs across page navigation. The store keeps these in
 // memory so visiting Installed and coming back doesn't blow away the user's
 // current search/filter context. Kept out of localStorage so a fresh launch
 // starts clean — sessions, not preferences.
 
-// Only show these categories in the dropdown (lowercase for matching)
-const ALLOWED_CATEGORIES = new Set(['hud', 'other/misc', 'maps']);
-
 type CategoryOption = {
   id: number;
   label: string;
+  itemCount: number;
 };
 
 type FlattenOptions = {
@@ -87,7 +86,7 @@ function flattenCategories(
 
     const nextPath = parentPath ? `${parentPath} / ${node.name}` : node.name;
     if (includeEmpty || node.itemCount > 0) {
-      results.push({ id: node.id, label: nextPath });
+      results.push({ id: node.id, label: nextPath, itemCount: node.itemCount });
     }
 
     if (node.children && node.children.length > 0) {
@@ -1000,18 +999,28 @@ export default function Browse() {
   }, [modCategories]);
 
   const categoryOptions = useMemo(() => {
+    // Per-hero entries under Skins are handled by the dedicated Hero filter, so
+    // exclude them here. Everything else (Skins, Model Replacement, HUD,
+    // Gameplay Modifications, Maps, Music, Killsounds, ...) becomes a mod-type
+    // filter. This surfaces GameBanana's real categories instead of the old
+    // hardcoded hud/other-misc/maps allowlist (issue #91).
     const heroIds = new Set(heroOptions.map((hero) => hero.id));
+    const flat = flattenCategories(categories, '', { excludeIds: heroIds, includeEmpty: false });
 
-    // Get all flattened categories
-    let options = flattenCategories(categories, '', { excludeIds: heroIds, includeEmpty: false });
+    // GameBanana keeps several legacy duplicate categories that share a name
+    // (e.g. multiple "Skins" / "Other/Misc" buckets). Collapse by label and keep
+    // the most populated one so the dropdown stays short and points at the
+    // canonical category.
+    const byLabel = new Map<string, CategoryOption>();
+    for (const opt of flat) {
+      const key = opt.label.toLowerCase();
+      const existing = byLabel.get(key);
+      if (!existing || opt.itemCount > existing.itemCount) {
+        byLabel.set(key, opt);
+      }
+    }
 
-    // Only keep allowed categories (HUD, Other/Misc, Maps)
-    options = options.filter(opt => {
-      const lowerLabel = opt.label.toLowerCase();
-      return ALLOWED_CATEGORIES.has(lowerLabel);
-    });
-
-    return options;
+    return Array.from(byLabel.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [categories, heroOptions]);
 
   const installedIds = useMemo(() => {
@@ -1310,6 +1319,17 @@ export default function Browse() {
               </button>
               <button
                 type="button"
+                onClick={() => setViewMode('dense')}
+                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'dense'
+                  ? 'bg-bg-tertiary text-text-primary'
+                  : 'text-text-secondary hover:text-text-primary'
+                  }`}
+                title="Dense view"
+              >
+                <Grip className="w-5 h-5" />
+              </button>
+              <button
+                type="button"
                 onClick={() => setViewMode('list')}
                 className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'list'
                   ? 'bg-bg-tertiary text-text-primary'
@@ -1494,9 +1514,11 @@ export default function Browse() {
           const gridClass =
             viewMode === 'list'
               ? 'flex flex-col gap-3'
-              : viewMode === 'compact'
-                ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
-                : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3';
+              : viewMode === 'dense'
+                ? 'grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2'
+                : viewMode === 'compact'
+                  ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
+                  : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3';
           const hasActiveFilters =
             search.trim().length > 0 || heroCategoryId !== 'all' || categoryId !== 'all' || sort !== 'default';
 
@@ -1672,7 +1694,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
       </div>
     );
   }
-  const aspect = viewMode === 'compact' ? 'aspect-[4/3]' : 'aspect-[3/2]';
+  const aspect = viewMode === 'compact' || viewMode === 'dense' ? 'aspect-[4/3]' : 'aspect-[3/2]';
   return (
     <div className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden ${aspect}`}>
       <div className="absolute inset-0 skeleton-shimmer bg-bg-secondary" />
@@ -1687,7 +1709,9 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
 function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
-  const isCompact = viewMode === 'compact';
+  // Dense reuses the compact card chrome (4:3 aspect, smaller text/padding); it
+  // only differs in how many columns the grid packs in.
+  const isCompact = viewMode === 'compact' || viewMode === 'dense';
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);

@@ -194,6 +194,10 @@ export default function LockerHero() {
     const heroModList = listForMod(modId);
     if (!heroModList?.some((m) => m.id === modId)) return;
     await toggleMod(modId);
+    // toggleMod only patches the single mod's enabled flag in the store; the
+    // sound/skin lists derive from a fresh scan. Without a reload the page can
+    // show a just-swapped sound until the user manually refreshes (issue #91).
+    await loadMods({ silent: true });
   };
 
   const toggleHeroVariant = async (modId: string) => {
@@ -201,6 +205,7 @@ export default function LockerHero() {
     const heroModList = listForMod(modId);
     if (!heroModList?.some((m) => m.id === modId)) return;
     await toggleMod(modId);
+    await loadMods({ silent: true });
   };
 
   const applyMinaPreset = async (presetFileName: string) => {
