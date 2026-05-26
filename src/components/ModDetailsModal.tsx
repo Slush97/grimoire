@@ -44,6 +44,10 @@ interface ModDetailsModalProps {
    *  the local mod id of the disabled install. */
   onEnableFile?: (modId: string) => void;
   downloadingFileId: number | null;
+  /** GameBanana file ids for this mod that are queued behind the active
+   *  download. Their rows show a "Queued" state but other rows stay clickable,
+   *  so the user can line up several variants at once. */
+  queuedFileIds?: Set<number>;
   extracting: boolean;
   progress: { downloaded: number; total: number } | null;
   hideNsfwPreviews: boolean;
@@ -68,6 +72,7 @@ export default function ModDetailsModal({
   installedFileStates,
   onEnableFile,
   downloadingFileId,
+  queuedFileIds = new Set<number>(),
   extracting,
   progress,
   hideNsfwPreviews,
@@ -195,12 +200,17 @@ export default function ModDetailsModal({
     const isUpdate = !!updateAvailable && !isInstalled && !archived;
     const isActive = activeFileIds.has(file.id);
     const isDownloadingThis = downloadingFileId === file.id;
+    const isQueuedThis = queuedFileIds.has(file.id);
+    // Only this row's own download/queue state should lock its buttons. A
+    // download in progress on a *different* file must leave this row clickable
+    // so the user can queue several variants in one go.
+    const isBusyThis = isDownloadingThis || isQueuedThis;
     const installedFileState = installedFileStates?.get(file.id);
     const showEnablePill =
       !!installedFileState &&
       !installedFileState.enabled &&
       !!onEnableFile &&
-      !isDownloadingThis;
+      !isBusyThis;
     const pct = progress && progress.total > 0
       ? Math.round((progress.downloaded / progress.total) * 100)
       : null;
@@ -277,7 +287,7 @@ export default function ModDetailsModal({
         {showEnablePill && installedFileState && (
           <button
             onClick={() => onEnableFile!(installedFileState.modId)}
-            disabled={downloadingFileId !== null}
+            disabled={isBusyThis}
             title="Enable this mod"
             className="flex-shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-300 border border-yellow-500/40"
           >
@@ -287,7 +297,7 @@ export default function ModDetailsModal({
         )}
         <button
           onClick={() => onDownload(file.id, file.fileName)}
-          disabled={downloadingFileId !== null}
+          disabled={isBusyThis}
           className={`flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 min-w-[110px] text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
             isUpdate
               ? 'bg-accent hover:bg-accent-hover text-white'
@@ -300,6 +310,11 @@ export default function ModDetailsModal({
             <>
               <Loader2 className="w-4 h-4 animate-spin" />
               {extracting ? 'Extracting...' : pct !== null ? `${pct}%` : 'Starting'}
+            </>
+          ) : isQueuedThis ? (
+            <>
+              <Clock className="w-4 h-4" />
+              Queued
             </>
           ) : (
             <>
