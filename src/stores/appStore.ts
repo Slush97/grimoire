@@ -19,16 +19,19 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 export type BrowseSortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 export type BrowseViewMode = 'grid' | 'compact' | 'dense' | 'list';
 export type BrowseNsfwFilter = 'all' | 'sfw' | 'nsfw';
-export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month';
+export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month' | 'custom';
 export interface BrowseUiState {
   search: string;
   viewMode: BrowseViewMode;
   sort: BrowseSortOption;
   section: string;
   // Content-rating filter and recency window. Both route browsing through the
-  // local catalog mirror (see useLocalSearch in Browse.tsx).
+  // local catalog mirror (see useLocalSearch in Browse.tsx). addedFrom/addedTo
+  // are 'YYYY-MM-DD' inputs used only when addedWithin === 'custom'.
   nsfw: BrowseNsfwFilter;
   addedWithin: BrowseTimeRange;
+  addedFrom: string;
+  addedTo: string;
   // 'none' is a Sound-only pseudo-hero: "show me sound mods whose title
   // doesn't resolve to any known hero" (item sounds, UI, music, etc.).
   // For Mod section it collapses to 'all' since every Skin lives under a hero.
@@ -77,6 +80,8 @@ const DEFAULT_BROWSE_UI: BrowseUiState = {
   section: 'Mod',
   nsfw: 'all',
   addedWithin: 'all',
+  addedFrom: '',
+  addedTo: '',
   heroCategoryId: 'all',
   categoryId: 'all',
 };

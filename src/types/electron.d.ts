@@ -203,7 +203,9 @@ export interface SearchLocalModsOptions {
     skinsCategoryId?: number;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
     nsfw?: 'all' | 'sfw' | 'nsfw';
-    addedWithin?: 'all' | 'today' | 'week' | 'month';
+    addedWithin?: 'all' | 'today' | 'week' | 'month' | 'custom';
+    addedFrom?: number;
+    addedTo?: number;
     limit?: number;
     offset?: number;
 }

@@ -163,13 +163,15 @@ export default function Browse() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, viewMode, sort, section, nsfw, addedWithin, heroCategoryId, categoryId } = browseUi;
+  const { search, viewMode, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
   const setViewMode = useCallback((v: ViewMode) => setBrowseUi({ viewMode: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
   const setNsfw = useCallback((v: BrowseNsfwFilter) => setBrowseUi({ nsfw: v }), [setBrowseUi]);
   const setAddedWithin = useCallback((v: BrowseTimeRange) => setBrowseUi({ addedWithin: v }), [setBrowseUi]);
+  const setAddedFrom = useCallback((v: string) => setBrowseUi({ addedFrom: v }), [setBrowseUi]);
+  const setAddedTo = useCallback((v: string) => setBrowseUi({ addedTo: v }), [setBrowseUi]);
   const setHeroCategoryId = useCallback((v: number | 'all' | 'none') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
   const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
 
@@ -336,6 +338,20 @@ export default function Browse() {
 
   const effectiveSearch = debouncedSearch;
 
+  // Custom-range date inputs (YYYY-MM-DD) -> inclusive Unix-second bounds for the
+  // local query. Parsed as UTC to line up with date_added (a UTC timestamp).
+  // Undefined when not in custom mode, blank, or unparseable.
+  const customAddedFrom = useMemo(() => {
+    if (addedWithin !== 'custom' || !addedFrom) return undefined;
+    const t = Date.parse(`${addedFrom}T00:00:00Z`);
+    return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
+  }, [addedWithin, addedFrom]);
+  const customAddedTo = useMemo(() => {
+    if (addedWithin !== 'custom' || !addedTo) return undefined;
+    const t = Date.parse(`${addedTo}T23:59:59Z`);
+    return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
+  }, [addedWithin, addedTo]);
+
   // Keep a fresh `mods` reference outside the fetch closures so they can check
   // "did the user already have results visible?" without making `mods` a
   // useCallback dep (that would self-trigger). Also doubles as the source
@@ -438,7 +454,7 @@ export default function Browse() {
     // we already loaded. Covers cache hydration on mount AND React
     // StrictMode's double-effect setup. Set BEFORE the network call so
     // a second setup hitting this line sees the stamp and returns.
-    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}`;
+    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}`;
     if (lastFetchedStampRef.current === stamp) return;
     lastFetchedStampRef.current = stamp;
 
@@ -509,6 +525,8 @@ export default function Browse() {
     heroCategoryId,
     nsfw,
     addedWithin,
+    customAddedFrom,
+    customAddedTo,
     useLocalSearch,
   ]);
 
@@ -516,7 +534,7 @@ export default function Browse() {
   const searchLocal = useCallback(async () => {
     // Same value-compare gate as fetchMods so the shared stamp prevents
     // re-fetching cached state and survives StrictMode double-mount.
-    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}`;
+    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}`;
     if (lastFetchedStampRef.current === stamp) return;
     lastFetchedStampRef.current = stamp;
     // Same anti-flash logic as fetchMods: skeleton only on truly empty first
@@ -563,6 +581,8 @@ export default function Browse() {
         sortBy: sortMap[sort] || 'relevance',
         nsfw,
         addedWithin,
+        addedFrom: customAddedFrom,
+        addedTo: customAddedTo,
         limit: perPage,
         offset: (page - 1) * perPage,
       });
@@ -612,7 +632,7 @@ export default function Browse() {
       setLoading(false);
       setLoadingMore(false);
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, nsfw, addedWithin, modCategories]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, modCategories]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
@@ -620,10 +640,10 @@ export default function Browse() {
   // StrictMode's double-effect run (the second setup sees the same stamp
   // and short-circuits, instead of consuming a one-shot skip flag).
   const lastResetFiltersRef = useRef<string | null>(
-    `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${nsfw}|${addedWithin}|${perPage}`
+    `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}`
   );
   useEffect(() => {
-    const current = `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${nsfw}|${addedWithin}|${perPage}`;
+    const current = `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}`;
     if (lastResetFiltersRef.current === current) return;
     lastResetFiltersRef.current = current;
     // Reset pagination when filters change but keep previous results visible
@@ -631,7 +651,7 @@ export default function Browse() {
     // skeleton flash on every keystroke pre-debounce.
     setPage(1);
     setHasMore(true);
-  }, [debouncedSearch, sort, section, effectiveCategoryId, nsfw, addedWithin, perPage]);
+  }, [debouncedSearch, sort, section, effectiveCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, perPage]);
 
   useEffect(() => {
     let active = true;
@@ -1459,6 +1479,8 @@ export default function Browse() {
                               setCategoryId('all');
                               setNsfw('all');
                               setAddedWithin('all');
+                              setAddedFrom('');
+                              setAddedTo('');
                             }}
                             className="text-xs text-text-secondary hover:text-accent cursor-pointer"
                           >
@@ -1532,9 +1554,10 @@ export default function Browse() {
                         )}
 
                         {hasLocalCache && (
-                          <label className="block">
+                          <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Added</span>
                             <select
+                              aria-label="Filter by date added"
                               value={addedWithin}
                               onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
                               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
@@ -1543,8 +1566,33 @@ export default function Browse() {
                               <option value="today">Today</option>
                               <option value="week">This week</option>
                               <option value="month">This month</option>
+                              <option value="custom">Custom range</option>
                             </select>
-                          </label>
+                            {addedWithin === 'custom' && (
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <label className="block">
+                                  <span className="block text-[11px] text-text-tertiary mb-1">From</span>
+                                  <input
+                                    type="date"
+                                    value={addedFrom}
+                                    max={addedTo || undefined}
+                                    onChange={(e) => setAddedFrom(e.target.value)}
+                                    className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                                  />
+                                </label>
+                                <label className="block">
+                                  <span className="block text-[11px] text-text-tertiary mb-1">To</span>
+                                  <input
+                                    type="date"
+                                    value={addedTo}
+                                    min={addedFrom || undefined}
+                                    onChange={(e) => setAddedTo(e.target.value)}
+                                    className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
