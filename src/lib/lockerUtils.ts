@@ -244,9 +244,11 @@ export function detectMinaTextures(mods: Mod[]) {
 }
 
 export function isLockerManagedMod(mod: Mod): boolean {
-  // The Locker cosmetics VPK (applied hero cards) is a managed artifact, never
-  // a hero skin card in its own right.
+  // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
+  // (applied per-ability sounds) are managed artifacts, never hero skin cards
+  // in their own right.
   if (mod.lockerCosmetics) return false;
+  if (mod.lockerSounds) return false;
 
   // Sound-section mods are the Sounds tab's domain (see isLockerManagedSound),
   // never hero skins. They get an auto hero-tag at download time, so guard on

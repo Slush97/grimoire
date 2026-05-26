@@ -17,12 +17,13 @@ import { getAddonsPath } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { inferHeroFromVpk, classifyGlobalModFromVpk } from '../services/vpk';
+import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { getMainWindow } from '../index';
-import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, EditLocalModArgs, GlobalModType, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult } from '../../../src/types/mod';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, EditLocalModArgs, GlobalModType, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -89,6 +90,24 @@ function enrichMod(mod: Mod): Mod {
             setModMetadata(mod.fileName, { globalType: classified });
             globalType = classified;
         }
+        // Per-ability sound footprint. Same lazy + persist + null-sentinel
+        // pattern as globalType, and it shares the cached VPK parse, so the two
+        // classifications cost one directory read between them. Lets the
+        // per-ability sound picker know which abilities a mod offers a sound for.
+        let abilitySounds = metadata.abilitySounds;
+        if (abilitySounds === undefined) {
+            let classified: AbilitySoundClassification | null = null;
+            try {
+                const result = classifyAbilitySoundsFromVpk(mod.path);
+                // Store null ("checked, none") unless a recognized hero matched,
+                // so skins and non-sound mods skip the re-parse on later scans.
+                classified = result && result.dominantHero ? result : null;
+            } catch (err) {
+                console.warn(`[enrichMod] VPK ability-sound classification failed for ${mod.fileName}:`, err);
+            }
+            setModMetadata(mod.fileName, { abilitySounds: classified });
+            abilitySounds = classified;
+        }
         return {
             ...mod,
             // Use the stored mod name from GameBanana if available
@@ -112,6 +131,8 @@ function enrichMod(mod: Mod): Mod {
             globalType: globalType ?? undefined,
             merged: metadata.merged,
             lockerCosmetics: metadata.lockerCosmetics,
+            lockerSounds: metadata.lockerSounds,
+            abilitySounds: abilitySounds ?? undefined,
             ignoreUpdates: metadata.ignoreUpdates,
         };
     }

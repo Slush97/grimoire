@@ -54,6 +54,7 @@ import './ipc/launch';
 import './ipc/social';
 import './ipc/diagnostics';
 import './ipc/portraits';
+import './ipc/abilitySounds';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';

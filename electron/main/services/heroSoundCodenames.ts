@@ -71,3 +71,18 @@ export const HERO_SOUND_CODENAMES: Readonly<Record<string, string>> = {
 export function heroForSoundCodename(codename: string): string | null {
     return HERO_SOUND_CODENAMES[codename.toLowerCase()] ?? null;
 }
+
+// Reverse map (display name -> sound codename), built once. The forward map is
+// 1:1, so this is unambiguous. Only canonical codenames appear (legacy aliases
+// like `geist`/`archer` are merged before lookup elsewhere).
+const SOUND_CODENAME_BY_HERO: Readonly<Record<string, string>> = Object.fromEntries(
+    Object.entries(HERO_SOUND_CODENAMES).map(([codename, name]) => [name.toLowerCase(), codename]),
+);
+
+/**
+ * Resolve a hero display name to its sound-path codename. Case-insensitive.
+ * Returns null when the name isn't a known Deadlock hero.
+ */
+export function soundCodenameForHero(name: string): string | null {
+    return SOUND_CODENAME_BY_HERO[name.trim().toLowerCase()] ?? null;
+}

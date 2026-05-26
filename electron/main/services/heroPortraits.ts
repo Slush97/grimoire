@@ -163,11 +163,13 @@ export async function getHeroPortraits(
 
     const results: HeroPortrait[] = [];
     for (const vpk of vpks) {
-        // Skip our own Locker cosmetics VPK: it holds the already-applied card,
-        // so decoding it would surface a duplicate tile of whatever source it
-        // was built from (the source itself is still scanned and stays the
-        // selectable, "Applied"-marked option).
-        if (getModMetadata(basename(vpk))?.lockerCosmetics) continue;
+        // Skip our own Locker-managed VPKs: the cosmetics VPK holds the
+        // already-applied card, so decoding it would surface a duplicate tile of
+        // whatever source it was built from (the source itself is still scanned
+        // and stays the selectable, "Applied"-marked option). The sound VPK has
+        // no card art, but is excluded on the same "managed artifact" grounds.
+        const portraitMeta = getModMetadata(basename(vpk));
+        if (portraitMeta?.lockerCosmetics || portraitMeta?.lockerSounds) continue;
 
         const tree = parseVpkDirectoryCached(vpk);
         if (!tree) continue;

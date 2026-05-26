@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult } from '../types/mod';
 import type { HeroPortrait } from '../types/portrait';
 import type {
   GameBananaModsResponse,
@@ -97,6 +97,10 @@ export async function getHeroPortraits(heroName: string): Promise<HeroPortrait[]
   return window.electronAPI.getHeroPortraits(heroName);
 }
 
+export async function getHeroAbilitySlots(heroName: string): Promise<HeroAbilitySlot[]> {
+  return window.electronAPI.getHeroAbilitySlots(heroName);
+}
+
 export async function applyHeroCard(
   heroName: string,
   sourceFileName: string
@@ -112,6 +116,26 @@ export async function getActiveHeroCard(
   heroName: string
 ): Promise<{ sourceFileName: string; variants: string[] } | null> {
   return window.electronAPI.getActiveHeroCard(heroName);
+}
+
+export async function applyHeroSound(
+  heroName: string,
+  slot: AbilitySlot,
+  sourceFileName: string,
+  params?: AbilitySoundParams
+): Promise<ApplyHeroSoundResult> {
+  return window.electronAPI.applyHeroSound(heroName, slot, sourceFileName, params);
+}
+
+export async function revertHeroSound(
+  heroName: string,
+  slot: AbilitySlot
+): Promise<ApplyHeroSoundResult> {
+  return window.electronAPI.revertHeroSound(heroName, slot);
+}
+
+export async function getActiveHeroSounds(heroName: string): Promise<ActiveHeroSound[]> {
+  return window.electronAPI.getActiveHeroSounds(heroName);
 }
 
 export async function setModGlobalType(

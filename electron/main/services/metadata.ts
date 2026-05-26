@@ -45,6 +45,16 @@ export interface ModMetadata {
      *  The card selection set; rebuilt on every apply/revert. Presence marks
      *  the VPK as Locker-managed so other surfaces hide it. */
     lockerCosmetics?: import('../../../src/types/mod').LockerCosmeticsInfo;
+    /** Set on the single Locker-managed sound VPK that holds applied per-ability
+     *  sounds. The selection set; rebuilt on every apply/revert. Presence marks
+     *  the VPK as Locker-managed so other surfaces hide it. Separate from
+     *  lockerCosmetics (disjoint paths, independent lifecycle). */
+    lockerSounds?: import('../../../src/types/mod').LockerSoundsInfo;
+    /** Per-ability sound classification from the VPK file tree. Tri-state like
+     *  globalType: an AbilitySoundClassification when the mod has recognized
+     *  hero ability/VO sounds, `null` when classified and it has none, and
+     *  `undefined` when not yet classified (so enrichMod skips the re-parse). */
+    abilitySounds?: import('../../../src/types/mod').AbilitySoundClassification | null;
     /** Load-order slot this mod last held while enabled. Disabled mods now
      *  get free-form filenames (no pakNN), so the priority is no longer encoded
      *  in the name; we stash it here on disable and try to restore it on enable

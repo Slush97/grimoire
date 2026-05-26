@@ -80,6 +80,74 @@ export interface ApplyHeroCardResult {
 }
 
 /**
+ * Optional per-ability volume/pitch retune, applied on top of the chosen clips
+ * via the soundevents codec. Absent (or all-neutral) means the clips play at
+ * their native level. Empty when the bundled vpkmerge lacks the soundevents
+ * packer (pre-v0.4.0).
+ */
+export interface AbilitySoundParams {
+  /** Volume offset in dB added to each retuned event's level (0 = unchanged).
+   *  Soundevents `volume` is an absolute dB field; this offset is layered onto
+   *  the event's current value at synthesis time. */
+  volumeDb?: number;
+  /** Pitch multiplier written to each retuned event (1 = unchanged). Matches the
+   *  soundevents `pitch` field (a multiplier; vanilla values cluster around 1). */
+  pitch?: number;
+}
+
+/**
+ * One per-(hero, ability) sound choice inside the Locker sound VPK. The user
+ * picked this ability's sound out of `source`; the rebuild splits just that
+ * ability's clip paths out of the source and folds them into the consolidated
+ * VPK. (Slot 4 = ultimate; see AbilitySlot.)
+ */
+export interface LockerSoundSelection {
+  heroName: string;
+  heroCodename: string;
+  slot: AbilitySlot;
+  /** Exact `.vsnd_c` paths extracted from the source for this ability. */
+  clipPaths: string[];
+  /** Optional volume/pitch retune for this ability (see AbilitySoundParams). */
+  params?: AbilitySoundParams;
+  source: {
+    /** Source VPK filename at apply time; `sha256AtApplyTime` relocates it if
+     *  reconcile renamed it (same recovery heroCards uses). */
+    fileName: string;
+    modName?: string;
+    gameBananaId?: number;
+    sha256AtApplyTime: string;
+  };
+  addedAt: string;
+}
+
+/**
+ * Manifest on the single Locker-managed sound VPK that holds every applied
+ * per-ability sound. Presence marks the VPK as Locker-managed so other surfaces
+ * hide it. Rebuilt on every apply/revert; no user-facing unmerge. Separate from
+ * lockerCosmetics (cards): disjoint paths, independent lifecycle.
+ */
+export interface LockerSoundsInfo {
+  /** One entry per (heroCodename, slot). */
+  sounds: LockerSoundSelection[];
+  rebuiltAt: string;
+}
+
+export interface ApplyHeroSoundResult {
+  /** Source VPK filename now providing this ability's sound, or null if reverted. */
+  activeSourceFileName: string | null;
+  /** Selections dropped because their source VPK was gone at rebuild time. */
+  missingSourceFileNames: string[];
+}
+
+/** The source (and any volume/pitch retune) applied for one ability slot, read
+ *  back so the picker can reflect the active pick + slider positions. */
+export interface ActiveHeroSound {
+  slot: AbilitySlot;
+  sourceFileName: string;
+  params?: AbilitySoundParams;
+}
+
+/**
  * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
  * alongside the per-hero piles. Most are derived from the VPK file tree by
  * `classifyGlobalModType` (electron/main/services/vpk.ts), since GameBanana's
@@ -95,6 +163,62 @@ export interface ApplyHeroCardResult {
  */
 export type GlobalModType = 'soul-container' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
+
+/** Deadlock ability slot. 1-3 are the signature abilities; 4 is the ultimate. */
+export type AbilitySlot = 1 | 2 | 3 | 4;
+
+/** Reference metadata for one hero ability slot (from deadlock-api). */
+export interface AbilitySlotMeta {
+  /** Internal ability name used in sound paths (e.g. "storm_cloud"). */
+  token: string;
+  /** Localized display name (e.g. "Storm Cloud"). */
+  display: string;
+  /** deadlock-api ability icon URL, or null when unknown. */
+  image: string | null;
+}
+
+/** One hero ability slot for the picker UI: the slot number plus its metadata. */
+export interface HeroAbilitySlot extends AbilitySlotMeta {
+  slot: AbilitySlot;
+}
+
+/**
+ * One hero's ability-sound footprint inside a single mod. A mod can touch more
+ * than one hero (usually a dominant hero plus a stray copy-pasted file), so the
+ * classifier attributes each sound FILE to its (hero, slot) and reports per-hero
+ * contributions rather than collapsing to a single hero.
+ */
+export interface HeroAbilityContribution {
+  /** Canonical hero display name (e.g. "Seven"). */
+  hero: string;
+  /** Count of ability SFX files resolved to each slot. */
+  slots: Partial<Record<AbilitySlot, number>>;
+  /** Ability SFX files under this hero that matched no slot. */
+  unclassified: number;
+  /** Voice-over files under this hero (sounds/vo/<codename>/), not slotted. */
+  voFiles: number;
+  /** Total sound files attributed to this hero (SFX + VO). */
+  total: number;
+}
+
+/**
+ * Result of classifying a sound mod's VPK file list by hero + ability slot.
+ * Drives the per-ability sound picker: which abilities a mod offers a sound for.
+ */
+export interface AbilitySoundClassification {
+  /** Hero with the most attributed files, or null if no hero sound matched. */
+  dominantHero: string | null;
+  /** Per-hero footprint, sorted by total files descending. */
+  perHero: HeroAbilityContribution[];
+  /** True when the mod ships its own hero soundevents (.vsndevts_c). Such a
+   *  mod can repoint/retune events, so its sounds may not mix losslessly with
+   *  another vsndevts mod for the same hero (one file per hero path). */
+  shipsHeroVsndevts: boolean;
+  /** Total ability SFX files (sounds/abilities/<codename>/) seen. */
+  abilitySoundFiles: number;
+  /** Total voice-over files (sounds/vo/<codename>/) seen. */
+  voSoundFiles: number;
+}
 
 export interface Mod {
   id: string;
@@ -139,6 +263,15 @@ export interface Mod {
   /** Set on the single Locker-managed cosmetics VPK that holds applied hero
    *  cards. Other surfaces treat a truthy value as "hide this artifact". */
   lockerCosmetics?: LockerCosmeticsInfo;
+  /** Set on the single Locker-managed sound VPK that holds applied per-ability
+   *  sounds. Like lockerCosmetics, a truthy value means "hide this artifact"
+   *  (it's a Locker output, not a user-installed mod). */
+  lockerSounds?: LockerSoundsInfo;
+  /** Per-ability sound footprint, classified from the VPK file tree for mods
+   *  that ship hero ability sounds (see classifyAbilitySounds). Undefined when
+   *  not yet classified or the mod has no recognized hero ability sounds.
+   *  Drives the per-ability sound picker. */
+  abilitySounds?: AbilitySoundClassification;
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;

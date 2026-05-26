@@ -12,6 +12,7 @@ import {
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
+import HeroSoundPicker from '../components/locker/HeroSoundPicker';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import {
@@ -161,10 +162,23 @@ export default function LockerHero() {
     () => (hero ? heroSkinsByHero.map.get(hero.id) ?? [] : []),
     [hero, heroSkinsByHero]
   );
-  const soundList = useMemo(
-    () => (hero ? heroSoundsByHero.map.get(hero.id) ?? [] : []),
-    [hero, heroSoundsByHero]
-  );
+  const soundList = useMemo(() => {
+    if (!hero) return [];
+    const tagged = heroSoundsByHero.map.get(hero.id) ?? [];
+    // Also surface any installed mod whose VPK ships ability sounds for this
+    // hero, even when it isn't a Sound-section mod: many skins bundle ability
+    // sounds. The classifier (mod.abilitySounds) attributes per hero, matched
+    // on display name; dedupe against the already-tagged Sound mods.
+    const seen = new Set(tagged.map((m) => m.id));
+    const bundled = mods.filter(
+      (m) =>
+        !seen.has(m.id) &&
+        // Never offer the Locker's own sound VPK as a selectable source.
+        !m.lockerSounds &&
+        m.abilitySounds?.perHero.some((h) => h.hero === hero.name)
+    );
+    return bundled.length > 0 ? [...tagged, ...bundled] : tagged;
+  }, [hero, heroSoundsByHero, mods]);
   const skinCount = useMemo(() => countLockerSkins(skinList), [skinList]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
@@ -570,6 +584,8 @@ export function LockerHeroView({
           <div className="space-y-4">
             {activeSection === 'cards' ? (
               <HeroCardPicker heroName={hero.name} />
+            ) : activeSection === 'sounds' ? (
+              <HeroSoundPicker heroName={hero.name} soundList={soundList} onSelect={onSelect} />
             ) : (
             <HeroSkinsPanel
               mods={activeList}
@@ -578,13 +594,8 @@ export function LockerHeroView({
               hideNsfwPreviews={hideNsfwPreviews}
               categoryId={hero.id}
               showDownloadable={activeSection === 'skins'}
-              useHeroPortraitThumbnails={activeSection === 'sounds'}
               heroName={hero.name}
-              emptyMessage={
-                activeSection === 'sounds'
-                  ? 'No sound mods tagged for this hero yet. Tag one from Installed (multi-select → Tag).'
-                  : 'Download a skin for this hero to manage it here.'
-              }
+              emptyMessage="Download a skin for this hero to manage it here."
               minaPresets={activeSection === 'skins' ? minaPresets : []}
               activeMinaPreset={activeSection === 'skins' ? activeMinaPreset : undefined}
               minaTextures={activeSection === 'skins' ? minaTextures : []}

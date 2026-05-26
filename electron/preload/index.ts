@@ -8,6 +8,8 @@ import type {
 import type { SnapshotSummary, SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
 import type {
+    AbilitySlot,
+    AbilitySoundParams,
     AppSettings,
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
@@ -781,12 +783,20 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-mod-locker-hero', modId, heroName),
     getHeroPortraits: (heroName: string) =>
         ipcRenderer.invoke('get-hero-portraits', heroName),
+    getHeroAbilitySlots: (heroName: string) =>
+        ipcRenderer.invoke('get-hero-ability-slots', heroName),
     applyHeroCard: (heroName: string, sourceFileName: string) =>
         ipcRenderer.invoke('apply-hero-card', heroName, sourceFileName),
     revertHeroCard: (heroName: string) =>
         ipcRenderer.invoke('revert-hero-card', heroName),
     getActiveHeroCard: (heroName: string) =>
         ipcRenderer.invoke('get-active-hero-card', heroName),
+    applyHeroSound: (heroName: string, slot: AbilitySlot, sourceFileName: string, params?: AbilitySoundParams) =>
+        ipcRenderer.invoke('apply-hero-sound', heroName, slot, sourceFileName, params),
+    revertHeroSound: (heroName: string, slot: AbilitySlot) =>
+        ipcRenderer.invoke('revert-hero-sound', heroName, slot),
+    getActiveHeroSounds: (heroName: string) =>
+        ipcRenderer.invoke('get-active-hero-sounds', heroName),
     setModGlobalType: (modId: string, globalType: GlobalModType | null) =>
         ipcRenderer.invoke('set-mod-global-type', modId, globalType),
     setModIgnoreUpdates: (modId: string, ignore: boolean) =>
