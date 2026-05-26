@@ -658,9 +658,13 @@ export default function Settings() {
               <div className="rounded-lg bg-bg-tertiary border border-white/10 p-3 text-sm text-text-secondary space-y-2">
                 <p className="text-text-primary font-medium">Updates are managed by your package manager.</p>
                 <p>
-                  Grimoire was installed via a system package. Update with your distro's usual tools (for example{' '}
-                  <code className="font-mono text-text-primary">yay -Syu grimoire-bin</code> on Arch). If you installed the{' '}
-                  <code className="font-mono text-text-primary">.deb</code> directly, re-download the latest release.
+                  Grimoire was installed via a system package. Update with your distro's tools:{' '}
+                  <code className="font-mono text-text-primary">yay -Syu grimoire-bin</code> on Arch, or{' '}
+                  <code className="font-mono text-text-primary">{'sudo apt update && sudo apt upgrade'}</code> on Debian/Ubuntu.
+                </p>
+                <p>
+                  Installed the <code className="font-mono text-text-primary">.deb</code> manually? Add the apt repository for
+                  automatic updates (instructions at <code className="font-mono text-text-primary">grimoiremods.com/download</code>).
                 </p>
               </div>
             )}

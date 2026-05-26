@@ -17,6 +17,7 @@
 
 - Windows: `Grimoire-Setup-x.y.z.exe`
 - Linux: `.AppImage` or `.deb`
+- Debian / Ubuntu (apt, auto-updates): add the repo, then `sudo apt install grimoire` (setup steps in [docs/apt-repo.md](docs/apt-repo.md))
 - Arch Linux: `yay -S grimoire-bin` ([AUR](https://aur.archlinux.org/packages/grimoire-bin))
 
 Requires Deadlock installed via Steam.
