@@ -186,15 +186,44 @@ body {
   @apply w-full;
 }
 
-.browse-stat-item {
+/* Shared icon+label primitive for card stats and metadata; avoid raw SVG+text rows. */
+.icon-text {
   display: inline-flex;
   align-items: center;
-  gap: clamp(4px, 1.8cqw, 5px);
+  gap: 3px;
+  height: 20px;
   min-width: 0;
   white-space: nowrap;
-  font-size: clamp(11px, 4.3cqw, 13px);
-  line-height: 17px;
-  font-weight: 600;
+  line-height: 1;
+}
+
+.icon-text__icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  transform: translateY(-0.5px);
+}
+
+.icon-text__icon svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+  stroke-width: 2;
+}
+
+.icon-text__value {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1;
+}
+
+.browse-stat-item {
   font-variant-numeric: tabular-nums;
 }
 
@@ -211,29 +240,19 @@ body {
 }
 
 .browse-stat-icon {
-  width: clamp(13px, 4.8cqw, 15px);
-  height: clamp(13px, 4.8cqw, 15px);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 clamp(13px, 4.8cqw, 15px);
-  color: color-mix(in srgb, var(--color-text-secondary) 88%, transparent);
+  color: currentColor;
 }
 
 .browse-stat-icon--strong {
   color: color-mix(in srgb, var(--color-text-secondary) 96%, transparent);
 }
 
-.browse-stat-icon svg {
-  width: clamp(13px, 4.8cqw, 15px);
-  height: clamp(13px, 4.8cqw, 15px);
-  display: block;
-  stroke-width: 1.75;
+.browse-stat-value {
+  color: currentColor;
 }
 
-.browse-stat-value {
-  line-height: 17px;
-  color: color-mix(in srgb, var(--color-text-secondary) 86%, transparent);
+.browse-meta-icon {
+  color: currentColor;
 }
 
 .browse-action-button {
@@ -393,6 +412,22 @@ body {
   animation: browseQueueValueSwap 240ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.browse-readable-card {
+  position: relative;
+}
+
+.browse-readable-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.018);
+}
+
 .browse-readable-card:focus-visible {
   box-shadow:
     inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 48%, transparent),
@@ -400,10 +435,38 @@ body {
     0 12px 28px rgba(0, 0, 0, 0.26);
 }
 
+.browse-readable-card-body {
+  background: var(--color-bg-secondary);
+  isolation: isolate;
+}
+
+.browse-readable-card-body > * {
+  position: relative;
+  z-index: 1;
+}
+
+.browse-readable-card-media-fade {
+  position: absolute;
+  inset-inline: 0;
+  bottom: -1px;
+  z-index: 1;
+  height: clamp(26px, 12cqw, 42px);
+  pointer-events: none;
+  background:
+    linear-gradient(
+      to bottom,
+      transparent 0%,
+      color-mix(in srgb, var(--color-bg-secondary) 18%, transparent) 42%,
+      color-mix(in srgb, var(--color-bg-secondary) 70%, transparent) 78%,
+      var(--color-bg-secondary) 100%
+    );
+}
+
 .browse-readable-card-media::after {
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 2;
   pointer-events: none;
   opacity: 0;
   background: color-mix(in srgb, var(--color-accent) 10%, transparent);
@@ -460,8 +523,33 @@ body {
     transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+.browse-art-parallax-card {
+  --browse-art-x: 0px;
+  --browse-art-y: 0px;
+  --browse-art-rotate: 0deg;
+}
+
 .browse-card-media-zoom {
-  transition: transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: center;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .browse-art-parallax-card:not([data-parallax-disabled='true']):hover > .browse-card-hover-surface {
+    transform: translateY(-2px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.055),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.024),
+      0 14px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .browse-art-parallax-card:not([data-parallax-disabled='true']):hover .browse-card-media-zoom {
+    transform:
+      translate3d(var(--browse-art-x), var(--browse-art-y), 0)
+      scale(1.018)
+      rotate(var(--browse-art-rotate)) !important;
+  }
 }
 
 .browse-is-scrolling .browse-card-hover-surface:hover {
@@ -470,9 +558,11 @@ body {
 }
 
 .browse-readable-card:hover {
-  transform: translateY(-2px);
-  border-color: color-mix(in srgb, var(--color-accent) 30%, transparent);
-  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+  border-color: rgba(235, 240, 250, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.024),
+    0 14px 30px rgba(0, 0, 0, 0.3);
 }
 
 .browse-is-scrolling .browse-readable-card:hover {
@@ -488,7 +578,7 @@ body {
 }
 
 .browse-card-hover-surface:hover .browse-card-media-zoom {
-  transform: scale(1.02) !important;
+  transform: scale(1.02);
 }
 
 .browse-is-scrolling .group:hover .browse-sound-placeholder::before {
@@ -819,10 +909,16 @@ body {
   }
 
   .browse-readable-card,
+  .browse-card-media-zoom,
   .browse-readable-card-media::after,
   .browse-sound-placeholder::before,
   .browse-sound-wave-bar {
     transition-duration: 0.01ms;
+  }
+
+  .browse-card-media-zoom {
+    transform: none !important;
+    will-change: auto;
   }
 
   /* Keep the stripe pattern visible (it carries meaning) but stop the slide. */

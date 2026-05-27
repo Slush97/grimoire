@@ -55,6 +55,7 @@ import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { Button, Tag } from '../components/common/ui';
+import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
 import ImportCollectionModal from '../components/ImportCollectionModal';
@@ -407,9 +408,87 @@ function BrowseReadableUpdatedLine({ timestamp }: { timestamp?: number }) {
   );
 }
 
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => (
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false
+  ));
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+    setPrefersReducedMotion(mediaQuery.matches);
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+}
+
+function BrowseArtParallaxCard({
+  children,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const effectDisabled = disabled || prefersReducedMotion;
+
+  const resetParallax = useCallback(() => {
+    const element = cardRef.current;
+    if (!element) return;
+
+    element.style.setProperty('--browse-art-x', '0px');
+    element.style.setProperty('--browse-art-y', '0px');
+    element.style.setProperty('--browse-art-rotate', '0deg');
+  }, []);
+
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (effectDisabled || event.pointerType !== 'mouse') return;
+
+    const element = cardRef.current;
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / Math.max(rect.width, 1);
+    const y = (event.clientY - rect.top) / Math.max(rect.height, 1);
+    const moveX = (0.5 - x) * 4;
+    const moveY = (0.5 - y) * 4;
+    const rotate = (x - 0.5) * 0.2;
+
+    element.style.setProperty('--browse-art-x', `${moveX.toFixed(2)}px`);
+    element.style.setProperty('--browse-art-y', `${moveY.toFixed(2)}px`);
+    element.style.setProperty('--browse-art-rotate', `${rotate.toFixed(2)}deg`);
+  }, [effectDisabled]);
+
+  useEffect(() => {
+    if (effectDisabled) resetParallax();
+  }, [effectDisabled, resetParallax]);
+
+  return (
+    <div
+      ref={cardRef}
+      className="browse-art-parallax-card group relative w-full"
+      data-parallax-disabled={effectDisabled ? 'true' : undefined}
+      onPointerMove={handlePointerMove}
+      onPointerCancel={resetParallax}
+      onPointerLeave={resetParallax}
+    >
+      {children}
+    </div>
+  );
+}
+
 function BrowseStatItem({
   type,
-  icon: Icon,
+  icon,
   value,
   title,
   align = 'start',
@@ -426,23 +505,23 @@ function BrowseStatItem({
     align === 'center' ? 'browse-stat-item--center' : align === 'end' ? 'browse-stat-item--end' : 'browse-stat-item--start';
 
   return (
-    <span
+    <IconText
+      icon={icon}
       className={`browse-stat-item ${alignmentClass}`}
       title={title}
+      iconClassName={`browse-stat-icon browse-stat-icon--${type}${emphasis === 'strong' ? ' browse-stat-icon--strong' : ''}`}
+      valueClassName="browse-stat-value"
     >
-      <span className={`browse-stat-icon browse-stat-icon--${type}${emphasis === 'strong' ? ' browse-stat-icon--strong' : ''}`}>
-        <Icon aria-hidden="true" />
-      </span>
-      <span className="browse-stat-value">{value}</span>
-    </span>
+      {value}
+    </IconText>
   );
 }
 
 function BrowseReadableStatsRow({ mod, density }: { mod: GameBananaMod; density: BrowseReadableDensity }) {
   const isMicro = density === 'micro';
   const groupClass = isMicro
-    ? 'grid w-full grid-cols-2 items-center'
-    : 'flex h-4 min-w-0 flex-1 items-center gap-[clamp(5px,2.5cqw,10px)] text-text-tertiary/60';
+    ? 'grid w-full grid-cols-2 items-center text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/70'
+    : 'flex h-5 min-w-0 flex-1 items-center gap-[clamp(5px,2.5cqw,10px)] text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/60';
   const itemEmphasis = isMicro ? 'strong' : 'muted';
 
   return (
@@ -2849,7 +2928,6 @@ function ReadableBrowseModCard({
   const footerHeightClass = isMicro
     ? 'h-6'
     : 'h-[clamp(24px,10cqw,32px)]';
-
   const media = isSoundSection ? (
     <div className="relative h-full w-full overflow-hidden bg-bg-tertiary">
       {heroRenderUrl ? (
@@ -2932,13 +3010,12 @@ function ReadableBrowseModCard({
     >
       <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-md bg-bg-tertiary`}>
         {media}
-        <div
-          className="pointer-events-none absolute inset-x-0 bottom-[-2px] h-[calc(3rem+2px)] bg-gradient-to-b from-transparent via-bg-secondary/45 to-bg-secondary shadow-[inset_0_-4px_0_var(--color-bg-secondary)]"
-          aria-hidden="true"
-        />
+        <div className="browse-readable-card-media-fade" aria-hidden="true" />
       </div>
 
-      <div className={`relative -mt-[2px] flex flex-none flex-col bg-bg-secondary ${bodyPaddingClass}`}>
+      <div
+        className={`browse-readable-card-body relative flex flex-none flex-col ${bodyPaddingClass}`}
+      >
         {showChips && (
           <BrowseReadableChipRow
             chips={chips}
@@ -3165,7 +3242,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 alt={inferredHero ?? mod.name}
                 loading="lazy"
                 decoding="async"
-                className="w-full h-full object-cover"
+                className="browse-card-media-zoom w-full h-full object-cover"
                 style={{ objectPosition: `${heroFacePos}% 25%` }}
               />
             ) : thumbnail ? (
@@ -3214,16 +3291,19 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             )}
           </div>
           <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
-            <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className="h-3 w-3 shrink-0" />{formatCount(mod.likeCount)}</span>
-            <span className="inline-flex items-center gap-1 leading-none"><Eye className="h-3 w-3 shrink-0" />{formatCount(mod.viewCount)}</span>
+            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
+            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.nsfw && <Tag tone="danger">18+</Tag>}
           </div>
           {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
           {mod.dateModified > 0 && (
-            <div className={`flex items-center gap-1 mt-1 text-xs ${isModOutdated(mod.dateModified) ? 'text-state-warning' : 'text-text-secondary'}`}>
-              {isModOutdated(mod.dateModified) ? <AlertTriangle className="w-3 h-3 flex-shrink-0" /> : <Clock className="w-3 h-3 flex-shrink-0" />}
+            <IconText
+              icon={isModOutdated(mod.dateModified) ? AlertTriangle : Clock}
+              className={`mt-1 max-w-full text-xs ${isModOutdated(mod.dateModified) ? 'text-state-warning' : 'text-text-secondary'}`}
+              iconClassName="browse-meta-icon"
+            >
               <span className="truncate">{isModOutdated(mod.dateModified) ? 'Outdated · ' : ''}{formatDate(mod.dateModified)}</span>
-            </div>
+            </IconText>
           )}
         </div>
 
@@ -3269,60 +3349,63 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   // Grid/Compact: overlay card — image fills card, info overlaid at bottom
   if (cardDesign === 'readable') {
     return (
-      <ReadableBrowseModCard
-        mod={mod}
-        installed={installed}
-        installedDisabled={installedDisabled}
-        downloading={downloading}
-        queuePosition={queuePosition}
-        viewMode={viewMode}
-        cardDesign={cardDesign}
-        cardSize={cardSize}
-        cardHeight={cardHeight}
-        section={section}
-        volume={volume}
-        onVolumeChange={onVolumeChange}
-        hideNsfwPreviews={hideNsfwPreviews}
-        isPlaying={isPlaying}
-        suppressHoverIntent={suppressHoverIntent}
-        onPlayingChange={onPlayingChange}
-        onClick={onClick}
-        onQuickDownload={onQuickDownload}
-        onEnable={onEnable}
-      />
+      <BrowseArtParallaxCard disabled={suppressHoverIntent}>
+        <ReadableBrowseModCard
+          mod={mod}
+          installed={installed}
+          installedDisabled={installedDisabled}
+          downloading={downloading}
+          queuePosition={queuePosition}
+          viewMode={viewMode}
+          cardDesign={cardDesign}
+          cardSize={cardSize}
+          cardHeight={cardHeight}
+          section={section}
+          volume={volume}
+          onVolumeChange={onVolumeChange}
+          hideNsfwPreviews={hideNsfwPreviews}
+          isPlaying={isPlaying}
+          suppressHoverIntent={suppressHoverIntent}
+          onPlayingChange={onPlayingChange}
+          onClick={onClick}
+          onQuickDownload={onQuickDownload}
+          onEnable={onEnable}
+        />
+      </BrowseArtParallaxCard>
     );
   }
 
   const isOutdated = mod.dateModified > 0 && isModOutdated(mod.dateModified);
   return (
-    <div
-      onClick={onClick}
-      onKeyDown={(e) => handleCardKeyDown(e, onClick)}
-      onMouseEnter={() => {
-        if (!suppressHoverIntent) setAudioControlsActive(true);
-      }}
-      onMouseLeave={() => {
-        if (!isPlaying) setAudioControlsActive(false);
-      }}
-      onFocus={() => setAudioControlsActive(true)}
-      onBlur={(event) => {
-        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
-          setAudioControlsActive(false);
-        }
-      }}
-      role="button"
-      tabIndex={0}
-      aria-label={`Open details for ${mod.name}`}
-      className={`browse-card-hover-surface relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
-        isPlaying
-          ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
-          : downloading
-            ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
-            : installed
-              ? 'border-state-success/40 hover:border-state-success/70'
-              : 'border-border hover:border-accent/50'
-      }`}
-    >
+    <BrowseArtParallaxCard disabled={suppressHoverIntent}>
+      <div
+        onClick={onClick}
+        onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+        onMouseEnter={() => {
+          if (!suppressHoverIntent) setAudioControlsActive(true);
+        }}
+        onMouseLeave={() => {
+          if (!isPlaying) setAudioControlsActive(false);
+        }}
+        onFocus={() => setAudioControlsActive(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
+            setAudioControlsActive(false);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`Open details for ${mod.name}`}
+        className={`browse-card-hover-surface relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+          isPlaying
+            ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
+            : downloading
+              ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
+              : installed
+                ? 'border-state-success/40 hover:border-state-success/70'
+                : 'border-border hover:border-accent/50'
+        }`}
+      >
       {/* Full-bleed image */}
       <div className="absolute inset-0">
         {isSoundSection ? (
@@ -3333,11 +3416,11 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 alt={inferredHero ?? mod.name}
                 loading="lazy"
                 decoding="async"
-                className="w-full h-full object-cover"
+                className="browse-card-media-zoom w-full h-full object-cover"
                 style={{ objectPosition: `${heroFacePos}% 20%` }}
               />
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
             )}
@@ -3360,7 +3443,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             )}
           </div>
         ) : (
-          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
+          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" />
         )}
       </div>
 
@@ -3410,8 +3493,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           )}
           <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
           <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
-            <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className="h-3 w-3 shrink-0" />{formatCount(mod.likeCount)}</span>
-            <span className="inline-flex items-center gap-1 leading-none"><Eye className="h-3 w-3 shrink-0" />{formatCount(mod.viewCount)}</span>
+            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
+            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
         </div>
@@ -3419,15 +3502,18 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
           <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
           <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
-            <span className="inline-flex items-center gap-1 leading-none"><ThumbsUp className={isCompact ? 'h-3 w-3 shrink-0' : 'h-3.5 w-3.5 shrink-0'} />{formatCount(mod.likeCount)}</span>
-            <span className="inline-flex items-center gap-1 leading-none"><Eye className={isCompact ? 'h-3 w-3 shrink-0' : 'h-3.5 w-3.5 shrink-0'} />{formatCount(mod.viewCount)}</span>
+            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
+            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
           {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
-            <div className={`flex items-center gap-1 mt-1 text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}>
-              <AlertTriangle className={isCompact ? 'w-3 h-3 flex-shrink-0' : 'w-3.5 h-3.5 flex-shrink-0'} />
+            <IconText
+              icon={AlertTriangle}
+              className={`mt-1 max-w-full text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}
+              iconClassName="browse-meta-icon"
+            >
               <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
-            </div>
+            </IconText>
           )}
         </div>
       )}
@@ -3559,7 +3645,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </button>
         )}
       </div>
-    </div>
+      </div>
+    </BrowseArtParallaxCard>
   );
 }
 
