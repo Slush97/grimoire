@@ -205,6 +205,16 @@ export default function Browse() {
   const [extracting, setExtracting] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(() => initialCache?.hasMore ?? true);
+  // A page>1 (or stale-results) fetch failure routes here instead of `error`
+  // so the already-loaded grid stays on screen and only the load-more row
+  // surfaces the failure. `error` stays reserved for the no-results case.
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  // Set when a browse fetch fails. Freezes the infinite-scroll observer so it
+  // stops auto-advancing the page into an API that's already refusing requests.
+  // Without this, a rate-limited fetch + auto-retry looped, flashing the grid
+  // between results and the error state (issue #99). Lifted on filter change,
+  // refresh, or an explicit retry.
+  const [autoLoadPaused, setAutoLoadPaused] = useState(false);
 
   // Last fetch's identity stamp. Value-comparison gate: if the next call to
   // fetchMods/searchLocal would target the same (page + filters), skip it.
@@ -510,7 +520,17 @@ export default function Browse() {
       setTotalCount(response.totalCount);
       setHasMore(response.records.length === perPage && page * perPage < response.totalCount);
     } catch (err) {
-      setError(String(err));
+      const message = String(err);
+      // Keep any already-loaded results on screen: route the failure to the
+      // inline load-more row rather than `error`, which would blank the whole
+      // grid. Only a truly empty list falls back to the full-page error state.
+      if (modsRef.current.length > 0) {
+        setLoadMoreError(message);
+      } else {
+        setError(message);
+      }
+      // Stop the observer from auto-retrying against an API that just refused.
+      setAutoLoadPaused(true);
     } finally {
       setLoading(false);
       setLoadingMore(false);
@@ -651,6 +671,10 @@ export default function Browse() {
     // skeleton flash on every keystroke pre-debounce.
     setPage(1);
     setHasMore(true);
+    // New filters: drop any prior load-more failure and re-enable
+    // auto-pagination for the fresh result set.
+    setLoadMoreError(null);
+    setAutoLoadPaused(false);
   }, [debouncedSearch, sort, section, effectiveCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, perPage]);
 
   useEffect(() => {
@@ -839,8 +863,10 @@ export default function Browse() {
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        // Load more when reaching bottom and not already loading
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+        // Load more when reaching bottom and not already loading. autoLoadPaused
+        // gates this after a fetch failure so a refusing API isn't hammered in a
+        // loop (the sentinel re-enters view when the grid shrinks).
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore && !autoLoadPaused) {
           setPage(prev => prev + 1);
         }
       },
@@ -852,7 +878,7 @@ export default function Browse() {
     }
 
     return () => observerRef.current?.disconnect();
-  }, [hasMore, loading, loadingMore]);
+  }, [hasMore, loading, loadingMore, autoLoadPaused]);
 
   // Background fetch download counts for visible mods (using global cache with TTL)
   // DISABLED: This makes N API calls per page load which is very slow and risks rate limiting.
@@ -908,6 +934,9 @@ export default function Browse() {
       setMods([]);
       setHasMore(true);
       setPage(1);
+      setError(null);
+      setLoadMoreError(null);
+      setAutoLoadPaused(false);
       setRefreshKey(k => k + 1);
     } catch (err) {
       setError(String(err));
@@ -915,6 +944,20 @@ export default function Browse() {
       setSyncing(false);
     }
   };
+
+  // Retry a failed browse fetch (full-page or load-more). Clears the failure
+  // flags, lifts the auto-pagination pause, and forces a re-fetch of the
+  // current page. The stamp guard would otherwise treat the retry as a
+  // duplicate and skip it, so the stamp is cleared too. loadingMore is set
+  // up front so the observer can't also advance the page in the same commit.
+  const handleRetryFetch = useCallback(() => {
+    setError(null);
+    setLoadMoreError(null);
+    setAutoLoadPaused(false);
+    setLoadingMore(true);
+    lastFetchedStampRef.current = null;
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   const handleModClick = async (mod: GameBananaMod) => {
     try {
@@ -1636,18 +1679,22 @@ export default function Browse() {
               </div>
             );
           }
-          if (error) {
-            return (
-              <EmptyState
-                icon={AlertTriangle}
-                title="Couldn't load mods"
-                description={renderErrorWithLinks(error)}
-                variant="error"
-                action={<Button onClick={fetchMods}>Retry</Button>}
-              />
-            );
-          }
+          // Only blank the page for the error/empty states when there are no
+          // results to show. When the grid already has mods, a fetch failure
+          // is surfaced inline at the load-more row instead (see below), so the
+          // grid never flashes out from under the user.
           if (displayMods.length === 0) {
+            if (error) {
+              return (
+                <EmptyState
+                  icon={AlertTriangle}
+                  title="Couldn't load mods"
+                  description={renderErrorWithLinks(error)}
+                  variant="error"
+                  action={<Button onClick={handleRetryFetch}>Retry</Button>}
+                />
+              );
+            }
             return (
               <EmptyState
                 icon={Search}
@@ -1715,7 +1762,16 @@ export default function Browse() {
               <span className="text-sm">Loading more...</span>
             </div>
           )}
-          {!hasMore && mods.length > 0 && !loadingMore && (
+          {loadMoreError && !loadingMore && (
+            <div className="flex flex-col items-center gap-2 text-center max-w-md">
+              <div className="flex items-center gap-2 text-text-secondary">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+                <span className="text-sm">Couldn't load more. {renderErrorWithLinks(loadMoreError)}</span>
+              </div>
+              <Button onClick={handleRetryFetch} variant="secondary" size="sm">Retry</Button>
+            </div>
+          )}
+          {!hasMore && !loadMoreError && mods.length > 0 && !loadingMore && (
             <span className="text-sm text-text-secondary">No more mods to load</span>
           )}
         </div>
