@@ -21,11 +21,15 @@ import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import { getAddonsPath, getDisabledPath, getCitadelPath } from './deadlock';
+import { getAddonsPath, getDisabledPath, getCitadelPath, getGrimoirePath } from './deadlock';
 import { invalidateVpkParseCache } from './vpk';
-import { runVpkmerge, runVpkmergeStdout, vpkmergeBinaryPath, verifyVpkOutput, reserveOutputSlot } from './modMerger';
-import { findNextAvailablePriority } from './mods';
-import { pinLockerVpksToFront } from './lockerVpk';
+import { runVpkmerge, runVpkmergeStdout, vpkmergeBinaryPath, verifyVpkOutput } from './modMerger';
+import {
+    LOCKER_SOUNDS_KEY,
+    lockerSoundsVpkPath,
+    ensureGrimoireConfigured,
+    migrateManagedVpksToGrimoire,
+} from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { soundCodenameForHero } from './heroSoundCodenames';
@@ -68,13 +72,25 @@ async function listAddonVpks(deadlockPath: string): Promise<VpkRef[]> {
     return out;
 }
 
-/** The single Locker sound VPK (metadata carries `lockerSounds`), or null. */
+/** The single Locker sound VPK (metadata carries `lockerSounds`), or null. Only
+ *  finds a PRE-migration copy still in addons/.disabled; the migrated copy lives
+ *  in grimoire with its selections under the synthetic key. */
 function findSoundsVpk(vpks: VpkRef[]): { ref: VpkRef; info: LockerSoundsInfo } | null {
     for (const v of vpks) {
         const info = getModMetadata(v.fileName)?.lockerSounds;
         if (info) return { ref: v, info };
     }
     return null;
+}
+
+/** The current sound selection set, read from the synthetic key (post-migration)
+ *  or, as a fallback during the pre-migration window, from an in-addons managed
+ *  VPK. */
+async function currentSoundSelections(deadlockPath: string): Promise<LockerSoundSelection[]> {
+    const synth = getModMetadata(LOCKER_SOUNDS_KEY)?.lockerSounds?.sounds;
+    if (synth) return synth;
+    const vpks = await listAddonVpks(deadlockPath);
+    return findSoundsVpk(vpks)?.info.sounds ?? [];
 }
 
 /** Locate a source VPK by filename, falling back to content hash if reconcile
@@ -183,9 +199,9 @@ async function rebuildLockerSounds(
     deadlockPath: string,
     desired: LockerSoundSelection[],
 ): Promise<RebuildResult> {
-    const addonsPath = getAddonsPath(deadlockPath);
+    const grimoireDir = getGrimoirePath(deadlockPath);
+    const destPath = lockerSoundsVpkPath(deadlockPath);
     const vpks = await listAddonVpks(deadlockPath);
-    const existing = findSoundsVpk(vpks);
 
     // Resolve each selection's source (relocating by hash) and re-derive the
     // clips it still ships for that (hero, slot). Anything unresolved is dropped.
@@ -202,24 +218,22 @@ async function rebuildLockerSounds(
     }
 
     if (valid.length === 0) {
-        if (existing) {
-            await fs.unlink(existing.ref.path).catch(() => {});
-            removeModMetadata(existing.ref.fileName);
-            invalidateVpkParseCache(existing.ref.path);
-        }
+        await fs.unlink(destPath).catch(() => {});
+        removeModMetadata(LOCKER_SOUNDS_KEY);
+        invalidateVpkParseCache(destPath);
         return { fileName: null, missing };
     }
 
     const tag = `.locker-sounds-build-${randomUUID()}`;
     const planDir = join(app.getPath('userData'), 'locker-sounds-build', randomUUID());
-    const buildOut = join(addonsPath, `${tag}.out.vpk`);
+    const buildOut = join(grimoireDir, `${tag}.out.vpk`);
     const chunkPaths: string[] = [];
     try {
         await fs.mkdir(planDir, { recursive: true });
         for (let i = 0; i < valid.length; i++) {
             const sel = valid[i];
             const src = vpks.find((v) => v.fileName === sel.source.fileName)!;
-            const chunkPath = join(addonsPath, `${tag}.chunk${i}.vpk`);
+            const chunkPath = join(grimoireDir, `${tag}.chunk${i}.vpk`);
             const planPath = join(planDir, `plan${i}.json`);
             // Each clip's full path used as an AnyPrefix predicate matches only
             // that file, so the chunk is exactly this (hero, slot)'s clips.
@@ -246,7 +260,7 @@ async function rebuildLockerSounds(
         }
         let sndIdx = 0;
         for (const [codename, sels] of paramByHero) {
-            const chunkPath = join(addonsPath, `${tag}.snd${sndIdx++}.vpk`);
+            const chunkPath = join(grimoireDir, `${tag}.snd${sndIdx++}.vpk`);
             try {
                 if (await synthesizeHeroSoundeventsChunk(deadlockPath, codename, sels, chunkPath)) {
                     chunkPaths.push(chunkPath);
@@ -267,49 +281,17 @@ async function rebuildLockerSounds(
         }
         await verifyVpkOutput(buildOut);
 
-        let destFileName: string;
-        let destPath: string;
-        // Reuse the existing sound VPK in place ONLY when it's enabled. A prior
-        // copy parked in .disabled/ (e.g. left over from before the heal, or a
-        // half-finished vanilla stash) carries a free-form name in the disabled
-        // folder; rebuilding into that path would leave the freshly applied sounds
-        // disabled and silent in game (and pinLockerVpksToFront would skip it
-        // since it isn't enabled). Drop the stale disabled copy and mint a fresh
-        // enabled pakNN slot instead.
-        if (existing && existing.ref.enabled) {
-            destFileName = existing.ref.fileName;
-            destPath = existing.ref.path;
-            await fs.rename(buildOut, destPath);
-        } else {
-            if (existing) {
-                await fs.unlink(existing.ref.path).catch(() => {});
-                removeModMetadata(existing.ref.fileName);
-                invalidateVpkParseCache(existing.ref.path);
-            }
-            const slot = await findNextAvailablePriority(deadlockPath);
-            destFileName = `pak${String(slot).padStart(2, '0')}_dir.vpk`;
-            destPath = join(addonsPath, destFileName);
-            await reserveOutputSlot(destPath);
-            await fs.rename(buildOut, destPath);
-            removeModMetadata(destFileName);
-        }
+        // Swap into the FIXED grimoire slot (overwrite). The grimoire folder wins
+        // by SearchPaths precedence, so no load-order pinning is needed and the
+        // selection set lives under the synthetic key, not the VPK filename.
+        await fs.unlink(destPath).catch(() => {});
+        await fs.rename(buildOut, destPath);
         invalidateVpkParseCache(destPath);
 
         const info: LockerSoundsInfo = { sounds: valid, rebuiltAt: new Date().toISOString() };
-        // globalType: null keeps it off the Locker Global axis, and
-        // abilitySounds: null keeps this VPK out of the sound picker's own source
-        // list (it ships ability clips, so without the sentinel enrichMod would
-        // classify it and re-offer it as a selectable source). enrichMod skips
-        // both classifications when metadata already carries a result.
-        setModMetadata(destFileName, {
-            modName: 'Locker Sounds',
-            lockerSounds: info,
-            globalType: null,
-            abilitySounds: null,
-        });
+        setModMetadata(LOCKER_SOUNDS_KEY, { modName: 'Locker Sounds', lockerSounds: info });
 
-        await pinLockerVpksToFront(deadlockPath);
-        return { fileName: destFileName, missing };
+        return { fileName: destPath, missing };
     } finally {
         await Promise.all([
             ...chunkPaths.map((p) => fs.unlink(p).catch(() => {})),
@@ -331,8 +313,12 @@ export async function applyHeroSound(
     params?: AbilitySoundParams,
 ): Promise<ApplyHeroSoundResult> {
     vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
+    ensureGrimoireConfigured(deadlockPath);
     const codename = soundCodenameForHero(heroName);
     if (!codename) throw new Error(`Unknown hero: ${heroName}`);
+    // Idempotent: relocates any not-yet-migrated managed VPK so `current` reads
+    // from the synthetic key even if config was fixed mid-session.
+    await migrateManagedVpksToGrimoire(deadlockPath);
 
     const vpks = await listAddonVpks(deadlockPath);
     const src = vpks.find((v) => v.fileName === sourceFileName);
@@ -362,7 +348,7 @@ export async function applyHeroSound(
         addedAt: new Date().toISOString(),
     };
 
-    const current = findSoundsVpk(vpks)?.info.sounds ?? [];
+    const current = await currentSoundSelections(deadlockPath);
     const next = [
         ...current.filter((s) => !(s.heroCodename === codename && s.slot === slot)),
         selection,
@@ -382,12 +368,13 @@ export async function revertHeroSound(
 ): Promise<ApplyHeroSoundResult> {
     const codename = soundCodenameForHero(heroName);
     if (!codename) throw new Error(`Unknown hero: ${heroName}`);
+    ensureGrimoireConfigured(deadlockPath);
+    await migrateManagedVpksToGrimoire(deadlockPath);
 
-    const vpks = await listAddonVpks(deadlockPath);
-    const existing = findSoundsVpk(vpks);
-    if (!existing) return { activeSourceFileName: null, missingSourceFileNames: [] };
+    const current = await currentSoundSelections(deadlockPath);
+    if (current.length === 0) return { activeSourceFileName: null, missingSourceFileNames: [] };
 
-    const next = existing.info.sounds.filter(
+    const next = current.filter(
         (s) => !(s.heroCodename === codename && s.slot === slot),
     );
     const { missing } = await rebuildLockerSounds(deadlockPath, next);
@@ -402,10 +389,8 @@ export async function getActiveHeroSounds(
 ): Promise<ActiveHeroSound[]> {
     const codename = soundCodenameForHero(heroName);
     if (!codename) return [];
-    const vpks = await listAddonVpks(deadlockPath);
-    const info = findSoundsVpk(vpks)?.info;
-    if (!info) return [];
-    return info.sounds
+    const sounds = await currentSoundSelections(deadlockPath);
+    return sounds
         .filter((s) => s.heroCodename === codename)
         .map((s) => ({ slot: s.slot, sourceFileName: s.source.fileName, params: s.params }));
 }

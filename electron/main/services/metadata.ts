@@ -262,7 +262,12 @@ export const deleteModMetadata = removeModMetadata;
  */
 export function pruneOrphanMetadata(validFileNames: Set<string>): void {
     const metadata = loadMetadata();
-    const orphans = Object.keys(metadata).filter((key) => !validFileNames.has(key));
+    // Synthetic `locker:*` keys hold the Locker-managed selection sets (cards /
+    // sounds), which live in citadel/grimoire and are NOT scanned filenames, so
+    // they must never be treated as orphans.
+    const orphans = Object.keys(metadata).filter(
+        (key) => !key.startsWith('locker:') && !validFileNames.has(key),
+    );
     if (orphans.length === 0) return;
 
     for (const key of orphans) {

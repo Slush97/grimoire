@@ -176,6 +176,24 @@ export function getDisabledPath(deadlockPath: string): string {
 }
 
 /**
+ * Get the Grimoire-managed addon folder path, creating it if necessary.
+ *
+ * This is a SECOND addon search path (sibling of citadel/addons), listed FIRST
+ * in gameinfo.gi's SearchPaths so it outranks every user mod. It holds only the
+ * Locker-managed override VPKs (hero cards + ability sounds), keeping them off
+ * the user's 99-slot citadel/addons budget while still winning every collision.
+ */
+export function getGrimoirePath(deadlockPath: string): string {
+    const grimoirePath = join(deadlockPath, 'game', 'citadel', 'grimoire');
+
+    if (!existsSync(grimoirePath)) {
+        mkdirSync(grimoirePath, { recursive: true });
+    }
+
+    return grimoirePath;
+}
+
+/**
  * Get the gameinfo.gi file path
  */
 export function getGameinfoPath(deadlockPath: string): string {

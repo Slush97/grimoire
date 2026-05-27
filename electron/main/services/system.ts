@@ -1,10 +1,11 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renameSync } from 'fs';
 import { join, extname } from 'path';
-import { getGameinfoPath, getAddonsPath, getDisabledPath, getCitadelPath } from './deadlock';
+import { getGameinfoPath, getAddonsPath, getDisabledPath, getCitadelPath, getGrimoirePath } from './deadlock';
 
 // The canonical SearchPaths block for Deadlock with mod support
 const SEARCH_PATHS_BLOCK = `SearchPaths
 	{
+		Game				citadel/grimoire
 		Game				citadel/addons
 		Mod				citadel
 		Write				citadel
@@ -93,6 +94,25 @@ function hasActiveAddonPath(searchPathsBody: string): boolean {
     });
 }
 
+// True when the SearchPaths body has an active entry pointing the engine at
+// citadel/grimoire, the Grimoire-managed override folder (Locker cards + ability
+// sounds). Listed first in the canonical block so it outranks every user mod;
+// matched as a complete token, ignoring comments, same as the addons check.
+function hasActiveGrimoirePath(searchPathsBody: string): boolean {
+    return searchPathsBody.split(/\r?\n/).some((line) => {
+        const code = line.split('//')[0];
+        return /citadel[\\/]+grimoire(?![\\/\w])/i.test(code);
+    });
+}
+
+// Both required search paths are present and active. The grimoire path is what
+// makes applied Locker cards/sounds win, so an install missing it (e.g. a
+// pre-grimoire 1.13.x user, or a game update that reset gameinfo.gi) reads as
+// not-yet-configured and Fix Configuration rewrites the canonical block.
+function hasRequiredSearchPaths(searchPathsBody: string): boolean {
+    return hasActiveAddonPath(searchPathsBody) && hasActiveGrimoirePath(searchPathsBody);
+}
+
 // Preserve the first version we touch. Never overwrites an existing backup so the
 // oldest (closest-to-original) copy is kept. Best-effort: a failed backup must
 // not block the repair itself.
@@ -143,7 +163,7 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
         const content = readFileSync(gameinfoPath, 'utf-8');
         const block = findSearchPathsBlock(content);
 
-        if (block && hasActiveAddonPath(block.body)) {
+        if (block && hasRequiredSearchPaths(block.body)) {
             return {
                 configured: true,
                 missing: false,
@@ -202,7 +222,7 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         const block = findSearchPathsBlock(content);
 
         // Already correct: an active addon path inside a real SearchPaths block.
-        if (block && hasActiveAddonPath(block.body)) {
+        if (block && hasRequiredSearchPaths(block.body)) {
             return {
                 configured: true,
                 missing: false,
@@ -243,6 +263,10 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         // Keep a one-time recovery copy before the first write.
         backupGameinfoOnce(gameinfoPath, content);
         writeFileSync(gameinfoPath, next, 'utf-8');
+
+        // Ensure the grimoire override folder exists so its (now-active) search
+        // path points at a real directory rather than a missing one.
+        getGrimoirePath(deadlockPath);
 
         return {
             configured: true,

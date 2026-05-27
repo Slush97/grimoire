@@ -9,6 +9,7 @@ import {
     CleanupResult,
 } from '../services/system';
 import { listArchiveContents } from '../services/extract';
+import { healLockerVpks } from '../services/lockerVpk';
 import {
     existsSync,
     readdirSync,
@@ -144,7 +145,7 @@ ipcMain.handle('get-always-on-top', (): boolean => {
 });
 
 // fix-gameinfo
-ipcMain.handle('fix-gameinfo', (): GameinfoStatus => {
+ipcMain.handle('fix-gameinfo', async (): Promise<GameinfoStatus> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         return {
@@ -154,7 +155,18 @@ ipcMain.handle('fix-gameinfo', (): GameinfoStatus => {
             candidates: [],
         };
     }
-    return fixGameinfo(deadlockPath);
+    const status = fixGameinfo(deadlockPath);
+    // Now that the grimoire search path is in place, migrate any Locker-managed
+    // VPKs out of addons into citadel/grimoire immediately, so applied cards /
+    // sounds relocate without needing an app restart.
+    if (status.configured) {
+        try {
+            await healLockerVpks(deadlockPath);
+        } catch (err) {
+            console.error('[system] Locker migration after fix-gameinfo failed:', err);
+        }
+    }
+    return status;
 });
 
 // download-mina-variations

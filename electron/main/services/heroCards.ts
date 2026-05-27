@@ -16,16 +16,19 @@ import { promises as fs } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import { getAddonsPath, getDisabledPath } from './deadlock';
+import { getAddonsPath, getDisabledPath, getGrimoirePath } from './deadlock';
 import { parseVpkDirectoryCached, invalidateVpkParseCache } from './vpk';
 import {
     runVpkmerge,
     vpkmergeBinaryPath,
     verifyVpkOutput,
-    reserveOutputSlot,
 } from './modMerger';
-import { findNextAvailablePriority } from './mods';
-import { pinLockerVpksToFront } from './lockerVpk';
+import {
+    LOCKER_CARDS_KEY,
+    lockerCardsVpkPath,
+    ensureGrimoireConfigured,
+    migrateManagedVpksToGrimoire,
+} from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { codenamesForHero } from './heroPortraits';
@@ -84,6 +87,16 @@ function findCosmeticsVpk(
         if (info) return { ref: v, info };
     }
     return null;
+}
+
+/** The current card selection set, read from the synthetic key (post-migration)
+ *  or, as a fallback during the pre-migration window, from an in-addons managed
+ *  VPK. */
+async function currentCardSelections(deadlockPath: string): Promise<LockerCardSelection[]> {
+    const synth = getModMetadata(LOCKER_CARDS_KEY)?.lockerCosmetics?.cards;
+    if (synth) return synth;
+    const vpks = await listAddonVpks(deadlockPath);
+    return findCosmeticsVpk(vpks)?.info.cards ?? [];
 }
 
 /** Locate a source VPK by filename, falling back to content hash if reconcile
@@ -157,9 +170,9 @@ async function rebuildLockerCosmetics(
     deadlockPath: string,
     desired: LockerCardSelection[]
 ): Promise<RebuildResult> {
-    const addonsPath = getAddonsPath(deadlockPath);
+    const grimoireDir = getGrimoirePath(deadlockPath);
+    const destPath = lockerCardsVpkPath(deadlockPath);
     const vpks = await listAddonVpks(deadlockPath);
-    const existing = findCosmeticsVpk(vpks);
 
     // Resolve each selection's source (relocating by hash if renamed) and
     // confirm it still ships this hero's cards. Anything unresolved is dropped.
@@ -176,27 +189,25 @@ async function rebuildLockerCosmetics(
 
     // Empty set: tear down the cosmetics VPK entirely.
     if (valid.length === 0) {
-        if (existing) {
-            await fs.unlink(existing.ref.path).catch(() => {});
-            removeModMetadata(existing.ref.fileName);
-            invalidateVpkParseCache(existing.ref.path);
-        }
+        await fs.unlink(destPath).catch(() => {});
+        removeModMetadata(LOCKER_CARDS_KEY);
+        invalidateVpkParseCache(destPath);
         return { fileName: null, missing };
     }
 
-    // Build artifacts live in the addons dir as dotfiles (not `_dir.vpk`, so
-    // scanMods ignores them) to keep every rename same-filesystem. Plans go to
-    // userData. Everything here is cleaned up in the finally block.
+    // Build artifacts live in the grimoire dir as dotfiles (not `_dir.vpk`) to
+    // keep every rename same-filesystem. Plans go to userData. Everything here is
+    // cleaned up in the finally block.
     const tag = `.locker-cards-build-${randomUUID()}`;
     const planDir = join(app.getPath('userData'), 'locker-cosmetics-build', randomUUID());
-    const buildOut = join(addonsPath, `${tag}.out.vpk`);
+    const buildOut = join(grimoireDir, `${tag}.out.vpk`);
     const chunkPaths: string[] = [];
     try {
         await fs.mkdir(planDir, { recursive: true });
         for (let i = 0; i < valid.length; i++) {
             const sel = valid[i];
             const src = vpks.find((v) => v.fileName === sel.source.fileName)!;
-            const chunkPath = join(addonsPath, `${tag}.chunk${i}.vpk`);
+            const chunkPath = join(grimoireDir, `${tag}.chunk${i}.vpk`);
             const planPath = join(planDir, `plan${i}.json`);
             await fs.writeFile(
                 planPath,
@@ -217,39 +228,17 @@ async function rebuildLockerCosmetics(
         }
         await verifyVpkOutput(buildOut);
 
-        // Swap the freshly built VPK into place. Reuse the existing slot ONLY when
-        // it's enabled (keeps the load-order position + metadata). A prior copy in
-        // .disabled/ must not be reused as the target: rebuilding into that path
-        // would leave the applied cards disabled and silent in game. Drop the stale
-        // disabled copy and reserve a fresh enabled slot instead.
-        let destFileName: string;
-        let destPath: string;
-        if (existing && existing.ref.enabled) {
-            destFileName = existing.ref.fileName;
-            destPath = existing.ref.path;
-            await fs.rename(buildOut, destPath);
-        } else {
-            if (existing) {
-                await fs.unlink(existing.ref.path).catch(() => {});
-                removeModMetadata(existing.ref.fileName);
-                invalidateVpkParseCache(existing.ref.path);
-            }
-            const slot = await findNextAvailablePriority(deadlockPath);
-            destFileName = `pak${String(slot).padStart(2, '0')}_dir.vpk`;
-            destPath = join(addonsPath, destFileName);
-            await reserveOutputSlot(destPath);
-            await fs.rename(buildOut, destPath);
-            removeModMetadata(destFileName); // scrub any orphan from a prior occupant
-        }
+        // Swap into the FIXED grimoire slot (overwrite). The grimoire folder wins
+        // by SearchPaths precedence, so no load-order pinning is needed and the
+        // selection set lives under the synthetic key, not the VPK filename.
+        await fs.unlink(destPath).catch(() => {});
+        await fs.rename(buildOut, destPath);
         invalidateVpkParseCache(destPath);
 
         const info: LockerCosmeticsInfo = { cards: valid, rebuiltAt: new Date().toISOString() };
-        // globalType: null keeps the multi-hero panorama payload out of the
-        // Locker's Global "Icon Packs" bucket (enrichMod skips classification).
-        setModMetadata(destFileName, { modName: 'Locker Cards', lockerCosmetics: info, globalType: null });
+        setModMetadata(LOCKER_CARDS_KEY, { modName: 'Locker Cards', lockerCosmetics: info });
 
-        await pinLockerVpksToFront(deadlockPath);
-        return { fileName: destFileName, missing };
+        return { fileName: destPath, missing };
     } finally {
         await Promise.all([
             ...chunkPaths.map((p) => fs.unlink(p).catch(() => {})),
@@ -268,9 +257,13 @@ export async function applyHeroCard(
     sourceFileName: string
 ): Promise<ApplyHeroCardResult> {
     vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
+    ensureGrimoireConfigured(deadlockPath);
     const codenames = codenamesForHero(heroName);
     if (codenames.length === 0) throw new Error(`Unknown hero: ${heroName}`);
     const primaryCodename = codenames[0];
+    // Idempotent: relocates any not-yet-migrated managed VPK so `current` reads
+    // from the synthetic key even if config was fixed mid-session.
+    await migrateManagedVpksToGrimoire(deadlockPath);
 
     const vpks = await listAddonVpks(deadlockPath);
     const src = vpks.find((v) => v.fileName === sourceFileName);
@@ -296,7 +289,7 @@ export async function applyHeroCard(
         addedAt: new Date().toISOString(),
     };
 
-    const current = findCosmeticsVpk(vpks)?.info.cards ?? [];
+    const current = await currentCardSelections(deadlockPath);
     const next = [...current.filter((c) => c.heroCodename !== primaryCodename), selection];
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
     return {
@@ -313,12 +306,13 @@ export async function revertHeroCard(
     const codenames = codenamesForHero(heroName);
     if (codenames.length === 0) throw new Error(`Unknown hero: ${heroName}`);
     const primaryCodename = codenames[0];
+    ensureGrimoireConfigured(deadlockPath);
+    await migrateManagedVpksToGrimoire(deadlockPath);
 
-    const vpks = await listAddonVpks(deadlockPath);
-    const existing = findCosmeticsVpk(vpks);
-    if (!existing) return { activeSourceFileName: null, missingSourceFileNames: [] };
+    const current = await currentCardSelections(deadlockPath);
+    if (current.length === 0) return { activeSourceFileName: null, missingSourceFileNames: [] };
 
-    const next = existing.info.cards.filter((c) => c.heroCodename !== primaryCodename);
+    const next = current.filter((c) => c.heroCodename !== primaryCodename);
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
     return { activeSourceFileName: null, missingSourceFileNames: missing };
 }
@@ -331,7 +325,7 @@ export async function getActiveHeroCard(
     const codenames = codenamesForHero(heroName);
     if (codenames.length === 0) return null;
     const primaryCodename = codenames[0];
-    const vpks = await listAddonVpks(deadlockPath);
-    const card = findCosmeticsVpk(vpks)?.info.cards.find((c) => c.heroCodename === primaryCodename);
+    const cards = await currentCardSelections(deadlockPath);
+    const card = cards.find((c) => c.heroCodename === primaryCodename);
     return card ? { sourceFileName: card.source.fileName, variants: card.variants } : null;
 }
