@@ -240,21 +240,22 @@ function entryFilesByEnabledState(entry: ModEntry, enabled: boolean): Mod[] {
   return entry.variants.filter((variant) => variant.enabled === enabled);
 }
 
+// Only enabled mods hold pakNN load-order slots; disabled mods live in
+// .disabled/ with free-form names and aren't loaded by the game. Compacting
+// must cover the enabled mods alone, otherwise the disabled ones inflate the
+// load order past the 99-slot cap and reorderMods rejects the whole operation.
 function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
-  const compactState = (enabled: boolean) =>
-    entries
-      .map((entry) => {
-        const files = entryFilesByEnabledState(entry, enabled);
-        const priority = files.length > 0
-          ? Math.min(...files.map((file) => file.priority))
-          : Number.POSITIVE_INFINITY;
-        return { files, priority };
-      })
-      .filter(({ files }) => files.length > 0)
-      .sort((a, b) => a.priority - b.priority)
-      .flatMap(({ files }) => files);
-
-  return [...compactState(true), ...compactState(false)];
+  return entries
+    .map((entry) => {
+      const files = entryFilesByEnabledState(entry, true);
+      const priority = files.length > 0
+        ? Math.min(...files.map((file) => file.priority))
+        : Number.POSITIVE_INFINITY;
+      return { files, priority };
+    })
+    .filter(({ files }) => files.length > 0)
+    .sort((a, b) => a.priority - b.priority)
+    .flatMap(({ files }) => files);
 }
 
 /**
@@ -2074,7 +2075,7 @@ export default function Installed() {
               <button
                 type="button"
                 onClick={fixOrder}
-                title="Renumber all installed mods 1, 2, 3, ... to tidy priority slots"
+                title="Renumber enabled mods 1, 2, 3, ... to tidy priority slots"
                 className="text-[10px] uppercase tracking-wider px-2.5 py-1 border border-white/10 hover:border-accent/50 bg-white/[0.02] hover:bg-accent/10 text-text-secondary hover:text-text-primary rounded-full transition-colors cursor-pointer"
               >
                 Fix Order
