@@ -398,7 +398,7 @@ function BrowseReadableUpdatedLine({ timestamp }: { timestamp?: number }) {
 
   return (
     <p
-      className={`mt-0.5 truncate text-[clamp(9px,3.5714cqw,11px)] font-normal leading-[1.05] ${
+      className={`mt-1 truncate text-[clamp(9px,3.5714cqw,11px)] font-normal leading-[1.05] ${
         isOutdated ? 'text-state-warning/70' : 'text-text-tertiary/42'
       }`}
       title={absolute ? `${isOutdated ? 'Outdated. ' : ''}Last updated on GameBanana: ${absolute}` : undefined}
@@ -3036,7 +3036,7 @@ function ReadableBrowseModCard({
             {mod.name}
           </h3>
           {showAuthor && (
-            <p className="mt-0 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/64">
+            <p className="-mt-0.5 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/64">
               by {mod.submitter?.name ?? 'Unknown author'}
             </p>
           )}
