@@ -213,14 +213,16 @@ function estimateBrowseRowHeight(
         : columnWidth * 0.571429;
   const bodyHeight =
     density === 'micro'
-      ? 84
+      ? section === 'Sound'
+        ? 94
+        : 84
       : density === 'compact'
         ? section === 'Sound'
-          ? 128
-          : 102
+          ? 144
+          : 120
         : section === 'Sound'
-          ? 168
-          : 128;
+          ? 186
+          : 160;
 
   return Math.ceil(mediaHeight + bodyHeight);
 }
@@ -2000,24 +2002,25 @@ export default function Browse() {
     layout === 'list'
       ? contentWidth
       : Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
-  const estimatedRowHeight = estimateBrowseRowHeight(
+  const virtualCardHeight = estimateBrowseRowHeight(
     virtualColumnWidth,
     layout,
     browseCardDesign,
     viewMode,
     section
   );
+  const virtualRowHeight = virtualCardHeight + gridGap;
   const virtualRowCount = Math.ceil(displayMods.length / virtualColumnCount);
   const rowVirtualizer = useVirtualizer({
     count: virtualRowCount,
     getScrollElement: () => scrollContainerRef.current,
-    estimateSize: () => estimatedRowHeight + gridGap,
+    estimateSize: () => virtualRowHeight,
     overscan: BROWSE_GRID_OVERSCAN_ROWS,
   });
 
   useEffect(() => {
     rowVirtualizer.measure();
-  }, [rowVirtualizer, estimatedRowHeight, gridGap, virtualColumnCount, displayMods.length]);
+  }, [rowVirtualizer, virtualColumnCount, virtualCardHeight, gridGap, browseCardDesign, layout]);
 
   if (!activeDeadlockPath) {
     return (
@@ -2592,7 +2595,8 @@ export default function Browse() {
                       const queuedState = queuedByModId.get(mod.id);
                       const installedLocal = installedByGbId.get(mod.id);
                       return (
-                        <ModCard
+                        <div key={mod.id} className="min-w-0">
+                          <ModCard
                           key={mod.id}
                           mod={mod}
                           installed={installedIds.has(mod.id)}
@@ -2618,7 +2622,8 @@ export default function Browse() {
                           onEnable={installedLocal && !installedLocal.enabled
                             ? () => toggleMod(installedLocal.id)
                             : undefined}
-                        />
+                          />
+                        </div>
                       );
                     })}
                   </div>
@@ -2814,7 +2819,7 @@ function ReadableBrowseModCard({
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`group flex ${cardFrameClass} w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] [content-visibility:auto] [contain-intrinsic-size:360px] ${
+      className={`group flex ${cardFrameClass} w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -3174,7 +3179,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group [content-visibility:auto] [contain-intrinsic-size:280px] ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+      className={`relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
         isPlaying
           ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
           : downloading
