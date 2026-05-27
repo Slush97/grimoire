@@ -316,13 +316,13 @@ function BrowseFreshnessLabel({ timestamp }: { timestamp: number }) {
 function BrowseReadableStatsRow({ mod, density }: { mod: GameBananaMod; density: BrowseReadableDensity }) {
   const isMicro = density === 'micro';
   const groupClass = isMicro
-    ? 'h-[clamp(18px,10cqw,26px)] gap-[clamp(6px,4.2857cqw,12px)] text-[clamp(11px,6.7857cqw,17px)] font-semibold leading-[clamp(12px,7.1429cqw,18px)]'
-    : 'h-[clamp(14px,6.4286cqw,19px)] gap-[clamp(4px,2.5cqw,8px)] text-[clamp(9px,4.2857cqw,12px)] font-medium leading-[clamp(10px,4.2857cqw,13px)]';
+    ? 'grid w-full grid-cols-3 gap-[clamp(6px,4.2857cqw,12px)] text-[clamp(11px,6.7857cqw,17px)] font-semibold leading-[clamp(12px,7.1429cqw,18px)]'
+    : 'flex min-w-0 flex-1 items-center overflow-visible gap-[clamp(4px,2.5cqw,8px)] text-[clamp(9px,4.2857cqw,12px)] font-medium leading-[clamp(10px,4.2857cqw,13px)]';
   const itemClass = isMicro
-    ? 'h-[clamp(18px,10cqw,26px)] gap-[clamp(2px,1.7857cqw,5px)]'
-    : 'h-[clamp(14px,6.4286cqw,19px)] gap-[clamp(1px,0.8929cqw,3px)]';
+    ? 'min-w-0 justify-start gap-[clamp(3px,2.1429cqw,6px)] text-left'
+    : 'min-w-0 gap-[clamp(1px,0.8929cqw,3px)]';
   const iconClass = isMicro
-    ? 'h-[clamp(13px,7.1429cqw,19px)] w-[clamp(13px,7.1429cqw,19px)]'
+    ? 'h-[clamp(13px,7.1429cqw,19px)] w-[clamp(13px,7.1429cqw,19px)] text-text-secondary/90'
     : 'h-[clamp(10px,4.6429cqw,14px)] w-[clamp(10px,4.6429cqw,14px)]';
   const textClass = isMicro
     ? 'leading-[clamp(12px,7.1429cqw,18px)]'
@@ -330,24 +330,24 @@ function BrowseReadableStatsRow({ mod, density }: { mod: GameBananaMod; density:
 
   return (
     <div
-      className={`flex min-w-0 flex-1 items-center overflow-visible text-text-tertiary/60 ${groupClass}`}
+      className={`min-w-0 text-text-tertiary/60 ${groupClass}`}
     >
       <span
-        className={`inline-flex min-w-0 items-center tabular-nums ${itemClass}`}
+        className={`inline-flex items-center tabular-nums ${itemClass}`}
         title={`${mod.likeCount ?? 0} likes`}
       >
         <ThumbsUp className={`shrink-0 ${iconClass}`} />
         <span className={textClass}>{formatCount(mod.likeCount)}</span>
       </span>
       <span
-        className={`inline-flex min-w-0 items-center tabular-nums ${itemClass}`}
+        className={`inline-flex items-center tabular-nums ${itemClass}`}
         title={`${mod.viewCount ?? 0} views`}
       >
         <Eye className={`shrink-0 ${iconClass}`} />
         <span className={textClass}>{formatCount(mod.viewCount)}</span>
       </span>
       <span
-        className={`inline-flex min-w-0 items-center tabular-nums ${itemClass}`}
+        className={`inline-flex items-center tabular-nums ${itemClass}`}
         title={`${mod.downloadCount ?? 0} downloads`}
       >
         <Download className={`shrink-0 ${iconClass}`} />
@@ -2287,13 +2287,13 @@ function ReadableBrowseModCard({
   const showFreshness = readableDensity === 'full';
   const isMicro = readableDensity === 'micro';
   const isCompactReadable = readableDensity === 'compact';
-  const cardAspectClass = isMicro
-    ? 'aspect-[140/152]'
+  const cardFrameClass = isMicro
+    ? 'h-auto'
     : isCompactReadable
       ? 'aspect-[220/230]'
       : 'aspect-[280/318]';
   const mediaHeightClass = isMicro
-    ? 'h-[52cqw]'
+    ? 'aspect-[16/9]'
     : isCompactReadable
       ? 'h-[56cqw]'
       : 'h-[57.1429cqw]';
@@ -2313,7 +2313,7 @@ function ReadableBrowseModCard({
       ? 'mt-[clamp(6px,4cqw,10px)]'
       : 'mt-auto';
   const footerHeightClass = isMicro
-    ? 'h-[clamp(18px,11.4286cqw,24px)]'
+    ? 'h-auto'
     : 'h-[clamp(22px,10cqw,32px)]';
 
   const media = isSoundSection ? (
@@ -2366,7 +2366,7 @@ function ReadableBrowseModCard({
       role="button"
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
-      className={`group flex ${cardAspectClass} w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+      className={`group flex ${cardFrameClass} w-full flex-col overflow-hidden rounded-md border bg-bg-secondary text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -2443,7 +2443,7 @@ function ReadableBrowseModCard({
         )}
       </div>
 
-      <div className={`flex min-h-0 flex-1 flex-col bg-bg-secondary ${bodyPaddingClass}`}>
+      <div className={`flex ${isMicro ? 'flex-none' : 'min-h-0 flex-1'} flex-col bg-bg-secondary ${bodyPaddingClass}`}>
         {showChips && (
           <BrowseReadableChipRow
             chips={chips}
