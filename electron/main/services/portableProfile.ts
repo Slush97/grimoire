@@ -3,6 +3,7 @@ import { gzipSync, gunzipSync, constants as zlibConstants } from 'zlib';
 import { addProfile, generateProfileId, loadProfiles, type Profile, type ProfileMod } from './profiles';
 import { scanMods } from './mods';
 import { getModMetadata } from './metadata';
+import { isLockerManaged } from './lockerVpk';
 import { fetchModDetails } from './gamebanana';
 import type {
     PortableProfile,
@@ -94,6 +95,10 @@ export async function buildPortableProfileFromInstalled(
     const warnings: string[] = [];
 
     for (const installedMod of installed) {
+        // Locker-managed VPKs (cards/sounds) are internal and have no GameBanana
+        // ref, so silently skip them rather than warning "Skipped local mod".
+        if (isLockerManaged(installedMod.fileName)) continue;
+
         const metadata = getModMetadata(installedMod.fileName);
         const gbId = metadata?.gameBananaId ?? installedMod.gameBananaId;
         const fileId = metadata?.gameBananaFileId ?? installedMod.gameBananaFileId;

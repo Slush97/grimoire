@@ -3,6 +3,7 @@ import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
 import { scanMods, enableMod, disableMod, reorderMods } from './mods';
 import { getModMetadata } from './metadata';
+import { isLockerManaged, pinLockerVpksToFront } from './lockerVpk';
 import { readAutoexec, writeAutoexec } from './autoexec';
 
 export interface ProfileMod {
@@ -120,7 +121,10 @@ function saveProfiles(profiles: Profile[]): void {
  */
 export async function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
     const mods = await scanMods(deadlockPath);
-    const enabledMods = mods.filter(mod => mod.enabled);  // Only save enabled mods
+    // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
+    // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
+    // in a profile's mod list (and have no gameBananaId to re-resolve anyway).
+    const enabledMods = mods.filter(mod => mod.enabled && !isLockerManaged(mod.fileName));
 
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
@@ -223,7 +227,10 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
     }
 
     const mods = await scanMods(deadlockPath);
-    const enabledMods = mods.filter(mod => mod.enabled);  // Only save enabled mods
+    // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
+    // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
+    // in a profile's mod list (and have no gameBananaId to re-resolve anyway).
+    const enabledMods = mods.filter(mod => mod.enabled && !isLockerManaged(mod.fileName));
 
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
@@ -459,6 +466,11 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     // (was-enabled vs was-disabled), so the snapshot ids stay valid across both.
     for (const mod of currentMods) {
         if (!mod.enabled) continue;
+        // Locker-managed VPKs (hero cards + ability sounds) aren't part of any
+        // profile: they're hidden, auto-pinned, and owned by the Locker. Never
+        // disable them on a profile switch, or applied cosmetics would silently
+        // stop loading. They get re-pinned to the front after the reorder pass.
+        if (isLockerManaged(mod.fileName)) continue;
         const profileMod = profileModByCurrentId.get(mod.id);
         if (profileMod && profileMod.enabled) continue; // keep it enabled
         await disableMod(deadlockPath, mod.id);
@@ -523,6 +535,11 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     } else {
         console.log(`[profiles] reorder: nothing to reorder`);
     }
+
+    // Re-assert the Locker-managed VPKs at the front: the profile reorder only
+    // sequences the profile's own mods (managed VPKs are excluded), so pin them
+    // back to pak01.. so applied cards/sounds keep winning every collision.
+    await pinLockerVpksToFront(deadlockPath);
 
     // 2. Apply Autoexec & Crosshair
     const currentAutoexec = readAutoexec(deadlockPath);

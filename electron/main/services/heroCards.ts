@@ -24,7 +24,8 @@ import {
     verifyVpkOutput,
     reserveOutputSlot,
 } from './modMerger';
-import { scanMods, reorderMods, findNextAvailablePriority } from './mods';
+import { findNextAvailablePriority } from './mods';
+import { pinLockerVpksToFront } from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { codenamesForHero } from './heroPortraits';
@@ -216,15 +217,23 @@ async function rebuildLockerCosmetics(
         }
         await verifyVpkOutput(buildOut);
 
-        // Swap the freshly built VPK into place. Reuse the existing slot (keeps
-        // the load-order position + metadata) or reserve a new low slot.
+        // Swap the freshly built VPK into place. Reuse the existing slot ONLY when
+        // it's enabled (keeps the load-order position + metadata). A prior copy in
+        // .disabled/ must not be reused as the target: rebuilding into that path
+        // would leave the applied cards disabled and silent in game. Drop the stale
+        // disabled copy and reserve a fresh enabled slot instead.
         let destFileName: string;
         let destPath: string;
-        if (existing) {
+        if (existing && existing.ref.enabled) {
             destFileName = existing.ref.fileName;
             destPath = existing.ref.path;
             await fs.rename(buildOut, destPath);
         } else {
+            if (existing) {
+                await fs.unlink(existing.ref.path).catch(() => {});
+                removeModMetadata(existing.ref.fileName);
+                invalidateVpkParseCache(existing.ref.path);
+            }
             const slot = await findNextAvailablePriority(deadlockPath);
             destFileName = `pak${String(slot).padStart(2, '0')}_dir.vpk`;
             destPath = join(addonsPath, destFileName);
@@ -239,7 +248,7 @@ async function rebuildLockerCosmetics(
         // Locker's Global "Icon Packs" bucket (enrichMod skips classification).
         setModMetadata(destFileName, { modName: 'Locker Cards', lockerCosmetics: info, globalType: null });
 
-        await ensureCosmeticsWins(deadlockPath, destFileName, valid);
+        await pinLockerVpksToFront(deadlockPath);
         return { fileName: destFileName, missing };
     } finally {
         await Promise.all([
@@ -248,45 +257,6 @@ async function rebuildLockerCosmetics(
             fs.rm(planDir, { recursive: true, force: true }).catch(() => {}),
         ]);
     }
-}
-
-/**
- * Guarantee the cosmetics VPK outranks every enabled mod that ships any of its
- * heroes' card paths (lowest pakNN wins). Only reorders when an enabled
- * competitor currently sits below it, and only then moves the cosmetics VPK to
- * the front of the enabled load order. No competitor means it already wins.
- */
-async function ensureCosmeticsWins(
-    deadlockPath: string,
-    cosmeticsFileName: string,
-    cards: LockerCardSelection[]
-): Promise<void> {
-    const mods = await scanMods(deadlockPath);
-    const cosmetics = mods.find((m) => m.fileName === cosmeticsFileName);
-    if (!cosmetics || !cosmetics.enabled) return;
-
-    const prefixes = cards.flatMap((c) => heroCardPrefixes(c.heroName));
-    const competesForCards = (vpkPath: string): boolean => {
-        const tree = parseVpkDirectoryCached(vpkPath);
-        if (!tree) return false;
-        return tree.some((p) => {
-            const lower = p.toLowerCase();
-            return prefixes.some((pre) => lower.startsWith(pre));
-        });
-    };
-
-    const lowestCompetitor = mods
-        .filter((m) => m.enabled && m.id !== cosmetics.id && competesForCards(m.path))
-        .reduce((min, m) => Math.min(min, m.priority), Infinity);
-
-    if (cosmetics.priority <= lowestCompetitor) return; // already wins
-
-    const enabled = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
-    const ordered = [
-        cosmetics.fileName,
-        ...enabled.filter((m) => m.id !== cosmetics.id).map((m) => m.fileName),
-    ];
-    await reorderMods(deadlockPath, ordered);
 }
 
 /**

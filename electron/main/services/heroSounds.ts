@@ -22,9 +22,10 @@ import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import { getAddonsPath, getDisabledPath, getCitadelPath } from './deadlock';
-import { parseVpkDirectoryCached, invalidateVpkParseCache } from './vpk';
+import { invalidateVpkParseCache } from './vpk';
 import { runVpkmerge, runVpkmergeStdout, vpkmergeBinaryPath, verifyVpkOutput, reserveOutputSlot } from './modMerger';
-import { scanMods, reorderMods, findNextAvailablePriority } from './mods';
+import { findNextAvailablePriority } from './mods';
+import { pinLockerVpksToFront } from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { soundCodenameForHero } from './heroSoundCodenames';
@@ -268,11 +269,23 @@ async function rebuildLockerSounds(
 
         let destFileName: string;
         let destPath: string;
-        if (existing) {
+        // Reuse the existing sound VPK in place ONLY when it's enabled. A prior
+        // copy parked in .disabled/ (e.g. left over from before the heal, or a
+        // half-finished vanilla stash) carries a free-form name in the disabled
+        // folder; rebuilding into that path would leave the freshly applied sounds
+        // disabled and silent in game (and pinLockerVpksToFront would skip it
+        // since it isn't enabled). Drop the stale disabled copy and mint a fresh
+        // enabled pakNN slot instead.
+        if (existing && existing.ref.enabled) {
             destFileName = existing.ref.fileName;
             destPath = existing.ref.path;
             await fs.rename(buildOut, destPath);
         } else {
+            if (existing) {
+                await fs.unlink(existing.ref.path).catch(() => {});
+                removeModMetadata(existing.ref.fileName);
+                invalidateVpkParseCache(existing.ref.path);
+            }
             const slot = await findNextAvailablePriority(deadlockPath);
             destFileName = `pak${String(slot).padStart(2, '0')}_dir.vpk`;
             destPath = join(addonsPath, destFileName);
@@ -295,7 +308,7 @@ async function rebuildLockerSounds(
             abilitySounds: null,
         });
 
-        await ensureSoundsWins(deadlockPath, destFileName, valid);
+        await pinLockerVpksToFront(deadlockPath);
         return { fileName: destFileName, missing };
     } finally {
         await Promise.all([
@@ -304,41 +317,6 @@ async function rebuildLockerSounds(
             fs.rm(planDir, { recursive: true, force: true }).catch(() => {}),
         ]);
     }
-}
-
-/**
- * Guarantee the sound VPK outranks every enabled mod that ships any of its
- * selected clips (lowest pakNN wins). Only reorders when an enabled competitor
- * currently sits below it.
- */
-async function ensureSoundsWins(
-    deadlockPath: string,
-    soundsFileName: string,
-    selections: LockerSoundSelection[],
-): Promise<void> {
-    const mods = await scanMods(deadlockPath);
-    const sounds = mods.find((m) => m.fileName === soundsFileName);
-    if (!sounds || !sounds.enabled) return;
-
-    const clips = new Set(selections.flatMap((s) => s.clipPaths.map((p) => p.toLowerCase())));
-    const competesForClips = (vpkPath: string): boolean => {
-        const tree = parseVpkDirectoryCached(vpkPath);
-        if (!tree) return false;
-        return tree.some((p) => clips.has(p.toLowerCase()));
-    };
-
-    const lowestCompetitor = mods
-        .filter((m) => m.enabled && m.id !== sounds.id && competesForClips(m.path))
-        .reduce((min, m) => Math.min(min, m.priority), Infinity);
-
-    if (sounds.priority <= lowestCompetitor) return;
-
-    const enabled = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
-    const ordered = [
-        sounds.fileName,
-        ...enabled.filter((m) => m.id !== sounds.id).map((m) => m.fileName),
-    ];
-    await reorderMods(deadlockPath, ordered);
 }
 
 /**

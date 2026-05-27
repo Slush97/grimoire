@@ -12,6 +12,7 @@ import {
     type StopDeadlockResult,
 } from '../services/launch';
 import { readLaunchOptions, isSteamRunning } from '../services/launchOptions';
+import { healLockerVpks } from '../services/lockerVpk';
 import { getMainWindow } from '../index';
 
 function getActiveDeadlockPath(): string | null {
@@ -129,5 +130,15 @@ export async function runStartupRecovery(): Promise<void> {
         }
     } catch (err) {
         console.error('[launch] Startup recovery failed:', err);
+    }
+
+    // After any vanilla stash is restored, make sure the Locker-managed VPKs are
+    // enabled and pinned to the front. healLockerVpks no-ops while a stash is
+    // still active (recovery failed, game holding file locks), so this can't
+    // un-stash a live vanilla session.
+    try {
+        await healLockerVpks(deadlockPath);
+    } catch (err) {
+        console.error('[launch] Locker VPK heal failed:', err);
     }
 }

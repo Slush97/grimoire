@@ -19,6 +19,7 @@ import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { inferHeroFromVpk, classifyGlobalModFromVpk } from '../services/vpk';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
+import { isLockerManaged } from '../services/lockerVpk';
 import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
@@ -167,9 +168,16 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     // install's name/thumbnail/gameBananaId from the global metadata sidecar.
     const settings = loadSettings();
     if (!settings.devMode) {
+        // Prune against ALL scanned files (including managed VPKs) so we don't
+        // wipe their metadata before filtering them out of the list below.
         pruneOrphanMetadata(new Set(mods.map((m) => m.fileName)));
     }
-    return mods.map(enrichMod);
+    // Hide Grimoire-managed Locker VPKs (hero cards + ability sounds). They're
+    // driven solely through the Locker pickers and are auto-enabled + pinned to
+    // the front of the load order (services/lockerVpk.ts), so surfacing them in
+    // the Installed list would only let the user disable or reorder them and
+    // silently break their applied cosmetics.
+    return mods.filter((m) => !isLockerManaged(m.fileName)).map(enrichMod);
 });
 
 // enable-mod

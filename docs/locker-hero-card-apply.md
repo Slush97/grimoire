@@ -139,13 +139,14 @@ swap, and revert are all just "edit the selection set, then rebuild".
 5. **Verify** (`verifyVpkOutput`) the temp output, then **swap it into the
    cosmetics slot atomically** (write to temp, reserve/replace the slot, rename
    in). Reuse `reserveOutputSlot` for the slot claim.
-6. **Slot to win:** keep the cosmetics VPK at a pakNN below every enabled
-   competitor that ships any included `panorama/images/heroes/<codename>_` path
-   (found via `parseVpkDirectoryCached`, as the prototype already prefilters).
-   With one stable VPK this is: if a competitor sits below it, `reorderMods` the
-   cosmetics VPK just under the lowest competitor; otherwise leave it. Usually
-   there are zero or one competitors per hero (the active skin bundle, an
-   enabled multi-hero icon pack).
+6. **Slot to win:** keep the cosmetics VPK pinned to the FRONT of the enabled
+   load order via `pinLockerVpksToFront` (`services/lockerVpk.ts`), shared with
+   the ability-sounds VPK. We pin unconditionally rather than only stepping ahead
+   of detected competitors: a source mod can ship its override at a layer/path
+   our exact-path check misses, and a competitor enabled LATER would otherwise
+   outrank an already-applied pick. The managed VPK only ships the exact
+   cosmetic paths the user chose (disjoint, additive), so sitting first can't
+   clobber anything it doesn't own. `reorderMods` no-ops when it's already first.
 7. **Stamp** `lockerCosmetics` with the (possibly pruned) selection set and
    `rebuiltAt`. Clean up temp files.
 
@@ -161,19 +162,32 @@ swap, and revert are all just "edit the selection set, then rebuild".
 ## Hiding the cosmetics VPK from other surfaces (cross-cutting cost)
 
 The cosmetics VPK is a real `pakNN_dir.vpk` in `addons/`, so without filtering
-it appears as a mystery mod. Treat "metadata has `lockerCosmetics`" as the hide
-signal and filter it out in:
+it appears as a mystery mod. "Metadata has `lockerCosmetics` or `lockerSounds`"
+is the hide signal, centralized as `isLockerManaged` in `services/lockerVpk.ts`.
+It is filtered out in:
 
-- `src/pages/Installed.tsx` (mod list)
-- `lockerUtils.ts` `isLockerManagedMod` / `isLockerManagedSound` (so it never
-  lands in a hero's skin/sound pile or the "Unassigned" bucket)
+- `electron/main/ipc/mods.ts` `get-mods` (managed VPKs never reach the renderer)
+- `src/pages/Installed.tsx` (mod list) and `lockerUtils.ts`
+  `isLockerManagedMod` / `isLockerManagedSound` (renderer defense in depth)
 - Conflicts scanning (`electron/main/services/conflicts.ts`)
-- Portable profile export (`modMerger.ts` `buildPortableForSources`,
-  `portableProfile.ts`) so it is not shared as if it were a mod
+- Profiles (`services/profiles.ts`): excluded from save AND never disabled on a
+  profile switch (the orphan-disable loop skips them, then re-pins). A profile
+  switch silently disabling the managed VPK was the original "sounds stopped
+  loading" root cause.
+- Portable profile export (`portableProfile.ts`) so it is not shared as a mod.
 
-Only ONE VPK to hide (vs one per card), but `merged` mods are NOT hidden today,
-so this is still new plumbing with no existing filter to piggyback on. This is
-the biggest part of the work and the main reason to design before coding.
+## Lifecycle guarantees (lockerVpk.ts)
+
+The managed VPKs are owned by Grimoire, never by the user:
+
+- **Always enabled + front:** `healLockerVpks` runs on app startup (after vanilla
+  stash recovery) and re-enables any managed VPK that ended up in `.disabled/`,
+  then pins all of them to the front. Skips while a vanilla launch is active so
+  it can't un-stash a live vanilla session.
+- **Never rebuilt into `.disabled/`:** the rebuild reuses an existing slot only
+  when that slot is enabled; a stale disabled copy is deleted and a fresh enabled
+  slot is minted. (Reusing a disabled path is exactly what stranded applied
+  sounds in `.disabled/` before.)
 
 ## Failure handling and edge cases
 
