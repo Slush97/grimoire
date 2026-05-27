@@ -17,12 +17,23 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // survives navigation away from /browse and back — user complaint: search
 // query, view mode, and filters all reset when switching pages.
 export type BrowseSortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
-export type BrowseViewMode = 'grid' | 'compact' | 'dense' | 'list';
+export type BrowseLayout = 'grid' | 'list';
 export type BrowseNsfwFilter = 'all' | 'sfw' | 'nsfw';
+
+// Browse card-size slider bounds (grid column min-width, in px). The slider
+// replaced the old fixed Grid/Compact/Dense presets: one continuous control
+// over how wide each card gets, with the layout reflowing columns to fit.
+// Below BROWSE_COMPACT_CARD_THRESHOLD cards drop to the leaner "compact"
+// chrome (4:3 aspect, smaller text), so small sizes stay readable.
+export const BROWSE_CARD_SIZE_MIN = 140;
+export const BROWSE_CARD_SIZE_MAX = 340;
+export const BROWSE_CARD_SIZE_DEFAULT = 300;
+export const BROWSE_COMPACT_CARD_THRESHOLD = 250;
 export type BrowseTimeRange = 'all' | 'today' | 'week' | 'month' | 'custom';
 export interface BrowseUiState {
   search: string;
-  viewMode: BrowseViewMode;
+  layout: BrowseLayout;
+  cardSize: number;
   sort: BrowseSortOption;
   section: string;
   // Content-rating filter and recency window. Both route browsing through the
@@ -39,26 +50,51 @@ export interface BrowseUiState {
   categoryId: number | 'all';
 }
 
-// viewMode + sort behave like preferences (the user mentioned wanting their
-// "list vs blocks" choice remembered). Cache them in localStorage so they
-// survive app restarts. The rest of BrowseUiState is session-only — search
-// queries and filters shouldn't follow the user across launches.
-const VIEW_MODE_KEY = 'browseViewMode';
+// layout + cardSize + sort behave like preferences (the user mentioned wanting
+// their "list vs blocks" choice and card size remembered). Cache them in
+// localStorage so they survive app restarts. The rest of BrowseUiState is
+// session-only — search queries and filters shouldn't follow across launches.
+const LAYOUT_KEY = 'browseLayout';
+const CARD_SIZE_KEY = 'browseCardSize';
 const SORT_KEY = 'browseSort';
+// Pre-slider key holding 'grid' | 'compact' | 'dense' | 'list'. Read once for
+// migration so existing users keep a comparable layout and card size.
+const LEGACY_VIEW_MODE_KEY = 'browseViewMode';
 
-const VIEW_MODES: BrowseViewMode[] = ['grid', 'compact', 'dense', 'list'];
 const SORT_OPTIONS: BrowseSortOption[] = ['default', 'popular', 'recent', 'updated', 'views', 'name'];
 
-function readPersistedViewMode(): BrowseViewMode {
+function readPersistedLayout(): BrowseLayout {
   try {
-    const stored = localStorage.getItem(VIEW_MODE_KEY);
-    if (stored && (VIEW_MODES as string[]).includes(stored)) {
-      return stored as BrowseViewMode;
-    }
+    const stored = localStorage.getItem(LAYOUT_KEY);
+    if (stored === 'grid' || stored === 'list') return stored;
+    // Migrate from the old four-mode key: only 'list' carried structure.
+    if (localStorage.getItem(LEGACY_VIEW_MODE_KEY) === 'list') return 'list';
   } catch {
     // localStorage may be unavailable (e.g. SSR, restricted contexts).
   }
   return 'grid';
+}
+
+function readPersistedCardSize(): number {
+  try {
+    const raw = localStorage.getItem(CARD_SIZE_KEY);
+    if (raw !== null) {
+      const n = Number(raw);
+      if (Number.isFinite(n)) {
+        return Math.min(BROWSE_CARD_SIZE_MAX, Math.max(BROWSE_CARD_SIZE_MIN, n));
+      }
+    }
+    // Migrate the old density presets to comparable card widths.
+    switch (localStorage.getItem(LEGACY_VIEW_MODE_KEY)) {
+      case 'dense':
+        return 150;
+      case 'compact':
+        return 200;
+    }
+  } catch {
+    // localStorage may be unavailable.
+  }
+  return BROWSE_CARD_SIZE_DEFAULT;
 }
 
 function readPersistedSort(): BrowseSortOption {
@@ -75,7 +111,8 @@ function readPersistedSort(): BrowseSortOption {
 
 const DEFAULT_BROWSE_UI: BrowseUiState = {
   search: '',
-  viewMode: readPersistedViewMode(),
+  layout: readPersistedLayout(),
+  cardSize: readPersistedCardSize(),
   sort: readPersistedSort(),
   section: 'Mod',
   nsfw: 'all',
@@ -404,13 +441,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   // Patch Browse UI state. Use a partial so callers can update one field at
-  // a time without restating the rest. viewMode + sort also mirror to
+  // a time without restating the rest. layout + cardSize + sort also mirror to
   // localStorage so they persist across app restarts.
   setBrowseUi: (partial: Partial<BrowseUiState>) => {
     set({ browseUi: { ...get().browseUi, ...partial } });
     try {
-      if (partial.viewMode !== undefined) {
-        localStorage.setItem(VIEW_MODE_KEY, partial.viewMode);
+      if (partial.layout !== undefined) {
+        localStorage.setItem(LAYOUT_KEY, partial.layout);
+      }
+      if (partial.cardSize !== undefined) {
+        localStorage.setItem(CARD_SIZE_KEY, String(partial.cardSize));
       }
       if (partial.sort !== undefined) {
         localStorage.setItem(SORT_KEY, partial.sort);

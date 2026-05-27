@@ -10,7 +10,6 @@ import {
   RefreshCw,
   LayoutGrid,
   Grid3x3,
-  Grip,
   List,
   AlertTriangle,
   Clock,
@@ -38,8 +37,13 @@ import type {
   GameBananaCategoryNode,
 } from '../types/gamebanana';
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
-import { useAppStore } from '../stores/appStore';
-import type { BrowseNsfwFilter, BrowseTimeRange } from '../stores/appStore';
+import {
+  useAppStore,
+  BROWSE_CARD_SIZE_MIN,
+  BROWSE_CARD_SIZE_MAX,
+  BROWSE_COMPACT_CARD_THRESHOLD,
+} from '../stores/appStore';
+import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
@@ -53,7 +57,9 @@ import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../l
 
 const DEFAULT_PER_PAGE = 20;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
-type ViewMode = 'grid' | 'compact' | 'dense' | 'list';
+// Effective render mode derived from layout + card size. 'compact' is no
+// longer a user choice: it's what small cards become below the size threshold.
+type ViewMode = 'grid' | 'compact' | 'list';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
 // Persist filter UI inputs across page navigation. The store keeps these in
 // memory so visiting Installed and coming back doesn't blow away the user's
@@ -163,9 +169,14 @@ export default function Browse() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, viewMode, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
+  const { search, layout, cardSize, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
+  // Effective render mode: List is structural; otherwise small cards get the
+  // compact chrome automatically. ModCard/skeleton keep reading one ViewMode.
+  const viewMode: ViewMode =
+    layout === 'list' ? 'list' : cardSize < BROWSE_COMPACT_CARD_THRESHOLD ? 'compact' : 'grid';
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
-  const setViewMode = useCallback((v: ViewMode) => setBrowseUi({ viewMode: v }), [setBrowseUi]);
+  const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
+  const setCardSize = useCallback((v: number) => setBrowseUi({ cardSize: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
   const setNsfw = useCallback((v: BrowseNsfwFilter) => setBrowseUi({ nsfw: v }), [setBrowseUi]);
@@ -1374,12 +1385,36 @@ export default function Browse() {
               )}
             </button>
 
-            {/* View Mode Toggle - Icon Only */}
+            {/* Card-size slider: only meaningful in grid layout, so it's
+                disabled (and dimmed) while List is active rather than hidden,
+                keeping the toolbar from reflowing as you switch. */}
+            <div
+              className={`flex items-center gap-2 h-10 rounded-lg border border-border bg-bg-secondary px-3 transition-opacity ${
+                layout === 'list' ? 'opacity-40' : ''
+              }`}
+              title="Card size"
+            >
+              <Grid3x3 className="w-4 h-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+              <input
+                type="range"
+                min={BROWSE_CARD_SIZE_MIN}
+                max={BROWSE_CARD_SIZE_MAX}
+                step={5}
+                value={cardSize}
+                disabled={layout === 'list'}
+                onChange={(e) => setCardSize(Number(e.target.value))}
+                aria-label="Card size"
+                className="h-1.5 w-24 cursor-pointer accent-accent disabled:cursor-default"
+              />
+              <LayoutGrid className="w-5 h-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+            </div>
+
+            {/* Layout Toggle - Grid vs List */}
             <div className="flex items-center h-10 rounded-lg border border-border bg-bg-secondary p-1">
               <button
                 type="button"
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-md transition-colors cursor-pointer ${viewMode === 'grid'
+                onClick={() => setLayout('grid')}
+                className={`p-1.5 rounded-md transition-colors cursor-pointer ${layout === 'grid'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -1389,30 +1424,8 @@ export default function Browse() {
               </button>
               <button
                 type="button"
-                onClick={() => setViewMode('compact')}
-                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'compact'
-                  ? 'bg-bg-tertiary text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                title="Compact view"
-              >
-                <Grid3x3 className="w-5 h-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('dense')}
-                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'dense'
-                  ? 'bg-bg-tertiary text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                title="Dense view"
-              >
-                <Grip className="w-5 h-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'list'
+                onClick={() => setLayout('list')}
+                className={`p-2 rounded-md transition-colors cursor-pointer ${layout === 'list'
                   ? 'bg-bg-tertiary text-text-primary'
                   : 'text-text-secondary hover:text-text-primary'
                   }`}
@@ -1657,14 +1670,19 @@ export default function Browse() {
       {/* Main Content */}
       <div className="flex-1 p-4">
         {(() => {
+          // Column min-width is the slider value, so the grid template can't be
+          // a static Tailwind class (the JIT scanner never sees it). Drive it
+          // with an inline style; gap still tracks the compact threshold.
           const gridClass =
-            viewMode === 'list'
+            layout === 'list'
               ? 'flex flex-col gap-3'
-              : viewMode === 'dense'
-                ? 'grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-8 gap-2'
-                : viewMode === 'compact'
-                  ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
-                  : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3';
+              : viewMode === 'compact'
+                ? 'grid gap-2'
+                : 'grid gap-3';
+          const gridStyle =
+            layout === 'list'
+              ? undefined
+              : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` };
           const hasActiveFilters =
             search.trim().length > 0 || heroCategoryId !== 'all' || categoryId !== 'all' || sort !== 'default';
 
@@ -1672,7 +1690,7 @@ export default function Browse() {
             // Match perPage so the skeleton grid fills roughly the same footprint
             // as the real results once they arrive.
             return (
-              <div className={gridClass} aria-busy="true" aria-live="polite">
+              <div className={gridClass} style={gridStyle} aria-busy="true" aria-live="polite">
                 {Array.from({ length: DEFAULT_PER_PAGE }).map((_, i) => (
                   <ModCardSkeleton key={i} viewMode={viewMode} />
                 ))}
@@ -1718,7 +1736,7 @@ export default function Browse() {
             );
           }
           return (
-            <div className={gridClass}>
+            <div className={gridClass} style={gridStyle}>
               {displayMods.map((mod) => {
                 const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
                 const isQueued = queueIndex >= 0;
@@ -1854,7 +1872,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
       </div>
     );
   }
-  const aspect = viewMode === 'compact' || viewMode === 'dense' ? 'aspect-[4/3]' : 'aspect-[3/2]';
+  const aspect = viewMode === 'compact' ? 'aspect-[4/3]' : 'aspect-[3/2]';
   return (
     <div className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden ${aspect}`}>
       <div className="absolute inset-0 skeleton-shimmer bg-bg-secondary" />
@@ -1869,9 +1887,9 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
 function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
-  // Dense reuses the compact card chrome (4:3 aspect, smaller text/padding); it
-  // only differs in how many columns the grid packs in.
-  const isCompact = viewMode === 'compact' || viewMode === 'dense';
+  // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
+  // see the size-threshold derivation of viewMode in the Browse component.
+  const isCompact = viewMode === 'compact';
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
   const hasAudioPreview = Boolean(audioPreview);

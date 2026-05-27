@@ -267,6 +267,16 @@ function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
 const updateCheckCache = new Map<number, Set<number> | null>();
 let installedPageScrollTop = 0;
 
+// Card-size slider bounds (grid column min-width, in px). The slider replaces
+// the old fixed Cards/Compact presets: drag controls how wide each card gets,
+// and the layout reflows columns to fit. Below COMPACT_CARD_THRESHOLD cards
+// drop to the leaner "compact" treatment (fewer chips, shorter media frame),
+// so small sizes stay readable without a separate view mode.
+const CARD_SIZE_MIN = 190;
+const CARD_SIZE_MAX = 360;
+const CARD_SIZE_DEFAULT = 300;
+const COMPACT_CARD_THRESHOLD = 255;
+
 export default function Installed() {
   const navigate = useNavigate();
   const {
@@ -308,13 +318,33 @@ export default function Installed() {
   const visibleMods = mods.filter(
     (m) => !m.lockerCosmetics && !m.lockerSounds && !absorbedFileNames.has(m.fileName)
   );
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    const stored = localStorage.getItem('installedViewMode');
-    return stored === 'grid' || stored === 'compact' || stored === 'list' ? stored : 'grid';
+  // Layout = the user's structural choice (cards grid vs horizontal list).
+  // cardSize = grid column min-width driven by the size slider. The effective
+  // three-way `viewMode` below is derived from both so the rest of the page
+  // (and ModCard) keeps reading a single ViewMode unchanged.
+  const [layout, setLayout] = useState<'grid' | 'list'>(() => {
+    const stored = localStorage.getItem('installedLayout');
+    if (stored === 'grid' || stored === 'list') return stored;
+    // Migrate from the old three-mode key: only 'list' carried structure.
+    return localStorage.getItem('installedViewMode') === 'list' ? 'list' : 'grid';
+  });
+  const [cardSize, setCardSize] = useState<number>(() => {
+    const stored = Number(localStorage.getItem('installedCardSize'));
+    if (Number.isFinite(stored) && stored >= CARD_SIZE_MIN && stored <= CARD_SIZE_MAX) {
+      return stored;
+    }
+    // Migrate: the old 'compact' preset becomes a small card; anything else
+    // (including 'grid' and 'list') lands on the default size.
+    return localStorage.getItem('installedViewMode') === 'compact' ? 210 : CARD_SIZE_DEFAULT;
   });
   useEffect(() => {
-    localStorage.setItem('installedViewMode', viewMode);
-  }, [viewMode]);
+    localStorage.setItem('installedLayout', layout);
+  }, [layout]);
+  useEffect(() => {
+    localStorage.setItem('installedCardSize', String(cardSize));
+  }, [cardSize]);
+  const viewMode: ViewMode =
+    layout === 'list' ? 'list' : cardSize < COMPACT_CARD_THRESHOLD ? 'compact' : 'grid';
   const [search, setSearch] = useState('');
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   // Raw pair count from detectConflicts. conflictMap.size / 2 only works when
@@ -1545,7 +1575,7 @@ export default function Installed() {
   }
 
   if (modsLoading) {
-    return <InstalledSkeleton viewMode={viewMode} />;
+    return <InstalledSkeleton viewMode={viewMode} cardSize={cardSize} />;
   }
 
   if (modsError) {
@@ -1925,11 +1955,15 @@ export default function Installed() {
     const activeEntry = draggingSection === section
       ? entries.find((entry) => entry.key === draggingKey)
       : undefined;
-    const gridClasses = viewMode === 'compact'
-      ? 'grid [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))] gap-3'
-      : viewMode === 'grid'
-        ? 'grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-4'
-        : 'space-y-1.5';
+    // Grid column min-width is the slider value, so it can't be a static
+    // Tailwind arbitrary class (the JIT scanner never sees it). Drive it with
+    // an inline style instead. Gap still tracks the compact/grid threshold.
+    const gridClasses =
+      layout === 'list' ? 'space-y-1.5' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4';
+    const gridStyle =
+      layout === 'list'
+        ? undefined
+        : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` };
 
     return (
       <DndContext
@@ -1943,9 +1977,9 @@ export default function Installed() {
       >
         <SortableContext
           items={entries.map((entry) => entry.key)}
-          strategy={viewMode === 'list' ? verticalListSortingStrategy : rectSortingStrategy}
+          strategy={layout === 'list' ? verticalListSortingStrategy : rectSortingStrategy}
         >
-          <div className={gridClasses}>
+          <div className={gridClasses} style={gridStyle}>
             {entries.map((entry) => (
               <SortableModEntry key={entry.key} id={entry.key} disabled={!sortableEnabled}>
                 {renderEntryCard(entry)}
@@ -2107,14 +2141,37 @@ export default function Installed() {
               title={selectMode ? 'Exit selection mode' : 'Select multiple mods for bulk delete, enable, or disable'}
             />
 
+            {/* Card-size slider: only meaningful in grid layout, so it's
+                disabled (and dimmed) while List is active rather than hidden,
+                keeping the toolbar from reflowing as you switch. */}
+            <div
+              className={`flex items-center gap-2 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 transition-opacity ${
+                layout === 'list' ? 'opacity-40' : ''
+              }`}
+              title="Card size"
+            >
+              <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+              <input
+                type="range"
+                min={CARD_SIZE_MIN}
+                max={CARD_SIZE_MAX}
+                step={5}
+                value={cardSize}
+                disabled={layout === 'list'}
+                onChange={(e) => setCardSize(Number(e.target.value))}
+                aria-label="Card size"
+                className="h-1.5 w-24 cursor-pointer accent-accent disabled:cursor-default"
+              />
+              <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+            </div>
+
             <ViewModeToggle
-              value={viewMode}
+              value={layout}
               options={[
-                { value: 'grid', label: 'Cards view', icon: LayoutGrid },
-                { value: 'compact', label: 'Compact view', icon: Grid3x3 },
+                { value: 'grid', label: 'Grid view', icon: LayoutGrid },
                 { value: 'list', label: 'List view', icon: List },
               ]}
-              onChange={setViewMode}
+              onChange={(mode) => setLayout(mode === 'list' ? 'list' : 'grid')}
             />
           </div>
         </div>
@@ -2710,7 +2767,7 @@ export default function Installed() {
   );
 }
 
-function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
+function InstalledSkeleton({ viewMode, cardSize }: { viewMode: ViewMode; cardSize: number }) {
   const isGridLike = viewMode !== 'list';
   const rows = viewMode === 'compact' ? 12 : viewMode === 'grid' ? 8 : 6;
   return (
@@ -2725,11 +2782,12 @@ function InstalledSkeleton({ viewMode }: { viewMode: ViewMode }) {
       <div className="skeleton-shimmer bg-bg-tertiary/70 rounded h-3 w-20 mb-3" />
       <div
         className={
-          viewMode === 'compact'
-            ? 'grid [grid-template-columns:repeat(auto-fill,minmax(210px,1fr))] gap-3'
-            : viewMode === 'grid'
-              ? 'grid [grid-template-columns:repeat(auto-fill,minmax(300px,1fr))] gap-4'
-              : 'space-y-2'
+          viewMode === 'list' ? 'space-y-2' : viewMode === 'compact' ? 'grid gap-3' : 'grid gap-4'
+        }
+        style={
+          isGridLike
+            ? { gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }
+            : undefined
         }
       >
         {Array.from({ length: rows }).map((_, i) =>
