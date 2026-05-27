@@ -13,6 +13,14 @@ interface CacheEntry<T> {
 // TTL for download counts cache (1 hour in ms)
 const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 
+// Monotonic generation guard for the mods list. loadMods claims a generation
+// before its (async) scan and only writes if it's still current; mutations that
+// replace the list (e.g. custom-mod import) bump it. This stops a slow silent
+// reload — notably the focus refresh fired when the OS file picker closes — from
+// resolving late and clobbering a just-completed mutation with a stale scan
+// (the "added a custom mod but can't act on it until I refresh" bug).
+let modsGeneration = 0;
+
 // Browse-page UI state. Kept in the store (not local component state) so it
 // survives navigation away from /browse and back — user complaint: search
 // query, view mode, and filters all reset when switching pages.
@@ -278,12 +286,23 @@ export const useAppStore = create<AppState>((set, get) => ({
   // doesn't flash the skeleton over already-rendered content.
   loadMods: async (opts) => {
     const silent = !!opts?.silent;
+    const gen = ++modsGeneration;
     if (!silent) set({ modsLoading: true, modsError: null });
     try {
       const mods = await api.getMods();
-      set(silent ? { mods, modsLoaded: true, modsError: null } : { mods, modsLoaded: true, modsLoading: false });
+      if (gen === modsGeneration) {
+        set(silent ? { mods, modsLoaded: true, modsError: null } : { mods, modsLoaded: true, modsLoading: false });
+      } else if (!silent) {
+        // Superseded by a newer load/mutation: drop the stale list, but still
+        // clear our own spinner so the page doesn't hang on it.
+        set({ modsLoading: false });
+      }
     } catch (err) {
-      set(silent ? { modsError: String(err) } : { modsError: String(err), modsLoading: false });
+      if (gen === modsGeneration) {
+        set(silent ? { modsError: String(err) } : { modsError: String(err), modsLoading: false });
+      } else if (!silent) {
+        set({ modsLoading: false });
+      }
     }
   },
 
@@ -401,6 +420,10 @@ export const useAppStore = create<AppState>((set, get) => ({
   importCustomMod: async (args) => {
     try {
       const updated = await api.importCustomMod(args);
+      // Bump the generation so any in-flight silent reload (e.g. the focus
+      // refresh from the just-closed file picker) can't overwrite this with a
+      // scan taken before the new VPK landed.
+      modsGeneration++;
       set({ mods: updated });
     } catch (err) {
       // At the 99-active cap, importing (which lands enabled) can't claim a

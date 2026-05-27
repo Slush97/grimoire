@@ -39,6 +39,7 @@ import type {
     AbilitySoundParams,
     ActiveHeroSound,
     ApplyHeroSoundResult,
+    LockerOverviewSound,
     LockerSoundSelection,
     LockerSoundsInfo,
 } from '../../../src/types/mod';
@@ -379,6 +380,24 @@ export async function revertHeroSound(
     );
     const { missing } = await rebuildLockerSounds(deadlockPath, next);
     return { activeSourceFileName: null, missingSourceFileNames: missing };
+}
+
+/** Applied ability sounds, summarized for the Installed-tab Locker Overrides card. */
+export async function listAppliedSounds(deadlockPath: string): Promise<LockerOverviewSound[]> {
+    const sounds = await currentSoundSelections(deadlockPath);
+    return sounds.map((s) => ({
+        heroName: s.heroName,
+        slot: s.slot,
+        sourceFileName: s.source.fileName,
+        modName: s.source.modName,
+        tuned: !!s.params,
+        params: s.params,
+    }));
+}
+
+/** Clear every applied sound (rebuild to empty, which deletes the sounds VPK). */
+export async function clearAllHeroSounds(deadlockPath: string): Promise<void> {
+    await rebuildLockerSounds(deadlockPath, []);
 }
 
 /** The source (and any volume/pitch retune) applied for each of a hero's ability

@@ -15,6 +15,7 @@ import type {
     ApplyUnknownModMatchArgs,
     GlobalModType,
     EditLocalModArgs,
+    LockerClearScope,
     MergeModsArgs,
     Mod,
     ModConflict,
@@ -797,6 +798,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('revert-hero-sound', heroName, slot),
     getActiveHeroSounds: (heroName: string) =>
         ipcRenderer.invoke('get-active-hero-sounds', heroName),
+    getLockerOverview: () =>
+        ipcRenderer.invoke('get-locker-overview'),
+    getLockerCardThumbnails: () =>
+        ipcRenderer.invoke('get-locker-card-thumbnails'),
+    clearLockerOverrides: (scope: LockerClearScope) =>
+        ipcRenderer.invoke('clear-locker-overrides', scope),
     setModGlobalType: (modId: string, globalType: GlobalModType | null) =>
         ipcRenderer.invoke('set-mod-global-type', modId, globalType),
     setModIgnoreUpdates: (modId: string, ignore: boolean) =>

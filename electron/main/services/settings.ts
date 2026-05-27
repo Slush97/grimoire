@@ -36,6 +36,10 @@ export interface AppSettings {
     accentColor: string;
     /** Order used to render absolute dates (mod/file upload + update dates). */
     dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY';
+    /** UI zoom factor (webContents.setZoomFactor). Driven by Ctrl +/-/0 and
+     *  persisted so hi-DPI laptops keep their preferred scale across launches.
+     *  1 = 100%. */
+    zoomFactor?: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
@@ -57,6 +61,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     ignoreConflictsByDefault: false,
     accentColor: '#f97316',
     dateFormat: 'MM/DD/YYYY',
+    zoomFactor: 1,
 };
 
 /**

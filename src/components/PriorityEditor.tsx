@@ -115,8 +115,12 @@ export default function PriorityEditor({
       aria-label={`Load order ${priority}. Click to change.`}
     >
       <span
-        className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/55 bg-[rgba(10,20,24,0.72)] px-2 text-[11px] font-bold leading-none tabular-nums text-accent shadow-none transition-colors duration-150 group-hover/order-chip:border-accent/85 group-hover/order-chip:bg-accent/10 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-accent/35 ${
-          variant === 'overlay' ? 'backdrop-blur-sm' : ''
+        // White number on a neutral dark scrim (overlay) or the standard input
+        // surface (inline), with a subtle grey border so it reads as a quiet
+        // card chip rather than an accent-highlighted control. Neutral greys keep
+        // it on-theme regardless of the user's accent hue.
+        className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-white/20 px-2 text-[11px] font-bold leading-none tabular-nums text-text-primary shadow-none transition-colors duration-150 group-hover/order-chip:border-white/35 group-hover/order-chip:bg-white/10 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-white/40 ${
+          variant === 'overlay' ? 'bg-black/55 backdrop-blur-sm' : 'bg-bg-tertiary'
         }`}
       >
         #{priority}
@@ -128,13 +132,13 @@ export default function PriorityEditor({
       )}
       {editing && popoverPos && createPortal(
         <div
-          className="fixed z-[9999] w-40 rounded-lg border border-white/10 bg-bg-primary/95 p-2.5 text-left shadow-xl"
+          className="fixed z-[9999] w-40 rounded-lg border border-border bg-bg-secondary p-2.5 text-left shadow-xl"
           style={{ top: popoverPos.top, left: popoverPos.left }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <span className="mb-2 block text-xs font-semibold text-text-primary">Load order</span>
-          <span className="inline-flex h-8 w-full items-center rounded-md border border-accent/55 bg-bg-tertiary/80 px-2 text-sm text-text-primary">
+          <span className="inline-flex h-9 w-full items-center rounded-md border border-border bg-bg-tertiary px-2.5 text-sm text-text-primary transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30">
             <span className="mr-1 text-text-secondary">#</span>
             <input
               ref={inputRef}

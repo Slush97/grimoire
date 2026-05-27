@@ -139,6 +139,48 @@ export interface ApplyHeroSoundResult {
   missingSourceFileNames: string[];
 }
 
+/** One applied hero-card override, summarized for the Locker Overrides popup. */
+export interface LockerOverviewCard {
+  heroName: string;
+  /** Source VPK filename whose card art is applied. Joins to the installed mod
+   *  for its thumbnail/name; the revert itself is keyed by heroName. */
+  sourceFileName: string;
+  modName?: string;
+}
+
+/** One applied ability-sound override, summarized for the popup. */
+export interface LockerOverviewSound {
+  heroName: string;
+  slot: AbilitySlot;
+  /** Source VPK filename providing this ability's clip. Joins to the installed
+   *  mod for its preview audio/name; the revert is keyed by (heroName, slot). */
+  sourceFileName: string;
+  modName?: string;
+  /** True when this slot carries a non-neutral volume/pitch retune. */
+  tuned: boolean;
+  /** The applied volume/pitch retune, so the popup's sliders reflect it. */
+  params?: AbilitySoundParams;
+}
+
+/** Everything the Locker is currently overriding, for the Locker Overrides popup. */
+export interface LockerOverview {
+  cards: LockerOverviewCard[];
+  sounds: LockerOverviewSound[];
+}
+
+/** Which slice of Locker overrides to clear. */
+export type LockerClearScope = 'all' | 'cards' | 'sounds';
+
+/** One applied hero card decoded to a preview thumbnail, for the popup. Decoded
+ *  on demand from the managed cosmetics VPK (the real applied art, not the
+ *  source mod's GameBanana cover), so it's a separate call from the cheap
+ *  overview/count. */
+export interface LockerCardThumbnail {
+  heroName: string;
+  /** PNG data URL of the most representative applied variant (card cover first). */
+  dataUrl: string;
+}
+
 /** The source (and any volume/pitch retune) applied for one ability slot, read
  *  back so the picker can reflect the active pick + slider positions. */
 export interface ActiveHeroSound {
@@ -416,4 +458,6 @@ export interface AppSettings {
   accentColor: string;
   /** Order used to render absolute dates (mod/file upload + update dates). */
   dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY';
+  /** UI zoom factor (Ctrl +/-/0), persisted across launches. 1 = 100%. */
+  zoomFactor?: number;
 }

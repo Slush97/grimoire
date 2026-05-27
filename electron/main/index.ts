@@ -55,10 +55,11 @@ import './ipc/social';
 import './ipc/diagnostics';
 import './ipc/portraits';
 import './ipc/abilitySounds';
+import './ipc/locker';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
-import { loadSettings } from './services/settings';
+import { loadSettings, saveSettings } from './services/settings';
 import { backfillMissingMetadataHashes } from './services/metadata';
 
 let mainWindow: BrowserWindow | null = null;
@@ -162,6 +163,38 @@ function createWindow(): void {
     // Debug: log renderer errors
     mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription) => {
         console.error('[Main] Renderer failed to load:', errorCode, errorDescription);
+    });
+
+    // --- UI zoom (Ctrl +/-/0), persisted across launches. The renderer is dense
+    // and on hi-DPI laptops everything renders tiny, so let the user scale the
+    // whole UI. Driven through webContents.setZoomFactor via before-input-event
+    // (the menu bar is auto-hidden, so there's no View > Zoom to lean on).
+    const ZOOM_MIN = 0.5;
+    const ZOOM_MAX = 3.0;
+    const ZOOM_STEP = 0.1;
+    const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+    const persistZoom = (z: number) => {
+        try {
+            saveSettings({ ...loadSettings(), zoomFactor: z });
+        } catch (err) {
+            console.warn('[Main] Failed to persist zoom factor:', err);
+        }
+    };
+    // Zoom factor resets to 1 on every load, so re-apply the saved value each time.
+    mainWindow.webContents.on('did-finish-load', () => {
+        mainWindow?.webContents.setZoomFactor(clampZoom(loadSettings().zoomFactor ?? 1));
+    });
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown' || !input.control || input.alt || input.meta || !mainWindow) return;
+        const wc = mainWindow.webContents;
+        let next: number | null = null;
+        if (input.key === '=' || input.key === '+' || input.key === 'Add') next = clampZoom(wc.getZoomFactor() + ZOOM_STEP);
+        else if (input.key === '-' || input.key === 'Subtract') next = clampZoom(wc.getZoomFactor() - ZOOM_STEP);
+        else if (input.key === '0') next = 1;
+        if (next === null) return;
+        event.preventDefault();
+        wc.setZoomFactor(next);
+        persistZoom(next);
     });
 
     // Load the renderer

@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
 import type { HeroPortrait } from '../types/portrait';
 import type {
   GameBananaModsResponse,
@@ -136,6 +136,18 @@ export async function revertHeroSound(
 
 export async function getActiveHeroSounds(heroName: string): Promise<ActiveHeroSound[]> {
   return window.electronAPI.getActiveHeroSounds(heroName);
+}
+
+export async function getLockerOverview(): Promise<LockerOverview> {
+  return window.electronAPI.getLockerOverview();
+}
+
+export async function getLockerCardThumbnails(): Promise<LockerCardThumbnail[]> {
+  return window.electronAPI.getLockerCardThumbnails();
+}
+
+export async function clearLockerOverrides(scope: LockerClearScope): Promise<void> {
+  return window.electronAPI.clearLockerOverrides(scope);
 }
 
 export async function setModGlobalType(

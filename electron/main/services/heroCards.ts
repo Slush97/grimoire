@@ -12,7 +12,7 @@
  * `.vtex_c` the game loads). Decoding to PNG (`vpkmerge portrait`) is only for
  * the preview grid in heroPortraits.ts.
  */
-import { promises as fs } from 'fs';
+import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
@@ -35,7 +35,9 @@ import { codenamesForHero } from './heroPortraits';
 import type {
     ApplyHeroCardResult,
     LockerCardSelection,
+    LockerCardThumbnail,
     LockerCosmeticsInfo,
+    LockerOverviewCard,
 } from '../../../src/types/mod';
 
 const PANORAMA_HERO_PREFIX = 'panorama/images/heroes/';
@@ -315,6 +317,92 @@ export async function revertHeroCard(
     const next = current.filter((c) => c.heroCodename !== primaryCodename);
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
     return { activeSourceFileName: null, missingSourceFileNames: missing };
+}
+
+/** Applied hero cards, summarized for the Installed-tab Locker Overrides card. */
+export async function listAppliedCards(deadlockPath: string): Promise<LockerOverviewCard[]> {
+    const cards = await currentCardSelections(deadlockPath);
+    return cards.map((c) => ({
+        heroName: c.heroName,
+        sourceFileName: c.source.fileName,
+        modName: c.source.modName,
+    }));
+}
+
+/** Clear every applied card (rebuild to empty, which deletes the cards VPK). */
+export async function clearAllHeroCards(deadlockPath: string): Promise<void> {
+    await rebuildLockerCosmetics(deadlockPath, []);
+}
+
+interface PortraitManifest {
+    portraits: Array<{
+        variant: string;
+        width: number;
+        height: number;
+        format_name: string;
+        output_path: string | null;
+    }>;
+}
+
+/** Which applied variant best represents a hero in a small tile: the full card
+ *  cover first, then the rest by prominence; anything unlisted sorts last. */
+const THUMB_VARIANT_ORDER = ['card', 'vertical', 'card_critical', 'card_gloat', 'minimap', 'small'];
+
+function thumbVariantRank(variant: string): number {
+    const i = THUMB_VARIANT_ORDER.indexOf(variant);
+    return i === -1 ? THUMB_VARIANT_ORDER.length : i;
+}
+
+/**
+ * Decode the ACTUAL applied card art into one representative thumbnail per hero,
+ * for the Locker Overrides popup. Reads straight from the managed cosmetics VPK
+ * (which holds exactly the applied cards) rather than the source mod's
+ * GameBanana cover, and picks the most cover-like variant per hero.
+ *
+ * Separate from the (cheap) overview/count on purpose: this shells out to
+ * `vpkmerge portrait` per applied hero, so it's fetched lazily only when the
+ * popup opens. A hero whose art fails to decode is simply omitted (the popup
+ * falls back to a placeholder), so one bad entry never sinks the rest.
+ */
+export async function getAppliedCardThumbnails(
+    deadlockPath: string
+): Promise<LockerCardThumbnail[]> {
+    const selections = await currentCardSelections(deadlockPath);
+    if (selections.length === 0) return [];
+    const vpkPath = lockerCardsVpkPath(deadlockPath);
+    if (!existsSync(vpkPath)) return [];
+    vpkmergeBinaryPath(); // clear early error if the binary is missing/old
+
+    const cacheRoot = join(app.getPath('userData'), 'locker-card-thumbs');
+    const out: LockerCardThumbnail[] = [];
+    for (const sel of selections) {
+        // The split folds in the whole per-hero prefix, so the art may sit under
+        // a legacy alias codename, not the primary. Try each and keep the best.
+        let best: { rank: number; outputPath: string } | null = null;
+        for (const codename of codenamesForHero(sel.heroName)) {
+            const outDir = join(cacheRoot, codename);
+            const manifestPath = join(outDir, 'manifest.json');
+            try {
+                await runVpkmerge(
+                    ['portrait', vpkPath, '--hero', codename, '--out', outDir, '--manifest', manifestPath],
+                    60000
+                );
+                const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8')) as PortraitManifest;
+                for (const p of manifest.portraits) {
+                    if (!p.output_path) continue;
+                    const rank = thumbVariantRank(p.variant);
+                    if (!best || rank < best.rank) best = { rank, outputPath: p.output_path };
+                }
+            } catch (err) {
+                console.warn(`[heroCards] thumb decode failed for ${sel.heroName} (${codename}): ${String(err)}`);
+            }
+        }
+        if (best) {
+            const png = await fs.readFile(best.outputPath);
+            out.push({ heroName: sel.heroName, dataUrl: `data:image/png;base64,${png.toString('base64')}` });
+        }
+    }
+    return out;
 }
 
 /** The card currently applied for a hero (to reflect selection in the picker). */
