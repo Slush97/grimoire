@@ -118,9 +118,13 @@ export default function PriorityEditor({
         // White number on a neutral dark scrim (overlay) or the standard input
         // surface (inline), with a subtle grey border so it reads as a quiet
         // card chip rather than an accent-highlighted control. Neutral greys keep
-        // it on-theme regardless of the user's accent hue.
+        // it on-theme regardless of the user's accent hue. The overlay sits over
+        // arbitrary thumbnail art, so the number gets a hard black outline
+        // (text-shadow on all four corners) to stay legible over bright covers.
         className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-white/20 px-2 text-[11px] font-bold leading-none tabular-nums text-text-primary shadow-none transition-colors duration-150 group-hover/order-chip:border-white/35 group-hover/order-chip:bg-white/10 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-white/40 ${
-          variant === 'overlay' ? 'bg-black/55 backdrop-blur-sm' : 'bg-bg-tertiary'
+          variant === 'overlay'
+            ? 'bg-black/60 backdrop-blur-sm [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000,0_0_2px_#000]'
+            : 'bg-bg-tertiary'
         }`}
       >
         #{priority}

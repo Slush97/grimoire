@@ -2127,7 +2127,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </div>
         </div>
       ) : (
-        <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5 pr-11' : 'p-3 pr-12'}`}>
+        <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
           <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
           <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-xs' : 'text-sm'}`}>
             <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.likeCount)}</span>
@@ -2212,10 +2212,8 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         </div>
       )}
 
-      {/* Download / Enable button overlay. Anchored bottom-right alongside the
-          title (where the eye already lands); sound cards with an audio player
-          keep it top-right so it doesn't collide with the pinned player. */}
-      <div className={`absolute right-2 ${isSoundSection && hasAudioPreview ? 'top-2' : 'bottom-2'}`}>
+      {/* Download / Enable button overlay — top right with backdrop */}
+      <div className="absolute top-2 right-2">
         {installed && installedDisabled && onEnable ? (
           // Mod just installed but still in the disabled folder. Surface an
           // inline Enable affordance right where the user's eye is rather

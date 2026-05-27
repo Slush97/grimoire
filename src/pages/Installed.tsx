@@ -50,6 +50,8 @@ import {
   Pencil,
   MoreHorizontal,
   Wand2,
+  SlidersHorizontal,
+  ArrowDownUp,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -66,7 +68,7 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS } from '../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { setModGlobalType } from '../lib/api';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
@@ -187,6 +189,59 @@ function entrySortPriority(entry: ModEntry): number {
 /** Searchable display name for an entry (the visible card title). */
 function entryName(entry: ModEntry): string {
   return entry.kind === 'single' ? entry.mod.name : entry.primary.name;
+}
+
+/** The mod we read metadata from for filtering (matches the visual primary). */
+function entryPrimaryMod(entry: ModEntry): Mod {
+  return entry.kind === 'single' ? entry.mod : entry.primary;
+}
+
+/** Most recent install time across an entry's files (ISO string, so it sorts
+ *  lexically = chronologically). Groups use their newest variant so a freshly
+ *  downloaded file pulls the whole card to the top of "Recently added". */
+function entryInstalledAt(entry: ModEntry): string {
+  if (entry.kind === 'single') return entry.mod.installedAt;
+  return entry.variants.reduce(
+    (latest, v) => (v.installedAt > latest ? v.installedAt : latest),
+    entry.variants[0]?.installedAt ?? ''
+  );
+}
+
+/** A locally imported mod has no GameBanana id. Group entries are always
+ *  GameBanana (they're keyed by a shared GameBanana mod id). */
+function entryIsLocal(entry: ModEntry): boolean {
+  return entry.kind === 'single' && typeof entry.mod.gameBananaId !== 'number';
+}
+
+const OTHER_TYPE_KEY = 'other';
+
+/** Coarse "mod type" bucket for the Installed type filter, derived entirely
+ *  from already-classified metadata. Precedence: a global cosmetic type, then
+ *  sounds, then the GameBanana category/section, then a catch-all. The key is
+ *  opaque; typeKeyLabel turns it into display text. */
+function entryTypeKey(entry: ModEntry): string {
+  const mod = entryPrimaryMod(entry);
+  const global = getEffectiveGlobalType(mod);
+  if (global) return `global:${global}`;
+  const section = (mod.sourceSection ?? '').toLowerCase();
+  if (section.includes('sound')) return 'sound';
+  const category = mod.categoryName?.trim();
+  if (category) return `cat:${category}`;
+  const rawSection = mod.sourceSection?.trim();
+  if (rawSection) return `section:${rawSection}`;
+  return OTHER_TYPE_KEY;
+}
+
+function typeKeyLabel(key: string): string {
+  if (key === OTHER_TYPE_KEY) return 'Other';
+  if (key === 'sound') return 'Sounds';
+  if (key.startsWith('global:')) {
+    const gt = key.slice('global:'.length) as GlobalModType;
+    return GLOBAL_MOD_TYPE_LABELS[gt] ?? gt;
+  }
+  if (key.startsWith('cat:')) return key.slice('cat:'.length);
+  if (key.startsWith('section:')) return key.slice('section:'.length);
+  return key;
 }
 
 function flattenEntries(entries: ModEntry[]): Mod[] {
@@ -370,6 +425,58 @@ export default function Installed() {
     void refreshLockerOverrideCount();
   }, [refreshLockerOverrideCount]);
   const [search, setSearch] = useState('');
+  // Sort + filter popover (the SlidersHorizontal button in the top bar). Sort
+  // and source persist across launches; the type selection is library-specific
+  // so it resets per session. A non-default sort or any active filter turns the
+  // list into a read-only view (see viewIsReorderable) because the displayed
+  // order no longer maps to load-order priority.
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+  const [sortMode, setSortMode] = useState<'priority' | 'recent' | 'name'>(() => {
+    const stored = localStorage.getItem('installedSortMode');
+    return stored === 'recent' || stored === 'name' ? stored : 'priority';
+  });
+  // Source + status are independent toggles (both on = no filter). Source
+  // persists; status resets per session like the type selection.
+  const [sourceSel, setSourceSel] = useState<('gamebanana' | 'local')[]>(() => {
+    try {
+      const stored: unknown = JSON.parse(localStorage.getItem('installedSourceSel') ?? 'null');
+      if (Array.isArray(stored)) {
+        const valid = Array.from(
+          new Set(stored.filter((v): v is 'gamebanana' | 'local' => v === 'gamebanana' || v === 'local'))
+        );
+        if (valid.length > 0) return valid;
+      }
+    } catch {
+      /* fall through to default */
+    }
+    return ['gamebanana', 'local'];
+  });
+  const [statusSel, setStatusSel] = useState<('enabled' | 'disabled')[]>(['enabled', 'disabled']);
+  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  useEffect(() => {
+    localStorage.setItem('installedSortMode', sortMode);
+  }, [sortMode]);
+  useEffect(() => {
+    localStorage.setItem('installedSourceSel', JSON.stringify(sourceSel));
+  }, [sourceSel]);
+  useEffect(() => {
+    if (!filterOpen) return;
+    const onMouseDown = (event: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(event.target as Node)) {
+        setFilterOpen(false);
+      }
+    };
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFilterOpen(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [filterOpen]);
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   // Raw pair count from detectConflicts. conflictMap.size / 2 only works when
   // every mod is in exactly one pair — when one mod conflicts with multiple
@@ -1660,14 +1767,66 @@ export default function Installed() {
         cancelled: unknownFilterPendingIds.has(unknownFilterGuess.mod.id) ? false : unknownFilterGuess.cancelled,
       }
     : null;
-  // Filter by search query (case-insensitive substring on name). Drag-and-drop
-  // reorder is still correct because it targets the full enabled list order,
-  // not the filtered view.
+  // Mod-type buckets present across every installed entry, with counts. Built
+  // from allEntries (not the filtered view) so the option list stays stable as
+  // selections change.
+  const typeOptionMap = new Map<string, number>();
+  for (const entry of allEntries) {
+    const key = entryTypeKey(entry);
+    typeOptionMap.set(key, (typeOptionMap.get(key) ?? 0) + 1);
+  }
+  const typeOptions = Array.from(typeOptionMap.entries())
+    .map(([key, count]) => ({ key, label: typeKeyLabel(key), count }))
+    .sort((a, b) => {
+      if (a.key === OTHER_TYPE_KEY) return 1;
+      if (b.key === OTHER_TYPE_KEY) return -1;
+      return a.label.localeCompare(b.label);
+    });
+  const localCount = allEntries.filter(entryIsLocal).length;
+  const gbCount = allEntries.length - localCount;
+  const enabledCount = enabledEntries.length;
+  const disabledCount = disabledEntries.length;
+
+  // Filter by search query (substring on name), source (GameBanana vs local
+  // import), and mod type, then optionally re-sort. Status (enabled/disabled) is
+  // applied per-section below. Drag-and-drop reorder is disabled whenever any of
+  // these is active (see viewIsReorderable) because the displayed order no longer
+  // maps to load-order priority; the canonical priority order lives on
+  // enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
   const matchesSearchEntry = (entry: ModEntry) =>
     !searchNeedle || entryName(entry).toLowerCase().includes(searchNeedle);
-  const visibleEnabled = enabledEntries.filter(matchesSearchEntry);
-  const visibleDisabled = disabledEntries.filter(matchesSearchEntry);
+  const matchesSourceEntry = (entry: ModEntry) =>
+    entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
+  const matchesTypeEntry = (entry: ModEntry) =>
+    typeFilter.length === 0 || typeFilter.includes(entryTypeKey(entry));
+  const matchesAllFilters = (entry: ModEntry) =>
+    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesTypeEntry(entry);
+  const sortEntries = (entries: ModEntry[]): ModEntry[] => {
+    if (sortMode === 'name') {
+      return [...entries].sort((a, b) =>
+        entryName(a).localeCompare(entryName(b), undefined, { sensitivity: 'base' })
+      );
+    }
+    if (sortMode === 'recent') {
+      return [...entries].sort((a, b) => entryInstalledAt(b).localeCompare(entryInstalledAt(a)));
+    }
+    return entries; // 'priority' (already in load order).
+  };
+  // Both toggles on (length 2) = no filtering on that axis.
+  const sourceActive = sourceSel.length !== 2;
+  const statusActive = statusSel.length !== 2;
+  const filtersActive = sourceActive || statusActive || typeFilter.length > 0;
+  const sortActive = sortMode !== 'priority';
+  const viewIsReorderable = !searchNeedle && !filtersActive && !sortActive;
+  const activeAdjustmentCount =
+    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + typeFilter.length + (sortActive ? 1 : 0);
+  const visibleEnabled = statusSel.includes('enabled')
+    ? sortEntries(enabledEntries.filter(matchesAllFilters))
+    : [];
+  const visibleDisabled = statusSel.includes('disabled')
+    ? sortEntries(disabledEntries.filter(matchesAllFilters))
+    : [];
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
 
   const selectAllVisible = () => {
@@ -1730,7 +1889,7 @@ export default function Installed() {
   const previewEnabled = previewEntriesForDrag(visibleEnabled, 'enabled');
   const previewDisabled = previewEntriesForDrag(visibleDisabled, 'disabled');
 
-  const sortableEnabled = !searchNeedle && !selectMode;
+  const sortableEnabled = viewIsReorderable && !selectMode;
 
   const visibleEntriesForSection = (section: DragSection): ModEntry[] =>
     section === 'enabled' ? visibleEnabled : visibleDisabled;
@@ -2142,16 +2301,205 @@ export default function Installed() {
             )}
           </div>
           <div className="flex flex-wrap items-center justify-end gap-3">
+            {/* Sort + filter: load order / recent / name, GameBanana vs local
+                import, and mod-type buckets. The badge counts active
+                adjustments; while any are on, the list is read-only (no drag
+                reorder) so it can't be mistaken for load order. order-last groups
+                it with the other view controls (size slider + layout toggle),
+                leaving the action buttons as their own cluster. */}
+            <div className="relative order-last" ref={filterRef}>
+              <Button
+                variant={activeAdjustmentCount > 0 ? 'primary' : 'secondary'}
+                onClick={() => setFilterOpen((v) => !v)}
+                icon={SlidersHorizontal}
+                className="!px-2.5"
+                aria-label="Sort and filter"
+                title="Sort and filter installed mods"
+              />
+              {activeAdjustmentCount > 0 && (
+                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-bg-primary">
+                  {activeAdjustmentCount}
+                </span>
+              )}
+              {filterOpen && (
+                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm shadow-xl shadow-black/40">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                    <ArrowDownUp className="h-3.5 w-3.5" /> Sort
+                  </div>
+                  <div className="space-y-1">
+                    {([
+                      ['priority', 'Load order'],
+                      ['recent', 'Recently added'],
+                      ['name', 'Name (A-Z)'],
+                    ] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setSortMode(value)}
+                        className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left transition-colors cursor-pointer ${
+                          sortMode === value
+                            ? 'bg-accent/15 text-text-primary'
+                            : 'text-text-secondary hover:bg-white/5 hover:text-text-primary'
+                        }`}
+                      >
+                        <span>{label}</span>
+                        {sortMode === value && <Check className="h-3.5 w-3.5 text-accent" />}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="mt-3 border-t border-border pt-3">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                      Source
+                    </div>
+                    <div className="flex gap-1">
+                      {([
+                        ['gamebanana', 'GameBanana', gbCount],
+                        ['local', 'Local', localCount],
+                      ] as const).map(([value, label, count]) => {
+                        const on = sourceSel.includes(value);
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() =>
+                              setSourceSel((prev) =>
+                                prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+                              )
+                            }
+                            aria-pressed={on}
+                            className={`flex-1 rounded-md border px-1.5 py-1 text-[11px] transition-colors cursor-pointer ${
+                              on
+                                ? 'border-accent/50 bg-accent/15 text-text-primary'
+                                : 'border-border text-text-secondary opacity-50 hover:border-white/20 hover:text-text-primary'
+                            }`}
+                          >
+                            {label}
+                            <span className="ml-1 opacity-60">{count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <div className="mt-3 border-t border-border pt-3">
+                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                      Status
+                    </div>
+                    <div className="flex gap-1">
+                      {([
+                        ['enabled', 'Enabled', enabledCount],
+                        ['disabled', 'Disabled', disabledCount],
+                      ] as const).map(([value, label, count]) => {
+                        const on = statusSel.includes(value);
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() =>
+                              setStatusSel((prev) =>
+                                prev.includes(value) ? prev.filter((v) => v !== value) : [...prev, value]
+                              )
+                            }
+                            aria-pressed={on}
+                            className={`flex-1 rounded-md border px-1.5 py-1 text-[11px] transition-colors cursor-pointer ${
+                              on
+                                ? 'border-accent/50 bg-accent/15 text-text-primary'
+                                : 'border-border text-text-secondary opacity-50 hover:border-white/20 hover:text-text-primary'
+                            }`}
+                          >
+                            {label}
+                            <span className="ml-1 opacity-60">{count}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {typeOptions.length > 1 && (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                          Mod type
+                        </span>
+                        {typeFilter.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setTypeFilter([])}
+                            className="text-[11px] text-accent hover:underline cursor-pointer"
+                          >
+                            Clear
+                          </button>
+                        )}
+                      </div>
+                      <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
+                        {typeOptions.map((opt) => {
+                          const checked = typeFilter.includes(opt.key);
+                          const hero = heroNameForLabel(opt.label);
+                          return (
+                            <button
+                              key={opt.key}
+                              type="button"
+                              onClick={() =>
+                                setTypeFilter((prev) =>
+                                  checked ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
+                                )
+                              }
+                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
+                            >
+                              <span
+                                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
+                                  checked ? 'border-accent bg-accent text-white' : 'border-border'
+                                }`}
+                              >
+                                {checked && <Check className="h-3 w-3" />}
+                              </span>
+                              {hero && (
+                                <img
+                                  src={getHeroChipIconPath(hero)}
+                                  alt=""
+                                  aria-hidden="true"
+                                  className="h-4 w-4 flex-shrink-0 rounded-full object-cover"
+                                  loading="lazy"
+                                />
+                              )}
+                              <span className="flex-1 truncate">{opt.label}</span>
+                              <span className="text-[11px] opacity-60">{opt.count}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {activeAdjustmentCount > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSortMode('priority');
+                        setSourceSel(['gamebanana', 'local']);
+                        setStatusSel(['enabled', 'disabled']);
+                        setTypeFilter([]);
+                      }}
+                      className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
+                    >
+                      Reset
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
             {statusButtons}
-            {!searchNeedle && (
-              <button
-                type="button"
+            {viewIsReorderable && (
+              <Button
+                variant="secondary"
                 onClick={fixOrder}
+                icon={Wrench}
+                className="!px-3 !text-xs"
                 title="Renumber enabled mods 1, 2, 3, ... to tidy priority slots"
-                className="text-[10px] uppercase tracking-wider px-2.5 py-1 border border-white/10 hover:border-accent/50 bg-white/[0.02] hover:bg-accent/10 text-text-secondary hover:text-text-primary rounded-full transition-colors cursor-pointer"
               >
                 Fix Order
-              </button>
+              </Button>
             )}
             <Button
               variant="secondary"
@@ -2202,7 +2550,7 @@ export default function Installed() {
                 disabled (and dimmed) while List is active rather than hidden,
                 keeping the toolbar from reflowing as you switch. */}
             <div
-              className={`flex items-center gap-2 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 transition-opacity ${
+              className={`order-last flex items-center gap-2 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 transition-opacity ${
                 layout === 'list' ? 'opacity-40' : ''
               }`}
               title="Card size"
@@ -2223,6 +2571,7 @@ export default function Installed() {
             </div>
 
             <ViewModeToggle
+              className="order-last"
               value={layout}
               options={[
                 { value: 'grid', label: 'Grid view', icon: LayoutGrid },
@@ -2244,15 +2593,24 @@ export default function Installed() {
         />
       )}
 
-      {searchNeedle && totalMatches === 0 && (
+      {(searchNeedle || filtersActive) && totalMatches === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-text-secondary">
           <Search className="w-12 h-12 mb-3 opacity-50" />
-          <p className="mb-2">No installed mods match &ldquo;{search}&rdquo;</p>
+          <p className="mb-2">
+            {searchNeedle
+              ? <>No installed mods match &ldquo;{search}&rdquo;</>
+              : 'No installed mods match the active filters'}
+          </p>
           <button
-            onClick={() => setSearch('')}
+            onClick={() => {
+              setSearch('');
+              setSourceSel(['gamebanana', 'local']);
+              setStatusSel(['enabled', 'disabled']);
+              setTypeFilter([]);
+            }}
             className="mt-1 px-3 py-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer text-sm"
           >
-            Clear search
+            {searchNeedle ? 'Clear search' : 'Clear filters'}
           </button>
         </div>
       )}
