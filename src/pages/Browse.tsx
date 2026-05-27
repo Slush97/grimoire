@@ -1472,6 +1472,7 @@ export default function Browse() {
         return;
       }
       console.error('Local search failed, falling back to API:', err);
+      lastFetchedStampRef.current = null;
       setLocalSearchFailed(true);
     } finally {
       if (requestGeneration === requestGenerationRef.current && lastFetchedStampRef.current === stamp) {
@@ -2389,7 +2390,7 @@ export default function Browse() {
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
                       <div className="mb-2 text-xs font-medium text-text-secondary">Card style</div>
                       <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Browse card design">
-                        {(['classic', 'readable'] as const).map((design) => {
+                        {(['readable', 'classic'] as const).map((design) => {
                           const active = browseCardDesign === design;
                           return (
                             <button
@@ -2405,12 +2406,13 @@ export default function Browse() {
                                   : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
                               }`}
                             >
-                              {design === 'classic' ? 'Classic' : 'Readable'}
+                              {design === 'readable' ? 'Default' : 'Classic'}
                             </button>
                           );
                         })}
                       </div>
                     </div>
+
                   </div>
                 </div>
               )}
@@ -2674,7 +2676,14 @@ export default function Browse() {
                   }
                 : { gridTemplateColumns: `repeat(auto-fill, minmax(${activeCardSize}px, 1fr))` };
           const hasActiveFilters =
-            search.trim().length > 0 || heroCategoryId !== 'all' || categoryId !== 'all' || sort !== 'default';
+            search.trim().length > 0 ||
+            heroCategoryId !== 'all' ||
+            categoryId !== 'all' ||
+            sort !== 'default' ||
+            nsfw !== 'all' ||
+            addedWithin !== 'all' ||
+            addedFrom.length > 0 ||
+            addedTo.length > 0;
 
           if (loading) {
             // Match perPage so the skeleton grid fills roughly the same footprint
@@ -2716,6 +2725,10 @@ export default function Browse() {
                         setHeroCategoryId('all');
                         setCategoryId('all');
                         setSort('default');
+                        setNsfw('all');
+                        setAddedWithin('all');
+                        setAddedFrom('');
+                        setAddedTo('');
                       }}
                     >
                       Clear filters
@@ -2768,6 +2781,7 @@ export default function Browse() {
                             viewMode={viewMode}
                             cardDesign={browseCardDesign}
                             cardSize={activeCardSize}
+                            cardWidth={virtualColumnWidth}
                             cardHeight={virtualCardHeight}
                             section={section}
                             volume={soundVolume}
@@ -2871,6 +2885,7 @@ function ReadableBrowseModCard({
   downloading,
   queuePosition,
   cardSize,
+  cardWidth,
   cardHeight,
   section,
   volume,
@@ -2891,8 +2906,7 @@ function ReadableBrowseModCard({
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
   const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
-  const readableCardTargetWidth = getReadableCardTargetWidth(cardSize);
-  const readableCardWidth = readableCardTargetWidth;
+  const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
   const readableDensity = getReadableDensity(readableCardWidth);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [audioControlsActive, setAudioControlsActive] = useState(false);
@@ -3145,6 +3159,7 @@ interface ModCardProps {
   viewMode: ViewMode;
   cardDesign: BrowseCardDesign;
   cardSize: number;
+  cardWidth?: number;
   cardHeight?: number;
   section: string;
   volume: number;
@@ -3186,7 +3201,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
-function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntent, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntent, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
@@ -3359,6 +3374,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           viewMode={viewMode}
           cardDesign={cardDesign}
           cardSize={cardSize}
+          cardWidth={cardWidth}
           cardHeight={cardHeight}
           section={section}
           volume={volume}
@@ -3659,6 +3675,7 @@ const MemoizedModCard = React.memo(ModCard, (prev, next) => (
   prev.viewMode === next.viewMode &&
   prev.cardDesign === next.cardDesign &&
   prev.cardSize === next.cardSize &&
+  prev.cardWidth === next.cardWidth &&
   prev.cardHeight === next.cardHeight &&
   prev.section === next.section &&
   prev.volume === next.volume &&

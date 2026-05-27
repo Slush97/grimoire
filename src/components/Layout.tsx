@@ -284,7 +284,7 @@ export default function Layout() {
             </div>
           </div>
         )}
-        <div key={outletKey} className="min-h-0 flex-1 animate-fade-in">
+        <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in">
           <Outlet />
         </div>
       </main>

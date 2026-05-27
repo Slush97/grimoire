@@ -33,21 +33,21 @@ export function DynamicSelect({
         const ctx = canvas.getContext('2d');
         if (!ctx) return;
         const computed = window.getComputedStyle(node);
-        ctx.font = `${computed.fontSize} ${computed.fontFamily}`;
+        ctx.font = `${computed.fontStyle} ${computed.fontVariant} ${computed.fontWeight} ${computed.fontSize} ${computed.fontFamily}`;
         const textWidth = ctx.measureText(currentLabel).width;
-        // Text + left padding (12px) + gap before arrow (8px) + arrow (16px) + right padding (8px) + border (2px)
-        setWidth(Math.ceil(textWidth) + 46);
+        // Text + left padding + native select buffer + gap before arrow + icon + right padding + border.
+        setWidth(Math.ceil(textWidth) + 64);
     }, [currentLabel]);
 
     return (
-        <div className="relative inline-flex">
+        <div className="relative inline-flex flex-shrink-0">
             <select
                 ref={measureRef}
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 disabled={disabled}
                 style={width ? { width: `${width}px` } : undefined}
-                className={`appearance-none h-10 pl-3 pr-8 bg-bg-secondary border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent transition-[width] duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
+                className={`appearance-none h-10 pl-3 pr-10 bg-bg-secondary border border-border rounded-lg text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent transition-[width] duration-150 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${className}`}
                 {...props}
             >
                 {options.map((opt) => (
@@ -58,7 +58,7 @@ export function DynamicSelect({
             </select>
             {/* Custom dropdown arrow */}
             <ChevronDown
-                className={`absolute right-2 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none ${disabled ? 'text-text-secondary/50' : 'text-text-secondary'}`}
+                className={`absolute right-2.5 top-1/2 -translate-y-1/2 w-5 h-5 pointer-events-none ${disabled ? 'text-text-secondary/50' : 'text-text-secondary'}`}
             />
         </div>
     );
