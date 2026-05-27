@@ -1,11 +1,11 @@
 import { useState, type CSSProperties } from 'react';
 import {
   AlertTriangle,
-  Calendar,
   Check,
   Clock,
   Download,
   Eye,
+  History,
   Layers,
   Loader2,
   Play,
@@ -234,19 +234,19 @@ function actionTone(card: SampleCard): string {
   switch (card.action) {
     case 'installed':
     case 'selected':
-      return 'border-state-success/45 bg-state-success/10 text-state-success';
+      return 'border-state-success/30 bg-state-success/[0.055] text-state-success';
     case 'queued':
-      return 'border-state-info/45 bg-state-info/10 text-state-info';
+      return 'border-state-info/30 bg-state-info/[0.055] text-state-info';
     case 'downloading':
-      return 'border-accent/45 bg-accent/10 text-accent';
+      return 'border-accent/30 bg-accent/[0.055] text-accent';
     case 'enable':
-      return 'border-state-success/45 bg-state-success/10 text-state-success hover:border-state-success/70';
+      return 'border-state-success/30 bg-state-success/[0.055] text-state-success hover:border-state-success/50';
     case 'disable':
-      return 'border-white/12 bg-white/[0.04] text-text-secondary hover:border-white/20';
+      return 'border-white/[0.08] bg-white/[0.025] text-text-secondary/85 hover:border-white/[0.14]';
     case 'update':
-      return 'border-state-warning/55 bg-state-warning/10 text-state-warning hover:border-state-warning/80';
+      return 'border-state-warning/35 bg-state-warning/[0.06] text-state-warning hover:border-state-warning/55';
     default:
-      return 'border-accent/45 bg-accent/10 text-accent hover:border-accent/70';
+      return 'border-accent/30 bg-accent/[0.055] text-accent hover:border-accent/50';
   }
 }
 
@@ -320,22 +320,24 @@ function FooterActionButton({ card }: { card: SampleCard }) {
     <button
       type="button"
       aria-label={`${label} ${card.title}`}
-      className={`inline-flex h-8 w-[108px] shrink-0 items-center justify-center gap-1.5 rounded-md border px-3 text-xs font-semibold leading-none transition-colors ${actionTone(
+      className={`inline-flex h-7 w-[98px] shrink-0 items-center justify-center rounded-md border px-[9px] text-xs font-semibold leading-none transition-colors ${actionTone(
         card
       )} ${passive ? 'cursor-default' : ''}`}
     >
-      {card.action === 'downloading' ? (
-        <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
-      ) : card.action === 'installed' || card.action === 'enable' || card.action === 'selected' ? (
-        <Check className="h-3.5 w-3.5 shrink-0" />
-      ) : card.action === 'queued' ? (
-        <Clock className="h-3.5 w-3.5 shrink-0" />
-      ) : card.action === 'update' ? (
-        <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-      ) : (
-        <Download className="h-3.5 w-3.5 shrink-0" />
-      )}
-      <span className="truncate">{label}</span>
+      <span className="inline-flex min-w-0 items-center gap-1.5">
+        {card.action === 'downloading' ? (
+          <Loader2 className="h-[13px] w-[13px] shrink-0 animate-spin" />
+        ) : card.action === 'installed' || card.action === 'enable' || card.action === 'selected' ? (
+          <Check className="h-[13px] w-[13px] shrink-0" />
+        ) : card.action === 'queued' ? (
+          <Clock className="h-[13px] w-[13px] shrink-0" />
+        ) : card.action === 'update' ? (
+          <AlertTriangle className="h-[13px] w-[13px] shrink-0" />
+        ) : (
+          <Download className="h-[13px] w-[13px] shrink-0 -translate-y-0.5" />
+        )}
+        <span className="min-w-0 truncate leading-none">{label}</span>
+      </span>
     </button>
   );
 }
@@ -410,6 +412,11 @@ function Thumbnail({ card }: { card: SampleCard }) {
         </div>
       )}
 
+      <div
+        className="pointer-events-none absolute inset-x-0 bottom-0 h-12 bg-gradient-to-b from-transparent via-bg-secondary/45 to-bg-secondary"
+        aria-hidden="true"
+      />
+
       <ThumbnailAudioPreview card={card} />
     </div>
   );
@@ -417,35 +424,35 @@ function Thumbnail({ card }: { card: SampleCard }) {
 
 function StatsRow({ card }: { card: SampleCard }) {
   return (
-    <div className="flex h-8 min-w-0 items-center gap-2 overflow-hidden text-[11px] font-medium leading-none text-text-tertiary">
-      <span className="inline-flex h-4 items-center gap-1 tabular-nums">
-        <ThumbsUp className="h-3 w-3 shrink-0" />
-        {card.likes}
+    <div className="flex h-4 min-w-0 items-end gap-1.5 overflow-visible text-[10px] font-medium leading-[11px] text-text-tertiary/60">
+      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums">
+        <ThumbsUp className="block h-3 w-3 shrink-0 -translate-y-0.5" />
+        <span className="block h-[11px] leading-[11px]">{card.likes}</span>
       </span>
-      <span className="inline-flex h-4 items-center gap-1 tabular-nums">
-        <Eye className="h-3 w-3 shrink-0" />
-        {card.views}
+      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums">
+        <Eye className="block h-3 w-3 shrink-0" />
+        <span className="block h-[11px] leading-[11px]">{card.views}</span>
       </span>
-      <span className="inline-flex h-4 items-center gap-1 tabular-nums">
-        <Download className="h-3 w-3 shrink-0" />
-        {card.downloads}
+      <span className="inline-flex h-4 items-end gap-0.5 tabular-nums">
+        <Download className="block h-3 w-3 shrink-0 -translate-y-0.5" />
+        <span className="block h-[11px] leading-[11px]">{card.downloads}</span>
       </span>
     </div>
   );
 }
 
 function FreshnessLabel({ card }: { card: SampleCard }) {
-  const relative = formatRelativeDate(card.updatedAt);
+  const relative = formatRelativeDate(card.updatedAt).replace(/(\d+)\s+(mo|yr)\s+ago/, '$1$2 ago');
   const absolute = formatAbsoluteDate(card.updatedAt);
   if (!relative || !absolute) return null;
 
   return (
     <span
-      className="mt-2 inline-flex h-4 shrink-0 items-center gap-1 text-[11px] font-medium tabular-nums text-text-tertiary"
+      className="mt-0.5 inline-flex h-3.5 shrink-0 items-center gap-0.5 text-[10px] font-medium leading-[11px] tabular-nums text-text-tertiary/60"
       title={`Last updated on GameBanana: ${absolute}`}
     >
-      <Calendar className="h-3 w-3 shrink-0" />
-      {relative}
+      <History className="h-3 w-3 shrink-0 -translate-y-0.5" />
+      <span className="leading-[11px]">{relative}</span>
     </span>
   );
 }
@@ -471,7 +478,7 @@ function ProductModCard({ card, bodyHeight }: { card: SampleCard; bodyHeight: nu
           <FreshnessLabel card={card} />
         </div>
 
-        <div className="mt-auto flex h-8 items-end justify-between gap-3">
+        <div className="mt-auto flex h-7 items-center justify-between gap-3">
           <StatsRow card={card} />
           <FooterActionButton card={card} />
         </div>
