@@ -27,6 +27,7 @@ import {
   AlertTriangle,
   FolderOpen,
   FilePlus,
+  Files,
   X,
   ImagePlus,
   Search,
@@ -3664,7 +3665,6 @@ interface ModListRowContentProps {
   manualTagChipClasses: string;
   inferredTagChipClasses: string;
   dangerInlineChipClasses: string;
-  accentInlineChipClasses: string;
   tagIconClassName: string;
   technicalMetaClasses: string;
   actions: ReactNode;
@@ -3714,12 +3714,23 @@ function CategoryChip({
   label,
   className,
   iconClassName = 'h-4 w-4',
+  iconOnly = false,
 }: {
   label: string;
   className: string;
   iconClassName?: string;
+  /** When the category is a hero, collapse to the bare face icon (no frame, no
+   *  truncated name) to match the locker-hero chip in cards. */
+  iconOnly?: boolean;
 }) {
   const heroName = heroNameForLabel(label);
+  if (heroName && iconOnly) {
+    return (
+      <span className="inline-flex flex-shrink-0 items-center" title={label}>
+        <HeroTagLabel heroName={heroName} iconClassName={iconClassName} iconOnly />
+      </span>
+    );
+  }
   return (
     <span className={className} title={label}>
       {heroName ? (
@@ -3790,7 +3801,6 @@ function ModListRowContent({
   manualTagChipClasses,
   inferredTagChipClasses,
   dangerInlineChipClasses,
-  accentInlineChipClasses,
   tagIconClassName,
   technicalMetaClasses,
   actions,
@@ -3890,11 +3900,13 @@ function ModListRowContent({
             {formatRelativeDate(mod.installedAt)}
           </span>
           {group && (
-            <MetaTextChip
-              label={`${variantStatusLabel} files`}
-              className={accentInlineChipClasses}
+            <span
+              className="inline-flex flex-shrink-0 items-center gap-1 tabular-nums text-text-secondary"
               title={variantStatusTitle}
-            />
+            >
+              <Files className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+              {variantStatusLabel}
+            </span>
           )}
           {!group && (
             <span className={technicalMetaClasses} title={mod.fileName}>
@@ -4078,7 +4090,6 @@ function ModCard({
   const manualTagChipClasses = `${baseChipClasses} border border-accent/30 bg-accent/10 text-accent`;
   const inferredTagChipClasses = `${baseChipClasses} border border-sky-400/35 bg-sky-500/15 text-sky-100`;
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
-  const accentInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-accent/30 bg-accent/10 text-accent tabular-nums`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
   const menuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary focus:outline-none focus-visible:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50';
@@ -4410,7 +4421,6 @@ function ModCard({
             manualTagChipClasses={manualTagChipClasses}
             inferredTagChipClasses={inferredTagChipClasses}
             dangerInlineChipClasses={dangerInlineChipClasses}
-            accentInlineChipClasses={accentInlineChipClasses}
             tagIconClassName={tagIconClassName}
             technicalMetaClasses={technicalMetaClasses}
             actions={actions}
@@ -4533,22 +4543,27 @@ function ModCard({
                 iconClassName={tagIconClassName}
                 iconOnly
               />
-              {showCategoryChip && mod.categoryName && (
+              {showCategoryChip && mod.categoryName && heroNameForLabel(mod.categoryName) !== mod.lockerHero && (
                 <CategoryChip
                   label={mod.categoryName}
                   className={metaChipClasses}
                   iconClassName={tagIconClassName}
+                  iconOnly
                 />
               )}
               {showNsfwChip && (
                 <MetaTextChip label="18+" className={dangerInlineChipClasses} />
               )}
               {showGroupChip && (
-                <MetaTextChip
-                  label={`${variantStatusLabel} files`}
-                  className={accentInlineChipClasses}
+                // Enabled/total variant count as a quiet icon + number (no accent,
+                // no border, no "files" label) so it reads as metadata, not a tag.
+                <span
+                  className="inline-flex flex-shrink-0 items-center gap-1 text-[11px] tabular-nums text-text-secondary"
                   title={variantStatusTitle}
-                />
+                >
+                  <Files className="h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+                  {variantStatusLabel}
+                </span>
               )}
               {!isCompact && (
                 <span
