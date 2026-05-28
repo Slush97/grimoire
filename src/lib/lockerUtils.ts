@@ -93,6 +93,34 @@ export const HERO_NAMES = SHARED_HERO_NAMES;
 export const HERO_ALIASES = SHARED_HERO_ALIASES;
 
 /**
+ * Display-name aliases that collapse roster duplicates to one canonical label.
+ * The shared roster carries both "Doorman" (GameBanana's category name, the one
+ * wired into every client-side map: face position, stats id, sound codename)
+ * and "The Doorman" (the deadlock-api roster name, appended later with the
+ * "Old Gods, New Blood" batch). They are the same hero, so the tag menu shows a
+ * single "Doorman". Kept client-side only: the shared roster and server-side
+ * inference are untouched.
+ */
+const HERO_DISPLAY_ALIASES: Readonly<Record<string, string>> = {
+  'The Doorman': 'Doorman',
+};
+
+/** Canonical display name for a hero, collapsing roster duplicates (see above). */
+export function canonicalHeroName(name: string | undefined | null): string {
+  if (!name) return '';
+  return HERO_DISPLAY_ALIASES[name] ?? name;
+}
+
+/**
+ * The hero roster for tag-menu display: canonicalized (duplicates collapsed),
+ * de-duplicated, and alphabetized. The Locker tag menu sorts its own roster
+ * (built from GameBanana categories), so the Installed menu uses this to match.
+ */
+export const HERO_NAMES_SORTED: readonly string[] = Array.from(
+  new Set(SHARED_HERO_NAMES.map(canonicalHeroName))
+).sort((a, b) => a.localeCompare(b));
+
+/**
  * Infer the Deadlock hero associated with a mod title. Re-exported from the
  * shared package; see @grimoire/social-types/heroes for the matcher details.
  */
