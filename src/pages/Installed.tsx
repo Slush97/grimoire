@@ -5092,7 +5092,15 @@ function ModCard({
   // manual or auto global tag is visible here, not just in the Locker. A global
   // mod has no hero, so the two chips never both show.
   const cardGlobalType = getEffectiveGlobalType(mod);
-  const showCategoryChip = viewMode !== 'compact' || !mod.lockerHero;
+  const cardGlobalLabel = cardGlobalType
+    ? (GLOBAL_MOD_TYPE_LABELS[cardGlobalType] ?? cardGlobalType)
+    : undefined;
+  // A globally-classified mod (HUD, Soul Containers, ...) already shows the
+  // Locker global chip, which makes the GameBanana category chip redundant: for
+  // HUD it was literally rendering "HUD" twice (category + global). Suppress the
+  // category chip whenever a global chip is present and let it stand in.
+  const showCategoryChip =
+    (viewMode !== 'compact' || !mod.lockerHero) && !cardGlobalType;
   const compactBaseChipCount =
     (mod.lockerHero ? 1 : 0) + (showCategoryChip && mod.categoryName ? 1 : 0);
   const showGlobalChip = !!cardGlobalType && (!isCompact || compactBaseChipCount < 2);
@@ -5525,11 +5533,11 @@ function ModCard({
                 iconClassName={tagIconClassName}
                 iconOnly
               />
-              {showGlobalChip && cardGlobalType && (
+              {showGlobalChip && cardGlobalLabel && (
                 <MetaTextChip
-                  label={GLOBAL_MOD_TYPE_LABELS[cardGlobalType] ?? cardGlobalType}
+                  label={cardGlobalLabel}
                   className={metaChipClasses}
-                  title={`Locker: ${GLOBAL_MOD_TYPE_LABELS[cardGlobalType] ?? cardGlobalType}`}
+                  title={`Locker: ${cardGlobalLabel}`}
                 />
               )}
               {showCategoryChip && mod.categoryName && heroNameForLabel(mod.categoryName) !== mod.lockerHero && (
