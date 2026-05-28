@@ -29,7 +29,7 @@ import type {
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
 } from './gamebanana';
-import type { HeroPortrait } from './portrait';
+import type { HeroPortrait, SoulModelInfo } from './portrait';
 
 export interface BrowseModsArgs {
     page: number;
@@ -314,6 +314,9 @@ export interface ElectronAPI {
     getActiveHeroCard: (
         heroName: string
     ) => Promise<{ sourceFileName: string; variants: string[] } | null>;
+    getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
+    exportSoulModel: (fileName: string) => Promise<SoulModelInfo>;
+    clearSoulModel: (key: string) => Promise<void>;
     applyHeroSound: (
         heroName: string,
         slot: AbilitySlot,

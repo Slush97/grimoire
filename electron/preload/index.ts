@@ -793,6 +793,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('revert-hero-card', heroName),
     getActiveHeroCard: (heroName: string) =>
         ipcRenderer.invoke('get-active-hero-card', heroName),
+    getSoulModelInfo: (key: string) =>
+        ipcRenderer.invoke('get-soul-model-info', key),
+    exportSoulModel: (fileName: string) =>
+        ipcRenderer.invoke('export-soul-model', fileName),
+    clearSoulModel: (key: string) =>
+        ipcRenderer.invoke('clear-soul-model', key),
     applyHeroSound: (heroName: string, slot: AbilitySlot, sourceFileName: string, params?: AbilitySoundParams) =>
         ipcRenderer.invoke('apply-hero-sound', heroName, slot, sourceFileName, params),
     revertHeroSound: (heroName: string, slot: AbilitySlot) =>

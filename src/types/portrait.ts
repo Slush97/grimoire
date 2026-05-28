@@ -21,3 +21,14 @@ export interface HeroPortrait {
   /** Decoded PNG as a data URL, ready to drop into an <img src>. */
   dataUrl: string;
 }
+
+/**
+ * Whether a soul-container mod has an exported 3D model in the user's library,
+ * and its mtime (used to cache-bust the `grimoire-soul:` URL after a re-export).
+ * Keyed per-mod by the VPK file name. The GLB itself never reaches the renderer
+ * as bytes; it's served through the privileged scheme.
+ */
+export interface SoulModelInfo {
+  hasModel: boolean;
+  mtimeMs: number | null;
+}

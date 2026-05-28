@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Layers, MoreVertical, Music, PowerOff, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
@@ -15,6 +15,9 @@ import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
+
+// Heavy (three.js): only pulled in when the soul-container type is viewed.
+const SoulContainerViewer = lazy(() => import('../components/locker/SoulContainerViewer'));
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { GlobalModType, Mod } from '../types/mod';
@@ -1045,8 +1048,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                     >
                       {/* Glass backdrop: a blurred copy of the cover art bleeds
                           behind the card so it's tinted by its own thumbnail,
-                          matching the Installed grid cards. */}
-                      {glassBackdropUrl && (
+                          matching the Installed grid cards. Soul containers show
+                          a 3D model on a clear window, so they skip it. */}
+                      {glassBackdropUrl && activeType !== 'soul-container' && (
                         <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
                           <img
                             src={glassBackdropUrl}
@@ -1061,27 +1065,44 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                         </div>
                       )}
 
-                      {/* Media: aspect-video cover. */}
-                      <div className="relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] bg-bg-tertiary">
-                        <div
-                          className={`h-full w-full transition-[filter,opacity] duration-200 ${
-                            mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
-                          }`}
-                        >
-                          <ModThumbnail
-                            src={mod.thumbnailUrl}
-                            alt={mod.name}
-                            nsfw={mod.nsfw}
-                            hideNsfw={hideNsfw}
-                            className="h-full w-full"
-                            imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-hover/card:scale-[1.03]"
-                            fallback={
-                              <div className="flex h-full w-full items-center justify-center text-xs text-text-secondary">
-                                No preview
-                              </div>
-                            }
-                          />
-                        </div>
+                      {/* Media: aspect-video cover. Soul containers float their
+                          3D model over a frosted-glass panel so the environment
+                          background shows through; other types keep a solid bg. */}
+                      <div
+                        className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] ${
+                          activeType === 'soul-container'
+                            ? 'bg-white/[0.04] backdrop-blur-md'
+                            : 'bg-bg-tertiary'
+                        }`}
+                      >
+                        {/* Soul containers show a live 3D model on a clear window
+                            (no 2D thumbnail behind it); other types show their
+                            GameBanana thumbnail. */}
+                        {activeType === 'soul-container' ? (
+                          <Suspense fallback={null}>
+                            <SoulContainerViewer modKey={mod.fileName} fileName={mod.fileName} />
+                          </Suspense>
+                        ) : (
+                          <div
+                            className={`h-full w-full transition-[filter,opacity] duration-200 ${
+                              mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
+                            }`}
+                          >
+                            <ModThumbnail
+                              src={mod.thumbnailUrl}
+                              alt={mod.name}
+                              nsfw={mod.nsfw}
+                              hideNsfw={hideNsfw}
+                              className="h-full w-full"
+                              imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-hover/card:scale-[1.03]"
+                              fallback={
+                                <div className="flex h-full w-full items-center justify-center text-xs text-text-secondary">
+                                  No preview
+                                </div>
+                              }
+                            />
+                          </div>
+                        )}
                         <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover/card:bg-bg-primary/20" />
                         {!mod.enabled && (
                           <div className="pointer-events-none absolute left-2 top-2 z-10 flex h-5 items-start">

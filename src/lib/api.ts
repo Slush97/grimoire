@@ -1,5 +1,5 @@
 import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
-import type { HeroPortrait } from '../types/portrait';
+import type { HeroPortrait, SoulModelInfo } from '../types/portrait';
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
@@ -116,6 +116,21 @@ export async function getActiveHeroCard(
   heroName: string
 ): Promise<{ sourceFileName: string; variants: string[] } | null> {
   return window.electronAPI.getActiveHeroCard(heroName);
+}
+
+/** Whether a soul-container mod has an exported model in the user's library (+ mtime). */
+export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
+  return window.electronAPI.getSoulModelInfo(key);
+}
+
+/** Export a soul-container mod's model via the bundled vpkmerge exporter. */
+export async function exportSoulModel(fileName: string): Promise<SoulModelInfo> {
+  return window.electronAPI.exportSoulModel(fileName);
+}
+
+/** Delete a soul-container mod's exported model. */
+export async function clearSoulModel(key: string): Promise<void> {
+  return window.electronAPI.clearSoulModel(key);
 }
 
 export async function applyHeroSound(

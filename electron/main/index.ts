@@ -1,7 +1,18 @@
-import { app, BrowserWindow, shell, session } from 'electron';
+import { app, BrowserWindow, shell, session, protocol } from 'electron';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
+import { SOUL_MODEL_SCHEME, registerSoulModelProtocol } from './services/soulContainerModels';
+
+// The `grimoire-soul:` scheme serves per-mod soul-container GLBs out of the
+// user's library to the renderer's 3D viewer. Must be declared privileged
+// before app-ready so fetch/streaming work under the renderer's file:// origin.
+protocol.registerSchemesAsPrivileged([
+    {
+        scheme: SOUL_MODEL_SCHEME,
+        privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+]);
 
 // Initialize the file logger before anything else so console.* calls in IPC
 // and service modules (imported below) flow into the rolling log file from
@@ -259,6 +270,9 @@ if (!gotTheLock) {
     app.whenReady().then(() => {
         // Set app user model id for windows
         electronApp.setAppUserModelId('com.grimoire.modmanager');
+
+        // Serve per-mod soul-container GLBs from the user's library.
+        registerSoulModelProtocol();
 
         // Default open or close DevTools by F12 in development
         app.on('browser-window-created', (_, window) => {

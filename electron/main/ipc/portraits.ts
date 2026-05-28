@@ -2,6 +2,12 @@ import { ipcMain } from 'electron';
 import { loadSettings } from '../services/settings';
 import { getHeroPortraits } from '../services/heroPortraits';
 import { applyHeroCard, revertHeroCard, getActiveHeroCard } from '../services/heroCards';
+import {
+    getSoulModelInfo,
+    exportSoulModel,
+    clearSoulModel,
+    type SoulModelInfo,
+} from '../services/soulContainerModels';
 import type { HeroPortrait } from '../../../src/types/portrait';
 import type { ApplyHeroCardResult } from '../../../src/types/mod';
 
@@ -47,5 +53,28 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) return null;
         return getActiveHeroCard(deadlockPath, heroName);
+    }
+);
+
+ipcMain.handle(
+    'get-soul-model-info',
+    async (_, key: string): Promise<SoulModelInfo> => {
+        return getSoulModelInfo(key);
+    }
+);
+
+ipcMain.handle(
+    'export-soul-model',
+    async (_, fileName: string): Promise<SoulModelInfo> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return exportSoulModel(deadlockPath, fileName);
+    }
+);
+
+ipcMain.handle(
+    'clear-soul-model',
+    async (_, key: string): Promise<void> => {
+        return clearSoulModel(key);
     }
 );

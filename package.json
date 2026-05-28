@@ -37,6 +37,7 @@
     "@dnd-kit/utilities": "^3.2.2",
     "@grimoire/social-types": "workspace:*",
     "@radix-ui/react-context-menu": "^2.2.16",
+    "@react-three/fiber": "^9.6.1",
     "@tanstack/react-virtual": "^3.13.26",
     "adm-zip": "^0.5.16",
     "better-sqlite3": "^12.5.0",
@@ -50,6 +51,7 @@
     "react-colorful": "^5.7.0",
     "react-dom": "^19.2.0",
     "react-router-dom": "^7.11.0",
+    "three": "^0.184.0",
     "zod": "^3.23.0",
     "zustand": "^5.0.9"
   },
@@ -64,6 +66,7 @@
     "@types/node": "^24.10.1",
     "@types/react": "^19.2.5",
     "@types/react-dom": "^19.2.3",
+    "@types/three": "^0.184.1",
     "@vitejs/plugin-react": "^5.1.1",
     "asar": "^3.2.0",
     "electron": "^35.0.0",
