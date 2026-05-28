@@ -423,6 +423,26 @@ export interface ApplyUnknownCustomModArgs {
   nsfw?: boolean;
 }
 
+// Manually link an unknown local VPK to a GameBanana mod the user found via
+// search. Unlike ApplyUnknownModMatchArgs, this tags the existing file in place
+// (no re-download, no delete), so it costs zero GameBanana archive fetches.
+export interface AssociateUnknownModArgs {
+  gameBananaId: number;
+  modName: string;
+  gameBananaFileId?: number;
+  thumbnailUrl?: string;
+  nsfw?: boolean;
+  categoryName?: string;
+  sourceSection?: 'Mod' | 'Sound';
+}
+
+// Raw contents of an unknown VPK, surfaced so the user can eyeball what the mod
+// touches before linking it. Pure local read: no network, no rate limiting.
+export interface UnknownModFileList {
+  paths: string[];
+  fileCount: number;
+}
+
 export interface EditLocalModArgs {
   name: string;
   thumbnailDataUrl?: string;

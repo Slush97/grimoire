@@ -1,4 +1,20 @@
+import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
+
+// Debounce the rate-limit warning so a burst of 429s (e.g. the unknown-mod CRC
+// matcher fanning out) produces one toast, not a flood. Broadcasting via
+// BrowserWindow keeps this service free of an import cycle with ../index.
+const RATE_LIMIT_NOTIFY_INTERVAL_MS = 10_000;
+let lastRateLimitNotifyAt = 0;
+
+function notifyRateLimited(): void {
+    const now = Date.now();
+    if (now - lastRateLimitNotifyAt < RATE_LIMIT_NOTIFY_INTERVAL_MS) return;
+    lastRateLimitNotifyAt = now;
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('gamebanana:rate-limited', {});
+    }
+}
 
 const GAMEBANANA_API_BASE = 'https://gamebanana.com/apiv11';
 const GAMEBANANA_API_V12_BASE = 'https://gamebanana.com/apiv12';
@@ -348,6 +364,9 @@ async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaR
         });
 
         if (!response.ok) {
+            if (response.status === 429) {
+                notifyRateLimited();
+            }
             throw new Error(`GameBanana API error: ${response.status} ${response.statusText}`);
         }
 
@@ -393,6 +412,9 @@ async function fetchText(url: string, timeoutMs = 30000, options: GameBananaRequ
         });
 
         if (!response.ok) {
+            if (response.status === 429) {
+                notifyRateLimited();
+            }
             throw new Error(`GameBanana API error: ${response.status} ${response.statusText}`);
         }
 

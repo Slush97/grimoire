@@ -16,15 +16,15 @@ import {
 import { metaKeyFor } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
-import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION } from '../services/vpk';
+import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory } from '../services/vpk';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { isLockerManaged } from '../services/lockerVpk';
-import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services/unknownModDetection';
+import { detectUnknownModFilters, inferHeroFromVpkTree, type UnknownModFilterGuess } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { getMainWindow } from '../index';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, EditLocalModArgs, GlobalModType, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult } from '../../../src/types/mod';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -78,6 +78,44 @@ function resolveGlobalType(
     return classified;
 }
 
+/**
+ * File-tree hero tag for UNKNOWN mods. Known mods get their hero from the
+ * GameBanana category; unknown skins have no metadata, so we infer the hero
+ * from the VPK tree (inferHeroFromVpkTree, which recognizes skins, not just
+ * sound mods) and tag it like a downloaded mod so the Locker chip + icon show.
+ * Only accepts a confident (strong/medium) signal to avoid mislabeling, and
+ * stamps lockerHeroVpkChecked so a "no hero found" result isn't re-parsed every
+ * scan. A recognized global cosmetic (soul container, HUD, ...) isn't per-hero,
+ * so it's skipped entirely.
+ */
+function resolveUnknownLockerHero(
+    mod: Mod,
+    metadata: ReturnType<typeof getModMetadata>,
+    isUnknown: boolean,
+    globalType: GlobalModType | null
+): { lockerHero?: string; lockerHeroSource?: LockerHeroSource } {
+    if (!isUnknown) return {};
+    if (metadata?.lockerHero) {
+        return { lockerHero: metadata.lockerHero, lockerHeroSource: metadata.lockerHeroSource };
+    }
+    if (globalType) return {};
+    if (metadata?.lockerHeroVpkChecked) return {};
+
+    let lockerHero: string | undefined;
+    let lockerHeroSource: LockerHeroSource | undefined;
+    try {
+        const guess = inferHeroFromVpkTree(mod.path);
+        if (guess && guess.strongestSignal !== 'weak') {
+            lockerHero = guess.name;
+            lockerHeroSource = 'vpk';
+        }
+    } catch (err) {
+        console.warn(`[enrichMod] VPK-tree hero inference failed for ${mod.fileName}:`, err);
+    }
+    setModMetadata(mod.metaKey, { lockerHero, lockerHeroVpkChecked: true });
+    return { lockerHero, lockerHeroSource };
+}
+
 function enrichMod(mod: Mod): Mod {
     const metadata = getModMetadata(mod.metaKey);
     const isUnknown =
@@ -111,6 +149,12 @@ function enrichMod(mod: Mod): Mod {
                 lockerHero = inferred;
                 lockerHeroSource = inferredSource;
             }
+        } else if (!lockerHero && isUnknown) {
+            // Unknown mod (no GameBanana category to lean on): tag the hero from
+            // the VPK tree so the card/Locker show the same chip as known mods.
+            const resolved = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
+            lockerHero = resolved.lockerHero;
+            lockerHeroSource = resolved.lockerHeroSource;
         }
         // Per-ability sound footprint. Same lazy + persist + null-sentinel
         // pattern as globalType, and it shares the cached VPK parse, so the two
@@ -158,7 +202,10 @@ function enrichMod(mod: Mod): Mod {
             ignoreUpdates: metadata.ignoreUpdates,
         };
     }
-    return { ...mod, isUnknown, globalType: globalType ?? undefined };
+    // No metadata row (a VPK dropped straight into addons): still file-tree tag
+    // the hero so unknown skins get their Locker chip like downloaded mods.
+    const { lockerHero, lockerHeroSource } = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
+    return { ...mod, isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
 }
 
 function sameKeys(a: string[], b: string[]): boolean {
@@ -350,6 +397,58 @@ ipcMain.handle(
             modName: args.name.trim(),
             thumbnailUrl: args.thumbnailDataUrl,
             nsfw: !!args.nsfw,
+        }, target.path);
+
+        return enrichMod(target);
+    }
+);
+
+// list-unknown-mod-files - read the raw file paths inside an unknown VPK so the
+// user can eyeball what it touches before linking it. Pure local parse: no
+// GameBanana calls, so it never trips the rate limiter.
+ipcMain.handle('list-unknown-mod-files', async (_, modId: string): Promise<UnknownModFileList> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const mods = await scanMods(deadlockPath);
+    const target = mods.find((m) => m.id === modId);
+    if (!target) {
+        throw new Error(`Mod not found: ${modId}`);
+    }
+    const paths = parseVpkDirectory(target.path) ?? [];
+    return { paths, fileCount: paths.length };
+});
+
+// associate-unknown-mod - manually link an unknown local VPK to a GameBanana mod
+// the user picked via search. Tags the existing file in place (no download, no
+// delete), so it costs zero archive fetches. Setting gameBananaId clears the
+// isUnknown flag in enrichMod.
+ipcMain.handle(
+    'associate-unknown-mod',
+    async (_, modId: string, args: AssociateUnknownModArgs): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        if (!args || !Number.isFinite(args.gameBananaId) || !args.modName?.trim()) {
+            throw new Error('A GameBanana mod selection is required');
+        }
+
+        const mods = await scanMods(deadlockPath);
+        const target = mods.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+
+        await setModMetadataWithHash(target.metaKey, {
+            modName: args.modName.trim(),
+            gameBananaId: args.gameBananaId,
+            gameBananaFileId: args.gameBananaFileId,
+            thumbnailUrl: args.thumbnailUrl,
+            nsfw: !!args.nsfw,
+            categoryName: args.categoryName,
+            sourceSection: args.sourceSection,
         }, target.path);
 
         return enrichMod(target);
