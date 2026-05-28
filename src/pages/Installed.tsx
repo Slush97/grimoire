@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DndContext,
   DragOverlay,
@@ -4353,15 +4354,24 @@ function ModCard({
   // near the top of the scroll area that clips it. Flip downward when there's
   // little room above. Measured from the trigger on open.
   const [menuPlacement, setMenuPlacement] = useState<'up' | 'down'>('up');
+  // Trigger rect captured on open (and on scroll/resize) so the menu can be
+  // portaled to <body> and positioned in fixed coordinates. The card sits in an
+  // overflow-auto/transform-gpu subtree that would otherwise clip an absolutely
+  // (or even fixed) positioned menu, hiding its left edge behind the sidebar.
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
     const onMouseDown = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-        setTagPickerOpen(false);
-      }
+      const target = event.target as Node;
+      // The menu is portaled out of menuRef, so check both the trigger and the
+      // portaled panel before treating a click as "outside".
+      if (menuRef.current?.contains(target)) return;
+      if (menuPanelRef.current?.contains(target)) return;
+      setMenuOpen(false);
+      setTagPickerOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -4369,11 +4379,20 @@ function ModCard({
         setTagPickerOpen(false);
       }
     };
+    // Keep the portaled menu anchored to its card as the list scrolls/resizes.
+    // Inner-container scroll doesn't bubble, so listen in the capture phase.
+    const reposition = () => {
+      if (menuRef.current) setMenuRect(menuRef.current.getBoundingClientRect());
+    };
     window.addEventListener('mousedown', onMouseDown);
     window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
     return () => {
       window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
     };
   }, [menuOpen]);
 
@@ -4516,6 +4535,7 @@ function ModCard({
               const willOpen = !open;
               if (willOpen && menuRef.current) {
                 const rect = menuRef.current.getBoundingClientRect();
+                setMenuRect(rect);
                 // The menu can grow tall (tag picker). Prefer opening upward,
                 // but flip down when there's clearly more room below.
                 const spaceAbove = rect.top;
@@ -4535,13 +4555,19 @@ function ModCard({
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
-        {menuOpen && (
+        {menuOpen && menuRect && createPortal(
           <div
+            ref={menuPanelRef}
             role="menu"
             data-card-menu-open
-            className={`absolute right-0 z-[70] w-56 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in ${
-              menuPlacement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'
-            }`}
+            className="z-[100] w-56 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
+            style={{
+              position: 'fixed',
+              right: Math.max(8, window.innerWidth - menuRect.right),
+              ...(menuPlacement === 'up'
+                ? { bottom: window.innerHeight - menuRect.top + 8 }
+                : { top: menuRect.bottom + 8 }),
+            }}
           >
             {menuError && (
               <div className="mb-1 rounded-md border border-state-danger/30 bg-state-danger/10 px-2 py-1.5 text-xs text-state-danger">
@@ -4730,7 +4756,8 @@ function ModCard({
                 </button>
               </>
             )}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
         <button
