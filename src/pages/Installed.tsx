@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import {
   DndContext,
   DragOverlay,
@@ -69,8 +70,7 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
-import { setModGlobalType } from '../lib/api';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
@@ -366,6 +366,7 @@ export default function Installed() {
     reorderMods,
     editLocalMod,
     setModLockerHero,
+    setModGlobalType,
     setVariantLabel,
     importCustomMod,
     soundVolume,
@@ -3155,7 +3156,7 @@ export default function Installed() {
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
                       Hero
                     </div>
-                    {HERO_NAMES.map((name) => (
+                    {HERO_NAMES_SORTED.map((name) => (
                       <button
                         key={name}
                         type="button"
@@ -4353,15 +4354,24 @@ function ModCard({
   // near the top of the scroll area that clips it. Flip downward when there's
   // little room above. Measured from the trigger on open.
   const [menuPlacement, setMenuPlacement] = useState<'up' | 'down'>('up');
+  // Trigger rect captured on open (and on scroll/resize) so the menu can be
+  // portaled to <body> and positioned in fixed coordinates. The card sits in an
+  // overflow-auto/transform-gpu subtree that would otherwise clip an absolutely
+  // (or even fixed) positioned menu, hiding its left edge behind the sidebar.
+  const [menuRect, setMenuRect] = useState<DOMRect | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const menuPanelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (!menuOpen) return;
     const onMouseDown = (event: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(event.target as Node)) {
-        setMenuOpen(false);
-        setTagPickerOpen(false);
-      }
+      const target = event.target as Node;
+      // The menu is portaled out of menuRef, so check both the trigger and the
+      // portaled panel before treating a click as "outside".
+      if (menuRef.current?.contains(target)) return;
+      if (menuPanelRef.current?.contains(target)) return;
+      setMenuOpen(false);
+      setTagPickerOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
@@ -4369,11 +4379,20 @@ function ModCard({
         setTagPickerOpen(false);
       }
     };
+    // Keep the portaled menu anchored to its card as the list scrolls/resizes.
+    // Inner-container scroll doesn't bubble, so listen in the capture phase.
+    const reposition = () => {
+      if (menuRef.current) setMenuRect(menuRef.current.getBoundingClientRect());
+    };
     window.addEventListener('mousedown', onMouseDown);
     window.addEventListener('keydown', onKey);
+    window.addEventListener('scroll', reposition, true);
+    window.addEventListener('resize', reposition);
     return () => {
       window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('keydown', onKey);
+      window.removeEventListener('scroll', reposition, true);
+      window.removeEventListener('resize', reposition);
     };
   }, [menuOpen]);
 
@@ -4500,11 +4519,17 @@ function ModCard({
   // Compact cards stay single-line (too small to wrap nicely); standard grid
   // cards wrap so a hero + category + 18+ + files chip never clips mid-chip.
   const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'min-h-7 flex-wrap';
+  // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
+  // manual or auto global tag is visible here, not just in the Locker. A global
+  // mod has no hero, so the two chips never both show.
+  const cardGlobalType = getEffectiveGlobalType(mod);
   const showCategoryChip = viewMode !== 'compact' || !mod.lockerHero;
   const compactBaseChipCount =
     (mod.lockerHero ? 1 : 0) + (showCategoryChip && mod.categoryName ? 1 : 0);
-  const showNsfwChip = !!mod.nsfw && (!isCompact || compactBaseChipCount < 2);
-  const showGroupChip = !!group && (!isCompact || compactBaseChipCount + (showNsfwChip ? 1 : 0) < 2);
+  const showGlobalChip = !!cardGlobalType && (!isCompact || compactBaseChipCount < 2);
+  const compactChipCount = compactBaseChipCount + (showGlobalChip ? 1 : 0);
+  const showNsfwChip = !!mod.nsfw && (!isCompact || compactChipCount < 2);
+  const showGroupChip = !!group && (!isCompact || compactChipCount + (showNsfwChip ? 1 : 0) < 2);
   const actions = (
     <div className="ml-auto flex items-center gap-1">
       <div className="relative" ref={menuRef} data-card-action="true">
@@ -4516,6 +4541,7 @@ function ModCard({
               const willOpen = !open;
               if (willOpen && menuRef.current) {
                 const rect = menuRef.current.getBoundingClientRect();
+                setMenuRect(rect);
                 // The menu can grow tall (tag picker). Prefer opening upward,
                 // but flip down when there's clearly more room below.
                 const spaceAbove = rect.top;
@@ -4535,13 +4561,19 @@ function ModCard({
         >
           <MoreHorizontal className="w-4 h-4" />
         </button>
-        {menuOpen && (
+        {menuOpen && menuRect && createPortal(
           <div
+            ref={menuPanelRef}
             role="menu"
             data-card-menu-open
-            className={`absolute right-0 z-[70] w-56 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in ${
-              menuPlacement === 'up' ? 'bottom-full mb-2' : 'top-full mt-2'
-            }`}
+            className="z-[100] w-56 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
+            style={{
+              position: 'fixed',
+              right: Math.max(8, window.innerWidth - menuRect.right),
+              ...(menuPlacement === 'up'
+                ? { bottom: window.innerHeight - menuRect.top + 8 }
+                : { top: menuRect.bottom + 8 }),
+            }}
           >
             {menuError && (
               <div className="mb-1 rounded-md border border-state-danger/30 bg-state-danger/10 px-2 py-1.5 text-xs text-state-danger">
@@ -4634,7 +4666,9 @@ function ModCard({
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
                       Hero
                     </div>
-                    {HERO_NAMES.map((heroName) => (
+                    {HERO_NAMES_SORTED.map((heroName) => {
+                      const tagged = canonicalHeroName(mod.lockerHero) === heroName;
+                      return (
                       <button
                         key={heroName}
                         type="button"
@@ -4644,7 +4678,7 @@ function ModCard({
                         }}
                         disabled={menuBusy}
                         className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50 ${
-                          mod.lockerHero === heroName
+                          tagged
                             ? mod.lockerHeroSource === 'manual'
                               ? 'text-accent'
                               : 'text-sky-200'
@@ -4652,9 +4686,10 @@ function ModCard({
                         }`}
                       >
                         <HeroTagLabel heroName={heroName} />
-                        {mod.lockerHero === heroName && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                        {tagged && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </>
@@ -4730,7 +4765,8 @@ function ModCard({
                 </button>
               </>
             )}
-          </div>
+          </div>,
+          document.body
         )}
       </div>
         <button
@@ -4920,6 +4956,13 @@ function ModCard({
                 iconClassName={tagIconClassName}
                 iconOnly
               />
+              {showGlobalChip && cardGlobalType && (
+                <MetaTextChip
+                  label={GLOBAL_MOD_TYPE_LABELS[cardGlobalType] ?? cardGlobalType}
+                  className={metaChipClasses}
+                  title={`Locker: ${GLOBAL_MOD_TYPE_LABELS[cardGlobalType] ?? cardGlobalType}`}
+                />
+              )}
               {showCategoryChip && mod.categoryName && heroNameForLabel(mod.categoryName) !== mod.lockerHero && (
                 <CategoryChip
                   label={mod.categoryName}

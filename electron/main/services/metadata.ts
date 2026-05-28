@@ -38,6 +38,11 @@ export interface ModMetadata {
      *  has not been classified yet. The null sentinel lets enrichMod skip
      *  re-parsing every skin's VPK on subsequent scans. */
     globalType?: import('../../../src/types/mod').GlobalModType | null;
+    /** Classifier version that produced `globalType`. Lets enrichMod re-run a
+     *  stale `null` result when the classifier patterns improve (see
+     *  GLOBAL_CLASSIFIER_VERSION in vpk.ts). Absent on pre-stamp metadata,
+     *  treated as version 0. */
+    globalTypeClassifierVersion?: number;
     /** Set when this VPK was produced by mergeMods. The share code +
      *  source list are the unroll payload. */
     merged?: import('../../../src/types/mod').MergedModInfo;

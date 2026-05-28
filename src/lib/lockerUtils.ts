@@ -93,6 +93,34 @@ export const HERO_NAMES = SHARED_HERO_NAMES;
 export const HERO_ALIASES = SHARED_HERO_ALIASES;
 
 /**
+ * Display-name aliases that collapse roster duplicates to one canonical label.
+ * The shared roster carries both "Doorman" (GameBanana's category name, the one
+ * wired into every client-side map: face position, stats id, sound codename)
+ * and "The Doorman" (the deadlock-api roster name, appended later with the
+ * "Old Gods, New Blood" batch). They are the same hero, so the tag menu shows a
+ * single "Doorman". Kept client-side only: the shared roster and server-side
+ * inference are untouched.
+ */
+const HERO_DISPLAY_ALIASES: Readonly<Record<string, string>> = {
+  'The Doorman': 'Doorman',
+};
+
+/** Canonical display name for a hero, collapsing roster duplicates (see above). */
+export function canonicalHeroName(name: string | undefined | null): string {
+  if (!name) return '';
+  return HERO_DISPLAY_ALIASES[name] ?? name;
+}
+
+/**
+ * The hero roster for tag-menu display: canonicalized (duplicates collapsed),
+ * de-duplicated, and alphabetized. The Locker tag menu sorts its own roster
+ * (built from GameBanana categories), so the Installed menu uses this to match.
+ */
+export const HERO_NAMES_SORTED: readonly string[] = Array.from(
+  new Set(SHARED_HERO_NAMES.map(canonicalHeroName))
+).sort((a, b) => a.localeCompare(b));
+
+/**
  * Infer the Deadlock hero associated with a mod title. Re-exported from the
  * shared package; see @grimoire/social-types/heroes for the matcher details.
  */
@@ -320,7 +348,11 @@ const KILLSTREAK_MUSIC_CATEGORY = 'killstreak music';
  * type on the Global card rather than per-hero sounds. Used by
  * getEffectiveGlobalType; kept narrow (category only) on purpose.
  */
-export function isKillstreakMusicSound(mod: Mod): boolean {
+/** Minimal mod shape the global-type helpers read. Lets card components pass a
+ *  structural subset of Mod (e.g. ModCardProps['mod']) without the full type. */
+type GlobalTypeModFields = Pick<Mod, 'globalType' | 'lockerHero' | 'sourceSection' | 'categoryName'>;
+
+export function isKillstreakMusicSound(mod: GlobalTypeModFields): boolean {
   return (
     mod.sourceSection === 'Sound' &&
     mod.categoryName?.trim().toLowerCase() === KILLSTREAK_MUSIC_CATEGORY
@@ -338,7 +370,7 @@ const ANNOUNCER_CATEGORY = 'announcer';
  * Lock, `sounds/mods/`) already carry a 'announcer' globalType from the
  * main-process classifier; this rescues the sound-only packs that don't.
  */
-export function isAnnouncerSound(mod: Mod): boolean {
+export function isAnnouncerSound(mod: GlobalTypeModFields): boolean {
   return (
     mod.sourceSection === 'Sound' &&
     mod.categoryName?.trim().toLowerCase() === ANNOUNCER_CATEGORY
@@ -356,7 +388,7 @@ export function isAnnouncerSound(mod: Mod): boolean {
  * category existed, with no metadata migration. A manual override still wins,
  * since `mod.globalType` is checked first.
  */
-export function getEffectiveGlobalType(mod: Mod): GlobalModType | undefined {
+export function getEffectiveGlobalType(mod: GlobalTypeModFields): GlobalModType | undefined {
   if (mod.globalType) return mod.globalType;
   if (isKillstreakMusicSound(mod)) return 'killstreak-music';
   // A hero tag wins: hero-tied SFX belong on that hero's Sounds tab, not here.

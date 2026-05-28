@@ -385,6 +385,14 @@ function heroImageCodenames(paths: string[]): Set<string> {
  * card (often shipped alongside a skin) and belongs on the hero axis — so we
  * return null and let the per-hero grouping claim it.
  */
+/**
+ * Bump when the global-type patterns above change. enrichMod re-runs
+ * classification for mods whose stored result was a stale `null` stamped with
+ * an older version, so pattern improvements (e.g. new HUD paths) reach
+ * already-installed mods without a manual retag or a metadata migration.
+ */
+export const GLOBAL_CLASSIFIER_VERSION = 1;
+
 export function classifyGlobalModType(paths: string[]): GlobalModType | null {
     if (paths.length === 0) return null;
     // Hero skin / ability payload wins outright: those belong on the hero axis.

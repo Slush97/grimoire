@@ -8,12 +8,24 @@ import {
   ignoreConflict,
   unignoreConflict,
   conflictPairKey,
+  reorderMods,
 } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { Button } from '../components/common/ui';
 import { PageHeader, EmptyState, ConfirmModal } from '../components/common/PageComponents';
+import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
+
+/** Global load-order rank of a mod: lower = loads first. The pakNN (mod.priority)
+ *  repeats per overflow folder, so fold in the folder index from metaKey
+ *  (addons{N}/...) for a single monotonic order. Mirrors modLoadOrder in
+ *  Installed.tsx so the conflict reorder matches the load-order list. */
+function modLoadOrder(mod: Mod): number {
+  const match = mod.metaKey.match(/^addons(\d+)\//);
+  const folderIndex = match ? parseInt(match[1], 10) : 0;
+  return folderIndex * 100 + mod.priority;
+}
 interface ModWithThumbnail {
   id: string;
   name: string;
@@ -100,6 +112,9 @@ function ConflictsSkeleton() {
 export default function Conflicts() {
   const [conflicts, setConflicts] = useState<ModConflict[]>([]);
   const [modsMap, setModsMap] = useState<Map<string, ModWithThumbnail>>(new Map());
+  // Enabled mod ids in true load order (index 0 loads first). Drives the
+  // per-conflict reorder control's "who currently wins" and the splice math.
+  const [orderedEnabledIds, setOrderedEnabledIds] = useState<string[]>([]);
   // Set of ignored pair keys ("identityA::identityB" sorted). Used both to
   // filter detected conflicts (defense-in-depth — backend already filters)
   // and to render the "Ignored" panel.
@@ -159,6 +174,12 @@ export default function Conflicts() {
         map.set(info.identity, info);
       }
       setModsMap(map);
+      setOrderedEnabledIds(
+        (modsResult as Mod[])
+          .filter((m) => m.enabled)
+          .sort((a, b) => modLoadOrder(a) - modLoadOrder(b))
+          .map((m) => m.id)
+      );
       setConflicts(conflictResult);
       setIgnored(new Set(ignoredResult));
     } catch (err) {
@@ -183,6 +204,36 @@ export default function Conflicts() {
       // Sidebar's badge count is derived from getConflicts() and only refreshes
       // on mods-list changes. Ignore/unignore don't touch mods, so notify the
       // Sidebar explicitly — otherwise the badge stays stale until restart.
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  /**
+   * Reorder so `winnerId` loads immediately after `loserId` (later load wins
+   * overlapping files). Reuses reorderMods with the full enabled-mod ordering,
+   * the same path the Installed load-order editor uses. For a priority conflict
+   * the dense renumber also splits the shared slot, clearing the pair; a file
+   * overlap stays flagged but now resolves deterministically to the winner.
+   */
+  const handleSetWinner = async (conflict: ModConflict, winnerId: string, loserId: string) => {
+    const key = getConflictIgnoreKey(conflict);
+    setPendingPair(key);
+    try {
+      const order = orderedEnabledIds.slice();
+      const winnerIdx = order.indexOf(winnerId);
+      if (winnerIdx === -1 || !order.includes(loserId)) {
+        throw new Error('Both mods must be enabled to set their load order.');
+      }
+      order.splice(winnerIdx, 1);
+      const loserIdx = order.indexOf(loserId);
+      order.splice(loserIdx + 1, 0, winnerId);
+      await reorderMods(order);
+      await loadMods();
+      await loadConflicts();
       window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
     } catch (err) {
       setError(String(err));
@@ -462,6 +513,15 @@ export default function Conflicts() {
                   )}
                 </div>
               </div>
+
+              <ConflictReorderActions
+                conflict={conflict}
+                modA={{ id: modA.id, name: modA.name }}
+                modB={{ id: modB.id, name: modB.name }}
+                orderedEnabledIds={orderedEnabledIds}
+                busy={pendingPair === getConflictIgnoreKey(conflict)}
+                onSetWinner={(winnerId, loserId) => handleSetWinner(conflict, winnerId, loserId)}
+              />
             </div>
           );
         })}

@@ -3,6 +3,19 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { resolve } from 'path';
 
+// Resolve the shared @grimoire/social-types workspace package straight from the
+// sibling checkout. pnpm's symlink for this out-of-root package
+// (../grimoire-social/packages/*) resolves to the wrong depth in CI's nested
+// directory layout, leaving it dangling so bundling fails. These aliases (which
+// mirror the tsconfig `paths`) make resolution deterministic in CI and local
+// dev for both the main and renderer builds. The /heroes entry must precede the
+// bare one so the more specific subpath matches first.
+const SOCIAL_TYPES_ROOT = resolve(__dirname, '../grimoire-social/packages/social-types/src');
+const socialTypesAlias = {
+    '@grimoire/social-types/heroes': resolve(SOCIAL_TYPES_ROOT, 'heroes.ts'),
+    '@grimoire/social-types': resolve(SOCIAL_TYPES_ROOT, 'schemas.ts'),
+};
+
 // Bake the social Worker URL at build time. Dev runs (electron-vite dev) fall
 // back to wrangler's local port. Production builds (electron-vite build, used
 // by all package:* scripts) REQUIRE GRIMOIRE_SOCIAL_BASE_URL to be set —
@@ -34,6 +47,7 @@ export default defineConfig(({ mode }) => {
     const SOCIAL_BASE_URL = resolveSocialBaseUrl(mode);
     return {
     main: {
+        resolve: { alias: socialTypesAlias },
         plugins: [
             externalizeDepsPlugin({
                 // @grimoire/social-types is a workspace package whose entrypoint is a
@@ -76,6 +90,7 @@ export default defineConfig(({ mode }) => {
         },
     },
     renderer: {
+        resolve: { alias: socialTypesAlias },
         root: '.',
         base: './',
         build: {
