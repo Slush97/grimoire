@@ -149,8 +149,36 @@ export default function ModDetailsModal({
         if (e.key === 'ArrowRight') goToNext();
       }
     };
+    // Side mouse buttons (3 = back, 4 = forward) would otherwise let Chromium
+    // walk the router history out from under an open modal/lightbox. While this
+    // modal is mounted, repurpose both to close the topmost overlay (same
+    // precedence as Escape) and suppress the navigation. The physical
+    // back/forward mapping varies by mouse, so handle either button.
+    const isSideButton = (e: MouseEvent) => e.button === 3 || e.button === 4;
+    const suppressNav = (e: MouseEvent) => {
+      if (isSideButton(e)) e.preventDefault();
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!isSideButton(e)) return;
+      e.preventDefault();
+      if (lightboxOpen) {
+        setLightboxOpen(false);
+      } else {
+        onClose();
+      }
+    };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // mousedown/auxclick are the gesture's cancelable phases; preventing default
+    // on them is what actually blocks the history navigation in Chromium.
+    window.addEventListener('mousedown', suppressNav);
+    window.addEventListener('auxclick', suppressNav);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('mousedown', suppressNav);
+      window.removeEventListener('auxclick', suppressNav);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onClose, images.length, lightboxOpen]);
 
