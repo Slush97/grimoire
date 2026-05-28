@@ -16,7 +16,7 @@ import {
 import { metaKeyFor } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
-import { inferHeroFromVpk, classifyGlobalModFromVpk } from '../services/vpk';
+import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION } from '../services/vpk';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { isLockerManaged } from '../services/lockerVpk';
@@ -47,11 +47,47 @@ function getActiveDeadlockPath(): string | null {
  * hero) but writing back means follow-up scans skip the work and the manual
  * override path has a stable field to overwrite.
  */
+/**
+ * Resolve a mod's Locker global type, classifying from the VPK tree when it has
+ * not been classified yet OR when an older classifier version produced a stale
+ * `null` ("not global") result. A positive type is left untouched: it may be a
+ * manual override, and re-running can't improve a confident hit. Runs for mods
+ * with no metadata row too (a VPK dropped straight into citadel/addons), so
+ * locally added HUD / Soul Container mods get tagged like downloaded ones.
+ * Persists the result + classifier version so later scans skip the re-parse.
+ */
+function resolveGlobalType(
+    mod: Mod,
+    metadata: ReturnType<typeof getModMetadata>
+): import('../../../src/types/mod').GlobalModType | null {
+    const current = metadata?.globalType;
+    const stamped = metadata?.globalTypeClassifierVersion ?? 0;
+    const needsClassify =
+        current === undefined || (current === null && stamped < GLOBAL_CLASSIFIER_VERSION);
+    if (!needsClassify) return current;
+    let classified: ReturnType<typeof classifyGlobalModFromVpk> = null;
+    try {
+        classified = classifyGlobalModFromVpk(mod.path);
+    } catch (err) {
+        console.warn(`[enrichMod] VPK global-type classification failed for ${mod.fileName}:`, err);
+    }
+    setModMetadata(mod.metaKey, {
+        globalType: classified,
+        globalTypeClassifierVersion: GLOBAL_CLASSIFIER_VERSION,
+    });
+    return classified;
+}
+
 function enrichMod(mod: Mod): Mod {
     const metadata = getModMetadata(mod.metaKey);
     const isUnknown =
         !metadata?.gameBananaId &&
         !(typeof metadata?.modName === 'string' && metadata.modName.trim().length > 0);
+    // Classify the global (non-hero) cosmetic type for EVERY scanned VPK, even
+    // ones with no metadata row, so locally added mods get tagged like
+    // downloaded ones. resolveGlobalType persists the result + classifier
+    // version so subsequent scans skip the parse.
+    const globalType = resolveGlobalType(mod, metadata);
     if (metadata) {
         let lockerHero = metadata.lockerHero;
         let lockerHeroSource = metadata.lockerHeroSource;
@@ -75,21 +111,6 @@ function enrichMod(mod: Mod): Mod {
                 lockerHero = inferred;
                 lockerHeroSource = inferredSource;
             }
-        }
-        // Global (non-hero) cosmetic type. Classified once from the VPK tree
-        // then persisted (including the null "checked, not global" result) so
-        // later scans skip the parse. The classifier guards out hero payloads,
-        // so a real skin resolves to null and stays on the hero axis.
-        let globalType = metadata.globalType;
-        if (globalType === undefined) {
-            let classified: ReturnType<typeof classifyGlobalModFromVpk> = null;
-            try {
-                classified = classifyGlobalModFromVpk(mod.path);
-            } catch (err) {
-                console.warn(`[enrichMod] VPK global-type classification failed for ${mod.fileName}:`, err);
-            }
-            setModMetadata(mod.metaKey, { globalType: classified });
-            globalType = classified;
         }
         // Per-ability sound footprint. Same lazy + persist + null-sentinel
         // pattern as globalType, and it shares the cached VPK parse, so the two
@@ -137,7 +158,7 @@ function enrichMod(mod: Mod): Mod {
             ignoreUpdates: metadata.ignoreUpdates,
         };
     }
-    return { ...mod, isUnknown };
+    return { ...mod, isUnknown, globalType: globalType ?? undefined };
 }
 
 function sameKeys(a: string[], b: string[]): boolean {
@@ -424,9 +445,10 @@ ipcMain.handle(
 // under the wrong type. Pass a GlobalModType to assign it (this also clears any
 // hero tag, since a mod lives on either the hero axis or the global axis, never
 // both). Pass null to force it OFF the global axis: we persist the explicit null
-// so the classifier doesn't just re-add it on the next scan. The stored value
-// wins over auto-classification because enrichMod only classifies when
-// globalType is undefined.
+// so the classifier doesn't just re-add it on the next scan. A positive type
+// always wins over auto-classification (enrichMod never re-runs a positive
+// result); the null is stamped with the current classifier version so a stale
+// null re-run can't override this deliberate "not global" choice.
 ipcMain.handle(
     'set-mod-global-type',
     async (_, modId: string, globalType: GlobalModType | null): Promise<Mod> => {
@@ -441,6 +463,7 @@ ipcMain.handle(
         }
         setModMetadata(target.metaKey, {
             globalType,
+            globalTypeClassifierVersion: GLOBAL_CLASSIFIER_VERSION,
             // Assigning a global type moves the mod off the hero axis.
             ...(globalType ? { lockerHero: undefined, lockerHeroSource: undefined } : {}),
         });
