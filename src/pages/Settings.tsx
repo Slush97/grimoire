@@ -21,6 +21,30 @@ import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
 import SocialAccountSection from '../components/social/SocialAccountSection';
 
+// GitHub Releases is the source of truth for changelogs. When we have local
+// release notes (an update is pending) we show them in-app; otherwise we link
+// out to the release page so users can read "what's new" even when up to date.
+const GITHUB_RELEASES_URL = 'https://github.com/Slush97/grimoire/releases';
+const releaseTagUrl = (version?: string | null) =>
+  version ? `${GITHUB_RELEASES_URL}/tag/v${version}` : GITHUB_RELEASES_URL;
+
+// A version number that links to its GitHub release notes. Renders nothing when
+// there's no version to point at.
+function ReleaseVersionLink({ version, className = '' }: { version?: string | null; className?: string }) {
+  if (!version) return null;
+  return (
+    <a
+      href={releaseTagUrl(version)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`View v${version} release notes on GitHub`}
+      className={`underline decoration-dotted underline-offset-2 transition-colors hover:text-accent ${className}`}
+    >
+      v{version}
+    </a>
+  );
+}
+
 export default function Settings() {
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
   const [localPath, setLocalPath] = useState<string | null>(null);
@@ -401,6 +425,18 @@ export default function Settings() {
     window.electronAPI.updater.installUpdate();
   }, []);
 
+  // "What's New" entry point that works in every state. If an update is pending
+  // we have its release notes locally, so open the in-app changelog. Otherwise
+  // (up to date, or a package-managed install) send users to this build's
+  // GitHub release page so they can always read the notes.
+  const handleViewWhatsNew = useCallback(() => {
+    if (updateStatus?.updateInfo?.releaseNotes) {
+      setShowChangelog(true);
+    } else {
+      window.open(releaseTagUrl(appVersion), '_blank', 'noopener,noreferrer');
+    }
+  }, [updateStatus, appVersion]);
+
   // Listen for sync progress
   useEffect(() => {
     const unsub = window.electronAPI.onSyncProgress((data) => {
@@ -599,13 +635,13 @@ export default function Settings() {
                 </div>
                 {updateStatus?.available && !updateStatus.downloaded && (
                   <span className="text-xs text-accent">
-                    v{updateStatus.updateInfo?.version} available!
+                    <ReleaseVersionLink version={updateStatus.updateInfo?.version} /> available!
                   </span>
                 )}
                 {updateStatus?.downloaded && (
                   <span className="text-xs text-green-400 inline-flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    v{updateStatus.updateInfo?.version} ready to install
+                    <ReleaseVersionLink version={updateStatus.updateInfo?.version} /> ready to install
                   </span>
                 )}
                 {upToDate && !updateStatus?.available && !updateStatus?.checking && (
@@ -616,6 +652,15 @@ export default function Settings() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
+                {/* Always present so release notes are reachable in any state,
+                    including when up to date or on a package-managed install. */}
+                <Button
+                  onClick={handleViewWhatsNew}
+                  variant="secondary"
+                  icon={Sparkles}
+                >
+                  What's New
+                </Button>
                 {installSource === 'managed' ? null : updateStatus?.downloaded ? (
                   <Button
                     onClick={handleInstallUpdate}
@@ -624,22 +669,12 @@ export default function Settings() {
                     Install & Restart
                   </Button>
                 ) : updateStatus?.available && !updateStatus.downloading ? (
-                  <>
-                    {updateStatus.updateInfo?.releaseNotes && (
-                      <Button
-                        onClick={() => setShowChangelog(true)}
-                        variant="secondary"
-                      >
-                        View Changelog
-                      </Button>
-                    )}
-                    <Button
-                      onClick={handleDownloadUpdate}
-                      icon={Download}
-                    >
-                      Download Update
-                    </Button>
-                  </>
+                  <Button
+                    onClick={handleDownloadUpdate}
+                    icon={Download}
+                  >
+                    Download Update
+                  </Button>
                 ) : (
                   <Button
                     onClick={handleCheckForUpdates}
@@ -1199,7 +1234,9 @@ export default function Settings() {
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div>
-                <h2 className="text-xl font-bold">What's New in v{updateStatus.updateInfo.version}</h2>
+                <h2 className="text-xl font-bold">
+                  What's New in <ReleaseVersionLink version={updateStatus.updateInfo.version} />
+                </h2>
                 {updateStatus.updateInfo.releaseDate && (
                   <p className="text-sm text-text-secondary mt-1">
                     Released {new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString()}
@@ -1223,7 +1260,9 @@ export default function Settings() {
                 <div className="space-y-4">
                   {updateStatus.updateInfo.releaseNotes.map((note, idx) => (
                     <div key={idx}>
-                      <h3 className="font-semibold text-accent">v{note.version}</h3>
+                      <h3 className="font-semibold text-accent">
+                        <ReleaseVersionLink version={note.version} />
+                      </h3>
                       {note.note && (
                         <div
                           className="prose prose-invert prose-sm max-w-none mt-1"
