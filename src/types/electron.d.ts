@@ -6,6 +6,8 @@ import type {
     UnknownModFilterGuess,
     ApplyUnknownModMatchArgs,
     ApplyUnknownCustomModArgs,
+    AssociateUnknownModArgs,
+    UnknownModFileList,
     EditLocalModArgs,
     MergeModsArgs,
     UnmergeModResult,
@@ -304,6 +306,8 @@ export interface ElectronAPI {
     cancelUnknownModDetection: (modId: string) => Promise<void>;
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
+    associateUnknownMod: (modId: string, args: AssociateUnknownModArgs) => Promise<Mod>;
+    listUnknownModFiles: (modId: string) => Promise<UnknownModFileList>;
     editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
@@ -389,6 +393,7 @@ export interface ElectronAPI {
     getDroppedFilePath: (file: File) => string;
 
     // Events
+    onGameBananaRateLimited: (callback: () => void) => () => void;
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;

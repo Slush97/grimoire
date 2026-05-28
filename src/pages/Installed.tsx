@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   DndContext,
@@ -53,15 +53,21 @@ import {
   Wand2,
   SlidersHorizontal,
   ArrowDownUp,
+  Link2,
+  ChevronDown,
+  ChevronRight,
+  Folder,
+  FileText,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, GlobalModType, UnknownModFilterGuess, MergedModSource } from '../types/mod';
-import type { GameBananaModDetails } from '../types/gamebanana';
+import type { Mod, GlobalModType, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs } from '../types/mod';
+import type { GameBananaModDetails, GameBananaMod } from '../types/gamebanana';
+import { getModThumbnail } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
@@ -762,18 +768,10 @@ export default function Installed() {
   const openUnknownModFix = (mod: Mod, mode: 'single' | 'bulk' = 'single') => {
     setUnknownFixMode(mode);
     setUnknownFilterGuess({ mod, loading: unknownFilterPendingIds.has(mod.id) });
-    // Auto-kick the search when there's no cached result and nothing in
-    // flight. Otherwise the user has to click Find inside the modal after
-    // already clicking Fix outside — one click too many, and confusing
-    // because the modal just sits idle. Suppressed when the experimental
-    // matcher is disabled (the modal opens straight to the custom-mod path).
-    if (
-      autoMatchEnabled &&
-      !unknownFilterCache[mod.id] &&
-      !unknownFilterPendingIds.has(mod.id)
-    ) {
-      void inspectUnknownModFilters(mod, false, mode);
-    }
+    // The modal opens to the manual search + view-files path. The CRC
+    // auto-matcher is no longer kicked automatically: it fans out a heavy
+    // burst of GameBanana requests that can hit rate limits, so it now waits
+    // for an explicit "Auto-detect" click inside the modal.
   };
 
   const applyUnknownMatch = async (mod: Mod, match: FoundUnknownMatch) => {
@@ -790,6 +788,23 @@ export default function Installed() {
       thumbnailUrl: match.thumbnailUrl,
       nsfw: match.nsfw,
     });
+    await finishUnknownFix(mod);
+  };
+
+  // Manual association: the user found the mod on GameBanana (via the in-modal
+  // search) and is linking it to their existing local VPK. Tags the file in
+  // place, so no download and no archive fetches: the lightweight path that
+  // sidesteps the rate-limit pain of the CRC auto-matcher.
+  const associateUnknownMatch = async (mod: Mod, args: AssociateUnknownModArgs) => {
+    await associateUnknownMod(mod.id, args);
+    setCopyToast(`Linked to ${args.modName}`);
+    await finishUnknownFix(mod);
+  };
+
+  // Shared cleanup after an unknown mod is resolved (matched or linked):
+  // refresh the list, drop its cached search state, and advance the bulk modal
+  // to the next unknown (or close).
+  const finishUnknownFix = async (mod: Mod) => {
     await loadMods();
     setUnknownFilterCache((prev) => {
       const next = { ...prev };
@@ -846,15 +861,10 @@ export default function Installed() {
     const first = unknowns[0];
     if (!first) return;
     openUnknownModFix(first, 'bulk');
-    // Kick searches for the rest in parallel so every row progresses while
-    // the user reviews the first one. The queue dedupes against pending/
-    // cached, so re-kicking the first mod here is a no-op. Gated behind the
-    // experimental flag while the matcher is being reworked. Without it the
-    // bulk modal just lists the unknowns so the user can route each one to
-    // the manual custom-mod path.
-    if (autoMatchEnabled) {
-      findAllUnknownMods(unknowns);
-    }
+    // The heavy auto-detect sweep is no longer kicked on open. The bulk modal
+    // lists the unknowns so the user can search/link each one manually; the
+    // "Auto-detect all" button (behind a rate-limit confirm) still runs the
+    // CRC matcher across the batch when explicitly requested.
   };
 
   const findAllUnknownMods = (unknowns: Mod[]) => {
@@ -2885,6 +2895,7 @@ export default function Installed() {
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           autoMatchEnabled={autoMatchEnabled}
           onApplyMatch={applyUnknownMatch}
+          onAssociate={associateUnknownMatch}
           onViewMatch={viewUnknownMatch}
           onMakeCustom={makeUnknownCustomMod}
           onFind={(mod) => void inspectUnknownModFilters(mod, false, 'single')}
@@ -2905,6 +2916,7 @@ export default function Installed() {
           errors={unknownFilterErrors}
           onSelect={(mod) => openUnknownModFix(mod, 'bulk')}
           onApplyMatch={applyUnknownMatch}
+          onAssociate={associateUnknownMatch}
           onViewMatch={viewUnknownMatch}
           onMakeCustom={makeUnknownCustomMod}
           onFindAll={findAllUnknownMods}
@@ -3255,6 +3267,7 @@ function UnknownFilterGuessModal({
   hideNsfwPreviews,
   autoMatchEnabled,
   onApplyMatch,
+  onAssociate,
   onViewMatch,
   onMakeCustom,
   onFind,
@@ -3272,6 +3285,7 @@ function UnknownFilterGuessModal({
   hideNsfwPreviews: boolean;
   autoMatchEnabled: boolean;
   onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
+  onAssociate: (mod: Mod, args: AssociateUnknownModArgs) => Promise<void>;
   onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
   onMakeCustom: (mod: Mod) => void;
   onFind: (mod: Mod) => void;
@@ -3319,6 +3333,7 @@ function UnknownFilterGuessModal({
           hideNsfwPreviews={hideNsfwPreviews}
           autoMatchEnabled={autoMatchEnabled}
           onApplyMatch={onApplyMatch}
+          onAssociate={onAssociate}
           onViewMatch={onViewMatch}
           onMakeCustom={onMakeCustom}
           onFind={onFind}
@@ -3341,6 +3356,7 @@ function BulkUnknownFixModal({
   errors,
   onSelect,
   onApplyMatch,
+  onAssociate,
   onViewMatch,
   onMakeCustom,
   onFindAll,
@@ -3364,6 +3380,7 @@ function BulkUnknownFixModal({
   errors: Record<string, string>;
   onSelect: (mod: Mod) => void;
   onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
+  onAssociate: (mod: Mod, args: AssociateUnknownModArgs) => Promise<void>;
   onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
   onMakeCustom: (mod: Mod) => void;
   onFindAll: (mods: Mod[]) => void;
@@ -3399,14 +3416,22 @@ function BulkUnknownFixModal({
           <div className="flex items-center gap-2 flex-shrink-0">
             {autoMatchEnabled && (
               <Button
-                variant="primary"
+                variant="secondary"
                 size="sm"
                 icon={Search}
                 disabled={findableCount === 0}
-                onClick={() => onFindAll(unknownMods)}
-                title="Search every unknown mod that has not already been checked"
+                onClick={() => {
+                  // Auto-detecting every unknown fans out a heavy burst of
+                  // GameBanana requests, so confirm before unleashing it.
+                  const ok = window.confirm(
+                    `Auto-detect scans GameBanana for ${findableCount} mod${findableCount === 1 ? '' : 's'}. ` +
+                      'This can hit GameBanana rate limits. Searching manually (per mod) is faster and lighter. Continue?'
+                  );
+                  if (ok) onFindAll(unknownMods);
+                }}
+                title="Auto-detect every unknown mod that has not already been checked (heavy, may hit rate limits)"
               >
-                Find all
+                Auto-detect all
               </Button>
             )}
             <button
@@ -3475,6 +3500,7 @@ function BulkUnknownFixModal({
             hideNsfwPreviews={hideNsfwPreviews}
             autoMatchEnabled={autoMatchEnabled}
             onApplyMatch={onApplyMatch}
+            onAssociate={onAssociate}
             onViewMatch={onViewMatch}
             onMakeCustom={onMakeCustom}
             onFind={onFind}
@@ -3492,6 +3518,7 @@ function UnknownMatchPanel({
   hideNsfwPreviews,
   autoMatchEnabled,
   onApplyMatch,
+  onAssociate,
   onViewMatch,
   onMakeCustom,
   onFind,
@@ -3508,6 +3535,7 @@ function UnknownMatchPanel({
   hideNsfwPreviews: boolean;
   autoMatchEnabled: boolean;
   onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
+  onAssociate: (mod: Mod, args: AssociateUnknownModArgs) => Promise<void>;
   onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
   onMakeCustom: (mod: Mod) => void;
   onFind: (mod: Mod) => void;
@@ -3553,40 +3581,22 @@ function UnknownMatchPanel({
 
   return (
     <div className="p-5 overflow-y-auto space-y-4">
-      {loading && (
-        <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
-            <span>Finding a matching mod...</span>
-          </div>
-          <Button
-            variant="secondary"
-            size="sm"
-            icon={X}
-            onClick={handleCancel}
-          >
-            Cancel
-          </Button>
-        </div>
-      )}
+      {/* Primary path: find the mod on GameBanana and link this local file to
+          it. Light on the API (one search, optional file list) versus the CRC
+          auto-matcher below, which downloads candidate archives. */}
+      <UnknownManualSearch
+        mod={mod}
+        defaultSection={result?.section ?? 'Mod'}
+        disabled={applying}
+        onAssociate={onAssociate}
+      />
 
-      {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-          <span>{error}</span>
-        </div>
-      )}
-
-      {foundMatch && (
-        <UnknownMatchCard
-          match={foundMatch}
-          hideNsfwPreviews={hideNsfwPreviews}
-          applying={applying}
-          onApply={() => void handleApply(foundMatch)}
-          onView={() => onViewMatch(mod, foundMatch)}
-          onRetry={autoMatchEnabled ? handleRetry : undefined}
-        />
-      )}
+      {/* Let the user eyeball what the VPK actually contains. Pure local read. */}
+      <UnknownFileList
+        mod={mod}
+        initialPaths={result?.samplePaths}
+        initialCount={result?.fileCount}
+      />
 
       {applyError && (
         <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
@@ -3595,92 +3605,651 @@ function UnknownMatchPanel({
         </div>
       )}
 
-      {result && match && !foundMatch && (
-        <div className="rounded-md bg-bg-tertiary/50 border border-white/5 overflow-hidden">
-          <div className="p-4">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="w-5 h-5 text-text-tertiary flex-shrink-0 mt-0.5" />
-              <div className="min-w-0">
-                <div className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                  {match.status === 'error' ? 'Match Check Failed' : 'No Match Found'}
-                </div>
-                <p className="text-sm text-text-secondary mt-1">
-                  {match.reason ?? 'No GameBanana archive matched this local VPK by CRC-32.'}
-                </p>
-                <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-text-tertiary">
-                  <span>{match.checkedMods} mods checked</span>
-                  <span>{match.checkedFiles} files checked</span>
-                  <span>{match.bytesFetched.toLocaleString()} bytes fetched</span>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div className="border-t border-white/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
-            {autoMatchEnabled && (
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={RotateCcw}
-                onClick={handleRetry}
-              >
-                Retry
-              </Button>
-            )}
-            {match.status !== 'error' && (
-              <Button
-                variant="secondary"
-                size="sm"
-                icon={FilePlus}
-                onClick={() => onMakeCustom(mod)}
-              >
-                Make Custom Mod
-              </Button>
-            )}
-          </div>
-        </div>
-      )}
+      {/* Fallback: keep the file but give it a custom name/thumbnail. */}
+      <div className="rounded-md bg-bg-tertiary/40 border border-white/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
+        <span className="text-sm text-text-secondary">
+          Can&apos;t find it on GameBanana? Save it with a custom name instead.
+        </span>
+        <Button variant="secondary" size="sm" icon={FilePlus} onClick={() => onMakeCustom(mod)}>
+          Make Custom Mod
+        </Button>
+      </div>
 
-      {!loading && !error && !result && autoMatchEnabled && (
-        <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-center gap-3 min-w-0">
-            {cancelled ? (
-              <X className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-            ) : (
-              <Search className="w-4 h-4 text-accent flex-shrink-0" />
-            )}
-            <span>{cancelled ? 'Search cancelled.' : 'Look for a matching mod from GameBanana.'}</span>
-          </div>
-          <Button
-            variant="primary"
-            size="sm"
-            icon={Search}
-            onClick={handleFind}
-          >
-            Search
-          </Button>
-        </div>
-      )}
-
-      {!loading && !error && !result && !autoMatchEnabled && (
-        <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 space-y-3">
-          <div className="flex items-start gap-3 text-sm text-text-secondary">
-            <Beaker className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+      {/* Advanced, demoted: the heavy CRC auto-matcher. Carries an explicit
+          rate-limit warning and never runs without a click. */}
+      <details className="rounded-md bg-bg-tertiary/40 border border-white/5 overflow-hidden">
+        <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-text-secondary hover:text-text-primary flex items-center gap-2">
+          <Beaker className="w-4 h-4 text-accent flex-shrink-0" />
+          Auto-detect from GameBanana (advanced)
+        </summary>
+        <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
+          <div className="flex items-start gap-2 text-xs text-yellow-200/90 bg-yellow-500/10 border border-yellow-500/25 rounded-md p-2.5">
+            <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-400" />
             <span>
-              Automatic GameBanana matching is off. It hits rate limits on larger
-              libraries; we're reworking it. Enable it under Settings (Experimental
-              Features) once you're ready to retry, or add custom metadata below.
+              Auto-detect downloads candidate archives from GameBanana and compares them
+              byte-for-byte. It is slow and can hit GameBanana rate limits, especially when
+              fixing many mods at once. The manual search above is faster and lighter.
             </span>
           </div>
-          <div className="flex justify-end">
-            <Button
-              variant="primary"
-              size="sm"
-              icon={FilePlus}
-              onClick={() => onMakeCustom(mod)}
+
+          {loading && (
+            <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
+                <span>Finding a matching mod...</span>
+              </div>
+              <Button variant="secondary" size="sm" icon={X} onClick={handleCancel}>
+                Cancel
+              </Button>
+            </div>
+          )}
+
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+
+          {foundMatch && (
+            <UnknownMatchCard
+              match={foundMatch}
+              hideNsfwPreviews={hideNsfwPreviews}
+              applying={applying}
+              onApply={() => void handleApply(foundMatch)}
+              onView={() => onViewMatch(mod, foundMatch)}
+              onRetry={autoMatchEnabled ? handleRetry : undefined}
+            />
+          )}
+
+          {result && match && !foundMatch && (
+            <div className="rounded-md bg-bg-tertiary/50 border border-white/5 overflow-hidden">
+              <div className="p-4">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="w-5 h-5 text-text-tertiary flex-shrink-0 mt-0.5" />
+                  <div className="min-w-0">
+                    <div className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
+                      {match.status === 'error' ? 'Match Check Failed' : 'No Match Found'}
+                    </div>
+                    <p className="text-sm text-text-secondary mt-1">
+                      {match.reason ?? 'No GameBanana archive matched this local VPK by CRC-32.'}
+                    </p>
+                    <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-text-tertiary">
+                      <span>{match.checkedMods} mods checked</span>
+                      <span>{match.checkedFiles} files checked</span>
+                      <span>{match.bytesFetched.toLocaleString()} bytes fetched</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              {autoMatchEnabled && (
+                <div className="border-t border-white/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+                  <Button variant="secondary" size="sm" icon={RotateCcw} onClick={handleRetry}>
+                    Retry
+                  </Button>
+                </div>
+              )}
+            </div>
+          )}
+
+          {!loading && !error && !result && autoMatchEnabled && (
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-text-secondary">
+              <span>{cancelled ? 'Auto-detect cancelled.' : 'Run a byte-for-byte search against GameBanana.'}</span>
+              <Button variant="secondary" size="sm" icon={Search} onClick={handleFind}>
+                {cancelled ? 'Try again' : 'Auto-detect'}
+              </Button>
+            </div>
+          )}
+
+          {!loading && !error && !result && !autoMatchEnabled && (
+            <p className="text-sm text-text-secondary">
+              Auto-detect is off. Enable it under Settings (Experimental Features) if you want
+              to try it, but the manual search above is the recommended path.
+            </p>
+          )}
+        </div>
+      </details>
+    </div>
+  );
+}
+
+// Manual GameBanana search inside the Fix Unknown modal. Leads with side-by-side
+// guidance, then a search box + selectable results. Linking tags the existing
+// local VPK in place (no download), so it costs at most one search plus an
+// optional file-list lookup.
+// Map a locally-cached catalog row to the GameBananaMod shape the result cards
+// expect. Mirrors the conversion the Browse tab does so the unknown-mod search
+// reuses the same instant local index instead of the slower GameBanana API.
+function cachedModToGameBananaMod(m: import('../types/electron').CachedMod): GameBananaMod {
+  let images: { baseUrl: string; file: string; file530: string }[] | undefined;
+  if (m.thumbnailUrl) {
+    const lastSlash = m.thumbnailUrl.lastIndexOf('/');
+    if (lastSlash !== -1) {
+      const baseUrl = m.thumbnailUrl.substring(0, lastSlash);
+      const file = m.thumbnailUrl.substring(lastSlash + 1);
+      if (baseUrl && file) images = [{ baseUrl, file, file530: file }];
+    }
+  }
+  const metadata = m.audioUrl ? { audioUrl: m.audioUrl } : undefined;
+  return {
+    id: m.id,
+    name: m.name,
+    profileUrl: m.profileUrl,
+    dateAdded: m.dateAdded,
+    dateModified: m.dateModified,
+    hasFiles: m.hasFiles,
+    likeCount: m.likeCount,
+    viewCount: m.viewCount,
+    nsfw: m.isNsfw,
+    rootCategory: m.categoryId ? { id: m.categoryId, name: m.categoryName || '' } : undefined,
+    submitter: m.submitterName ? { id: m.submitterId || 0, name: m.submitterName } : undefined,
+    previewMedia: images || metadata ? { images, metadata } : undefined,
+  };
+}
+
+function UnknownManualSearch({
+  mod,
+  defaultSection,
+  disabled,
+  onAssociate,
+}: {
+  mod: Mod;
+  defaultSection: 'Mod' | 'Sound';
+  disabled: boolean;
+  onAssociate: (mod: Mod, args: AssociateUnknownModArgs) => Promise<void>;
+}) {
+  // Seed the box with the hero inferred from the VPK tree (when confident), so
+  // a skin search is one keystroke away. enrichMod tags Sound mods as 'Sound',
+  // everything else defaults to 'Mod'.
+  const [query, setQuery] = useState(mod.lockerHero ?? '');
+  const [section, setSection] = useState<'Mod' | 'Sound'>(defaultSection);
+  const [results, setResults] = useState<GameBananaMod[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [selected, setSelected] = useState<GameBananaMod | null>(null);
+  const [files, setFiles] = useState<GameBananaModFileChoice[] | null>(null);
+  const [fileId, setFileId] = useState<number | undefined>(undefined);
+  const [linking, setLinking] = useState(false);
+  const reqRef = useRef(0);
+  // Whether the local catalog mirror is populated. When it is, search hits the
+  // instant FTS index (like the Browse tab) and trusts an empty result; when
+  // it isn't (fresh install, never synced), we fall back to the GameBanana API
+  // so we never show a false "no results".
+  const hasLocalCacheRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    window.electronAPI
+      .getLocalModCount()
+      .then((count) => {
+        if (!cancelled) hasLocalCacheRef.current = count > 100;
+      })
+      .catch(() => {
+        if (!cancelled) hasLocalCacheRef.current = false;
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Live search. Stable (no changing deps) so the debounce effect can depend on
+  // it without re-arming every render. Empty query clears the list. Prefers the
+  // local FTS catalog for snappy, in-game-like results; the GameBanana API is
+  // only used as a fallback when there's no local mirror.
+  const search = useCallback(async (rawQuery: string, sec: 'Mod' | 'Sound') => {
+    const q = rawQuery.trim();
+    const reqId = ++reqRef.current;
+    setSelected(null);
+    setFiles(null);
+    setFileId(undefined);
+    if (!q) {
+      setResults([]);
+      setHasSearched(false);
+      setSearching(false);
+      return;
+    }
+    setSearching(true);
+    setSearchError(null);
+    setHasSearched(true);
+    try {
+      let records: GameBananaMod[] = [];
+      let servedLocally = false;
+      try {
+        const local = await window.electronAPI.searchLocalMods({
+          query: q,
+          section: sec,
+          sortBy: 'relevance',
+          nsfw: 'all',
+          addedWithin: 'all',
+          limit: 20,
+          offset: 0,
+        });
+        if (reqRef.current !== reqId) return;
+        records = local.mods.map(cachedModToGameBananaMod);
+        servedLocally = true;
+      } catch {
+        servedLocally = false;
+      }
+      // Hit the API only when local couldn't serve it: it errored, or it came
+      // back empty while we're not sure the mirror is actually populated.
+      if (!servedLocally || (records.length === 0 && hasLocalCacheRef.current !== true)) {
+        const res = await browseMods(1, 20, q, sec);
+        if (reqRef.current !== reqId) return;
+        records = res.records;
+      }
+      setResults(records);
+    } catch (err) {
+      if (reqRef.current !== reqId) return;
+      setSearchError(err instanceof Error ? err.message : String(err));
+      setResults([]);
+    } finally {
+      if (reqRef.current === reqId) setSearching(false);
+    }
+  }, []);
+
+  // Debounced live results: re-run as the user types or flips the section.
+  // Also fires once on mount when the box was prefilled from the inferred hero.
+  // 250ms matches the Browse tab's search feel.
+  useEffect(() => {
+    const t = setTimeout(() => void search(query, section), 250);
+    return () => clearTimeout(t);
+  }, [query, section, search]);
+
+  // Lazy-load the candidate's files so the user can optionally pin the exact
+  // file. Skippable: linking works without a fileId.
+  const selectMod = async (gbMod: GameBananaMod) => {
+    setSelected(gbMod);
+    setFiles(null);
+    setFileId(undefined);
+    if (!gbMod.hasFiles) return;
+    try {
+      const details = await getModDetails(gbMod.id, section);
+      const choices = (details.files ?? []).map((f) => ({ id: f.id, fileName: f.fileName }));
+      setFiles(choices);
+    } catch {
+      // A missing file list just means no file pin; the link still works.
+      setFiles([]);
+    }
+  };
+
+  const handleLink = async () => {
+    if (!selected || linking || disabled) return;
+    setLinking(true);
+    setSearchError(null);
+    try {
+      await onAssociate(mod, {
+        gameBananaId: selected.id,
+        modName: selected.name,
+        gameBananaFileId: fileId,
+        thumbnailUrl: getModThumbnail(selected),
+        nsfw: selected.nsfw,
+        categoryName: selected.rootCategory?.name,
+        sourceSection: section,
+      });
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md bg-bg-tertiary/50 border border-white/5 p-4 space-y-3">
+      <div className="flex items-start gap-3">
+        <Link2 className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+        <div className="text-sm text-text-secondary">
+          <span className="font-medium text-text-primary">Find it on GameBanana and link it.</span>{' '}
+          Results update as you type, or open GameBanana (or the Browse tab) side by side to
+          find the mod, then search for it here. Linking tags this exact file: nothing is
+          re-downloaded.
+        </div>
+      </div>
+
+      {(mod.lockerHero || mod.globalType) && (
+        <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+          <span className="text-text-tertiary">From the file tree:</span>
+          {mod.lockerHero && (
+            <span className="inline-flex items-center rounded-full bg-bg-primary/60 border border-white/10 px-2 py-0.5">
+              <HeroTagLabel heroName={mod.lockerHero} iconClassName="h-4 w-4" />
+            </span>
+          )}
+          {mod.globalType && (
+            <span className="rounded-full bg-bg-primary/60 border border-white/10 px-2 py-0.5 text-text-secondary">
+              {GLOBAL_MOD_TYPE_LABELS[mod.globalType] ?? mod.globalType}
+            </span>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center gap-2">
+        <div className="flex rounded-md overflow-hidden border border-white/10 text-xs flex-shrink-0">
+          {(['Mod', 'Sound'] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              onClick={() => setSection(s)}
+              className={`px-2.5 py-2 transition-colors cursor-pointer ${
+                section === s ? 'bg-accent text-accent-foreground' : 'text-text-secondary hover:bg-white/5'
+              }`}
             >
-              Make Custom Mod
-            </Button>
+              {s === 'Mod' ? 'Mods' : 'Sounds'}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1 min-w-0">
+          <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-tertiary" />
+          <input
+            type="text"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search GameBanana by name..."
+            className="w-full bg-bg-primary border border-white/10 rounded-md pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/50"
+          />
+          {searching && (
+            <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-accent" />
+          )}
+        </div>
+      </div>
+
+      {searchError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+          <span>{searchError}</span>
+        </div>
+      )}
+
+      {hasSearched && !searching && results.length === 0 && !searchError && (
+        <p className="text-sm text-text-tertiary">No results. Try a different name or section.</p>
+      )}
+
+      {results.length > 0 && (
+        <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
+          {results.map((gbMod) => {
+            const isSel = selected?.id === gbMod.id;
+            return (
+              <div
+                key={gbMod.id}
+                className={`rounded-md border transition-colors ${
+                  isSel ? 'bg-accent/10 border-accent/40' : 'bg-bg-primary/40 border-white/5 hover:border-white/15'
+                }`}
+              >
+                <button
+                  type="button"
+                  onClick={() => void selectMod(gbMod)}
+                  className="w-full text-left flex items-center gap-3 p-2 cursor-pointer"
+                >
+                  <ModThumbnail
+                    src={getModThumbnail(gbMod)}
+                    alt={gbMod.name}
+                    nsfw={gbMod.nsfw}
+                    hideNsfw
+                    className="w-16 h-11 rounded bg-bg-primary border border-white/10 flex-shrink-0"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-medium text-text-primary truncate" title={gbMod.name}>
+                      {gbMod.name}
+                    </div>
+                    <div className="text-[11px] text-text-tertiary truncate">
+                      {gbMod.rootCategory?.name ?? (section === 'Mod' ? 'Mods' : 'Sounds')} · #{gbMod.id}
+                    </div>
+                  </div>
+                  {isSel && <Check className="w-4 h-4 text-accent flex-shrink-0" />}
+                </button>
+
+                {isSel && (
+                  <div className="border-t border-white/5 px-2.5 py-2.5 space-y-2">
+                    {files && files.length > 0 && (
+                      <label className="block text-xs text-text-secondary">
+                        Pin exact file (optional)
+                        <select
+                          value={fileId ?? ''}
+                          onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
+                          className="mt-1 w-full bg-bg-primary border border-white/10 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent/50"
+                        >
+                          <option value="">Don&apos;t pin a file</option>
+                          {files.map((f) => (
+                            <option key={f.id} value={f.id}>
+                              {f.fileName}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
+                    <div className="flex justify-end">
+                      <Button
+                        variant="success"
+                        size="sm"
+                        icon={Link2}
+                        isLoading={linking}
+                        disabled={disabled}
+                        onClick={() => void handleLink()}
+                      >
+                        Link this mod
+                      </Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+type GameBananaModFileChoice = { id: number; fileName: string };
+
+interface FileTreeNode {
+  name: string;
+  path: string;
+  isFile: boolean;
+  fileCount: number;
+  children: Map<string, FileTreeNode>;
+}
+
+// Turn a flat path list ("models/heroes/ghost/foo.vmdl_c") into a nested tree,
+// stamping each folder with how many files sit under it.
+function buildFileTree(paths: string[]): FileTreeNode {
+  const root: FileTreeNode = { name: '', path: '', isFile: false, fileCount: 0, children: new Map() };
+  for (const p of paths) {
+    const parts = p.split('/').filter(Boolean);
+    let node = root;
+    parts.forEach((part, i) => {
+      const isLast = i === parts.length - 1;
+      let child = node.children.get(part);
+      if (!child) {
+        child = { name: part, path: parts.slice(0, i + 1).join('/'), isFile: isLast, fileCount: 0, children: new Map() };
+        node.children.set(part, child);
+      } else if (!isLast) {
+        child.isFile = false;
+      }
+      node = child;
+    });
+  }
+  const finalize = (n: FileTreeNode): number => {
+    if (n.isFile && n.children.size === 0) {
+      n.fileCount = 1;
+      return 1;
+    }
+    let total = 0;
+    for (const c of n.children.values()) total += finalize(c);
+    n.fileCount = total;
+    return total;
+  };
+  finalize(root);
+  return root;
+}
+
+// Folders first, then files, each alphabetical.
+function sortTreeNodes(nodes: Map<string, FileTreeNode>): FileTreeNode[] {
+  return [...nodes.values()].sort((a, b) => {
+    if (a.isFile !== b.isFile) return a.isFile ? 1 : -1;
+    return a.name.localeCompare(b.name);
+  });
+}
+
+function FileTreeBranch({
+  nodes,
+  depth,
+  expanded,
+  onToggle,
+}: {
+  nodes: Map<string, FileTreeNode>;
+  depth: number;
+  expanded: Set<string>;
+  onToggle: (path: string) => void;
+}) {
+  return (
+    <>
+      {sortTreeNodes(nodes).map((node) => {
+        const isOpen = expanded.has(node.path);
+        const indent = { paddingLeft: `${depth * 14 + 8}px` };
+        if (node.isFile) {
+          return (
+            <div
+              key={node.path}
+              style={indent}
+              className="flex items-center gap-1.5 py-0.5 pr-2 text-text-secondary"
+              title={node.path}
+            >
+              <FileText className="w-3.5 h-3.5 flex-shrink-0 text-text-tertiary" />
+              <span className="truncate">{node.name}</span>
+            </div>
+          );
+        }
+        return (
+          <div key={node.path}>
+            <button
+              type="button"
+              onClick={() => onToggle(node.path)}
+              style={indent}
+              className="flex w-full items-center gap-1.5 py-0.5 pr-2 text-left text-text-primary hover:bg-white/5 cursor-pointer"
+            >
+              {isOpen ? (
+                <ChevronDown className="w-3.5 h-3.5 flex-shrink-0 text-text-tertiary" />
+              ) : (
+                <ChevronRight className="w-3.5 h-3.5 flex-shrink-0 text-text-tertiary" />
+              )}
+              {isOpen ? (
+                <FolderOpen className="w-3.5 h-3.5 flex-shrink-0 text-accent" />
+              ) : (
+                <Folder className="w-3.5 h-3.5 flex-shrink-0 text-accent" />
+              )}
+              <span className="truncate">{node.name}</span>
+              <span className="text-[10px] text-text-tertiary">{node.fileCount}</span>
+            </button>
+            {isOpen && (
+              <FileTreeBranch nodes={node.children} depth={depth + 1} expanded={expanded} onToggle={onToggle} />
+            )}
           </div>
+        );
+      })}
+    </>
+  );
+}
+
+// Collapsible file TREE for the unknown VPK. Seeds from the detector's sample
+// paths, then lazily loads the full list (a local VPK directory parse, no
+// network) the first time it's expanded.
+function UnknownFileList({
+  mod,
+  initialPaths,
+  initialCount,
+}: {
+  mod: Mod;
+  initialPaths?: string[];
+  initialCount?: number;
+}) {
+  const [open, setOpen] = useState(false);
+  const [paths, setPaths] = useState<string[] | null>(initialPaths && initialPaths.length ? initialPaths : null);
+  const [count, setCount] = useState<number | undefined>(initialCount);
+  const [full, setFull] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
+
+  const tree = useMemo(() => (paths ? buildFileTree(paths) : null), [paths]);
+
+  // Expand the top-level folders by default so the tree opens to something
+  // useful (models/, sounds/, panorama/) without burying everything.
+  useEffect(() => {
+    if (!tree) return;
+    setExpanded((prev) => {
+      if (prev.size > 0) return prev;
+      return new Set([...tree.children.values()].filter((n) => !n.isFile).map((n) => n.path));
+    });
+  }, [tree]);
+
+  const loadFull = async () => {
+    if (loading) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await listUnknownModFiles(mod.id);
+      setPaths(res.paths);
+      setCount(res.fileCount);
+      setFull(true);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const toggleOpen = () => {
+    const next = !open;
+    setOpen(next);
+    if (next && !full) void loadFull();
+  };
+
+  const toggleNode = (path: string) =>
+    setExpanded((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+
+  return (
+    <div className="rounded-md bg-bg-tertiary/40 border border-white/5 overflow-hidden">
+      <button
+        type="button"
+        onClick={toggleOpen}
+        className="w-full flex items-center gap-2 px-4 py-3 text-sm text-text-secondary hover:text-text-primary cursor-pointer"
+      >
+        {open ? <ChevronDown className="w-4 h-4 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 flex-shrink-0" />}
+        <Files className="w-4 h-4 text-text-tertiary flex-shrink-0" />
+        <span className="font-medium">View files</span>
+        {typeof count === 'number' && <span className="text-text-tertiary">({count})</span>}
+      </button>
+
+      {open && (
+        <div className="border-t border-white/5 px-4 py-3 space-y-3">
+          {loading && (
+            <div className="flex items-center gap-2 text-sm text-text-tertiary">
+              <Loader2 className="w-4 h-4 animate-spin text-accent" /> Reading VPK...
+            </div>
+          )}
+          {error && (
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+              <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+              <span>{error}</span>
+            </div>
+          )}
+          {tree && tree.children.size > 0 && (
+            <>
+              <div className="max-h-64 overflow-auto rounded-md border border-white/5 bg-bg-primary/40 py-1.5 text-xs font-mono">
+                <FileTreeBranch nodes={tree.children} depth={0} expanded={expanded} onToggle={toggleNode} />
+              </div>
+              {!full && (
+                <p className="text-[11px] text-text-tertiary">Showing a sample. The full tree loads when expanded.</p>
+              )}
+            </>
+          )}
+          {tree && tree.children.size === 0 && !loading && (
+            <p className="text-sm text-text-tertiary">No file paths found in this VPK.</p>
+          )}
         </div>
       )}
     </div>

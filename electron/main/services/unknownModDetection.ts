@@ -13,7 +13,7 @@ import {
     fetchGameBananaArchiveVpkCrcEntries,
     type ArchiveVpkCrcEntry,
 } from './archiveCrc';
-import { parseVpkDirectory } from './vpk';
+import { parseVpkDirectory, parseVpkDirectoryCached } from './vpk';
 import type { UnknownModCrcMatchResult, UnknownModFilterGuess } from '../../../src/types/mod';
 
 export type { UnknownModFilterGuess };
@@ -153,6 +153,35 @@ export async function detectUnknownModFilters(
         ...guessWithoutMatch,
         crcMatch: await findUnknownModCrcMatch(vpkPath, guessWithoutMatch, options),
     };
+}
+
+export interface VpkHeroGuess {
+    /** Canonical hero name, e.g. "Lady Geist". */
+    name: string;
+    /** Hero file/codename stem used for asset lookups. */
+    fileName: string;
+    /** Strongest file-tree signal backing this guess. */
+    strongestSignal: SignalStrength;
+}
+
+/**
+ * File-tree hero inference for unknown mods. Unlike inferHeroFromVpk (sound
+ * paths only), this runs the full content classifier (models, materials,
+ * particles, panorama, sounds), so it recognizes skins too. Pure local read:
+ * uses the cached VPK parse, no GameBanana calls. Returns null when no hero is
+ * found or when more than one hero shows a strong signal (ambiguous: better to
+ * leave it untagged than guess wrong). Callers decide the confidence bar; the
+ * Locker auto-tag only accepts strong/medium.
+ */
+export function inferHeroFromVpkTree(vpkPath: string): VpkHeroGuess | null {
+    const paths = parseVpkDirectoryCached(vpkPath);
+    if (!paths || paths.length === 0) return null;
+    const normalized = paths.map(normalizePath);
+    const detected = summarizeHeroSignals(detectHeroSignals(normalized));
+    const primary = choosePrimaryHero(detected);
+    if (!primary) return null;
+    if (detected.filter((hero) => hero.strongestSignal === 'strong').length > 1) return null;
+    return { name: primary.name, fileName: primary.fileName, strongestSignal: primary.strongestSignal };
 }
 
 interface LocalVpkFingerprint {

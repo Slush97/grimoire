@@ -13,6 +13,7 @@ import type {
     AppSettings,
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
+    AssociateUnknownModArgs,
     GlobalModType,
     EditLocalModArgs,
     LockerClearScope,
@@ -20,6 +21,7 @@ import type {
     Mod,
     ModConflict,
     ExtractMergeSourceResult,
+    UnknownModFileList,
     UnknownModFilterGuess,
     UnmergeModResult,
 } from '../../src/types/mod';
@@ -54,6 +56,8 @@ export interface ElectronAPI {
     cancelUnknownModDetection: (modId: string) => Promise<void>;
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
+    associateUnknownMod: (modId: string, args: AssociateUnknownModArgs) => Promise<Mod>;
+    listUnknownModFiles: (modId: string) => Promise<UnknownModFileList>;
     editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
@@ -119,6 +123,7 @@ export interface ElectronAPI {
     getDroppedFilePath: (file: File) => string;
 
     // Events
+    onGameBananaRateLimited: (callback: () => void) => () => void;
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
@@ -777,6 +782,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('apply-unknown-mod-match', modId, args),
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) =>
         ipcRenderer.invoke('apply-unknown-custom-mod', modId, args),
+    associateUnknownMod: (modId: string, args: AssociateUnknownModArgs) =>
+        ipcRenderer.invoke('associate-unknown-mod', modId, args),
+    listUnknownModFiles: (modId: string) =>
+        ipcRenderer.invoke('list-unknown-mod-files', modId),
     editLocalMod: (modId: string, args: EditLocalModArgs) =>
         ipcRenderer.invoke('edit-local-mod', modId, args),
     setVariantLabel: (modId: string, label: string) =>
@@ -889,6 +898,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDroppedFilePath: (file: File) => webUtils.getPathForFile(file),
 
     // Events - return unsubscribe function
+    onGameBananaRateLimited: (callback: () => void) => {
+        const handler = () => callback();
+        ipcRenderer.on('gamebanana:rate-limited', handler);
+        return () => ipcRenderer.removeListener('gamebanana:rate-limited', handler);
+    },
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadProgressData) =>
             callback(data);

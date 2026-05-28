@@ -31,6 +31,11 @@ export interface ModMetadata {
     lockerHero?: string;
     /** Provenance for lockerHero. Missing values are legacy inferred tags. */
     lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource;
+    /** Set once we've run the full VPK-tree hero inference for an UNKNOWN mod
+     *  (see inferHeroFromVpkTree). Lets enrichMod skip the re-parse on later
+     *  scans when the tree yielded no confident hero, the same way globalType
+     *  uses a null sentinel. Only meaningful for unknown mods. */
+    lockerHeroVpkChecked?: boolean;
     /** Global (non-hero) cosmetic category, classified from the VPK file tree
      *  (see classifyGlobalModType in vpk.ts). Tri-state: a GlobalModType when
      *  the mod is a recognized global cosmetic, `null` when we classified it
