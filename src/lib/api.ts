@@ -123,9 +123,10 @@ export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
   return window.electronAPI.getSoulModelInfo(key);
 }
 
-/** Export a soul-container mod's model via the bundled vpkmerge exporter. */
-export async function exportSoulModel(fileName: string): Promise<SoulModelInfo> {
-  return window.electronAPI.exportSoulModel(fileName);
+/** Export a soul-container mod's model via the bundled vpkmerge exporter.
+ *  Keyed by the mod's metaKey (folder-qualified for overflow mods). */
+export async function exportSoulModel(metaKey: string): Promise<SoulModelInfo> {
+  return window.electronAPI.exportSoulModel(metaKey);
 }
 
 /** Delete a soul-container mod's exported model. */

@@ -26,7 +26,10 @@ import { getSoulModelInfo, exportSoulModel } from '../../lib/api';
 const SOUL_MODEL_SCHEME = 'grimoire-soul';
 
 function meshUrlFor(key: string, mtimeMs: number | null): string {
-  return `${SOUL_MODEL_SCHEME}://${encodeURIComponent(key)}/model.glb?v=${mtimeMs ?? 0}`;
+  // The key is a mod metaKey (overflow mods carry a '/', which a standard
+  // scheme forbids in the host), so carry it as a single encoded path segment
+  // under a fixed `m` host.
+  return `${SOUL_MODEL_SCHEME}://m/${encodeURIComponent(key)}/model.glb?v=${mtimeMs ?? 0}`;
 }
 
 /** Free a loaded scene's GPU resources (geometry, materials, textures). */
@@ -78,21 +81,19 @@ function OrbitingModel({ scene }: { scene: THREE.Object3D }) {
 
 export default function SoulContainerViewer({
   modKey,
-  fileName,
 }: {
-  /** Storage/URL key for this mod's model (the VPK file name). */
+  /** The mod's metaKey: the collision-safe storage/URL key and the source the
+   *  main process resolves and exports from. Folder-qualified for overflow
+   *  mods (`addons{N}/<file>`), a bare filename for base-addons/.disabled. */
   modKey: string;
-  /** VPK file name to export from (same as modKey today; passed explicitly so
-   *  the export source is unambiguous). */
-  fileName: string;
 }) {
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
   const [generating, setGenerating] = useState(false);
   const [failed, setFailed] = useState(false);
 
   useEffect(() => {
-    // Each Locker card mounts its own viewer (keyed by mod), so modKey/fileName
-    // are stable for an instance and initial state needs no reset here.
+    // Each Locker card mounts its own viewer (keyed by mod), so modKey is
+    // stable for an instance and initial state needs no reset here.
     let cancelled = false;
     let loaded: THREE.Object3D | null = null;
 
@@ -102,7 +103,7 @@ export default function SoulContainerViewer({
         if (!info.hasModel) {
           if (cancelled) return;
           setGenerating(true);
-          info = await exportSoulModel(fileName);
+          info = await exportSoulModel(modKey);
           if (cancelled) return;
           setGenerating(false);
         }
@@ -132,7 +133,7 @@ export default function SoulContainerViewer({
       cancelled = true;
       if (loaded) disposeScene(loaded);
     };
-  }, [modKey, fileName]);
+  }, [modKey]);
 
   // Failure: render nothing so the card's clear window shows.
   if (failed) return null;

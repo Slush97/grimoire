@@ -315,7 +315,7 @@ export interface ElectronAPI {
         heroName: string
     ) => Promise<{ sourceFileName: string; variants: string[] } | null>;
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
-    exportSoulModel: (fileName: string) => Promise<SoulModelInfo>;
+    exportSoulModel: (metaKey: string) => Promise<SoulModelInfo>;
     clearSoulModel: (key: string) => Promise<void>;
     applyHeroSound: (
         heroName: string,

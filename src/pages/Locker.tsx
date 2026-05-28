@@ -1080,7 +1080,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                             GameBanana thumbnail. */}
                         {activeType === 'soul-container' ? (
                           <Suspense fallback={null}>
-                            <SoulContainerViewer modKey={mod.fileName} fileName={mod.fileName} />
+                            <SoulContainerViewer modKey={mod.metaKey} />
                           </Suspense>
                         ) : (
                           <div
