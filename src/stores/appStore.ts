@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Mod, AppSettings, EditLocalModArgs } from '../types/mod';
+import type { Mod, AppSettings, EditLocalModArgs, GlobalModType } from '../types/mod';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import * as api from '../lib/api';
@@ -201,6 +201,7 @@ interface AppState {
   reorderMods: (orderedIds: string[]) => Promise<void>;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
+  setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
   importCustomMod: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
 
@@ -402,6 +403,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setModLockerHero: async (modId: string, heroName: string | null) => {
     const updated = await api.setModLockerHero(modId, heroName);
+    set({
+      mods: get().mods.map((m) => (m.id === modId ? updated : m)),
+    });
+  },
+
+  setModGlobalType: async (modId: string, globalType: GlobalModType | null) => {
+    const updated = await api.setModGlobalType(modId, globalType);
     set({
       mods: get().mods.map((m) => (m.id === modId ? updated : m)),
     });

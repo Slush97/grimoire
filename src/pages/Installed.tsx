@@ -71,7 +71,6 @@ import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
-import { setModGlobalType } from '../lib/api';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
@@ -367,6 +366,7 @@ export default function Installed() {
     reorderMods,
     editLocalMod,
     setModLockerHero,
+    setModGlobalType,
     setVariantLabel,
     importCustomMod,
     soundVolume,
