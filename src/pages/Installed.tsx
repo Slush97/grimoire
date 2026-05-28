@@ -70,7 +70,7 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { setModGlobalType } from '../lib/api';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
@@ -3156,7 +3156,7 @@ export default function Installed() {
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
                       Hero
                     </div>
-                    {HERO_NAMES.map((name) => (
+                    {HERO_NAMES_SORTED.map((name) => (
                       <button
                         key={name}
                         type="button"
@@ -4660,7 +4660,9 @@ function ModCard({
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
                       Hero
                     </div>
-                    {HERO_NAMES.map((heroName) => (
+                    {HERO_NAMES_SORTED.map((heroName) => {
+                      const tagged = canonicalHeroName(mod.lockerHero) === heroName;
+                      return (
                       <button
                         key={heroName}
                         type="button"
@@ -4670,7 +4672,7 @@ function ModCard({
                         }}
                         disabled={menuBusy}
                         className={`flex w-full items-center justify-between rounded px-2 py-1.5 text-left text-xs hover:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50 ${
-                          mod.lockerHero === heroName
+                          tagged
                             ? mod.lockerHeroSource === 'manual'
                               ? 'text-accent'
                               : 'text-sky-200'
@@ -4678,9 +4680,10 @@ function ModCard({
                         }`}
                       >
                         <HeroTagLabel heroName={heroName} />
-                        {mod.lockerHero === heroName && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
+                        {tagged && <Check className="w-3.5 h-3.5 flex-shrink-0" />}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </>
