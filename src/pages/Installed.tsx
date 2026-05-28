@@ -4519,11 +4519,17 @@ function ModCard({
   // Compact cards stay single-line (too small to wrap nicely); standard grid
   // cards wrap so a hero + category + 18+ + files chip never clips mid-chip.
   const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'min-h-7 flex-wrap';
+  // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
+  // manual or auto global tag is visible here, not just in the Locker. A global
+  // mod has no hero, so the two chips never both show.
+  const cardGlobalType = getEffectiveGlobalType(mod);
   const showCategoryChip = viewMode !== 'compact' || !mod.lockerHero;
   const compactBaseChipCount =
     (mod.lockerHero ? 1 : 0) + (showCategoryChip && mod.categoryName ? 1 : 0);
-  const showNsfwChip = !!mod.nsfw && (!isCompact || compactBaseChipCount < 2);
-  const showGroupChip = !!group && (!isCompact || compactBaseChipCount + (showNsfwChip ? 1 : 0) < 2);
+  const showGlobalChip = !!cardGlobalType && (!isCompact || compactBaseChipCount < 2);
+  const compactChipCount = compactBaseChipCount + (showGlobalChip ? 1 : 0);
+  const showNsfwChip = !!mod.nsfw && (!isCompact || compactChipCount < 2);
+  const showGroupChip = !!group && (!isCompact || compactChipCount + (showNsfwChip ? 1 : 0) < 2);
   const actions = (
     <div className="ml-auto flex items-center gap-1">
       <div className="relative" ref={menuRef} data-card-action="true">
@@ -4950,6 +4956,13 @@ function ModCard({
                 iconClassName={tagIconClassName}
                 iconOnly
               />
+              {showGlobalChip && cardGlobalType && (
+                <MetaTextChip
+                  label={GLOBAL_MOD_TYPE_LABELS[cardGlobalType] ?? cardGlobalType}
+                  className={metaChipClasses}
+                  title={`Locker: ${GLOBAL_MOD_TYPE_LABELS[cardGlobalType] ?? cardGlobalType}`}
+                />
+              )}
               {showCategoryChip && mod.categoryName && heroNameForLabel(mod.categoryName) !== mod.lockerHero && (
                 <CategoryChip
                   label={mod.categoryName}
