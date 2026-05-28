@@ -1265,14 +1265,17 @@ export default function Browse() {
     // live API enriches NSFW after the fact and doesn't window by date, so route
     // those through local search (the cache is a full mirror of the index).
     const hasContentFilter = nsfw !== 'all' || addedWithin !== 'all';
-    return (hasSearchQuery || hasHeroFilter || hasContentFilter) && hasLocalCache && !localSearchFailed;
-  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, hasLocalCache, localSearchFailed]);
+    // The v11 API has no alphabetical sort token, so name ordering also has to
+    // come from the local mirror (which sorts name COLLATE NOCASE ASC).
+    const needsLocalSort = sort === 'name';
+    return (hasSearchQuery || hasHeroFilter || hasContentFilter || needsLocalSort) && hasLocalCache && !localSearchFailed;
+  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, hasLocalCache, localSearchFailed]);
 
   // Reset the failure flag whenever the user changes filters so a one-off
   // backend error doesn't permanently disable local search.
   useEffect(() => {
     setLocalSearchFailed(false);
-  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section]);
+  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section, sort]);
 
   const fetchMods = useCallback(async () => {
     // Don't fetch from API if we're using local search

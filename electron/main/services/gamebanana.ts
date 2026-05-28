@@ -560,12 +560,14 @@ export async function fetchSubmissions(
     options: GameBananaRequestOptions = {}
 ): Promise<GameBananaModsResponse> {
     let url: string;
-    // GameBanana v11 API only reliably supports likes/views sorting
-    // Default API order is already sorted by recent submissions, so 'new', 'recent', 'updated' don't need explicit sort
+    // The API's default order is already newest-submission-first, so 'recent'/'new'
+    // and 'default' need no explicit sort. 'updated' is distinct (date modified, not
+    // added) and must be requested explicitly or it silently mirrors 'recent'.
     const sortMap: Record<string, string> = {
         likes: 'Generic_MostLiked',
         popular: 'Generic_MostLiked',
         views: 'Generic_MostViewed',
+        updated: 'Generic_LatestModified',
     };
 
     // Fields to request from GameBanana API (including NSFW flag)
