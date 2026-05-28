@@ -61,8 +61,25 @@ function normalizeIdentityPart(value: string): string {
     return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/** The addon folder an enabled mod lives in, derived from its metaKey: the bare
+ *  filename (no slash) means the base citadel/addons; `addonsN/<file>` means
+ *  overflow folder N. Used to scope pakNN priority-collision grouping per folder. */
+function folderOf(mod: Mod): string {
+    const slash = mod.metaKey.indexOf('/');
+    return slash === -1 ? 'addons' : mod.metaKey.slice(0, slash);
+}
+
+/** Message for a priority (same-slot) conflict. Two mods only reach here when
+ *  they share a folder AND a pakNN, so naming the slot (and the overflow folder,
+ *  when not base) is enough to tell the user which slot to change. */
+function priorityConflictDetail(mod: Mod): string {
+    const folder = folderOf(mod);
+    const pak = `pak${String(mod.priority).padStart(2, '0')}`;
+    return folder === 'addons' ? `Both use ${pak}` : `Both use ${folder}/${pak}`;
+}
+
 export function modConflictIdentity(mod: Mod): string {
-    const metadata = getModMetadata(mod.fileName);
+    const metadata = getModMetadata(mod.metaKey);
     if (typeof metadata?.gameBananaId === 'number' && metadata.gameBananaId > 0) {
         if (typeof metadata.gameBananaFileId === 'number' && metadata.gameBananaFileId > 0) {
             return `gb:${metadata.gameBananaId}:file:${metadata.gameBananaFileId}`;
@@ -138,7 +155,7 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     // wins), so they would otherwise report a file conflict against every
     // source. Exclude them.
     const enabledMods = mods.filter(m => {
-        const meta = getModMetadata(m.fileName);
+        const meta = getModMetadata(m.metaKey);
         return m.enabled && !meta?.lockerCosmetics && !meta?.lockerSounds;
     });
     const conflicts: ModConflict[] = [];
@@ -154,25 +171,27 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     const markReported = (a: Mod, b: Mod) => reportedPairs.add(conflictPairKey(a.id, b.id));
     const wasReported = (a: Mod, b: Mod) => reportedPairs.has(conflictPairKey(a.id, b.id));
 
-    const priorityMap = new Map<number, Mod[]>();
+    // A pakNN load-order slot only collides WITHIN a single addon folder: base
+    // citadel/addons/pak05 and an overflow citadel/addons1/pak05 are mounted via
+    // separate SearchPaths, so they are NOT a real priority conflict (each folder
+    // has its own pak01-pak99 namespace, Model A). Group by (folder, pakNN), not
+    // raw pakNN. The folder comes from metaKey: bare filename (no slash) = base
+    // addons, `addonsN/<file>` = overflow folder N.
+    const priorityMap = new Map<string, Mod[]>();
     for (const mod of enabledMods) {
-        const existing = priorityMap.get(mod.priority) || [];
+        const key = `${folderOf(mod)}#${mod.priority}`;
+        const existing = priorityMap.get(key) || [];
         existing.push(mod);
-        priorityMap.set(mod.priority, existing);
+        priorityMap.set(key, existing);
     }
 
-    for (const [priority, modsWithPriority] of priorityMap) {
+    for (const modsWithPriority of priorityMap.values()) {
         if (modsWithPriority.length > 1) {
             for (let i = 0; i < modsWithPriority.length; i++) {
                 for (let j = i + 1; j < modsWithPriority.length; j++) {
                     const a = modsWithPriority[i];
                     const b = modsWithPriority[j];
-                    conflicts.push(createConflict(
-                        a,
-                        b,
-                        'priority',
-                        `Both use pak${String(priority).padStart(2, '0')}`
-                    ));
+                    conflicts.push(createConflict(a, b, 'priority', priorityConflictDetail(a)));
                     markReported(a, b);
                 }
             }

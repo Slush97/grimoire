@@ -99,14 +99,14 @@ async function relocateManaged(
 export async function migrateManagedVpksToGrimoire(deadlockPath: string): Promise<void> {
     const mods = await scanMods(deadlockPath);
     for (const m of mods) {
-        const meta = getModMetadata(m.fileName);
+        const meta = getModMetadata(m.metaKey);
         if (meta?.lockerCosmetics) {
-            await relocateManaged(m.path, m.fileName, lockerCardsVpkPath(deadlockPath), LOCKER_CARDS_KEY, {
+            await relocateManaged(m.path, m.metaKey, lockerCardsVpkPath(deadlockPath), LOCKER_CARDS_KEY, {
                 modName: 'Locker Cards',
                 lockerCosmetics: meta.lockerCosmetics,
             });
         } else if (meta?.lockerSounds) {
-            await relocateManaged(m.path, m.fileName, lockerSoundsVpkPath(deadlockPath), LOCKER_SOUNDS_KEY, {
+            await relocateManaged(m.path, m.metaKey, lockerSoundsVpkPath(deadlockPath), LOCKER_SOUNDS_KEY, {
                 modName: 'Locker Sounds',
                 lockerSounds: meta.lockerSounds,
             });
@@ -121,14 +121,14 @@ export async function migrateManagedVpksToGrimoire(deadlockPath: string): Promis
  * scanned. Used by addons-scanning surfaces (get-mods, conflicts, profiles) to
  * hide a not-yet-migrated managed VPK.
  */
-export function isLockerManaged(fileName: string): boolean {
-    const meta = getModMetadata(fileName);
+export function isLockerManaged(metaKey: string): boolean {
+    const meta = getModMetadata(metaKey);
     return !!(meta?.lockerCosmetics || meta?.lockerSounds);
 }
 
 /** Stable relative order among in-addons managed VPKs (fallback path only). */
-function lockerRank(fileName: string): number {
-    const meta = getModMetadata(fileName);
+function lockerRank(metaKey: string): number {
+    const meta = getModMetadata(metaKey);
     if (meta?.lockerCosmetics) return 0;
     if (meta?.lockerSounds) return 1;
     return 2;
@@ -144,15 +144,15 @@ export async function pinLockerVpksToFront(deadlockPath: string): Promise<void> 
     const mods = await scanMods(deadlockPath);
     const enabled = mods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
     const managed = enabled
-        .filter((m) => isLockerManaged(m.fileName))
-        .sort((a, b) => lockerRank(a.fileName) - lockerRank(b.fileName));
+        .filter((m) => isLockerManaged(m.metaKey))
+        .sort((a, b) => lockerRank(a.metaKey) - lockerRank(b.metaKey));
     if (managed.length === 0) return;
 
     const front = enabled.slice(0, managed.length);
     if (managed.every((m, i) => front[i]?.id === m.id)) return;
 
-    const rest = enabled.filter((m) => !isLockerManaged(m.fileName));
-    const ordered = [...managed, ...rest].map((m) => m.fileName);
+    const rest = enabled.filter((m) => !isLockerManaged(m.metaKey));
+    const ordered = [...managed, ...rest].map((m) => m.id);
     await reorderMods(deadlockPath, ordered);
 }
 
@@ -174,7 +174,7 @@ export async function healLockerVpks(deadlockPath: string): Promise<void> {
     // grimoire not configured yet: re-enable any managed VPK parked in .disabled/
     // and pin it to the front of addons so applied cosmetics keep loading.
     const mods = await scanMods(deadlockPath);
-    const disabledManaged = mods.filter((m) => !m.enabled && isLockerManaged(m.fileName));
+    const disabledManaged = mods.filter((m) => !m.enabled && isLockerManaged(m.metaKey));
     for (const m of disabledManaged) {
         try {
             await enableMod(deadlockPath, m.id);

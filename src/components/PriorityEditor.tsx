@@ -1,37 +1,37 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { setModPriority } from '../lib/api';
-import { useAppStore } from '../stores/appStore';
 
 interface Props {
-  modId: string;
   modName: string;
-  priority: number;
+  /** The number shown on the chip and seeded into the editor: the mod's
+   *  1-based global load-order position (1 = loads first). */
+  value: number;
+  /** Highest selectable position (the count of enabled mods). The editor
+   *  rejects anything outside 1..max. */
+  max: number;
   variant?: 'overlay' | 'inline';
-  /** Override the default single-rename commit path. Provided by Installed.tsx
-   *  so collisions with same-section mods rebuild the order via reorderMods
-   *  (insert-and-shift) instead of throwing "already in use". */
-  onCommit?: (newPriority: number) => Promise<void>;
+  /** Commit a new load-order position. Installed.tsx repositions the mod in the
+   *  global enabled order and reorders the pakNN slots on disk to match. */
+  onCommit?: (newPosition: number) => Promise<void>;
 }
 
 /**
- * Click-to-edit load order chip. Opens a small popover so users can retype
- * a priority instead of dragging through
- * a long list. Right-click is supported too because some users reach for
- * a context menu first — we suppress the native menu in that case.
+ * Click-to-edit load order chip. Opens a small popover so users can retype a
+ * position instead of dragging through a long list. Right-click is supported
+ * too because some users reach for a context menu first (we suppress the native
+ * menu in that case).
  *
- * Enter / blur commit; Escape cancels. Validation mirrors the underlying
- * setModPriority IPC (1-99), and the IPC's "already in use" error surfaces
- * inline so the user can pick another number without leaving the field.
+ * The number is the mod's global load-order position (1 = loads first). Enter /
+ * blur commit; Escape cancels. Valid range is 1..max (the enabled-mod count);
+ * onCommit repositions the mod and reorders the pakNN slots on disk to match.
  */
 export default function PriorityEditor({
-  modId,
   modName,
-  priority,
+  value,
+  max,
   variant = 'inline',
   onCommit,
 }: Props) {
-  const loadMods = useAppStore((s) => s.loadMods);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -47,7 +47,7 @@ export default function PriorityEditor({
   const startEdit = (e: React.MouseEvent | React.KeyboardEvent) => {
     e.stopPropagation();
     if ('preventDefault' in e) e.preventDefault();
-    setDraft(String(priority));
+    setDraft(String(value));
     setEditing(true);
     setError(null);
     const rect = chipRef.current?.getBoundingClientRect();
@@ -69,19 +69,15 @@ export default function PriorityEditor({
     const trimmed = draft.trim();
     if (trimmed === '') return cancel();
     const n = parseInt(trimmed, 10);
-    if (!Number.isFinite(n) || n < 1 || n > 99) {
-      setError('Use 1-99');
+    if (!Number.isFinite(n) || n < 1 || n > max) {
+      setError(`Use 1-${max}`);
       return;
     }
-    if (n === priority) return cancel();
+    if (n === value) return cancel();
+    if (!onCommit) return cancel();
     setBusy(true);
     try {
-      if (onCommit) {
-        await onCommit(n);
-      } else {
-        await setModPriority(modId, n);
-        await loadMods();
-      }
+      await onCommit(n);
       setEditing(false);
       setError(null);
       setPopoverPos(null);
@@ -112,7 +108,7 @@ export default function PriorityEditor({
         }
       }}
       className="group/order-chip relative inline-flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md focus:outline-none"
-      aria-label={`Load order ${priority}. Click to change.`}
+      aria-label={`Load order ${value}. Click to change.`}
     >
       <span
         // White number on a neutral dark scrim (overlay) or the standard input
@@ -127,7 +123,7 @@ export default function PriorityEditor({
             : 'bg-bg-tertiary'
         }`}
       >
-        #{priority}
+        #{value}
       </span>
       {!editing && (
         <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-bg-primary/95 px-2 py-1 text-[11px] font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
@@ -150,7 +146,7 @@ export default function PriorityEditor({
               inputMode="numeric"
               value={draft}
               disabled={busy}
-              onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 2))}
+              onChange={(e) => setDraft(e.target.value.replace(/\D/g, '').slice(0, 3))}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') {
                   e.preventDefault();

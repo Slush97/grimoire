@@ -854,7 +854,7 @@ async function executeDownload(
             const stalePeers = allMods.filter((m) => {
                 if (!m.enabled) return false;
                 if (installedSet.has(m.fileName)) return false;
-                const meta = getModMetadata(m.fileName);
+                const meta = getModMetadata(m.metaKey);
                 return (
                     meta?.gameBananaId === modId &&
                     meta?.gameBananaFileId !== fileId

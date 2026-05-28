@@ -332,7 +332,7 @@ export interface ElectronAPI {
       payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
-    reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
+    reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     readImageDataUrl: (imagePath: string) => Promise<string>;

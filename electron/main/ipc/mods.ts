@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { promises as fs, existsSync } from 'fs';
-import { extname, join } from 'path';
+import { extname } from 'path';
 import { loadSettings, saveSettings } from '../services/settings';
 import {
     scanMods,
@@ -10,10 +10,10 @@ import {
     setModPriority,
     reorderMods,
     swapModPriority,
-    findNextAvailablePriority,
+    allocateEnabledVpkPath,
     Mod,
 } from '../services/mods';
-import { getAddonsPath } from '../services/deadlock';
+import { metaKeyFor } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { inferHeroFromVpk, classifyGlobalModFromVpk } from '../services/vpk';
@@ -48,7 +48,7 @@ function getActiveDeadlockPath(): string | null {
  * override path has a stable field to overwrite.
  */
 function enrichMod(mod: Mod): Mod {
-    const metadata = getModMetadata(mod.fileName);
+    const metadata = getModMetadata(mod.metaKey);
     const isUnknown =
         !metadata?.gameBananaId &&
         !(typeof metadata?.modName === 'string' && metadata.modName.trim().length > 0);
@@ -71,7 +71,7 @@ function enrichMod(mod: Mod): Mod {
                 }
             }
             if (inferred) {
-                setModMetadata(mod.fileName, { lockerHero: inferred, lockerHeroSource: inferredSource });
+                setModMetadata(mod.metaKey, { lockerHero: inferred, lockerHeroSource: inferredSource });
                 lockerHero = inferred;
                 lockerHeroSource = inferredSource;
             }
@@ -88,7 +88,7 @@ function enrichMod(mod: Mod): Mod {
             } catch (err) {
                 console.warn(`[enrichMod] VPK global-type classification failed for ${mod.fileName}:`, err);
             }
-            setModMetadata(mod.fileName, { globalType: classified });
+            setModMetadata(mod.metaKey, { globalType: classified });
             globalType = classified;
         }
         // Per-ability sound footprint. Same lazy + persist + null-sentinel
@@ -106,7 +106,7 @@ function enrichMod(mod: Mod): Mod {
             } catch (err) {
                 console.warn(`[enrichMod] VPK ability-sound classification failed for ${mod.fileName}:`, err);
             }
-            setModMetadata(mod.fileName, { abilitySounds: classified });
+            setModMetadata(mod.metaKey, { abilitySounds: classified });
             abilitySounds = classified;
         }
         return {
@@ -170,14 +170,14 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     if (!settings.devMode) {
         // Prune against ALL scanned files (including managed VPKs) so we don't
         // wipe their metadata before filtering them out of the list below.
-        pruneOrphanMetadata(new Set(mods.map((m) => m.fileName)));
+        pruneOrphanMetadata(new Set(mods.map((m) => m.metaKey)));
     }
     // Hide Grimoire-managed Locker VPKs (hero cards + ability sounds). They're
     // driven solely through the Locker pickers and are auto-enabled + pinned to
     // the front of the load order (services/lockerVpk.ts), so surfacing them in
     // the Installed list would only let the user disable or reorder them and
     // silently break their applied cosmetics.
-    return mods.filter((m) => !isLockerManaged(m.fileName)).map(enrichMod);
+    return mods.filter((m) => !isLockerManaged(m.metaKey)).map(enrichMod);
 });
 
 // enable-mod
@@ -325,7 +325,7 @@ ipcMain.handle(
             throw new Error(`Mod not found: ${modId}`);
         }
 
-        await setModMetadataWithHash(target.fileName, {
+        await setModMetadataWithHash(target.metaKey, {
             modName: args.name.trim(),
             thumbnailUrl: args.thumbnailDataUrl,
             nsfw: !!args.nsfw,
@@ -354,12 +354,12 @@ ipcMain.handle(
         if (!target) {
             throw new Error(`Mod not found: ${modId}`);
         }
-        const existing = getModMetadata(target.fileName) ?? {};
+        const existing = getModMetadata(target.metaKey) ?? {};
         if (typeof existing.gameBananaId === 'number' && existing.gameBananaId > 0) {
             throw new Error('Only local mods can be renamed');
         }
 
-        await setModMetadataWithHash(target.fileName, {
+        await setModMetadataWithHash(target.metaKey, {
             modName: trimmed,
             thumbnailUrl: args.thumbnailDataUrl,
             nsfw: !!args.nsfw,
@@ -386,7 +386,7 @@ ipcMain.handle(
             throw new Error(`Mod not found: ${modId}`);
         }
         const trimmed = label.trim();
-        setModMetadata(target.fileName, {
+        setModMetadata(target.metaKey, {
             variantLabel: trimmed.length > 0 ? trimmed : undefined,
         });
         return enrichMod(target);
@@ -410,7 +410,7 @@ ipcMain.handle(
             throw new Error(`Mod not found: ${modId}`);
         }
         const trimmed = heroName?.trim() ?? '';
-        setModMetadata(target.fileName, {
+        setModMetadata(target.metaKey, {
             lockerHero: trimmed.length > 0 ? trimmed : undefined,
             lockerHeroSource: trimmed.length > 0 ? 'manual' : undefined,
             ...(trimmed.length > 0 ? { globalType: undefined } : {}),
@@ -439,7 +439,7 @@ ipcMain.handle(
         if (!target) {
             throw new Error(`Mod not found: ${modId}`);
         }
-        setModMetadata(target.fileName, {
+        setModMetadata(target.metaKey, {
             globalType,
             // Assigning a global type moves the mod off the hero axis.
             ...(globalType ? { lockerHero: undefined, lockerHeroSource: undefined } : {}),
@@ -463,7 +463,7 @@ ipcMain.handle(
         if (!target) {
             throw new Error(`Mod not found: ${modId}`);
         }
-        setModMetadata(target.fileName, {
+        setModMetadata(target.metaKey, {
             ignoreUpdates: ignore ? true : undefined,
         });
         return enrichMod(target);
@@ -497,7 +497,7 @@ ipcMain.handle(
         if (!target) {
             throw new Error(`Mod not found: ${modId}`);
         }
-        const existing = getModMetadata(target.fileName) ?? {};
+        const existing = getModMetadata(target.metaKey) ?? {};
         const patch: Record<string, unknown> = { gameBananaFileId: payload.gameBananaFileId };
         if (payload.fileDescription && !existing.fileDescription) {
             patch.fileDescription = payload.fileDescription;
@@ -509,7 +509,7 @@ ipcMain.handle(
         if (payload.sourceFileName && (!existing.sourceFileName || placeholderName)) {
             patch.sourceFileName = payload.sourceFileName;
         }
-        setModMetadata(target.fileName, patch);
+        setModMetadata(target.metaKey, patch);
         return enrichMod(target);
     }
 );
@@ -531,13 +531,13 @@ ipcMain.handle(
 // reorder-mods
 ipcMain.handle(
     'reorder-mods',
-    async (_, orderedFileNames: string[]): Promise<Mod[]> => {
+    async (_, orderedIds: string[]): Promise<Mod[]> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
         migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
-        await reorderMods(deadlockPath, orderedFileNames);
+        await reorderMods(deadlockPath, orderedIds);
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
     }
@@ -617,27 +617,26 @@ ipcMain.handle(
             throw new Error('A name is required');
         }
 
-        const addonsPath = getAddonsPath(deadlockPath);
-        if (!existsSync(addonsPath)) {
-            await fs.mkdir(addonsPath, { recursive: true });
-        }
+        // Imports install ENABLED, so reserve a slot via the overflow-aware
+        // allocator: it fills base addons first and spills into an overflow
+        // folder (creating one + patching gameinfo) when base is full, instead of
+        // failing once a >99 user has filled citadel/addons. Metadata is keyed by
+        // the destination's metaKey (folder-prefixed for an overflow slot).
+        const destPath = await allocateEnabledVpkPath(deadlockPath);
+        const destMetaKey = metaKeyFor(destPath);
 
-        const priority = await findNextAvailablePriority(deadlockPath);
-        const priorityStr = String(priority).padStart(2, '0');
-        const newDirFileName = `pak${priorityStr}_dir.vpk`;
-
-        await fs.copyFile(vpkPath, join(addonsPath, newDirFileName));
+        await fs.copyFile(vpkPath, destPath);
 
         // Scrub any orphan metadata at this slot before writing. setModMetadata
         // merges into the existing entry, so stale fields (gameBananaId,
         // categoryName, etc.) from a prior occupant would otherwise stick to
         // the new local mod and visually merge it with unrelated mods.
-        removeModMetadata(newDirFileName);
-        await setModMetadataWithHash(newDirFileName, {
+        removeModMetadata(destMetaKey);
+        await setModMetadataWithHash(destMetaKey, {
             modName: name.trim(),
             thumbnailUrl: thumbnailDataUrl,
             nsfw: !!nsfw,
-        }, join(addonsPath, newDirFileName));
+        }, destPath);
 
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);

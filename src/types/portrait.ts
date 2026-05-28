@@ -5,7 +5,12 @@
  * process; the renderer only ever sees the ready-to-display data URL.
  */
 export interface HeroPortrait {
-  /** File name of the mod VPK this portrait came from (e.g. "pak42_dir.vpk"). */
+  /** Folder-relative identity key of the source mod VPK this portrait came from:
+   *  the bare filename for a base citadel/addons mod (e.g. "pak42_dir.vpk"), or
+   *  "addonsN/pak42_dir.vpk" for an overflow-folder mod. Equals the filename for
+   *  base mods (so it stays human-readable and unchanged for non-overflow users)
+   *  but stays unique across folders, which the bare filename does not once a
+   *  user overflows. Round-tripped verbatim back into applyHeroCard. */
   modFileName: string;
   /** card | vertical | minimap | small | card_critical | card_gloat | other */
   variant: string;

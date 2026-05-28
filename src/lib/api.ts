@@ -175,8 +175,8 @@ export async function setModPriority(modId: string, priority: number): Promise<M
   return window.electronAPI.setModPriority(modId, priority);
 }
 
-export async function reorderMods(orderedFileNames: string[]): Promise<Mod[]> {
-  return window.electronAPI.reorderMods(orderedFileNames);
+export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
+  return window.electronAPI.reorderMods(orderedIds);
 }
 
 export async function swapModPriority(modIdA: string, modIdB: string): Promise<Mod[]> {

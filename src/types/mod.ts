@@ -49,8 +49,12 @@ export interface LockerCardSelection {
    *  Informational: the split takes the whole per-hero panorama prefix. */
   variants: string[];
   source: {
-    /** Source VPK filename at apply time. May drift if reconcile renames it;
-     *  `sha256AtApplyTime` is the content-identity fallback for relocation. */
+    /** Folder-relative metaKey of the source VPK (bare filename for a base
+     *  citadel/addons mod, "addonsN/<file>" for an overflow mod). Named
+     *  `fileName` for back-compat: pre-overflow selections stored the bare
+     *  filename, which IS the base mod's metaKey, so they still resolve. May
+     *  drift if reconcile renames or overflow moves it; `sha256AtApplyTime` is
+     *  the content-identity fallback for relocation. */
     fileName: string;
     modName?: string;
     gameBananaId?: number;
@@ -73,9 +77,10 @@ export interface LockerCosmeticsInfo {
 }
 
 export interface ApplyHeroCardResult {
-  /** Source VPK filename now providing this hero's card, or null if reverted. */
+  /** Source identity (folder-relative metaKey; == filename for base mods) now
+   *  providing this hero's card, or null if reverted. */
   activeSourceFileName: string | null;
-  /** Selections dropped because their source VPK was gone at rebuild time. */
+  /** Source identities (metaKeys) dropped because their VPK was gone at rebuild. */
   missingSourceFileNames: string[];
 }
 
@@ -110,8 +115,10 @@ export interface LockerSoundSelection {
   /** Optional volume/pitch retune for this ability (see AbilitySoundParams). */
   params?: AbilitySoundParams;
   source: {
-    /** Source VPK filename at apply time; `sha256AtApplyTime` relocates it if
-     *  reconcile renamed it (same recovery heroCards uses). */
+    /** Folder-relative metaKey of the source VPK (bare filename for base
+     *  citadel/addons, "addonsN/<file>" for overflow). Named `fileName` for
+     *  back-compat (see LockerCardSelection.source.fileName). `sha256AtApplyTime`
+     *  relocates it if reconcile renamed or overflow moved it. */
     fileName: string;
     modName?: string;
     gameBananaId?: number;
@@ -133,17 +140,19 @@ export interface LockerSoundsInfo {
 }
 
 export interface ApplyHeroSoundResult {
-  /** Source VPK filename now providing this ability's sound, or null if reverted. */
+  /** Source identity (folder-relative metaKey; == filename for base mods) now
+   *  providing this ability's sound, or null if reverted. */
   activeSourceFileName: string | null;
-  /** Selections dropped because their source VPK was gone at rebuild time. */
+  /** Source identities (metaKeys) dropped because their VPK was gone at rebuild. */
   missingSourceFileNames: string[];
 }
 
 /** One applied hero-card override, summarized for the Locker Overrides popup. */
 export interface LockerOverviewCard {
   heroName: string;
-  /** Source VPK filename whose card art is applied. Joins to the installed mod
-   *  for its thumbnail/name; the revert itself is keyed by heroName. */
+  /** Source identity (folder-relative metaKey; == filename for base mods) whose
+   *  card art is applied. Joins to the installed mod by metaKey for its
+   *  thumbnail/name; the revert itself is keyed by heroName. */
   sourceFileName: string;
   modName?: string;
 }
@@ -152,8 +161,9 @@ export interface LockerOverviewCard {
 export interface LockerOverviewSound {
   heroName: string;
   slot: AbilitySlot;
-  /** Source VPK filename providing this ability's clip. Joins to the installed
-   *  mod for its preview audio/name; the revert is keyed by (heroName, slot). */
+  /** Source identity (folder-relative metaKey; == filename for base mods)
+   *  providing this ability's clip. Joins to the installed mod by metaKey for its
+   *  preview audio/name; the revert is keyed by (heroName, slot). */
   sourceFileName: string;
   modName?: string;
   /** True when this slot carries a non-neutral volume/pitch retune. */
@@ -185,6 +195,8 @@ export interface LockerCardThumbnail {
  *  back so the picker can reflect the active pick + slider positions. */
 export interface ActiveHeroSound {
   slot: AbilitySlot;
+  /** Source identity (folder-relative metaKey; == filename for base mods). The
+   *  sound picker compares this against each mod's metaKey to mark the active row. */
   sourceFileName: string;
   params?: AbilitySoundParams;
 }
@@ -267,6 +279,10 @@ export interface Mod {
   name: string;
   fileName: string;
   path: string;
+  /** Metadata/identity key derived from the VPK's addon folder. Bare filename
+   *  for the base addons folder + .disabled; `addons{N}/<file>` for overflow
+   *  folders. Mirrors the backend field so the IPC Mod stays in sync. */
+  metaKey: string;
   enabled: boolean;
   priority: number;
   size: number;

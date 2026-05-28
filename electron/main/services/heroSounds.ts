@@ -21,7 +21,7 @@ import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import { getAddonsPath, getDisabledPath, getCitadelPath, getGrimoirePath } from './deadlock';
+import { getAddonFolderPaths, getDisabledPath, getCitadelPath, getGrimoirePath, metaKeyFor } from './deadlock';
 import { invalidateVpkParseCache } from './vpk';
 import { runVpkmerge, runVpkmergeStdout, vpkmergeBinaryPath, verifyVpkOutput } from './modMerger';
 import {
@@ -47,14 +47,17 @@ import type {
 interface VpkRef {
     fileName: string;
     path: string;
+    metaKey: string;
     enabled: boolean;
 }
 
-/** Enabled addon VPKs plus the ones parked in `.disabled/`. */
+/** Enabled addon VPKs across every addon folder (base citadel/addons plus any
+ *  overflow addonsN) plus the ones parked in `.disabled/`, so a sound source that
+ *  overflowed past slot 99 is still found at apply/rebuild time. */
 async function listAddonVpks(deadlockPath: string): Promise<VpkRef[]> {
     const out: VpkRef[] = [];
     const folders: Array<[string, boolean]> = [
-        [getAddonsPath(deadlockPath), true],
+        ...getAddonFolderPaths(deadlockPath).map((p) => [p, true] as [string, boolean]),
         [getDisabledPath(deadlockPath), false],
     ];
     for (const [dir, enabled] of folders) {
@@ -66,7 +69,8 @@ async function listAddonVpks(deadlockPath: string): Promise<VpkRef[]> {
         }
         for (const entry of entries) {
             if (entry.toLowerCase().endsWith('_dir.vpk')) {
-                out.push({ fileName: entry, path: join(dir, entry), enabled });
+                const path = join(dir, entry);
+                out.push({ fileName: entry, path, metaKey: metaKeyFor(path), enabled });
             }
         }
     }
@@ -78,7 +82,7 @@ async function listAddonVpks(deadlockPath: string): Promise<VpkRef[]> {
  *  in grimoire with its selections under the synthetic key. */
 function findSoundsVpk(vpks: VpkRef[]): { ref: VpkRef; info: LockerSoundsInfo } | null {
     for (const v of vpks) {
-        const info = getModMetadata(v.fileName)?.lockerSounds;
+        const info = getModMetadata(v.metaKey)?.lockerSounds;
         if (info) return { ref: v, info };
     }
     return null;
@@ -94,15 +98,18 @@ async function currentSoundSelections(deadlockPath: string): Promise<LockerSound
     return findSoundsVpk(vpks)?.info.sounds ?? [];
 }
 
-/** Locate a source VPK by filename, falling back to content hash if reconcile
- *  renamed it since apply time. */
+/** Locate a source VPK by its folder-relative metaKey, falling back to content
+ *  hash if reconcile renamed or overflow moved it since apply time. Keying by
+ *  metaKey (not the bare filename) keeps two same-named sources in different
+ *  addon folders distinct; pre-overflow selections stored a bare filename, which
+ *  is exactly the base mod's metaKey, so they still resolve. */
 async function locateSource(
     vpks: VpkRef[],
-    fileName: string,
+    sourceKey: string,
     sha256?: string,
 ): Promise<VpkRef | null> {
-    const byName = vpks.find((v) => v.fileName === fileName);
-    if (byName) return byName;
+    const byKey = vpks.find((v) => v.metaKey === sourceKey);
+    if (byKey) return byKey;
     if (!sha256) return null;
     const wanted = sha256.toLowerCase();
     for (const v of vpks) {
@@ -215,7 +222,9 @@ async function rebuildLockerSounds(
             missing.push(sel.source.fileName);
             continue;
         }
-        valid.push({ ...sel, clipPaths, source: { ...sel.source, fileName: src.fileName } });
+        // Re-key to the located file's current metaKey so a source that moved
+        // folders (overflow) or was renamed (reconcile) stays addressable.
+        valid.push({ ...sel, clipPaths, source: { ...sel.source, fileName: src.metaKey } });
     }
 
     if (valid.length === 0) {
@@ -233,7 +242,7 @@ async function rebuildLockerSounds(
         await fs.mkdir(planDir, { recursive: true });
         for (let i = 0; i < valid.length; i++) {
             const sel = valid[i];
-            const src = vpks.find((v) => v.fileName === sel.source.fileName)!;
+            const src = vpks.find((v) => v.metaKey === sel.source.fileName)!;
             const chunkPath = join(grimoireDir, `${tag}.chunk${i}.vpk`);
             const planPath = join(planDir, `plan${i}.json`);
             // Each clip's full path used as an AnyPrefix predicate matches only
@@ -303,14 +312,15 @@ async function rebuildLockerSounds(
 }
 
 /**
- * Apply hero X's ability-`slot` sound from `sourceFileName`, replacing any prior
- * choice for that (hero, slot).
+ * Apply hero X's ability-`slot` sound from the source identified by `sourceKey`
+ * (its folder-relative metaKey, as carried by the renderer mod's metaKey),
+ * replacing any prior choice for that (hero, slot).
  */
 export async function applyHeroSound(
     deadlockPath: string,
     heroName: string,
     slot: AbilitySlot,
-    sourceFileName: string,
+    sourceKey: string,
     params?: AbilitySoundParams,
 ): Promise<ApplyHeroSoundResult> {
     vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
@@ -322,16 +332,16 @@ export async function applyHeroSound(
     await migrateManagedVpksToGrimoire(deadlockPath);
 
     const vpks = await listAddonVpks(deadlockPath);
-    const src = vpks.find((v) => v.fileName === sourceFileName);
-    if (!src) throw new Error(`Source mod not found: ${sourceFileName}`);
+    const src = vpks.find((v) => v.metaKey === sourceKey);
+    if (!src) throw new Error(`Source mod not found: ${sourceKey}`);
 
     const clipPaths = abilitySoundClipsForSlot(src.path, heroName, slot);
     if (clipPaths.length === 0) {
-        throw new Error(`${basename(sourceFileName)} has no ability ${slot} sound for ${heroName}.`);
+        throw new Error(`${basename(src.fileName)} has no ability ${slot} sound for ${heroName}.`);
     }
 
     const fp = await fingerprintFile(src.path);
-    const srcMeta = getModMetadata(src.fileName);
+    const srcMeta = getModMetadata(src.metaKey);
     const selection: LockerSoundSelection = {
         heroName,
         heroCodename: codename,
@@ -341,7 +351,7 @@ export async function applyHeroSound(
         // all-neutral pick stays a pure clip selection (and reverts cleanly).
         ...(hasParams(params) ? { params } : {}),
         source: {
-            fileName: src.fileName,
+            fileName: src.metaKey,
             modName: srcMeta?.modName,
             gameBananaId: srcMeta?.gameBananaId,
             sha256AtApplyTime: fp.sha256,
@@ -356,7 +366,9 @@ export async function applyHeroSound(
     ];
     const { missing } = await rebuildLockerSounds(deadlockPath, next);
     return {
-        activeSourceFileName: missing.includes(src.fileName) ? null : src.fileName,
+        // missing[] carries metaKeys (a selection's source key); compare and
+        // report the metaKey, which the picker round-trips as the source identity.
+        activeSourceFileName: missing.includes(src.metaKey) ? null : src.metaKey,
         missingSourceFileNames: missing,
     };
 }

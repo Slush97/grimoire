@@ -176,9 +176,13 @@ export function LockerOverridesModal({
     const [thumbsLoading, setThumbsLoading] = useState(false);
     const commitTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
 
+    // Keyed by metaKey (folder-relative), because an override's sourceFileName is
+    // now that key, not the bare filename: once a user overflows, the same
+    // pakNN_dir.vpk name repeats across addon folders. metaKey === fileName for
+    // base-folder mods, so this is unchanged for non-overflow users.
     const modByFile = useMemo(() => {
         const m = new Map<string, Mod>();
-        for (const mod of mods) m.set(mod.fileName, mod);
+        for (const mod of mods) m.set(mod.metaKey, mod);
         return m;
     }, [mods]);
 

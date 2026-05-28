@@ -56,7 +56,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, extractMergeSource, setModPriority as apiSetModPriority, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModFilterGuess, MergedModSource } from '../types/mod';
@@ -183,8 +183,18 @@ function isEntryEnabled(entry: ModEntry): boolean {
 /** Sort key for ordering enabled/disabled sections. Uses the primary's
  *  priority for groups so reorder math stays consistent with the existing
  *  per-mod priority system. */
+/** Global load-order rank of a mod: lower = higher priority. With overflow
+ *  folders the pakNN (mod.priority) repeats per folder, so we fold in the folder
+ *  index from metaKey (addons{N}/...) to get a single monotonic order. Base
+ *  citadel/addons (and disabled) is folder 0, addons1 is 1, etc. */
+function modLoadOrder(mod: Mod): number {
+  const match = mod.metaKey.match(/^addons(\d+)\//);
+  const folderIndex = match ? parseInt(match[1], 10) : 0;
+  return folderIndex * 100 + mod.priority;
+}
+
 function entrySortPriority(entry: ModEntry): number {
-  return entry.kind === 'single' ? entry.mod.priority : entry.primary.priority;
+  return modLoadOrder(entry.kind === 'single' ? entry.mod : entry.primary);
 }
 
 /** Searchable display name for an entry (the visible card title). */
@@ -305,14 +315,14 @@ function entryFilesByEnabledState(entry: ModEntry, enabled: boolean): Mod[] {
 
 // Only enabled mods hold pakNN load-order slots; disabled mods live in
 // .disabled/ with free-form names and aren't loaded by the game. Compacting
-// must cover the enabled mods alone, otherwise the disabled ones inflate the
-// load order past the 99-slot cap and reorderMods rejects the whole operation.
+// covers the enabled mods alone (reorderMods ignores disabled ids anyway) and
+// orders them by global load order so overflow-folder mods stay after base ones.
 function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
   return entries
     .map((entry) => {
       const files = entryFilesByEnabledState(entry, true);
       const priority = files.length > 0
-        ? Math.min(...files.map((file) => file.priority))
+        ? Math.min(...files.map(modLoadOrder))
         : Number.POSITIVE_INFINITY;
       return { files, priority };
     })
@@ -1512,7 +1522,7 @@ export default function Installed() {
     // Use `visibleMods` so absorbed merge sources aren't passed to
     // reorderMods — their fileNames are recorded in the merged mod's
     // manifest, and a rename would silently break unmerge recovery.
-    const enabledMods = visibleMods.filter((m) => m.enabled).sort((a, b) => a.priority - b.priority);
+    const enabledMods = visibleMods.filter((m) => m.enabled).sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
     const disabledMods = visibleMods.filter((m) => !m.enabled).sort((a, b) => a.priority - b.priority);
     const section = source.enabled ? enabledMods : disabledMods;
     const next = section.slice();
@@ -1529,7 +1539,7 @@ export default function Installed() {
     const full = source.enabled
       ? [...next, ...disabledMods]
       : [...enabledMods, ...next];
-    await reorderMods(full.map((m) => m.fileName));
+    await reorderMods(full.map((m) => m.id));
   };
 
   /**
@@ -1788,6 +1798,17 @@ export default function Installed() {
   const enabledCount = enabledEntries.length;
   const disabledCount = disabledEntries.length;
 
+  // Global load-order position (1..N) of each enabled mod, in true load order
+  // (modLoadOrder folds in the addon-folder index, so overflow-folder mods rank
+  // after base ones instead of restarting their pakNN at 1). Drives the
+  // load-order badge so the displayed number never repeats across folders, and
+  // commitLoadPosition repositions within this same ordering.
+  const enabledByLoadOrder = visibleMods
+    .filter((m) => m.enabled)
+    .sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
+  const enabledModCount = enabledByLoadOrder.length;
+  const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
+
   // Filter by search query (substring on name), source (GameBanana vs local
   // import), and mod type, then optionally re-sort. Status (enabled/disabled) is
   // applied per-section below. Drag-and-drop reorder is disabled whenever any of
@@ -1961,61 +1982,38 @@ export default function Installed() {
     const unchanged = next.every((m, i) => m.id === prev[i]?.id);
     if (unchanged) return false;
 
-    await reorderMods(next.map((m) => m.fileName));
+    await reorderMods(next.map((m) => m.id));
     return true;
   };
 
   const fixOrder = () => {
     if (compactOrder.length === 0) return;
-    reorderMods(compactOrder.map((m) => m.fileName));
+    reorderMods(compactOrder.map((m) => m.id));
   };
 
   /**
-   * Commit a typed priority from the right-click Load editor. When the target
-   * slot is held by another enabled mod we can't just rename (the file would
-   * collide), so we rebuild the enabled-section order around the collider and
-   * hand it to reorderMods. When moving down, the collider shifts up after the
-   * moved mod is removed, so we insert after it; when moving up, we insert
-   * before it. That preserves "type N, end at N" semantics.
+   * Commit a typed load-order position from the Load editor. The number is a
+   * 1-based global position over the enabled mods (1 = loads first), so we move
+   * the mod to that index in the global enabled order and hand the full id list
+   * to reorderMods, which lays the slots out densely across addon folders. This
+   * replaces the old pakNN-rename path, which restarted its number per overflow
+   * folder and could collide; repositioning can never "already be in use".
    *
    * Calls the API directly (not the store wrappers) so errors propagate back
    * to PriorityEditor for inline display instead of being swallowed into
    * modsError.
    */
-  const commitPriorityForMod = async (modId: string, newPriority: number): Promise<void> => {
-    const mod = mods.find((m) => m.id === modId);
-    if (!mod) throw new Error('Mod not found');
-    if (mod.priority === newPriority) return;
-
-    const collider = mods.find(
-      (m) => m.id !== modId && m.enabled && m.priority === newPriority
-    );
-
-    if (!collider) {
-      await apiSetModPriority(modId, newPriority);
-      await loadMods();
-      return;
-    }
-
-    const enabled = mods
-      .filter((m) => m.enabled)
-      .sort((a, b) => a.priority - b.priority);
-    const withoutMoved = enabled.filter((m) => m.id !== modId);
-    const insertIdx = withoutMoved.findIndex((m) => m.id === collider.id);
-    if (insertIdx === -1) {
-      // Defensive: collider must be enabled, so this shouldn't trigger.
-      // Fall back to the single rename so the user still gets feedback.
-      await apiSetModPriority(modId, newPriority);
-      await loadMods();
-      return;
-    }
-    const insertAt = mod.priority < newPriority ? insertIdx + 1 : insertIdx;
-    const reordered = [
-      ...withoutMoved.slice(0, insertAt),
-      mod,
-      ...withoutMoved.slice(insertAt),
-    ];
-    await apiReorderMods(reordered.map((m) => m.fileName));
+  const commitLoadPosition = async (modId: string, newPosition: number): Promise<void> => {
+    const ordered = enabledByLoadOrder.slice();
+    const fromIdx = ordered.findIndex((m) => m.id === modId);
+    if (fromIdx === -1) throw new Error('Mod not found');
+    // The editor validates 1..N, but a stale render could submit out of range;
+    // clamp to a real slot so we never index past the ends.
+    const toIdx = Math.min(Math.max(newPosition - 1, 0), ordered.length - 1);
+    if (toIdx === fromIdx) return;
+    const [moved] = ordered.splice(fromIdx, 1);
+    ordered.splice(toIdx, 0, moved);
+    await apiReorderMods(ordered.map((m) => m.id));
     await loadMods();
   };
 
@@ -2067,7 +2065,9 @@ export default function Installed() {
           }}
           onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
           fixingUnknown={unknownFilterPendingIds.has(mod.id)}
-          onCommitPriority={(p) => commitPriorityForMod(mod.id, p)}
+          loadPosition={loadPositionById.get(mod.id)}
+          loadCount={enabledModCount}
+          onCommitPriority={(p) => commitLoadPosition(mod.id, p)}
           onUnmerge={mod.merged ? () => setUnmergeTarget(mod) : undefined}
           onCopyShareCode={mod.merged ? () => void handleCopyShareCode(mod) : undefined}
           selectMode={selectMode}
@@ -2128,7 +2128,9 @@ export default function Installed() {
             await setModGlobalType(variant.id, globalType);
           }
         }}
-        onCommitPriority={(p) => commitPriorityForMod(entry.primary.id, p)}
+        loadPosition={loadPositionById.get(entry.primary.id)}
+        loadCount={enabledModCount}
+        onCommitPriority={(p) => commitLoadPosition(entry.primary.id, p)}
         selectMode={selectMode}
         selected={entrySelected}
         onSelectToggle={() => toggleEntrySelection(entry)}
@@ -3822,9 +3824,13 @@ interface ModCardProps {
   onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
-  /** Collision-tolerant priority commit. Passed through to PriorityEditor so
-   *  retyping an already-used slot insert-shifts instead of throwing. */
-  onCommitPriority?: (newPriority: number) => Promise<void>;
+  /** Reposition commit. Passed through to PriorityEditor; the argument is a
+   *  1-based global load-order position, applied via a dense reorder. */
+  onCommitPriority?: (newPosition: number) => Promise<void>;
+  /** This mod's 1-based global load-order position, shown on the badge. */
+  loadPosition?: number;
+  /** Count of enabled mods (the badge editor's max position). */
+  loadCount?: number;
   /** Open the unmerge confirm flow. Only meaningful when `mod.merged` is set. */
   onUnmerge?: () => void;
   /** Copy the merged mod's share code to the clipboard. */
@@ -4017,7 +4023,9 @@ interface ModListRowContentProps {
   hideNsfwPreviews: boolean;
   soundVolume: number;
   onOpenDetails?: () => void;
-  onCommitPriority?: (newPriority: number) => Promise<void>;
+  onCommitPriority?: (newPosition: number) => Promise<void>;
+  loadPosition?: number;
+  loadCount?: number;
   isGroupCard: boolean;
   group?: ModCardProps['group'];
   variantStatusLabel: string | null;
@@ -4154,6 +4162,8 @@ function ModListRowContent({
   soundVolume,
   onOpenDetails,
   onCommitPriority,
+  loadPosition,
+  loadCount,
   isGroupCard,
   group,
   variantStatusLabel,
@@ -4180,12 +4190,12 @@ function ModListRowContent({
         {mod.enabled ? (
           <span data-card-action="true">
             <PriorityEditor
-              modId={mod.id}
               modName={mod.name}
-            priority={mod.priority}
-            variant="inline"
-            onCommit={onCommitPriority}
-          />
+              value={loadPosition ?? mod.priority}
+              max={loadCount ?? 99}
+              variant="inline"
+              onCommit={onCommitPriority}
+            />
           </span>
         ) : (
           <span className="inline-flex h-5 items-center rounded border border-white/[0.06] bg-bg-tertiary/60 px-1.5 text-[11px] font-semibold text-text-secondary/70">
@@ -4318,6 +4328,8 @@ function ModCard({
   onFixUnknown,
   fixingUnknown,
   onCommitPriority,
+  loadPosition,
+  loadCount,
   onUnmerge,
   onCopyShareCode,
   selectMode,
@@ -4776,6 +4788,8 @@ function ModCard({
             soundVolume={soundVolume}
             onOpenDetails={onOpenDetails}
             onCommitPriority={onCommitPriority}
+            loadPosition={loadPosition}
+            loadCount={loadCount}
             isGroupCard={isGroupCard}
             group={group}
             variantStatusLabel={variantStatusLabel}
@@ -4810,9 +4824,9 @@ function ModCard({
             {mod.enabled && !selectMode && (
               <div className="absolute top-2 left-2 z-10 flex h-5 items-start" data-card-action="true">
                 <PriorityEditor
-                  modId={mod.id}
                   modName={mod.name}
-                  priority={mod.priority}
+                  value={loadPosition ?? mod.priority}
+                  max={loadCount ?? 99}
                   variant="overlay"
                   onCommit={onCommitPriority}
                 />

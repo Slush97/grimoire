@@ -16,7 +16,7 @@ import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import { getAddonsPath, getDisabledPath, getGrimoirePath } from './deadlock';
+import { getAddonFolderPaths, getDisabledPath, getGrimoirePath, metaKeyFor } from './deadlock';
 import { parseVpkDirectoryCached, invalidateVpkParseCache } from './vpk';
 import {
     runVpkmerge,
@@ -53,14 +53,17 @@ function cardPrefix(codename: string): string {
 interface VpkRef {
     fileName: string;
     path: string;
+    metaKey: string;
     enabled: boolean;
 }
 
-/** Enabled addon VPKs plus the ones parked in `.disabled/`. */
+/** Enabled addon VPKs across every addon folder (base citadel/addons plus any
+ *  overflow addonsN) plus the ones parked in `.disabled/`, so a card source that
+ *  overflowed past slot 99 is still found at apply/rebuild time. */
 async function listAddonVpks(deadlockPath: string): Promise<VpkRef[]> {
     const out: VpkRef[] = [];
     const folders: Array<[string, boolean]> = [
-        [getAddonsPath(deadlockPath), true],
+        ...getAddonFolderPaths(deadlockPath).map((p) => [p, true] as [string, boolean]),
         [getDisabledPath(deadlockPath), false],
     ];
     for (const [dir, enabled] of folders) {
@@ -72,7 +75,8 @@ async function listAddonVpks(deadlockPath: string): Promise<VpkRef[]> {
         }
         for (const entry of entries) {
             if (entry.toLowerCase().endsWith('_dir.vpk')) {
-                out.push({ fileName: entry, path: join(dir, entry), enabled });
+                const path = join(dir, entry);
+                out.push({ fileName: entry, path, metaKey: metaKeyFor(path), enabled });
             }
         }
     }
@@ -85,7 +89,7 @@ function findCosmeticsVpk(
     vpks: VpkRef[]
 ): { ref: VpkRef; info: LockerCosmeticsInfo } | null {
     for (const v of vpks) {
-        const info = getModMetadata(v.fileName)?.lockerCosmetics;
+        const info = getModMetadata(v.metaKey)?.lockerCosmetics;
         if (info) return { ref: v, info };
     }
     return null;
@@ -101,15 +105,19 @@ async function currentCardSelections(deadlockPath: string): Promise<LockerCardSe
     return findCosmeticsVpk(vpks)?.info.cards ?? [];
 }
 
-/** Locate a source VPK by filename, falling back to content hash if reconcile
- *  renamed it since apply time (same recovery unmergeMod uses). */
+/** Locate a source VPK by its folder-relative metaKey, falling back to content
+ *  hash if reconcile renamed or overflow moved it since apply time (same
+ *  recovery unmergeMod uses). Keying by metaKey (not the bare filename) keeps two
+ *  same-named sources in different addon folders distinct. Selections written
+ *  before overflow stored a bare filename, which is exactly the base mod's
+ *  metaKey, so they still resolve here. */
 async function locateSource(
     vpks: VpkRef[],
-    fileName: string,
+    sourceKey: string,
     sha256?: string
 ): Promise<VpkRef | null> {
-    const byName = vpks.find((v) => v.fileName === fileName);
-    if (byName) return byName;
+    const byKey = vpks.find((v) => v.metaKey === sourceKey);
+    if (byKey) return byKey;
     if (!sha256) return null;
     const wanted = sha256.toLowerCase();
     for (const v of vpks) {
@@ -186,7 +194,9 @@ async function rebuildLockerCosmetics(
             missing.push(sel.source.fileName);
             continue;
         }
-        valid.push({ ...sel, source: { ...sel.source, fileName: src.fileName } });
+        // Re-key to the located file's current metaKey so a source that moved
+        // folders (overflow) or was renamed (reconcile) stays addressable.
+        valid.push({ ...sel, source: { ...sel.source, fileName: src.metaKey } });
     }
 
     // Empty set: tear down the cosmetics VPK entirely.
@@ -208,7 +218,7 @@ async function rebuildLockerCosmetics(
         await fs.mkdir(planDir, { recursive: true });
         for (let i = 0; i < valid.length; i++) {
             const sel = valid[i];
-            const src = vpks.find((v) => v.fileName === sel.source.fileName)!;
+            const src = vpks.find((v) => v.metaKey === sel.source.fileName)!;
             const chunkPath = join(grimoireDir, `${tag}.chunk${i}.vpk`);
             const planPath = join(planDir, `plan${i}.json`);
             await fs.writeFile(
@@ -251,12 +261,14 @@ async function rebuildLockerCosmetics(
 }
 
 /**
- * Apply hero X's card from `sourceFileName`, replacing any prior choice for X.
+ * Apply hero X's card from the source identified by `sourceKey` (its
+ * folder-relative metaKey, as surfaced by getHeroPortraits.modFileName),
+ * replacing any prior choice for X.
  */
 export async function applyHeroCard(
     deadlockPath: string,
     heroName: string,
-    sourceFileName: string
+    sourceKey: string
 ): Promise<ApplyHeroCardResult> {
     vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
     ensureGrimoireConfigured(deadlockPath);
@@ -268,22 +280,22 @@ export async function applyHeroCard(
     await migrateManagedVpksToGrimoire(deadlockPath);
 
     const vpks = await listAddonVpks(deadlockPath);
-    const src = vpks.find((v) => v.fileName === sourceFileName);
-    if (!src) throw new Error(`Source mod not found: ${sourceFileName}`);
+    const src = vpks.find((v) => v.metaKey === sourceKey);
+    if (!src) throw new Error(`Source mod not found: ${sourceKey}`);
 
     const cardPaths = heroCardPaths(src.path, heroName);
     if (cardPaths.length === 0) {
-        throw new Error(`${basename(sourceFileName)} has no card art for ${heroName}.`);
+        throw new Error(`${basename(src.fileName)} has no card art for ${heroName}.`);
     }
 
     const fp = await fingerprintFile(src.path);
-    const srcMeta = getModMetadata(src.fileName);
+    const srcMeta = getModMetadata(src.metaKey);
     const selection: LockerCardSelection = {
         heroCodename: primaryCodename,
         heroName,
         variants: variantsFor(cardPaths, heroName),
         source: {
-            fileName: src.fileName,
+            fileName: src.metaKey,
             modName: srcMeta?.modName,
             gameBananaId: srcMeta?.gameBananaId,
             sha256AtApplyTime: fp.sha256,
@@ -295,7 +307,9 @@ export async function applyHeroCard(
     const next = [...current.filter((c) => c.heroCodename !== primaryCodename), selection];
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
     return {
-        activeSourceFileName: missing.includes(src.fileName) ? null : src.fileName,
+        // missing[] carries metaKeys (a selection's source key), so compare and
+        // report the metaKey, which the picker round-trips as the tile identity.
+        activeSourceFileName: missing.includes(src.metaKey) ? null : src.metaKey,
         missingSourceFileNames: missing,
     };
 }

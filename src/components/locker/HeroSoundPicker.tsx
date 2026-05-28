@@ -360,10 +360,14 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
 
   const handlePick = async (slot: AbilitySlot, mod: Mod) => {
     if (busyKey || savingSlot !== null) return;
-    setBusyKey(`${slot}:${mod.fileName}`);
+    // Identify the source by its folder-unique metaKey, not the bare filename:
+    // once a user overflows, the same pakNN_dir.vpk name exists in several addon
+    // folders, so the filename can't tell two sources apart. (metaKey === fileName
+    // for base-folder mods, so nothing changes for non-overflow users.)
+    setBusyKey(`${slot}:${mod.metaKey}`);
     setActionError(null);
     try {
-      if (activeBySlot.get(slot) === mod.fileName) {
+      if (activeBySlot.get(slot) === mod.metaKey) {
         await revertHeroSound(heroName, slot);
         setActiveBySlot((prev) => {
           const next = new Map(prev);
@@ -371,7 +375,7 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
           return next;
         });
       } else {
-        const result = await applyHeroSound(heroName, slot, mod.fileName);
+        const result = await applyHeroSound(heroName, slot, mod.metaKey);
         setActiveBySlot((prev) => {
           const next = new Map(prev);
           if (result.activeSourceFileName) next.set(slot, result.activeSourceFileName);
@@ -549,8 +553,8 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
                         mod={mod}
                         heroName={heroName}
                         slot={slot.slot}
-                        isActive={activeSource === mod.fileName}
-                        isBusy={busyKey === `${slot.slot}:${mod.fileName}`}
+                        isActive={activeSource === mod.metaKey}
+                        isBusy={busyKey === `${slot.slot}:${mod.metaKey}`}
                         anyBusy={anyBusy}
                         params={paramsBySlot.get(slot.slot) ?? {}}
                         saving={savingSlot === slot.slot}

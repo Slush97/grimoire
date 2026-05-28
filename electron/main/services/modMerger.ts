@@ -1,10 +1,10 @@
 import { promises as fs, existsSync } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { spawn } from 'child_process';
 import { randomUUID, createHash } from 'crypto';
 import { app } from 'electron';
-import { getAddonsPath } from './deadlock';
-import { scanMods, disableMod, enableMod, setModPriority, findNextAvailablePriority, type Mod } from './mods';
+import { metaKeyFor } from './deadlock';
+import { scanMods, disableMod, enableMod, allocateEnabledVpkPath, type Mod } from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { encodeShareCode } from './portableProfile';
@@ -172,8 +172,8 @@ export async function verifyVpkOutput(path: string): Promise<void> {
 /**
  * Exclusively create an empty file at `path` so the priority slot is
  * reserved on disk before we hand it to vpkmerge. Closes the TOCTOU
- * window between findNextAvailablePriority() and runVpkmerge() where a
- * concurrent download or 1-Click install could otherwise claim the slot.
+ * window between slot allocation (allocateEnabledVpkPath) and runVpkmerge()
+ * where a concurrent download or 1-Click install could otherwise claim the slot.
  * Throws a friendly error if the slot was lost to a race.
  */
 export async function reserveOutputSlot(path: string): Promise<void> {
@@ -221,7 +221,7 @@ export async function mergeMods(
     for (const id of modIds) {
         const found = installed.find((m) => m.id === id);
         if (!found) throw new Error(`Selected mod not found (id: ${id}).`);
-        const meta = getModMetadata(found.fileName);
+        const meta = getModMetadata(found.metaKey);
         if (meta?.merged) {
             throw new Error(
                 `"${meta.modName || found.name}" is already a merged mod. Unmerge it first.`
@@ -247,11 +247,13 @@ export async function mergeMods(
     const portable = buildPortableForSources(sources, trimmedName);
     const shareCode = encodeShareCode(JSON.stringify(portable));
 
-    const priority = await findNextAvailablePriority(deadlockPath);
-    const priorityStr = String(priority).padStart(2, '0');
-    const mergedFileName = `pak${priorityStr}_dir.vpk`;
-    const addonsPath = getAddonsPath(deadlockPath);
-    const mergedPath = join(addonsPath, mergedFileName);
+    // The merged VPK installs ENABLED, so reserve a slot via the overflow-aware
+    // allocator: it fills base addons first and spills into an overflow folder
+    // (creating one + patching gameinfo) when base is full, so a merge still
+    // works for a >99 user whose citadel/addons is already saturated. The
+    // metadata key is the destination's metaKey (folder-prefixed for overflow).
+    const mergedPath = await allocateEnabledVpkPath(deadlockPath);
+    const mergedMetaKey = metaKeyFor(mergedPath);
 
     // Reserve the slot on disk before spawning vpkmerge so a concurrent
     // download or 1-Click install can't claim it mid-spawn. wx errors with
@@ -272,7 +274,7 @@ export async function mergeMods(
     }
 
     const preDisableSnapshot: MergedModSource[] = sources.map((src, i) => {
-        const meta = getModMetadata(src.fileName);
+        const meta = getModMetadata(src.metaKey);
         return {
             fileName: src.fileName,
             modName: meta?.modName || src.name,
@@ -300,8 +302,8 @@ export async function mergeMods(
     // fileName fields here are pre-disable; they're updated after each
     // successful disable so the contents-modal UI shows the actual on-disk
     // name. Scrub any orphan metadata from a prior occupant first.
-    removeModMetadata(mergedFileName);
-    setModMetadata(mergedFileName, {
+    removeModMetadata(mergedMetaKey);
+    setModMetadata(mergedMetaKey, {
         modName: trimmedName,
         thumbnailUrl: options.thumbnailDataUrl,
         sha256,
@@ -322,7 +324,7 @@ export async function mergeMods(
             const after = await disableMod(deadlockPath, src.id);
             disabledSources.push(after);
             preDisableSnapshot[i].fileName = after.fileName;
-            setModMetadata(mergedFileName, {
+            setModMetadata(mergedMetaKey, {
                 modName: trimmedName,
                 thumbnailUrl: options.thumbnailDataUrl,
                 sha256,
@@ -334,7 +336,7 @@ export async function mergeMods(
     }
 
     const finalMods = await scanMods(deadlockPath);
-    const newMod = finalMods.find((m) => m.fileName === mergedFileName);
+    const newMod = finalMods.find((m) => m.metaKey === mergedMetaKey);
     if (!newMod) {
         throw new Error('Merged mod was created on disk but could not be located in the rescan.');
     }
@@ -344,7 +346,7 @@ export async function mergeMods(
 function buildPortableForSources(sources: Mod[], profileName: string): PortableProfile {
     const mods: PortableModEntry[] = [];
     for (const src of sources) {
-        const meta = getModMetadata(src.fileName);
+        const meta = getModMetadata(src.metaKey);
         const gbId = meta?.gameBananaId ?? src.gameBananaId;
         const fileId = meta?.gameBananaFileId ?? src.gameBananaFileId;
         if (!gbId || !fileId) continue; // local mod — fast-path unmerge still works
@@ -404,17 +406,17 @@ function makeSourceLocator(candidates: Mod[]): SourceLocator {
 
     const hashCache = new Map<string, string>();
     const getHash = async (mod: Mod): Promise<string> => {
-        const cached = hashCache.get(mod.fileName);
+        const cached = hashCache.get(mod.metaKey);
         if (cached) return cached;
-        const fromMeta = getModMetadata(mod.fileName)?.sha256;
+        const fromMeta = getModMetadata(mod.metaKey)?.sha256;
         if (fromMeta) {
             const lower = fromMeta.toLowerCase();
-            hashCache.set(mod.fileName, lower);
+            hashCache.set(mod.metaKey, lower);
             return lower;
         }
         const fp = await fingerprintFile(mod.path);
         const lower = fp.sha256.toLowerCase();
-        hashCache.set(mod.fileName, lower);
+        hashCache.set(mod.metaKey, lower);
         return lower;
     };
 
@@ -458,7 +460,7 @@ export async function unmergeMod(
     const target = installed.find((m) => m.id === mergedModId);
     if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
 
-    const meta = getModMetadata(target.fileName);
+    const meta = getModMetadata(target.metaKey);
     if (!meta?.merged) {
         throw new Error(`"${meta?.modName || target.name}" is not a merged mod.`);
     }
@@ -485,7 +487,7 @@ export async function unmergeMod(
     }
 
     await fs.unlink(target.path);
-    removeModMetadata(target.fileName);
+    removeModMetadata(target.metaKey);
 
     return {
         recovered,
@@ -513,7 +515,7 @@ export async function extractMergeSource(
     const target = installed.find((m) => m.id === mergedModId);
     if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
 
-    const meta = getModMetadata(target.fileName);
+    const meta = getModMetadata(target.metaKey);
     if (!meta?.merged) {
         throw new Error(`"${meta?.modName || target.name}" is not a merged mod.`);
     }
@@ -560,7 +562,7 @@ export async function extractMergeSource(
             }
         }
         await fs.unlink(target.path);
-        removeModMetadata(target.fileName);
+        removeModMetadata(target.metaKey);
         await restoreExtracted();
         return { collapsed: true, merged: null, restored };
     }
@@ -591,19 +593,24 @@ export async function extractMergeSource(
         .sort((a, b) => b.priority - a.priority)
         .map((p) => p.mod);
 
-    const rebuildPriority = await findNextAvailablePriority(deadlockPath);
-    const rebuildFileName = `pak${String(rebuildPriority).padStart(2, '0')}_dir.vpk`;
-    const addonsPath = getAddonsPath(deadlockPath);
-    const rebuildPath = join(addonsPath, rebuildFileName);
-
-    await reserveOutputSlot(rebuildPath);
+    // Rebuild IN PLACE: build to a dotfile in the merged mod's OWN folder (a
+    // non-`_dir.vpk` name, so it isn't scanned as a mod or counted as a slot),
+    // then swap it into the target's exact path. Staying in-folder keeps the
+    // merge at its original load-order position (folder + pakNN) and needs no free
+    // slot elsewhere, which matters once the merge lives in an overflow folder:
+    // the old findNextAvailablePriority + setModPriority path is base-only and
+    // would wrongly fail (or move the merge to base) for an overflowed merge.
+    const targetDir = dirname(target.path);
+    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
     try {
-        await runVpkmerge([rebuildPath, ...ordered.map((m) => m.path)]);
-        await verifyVpkOutput(rebuildPath);
+        await runVpkmerge([buildPath, ...ordered.map((m) => m.path)]);
+        await verifyVpkOutput(buildPath);
     } catch (err) {
-        try { await fs.unlink(rebuildPath); } catch { /* ignore partial-output cleanup */ }
+        try { await fs.unlink(buildPath); } catch { /* ignore partial-output cleanup */ }
         throw err;
     }
+
+    const sha256 = await hashFile(buildPath);
 
     // Fresh manifest: keep the surviving source snapshots (still accurate),
     // regenerate the share code from the on-disk survivors, preserve createdAt.
@@ -614,33 +621,28 @@ export async function extractMergeSource(
         shareCode: encodeShareCode(JSON.stringify(portable)),
         sources: remainingSnapshots,
     };
-    const sha256 = await hashFile(rebuildPath);
-    removeModMetadata(rebuildFileName); // scrub any orphan from a prior slot occupant
-    setModMetadata(rebuildFileName, {
+
+    // Swap: drop the old merged VPK, then move the freshly built one into its
+    // exact path. Same folder + pakNN means the metaKey (and load order) is
+    // preserved, so the metadata re-stamps under the unchanged key.
+    await fs.unlink(target.path);
+    removeModMetadata(target.metaKey);
+    await fs.rename(buildPath, target.path);
+    setModMetadata(target.metaKey, {
         modName: meta.modName,
         thumbnailUrl: meta.thumbnailUrl,
         sha256,
         merged: newManifest,
     });
 
-    // Delete the old merged VPK to free its slot, then move the rebuilt VPK
-    // back into that slot so the merge keeps its load-order position.
-    const originalPriority = target.priority;
-    await fs.unlink(target.path);
-    removeModMetadata(target.fileName);
-
-    const afterBuild = await scanMods(deadlockPath);
-    const rebuilt = afterBuild.find((m) => m.fileName === rebuildFileName);
-    if (!rebuilt) {
-        throw new Error('Rebuilt merged VPK was created but could not be located in the rescan.');
-    }
-    const reslotted = await setModPriority(deadlockPath, rebuilt.id, originalPriority);
-
     await restoreExtracted();
 
-    // Re-read so the returned merged mod reflects its final on-disk filename
-    // (setModPriority renamed it); the IPC layer enriches it with the manifest.
+    // Re-read so the returned merged mod reflects on-disk state; the IPC layer
+    // enriches it with the manifest. The slot/metaKey is unchanged by the swap.
     const finalScan = await scanMods(deadlockPath);
-    const finalMerged = finalScan.find((m) => m.fileName === reslotted.fileName) ?? reslotted;
+    const finalMerged = finalScan.find((m) => m.metaKey === target.metaKey);
+    if (!finalMerged) {
+        throw new Error('Rebuilt merged VPK was created but could not be located in the rescan.');
+    }
     return { collapsed: false, merged: finalMerged, restored };
 }

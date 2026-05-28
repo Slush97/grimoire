@@ -97,9 +97,9 @@ export async function buildPortableProfileFromInstalled(
     for (const installedMod of installed) {
         // Locker-managed VPKs (cards/sounds) are internal and have no GameBanana
         // ref, so silently skip them rather than warning "Skipped local mod".
-        if (isLockerManaged(installedMod.fileName)) continue;
+        if (isLockerManaged(installedMod.metaKey)) continue;
 
-        const metadata = getModMetadata(installedMod.fileName);
+        const metadata = getModMetadata(installedMod.metaKey);
         const gbId = metadata?.gameBananaId ?? installedMod.gameBananaId;
         const fileId = metadata?.gameBananaFileId ?? installedMod.gameBananaFileId;
 
@@ -180,7 +180,7 @@ export async function buildPortableProfile(
     // installs.
     const modByGbFile = new Map<string, typeof installed[number]>();
     for (const m of installed) {
-        const meta = getModMetadata(m.fileName);
+        const meta = getModMetadata(m.metaKey);
         if (typeof meta?.gameBananaId === 'number' && typeof meta?.gameBananaFileId === 'number') {
             const key = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
             if (!modByGbFile.has(key)) modByGbFile.set(key, m);
@@ -199,8 +199,8 @@ export async function buildPortableProfile(
         const installedMod =
             (stableKey ? modByGbFile.get(stableKey) : undefined) ??
             modByFileName.get(profileMod.fileName);
-        const metadataFileName = installedMod?.fileName ?? profileMod.fileName;
-        const metadata = getModMetadata(metadataFileName);
+        const metadataKey = installedMod?.metaKey ?? profileMod.fileName;
+        const metadata = getModMetadata(metadataKey);
         const gbId =
             profileMod.gameBananaId ??
             metadata?.gameBananaId ??
@@ -417,7 +417,7 @@ async function buildInstalledIndex(deadlockPath: string): Promise<InstalledIndex
     const byVariant = new Map<string, string>();
     const byArchive = new Map<string, string>();
     for (const mod of installed) {
-        const meta = getModMetadata(mod.fileName);
+        const meta = getModMetadata(mod.metaKey);
         if (meta?.gameBananaId === undefined || meta?.gameBananaFileId === undefined) continue;
         const archiveKey = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
         if (!byArchive.has(archiveKey)) byArchive.set(archiveKey, mod.fileName);

@@ -198,7 +198,7 @@ interface AppState {
   deleteMod: (modId: string) => Promise<void>;
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
-  reorderMods: (orderedFileNames: string[]) => Promise<void>;
+  reorderMods: (orderedIds: string[]) => Promise<void>;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
@@ -221,12 +221,13 @@ interface AppState {
   setInstalledScrollTop: (scrollTop: number) => void;
 }
 
-// The main process throws this exact phrase from every "can't add a 100th
-// active mod" path (enable, reorder/compact, local import, merge). We surface
-// it as a transient toast instead of the full-page modsError screen.
+// The main process throws this exact phrase from every "out of enabled slots"
+// path (enable, reorder/compact, local import, merge). We surface it as a
+// transient toast instead of the full-page modsError screen. Match on the
+// cap-agnostic tail so a future MAX_ADDON_FOLDERS bump doesn't break detection.
 const ENABLE_CAP_NOTICE =
-  'You can have at most 99 mods enabled at once. Disable one to make room.';
-const isEnableCapError = (err: unknown): boolean => /99 mods enabled/.test(String(err));
+  'You can have at most 990 mods enabled at once. Disable one to make room.';
+const isEnableCapError = (err: unknown): boolean => /mods enabled at once/.test(String(err));
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
@@ -379,11 +380,11 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Reorder mods via drag-and-drop. Accepts the target enabled-list order as filenames.
+  // Reorder mods via drag-and-drop. Accepts the target enabled-list order as mod ids.
   // Rolls back to a fresh scan on error so the UI can't desync from disk.
-  reorderMods: async (orderedFileNames: string[]) => {
+  reorderMods: async (orderedIds: string[]) => {
     try {
-      const updated = await api.reorderMods(orderedFileNames);
+      const updated = await api.reorderMods(orderedIds);
       set({ mods: updated });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }

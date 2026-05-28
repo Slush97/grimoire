@@ -14,7 +14,7 @@
 import { promises as fs } from 'fs';
 import { basename, join } from 'path';
 import { app } from 'electron';
-import { getAddonsPath } from './deadlock';
+import { getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
 import { parseVpkDirectoryCached } from './vpk';
 import { vpkmergeBinaryPath, runVpkmerge } from './modMerger';
 import { getModMetadata } from './metadata';
@@ -113,11 +113,12 @@ function sanitize(value: string): string {
     return value.replace(/[^a-zA-Z0-9_-]+/g, '_');
 }
 
-/** Enabled addon VPKs plus the ones parked in `.disabled/`. */
+/** Enabled addon VPKs across every addon folder (base citadel/addons plus any
+ *  overflow addonsN) plus the ones parked in `.disabled/`, so a source that
+ *  overflowed past slot 99 still surfaces in the picker. */
 async function listAddonVpks(deadlockPath: string): Promise<string[]> {
-    const addonsPath = getAddonsPath(deadlockPath);
     const vpks: string[] = [];
-    for (const dir of [addonsPath, join(addonsPath, '.disabled')]) {
+    for (const dir of [...getAddonFolderPaths(deadlockPath), getDisabledPath(deadlockPath)]) {
         let entries: string[];
         try {
             entries = await fs.readdir(dir);
@@ -163,12 +164,17 @@ export async function getHeroPortraits(
 
     const results: HeroPortrait[] = [];
     for (const vpk of vpks) {
+        // Identify the source by its folder-relative metaKey, not the bare
+        // filename: once a user overflows, the same pakNN_dir.vpk name exists in
+        // several folders, so the filename alone can't tell two sources apart
+        // (the picker round-trips this value straight back into applyHeroCard).
+        const metaKey = metaKeyFor(vpk);
         // Skip our own Locker-managed VPKs: the cosmetics VPK holds the
         // already-applied card, so decoding it would surface a duplicate tile of
         // whatever source it was built from (the source itself is still scanned
         // and stays the selectable, "Applied"-marked option). The sound VPK has
         // no card art, but is excluded on the same "managed artifact" grounds.
-        const portraitMeta = getModMetadata(basename(vpk));
+        const portraitMeta = getModMetadata(metaKey);
         if (portraitMeta?.lockerCosmetics || portraitMeta?.lockerSounds) continue;
 
         const tree = parseVpkDirectoryCached(vpk);
@@ -182,7 +188,9 @@ export async function getHeroPortraits(
         if (matched.length === 0) continue;
 
         for (const codename of matched) {
-            const outDir = join(cacheRoot, sanitize(basename(vpk)), codename);
+            // Cache dir keyed by the unique metaKey so two same-named sources in
+            // different folders don't clobber each other's decoded portraits.
+            const outDir = join(cacheRoot, sanitize(metaKey), codename);
             const manifestPath = join(outDir, 'manifest.json');
             try {
                 await runVpkmerge(
@@ -196,7 +204,7 @@ export async function getHeroPortraits(
                     if (!p.output_path) continue;
                     const png = await fs.readFile(p.output_path);
                     results.push({
-                        modFileName: basename(vpk),
+                        modFileName: metaKey,
                         variant: p.variant,
                         width: p.width,
                         height: p.height,

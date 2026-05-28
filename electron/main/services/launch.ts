@@ -1,9 +1,9 @@
 import { promises as fs, existsSync } from 'fs';
-import { join } from 'path';
+import { join, basename, dirname } from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
 import { getUserDataPath } from '../utils/paths';
-import { getAddonsPath, getDisabledPath } from './deadlock';
+import { getAddonsPath, getDisabledPath, getAddonFolderPaths, getCitadelPath } from './deadlock';
 import { loadSettings } from './settings';
 import { writeLaunchOptions, readLaunchOptions, isSteamRunning } from './launchOptions';
 
@@ -39,7 +39,32 @@ export interface VanillaStash {
     version: 1;
     status: 'pending' | 'active';
     startedAt: string;
-    mods: Array<{ fileName: string }>;
+    /** Each stashed VPK plus the addon folder it came from, so restore returns
+     *  it to the right place. `folder` is the addon root basename: "addons" for
+     *  the base folder, "addonsN" for an overflow folder. Absent on stashes
+     *  written before multi-folder overflow existed; those are all base addons. */
+    mods: Array<{ fileName: string; folder?: string }>;
+}
+
+/** Absolute path of an addon root folder from the basename recorded in the
+ *  stash ("addons" -> base citadel/addons, "addonsN" -> citadel/addonsN). */
+function originFolderPath(deadlockPath: string, folder: string): string {
+    return folder === 'addons'
+        ? getAddonsPath(deadlockPath)
+        : join(getCitadelPath(deadlockPath), folder);
+}
+
+/**
+ * Where a stashed VPK lives while parked. Base-addons files stay flat in
+ * `.disabled/` (byte-identical to the pre-overflow stash format, so a
+ * non-overflow user's vanilla launch is unchanged). Overflow addonsN files go in
+ * a per-folder subfolder of `.disabled/` so a pakNN name (which legitimately
+ * repeats across folders) can't collide in the shared parking lot.
+ */
+function stashSlotPath(disabledPath: string, folder: string, fileName: string): string {
+    return folder === 'addons'
+        ? join(disabledPath, fileName)
+        : join(disabledPath, folder, fileName);
 }
 
 function getStashPath(): string {
@@ -176,39 +201,57 @@ export async function stopDeadlockGame(): Promise<StopDeadlockResult> {
 }
 
 /**
- * Stash every VPK currently in the addons folder: record them to the stash
- * file first (so a crash mid-move leaves a recoverable breadcrumb), then move
- * the files into disabled/. Mark the stash 'active' only once all moves succeed.
+ * Stash every VPK across every addon folder (base citadel/addons plus any
+ * overflow addonsN): record them to the stash file first (so a crash mid-move
+ * leaves a recoverable breadcrumb that knows each file's origin folder), then
+ * move the files into disabled/. Mark the stash 'active' only once all moves
+ * succeed.
  *
  * If a move fails mid-operation, we leave the stash at 'pending' and rethrow.
  * The caller (or next app startup) can then invoke restoreFromStash to
  * reassemble whatever state made it to disk.
  */
 async function stashEnabledMods(deadlockPath: string): Promise<VanillaStash> {
-    const addonsPath = getAddonsPath(deadlockPath);
     const disabledPath = getDisabledPath(deadlockPath);
 
-    const entries = await fs.readdir(addonsPath);
-    // Stash only VPK files (addons folder may contain other junk).
-    const vpks = entries.filter((e) => e.toLowerCase().endsWith('.vpk'));
+    // Enumerate every addon root (base citadel/addons first, then overflow
+    // addons1, addons2, ...) and record each enabled VPK with its origin folder
+    // BEFORE moving anything, so a crash mid-move leaves a recoverable breadcrumb
+    // that knows where each file belongs.
+    const mods: Array<{ fileName: string; folder: string }> = [];
+    for (const folder of getAddonFolderPaths(deadlockPath)) {
+        const name = basename(folder);
+        let entries: string[];
+        try {
+            entries = await fs.readdir(folder);
+        } catch {
+            continue;
+        }
+        // Stash only VPK files (addon folders may contain other junk).
+        for (const fileName of entries) {
+            if (fileName.toLowerCase().endsWith('.vpk')) mods.push({ fileName, folder: name });
+        }
+    }
 
     const stash: VanillaStash = {
         version: 1,
         status: 'pending',
         startedAt: new Date().toISOString(),
-        mods: vpks.map((fileName) => ({ fileName })),
+        mods,
     };
     await writeStash(stash);
 
-    for (const fileName of vpks) {
-        const from = join(addonsPath, fileName);
-        const to = join(disabledPath, fileName);
+    for (const { fileName, folder } of mods) {
+        const from = join(originFolderPath(deadlockPath, folder), fileName);
+        const to = stashSlotPath(disabledPath, folder, fileName);
         if (existsSync(to)) {
-            // Disabled folder already has a file with this name. This shouldn't
-            // happen in normal operation (enable/disable handles collisions),
-            // but be safe: skip rather than overwrite the disabled copy.
+            // Parking spot already taken. This shouldn't happen in normal
+            // operation (enable/disable handles collisions, and overflow files
+            // get a per-folder subfolder), but be safe: skip rather than
+            // overwrite the parked copy.
             continue;
         }
+        await fs.mkdir(dirname(to), { recursive: true });
         await fs.rename(from, to);
     }
 
@@ -224,32 +267,36 @@ export interface RestoreResult {
 }
 
 /**
- * Move stashed VPKs from disabled/ back to addons/, with retries for transient
- * Windows file locks. Deletes the stash only if every file is accounted for.
+ * Move stashed VPKs from disabled/ back to each one's origin addon folder (base
+ * addons or an overflow addonsN, per the stash record), with retries for
+ * transient Windows file locks. Deletes the stash only if every file is
+ * accounted for.
  *
  * Hazard notes:
  * - If the game is still running and holds a handle on the _dir.vpk, Windows
  *   will fail the rename with EBUSY/EPERM. We retry a few times then give up
  *   and leave the stash in place so the user can hit "Restore now" after they
  *   quit the game.
- * - If a stashed file is already back in addons/ (user manually moved it),
- *   we skip rather than clobber.
+ * - If a stashed file is already back in its origin folder (user manually moved
+ *   it), we skip rather than clobber.
  * - If the stashed file vanished from disabled/ (user deleted it), we skip.
  */
 export async function restoreFromStash(
     deadlockPath: string,
     stash: VanillaStash
 ): Promise<RestoreResult> {
-    const addonsPath = getAddonsPath(deadlockPath);
     const disabledPath = getDisabledPath(deadlockPath);
 
     let restored = 0;
     let skipped = 0;
     const failed: string[] = [];
 
-    for (const { fileName } of stash.mods) {
-        const from = join(disabledPath, fileName);
-        const to = join(addonsPath, fileName);
+    for (const { fileName, folder } of stash.mods) {
+        // Legacy stashes (pre-overflow) carry no folder; they're all base addons.
+        const originFolder = folder ?? 'addons';
+        const from = stashSlotPath(disabledPath, originFolder, fileName);
+        const targetDir = originFolderPath(deadlockPath, originFolder);
+        const to = join(targetDir, fileName);
 
         if (!existsSync(from)) {
             skipped++;
@@ -260,6 +307,10 @@ export async function restoreFromStash(
             skipped++;
             continue;
         }
+
+        // The origin folder may have been emptied (overflow) but should still
+        // exist; recreate it defensively so the rename lands.
+        await fs.mkdir(targetDir, { recursive: true });
 
         let ok = false;
         let lastErr: unknown;

@@ -1,5 +1,5 @@
-import { existsSync, mkdirSync, readFileSync } from 'fs';
-import { join } from 'path';
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'fs';
+import { join, basename, dirname } from 'path';
 import { homedir } from 'os';
 import { execFileSync } from 'child_process';
 
@@ -191,6 +191,98 @@ export function getGrimoirePath(deadlockPath: string): string {
     }
 
     return grimoirePath;
+}
+
+/**
+ * Match an overflow addons folder name: addons1, addons2, ... (NOT the base
+ * "addons", which has no numeric suffix). Overflow folders hold mods that spill
+ * past the 99-slot pakNN budget of the base citadel/addons folder; each carries
+ * its own pak01-pak99 namespace and its own Game search path in gameinfo.gi.
+ */
+const OVERFLOW_FOLDER_RE = /^addons(\d+)$/i;
+
+/**
+ * Maximum number of addon root folders (base citadel/addons plus overflow
+ * addons1..addons9). Each holds a pak01-pak99 namespace, so 10 folders gives a
+ * 990-mod enabled ceiling. Bump this to raise the cap.
+ */
+export const MAX_ADDON_FOLDERS = 10;
+
+/**
+ * Ordered list of addon root folders the engine searches, base first, then
+ * overflow folders (addons1, addons2, ...) in numeric order. Only folders that
+ * exist on disk are returned; the base citadel/addons is always present (created
+ * if missing). Each entry is an absolute path.
+ */
+export function getAddonFolderPaths(deadlockPath: string): string[] {
+    const citadelPath = getCitadelPath(deadlockPath);
+    const folders = [getAddonsPath(deadlockPath)]; // base, created if missing
+    try {
+        const overflow = readdirSync(citadelPath, { withFileTypes: true })
+            .filter((e) => e.isDirectory() && OVERFLOW_FOLDER_RE.test(e.name))
+            .map((e) => ({ path: join(citadelPath, e.name), num: parseInt(e.name.match(OVERFLOW_FOLDER_RE)![1], 10) }))
+            .sort((a, b) => a.num - b.num)
+            .map((e) => e.path);
+        folders.push(...overflow);
+    } catch {
+        // citadel/ unreadable: base-only is the safe fallback.
+    }
+    return folders;
+}
+
+/**
+ * Get the Nth overflow addons folder path (citadel/addons{index}, index >= 1),
+ * creating it if necessary. These are the spill-over roots for mods past the
+ * base folder's 99-slot pakNN budget.
+ */
+export function overflowAddonsPath(deadlockPath: string, index: number): string {
+    const path = join(deadlockPath, 'game', 'citadel', `addons${index}`);
+    if (!existsSync(path)) {
+        mkdirSync(path, { recursive: true });
+    }
+    return path;
+}
+
+/** Overflow folder basenames (addons1, addons2, ...) that exist on disk, in
+ *  numeric order. Empty when no overflow folders have been created yet. */
+export function getOverflowFolderNames(deadlockPath: string): string[] {
+    return getAddonFolderPaths(deadlockPath)
+        .slice(1) // drop the base citadel/addons
+        .map((p) => basename(p));
+}
+
+/**
+ * Create and return the next overflow folder, reusing the lowest unused
+ * addons{N} index (so a deleted folder's slot is recycled). Returns null when
+ * the MAX_ADDON_FOLDERS cap is already reached, leaving the caller to surface
+ * the enable-limit error.
+ */
+export function createNextOverflowFolder(deadlockPath: string): string | null {
+    const used = new Set(
+        getOverflowFolderNames(deadlockPath).map((n) => parseInt(n.match(OVERFLOW_FOLDER_RE)![1], 10))
+    );
+    let index = 1;
+    while (used.has(index)) index++;
+    // index is the 1-based overflow slot; base counts as folder 0, so the cap is
+    // MAX_ADDON_FOLDERS - 1 overflow folders.
+    if (index > MAX_ADDON_FOLDERS - 1) return null;
+    return overflowAddonsPath(deadlockPath, index);
+}
+
+/**
+ * Derive the metadata/identity key for a VPK from its on-disk location.
+ *
+ * Mods in the base citadel/addons folder and in .disabled/ key to their BARE
+ * filename, exactly as they always have, so existing installs need no migration.
+ * Mods in an overflow folder key to `addons{N}/<filename>` so a pak01_dir.vpk in
+ * addons1 can't collide with the pak01_dir.vpk in the base folder. This is the
+ * single source of truth for the rule; metadata access and id generation both
+ * route through it.
+ */
+export function metaKeyFor(vpkPath: string): string {
+    const fileName = basename(vpkPath);
+    const parentName = basename(dirname(vpkPath));
+    return OVERFLOW_FOLDER_RE.test(parentName) ? `${parentName}/${fileName}` : fileName;
 }
 
 /**

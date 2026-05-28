@@ -64,7 +64,7 @@ export interface ElectronAPI {
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
-    reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
+    reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
@@ -815,8 +815,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ) => ipcRenderer.invoke('backfill-gamebanana-file-id', modId, payload),
     setModPriority: (modId: string, priority: number) =>
         ipcRenderer.invoke('set-mod-priority', modId, priority),
-    reorderMods: (orderedFileNames: string[]) =>
-        ipcRenderer.invoke('reorder-mods', orderedFileNames),
+    reorderMods: (orderedIds: string[]) =>
+        ipcRenderer.invoke('reorder-mods', orderedIds),
     swapModPriority: (modIdA: string, modIdB: string) =>
         ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
     importCustomMod: (args: ImportCustomModArgs) =>

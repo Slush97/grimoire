@@ -14,7 +14,6 @@ import {
     existsSync,
     readFileSync,
     readdirSync,
-    renameSync,
     copyFileSync,
     unlinkSync,
     mkdirSync,
@@ -28,6 +27,7 @@ import { fileURLToPath } from 'url';
 import https from 'https';
 import http from 'http';
 import { getAddonsPath, getDisabledPath, getCitadelPath } from '../services/deadlock';
+import { scanMods, enableMod } from '../services/mods';
 import { getUserDataPath } from '../utils/paths';
 import {
     getModMetadata,
@@ -294,34 +294,19 @@ ipcMain.handle('set-mina-preset', async (_, args: SetMinaPresetArgs): Promise<vo
         throw new Error('No Deadlock path configured');
     }
 
-    const addonsPath = getAddonsPath(deadlockPath);
-    const disabledPath = getDisabledPath(deadlockPath);
     const { presetFileName } = args;
 
-    // Find the preset file in either folder
-    let presetPath: string | null = null;
-    let isEnabled = false;
-
-    const addonsPreset = join(addonsPath, presetFileName);
-    const disabledPreset = join(disabledPath, presetFileName);
-
-    if (existsSync(addonsPreset)) {
-        presetPath = addonsPreset;
-        isEnabled = true;
-    } else if (existsSync(disabledPreset)) {
-        presetPath = disabledPreset;
-        isEnabled = false;
-    }
-
-    if (!presetPath) {
+    // Enable the preset through the normal enableMod path rather than a raw move
+    // into base addons: enableMod allocates a free slot across base + overflow
+    // folders (so it works for a >99 user with a full citadel/addons) and never
+    // clobbers an existing pakNN the way a hard-coded rename could.
+    const mods = await scanMods(deadlockPath);
+    const preset = mods.find((m) => m.fileName === presetFileName);
+    if (!preset) {
         throw new Error(`Preset file not found: ${presetFileName}`);
     }
-
-    // Move to addons if disabled
-    if (!isEnabled) {
-        const destPath = join(addonsPath, presetFileName);
-        renameSync(presetPath, destPath);
-    }
+    if (preset.enabled) return; // already active
+    await enableMod(deadlockPath, preset.id);
 });
 
 // list-mina-variants

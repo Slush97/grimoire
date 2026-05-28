@@ -124,7 +124,7 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
     // in a profile's mod list (and have no gameBananaId to re-resolve anyway).
-    const enabledMods = mods.filter(mod => mod.enabled && !isLockerManaged(mod.fileName));
+    const enabledMods = mods.filter(mod => mod.enabled && !isLockerManaged(mod.metaKey));
 
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
@@ -154,8 +154,8 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
  * ids are what `applyProfile` resolves against so a mod can still be found
  * after its fileName has changed (reorder, collision-rename, multi-vpk pick).
  */
-function toProfileMod(mod: { fileName: string; priority: number }, enabled: boolean): ProfileMod {
-    const meta = getModMetadata(mod.fileName);
+function toProfileMod(mod: { fileName: string; metaKey: string; priority: number }, enabled: boolean): ProfileMod {
+    const meta = getModMetadata(mod.metaKey);
     const out: ProfileMod = {
         fileName: mod.fileName,
         enabled,
@@ -191,7 +191,7 @@ export async function createProfileFromGameBananaIds(
     // it up per-mod here. Without this the filter never matches and the
     // profile saves zero mods.
     const matching = mods.filter((mod) => {
-        const metadata = getModMetadata(mod.fileName);
+        const metadata = getModMetadata(mod.metaKey);
         return metadata?.gameBananaId !== undefined && idSet.has(metadata.gameBananaId);
     });
 
@@ -230,7 +230,7 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
     // in a profile's mod list (and have no gameBananaId to re-resolve anyway).
-    const enabledMods = mods.filter(mod => mod.enabled && !isLockerManaged(mod.fileName));
+    const enabledMods = mods.filter(mod => mod.enabled && !isLockerManaged(mod.metaKey));
 
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
@@ -301,7 +301,7 @@ function buildProfileModResolver(
     const metaByFileName = new Map<string, ReturnType<typeof getModMetadata>>();
     for (const mod of currentMods) {
         byFileName.set(mod.fileName, mod);
-        const meta = getModMetadata(mod.fileName);
+        const meta = getModMetadata(mod.metaKey);
         metaByFileName.set(mod.fileName, meta);
         const gbId = meta?.gameBananaId;
         const fileId = meta?.gameBananaFileId;
@@ -470,7 +470,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         // profile: they're hidden, auto-pinned, and owned by the Locker. Never
         // disable them on a profile switch, or applied cosmetics would silently
         // stop loading. They get re-pinned to the front after the reorder pass.
-        if (isLockerManaged(mod.fileName)) continue;
+        if (isLockerManaged(mod.metaKey)) continue;
         const profileMod = profileModByCurrentId.get(mod.id);
         if (profileMod && profileMod.enabled) continue; // keep it enabled
         await disableMod(deadlockPath, mod.id);
@@ -507,7 +507,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     // id-to-mod (and fileName) mapping is stale.
     const refreshedMods = await scanMods(deadlockPath);
     const resolveAgainstRefreshed = buildProfileModResolver(refreshedMods);
-    const orderedFileNames: string[] = [];
+    const orderedIds: string[] = [];
     const seen = new Set<string>();
     let reorderSkippedDisabled = 0;
     let reorderSkippedUnmatched = 0;
@@ -522,16 +522,16 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
             reorderSkippedDisabled++;
             continue;
         }
-        if (seen.has(resolution.mod.fileName)) continue;
-        seen.add(resolution.mod.fileName);
-        orderedFileNames.push(resolution.mod.fileName);
+        if (seen.has(resolution.mod.id)) continue;
+        seen.add(resolution.mod.id);
+        orderedIds.push(resolution.mod.id);
     }
-    if (orderedFileNames.length > 0) {
+    if (orderedIds.length > 0) {
         console.log(
-            `[profiles] reorder: ${orderedFileNames.length} mods -> pak01..pak${orderedFileNames.length} ` +
+            `[profiles] reorder: ${orderedIds.length} mods laid out densely across addon folders ` +
             `(skipped ${reorderSkippedUnmatched} unmatched, ${reorderSkippedDisabled} disabled)`
         );
-        await reorderMods(deadlockPath, orderedFileNames);
+        await reorderMods(deadlockPath, orderedIds);
     } else {
         console.log(`[profiles] reorder: nothing to reorder`);
     }

@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renameSync } from 'fs';
 import { join, extname } from 'path';
-import { getGameinfoPath, getAddonsPath, getDisabledPath, getCitadelPath, getGrimoirePath } from './deadlock';
+import { getGameinfoPath, getDisabledPath, getCitadelPath, getGrimoirePath, getOverflowFolderNames, getAddonFolderPaths } from './deadlock';
 
 // The canonical SearchPaths block for Deadlock with mod support
 const SEARCH_PATHS_BLOCK = `SearchPaths
@@ -16,6 +16,20 @@ const SEARCH_PATHS_BLOCK = `SearchPaths
 		AddonRoot			citadel_addons
 		OfficialAddonRoot		citadel_community_addons
 	}`;
+
+// The canonical block with one extra `Game citadel/addonsN` line per overflow
+// folder, inserted right after the base citadel/addons line and reusing its
+// indentation. Per Model A precedence (earlier line wins), base addons outranks
+// addons1 outranks addons2, etc. With no overflow folders this is byte-identical
+// to SEARCH_PATHS_BLOCK, so existing installs are unaffected.
+function buildSearchPathsBlock(overflowFolderNames: string[]): string {
+    if (overflowFolderNames.length === 0) return SEARCH_PATHS_BLOCK;
+    return SEARCH_PATHS_BLOCK.replace(
+        /^([^\S\n]*Game[^\S\n]+)citadel\/addons[^\S\n]*$/m,
+        (line, prefix: string) =>
+            [line, ...overflowFolderNames.map((name) => `${prefix}citadel/${name}`)].join('\n')
+    );
+}
 
 export interface GameinfoStatus {
     configured: boolean;
@@ -77,32 +91,26 @@ function findSearchPathsBlock(
 }
 
 // True when the SearchPaths body has an active (non-commented) entry pointing the
-// engine at citadel/addons. Checking inside the block and ignoring // comments
-// means a stray "citadel/addons" in a comment or elsewhere in the file no longer
-// reads as configured: that false positive is what let a DLM-mangled gameinfo.gi
-// look healthy while mods silently failed to load.
-function hasActiveAddonPath(searchPathsBody: string): boolean {
-    return searchPathsBody.split(/\r?\n/).some((line) => {
-        const code = line.split('//')[0]; // drop any trailing line comment
-        // Match citadel/addons only as a complete path token. A subfolder path
-        // like citadel/addons/profile_default (which Deadlock Mod Manager writes
-        // in its profile mode) must NOT count as configured: the engine would
-        // search that subfolder, not the addons root where Grimoire drops its
-        // VPKs. The bare substring check this replaces treated that prefix as
-        // healthy, so Grimoire reported "configured" while no mods loaded.
-        return /citadel[\\/]+addons(?![\\/\w])/i.test(code);
-    });
+// engine at the given citadel-relative folder. Matched as a COMPLETE path token,
+// ignoring // comments, so: a stray path in a comment doesn't read as configured
+// (the false positive that let a DLM-mangled gameinfo.gi look healthy); a
+// subfolder like citadel/addons/profile_default (Deadlock Mod Manager's profile
+// mode) does NOT satisfy citadel/addons; and citadel/addons does NOT satisfy a
+// query for citadel/addons1 (or vice versa).
+function hasActivePath(searchPathsBody: string, relPath: string): boolean {
+    const pattern = relPath.replace(/[/\\]/g, '[\\\\/]+');
+    const re = new RegExp(`${pattern}(?![\\\\/\\w])`, 'i');
+    return searchPathsBody.split(/\r?\n/).some((line) => re.test(line.split('//')[0]));
 }
 
-// True when the SearchPaths body has an active entry pointing the engine at
-// citadel/grimoire, the Grimoire-managed override folder (Locker cards + ability
-// sounds). Listed first in the canonical block so it outranks every user mod;
-// matched as a complete token, ignoring comments, same as the addons check.
+function hasActiveAddonPath(searchPathsBody: string): boolean {
+    return hasActivePath(searchPathsBody, 'citadel/addons');
+}
+
+// citadel/grimoire is the Grimoire-managed override folder (Locker cards +
+// ability sounds), listed first in the canonical block so it outranks every mod.
 function hasActiveGrimoirePath(searchPathsBody: string): boolean {
-    return searchPathsBody.split(/\r?\n/).some((line) => {
-        const code = line.split('//')[0];
-        return /citadel[\\/]+grimoire(?![\\/\w])/i.test(code);
-    });
+    return hasActivePath(searchPathsBody, 'citadel/grimoire');
 }
 
 // Both required search paths are present and active. The grimoire path is what
@@ -129,11 +137,11 @@ function backupGameinfoOnce(gameinfoPath: string, original: string): void {
 // Insert the canonical SearchPaths block just inside the FileSystem section, for
 // the case where another tool stripped SearchPaths out entirely. Returns null if
 // there's no FileSystem block to repair (don't guess at an unknown structure).
-function insertSearchPaths(content: string): string | null {
+function insertSearchPaths(content: string, block: string): string | null {
     const match = /FileSystem\s*\{/.exec(content);
     if (!match) return null;
     const insertAt = match.index + match[0].length;
-    return `${content.slice(0, insertAt)}\n\t\t${SEARCH_PATHS_BLOCK}${content.slice(insertAt)}`;
+    return `${content.slice(0, insertAt)}\n\t\t${block}${content.slice(insertAt)}`;
 }
 
 export interface CleanupResult {
@@ -164,10 +172,28 @@ export function getGameinfoStatus(deadlockPath: string): GameinfoStatus {
         const block = findSearchPathsBlock(content);
 
         if (block && hasRequiredSearchPaths(block.body)) {
+            // Required base paths are present. Also require a Game line for every
+            // overflow folder that exists on disk: a >99 user whose gameinfo.gi
+            // lost its overflow paths (a game update reset the file, or an old
+            // build's fixGameinfo dropped them) would otherwise read as configured
+            // while those mods silently stop loading. Vacuously true - and a no-op
+            // - for the common install with no overflow folders, so non-overflow
+            // users are never re-flagged.
+            const missingOverflow = getOverflowFolderNames(deadlockPath).filter(
+                (name) => !hasActivePath(block.body, `citadel/${name}`)
+            );
+            if (missingOverflow.length === 0) {
+                return {
+                    configured: true,
+                    missing: false,
+                    message: 'Addon search paths are configured correctly',
+                    candidates: [],
+                };
+            }
             return {
-                configured: true,
+                configured: false,
                 missing: false,
-                message: 'Addon search paths are configured correctly',
+                message: `Overflow mod folders are missing from gameinfo.gi (${missingOverflow.join(', ')}). Use Fix Configuration to restore them.`,
                 candidates: [],
             };
         }
@@ -221,8 +247,18 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         const content = readFileSync(gameinfoPath, 'utf-8');
         const block = findSearchPathsBlock(content);
 
-        // Already correct: an active addon path inside a real SearchPaths block.
-        if (block && hasRequiredSearchPaths(block.body)) {
+        // The canonical block includes a Game line for every overflow folder that
+        // currently exists on disk, so a user-triggered repair restores them too.
+        const overflow = getOverflowFolderNames(deadlockPath);
+        const canonical = buildSearchPathsBlock(overflow);
+
+        // Already correct: a real SearchPaths block with the required base paths
+        // AND every existing overflow folder's Game line present.
+        if (
+            block &&
+            hasRequiredSearchPaths(block.body) &&
+            overflow.every((name) => hasActivePath(block.body, `citadel/${name}`))
+        ) {
             return {
                 configured: true,
                 missing: false,
@@ -235,11 +271,11 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
         if (block) {
             // Canonicalize: swap whatever SearchPaths block is present (including
             // one a different mod manager rewrote) for our known-good version.
-            next = content.slice(0, block.start) + SEARCH_PATHS_BLOCK + content.slice(block.end);
+            next = content.slice(0, block.start) + canonical + content.slice(block.end);
         } else if (!/SearchPaths/.test(content)) {
             // Another tool stripped SearchPaths out entirely. Rebuild it inside the
             // FileSystem section so mods load again without a game reinstall.
-            const rebuilt = insertSearchPaths(content);
+            const rebuilt = insertSearchPaths(content, canonical);
             if (!rebuilt) {
                 return {
                     configured: false,
@@ -296,11 +332,12 @@ export function cleanupAddons(deadlockPath: string): CleanupResult {
         skippedMinaTextures: 0,
     };
 
-    const addonsPath = getAddonsPath(deadlockPath);
     const disabledPath = getDisabledPath(deadlockPath);
 
-    // Process both enabled and disabled folders
-    for (const folder of [addonsPath, disabledPath]) {
+    // Process every enabled addon folder (base citadel/addons plus any overflow
+    // addonsN) and the shared .disabled parking lot, so leftover archives and
+    // Mina files are normalized wherever a mod ended up.
+    for (const folder of [...getAddonFolderPaths(deadlockPath), disabledPath]) {
         if (!existsSync(folder)) continue;
 
         const files = readdirSync(folder);
