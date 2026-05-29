@@ -307,7 +307,17 @@ if (!gotTheLock) {
                             // entry is here so any future renderer-side asset (e.g. avatar URL
                             // not on Steam's CDN) doesn't trip CSP unexpectedly. Update when a
                             // dedicated grimoire-social production domain is locked.
-                            "connect-src 'self' https://gamebanana.com https://*.gamebanana.com https://api.deadlock-api.com https://*.workers.dev"
+                            //
+                            // The `grimoire-soul:`/`grimoire-hero:` schemes serve the
+                            // Locker's 3D GLBs; GLTFLoader fetches them, so they must be
+                            // allowed here or the load is blocked under the prod CSP (dev
+                            // has no CSP, which is why the 3D previews work in `pnpm dev`
+                            // but not in a packaged build). `blob:` is required too:
+                            // three's GLTFLoader extracts each embedded GLB texture into a
+                            // blob: URL and loads it via ImageBitmapLoader, which fetch()es
+                            // it; without blob: here the textures fail and models render
+                            // untextured (white).
+                            "connect-src 'self' blob: data: grimoire-soul: grimoire-hero: https://gamebanana.com https://*.gamebanana.com https://api.deadlock-api.com https://*.workers.dev"
                         ]
                     }
                 });
