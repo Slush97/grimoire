@@ -1,3 +1,5 @@
+import { formatDateParts } from '../lib/dateFormat';
+
 export interface GameBananaMod {
   id: number;
   name: string;
@@ -75,6 +77,8 @@ export interface GameBananaFile {
   downloadCount: number;
   description?: string;
   isArchived: boolean;
+  /** Unix timestamp (seconds) of when this file was uploaded to GameBanana. */
+  dateAdded?: number;
 }
 
 export interface GameBananaModDetails {
@@ -85,6 +89,11 @@ export interface GameBananaModDetails {
   category?: GameBananaCategory;
   files?: GameBananaFile[];
   previewMedia?: GameBananaPreviewMedia;
+}
+
+export interface GameBananaModFileList {
+  id: number;
+  files: Array<{ id: number; isArchived: boolean }>;
 }
 
 export interface GameBananaComment {
@@ -191,7 +200,7 @@ export function getPrimaryFile(files: GameBananaFile[]): GameBananaFile {
 }
 
 export function formatDate(timestamp: number): string {
-  return new Date(timestamp * 1000).toLocaleDateString();
+  return formatDateParts(new Date(timestamp * 1000));
 }
 
 // Mods updated before this date may be incompatible with the current game version

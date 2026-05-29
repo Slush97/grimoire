@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Download, Loader2, X, ChevronUp } from 'lucide-react';
+import { Download, Loader2, X, ChevronUp, ChevronDown } from 'lucide-react';
 import type { DownloadQueueItem, DownloadProgressData } from '../types/electron';
 
 interface DownloadQueueIndicatorProps {
@@ -118,6 +118,10 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
         await window.electronAPI.removeFromQueue(modId);
     };
 
+    const handleCancelActive = async () => {
+        await window.electronAPI.cancelActiveDownload();
+    };
+
     const totalItems = queueState.queue.length + (queueState.currentDownload ? 1 : 0);
     const progressPercent =
         queueState.progress && queueState.progress.total > 0
@@ -138,43 +142,62 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     return (
         <div className={`pointer-events-auto ${className}`}>
             {/* Collapsed pill: compact chip with filename + percent and an
-                inline progress bar across the bottom edge. Clicking pops the
-                expanded panel up above it. */}
+                inline progress bar across the bottom edge. Clicking the body
+                pops the expanded panel; the trailing X (when a download is
+                actually in flight) cancels the active fetch. */}
             {!isExpanded && (
-                <button
-                    type="button"
-                    onClick={() => setIsExpanded(true)}
-                    className="group relative flex w-72 items-center gap-2.5 overflow-hidden rounded-full border border-white/10 bg-bg-secondary/95 px-3 py-2 text-left shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90 cursor-pointer"
-                    title="Show download details"
+                <div
+                    className="group relative flex w-72 items-stretch overflow-hidden rounded-full border border-white/10 bg-bg-secondary/95 text-left shadow-lg shadow-black/40 backdrop-blur-md transition-colors hover:border-accent/40 hover:bg-bg-tertiary/90"
                 >
-                    <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent/15">
-                        {queueState.currentDownload ? (
-                            <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
-                        ) : (
-                            <Download className="h-3.5 w-3.5 text-accent" />
-                        )}
-                    </span>
-                    <div className="min-w-0 flex-1">
-                        <div className="truncate text-[13px] font-medium leading-tight text-text-primary" title={currentFileName}>
-                            {currentFileName}
-                        </div>
-                        <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-secondary">
-                            <span className="tabular-nums">{progressPercentRounded}%</span>
-                            {speed > 0 && (
-                                <>
-                                    <span className="opacity-50">·</span>
-                                    <span className="tabular-nums">{formatSpeed(speed)}</span>
-                                </>
+                    <button
+                        type="button"
+                        onClick={() => setIsExpanded(true)}
+                        className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 cursor-pointer text-left"
+                        title="Show download details"
+                    >
+                        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent/15">
+                            {queueState.currentDownload ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin text-accent" />
+                            ) : (
+                                <Download className="h-3.5 w-3.5 text-accent" />
                             )}
-                            {totalItems > 1 && (
-                                <>
-                                    <span className="opacity-50">·</span>
-                                    <span>{totalItems - 1} queued</span>
-                                </>
-                            )}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                            <div className="truncate text-[13px] font-medium leading-tight text-text-primary" title={currentFileName}>
+                                {currentFileName}
+                            </div>
+                            <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-secondary">
+                                <span className="tabular-nums">{progressPercentRounded}%</span>
+                                {speed > 0 && (
+                                    <>
+                                        <span className="opacity-50">·</span>
+                                        <span className="tabular-nums">{formatSpeed(speed)}</span>
+                                    </>
+                                )}
+                                {totalItems > 1 && (
+                                    <>
+                                        <span className="opacity-50">·</span>
+                                        <span>{totalItems - 1} queued</span>
+                                    </>
+                                )}
+                            </div>
                         </div>
-                    </div>
-                    <ChevronUp className="h-4 w-4 flex-shrink-0 text-text-secondary opacity-0 transition-opacity group-hover:opacity-100" />
+                        <ChevronUp className="h-4 w-4 flex-shrink-0 text-text-secondary opacity-0 transition-opacity group-hover:opacity-100" />
+                    </button>
+                    {queueState.currentDownload && (
+                        <button
+                            type="button"
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                void handleCancelActive();
+                            }}
+                            className="flex flex-shrink-0 items-center justify-center border-l border-white/5 px-3 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
+                            aria-label="Cancel download"
+                            title="Cancel download"
+                        >
+                            <X className="h-4 w-4" />
+                        </button>
+                    )}
                     <span
                         aria-hidden
                         className="pointer-events-none absolute inset-x-0 bottom-0 h-[2px] bg-white/5"
@@ -184,7 +207,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                             style={{ width: `${progressPercent}%` }}
                         />
                     </span>
-                </button>
+                </div>
             )}
 
             {/* Expanded panel: opens upward (transform-origin-bottom) so the
@@ -205,7 +228,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                             aria-label="Collapse"
                             title="Collapse"
                         >
-                            <X className="h-3.5 w-3.5" />
+                            <ChevronDown className="h-4 w-4" />
                         </button>
                     </div>
 
@@ -222,6 +245,15 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 <span className="text-xs tabular-nums text-accent font-semibold">
                                     {progressPercentRounded}%
                                 </span>
+                                <button
+                                    type="button"
+                                    onClick={() => void handleCancelActive()}
+                                    className="rounded-md p-1 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
+                                    aria-label="Cancel download"
+                                    title="Cancel download"
+                                >
+                                    <X className="h-3.5 w-3.5" />
+                                </button>
                             </div>
                             <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-white/5">
                                 <div

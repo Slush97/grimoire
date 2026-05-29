@@ -15,10 +15,43 @@ import {
   showOpenDialog,
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
 import SocialAccountSection from '../components/social/SocialAccountSection';
+
+// GitHub Releases is the source of truth for changelogs. When we have local
+// release notes (an update is pending) we show them in-app; otherwise we link
+// out to the release page so users can read "what's new" even when up to date.
+const GITHUB_RELEASES_URL = 'https://github.com/Slush97/grimoire/releases';
+const releaseTagUrl = (version?: string | null) =>
+  version ? `${GITHUB_RELEASES_URL}/tag/v${version}` : GITHUB_RELEASES_URL;
+
+// A version number that links to its GitHub release notes. Renders nothing when
+// there's no version to point at.
+function ReleaseVersionLink({ version, className = '' }: { version?: string | null; className?: string }) {
+  if (!version) return null;
+  return (
+    <a
+      href={releaseTagUrl(version)}
+      target="_blank"
+      rel="noopener noreferrer"
+      title={`View v${version} release notes on GitHub`}
+      className={`underline decoration-dotted underline-offset-2 transition-colors hover:text-accent ${className}`}
+    >
+      v{version}
+    </a>
+  );
+}
+
+/** Human-readable byte size (MB below a GB, GB above). */
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 MB';
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1024) return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
 
 export default function Settings() {
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
@@ -39,6 +72,10 @@ export default function Settings() {
   const [isWipingCache, setIsWipingCache] = useState(false);
   const [wipeResult, setWipeResult] = useState<string | null>(null);
   const [wipeConfirmOpen, setWipeConfirmOpen] = useState(false);
+  const [previewCacheBytes, setPreviewCacheBytes] = useState<number | null>(null);
+  const [isClearingPreview, setIsClearingPreview] = useState(false);
+  const [previewResult, setPreviewResult] = useState<string | null>(null);
+  const [previewConfirmOpen, setPreviewConfirmOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetResult, setResetResult] = useState<string | null>(null);
 
@@ -247,6 +284,12 @@ export default function Settings() {
     }
   };
 
+  const handleDateFormatChange = async (format: 'MM/DD/YYYY' | 'DD/MM/YYYY') => {
+    if (settings && settings.dateFormat !== format) {
+      await saveSettings({ ...settings, dateFormat: format });
+    }
+  };
+
   const handleDevModeChange = async (checked: boolean) => {
     if (!settings) return;
     if (checked) {
@@ -394,6 +437,18 @@ export default function Settings() {
     window.electronAPI.updater.installUpdate();
   }, []);
 
+  // "What's New" entry point that works in every state. If an update is pending
+  // we have its release notes locally, so open the in-app changelog. Otherwise
+  // (up to date, or a package-managed install) send users to this build's
+  // GitHub release page so they can always read the notes.
+  const handleViewWhatsNew = useCallback(() => {
+    if (updateStatus?.updateInfo?.releaseNotes) {
+      setShowChangelog(true);
+    } else {
+      window.open(releaseTagUrl(appVersion), '_blank', 'noopener,noreferrer');
+    }
+  }, [updateStatus, appVersion]);
+
   // Listen for sync progress
   useEffect(() => {
     const unsub = window.electronAPI.onSyncProgress((data) => {
@@ -406,6 +461,13 @@ export default function Settings() {
       }
     });
     return unsub;
+  }, []);
+
+  useEffect(() => {
+    window.electronAPI
+      .getPreviewCacheSize()
+      .then((r) => setPreviewCacheBytes(r.bytes))
+      .catch(() => setPreviewCacheBytes(null));
   }, []);
 
   const handleSyncDatabase = async () => {
@@ -434,6 +496,21 @@ export default function Settings() {
       setWipeResult(String(err));
     } finally {
       setIsWipingCache(false);
+    }
+  };
+
+  const handleClearPreviewCache = async () => {
+    setPreviewConfirmOpen(false);
+    setIsClearingPreview(true);
+    setPreviewResult(null);
+    try {
+      const { bytesFreed } = await window.electronAPI.clearPreviewCache();
+      setPreviewCacheBytes(0);
+      setPreviewResult(`Cleared ${formatBytes(bytesFreed)}.`);
+    } catch (err) {
+      setPreviewResult(String(err));
+    } finally {
+      setIsClearingPreview(false);
     }
   };
 
@@ -592,13 +669,13 @@ export default function Settings() {
                 </div>
                 {updateStatus?.available && !updateStatus.downloaded && (
                   <span className="text-xs text-accent">
-                    v{updateStatus.updateInfo?.version} available!
+                    <ReleaseVersionLink version={updateStatus.updateInfo?.version} /> available!
                   </span>
                 )}
                 {updateStatus?.downloaded && (
                   <span className="text-xs text-green-400 inline-flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    v{updateStatus.updateInfo?.version} ready to install
+                    <ReleaseVersionLink version={updateStatus.updateInfo?.version} /> ready to install
                   </span>
                 )}
                 {upToDate && !updateStatus?.available && !updateStatus?.checking && (
@@ -609,6 +686,15 @@ export default function Settings() {
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
+                {/* Always present so release notes are reachable in any state,
+                    including when up to date or on a package-managed install. */}
+                <Button
+                  onClick={handleViewWhatsNew}
+                  variant="secondary"
+                  icon={Sparkles}
+                >
+                  What's New
+                </Button>
                 {installSource === 'managed' ? null : updateStatus?.downloaded ? (
                   <Button
                     onClick={handleInstallUpdate}
@@ -617,22 +703,12 @@ export default function Settings() {
                     Install & Restart
                   </Button>
                 ) : updateStatus?.available && !updateStatus.downloading ? (
-                  <>
-                    {updateStatus.updateInfo?.releaseNotes && (
-                      <Button
-                        onClick={() => setShowChangelog(true)}
-                        variant="secondary"
-                      >
-                        View Changelog
-                      </Button>
-                    )}
-                    <Button
-                      onClick={handleDownloadUpdate}
-                      icon={Download}
-                    >
-                      Download Update
-                    </Button>
-                  </>
+                  <Button
+                    onClick={handleDownloadUpdate}
+                    icon={Download}
+                  >
+                    Download Update
+                  </Button>
                 ) : (
                   <Button
                     onClick={handleCheckForUpdates}
@@ -651,9 +727,13 @@ export default function Settings() {
               <div className="rounded-lg bg-bg-tertiary border border-white/10 p-3 text-sm text-text-secondary space-y-2">
                 <p className="text-text-primary font-medium">Updates are managed by your package manager.</p>
                 <p>
-                  Grimoire was installed via a system package. Update with your distro's usual tools (for example{' '}
-                  <code className="font-mono text-text-primary">yay -Syu grimoire-bin</code> on Arch). If you installed the{' '}
-                  <code className="font-mono text-text-primary">.deb</code> directly, re-download the latest release.
+                  Grimoire was installed via a system package. Update with your distro's tools:{' '}
+                  <code className="font-mono text-text-primary">yay -Syu grimoire-bin</code> on Arch, or{' '}
+                  <code className="font-mono text-text-primary">{'sudo apt update && sudo apt upgrade'}</code> on Debian/Ubuntu.
+                </p>
+                <p>
+                  Installed the <code className="font-mono text-text-primary">.deb</code> manually? Add the apt repository for
+                  automatic updates (instructions at <code className="font-mono text-text-primary">grimoiremods.com/download</code>).
                 </p>
               </div>
             )}
@@ -812,7 +892,7 @@ export default function Settings() {
         <Card title="Preferences" icon={Shield}>
           <div className="space-y-6">
             <Toggle
-              checked={settings?.hideNsfwPreviews ?? false}
+              checked={settings?.hideNsfwPreviews ?? true}
               onChange={handleHideNsfwChange}
               label="Hide NSFW Content"
               description="Blur thumbnail images for mods marked as NSFW."
@@ -832,8 +912,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.autoDisableSiblingVariants ?? true}
               onChange={handleAutoDisableSiblingsChange}
-              label="Auto-disable older variants on re-download"
-              description="When you re-download a GameBanana mod with a different file, automatically disable the previously installed variant. Disable this if you want to keep multiple variants enabled at once."
+              label="Switch variants instead of stacking them"
+              description="When you install a different file of a mod you already have enabled, disable the previous variant so only the new one is active. Turn off to keep multiple variants of the same mod enabled at once. (Updates always replace the old file regardless of this setting.)"
             />
 
             <div className="h-px bg-white/5" />
@@ -860,6 +940,36 @@ export default function Settings() {
                   {settings.devDeadlockPath}
                 </div>
               )}
+            </div>
+
+            <div className="h-px bg-white/5" />
+
+            <div>
+              <label className="text-sm font-medium text-text-primary block">Date Format</label>
+              <p className="text-xs text-text-secondary mt-0.5 mb-2">
+                How upload and update dates are shown on mods and files.
+              </p>
+              <div className="inline-flex rounded-md border border-white/10 overflow-hidden">
+                {(['MM/DD/YYYY', 'DD/MM/YYYY'] as const).map((fmt, i) => {
+                  const active = (settings?.dateFormat ?? 'MM/DD/YYYY') === fmt;
+                  return (
+                    <button
+                      key={fmt}
+                      onClick={() => handleDateFormatChange(fmt)}
+                      className={`px-4 py-2 text-sm font-medium transition-colors cursor-pointer ${
+                        i > 0 ? 'border-l border-white/10' : ''
+                      } ${
+                        active
+                          ? 'bg-accent/20 text-text-primary'
+                          : 'bg-bg-tertiary text-text-secondary hover:bg-white/5'
+                      }`}
+                    >
+                      {fmt}
+                      <span className="ml-2 text-xs text-text-tertiary">{formatDateParts(new Date(), fmt)}</span>
+                    </button>
+                  );
+                })}
+              </div>
             </div>
           </div>
         </Card>
@@ -894,6 +1004,15 @@ export default function Settings() {
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalSocial: checked })}
               label="Grimoire Social"
               description="Sign in with Steam to publish profiles and browse uploads from other players in Discover."
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.experimentalUnknownModMatching ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalUnknownModMatching: checked })}
+              label="Fix Unknown Mods"
+              description="Auto-match unknown local VPKs against GameBanana to recover their names and thumbnails. Currently hits rate limits on larger libraries while we rework it. The manual Custom Mod path stays available either way."
             />
           </div>
         </Card>
@@ -1140,6 +1259,40 @@ export default function Settings() {
             </div>
           </div>
         </Card>
+
+        {/* Local preview cache - Full Width */}
+        <Card title="Local preview cache" icon={HardDrive} className="lg:col-span-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-4 mb-2">
+                <div className="text-2xl font-bold font-valvepulp text-text-primary">
+                  {previewCacheBytes != null ? formatBytes(previewCacheBytes) : '---'}
+                </div>
+                <Badge variant="info">On Disk</Badge>
+              </div>
+              <p className="text-xs text-text-secondary">
+                3D model stills, hero portraits, and locker card thumbnails. These
+                rebuild automatically from your installed mods when next viewed.
+                Your installed mods are not affected.
+              </p>
+              {previewResult && (
+                <p className="text-xs text-text-secondary mt-2 animate-fade-in">{previewResult}</p>
+              )}
+            </div>
+
+            <div className="flex gap-3 shrink-0">
+              <Button
+                onClick={() => setPreviewConfirmOpen(true)}
+                disabled={isClearingPreview || !previewCacheBytes}
+                isLoading={isClearingPreview}
+                variant="danger"
+                icon={Trash2}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Changelog Modal */}
@@ -1149,7 +1302,9 @@ export default function Settings() {
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div>
-                <h2 className="text-xl font-bold">What's New in v{updateStatus.updateInfo.version}</h2>
+                <h2 className="text-xl font-bold">
+                  What's New in <ReleaseVersionLink version={updateStatus.updateInfo.version} />
+                </h2>
                 {updateStatus.updateInfo.releaseDate && (
                   <p className="text-sm text-text-secondary mt-1">
                     Released {new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString()}
@@ -1173,7 +1328,9 @@ export default function Settings() {
                 <div className="space-y-4">
                   {updateStatus.updateInfo.releaseNotes.map((note, idx) => (
                     <div key={idx}>
-                      <h3 className="font-semibold text-accent">v{note.version}</h3>
+                      <h3 className="font-semibold text-accent">
+                        <ReleaseVersionLink version={note.version} />
+                      </h3>
                       {note.note && (
                         <div
                           className="prose prose-invert prose-sm max-w-none mt-1"
@@ -1215,6 +1372,16 @@ export default function Settings() {
         title="Wipe mod cache?"
         message="This removes all cached mod metadata and sync state. The next Browse session will re-sync from GameBanana (a few minutes on first run). Your installed mods are not affected."
         confirmLabel="Wipe Cache"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={previewConfirmOpen}
+        onCancel={() => setPreviewConfirmOpen(false)}
+        onConfirm={handleClearPreviewCache}
+        title="Clear preview cache?"
+        message="This deletes the cached 3D model stills, hero portraits, and locker card thumbnails to reclaim disk. They regenerate on demand the next time you view them (a brief pause on first view). Your installed mods are not affected."
+        confirmLabel="Clear"
         variant="danger"
       />
 

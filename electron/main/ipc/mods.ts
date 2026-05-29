@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { promises as fs, existsSync } from 'fs';
-import { extname, join } from 'path';
+import { extname } from 'path';
 import { loadSettings, saveSettings } from '../services/settings';
 import {
     scanMods,
@@ -10,21 +10,27 @@ import {
     setModPriority,
     reorderMods,
     swapModPriority,
-    findNextAvailablePriority,
+    allocateEnabledVpkPath,
     Mod,
 } from '../services/mods';
-import { getAddonsPath } from '../services/deadlock';
+import { metaKeyFor } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
+import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
+import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory } from '../services/vpk';
+import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
+import { isLockerManaged } from '../services/lockerVpk';
 import {
     detectUnknownModCacheMatches,
     detectUnknownModFilters,
+    inferHeroFromVpkTree,
     type UnknownModCacheMatchInput,
     type UnknownModFilterGuess,
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
+import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { getMainWindow } from '../index';
-import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs } from '../../../src/types/mod';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -45,14 +51,140 @@ function getActiveDeadlockPath(): string | null {
 }
 
 /**
- * Enrich mod with metadata
+ * Enrich mod with metadata.
+ *
+ * For Sound mods without a stored lockerHero, lazily infer one from the mod
+ * name and persist it. The infer call is cheap (substring + a few regexes per
+ * hero) but writing back means follow-up scans skip the work and the manual
+ * override path has a stable field to overwrite.
  */
+/**
+ * Resolve a mod's Locker global type, classifying from the VPK tree when it has
+ * not been classified yet OR when an older classifier version produced a stale
+ * `null` ("not global") result. A positive type is left untouched: it may be a
+ * manual override, and re-running can't improve a confident hit. Runs for mods
+ * with no metadata row too (a VPK dropped straight into citadel/addons), so
+ * locally added HUD / Soul Container mods get tagged like downloaded ones.
+ * Persists the result + classifier version so later scans skip the re-parse.
+ */
+function resolveGlobalType(
+    mod: Mod,
+    metadata: ReturnType<typeof getModMetadata>
+): import('../../../src/types/mod').GlobalModType | null {
+    const current = metadata?.globalType;
+    const stamped = metadata?.globalTypeClassifierVersion ?? 0;
+    const needsClassify =
+        current === undefined || (current === null && stamped < GLOBAL_CLASSIFIER_VERSION);
+    if (!needsClassify) return current;
+    let classified: ReturnType<typeof classifyGlobalModFromVpk> = null;
+    try {
+        classified = classifyGlobalModFromVpk(mod.path);
+    } catch (err) {
+        console.warn(`[enrichMod] VPK global-type classification failed for ${mod.fileName}:`, err);
+    }
+    setModMetadata(mod.metaKey, {
+        globalType: classified,
+        globalTypeClassifierVersion: GLOBAL_CLASSIFIER_VERSION,
+    });
+    return classified;
+}
+
+/**
+ * File-tree hero tag for UNKNOWN mods. Known mods get their hero from the
+ * GameBanana category; unknown skins have no metadata, so we infer the hero
+ * from the VPK tree (inferHeroFromVpkTree, which recognizes skins, not just
+ * sound mods) and tag it like a downloaded mod so the Locker chip + icon show.
+ * Only accepts a confident (strong/medium) signal to avoid mislabeling, and
+ * stamps lockerHeroVpkChecked so a "no hero found" result isn't re-parsed every
+ * scan. A recognized global cosmetic (soul container, HUD, ...) isn't per-hero,
+ * so it's skipped entirely.
+ */
+function resolveUnknownLockerHero(
+    mod: Mod,
+    metadata: ReturnType<typeof getModMetadata>,
+    isUnknown: boolean,
+    globalType: GlobalModType | null
+): { lockerHero?: string; lockerHeroSource?: LockerHeroSource } {
+    if (!isUnknown) return {};
+    if (metadata?.lockerHero) {
+        return { lockerHero: metadata.lockerHero, lockerHeroSource: metadata.lockerHeroSource };
+    }
+    if (globalType) return {};
+    if (metadata?.lockerHeroVpkChecked) return {};
+
+    let lockerHero: string | undefined;
+    let lockerHeroSource: LockerHeroSource | undefined;
+    try {
+        const guess = inferHeroFromVpkTree(mod.path);
+        if (guess && guess.strongestSignal !== 'weak') {
+            lockerHero = guess.name;
+            lockerHeroSource = 'vpk';
+        }
+    } catch (err) {
+        console.warn(`[enrichMod] VPK-tree hero inference failed for ${mod.fileName}:`, err);
+    }
+    setModMetadata(mod.metaKey, { lockerHero, lockerHeroVpkChecked: true });
+    return { lockerHero, lockerHeroSource };
+}
+
 function enrichMod(mod: Mod): Mod {
-    const metadata = getModMetadata(mod.fileName);
+    const metadata = getModMetadata(mod.metaKey);
     const isUnknown =
         !metadata?.gameBananaId &&
         !(typeof metadata?.modName === 'string' && metadata.modName.trim().length > 0);
+    // Classify the global (non-hero) cosmetic type for EVERY scanned VPK, even
+    // ones with no metadata row, so locally added mods get tagged like
+    // downloaded ones. resolveGlobalType persists the result + classifier
+    // version so subsequent scans skip the parse.
+    const globalType = resolveGlobalType(mod, metadata);
     if (metadata) {
+        let lockerHero = metadata.lockerHero;
+        let lockerHeroSource = metadata.lockerHeroSource;
+        if (!lockerHero && metadata.sourceSection === 'Sound') {
+            // Title match first because it's O(1) regex; only crack open the
+            // VPK if the title gave us nothing. The VPK path is authoritative
+            // (parses real Source 2 codenames like `ghost` → Lady Geist) but
+            // costs a disk read + directory tree parse per call.
+            let inferred = inferHeroFromTitle(metadata.modName || mod.name);
+            let inferredSource: typeof lockerHeroSource = inferred ? 'title' : undefined;
+            if (!inferred) {
+                try {
+                    inferred = inferHeroFromVpk(mod.path);
+                    inferredSource = inferred ? 'vpk' : undefined;
+                } catch (err) {
+                    console.warn(`[enrichMod] VPK hero inference failed for ${mod.fileName}:`, err);
+                }
+            }
+            if (inferred) {
+                setModMetadata(mod.metaKey, { lockerHero: inferred, lockerHeroSource: inferredSource });
+                lockerHero = inferred;
+                lockerHeroSource = inferredSource;
+            }
+        } else if (!lockerHero && isUnknown) {
+            // Unknown mod (no GameBanana category to lean on): tag the hero from
+            // the VPK tree so the card/Locker show the same chip as known mods.
+            const resolved = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
+            lockerHero = resolved.lockerHero;
+            lockerHeroSource = resolved.lockerHeroSource;
+        }
+        // Per-ability sound footprint. Same lazy + persist + null-sentinel
+        // pattern as globalType, and it shares the cached VPK parse, so the two
+        // classifications cost one directory read between them. Lets the
+        // per-ability sound picker know which abilities a mod offers a sound for.
+        let abilitySounds = metadata.abilitySounds;
+        if (abilitySounds === undefined) {
+            let classified: AbilitySoundClassification | null = null;
+            try {
+                const result = classifyAbilitySoundsFromVpk(mod.path);
+                // Store null ("checked, none") unless a recognized hero matched,
+                // so skins and non-sound mods skip the re-parse on later scans.
+                classified = result && result.dominantHero ? result : null;
+            } catch (err) {
+                console.warn(`[enrichMod] VPK ability-sound classification failed for ${mod.fileName}:`, err);
+            }
+            setModMetadata(mod.metaKey, { abilitySounds: classified });
+            abilitySounds = classified;
+        }
         return {
             ...mod,
             // Use the stored mod name from GameBanana if available
@@ -71,9 +203,20 @@ function enrichMod(mod: Mod): Mod {
             variantLabel: metadata.variantLabel,
             fileDescription: metadata.fileDescription,
             sourceFileName: metadata.sourceFileName,
+            lockerHero,
+            lockerHeroSource,
+            globalType: globalType ?? undefined,
+            merged: metadata.merged,
+            lockerCosmetics: metadata.lockerCosmetics,
+            lockerSounds: metadata.lockerSounds,
+            abilitySounds: abilitySounds ?? undefined,
+            ignoreUpdates: metadata.ignoreUpdates,
         };
     }
-    return { ...mod, isUnknown };
+    // No metadata row (a VPK dropped straight into addons): still file-tree tag
+    // the hero so unknown skins get their Locker chip like downloaded mods.
+    const { lockerHero, lockerHeroSource } = resolveUnknownLockerHero(mod, metadata, isUnknown, globalType);
+    return { ...mod, isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
 }
 
 function sameKeys(a: string[], b: string[]): boolean {
@@ -99,10 +242,21 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     }
     const mods = await scanMods(deadlockPath);
     // Self-heal users whose metadata.json still carries orphan entries from
-    // pre-fix deletes (issue #26). pruneOrphanMetadata is a no-op when there
-    // are none, so the steady-state cost is one JSON parse.
-    pruneOrphanMetadata(new Set(mods.map((m) => m.fileName)));
-    return mods.map(enrichMod);
+    // pre-fix deletes (issue #26). Skip while dev mode is active: the dev
+    // sandbox starts empty, and pruning against it would wipe every real
+    // install's name/thumbnail/gameBananaId from the global metadata sidecar.
+    const settings = loadSettings();
+    if (!settings.devMode) {
+        // Prune against ALL scanned files (including managed VPKs) so we don't
+        // wipe their metadata before filtering them out of the list below.
+        pruneOrphanMetadata(new Set(mods.map((m) => m.metaKey)));
+    }
+    // Hide Grimoire-managed Locker VPKs (hero cards + ability sounds). They're
+    // driven solely through the Locker pickers and are auto-enabled + pinned to
+    // the front of the load order (services/lockerVpk.ts), so surfacing them in
+    // the Installed list would only let the user disable or reorder them and
+    // silently break their applied cosmetics.
+    return mods.filter((m) => !isLockerManaged(m.metaKey)).map(enrichMod);
 });
 
 // enable-mod
@@ -295,7 +449,7 @@ ipcMain.handle(
             throw new Error(`Mod not found: ${modId}`);
         }
 
-        await setModMetadataWithHash(target.fileName, {
+        await setModMetadataWithHash(target.metaKey, {
             modName: args.name.trim(),
             thumbnailUrl: args.thumbnailDataUrl,
             nsfw: !!args.nsfw,
@@ -305,7 +459,93 @@ ipcMain.handle(
     }
 );
 
-// set-variant-label — user-facing rename of a single VPK (the "variant"
+// list-unknown-mod-files - read the raw file paths inside an unknown VPK so the
+// user can eyeball what it touches before linking it. Pure local parse: no
+// GameBanana calls, so it never trips the rate limiter.
+ipcMain.handle('list-unknown-mod-files', async (_, modId: string): Promise<UnknownModFileList> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const mods = await scanMods(deadlockPath);
+    const target = mods.find((m) => m.id === modId);
+    if (!target) {
+        throw new Error(`Mod not found: ${modId}`);
+    }
+    const paths = parseVpkDirectory(target.path) ?? [];
+    return { paths, fileCount: paths.length };
+});
+
+// associate-unknown-mod - manually link an unknown local VPK to a GameBanana mod
+// the user picked via search. Tags the existing file in place (no download, no
+// delete), so it costs zero archive fetches. Setting gameBananaId clears the
+// isUnknown flag in enrichMod.
+ipcMain.handle(
+    'associate-unknown-mod',
+    async (_, modId: string, args: AssociateUnknownModArgs): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        if (!args || !Number.isFinite(args.gameBananaId) || !args.modName?.trim()) {
+            throw new Error('A GameBanana mod selection is required');
+        }
+
+        const mods = await scanMods(deadlockPath);
+        const target = mods.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+
+        await setModMetadataWithHash(target.metaKey, {
+            modName: args.modName.trim(),
+            gameBananaId: args.gameBananaId,
+            gameBananaFileId: args.gameBananaFileId,
+            thumbnailUrl: args.thumbnailUrl,
+            nsfw: !!args.nsfw,
+            categoryName: args.categoryName,
+            sourceSection: args.sourceSection,
+        }, target.path);
+
+        return enrichMod(target);
+    }
+);
+
+// edit-local-mod - local/custom VPKs keep engine-safe pakNN filenames, so
+// edits update the human-readable metadata shown in Grimoire.
+ipcMain.handle(
+    'edit-local-mod',
+    async (_, modId: string, args: EditLocalModArgs): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const trimmed = args?.name?.trim() ?? '';
+        if (!trimmed) {
+            throw new Error('A name is required');
+        }
+
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        const existing = getModMetadata(target.metaKey) ?? {};
+        if (typeof existing.gameBananaId === 'number' && existing.gameBananaId > 0) {
+            throw new Error('Only local mods can be renamed');
+        }
+
+        await setModMetadataWithHash(target.metaKey, {
+            modName: trimmed,
+            thumbnailUrl: args.thumbnailDataUrl,
+            nsfw: !!args.nsfw,
+        }, target.path);
+
+        return enrichMod(target);
+    }
+);
+
+// set-variant-label - user-facing rename of a single VPK (the "variant"
 // inside a grouped mod). Stored alongside the mod's other metadata so it
 // survives priority renames via migrateModMetadata. An empty string clears
 // the label and falls back to the filename-derived display.
@@ -322,8 +562,87 @@ ipcMain.handle(
             throw new Error(`Mod not found: ${modId}`);
         }
         const trimmed = label.trim();
-        setModMetadata(target.fileName, {
+        setModMetadata(target.metaKey, {
             variantLabel: trimmed.length > 0 ? trimmed : undefined,
+        });
+        return enrichMod(target);
+    }
+);
+
+// set-mod-locker-hero — manual hero tag for the Locker. Pass null to clear
+// the override and fall back to categoryId / inferHeroFromTitle. Used from
+// the Locker's "unassigned" section when GameBanana left a mod under the
+// generic "Skins" parent (or when an author misspelled the hero name).
+ipcMain.handle(
+    'set-mod-locker-hero',
+    async (_, modId: string, heroName: string | null): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        const trimmed = heroName?.trim() ?? '';
+        setModMetadata(target.metaKey, {
+            lockerHero: trimmed.length > 0 ? trimmed : undefined,
+            lockerHeroSource: trimmed.length > 0 ? 'manual' : undefined,
+            ...(trimmed.length > 0 ? { globalType: undefined } : {}),
+        });
+        return enrichMod(target);
+    }
+);
+
+// set-mod-global-type — manual override for the Locker's Global axis, used when
+// the VPK-path classifier (classifyGlobalModType) misses a mod or files it
+// under the wrong type. Pass a GlobalModType to assign it (this also clears any
+// hero tag, since a mod lives on either the hero axis or the global axis, never
+// both). Pass null to force it OFF the global axis: we persist the explicit null
+// so the classifier doesn't just re-add it on the next scan. A positive type
+// always wins over auto-classification (enrichMod never re-runs a positive
+// result); the null is stamped with the current classifier version so a stale
+// null re-run can't override this deliberate "not global" choice.
+ipcMain.handle(
+    'set-mod-global-type',
+    async (_, modId: string, globalType: GlobalModType | null): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        setModMetadata(target.metaKey, {
+            globalType,
+            globalTypeClassifierVersion: GLOBAL_CLASSIFIER_VERSION,
+            // Assigning a global type moves the mod off the hero axis.
+            ...(globalType ? { lockerHero: undefined, lockerHeroSource: undefined } : {}),
+        });
+        return enrichMod(target);
+    }
+);
+
+// set-mod-ignore-updates — manual opt-out from the update-available flag.
+// Pass false to clear and resume normal update detection. Stored alongside
+// other per-mod metadata so it survives priority renames.
+ipcMain.handle(
+    'set-mod-ignore-updates',
+    async (_, modId: string, ignore: boolean): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const all = await scanMods(deadlockPath);
+        const target = all.find((m) => m.id === modId);
+        if (!target) {
+            throw new Error(`Mod not found: ${modId}`);
+        }
+        setModMetadata(target.metaKey, {
+            ignoreUpdates: ignore ? true : undefined,
         });
         return enrichMod(target);
     }
@@ -356,7 +675,7 @@ ipcMain.handle(
         if (!target) {
             throw new Error(`Mod not found: ${modId}`);
         }
-        const existing = getModMetadata(target.fileName) ?? {};
+        const existing = getModMetadata(target.metaKey) ?? {};
         const patch: Record<string, unknown> = { gameBananaFileId: payload.gameBananaFileId };
         if (payload.fileDescription && !existing.fileDescription) {
             patch.fileDescription = payload.fileDescription;
@@ -368,7 +687,7 @@ ipcMain.handle(
         if (payload.sourceFileName && (!existing.sourceFileName || placeholderName)) {
             patch.sourceFileName = payload.sourceFileName;
         }
-        setModMetadata(target.fileName, patch);
+        setModMetadata(target.metaKey, patch);
         return enrichMod(target);
     }
 );
@@ -390,13 +709,13 @@ ipcMain.handle(
 // reorder-mods
 ipcMain.handle(
     'reorder-mods',
-    async (_, orderedFileNames: string[]): Promise<Mod[]> => {
+    async (_, orderedIds: string[]): Promise<Mod[]> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
         migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
-        await reorderMods(deadlockPath, orderedFileNames);
+        await reorderMods(deadlockPath, orderedIds);
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
     }
@@ -476,30 +795,88 @@ ipcMain.handle(
             throw new Error('A name is required');
         }
 
-        const addonsPath = getAddonsPath(deadlockPath);
-        if (!existsSync(addonsPath)) {
-            await fs.mkdir(addonsPath, { recursive: true });
-        }
+        // Imports install ENABLED, so reserve a slot via the overflow-aware
+        // allocator: it fills base addons first and spills into an overflow
+        // folder (creating one + patching gameinfo) when base is full, instead of
+        // failing once a >99 user has filled citadel/addons. Metadata is keyed by
+        // the destination's metaKey (folder-prefixed for an overflow slot).
+        const destPath = await allocateEnabledVpkPath(deadlockPath);
+        const destMetaKey = metaKeyFor(destPath);
 
-        const priority = await findNextAvailablePriority(deadlockPath);
-        const priorityStr = String(priority).padStart(2, '0');
-        const newDirFileName = `pak${priorityStr}_dir.vpk`;
-
-        await fs.copyFile(vpkPath, join(addonsPath, newDirFileName));
+        await fs.copyFile(vpkPath, destPath);
 
         // Scrub any orphan metadata at this slot before writing. setModMetadata
         // merges into the existing entry, so stale fields (gameBananaId,
         // categoryName, etc.) from a prior occupant would otherwise stick to
         // the new local mod and visually merge it with unrelated mods.
-        removeModMetadata(newDirFileName);
-        await setModMetadataWithHash(newDirFileName, {
+        removeModMetadata(destMetaKey);
+        await setModMetadataWithHash(destMetaKey, {
             modName: name.trim(),
             thumbnailUrl: thumbnailDataUrl,
             nsfw: !!nsfw,
-        }, join(addonsPath, newDirFileName));
+        }, destPath);
 
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
+    }
+);
+
+// merge-mods — combine multiple installed VPKs into one via vpkmerge. Sources
+// are disabled (moved to .disabled/) so their priority slots free up; the
+// merged mod takes the next available pakNN slot. Manifest (source list +
+// portable-profile share code) is stored in the merged mod's metadata so
+// unmerge can either re-enable the originals or fall back to the share code.
+ipcMain.handle('merge-mods', async (_, args: MergeModsArgs): Promise<Mod> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const result = await mergeMods(deadlockPath, args.modIds, {
+        name: args.name,
+        thumbnailDataUrl: args.thumbnailDataUrl,
+        strict: args.strict,
+    });
+    return enrichMod(result.mod);
+});
+
+// unmerge-mod — reverse a merge by re-enabling sources still on disk and
+// deleting the merged VPK. Returns missing-source filenames + the share code
+// so the renderer can offer the portable-profile import flow for recovery.
+ipcMain.handle(
+    'unmerge-mod',
+    async (_, mergedModId: string): Promise<UnmergeModResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const result = await unmergeMod(deadlockPath, mergedModId);
+        return {
+            ...result,
+            recovered: result.recovered.map(enrichMod),
+        };
+    }
+);
+
+// extract-merge-source — pull one source out of a merged VPK and restore it as
+// a standalone mod. The remaining sources are re-merged in place (or the merge
+// dissolves when fewer than two would remain).
+ipcMain.handle(
+    'extract-merge-source',
+    async (
+        _,
+        mergedModId: string,
+        sourceFileName: string
+    ): Promise<ExtractMergeSourceResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const result = await extractMergeSource(deadlockPath, mergedModId, sourceFileName);
+        return {
+            ...result,
+            merged: result.merged ? enrichMod(result.merged) : null,
+            restored: result.restored.map(enrichMod),
+        };
     }
 );
 

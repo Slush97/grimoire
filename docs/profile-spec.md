@@ -163,6 +163,7 @@ mp1:<base64url(gzip(json))>
 * Body is base64url (RFC 4648 §5, no padding) of `gzip(UTF-8 JSON)`.
 * Typical profile compresses to 1 to 2 KB. Stay under 4 KB to fit comfortably in a Discord message.
 * Decoder MUST validate the prefix, decode, decompress, and then validate the JSON against this spec.
+* Decoder MUST cap the inflated payload to bound gzip-bomb risk. Profiles that exceed this cap can still be shared as a `.modprofile.json` file (the file path skips the gzip cap, but importers are still free to cap raw JSON size). Grimoire's current limit is 256 KB inflated for share codes, sized to fit a 100-mod Deadlock profile with every optional hint field populated.
 
 A share code is informationally equivalent to a `.modprofile.json` file; one can be converted to the other losslessly.
 

@@ -19,6 +19,15 @@ export interface SearchOptions {
     heroName?: string;
     skinsCategoryId?: number;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
+    // Content-rating filter: 'all' (default), SFW only, or NSFW only.
+    nsfw?: 'all' | 'sfw' | 'nsfw';
+    // Recency window on date_added: 'all' (default), a preset (day/week/month),
+    // or 'custom' bounded by addedFrom/addedTo.
+    addedWithin?: 'all' | 'today' | 'week' | 'month' | 'custom';
+    // Custom-range bounds (Unix seconds, inclusive). Only used when
+    // addedWithin === 'custom'; either bound may be omitted for an open range.
+    addedFrom?: number;
+    addedTo?: number;
     limit?: number;
     offset?: number;
 }
@@ -54,6 +63,42 @@ function buildOrderBy(sortBy: SearchOptions['sortBy'], hasQuery: boolean): strin
 }
 
 /**
+ * Append the content-rating and recency filters shared by the FTS and fallback
+ * paths. Mutates the passed conditions/params so both code paths stay in sync.
+ */
+function applyContentFilters(
+    conditions: string[],
+    params: Record<string, unknown>,
+    nsfw: SearchOptions['nsfw'],
+    addedWithin: SearchOptions['addedWithin'],
+    addedFrom?: number,
+    addedTo?: number
+): void {
+    if (nsfw === 'sfw') {
+        conditions.push('mods.is_nsfw = 0');
+    } else if (nsfw === 'nsfw') {
+        conditions.push('mods.is_nsfw = 1');
+    }
+
+    // date_added is a Unix timestamp in seconds (GameBanana's _tsDateAdded).
+    if (addedWithin === 'custom') {
+        if (typeof addedFrom === 'number') {
+            params.addedAfter = addedFrom;
+            conditions.push('mods.date_added >= @addedAfter');
+        }
+        if (typeof addedTo === 'number') {
+            params.addedBefore = addedTo;
+            conditions.push('mods.date_added <= @addedBefore');
+        }
+    } else if (addedWithin && addedWithin !== 'all') {
+        const windowSeconds =
+            addedWithin === 'today' ? 86_400 : addedWithin === 'week' ? 7 * 86_400 : 30 * 86_400;
+        params.addedAfter = Math.floor(Date.now() / 1000) - windowSeconds;
+        conditions.push('mods.date_added >= @addedAfter');
+    }
+}
+
+/**
  * Fallback search used when the FTS5 path returns zero results. FTS5 is
  * tokenized and prefix-only, so creative names ("MìnaMod-v2", typos, partial
  * substrings inside a word) miss even when they should match. This runs a
@@ -68,6 +113,10 @@ function runFallbackSubstringSearch(
     heroName: string | undefined,
     skinsCategoryId: number | undefined,
     sortBy: SearchOptions['sortBy'],
+    nsfw: SearchOptions['nsfw'],
+    addedWithin: SearchOptions['addedWithin'],
+    addedFrom: number | undefined,
+    addedTo: number | undefined,
     limit: number,
     offset: number
 ): SearchResult {
@@ -102,6 +151,8 @@ function runFallbackSubstringSearch(
             params.categoryId = categoryId;
         }
     }
+
+    applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const orderBy = buildOrderBy(sortBy, false); // no FTS rank in fallback
@@ -139,6 +190,10 @@ export function searchMods(options: SearchOptions): SearchResult {
         heroName,
         skinsCategoryId,
         sortBy = 'relevance',
+        nsfw = 'all',
+        addedWithin = 'all',
+        addedFrom,
+        addedTo,
     } = options;
 
     // Validate and cap pagination values
@@ -195,6 +250,8 @@ export function searchMods(options: SearchOptions): SearchResult {
         }
     }
 
+    applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
+
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
 
@@ -229,6 +286,10 @@ export function searchMods(options: SearchOptions): SearchResult {
             heroName,
             skinsCategoryId,
             sortBy,
+            nsfw,
+            addedWithin,
+            addedFrom,
+            addedTo,
             limit,
             offset
         );

@@ -91,6 +91,13 @@
 }
 
 /* Base styles */
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
 body {
   @apply bg-bg-primary text-text-primary m-0 antialiased;
   font-family: var(--font-radiance);
@@ -121,6 +128,43 @@ body {
   background: var(--color-accent);
 }
 
+/* Scrollbar variant for panels that sit over imagery (the Locker hero detail
+   and Global drill-in shells use a feathered frosted-glass background with a
+   transparent panel). The default solid bg-secondary track would paint a hard
+   vertical strip over that feather; this keeps the track clear and renders the
+   thumb as a slim translucent bar so the glass shows through behind it. */
+.scrollbar-glass {
+  scrollbar-color: transparent transparent;
+}
+
+/* Reveal the thumb only while the panel is actively scrolling (the `is-scrolling`
+   class is toggled by initAutoHideScrollbars), so at rest nothing sits over the
+   hero art. The gutter is reserved either way, so content never shifts. */
+.scrollbar-glass.is-scrolling {
+  scrollbar-color: rgba(255, 255, 255, 0.22) transparent;
+}
+
+.scrollbar-glass::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-glass::-webkit-scrollbar-thumb {
+  background: transparent;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+  border-radius: 9999px;
+}
+
+.scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.22);
+  background-clip: padding-box;
+}
+
+.scrollbar-glass.is-scrolling::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.35);
+  background-clip: padding-box;
+}
+
 /* Font utility classes */
 .font-radiance {
   font-family: var(--font-radiance);
@@ -139,7 +183,468 @@ body {
 }
 
 #root {
-  @apply min-h-screen w-full;
+  @apply w-full;
+}
+
+/* Shared icon+label primitive for card stats and metadata; avoid raw SVG+text rows. */
+.icon-text {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 20px;
+  min-width: 0;
+  white-space: nowrap;
+  line-height: 1;
+}
+
+.icon-text__icon {
+  width: 16px;
+  height: 16px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 16px;
+  transform: translateY(-0.5px);
+}
+
+.icon-text__icon svg {
+  width: 12px;
+  height: 12px;
+  display: block;
+  stroke-width: 2;
+}
+
+.icon-text__value {
+  display: inline-flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  line-height: 1;
+}
+
+.browse-stat-item {
+  font-variant-numeric: tabular-nums;
+}
+
+.browse-stat-item--start {
+  justify-self: start;
+}
+
+.browse-stat-item--center {
+  justify-self: center;
+}
+
+.browse-stat-item--end {
+  justify-self: end;
+}
+
+.browse-stat-icon {
+  color: currentColor;
+}
+
+.browse-stat-icon--strong {
+  color: color-mix(in srgb, var(--color-text-secondary) 96%, transparent);
+}
+
+.browse-stat-value {
+  color: currentColor;
+}
+
+.browse-meta-icon {
+  color: currentColor;
+}
+
+.browse-action-button {
+  position: relative;
+  overflow: hidden;
+  height: clamp(24px, 10cqw, 32px);
+  min-width: clamp(96px, 38cqw, 118px);
+  padding: 0 clamp(9px, 3.5cqw, 12px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(4px, 2.2cqw, 7px);
+  flex: 0 0 auto;
+  border-radius: 7px;
+  border: 1px solid rgba(120, 140, 170, 0.28);
+  background: rgba(255, 255, 255, 0.025);
+  color: color-mix(in srgb, var(--color-text-secondary) 86%, transparent);
+  font-size: clamp(10px, 4.3cqw, 13px);
+  line-height: 16px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  transition:
+    color 150ms ease,
+    border-color 150ms ease,
+    background-color 150ms ease;
+}
+
+.browse-action-button::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateX(-120%) skewX(-18deg);
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.16) 48%,
+    transparent 100%
+  );
+}
+
+.browse-action-button:hover {
+  color: var(--color-text-primary);
+  border-color: rgba(120, 140, 170, 0.4);
+  background: rgba(255, 255, 255, 0.055);
+}
+
+.browse-action-button--icon {
+  height: clamp(24px, 17cqw, 28px);
+  min-width: clamp(24px, 17cqw, 28px);
+  padding: 0;
+  align-items: center;
+  gap: 0;
+  border-radius: 4px;
+}
+
+.browse-action-button--install:hover {
+  color: var(--color-text-primary);
+  border-color: color-mix(in srgb, var(--color-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 5.5%, transparent);
+}
+
+.browse-action-button--install {
+  border-color: rgba(120, 140, 170, 0.28);
+  background: rgba(255, 255, 255, 0.025);
+  color: var(--color-text-primary);
+}
+
+.browse-action-button--installed {
+  border-color: rgb(74 222 128 / 0.3);
+  background: rgb(74 222 128 / 0.055);
+  color: rgb(74 222 128);
+}
+
+.browse-action-button--installed:hover {
+  border-color: rgb(74 222 128 / 0.5);
+  background: rgb(74 222 128 / 0.09);
+  color: rgb(74 222 128);
+}
+
+.browse-action-button--enable {
+  border-color: color-mix(in srgb, var(--color-accent) 34%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 5.5%, transparent);
+  color: color-mix(in srgb, var(--color-accent) 82%, var(--color-text-primary));
+}
+
+.browse-action-button--enable:hover {
+  border-color: color-mix(in srgb, var(--color-accent) 52%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 9%, transparent);
+  color: var(--color-text-primary);
+}
+
+.browse-action-button--queued {
+  border-color: rgb(96 165 250 / 0.3);
+  background: rgb(96 165 250 / 0.055);
+  color: rgb(96 165 250);
+}
+
+.browse-action-button--downloading {
+  border-color: rgb(249 115 22 / 0.3);
+  background: rgb(249 115 22 / 0.055);
+  color: rgb(249 115 22);
+}
+
+.browse-action-button--downloading::after {
+  opacity: 1;
+  animation: browseDownloadSheen 1.35s ease-out infinite;
+}
+
+.browse-action-button--complete-pop {
+  animation: browseActionCompletePop 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.browse-action-button--complete-pop::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  pointer-events: none;
+  border-radius: inherit;
+  border: 1px solid rgb(74 222 128 / 0.68);
+  animation: browseActionCompleteRing 620ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.browse-action-button--queue-shift {
+  border-color: rgb(96 165 250 / 0.48);
+}
+
+.browse-action-button-icon {
+  width: clamp(12px, 4.8cqw, 15px);
+  height: clamp(12px, 4.8cqw, 15px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 clamp(12px, 4.8cqw, 15px);
+  color: currentColor;
+}
+
+.browse-action-button-icon svg {
+  width: clamp(12px, 4.8cqw, 15px);
+  height: clamp(12px, 4.8cqw, 15px);
+  display: block;
+  stroke-width: 2;
+}
+
+.browse-action-button-label {
+  display: inline-flex;
+  align-items: center;
+  line-height: 16px;
+  flex: 0 0 auto;
+  overflow: hidden;
+}
+
+.browse-action-button-queue-value {
+  display: inline-block;
+  animation: browseQueueValueSwap 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.browse-readable-card {
+  position: relative;
+}
+
+.browse-readable-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  pointer-events: none;
+  border-radius: inherit;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.045),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.018);
+}
+
+.browse-readable-card:focus-visible {
+  box-shadow:
+    inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 48%, transparent),
+    0 0 0 3px color-mix(in srgb, var(--color-accent) 18%, transparent),
+    0 12px 28px rgba(0, 0, 0, 0.26);
+}
+
+.browse-readable-card-body {
+  /* Transparent so the body reads as the card's own slightly-opaque dark
+     surface (set on the card frame), which sits just above the page
+     background. */
+  background: transparent;
+  isolation: isolate;
+}
+
+.browse-readable-card-body > * {
+  position: relative;
+  z-index: 1;
+}
+
+
+.browse-readable-card-media::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  opacity: 0;
+  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  transition: opacity 160ms ease;
+}
+
+.browse-readable-card:focus-visible .browse-readable-card-media::after {
+  opacity: 1;
+}
+
+.browse-sound-placeholder::before {
+  content: '';
+  position: absolute;
+  inset: 22% 18%;
+  border-radius: 9999px;
+  background: radial-gradient(circle, rgba(249, 115, 22, 0.18), transparent 62%);
+  opacity: 0;
+  transform: scale(0.78);
+  transition:
+    opacity 180ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.group:hover .browse-sound-placeholder::before,
+.group:focus-visible .browse-sound-placeholder::before,
+.group:focus-within .browse-sound-placeholder::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.browse-sound-wave-bar {
+  transform-origin: 50% 50%;
+  transition:
+    background-color 180ms ease,
+    transform 220ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 180ms ease;
+}
+
+.group:hover .browse-sound-wave-bar,
+.group:focus-visible .browse-sound-wave-bar,
+.group:focus-within .browse-sound-wave-bar {
+  background-color: color-mix(in srgb, var(--color-accent) 72%, var(--color-text-primary));
+  animation: browseSoundWaveWake 680ms ease-out both;
+}
+
+.browse-result-card {
+  animation: browseResultSettle 180ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.browse-card-hover-surface {
+  transition:
+    border-color 190ms cubic-bezier(0.22, 1, 0.36, 1),
+    box-shadow 190ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 190ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.browse-art-parallax-card {
+  --browse-art-x: 0px;
+  --browse-art-y: 0px;
+  --browse-art-rotate: 0deg;
+}
+
+.browse-card-media-zoom {
+  transform-origin: center;
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .browse-art-parallax-card:not([data-parallax-disabled='true']):hover > .browse-card-hover-surface {
+    transform: translateY(-2px);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.055),
+      inset 0 0 0 1px rgba(255, 255, 255, 0.024),
+      0 14px 30px rgba(0, 0, 0, 0.3);
+  }
+
+  .browse-art-parallax-card:not([data-parallax-disabled='true']):hover .browse-card-media-zoom {
+    transform:
+      translate3d(var(--browse-art-x), var(--browse-art-y), 0)
+      scale(1.018)
+      rotate(var(--browse-art-rotate)) !important;
+  }
+}
+
+.browse-is-scrolling .browse-card-hover-surface:hover {
+  transform: none !important;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.03) !important;
+}
+
+.browse-readable-card:hover {
+  border-color: rgba(235, 240, 250, 0.14);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.055),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.024),
+    0 14px 30px rgba(0, 0, 0, 0.3);
+}
+
+.browse-is-scrolling .browse-readable-card:hover {
+  border-color: rgba(255, 255, 255, 0.07) !important;
+}
+
+.browse-is-scrolling .browse-card-hover-surface:not(.browse-readable-card):hover {
+  border-color: var(--color-border) !important;
+}
+
+.browse-is-scrolling .browse-card-hover-surface:hover .browse-card-media-zoom {
+  transform: none !important;
+}
+
+.browse-card-hover-surface:hover .browse-card-media-zoom {
+  transform: scale(1.02);
+}
+
+.browse-is-scrolling .group:hover .browse-sound-placeholder::before {
+  opacity: 0;
+  transform: scale(0.78);
+}
+
+.browse-is-scrolling .group:hover .browse-sound-wave-bar {
+  animation: none;
+  background-color: var(--color-text-secondary);
+  transform: none;
+}
+
+@keyframes browseDownloadSheen {
+  0% {
+    opacity: 0;
+    transform: translateX(-120%) skewX(-18deg);
+  }
+
+  18% {
+    opacity: 0.85;
+  }
+
+  58% {
+    opacity: 0.18;
+  }
+
+  100% {
+    opacity: 0;
+    transform: translateX(120%) skewX(-18deg);
+  }
+}
+
+@keyframes browseActionCompletePop {
+  0% { transform: scale(1); }
+  36% { transform: scale(1.055); }
+  100% { transform: scale(1); }
+}
+
+@keyframes browseActionCompleteRing {
+  0% {
+    opacity: 0.88;
+    transform: scale(0.96);
+  }
+
+  100% {
+    opacity: 0;
+    transform: scale(1.35);
+  }
+}
+
+@keyframes browseQueueValueSwap {
+  0% {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes browseSoundWaveWake {
+  0% { transform: scaleY(0.82); }
+  46% { transform: scaleY(1.16); }
+  100% { transform: scaleY(1); }
+}
+
+@keyframes browseResultSettle {
+  0% {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Locker Hero animations */
@@ -377,9 +882,30 @@ body {
   .animate-slide-in-left,
   .animate-hero-zoom-in,
   .animate-fade-in,
-  .skeleton-shimmer {
+  .skeleton-shimmer,
+  .browse-action-button--downloading::after,
+  .browse-action-button--complete-pop,
+  .browse-action-button--complete-pop::before,
+  .browse-action-button-queue-value,
+  .group:hover .browse-sound-wave-bar,
+  .group:focus-visible .browse-sound-wave-bar,
+  .group:focus-within .browse-sound-wave-bar,
+  .browse-result-card {
     animation-duration: 0.01ms;
     animation-iteration-count: 1;
+  }
+
+  .browse-readable-card,
+  .browse-card-media-zoom,
+  .browse-readable-card-media::after,
+  .browse-sound-placeholder::before,
+  .browse-sound-wave-bar {
+    transition-duration: 0.01ms;
+  }
+
+  .browse-card-media-zoom {
+    transform: none !important;
+    will-change: auto;
   }
 
   /* Keep the stripe pattern visible (it carries meaning) but stop the slide. */

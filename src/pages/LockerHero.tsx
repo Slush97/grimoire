@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Layers, Star } from 'lucide-react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Layers, Star, Music, Shirt, Images, Box, Loader2 } from 'lucide-react';
 import { Skeleton } from '../components/common/Skeleton';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -11,6 +11,10 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import HeroCardPicker from '../components/locker/HeroCardPicker';
+import HeroSoundPicker from '../components/locker/HeroSoundPicker';
+// three.js viewer is heavy; only pull the chunk when the user flips to 3D.
+const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import {
@@ -21,12 +25,12 @@ import {
   countLockerSkins,
   detectMinaTextures,
   findMinaVariant,
-  getLockerSkinKey,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
   groupModsByCategory,
   isLockerManagedMod,
+  isLockerManagedSound,
   parseMinaVariant,
   readStoredFavorites,
   type HeroCategory,
@@ -37,7 +41,11 @@ import {
 
 interface LockerHeroViewProps {
   hero: HeroCategory;
-  list: Mod[];
+  skinList: Mod[];
+  /** Sound-section mods mapped to this hero. Optional because the gallery
+   *  view in `Locker.tsx` keeps the same prop surface and may not split sounds
+   *  out yet. Empty/undefined hides the Sounds toggle entirely. */
+  soundList?: Mod[];
   skinCount: number;
   isFavorite: boolean;
   onBack: () => void;
@@ -102,7 +110,7 @@ export default function LockerHero() {
 
   useEffect(() => {
     if (activeDeadlockPath) {
-      loadMods();
+      loadMods({ silent: useAppStore.getState().modsLoaded });
     }
   }, [activeDeadlockPath, loadMods]);
 
@@ -142,10 +150,38 @@ export default function LockerHero() {
 
   const heroList = useMemo(() => buildHeroList(categories), [categories]);
   const hero = heroList.find((entry) => entry.id === heroId);
-  const lockerMods = useMemo(() => mods.filter(isLockerManagedMod), [mods]);
-  const heroMods = useMemo(() => groupModsByCategory(lockerMods, heroList), [lockerMods, heroList]);
-  const list = useMemo(() => (hero ? heroMods.map.get(hero.id) ?? [] : []), [hero, heroMods]);
-  const skinCount = useMemo(() => countLockerSkins(list), [list]);
+  const lockerSkins = useMemo(() => mods.filter(isLockerManagedMod), [mods]);
+  const lockerSounds = useMemo(() => mods.filter(isLockerManagedSound), [mods]);
+  const heroSkinsByHero = useMemo(
+    () => groupModsByCategory(lockerSkins, heroList),
+    [lockerSkins, heroList]
+  );
+  const heroSoundsByHero = useMemo(
+    () => groupModsByCategory(lockerSounds, heroList),
+    [lockerSounds, heroList]
+  );
+  const skinList = useMemo(
+    () => (hero ? heroSkinsByHero.map.get(hero.id) ?? [] : []),
+    [hero, heroSkinsByHero]
+  );
+  const soundList = useMemo(() => {
+    if (!hero) return [];
+    const tagged = heroSoundsByHero.map.get(hero.id) ?? [];
+    // Also surface any installed mod whose VPK ships ability sounds for this
+    // hero, even when it isn't a Sound-section mod: many skins bundle ability
+    // sounds. The classifier (mod.abilitySounds) attributes per hero, matched
+    // on display name; dedupe against the already-tagged Sound mods.
+    const seen = new Set(tagged.map((m) => m.id));
+    const bundled = mods.filter(
+      (m) =>
+        !seen.has(m.id) &&
+        // Never offer the Locker's own sound VPK as a selectable source.
+        !m.lockerSounds &&
+        m.abilitySounds?.perHero.some((h) => h.hero === hero.name)
+    );
+    return bundled.length > 0 ? [...tagged, ...bundled] : tagged;
+  }, [hero, heroSoundsByHero, mods]);
+  const skinCount = useMemo(() => countLockerSkins(skinList), [skinList]);
 
   const minaPresets = useMemo(() => buildMinaPresets(mods), [mods]);
   const minaTextures = useMemo(() => detectMinaTextures(mods), [mods]);
@@ -155,54 +191,43 @@ export default function LockerHero() {
     [minaVariants, minaSelection]
   );
 
-  const setActiveSkin = async (modId: string) => {
-    if (!hero) return;
-    const heroModList = heroMods.map.get(hero.id) ?? [];
-    const clicked = heroModList.find((m) => m.id === modId);
-    if (!clicked) return;
-    const actions: Promise<void>[] = [];
-    if (clicked.enabled) {
-      // Click again on the active skin disables it (and any sibling variants
-      // currently enabled), returning the hero to the default in-game skin.
-      for (const mod of heroModList) {
-        if (mod.enabled) actions.push(toggleMod(mod.id));
-      }
-    } else {
-      for (const mod of heroModList) {
-        if (mod.id === modId) {
-          if (!mod.enabled) actions.push(toggleMod(mod.id));
-        } else if (mod.enabled) {
-          actions.push(toggleMod(mod.id));
-        }
-      }
-    }
-    await Promise.all(actions);
+  // Resolve which section list the clicked mod belongs to. Section exclusivity
+  // is per-section: picking a Geist skin doesn't disable Geist voice lines and
+  // vice versa.
+  const listForMod = (modId: string): Mod[] | null => {
+    if (skinList.some((m) => m.id === modId)) return skinList;
+    if (soundList.some((m) => m.id === modId)) return soundList;
+    return null;
   };
 
-  // Toggle one variant within a group. Disables enabled mods from other groups
-  // for the hero, but leaves sibling variants in the same group alone so a
-  // model + voice-lines pair can stay co-enabled.
+  // Both skins and sounds toggle independently in the Locker now. Users have
+  // valid reasons to layer multiple VPKs on the same hero (e.g. one mod
+  // touches textures, another touches weapons, another the voice). The Locker
+  // surfaces what's enabled; it doesn't enforce exclusivity. If two enabled
+  // mods truly conflict, that's the Conflicts page's job to flag.
+  const setActiveSkin = async (modId: string) => {
+    if (!hero) return;
+    const heroModList = listForMod(modId);
+    if (!heroModList?.some((m) => m.id === modId)) return;
+    await toggleMod(modId);
+    // toggleMod only patches the single mod's enabled flag in the store; the
+    // sound/skin lists derive from a fresh scan. Without a reload the page can
+    // show a just-swapped sound until the user manually refreshes (issue #91).
+    await loadMods({ silent: true });
+  };
+
   const toggleHeroVariant = async (modId: string) => {
     if (!hero) return;
-    const heroModList = heroMods.map.get(hero.id) ?? [];
-    const target = heroModList.find((m) => m.id === modId);
-    if (!target) return;
-    const groupKey = getLockerSkinKey(target);
-    const actions: Promise<void>[] = [];
-    for (const mod of heroModList) {
-      if (mod.id === modId) continue;
-      if (!mod.enabled) continue;
-      const otherKey = getLockerSkinKey(mod);
-      if (otherKey !== groupKey) actions.push(toggleMod(mod.id));
-    }
-    actions.push(toggleMod(modId));
-    await Promise.all(actions);
+    const heroModList = listForMod(modId);
+    if (!heroModList?.some((m) => m.id === modId)) return;
+    await toggleMod(modId);
+    await loadMods({ silent: true });
   };
 
   const applyMinaPreset = async (presetFileName: string) => {
     try {
       await setMinaPreset(presetFileName);
-      await loadMods();
+      await loadMods({ silent: true });
     } catch (err) {
       setCategoriesError(String(err));
     }
@@ -234,7 +259,7 @@ export default function LockerHero() {
         selectedMinaVariant.label,
         hero.name === 'Mina' ? hero.id : undefined
       );
-      await loadMods();
+      await loadMods({ silent: true });
     } catch (err) {
       setMinaVariantsError(String(err));
     }
@@ -286,7 +311,8 @@ export default function LockerHero() {
     <LockerHeroView
       key={hero.id}
       hero={hero}
-      list={list}
+      skinList={skinList}
+      soundList={soundList}
       skinCount={skinCount}
       isFavorite={favoriteHeroes.includes(hero.id)}
       onBack={() => navigate('/locker')}
@@ -297,7 +323,7 @@ export default function LockerHero() {
       }
       onSelect={setActiveSkin}
       onToggleVariant={toggleHeroVariant}
-      hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+      hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
       minaPresets={hero.name === 'Mina' ? minaPresets : []}
       activeMinaPreset={hero.name === 'Mina' ? activeMinaPreset : undefined}
       minaTextures={hero.name === 'Mina' ? minaTextures : []}
@@ -318,7 +344,8 @@ export default function LockerHero() {
 
 export function LockerHeroView({
   hero,
-  list,
+  skinList,
+  soundList = [],
   skinCount,
   isFavorite,
   onBack,
@@ -343,6 +370,22 @@ export function LockerHeroView({
 }: LockerHeroViewProps) {
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
+  const [view3d, setView3d] = useState(false);
+  const [section, setSection] = useState<'skins' | 'sounds' | 'cards'>('skins');
+  // The active skin to pose: the hero's first enabled skin mod, if any. Its
+  // metaKey is the source VPK; undefined poses the vanilla base model.
+  const activeSkinMetaKey = useMemo(
+    () => skinList.find((mod) => mod.enabled)?.metaKey,
+    [skinList]
+  );
+  const hasSounds = soundList.length > 0;
+  // If the active section runs out of mods (e.g. user deleted their last
+  // sound for this hero) drop back to skins so the panel isn't stuck empty.
+  const activeSection = section === 'sounds' && !hasSounds ? 'skins' : section;
+  const activeList = activeSection === 'sounds' ? soundList : skinList;
+  // Group sound variants the same way skins are counted so the count matches
+  // the gallery/list cards and the grouped rows rendered below.
+  const soundCount = countLockerSkins(soundList);
 
   const renderSrc =
     renderFallbackStep === 0
@@ -376,7 +419,21 @@ export function LockerHeroView({
           frosted overlay reads as a dark frosted panel — same look as if the
           portrait extended that far. */}
       <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
-        {renderSrc ? (
+        {view3d ? (
+          <Suspense
+            fallback={
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-white/80" />
+              </div>
+            }
+          >
+            <HeroPoseViewer
+              key={`${hero.name}:${activeSkinMetaKey ?? 'vanilla'}`}
+              heroName={hero.name}
+              skinMetaKey={activeSkinMetaKey}
+            />
+          </Suspense>
+        ) : renderSrc ? (
           <img
             src={renderSrc}
             alt={hero.name}
@@ -388,9 +445,28 @@ export function LockerHeroView({
             {hero.name}
           </div>
         )}
-        {/* Bottom gradient for depth */}
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        {/* Bottom gradient for depth (2D only; the 3D viewer owns its frame) */}
+        {!view3d && (
+          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        )}
       </div>
+
+      {/* 2D portrait <-> live 3D pose toggle. lg+ only, matching the preview
+          area; sits above the frosted panel so it's always clickable. */}
+      <button
+        type="button"
+        onClick={() => setView3d((v) => !v)}
+        aria-pressed={view3d}
+        title={view3d ? 'Show 2D portrait' : 'Show live 3D pose'}
+        className={`hidden lg:flex absolute top-4 right-4 z-20 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+          view3d
+            ? 'border-accent/60 bg-accent/20 text-text-primary'
+            : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
+        }`}
+      >
+        <Box className="h-3.5 w-3.5" />
+        {view3d ? '2D' : '3D'}
+      </button>
 
       {/* Progressive frosted-glass background — every layer (including the
           base heavy blur) is masked with a long, smooth taper so nothing has
@@ -442,7 +518,7 @@ export function LockerHeroView({
       </div>
 
       {/* Left Panel - Skin Selection */}
-      <div className="relative z-10 w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto bg-bg-secondary lg:bg-transparent animate-slide-in-left">
+      <div className="relative z-10 w-full lg:w-[400px] xl:w-[450px] flex-shrink-0 overflow-y-auto scrollbar-glass bg-bg-secondary lg:bg-transparent animate-slide-in-left">
         <div className="relative z-10 p-6 space-y-6">
           {/* Header */}
           <div className="flex items-center justify-between gap-3">
@@ -481,33 +557,111 @@ export function LockerHeroView({
               />
             )}
             <span className="text-sm text-text-secondary">
-              {skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins'}
+              {activeSection === 'cards'
+                ? 'Card art'
+                : activeSection === 'sounds'
+                  ? soundCount > 0
+                    ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}`
+                    : 'No sounds'
+                  : skinCount > 0
+                    ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}`
+                    : 'No skins'}
             </span>
           </div>
 
-          {/* Skin Selection */}
+          {/* Section toggle. Skins and Cards are always available; Sounds only
+              shows when this hero has at least one tagged Sound mod. */}
+          <div
+            role="tablist"
+            aria-label="Section"
+            className="inline-flex items-center rounded-full border border-border bg-bg-tertiary p-0.5 text-xs"
+          >
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'skins'}
+              onClick={() => setSection('skins')}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                activeSection === 'skins'
+                  ? 'bg-accent/15 text-text-primary border border-accent/40'
+                  : 'text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
+            >
+              <Shirt className="w-3.5 h-3.5" />
+              Skins
+            </button>
+            {hasSounds && (
+              <button
+                type="button"
+                role="tab"
+                aria-selected={activeSection === 'sounds'}
+                onClick={() => setSection('sounds')}
+                className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                  activeSection === 'sounds'
+                    ? 'bg-accent/15 text-text-primary border border-accent/40'
+                    : 'text-text-secondary hover:text-text-primary border border-transparent'
+                }`}
+              >
+                <Music className="w-3.5 h-3.5" />
+                Sounds
+              </button>
+            )}
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'cards'}
+              onClick={() => setSection('cards')}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                activeSection === 'cards'
+                  ? 'bg-accent/15 text-text-primary border border-accent/40'
+                  : 'text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
+            >
+              <Images className="w-3.5 h-3.5" />
+              Cards
+            </button>
+          </div>
+
+          {/* Skin / Sound / Card selection */}
           <div className="space-y-4">
+            {activeSection === 'cards' ? (
+              <HeroCardPicker heroName={hero.name} />
+            ) : activeSection === 'sounds' ? (
+              <HeroSoundPicker heroName={hero.name} soundList={soundList} onSelect={onSelect} />
+            ) : (
             <HeroSkinsPanel
-              mods={list}
+              mods={activeList}
               onSelect={onSelect}
               onToggleVariant={onToggleVariant}
               hideNsfwPreviews={hideNsfwPreviews}
               categoryId={hero.id}
-              minaPresets={minaPresets}
-              activeMinaPreset={activeMinaPreset}
-              minaTextures={minaTextures}
-              onApplyMinaPreset={onApplyMinaPreset}
-              minaArchivePath={minaArchivePath}
-              onMinaArchivePathChange={onMinaArchivePathChange}
-              minaVariants={minaVariants}
-              minaVariantsLoading={minaVariantsLoading}
-              minaVariantsError={minaVariantsError}
-              onLoadMinaVariants={onLoadMinaVariants}
-              minaSelection={minaSelection}
-              onMinaSelectionChange={onMinaSelectionChange}
-              selectedMinaVariant={selectedMinaVariant}
-              onApplyMinaVariant={onApplyMinaVariant}
+              showDownloadable={activeSection === 'skins'}
+              heroName={hero.name}
+              emptyMessage="Download a skin for this hero to manage it here."
+              minaPresets={activeSection === 'skins' ? minaPresets : []}
+              activeMinaPreset={activeSection === 'skins' ? activeMinaPreset : undefined}
+              minaTextures={activeSection === 'skins' ? minaTextures : []}
+              onApplyMinaPreset={activeSection === 'skins' ? onApplyMinaPreset : undefined}
+              minaArchivePath={activeSection === 'skins' ? minaArchivePath : undefined}
+              onMinaArchivePathChange={
+                activeSection === 'skins' ? onMinaArchivePathChange : undefined
+              }
+              minaVariants={activeSection === 'skins' ? minaVariants : []}
+              minaVariantsLoading={
+                activeSection === 'skins' ? minaVariantsLoading : false
+              }
+              minaVariantsError={activeSection === 'skins' ? minaVariantsError : null}
+              onLoadMinaVariants={activeSection === 'skins' ? onLoadMinaVariants : undefined}
+              minaSelection={activeSection === 'skins' ? minaSelection : undefined}
+              onMinaSelectionChange={
+                activeSection === 'skins' ? onMinaSelectionChange : undefined
+              }
+              selectedMinaVariant={
+                activeSection === 'skins' ? selectedMinaVariant : undefined
+              }
+              onApplyMinaVariant={activeSection === 'skins' ? onApplyMinaVariant : undefined}
             />
+            )}
           </div>
 
         </div>

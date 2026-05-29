@@ -8,6 +8,17 @@
     "types": ["vite/client"],
     "skipLibCheck": true,
 
+    /* Resolve the shared @grimoire/social-types workspace package directly from
+       the sibling checkout. pnpm's symlink for this out-of-root package
+       (../grimoire-social/packages/*) resolves to the wrong depth in CI's
+       nested directory layout, leaving it dangling so tsc can't find it; an
+       explicit path makes resolution deterministic in both CI and local dev. */
+    "baseUrl": ".",
+    "paths": {
+      "@grimoire/social-types": ["../grimoire-social/packages/social-types/src/schemas.ts"],
+      "@grimoire/social-types/heroes": ["../grimoire-social/packages/social-types/src/heroes.ts"]
+    },
+
     /* Bundler mode */
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,

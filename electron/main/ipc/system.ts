@@ -1,4 +1,4 @@
-import { ipcMain, dialog, shell } from 'electron';
+import { ipcMain, dialog, shell, clipboard, nativeImage } from 'electron';
 import { getMainWindow } from '../index';
 import { loadSettings } from '../services/settings';
 import {
@@ -9,10 +9,11 @@ import {
     CleanupResult,
 } from '../services/system';
 import { listArchiveContents } from '../services/extract';
+import { healLockerVpks } from '../services/lockerVpk';
 import {
     existsSync,
+    readFileSync,
     readdirSync,
-    renameSync,
     copyFileSync,
     unlinkSync,
     mkdirSync,
@@ -22,9 +23,11 @@ import {
 import { join, basename } from 'path';
 import { spawn } from 'child_process';
 import { tmpdir } from 'os';
+import { fileURLToPath } from 'url';
 import https from 'https';
 import http from 'http';
 import { getAddonsPath, getDisabledPath, getCitadelPath } from '../services/deadlock';
+import { scanMods, enableMod } from '../services/mods';
 import { getUserDataPath } from '../utils/paths';
 import {
     getModMetadata,
@@ -54,6 +57,31 @@ interface ApplyMinaVariantArgs {
     heroCategoryId?: number;
 }
 
+async function loadClipboardImage(source: string): Promise<Electron.NativeImage> {
+    if (!source) {
+        throw new Error('Image source is required');
+    }
+
+    if (source.startsWith('data:image/')) {
+        return nativeImage.createFromDataURL(source);
+    }
+
+    const url = new URL(source);
+    if (url.protocol === 'file:') {
+        return nativeImage.createFromBuffer(readFileSync(fileURLToPath(url)));
+    }
+
+    if (url.protocol === 'http:' || url.protocol === 'https:') {
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`Image request failed with status ${response.status}`);
+        }
+        return nativeImage.createFromBuffer(Buffer.from(await response.arrayBuffer()));
+    }
+
+    throw new Error(`Unsupported image source: ${url.protocol}`);
+}
+
 /**
  * Get the active deadlock path from settings
  */
@@ -78,6 +106,16 @@ ipcMain.handle(
         return result.canceled ? null : result.filePaths[0] || null;
     }
 );
+
+// copy-image-to-clipboard
+// Writes actual image pixels to the system clipboard, not just the image URL.
+ipcMain.handle('copy-image-to-clipboard', async (_, source: string): Promise<void> => {
+    const image = await loadClipboardImage(source);
+    if (image.isEmpty()) {
+        throw new Error('Image could not be decoded');
+    }
+    clipboard.writeImage(image);
+});
 
 // open-mods-folder
 ipcMain.handle('open-mods-folder', async (): Promise<void> => {
@@ -144,7 +182,7 @@ ipcMain.handle('get-always-on-top', (): boolean => {
 });
 
 // fix-gameinfo
-ipcMain.handle('fix-gameinfo', (): GameinfoStatus => {
+ipcMain.handle('fix-gameinfo', async (): Promise<GameinfoStatus> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         return {
@@ -154,7 +192,18 @@ ipcMain.handle('fix-gameinfo', (): GameinfoStatus => {
             candidates: [],
         };
     }
-    return fixGameinfo(deadlockPath);
+    const status = fixGameinfo(deadlockPath);
+    // Now that the grimoire search path is in place, migrate any Locker-managed
+    // VPKs out of addons into citadel/grimoire immediately, so applied cards /
+    // sounds relocate without needing an app restart.
+    if (status.configured) {
+        try {
+            await healLockerVpks(deadlockPath);
+        } catch (err) {
+            console.error('[system] Locker migration after fix-gameinfo failed:', err);
+        }
+    }
+    return status;
 });
 
 // download-mina-variations
@@ -245,34 +294,19 @@ ipcMain.handle('set-mina-preset', async (_, args: SetMinaPresetArgs): Promise<vo
         throw new Error('No Deadlock path configured');
     }
 
-    const addonsPath = getAddonsPath(deadlockPath);
-    const disabledPath = getDisabledPath(deadlockPath);
     const { presetFileName } = args;
 
-    // Find the preset file in either folder
-    let presetPath: string | null = null;
-    let isEnabled = false;
-
-    const addonsPreset = join(addonsPath, presetFileName);
-    const disabledPreset = join(disabledPath, presetFileName);
-
-    if (existsSync(addonsPreset)) {
-        presetPath = addonsPreset;
-        isEnabled = true;
-    } else if (existsSync(disabledPreset)) {
-        presetPath = disabledPreset;
-        isEnabled = false;
-    }
-
-    if (!presetPath) {
+    // Enable the preset through the normal enableMod path rather than a raw move
+    // into base addons: enableMod allocates a free slot across base + overflow
+    // folders (so it works for a >99 user with a full citadel/addons) and never
+    // clobbers an existing pakNN the way a hard-coded rename could.
+    const mods = await scanMods(deadlockPath);
+    const preset = mods.find((m) => m.fileName === presetFileName);
+    if (!preset) {
         throw new Error(`Preset file not found: ${presetFileName}`);
     }
-
-    // Move to addons if disabled
-    if (!isEnabled) {
-        const destPath = join(addonsPath, presetFileName);
-        renameSync(presetPath, destPath);
-    }
+    if (preset.enabled) return; // already active
+    await enableMod(deadlockPath, preset.id);
 });
 
 // list-mina-variants

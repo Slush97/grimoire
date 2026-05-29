@@ -49,7 +49,8 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          # Match the local pnpm that generates pnpm-lock.yaml (v10); see ci.yml.
+          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v6
@@ -268,3 +269,87 @@ jobs:
           fi
           git commit -m "Update to ${{ steps.meta.outputs.version }}"
           git push origin master
+
+  apt-publish:
+    needs: release
+    runs-on: ubuntu-latest
+    # Dormant until the R2 bucket + secrets exist and you set the repo variable
+    # APT_PUBLISH_ENABLED to "true". Until then this is skipped, so releases
+    # stay green while the apt repo isn't wired up. See docs/apt-repo.md.
+    if: startsWith(github.ref, 'refs/tags/') && inputs.draft != true && vars.APT_PUBLISH_ENABLED == 'true'
+
+    permissions:
+      contents: read
+
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+      AWS_DEFAULT_REGION: auto
+      R2_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      BUCKET: grimoire-apt
+
+    steps:
+      - name: Download Linux artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: linux-build
+          path: artifacts
+
+      - name: Install reprepro
+        run: sudo apt-get update && sudo apt-get install -y reprepro
+
+      # Import the dedicated (passphraseless) repo signing key into a throwaway
+      # GNUPGHOME and stash its fingerprint for reprepro's SignWith.
+      - name: Import signing key
+        shell: bash
+        run: |
+          set -euo pipefail
+          GNUPGHOME="$(mktemp -d)"; export GNUPGHOME
+          echo "GNUPGHOME=$GNUPGHOME" >> "$GITHUB_ENV"
+          echo "${{ secrets.APT_GPG_PRIVATE_KEY }}" | base64 -d | gpg --batch --import
+          FPR="$(gpg --list-secret-keys --with-colons | awk -F: '/^fpr:/{print $10; exit}')"
+          echo "APT_GPG_FPR=$FPR" >> "$GITHUB_ENV"
+
+      # Rebuild a fresh, signed, latest-only repo from this release's .deb.
+      # reprepro keeps a single version per package, so the repo always offers
+      # exactly the current release; older versions remain on GitHub Releases.
+      - name: Build signed repo
+        shell: bash
+        run: |
+          set -euo pipefail
+          VERSION="${GITHUB_REF_NAME#v}"
+          DEB="artifacts/grimoire_${VERSION}_amd64.deb"
+          if [ ! -f "$DEB" ]; then
+            echo "ERROR: $DEB not found in artifacts"; ls -la artifacts; exit 1
+          fi
+          mkdir -p repo/conf
+          cat > repo/conf/distributions <<EOF
+          Origin: Grimoire
+          Label: Grimoire
+          Codename: stable
+          Suite: stable
+          Architectures: amd64
+          Components: main
+          Description: Grimoire (Deadlock mod manager) APT repository
+          SignWith: ${APT_GPG_FPR}
+          EOF
+          reprepro -b repo includedeb stable "$DEB"
+          gpg --export "$APT_GPG_FPR" > repo/grimoire.gpg
+
+      # Pool .debs are version-stamped and immutable, so cache them hard. The
+      # dists/ index reuses stable paths every release, so it must be no-cache
+      # or apt update sees a stale package list behind Cloudflare's CDN. Upload
+      # the pool before the index so the index never points at a missing .deb.
+      - name: Publish to R2
+        shell: bash
+        run: |
+          set -euo pipefail
+          aws s3 sync repo/pool/ "s3://${BUCKET}/pool/" --delete \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "public, max-age=31536000, immutable"
+          aws s3 sync repo/dists/ "s3://${BUCKET}/dists/" --delete \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "no-cache"
+          aws s3 cp repo/grimoire.gpg "s3://${BUCKET}/grimoire.gpg" \
+            --endpoint-url "$R2_ENDPOINT" \
+            --cache-control "no-cache"

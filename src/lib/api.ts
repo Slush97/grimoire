@@ -1,7 +1,9 @@
-import type { Mod, AppSettings, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
+import type { HeroPortrait, SoulModelInfo, HeroPoseInfo } from '../types/portrait';
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
+  GameBananaModFileList,
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaMod,
@@ -14,6 +16,7 @@ import type {
 export type {
   GameBananaModsResponse,
   GameBananaModDetails,
+  GameBananaModFileList,
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaMod,
@@ -87,8 +90,131 @@ export async function applyUnknownCustomMod(modId: string, args: ApplyUnknownCus
   return window.electronAPI.applyUnknownCustomMod(modId, args);
 }
 
+export async function associateUnknownMod(modId: string, args: AssociateUnknownModArgs): Promise<Mod> {
+  return window.electronAPI.associateUnknownMod(modId, args);
+}
+
+export async function listUnknownModFiles(modId: string): Promise<UnknownModFileList> {
+  return window.electronAPI.listUnknownModFiles(modId);
+}
+
+export async function editLocalMod(modId: string, args: EditLocalModArgs): Promise<Mod> {
+  return window.electronAPI.editLocalMod(modId, args);
+}
+
 export async function setVariantLabel(modId: string, label: string): Promise<Mod> {
   return window.electronAPI.setVariantLabel(modId, label);
+}
+
+export async function setModLockerHero(
+  modId: string,
+  heroName: string | null
+): Promise<Mod> {
+  return window.electronAPI.setModLockerHero(modId, heroName);
+}
+
+export async function getHeroPortraits(heroName: string): Promise<HeroPortrait[]> {
+  return window.electronAPI.getHeroPortraits(heroName);
+}
+
+export async function getHeroAbilitySlots(heroName: string): Promise<HeroAbilitySlot[]> {
+  return window.electronAPI.getHeroAbilitySlots(heroName);
+}
+
+export async function applyHeroCard(
+  heroName: string,
+  sourceFileName: string
+): Promise<ApplyHeroCardResult> {
+  return window.electronAPI.applyHeroCard(heroName, sourceFileName);
+}
+
+export async function revertHeroCard(heroName: string): Promise<ApplyHeroCardResult> {
+  return window.electronAPI.revertHeroCard(heroName);
+}
+
+export async function getActiveHeroCard(
+  heroName: string
+): Promise<{ sourceFileName: string; variants: string[] } | null> {
+  return window.electronAPI.getActiveHeroCard(heroName);
+}
+
+/** Whether a soul-container mod has an exported model in the user's library (+ mtime). */
+export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
+  return window.electronAPI.getSoulModelInfo(key);
+}
+
+/** Export a soul-container mod's model via the bundled vpkmerge exporter.
+ *  Keyed by the mod's metaKey (folder-qualified for overflow mods). */
+export async function exportSoulModel(metaKey: string): Promise<SoulModelInfo> {
+  return window.electronAPI.exportSoulModel(metaKey);
+}
+
+/** Delete a soul-container mod's exported model. */
+export async function clearSoulModel(key: string): Promise<void> {
+  return window.electronAPI.clearSoulModel(key);
+}
+
+/** Whether a hero's posed 3D still exists for the given active skin (+ mtime, key). */
+export async function getHeroPoseInfo(
+  heroName: string,
+  skinMetaKey?: string
+): Promise<HeroPoseInfo> {
+  return window.electronAPI.getHeroPoseInfo(heroName, skinMetaKey);
+}
+
+/** Generate a hero's posed 3D still via the bundled vpkmerge `--pose` exporter.
+ *  Pass the active skin's metaKey to pose that skin; omit for a vanilla pose. */
+export async function exportHeroPose(
+  heroName: string,
+  skinMetaKey?: string
+): Promise<HeroPoseInfo> {
+  return window.electronAPI.exportHeroPose(heroName, skinMetaKey);
+}
+
+export async function applyHeroSound(
+  heroName: string,
+  slot: AbilitySlot,
+  sourceFileName: string,
+  params?: AbilitySoundParams
+): Promise<ApplyHeroSoundResult> {
+  return window.electronAPI.applyHeroSound(heroName, slot, sourceFileName, params);
+}
+
+export async function revertHeroSound(
+  heroName: string,
+  slot: AbilitySlot
+): Promise<ApplyHeroSoundResult> {
+  return window.electronAPI.revertHeroSound(heroName, slot);
+}
+
+export async function getActiveHeroSounds(heroName: string): Promise<ActiveHeroSound[]> {
+  return window.electronAPI.getActiveHeroSounds(heroName);
+}
+
+export async function getLockerOverview(): Promise<LockerOverview> {
+  return window.electronAPI.getLockerOverview();
+}
+
+export async function getLockerCardThumbnails(): Promise<LockerCardThumbnail[]> {
+  return window.electronAPI.getLockerCardThumbnails();
+}
+
+export async function clearLockerOverrides(scope: LockerClearScope): Promise<void> {
+  return window.electronAPI.clearLockerOverrides(scope);
+}
+
+export async function setModGlobalType(
+  modId: string,
+  globalType: GlobalModType | null
+): Promise<Mod> {
+  return window.electronAPI.setModGlobalType(modId, globalType);
+}
+
+export async function setModIgnoreUpdates(
+  modId: string,
+  ignore: boolean
+): Promise<Mod> {
+  return window.electronAPI.setModIgnoreUpdates(modId, ignore);
 }
 
 export async function backfillGameBananaFileId(
@@ -102,8 +228,8 @@ export async function setModPriority(modId: string, priority: number): Promise<M
   return window.electronAPI.setModPriority(modId, priority);
 }
 
-export async function reorderMods(orderedFileNames: string[]): Promise<Mod[]> {
-  return window.electronAPI.reorderMods(orderedFileNames);
+export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
+  return window.electronAPI.reorderMods(orderedIds);
 }
 
 export async function swapModPriority(modIdA: string, modIdB: string): Promise<Mod[]> {
@@ -122,6 +248,23 @@ export async function importCustomMod(args: {
 export async function readImageDataUrl(imagePath: string): Promise<string> {
   return window.electronAPI.readImageDataUrl(imagePath);
 }
+
+export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
+  return window.electronAPI.mergeMods(args);
+}
+
+export async function unmergeMod(mergedModId: string): Promise<UnmergeModResult> {
+  return window.electronAPI.unmergeMod(mergedModId);
+}
+
+export async function extractMergeSource(
+  mergedModId: string,
+  sourceFileName: string,
+): Promise<ExtractMergeSourceResult> {
+  return window.electronAPI.extractMergeSource(mergedModId, sourceFileName);
+}
+
+export type { UnmergeModResult, ExtractMergeSourceResult };
 
 // =====================
 // Launch API
@@ -189,6 +332,10 @@ export async function browseMods(
   sort?: string
 ): Promise<GameBananaModsResponse> {
   return window.electronAPI.browseMods({ page, perPage, search, section, categoryId, sort });
+}
+
+export async function getModFileList(modId: number, section?: string): Promise<GameBananaModFileList> {
+  return window.electronAPI.getModFileList({ modId, section });
 }
 
 export async function getModDetails(modId: number, section?: string): Promise<GameBananaModDetails> {
@@ -324,8 +471,21 @@ export interface ModConflict {
   details: string;
 }
 
+// Conflict detection re-parses every enabled VPK on the main process, so
+// firing it twice for the same store update (Sidebar badge + Installed
+// page) doubled the freeze window. Concurrent callers share the in-flight
+// promise; once it resolves, the next call starts a fresh scan so any
+// state change since then is picked up immediately.
+let conflictsInFlight: Promise<ModConflict[]> | null = null;
+
 export async function getConflicts(): Promise<ModConflict[]> {
-  return window.electronAPI.getConflicts();
+  if (conflictsInFlight) return conflictsInFlight;
+  const promise = window.electronAPI.getConflicts();
+  conflictsInFlight = promise;
+  promise.finally(() => {
+    if (conflictsInFlight === promise) conflictsInFlight = null;
+  });
+  return promise;
 }
 
 export async function getIgnoredConflicts(): Promise<string[]> {
@@ -355,6 +515,10 @@ export interface ProfileMod {
   fileName: string;
   enabled: boolean;
   priority: number;
+  /** Stable identity. Populated at profile-save time from metadata; used by
+   *  applyProfile to resolve mods whose fileName has changed since save. */
+  gameBananaId?: number;
+  gameBananaFileId?: number;
 }
 
 export interface ProfileCrosshairSettings {

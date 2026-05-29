@@ -1,8 +1,9 @@
 import { promises as fs } from 'fs';
 import { existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, basename } from 'path';
 import { createHash, randomBytes } from 'crypto';
-import { getAddonsPath, getDisabledPath } from './deadlock';
+import { getAddonsPath, getDisabledPath, getAddonFolderPaths, createNextOverflowFolder, overflowAddonsPath, MAX_ADDON_FOLDERS, metaKeyFor } from './deadlock';
+import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
 import { compareFileContents, fingerprintFile } from './fileMatch';
 
@@ -12,6 +13,14 @@ const MIN_VPK_PRIORITY = 1;
 const MAX_VPK_PRIORITY = 99;
 /** Default priority for mods without pak## prefix */
 const DEFAULT_MOD_PRIORITY = 50;
+/**
+ * Thrown by enableMod when every addon folder (base + overflow, up to
+ * MAX_ADDON_FOLDERS) is full. The renderer matches on the "mods enabled at once"
+ * phrase to surface this as a non-fatal toast instead of the full-page error
+ * screen, so keep that substring stable across cap changes.
+ */
+export const ENABLE_LIMIT_MESSAGE =
+    'You can have at most 990 mods enabled at once. Disable one to make room.';
 
 type CollisionMetadataOwner = 'enabled' | 'disabled';
 
@@ -20,6 +29,12 @@ export interface Mod {
     name: string;
     fileName: string;
     path: string;
+    /** Metadata/identity key for this VPK, derived from its folder location.
+     *  Bare filename for the base addons folder + .disabled (unchanged for
+     *  existing installs); `addons{N}/<file>` for overflow folders. Use this,
+     *  not fileName, as the key for getModMetadata/setModMetadata and as the
+     *  generateModId input, so a pakNN_dir.vpk can't collide across folders. */
+    metaKey: string;
     enabled: boolean;
     priority: number;
     size: number;
@@ -48,6 +63,18 @@ export interface Mod {
      *  a meaningful label - falls between fileDescription and the local
      *  pakNN_dir.vpk filename in the picker's display chain. */
     sourceFileName?: string;
+    /** Hero this mod belongs to in the Locker (canonical name). Either
+     *  auto-inferred at download time for Sound mods or manually set by the
+     *  user; takes precedence over categoryId in the locker grouping. */
+    lockerHero?: string;
+    /** Provenance for lockerHero. Missing values are legacy inferred tags. */
+    lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource;
+    /** Populated when this VPK was produced by mergeMods. The metadata
+     *  enricher reads this from the mod metadata sidecar. */
+    merged?: import('../../../src/types/mod').MergedModInfo;
+    /** User opted out of the "update available" flag for this mod. The
+     *  enricher reads this from the mod metadata sidecar. */
+    ignoreUpdates?: boolean;
 }
 
 /**
@@ -66,11 +93,13 @@ function parseVpkPriority(filename: string): number | null {
 }
 
 /**
- * Generate a mod ID from the file name (hash)
- * Uses fileName instead of full path so ID stays stable when mod moves between folders
+ * Generate a mod ID by hashing its metadata key (see metaKeyFor). The key is the
+ * bare filename for base-addons + .disabled mods (so existing IDs are unchanged)
+ * and `addons{N}/<file>` for overflow mods, which keeps IDs unique when the same
+ * pakNN_dir.vpk name exists in more than one addon folder.
  */
-function generateModId(fileName: string): string {
-    return createHash('md5').update(fileName).digest('hex').slice(0, 16);
+function generateModId(metaKey: string): string {
+    return createHash('md5').update(metaKey).digest('hex').slice(0, 16);
 }
 
 /**
@@ -96,6 +125,106 @@ function extractModName(filename: string): string {
 }
 
 /**
+ * Build a free-form, unique filename for a mod living in the .disabled/ folder.
+ *
+ * Disabled VPKs are not loaded by the game, so they don't need a pakNN load-order
+ * slot. Naming them free-form (a) lifts the 99-name cap on the disabled library
+ * and (b) keeps the enabled (pakNN) and disabled namespaces disjoint, so
+ * `md5(fileName)` stays globally unique with no identity/metadata migration.
+ *
+ * The readable stem comes from the file's own name when it has one; for an
+ * enabled mod (always a bare pakNN with no descriptive stem) we fall back to the
+ * `preferredName` the caller pulls from metadata (the mod's display name), so a
+ * disabled file reads like `glamorous_geist_dir.vpk` instead of `mod_12ce`. A
+ * short token is appended only to stay unique, and the result is guaranteed not
+ * to parse back as a pakNN slot.
+ */
+export function makeDisabledFileName(
+    sourceFileName: string,
+    taken: Set<string>,
+    preferredName?: string
+): string {
+    // The file's own stem, minus any pak## load-order prefix (disabled files
+    // carry no slot). Empty for bare pakNN names, which is the disable case.
+    let stem = sourceFileName.replace(/_dir\.vpk$/i, '').replace(/\.vpk$/i, '');
+    stem = stem.replace(/^pak\d{2}_?/i, '').trim();
+
+    let base = slugify(stem) || slugify(preferredName ?? '') || 'mod';
+    // Guard against a base that still starts with "pak<digit>": parseVpkPriority
+    // is lenient (it reads chars 3-4 and parseInts them), so "pak1_foo" would be
+    // read back as slot 1 and loop forever below. Prefix it out of that shape.
+    if (/^pak\d/i.test(base)) base = `mod_${base}`;
+
+    const build = (suffix: string) => `${base}${suffix}_dir.vpk`;
+    let candidate = build('');
+    while (parseVpkPriority(candidate) !== null || taken.has(candidate.toLowerCase())) {
+        candidate = build(`_${randomBytes(2).toString('hex')}`);
+    }
+    return candidate;
+}
+
+/**
+ * Lowercase a display string into a filesystem-safe, pakNN-free filename stem:
+ * non-alphanumerics collapse to underscores, edges trimmed, length capped.
+ */
+function slugify(value: string): string {
+    const s = value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+    return s.slice(0, 48).replace(/_+$/, '');
+}
+
+/**
+ * Folder index of an addon VPK from its on-disk path: 0 for the base
+ * citadel/addons, N for an overflow citadel/addonsN. Anything else (e.g. a
+ * .disabled file) reports 0; callers that care gate on mod.enabled first.
+ */
+function addonFolderIndex(vpkPath: string): number {
+    const match = basename(dirname(vpkPath)).match(/^addons(\d+)$/i);
+    return match ? parseInt(match[1], 10) : 0;
+}
+
+/**
+ * The set of pakNN load-order numbers currently used by files in one folder.
+ * Free-form (disabled) filenames don't parse as pakNN, so they're excluded.
+ */
+async function folderPakNumbers(folder: string): Promise<Set<number>> {
+    const nums = new Set<number>();
+    if (!existsSync(folder)) return nums;
+    for (const entry of await fs.readdir(folder)) {
+        const priority = parseVpkPriority(entry);
+        if (priority !== null) nums.add(priority);
+    }
+    return nums;
+}
+
+/**
+ * Choose an enabled (pakNN) slot for a mod being enabled. Tries the preferred
+ * numbers in order (remembered last-priority, then the mod's own legacy number)
+ * and otherwise takes the lowest free slot. Throws the cap error when all 99 are
+ * taken. `forbidden` must include every addons number plus every OTHER disabled
+ * pakNN, so enabling can never collide an id with a still-disabled mod.
+ */
+function pickEnableSlot(forbidden: Set<number>, preferred: Array<number | undefined>): number {
+    for (const p of preferred) {
+        if (
+            p != null &&
+            Number.isInteger(p) &&
+            p >= MIN_VPK_PRIORITY &&
+            p <= MAX_VPK_PRIORITY &&
+            !forbidden.has(p)
+        ) {
+            return p;
+        }
+    }
+    for (let p = MIN_VPK_PRIORITY; p <= MAX_VPK_PRIORITY; p++) {
+        if (!forbidden.has(p)) return p;
+    }
+    throw new Error(ENABLE_LIMIT_MESSAGE);
+}
+
+/**
  * Scan a folder for VPK mods (async)
  */
 async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
@@ -117,12 +246,14 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
             if (!isDeadlockModVpk(entry)) continue;
 
             const priority = parseVpkPriority(entry) ?? DEFAULT_MOD_PRIORITY;
+            const metaKey = metaKeyFor(fullPath);
 
             mods.push({
-                id: generateModId(entry),
+                id: generateModId(metaKey),
                 name: extractModName(entry),
                 fileName: entry,
                 path: fullPath,
+                metaKey,
                 enabled,
                 priority,
                 size: stats.size,
@@ -149,15 +280,23 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
 
     await reconcileEnabledDisabledCollisions(deadlockPath, addonsPath, disabledPath);
 
-    const [enabledMods, disabledMods] = await Promise.all([
-        scanFolder(addonsPath, true),
+    // Scan every enabled addon folder (base citadel/addons plus any overflow
+    // addons1, addons2, ...) and the single shared .disabled parking lot. Each
+    // mod's metaKey is stamped in scanFolder from its folder location.
+    const enabledFolders = getAddonFolderPaths(deadlockPath);
+    const scanned = await Promise.all([
+        ...enabledFolders.map((folder) => scanFolder(folder, true)),
         scanFolder(disabledPath, false),
     ]);
 
-    const mods = [...enabledMods, ...disabledMods];
+    const mods = scanned.flat();
 
-    // Sort by priority
-    mods.sort((a, b) => a.priority - b.priority);
+    // Sort by global load order: folder first (base, then addons1, addons2, ...),
+    // then pakNN within a folder, so the list reflects real load priority.
+    mods.sort(
+        (a, b) =>
+            addonFolderIndex(a.path) * 100 + a.priority - (addonFolderIndex(b.path) * 100 + b.priority)
+    );
 
     return mods;
 }
@@ -263,60 +402,43 @@ function fileNameForPriority(fileName: string, priority: number): string {
     return `pak${priorityStr}_dir.vpk`;
 }
 
-async function moveModToFolder(
-    deadlockPath: string,
+/**
+ * Move a mod to a folder under an explicit destination filename, migrating its
+ * metadata to follow the rename. Callers compute a collision-free destination
+ * (enableMod picks a free pakNN slot; disableMod mints a free-form unique name),
+ * so this is a straight rename - no slot-conflict healing needed here.
+ *
+ * `rememberPriority`, set on disable, is stashed in metadata BEFORE the rename
+ * so it travels with the migrated entry and can be restored on the next enable.
+ */
+async function moveModToFolderAs(
     targetMod: Mod,
     destinationFolder: string,
-    enabled: boolean
+    destinationFileName: string,
+    enabled: boolean,
+    rememberPriority?: number
 ): Promise<Mod> {
-    let destinationFileName = targetMod.fileName;
-    let collisionMetadata: ReturnType<typeof getModMetadata> | undefined;
-    let collisionMetadataOwner: CollisionMetadataOwner | undefined;
-    const destinationPath = join(destinationFolder, destinationFileName);
-    const hasConflict = targetMod.path !== destinationPath && existsSync(destinationPath);
-
-    if (hasConflict) {
-        const identical = await sameFileContents(
-            targetMod.path,
-            join(destinationFolder, destinationFileName)
-        );
-
-        if (identical) {
-            await fs.unlink(targetMod.path);
-            return {
-                ...targetMod,
-                enabled,
-                path: join(destinationFolder, destinationFileName),
-            };
-        }
-
-        const priority = await findNextAvailablePriority(deadlockPath);
-        collisionMetadata = getModMetadata(targetMod.fileName);
-        collisionMetadataOwner = await getCollisionMetadataOwner(
-            collisionMetadata?.sha256,
-            targetMod.path
-        );
-        destinationFileName = fileNameForPriority(targetMod.fileName, priority);
+    if (rememberPriority != null) {
+        setModMetadata(targetMod.metaKey, { lastPriority: rememberPriority });
     }
 
     await fs.mkdir(destinationFolder, { recursive: true });
-    await fs.rename(targetMod.path, join(destinationFolder, destinationFileName));
+    const destinationPath = join(destinationFolder, destinationFileName);
+    await fs.rename(targetMod.path, destinationPath);
+    const destMetaKey = metaKeyFor(destinationPath);
 
-    if (destinationFileName !== targetMod.fileName) {
-        if (collisionMetadataOwner) {
-            moveCollisionMetadata(targetMod.fileName, destinationFileName, collisionMetadataOwner, collisionMetadata);
-        } else {
-            migrateModMetadata([{ from: targetMod.fileName, to: destinationFileName }]);
-        }
+    if (destMetaKey !== targetMod.metaKey) {
+        migrateModMetadata([{ from: targetMod.metaKey, to: destMetaKey }]);
     }
 
     return {
         ...targetMod,
-        id: generateModId(destinationFileName),
+        id: generateModId(destMetaKey),
         fileName: destinationFileName,
+        metaKey: destMetaKey,
         enabled,
         priority: parseVpkPriority(destinationFileName) ?? targetMod.priority,
-        path: join(destinationFolder, destinationFileName),
+        path: destinationPath,
     };
 }
 
@@ -363,10 +485,83 @@ export async function findNextAvailablePriority(deadlockPath: string, startFrom 
 
     // If all numbers up to 99 are taken, this is an error
     if (priority >= MAX_VPK_PRIORITY && usedPriorities.has(MAX_VPK_PRIORITY)) {
-        throw new Error('No available priority slots (all 1-99 are used)');
+        throw new Error(ENABLE_LIMIT_MESSAGE);
     }
 
     return priority;
+}
+
+interface AllocatedSlot {
+    /** Absolute path of the chosen addon folder (base citadel/addons or an
+     *  overflow citadel/addonsN). */
+    folder: string;
+    /** pakNN_dir.vpk name for the chosen free slot in that folder. */
+    fileName: string;
+}
+
+/**
+ * Find a free enabled (pakNN) slot, walking the base addons folder first then
+ * each existing overflow folder in order, minting a new overflow folder (and
+ * patching gameinfo.gi to add its Game path) only when all are full. Per Model A
+ * the earlier folder is higher priority, so filling base-first keeps the densest
+ * load order. Throws ENABLE_LIMIT_MESSAGE at the MAX_ADDON_FOLDERS cap.
+ *
+ * `preferred` slot numbers (a remembered last-priority, a mod's own legacy pakNN)
+ * are honored only in the base folder. `disabledForbidden` are pakNN held by
+ * .disabled files; the base folder must avoid them because base + .disabled share
+ * the bare-filename id namespace (overflow folders are folder-namespaced, so they
+ * don't). Shared by enableMod and allocateEnabledVpkPath.
+ */
+async function allocateSlot(
+    deadlockPath: string,
+    opts: { disabledForbidden: Set<number>; preferred: Array<number | undefined> }
+): Promise<AllocatedSlot> {
+    const folders = getAddonFolderPaths(deadlockPath);
+    for (let i = 0; i < folders.length; i++) {
+        const folder = folders[i];
+        const used = await folderPakNumbers(folder);
+        const forbidden = i === 0 ? new Set<number>([...used, ...opts.disabledForbidden]) : used;
+        const preferred = i === 0 ? opts.preferred : [];
+        let slot: number;
+        try {
+            slot = pickEnableSlot(forbidden, preferred);
+        } catch {
+            continue; // this folder is full; try the next
+        }
+        return { folder, fileName: `pak${String(slot).padStart(2, '0')}_dir.vpk` };
+    }
+
+    // Every existing folder is full: spill into a fresh overflow folder. Add it
+    // to gameinfo BEFORE the caller writes a VPK in, or the engine won't load it.
+    // createNextOverflowFolder returns null once the MAX_ADDON_FOLDERS cap is hit.
+    const overflowFolder = createNextOverflowFolder(deadlockPath);
+    if (!overflowFolder) {
+        throw new Error(ENABLE_LIMIT_MESSAGE);
+    }
+    const status = fixGameinfo(deadlockPath);
+    if (!status.configured) {
+        throw new Error(
+            `Couldn't add the overflow mod folder to gameinfo.gi${status.message ? `: ${status.message}` : ''}. ` +
+                'Open Settings and use Fix Configuration, then try again.'
+        );
+    }
+    return { folder: overflowFolder, fileName: `pak${String(MIN_VPK_PRIORITY).padStart(2, '0')}_dir.vpk` };
+}
+
+/**
+ * Absolute path a brand-new ENABLED VPK should be written to (custom local
+ * import, merge output), honoring the multi-folder overflow model so the create
+ * still succeeds when the base addons folder is full. Unlike
+ * findNextAvailablePriority (base + .disabled only), this spills into overflow
+ * folders and mints a new one at capacity. Throws ENABLE_LIMIT_MESSAGE at the cap.
+ *
+ * The caller writes the VPK to this path and then keys its metadata by
+ * metaKeyFor(path), since an overflow destination uses a folder-prefixed key.
+ */
+export async function allocateEnabledVpkPath(deadlockPath: string): Promise<string> {
+    const disabledForbidden = await folderPakNumbers(getDisabledPath(deadlockPath));
+    const { folder, fileName } = await allocateSlot(deadlockPath, { disabledForbidden, preferred: [] });
+    return join(folder, fileName);
 }
 
 /**
@@ -384,8 +579,26 @@ export async function enableMod(deadlockPath: string, modId: string): Promise<Mo
         return targetMod;
     }
 
-    const addonsPath = getAddonsPath(deadlockPath);
-    return moveModToFolder(deadlockPath, targetMod, addonsPath, true);
+    const disabledPath = getDisabledPath(deadlockPath);
+
+    // A still-disabled mod with a legacy pakNN name shares the bare-filename id
+    // namespace with a base-folder file, so the base folder must avoid those
+    // numbers (an overflow file's id is namespaced by its folder, so disabled
+    // names can't collide there). The mod we're moving out is excluded.
+    const disabledUsed = await folderPakNumbers(disabledPath);
+    const ownNumber = parseVpkPriority(targetMod.fileName);
+    if (ownNumber !== null) disabledUsed.delete(ownNumber);
+
+    // Prefer the slot the mod last held, then its own legacy number, so a
+    // re-enable returns it to roughly its old load-order position when free.
+    // allocateSlot fills the base addons folder first, then each overflow folder
+    // in order, minting a new one (and patching gameinfo) only when all are full.
+    const meta = getModMetadata(targetMod.metaKey);
+    const { folder, fileName } = await allocateSlot(deadlockPath, {
+        disabledForbidden: disabledUsed,
+        preferred: [meta?.lastPriority, ownNumber ?? undefined],
+    });
+    return moveModToFolderAs(targetMod, folder, fileName, true);
 }
 
 /**
@@ -404,7 +617,20 @@ export async function disableMod(deadlockPath: string, modId: string): Promise<M
     }
 
     const disabledPath = getDisabledPath(deadlockPath);
-    return moveModToFolder(deadlockPath, targetMod, disabledPath, false);
+
+    // Disabled mods carry no load-order slot, so give them a free-form unique
+    // name (lifting the 99-name cap on the disabled library) and remember the
+    // priority they held so re-enabling can restore it.
+    const taken = existsSync(disabledPath)
+        ? new Set((await fs.readdir(disabledPath)).map((n) => n.toLowerCase()))
+        : new Set<string>();
+    // Name the disabled file after the mod's display name (an enabled mod's own
+    // filename is a bare pakNN with nothing readable to keep).
+    const meta = getModMetadata(targetMod.metaKey);
+    const preferredName = meta?.modName ?? meta?.sourceFileName ?? meta?.variantLabel;
+    const destinationFileName = makeDisabledFileName(targetMod.fileName, taken, preferredName);
+
+    return moveModToFolderAs(targetMod, disabledPath, destinationFileName, false, targetMod.priority);
 }
 
 /**
@@ -420,10 +646,10 @@ export async function deleteMod(deadlockPath: string, modId: string): Promise<vo
 
     await fs.unlink(targetMod.path);
 
-    // Metadata is keyed by fileName. If we leave it behind, the next mod that
-    // is assigned the same pakNN_dir.vpk slot will inherit the deleted mod's
-    // gameBananaId, thumbnail, category, etc. via setModMetadata's merge.
-    removeModMetadata(targetMod.fileName);
+    // Metadata is keyed by metaKey. If we leave it behind, the next mod that
+    // is assigned the same slot will inherit the deleted mod's gameBananaId,
+    // thumbnail, category, etc. via setModMetadata's merge.
+    removeModMetadata(targetMod.metaKey);
 }
 
 /**
@@ -457,81 +683,142 @@ export async function setModPriority(
         return targetMod;
     }
 
-    if (existsSync(join(parentDir, newFileName))) {
+    // Reject a slot already taken in the mod's OWN folder. For a base-folder mod
+    // also reject one held by a disabled file: the two share the bare-filename id
+    // namespace, so reconcile would otherwise rename the disabled file on the next
+    // scan and a merged-mod manifest pointing at it would lose its source.
+    // (Overflow folders have a folder-prefixed id namespace, so disabled names
+    // can't collide there.)
+    const collides =
+        existsSync(join(parentDir, newFileName)) ||
+        (addonFolderIndex(targetMod.path) === 0 &&
+            existsSync(join(getDisabledPath(deadlockPath), newFileName)));
+    if (collides) {
         throw new Error(`Priority ${newPriority} is already in use`);
     }
-    await fs.rename(join(parentDir, targetMod.fileName), join(parentDir, newFileName));
+    const newPath = join(parentDir, newFileName);
+    await fs.rename(join(parentDir, targetMod.fileName), newPath);
+    const newMetaKey = metaKeyFor(newPath);
 
-    const oldMeta = getModMetadata(targetMod.fileName);
+    const oldMeta = getModMetadata(targetMod.metaKey);
     if (oldMeta) {
-        setModMetadata(newFileName, oldMeta);
-        removeModMetadata(targetMod.fileName);
+        setModMetadata(newMetaKey, oldMeta);
+        removeModMetadata(targetMod.metaKey);
     }
 
     return {
         ...targetMod,
         priority: newPriority,
         fileName: newFileName,
-        path: join(parentDir, newFileName),
-        id: generateModId(newFileName),
+        metaKey: newMetaKey,
+        path: newPath,
+        id: generateModId(newMetaKey),
     };
 }
 
 /**
- * Reorder mods by rewriting their pak## priorities to match the given order (async).
- * - Assigns priorities 1, 2, 3, … to orderedFileNames, skipping priority numbers
- *   already held by mods NOT in the list (so disabled mods keep their slots).
- * - Uses two-phase rename (temp prefix → final) so collisions between target
- *   priorities can't happen mid-operation.
- * - Migrates metadata for every renamed _dir.vpk.
+ * Reorder the enabled mods to match the given order (async).
+ *
+ * `orderedIds` is the desired order of enabled mods (by id). They're laid out
+ * densely across addon folders per Model A: the first 99 fill the base
+ * citadel/addons (pak01..pak99), the next 99 fill addons1, then addons2, etc.
+ * So flat position P maps to folderIndex floor((P-1)/99), slot ((P-1)%99)+1;
+ * lower position = higher load-order priority.
+ *
+ * Slots held by mods NOT in the list are reserved so they're not overwritten: an
+ * enabled mod keeps its slot in its own folder, and a legacy disabled pakNN
+ * reserves that number in the BASE folder (it shares the bare-filename id
+ * namespace). Disabled ids in the list are ignored - reordering never pulls a mod
+ * out of .disabled (matches the old free-form-name no-op).
+ *
+ * Overflow folders are created and added to gameinfo before any file moves. A
+ * two-phase rename (source -> temp in the target folder -> final) keeps
+ * cross-folder moves and slot swaps collision-free; metadata migrates with each.
  */
 export async function reorderMods(
     deadlockPath: string,
-    orderedFileNames: string[]
+    orderedIds: string[]
 ): Promise<void> {
     const allMods = await scanMods(deadlockPath);
-    const modByFileName = new Map(allMods.map((m) => [m.fileName, m]));
+    const modById = new Map(allMods.map((m) => [m.id, m]));
 
-    for (const fn of orderedFileNames) {
-        if (!modByFileName.has(fn)) {
-            throw new Error(`Mod not in list: ${fn}`);
+    const targets: Mod[] = [];
+    for (const id of orderedIds) {
+        const mod = modById.get(id);
+        if (!mod) throw new Error(`Mod not in list: ${id}`);
+        if (mod.enabled) targets.push(mod);
+    }
+    if (targets.length === 0) return;
+    const targetIds = new Set(targets.map((m) => m.id));
+
+    // Reserve slots held by mods NOT being reordered, per folder index.
+    const reservedByIndex = new Map<number, Set<number>>();
+    const reserve = (idx: number, slot: number) => {
+        const set = reservedByIndex.get(idx) ?? new Set<number>();
+        set.add(slot);
+        reservedByIndex.set(idx, set);
+    };
+    for (const m of allMods) {
+        if (targetIds.has(m.id)) continue;
+        const slot = parseVpkPriority(m.fileName);
+        if (slot === null) continue; // free-form disabled: reserves nothing
+        if (m.enabled) reserve(addonFolderIndex(m.path), slot);
+        else reserve(0, slot); // legacy disabled pakNN blocks the base slot
+    }
+
+    // Generate dense (folderIndex, slot) addresses in priority order, skipping
+    // reserved slots and advancing to the next folder when one fills.
+    const addresses: Array<{ idx: number; slot: number }> = [];
+    let idx = 0;
+    let slot = MIN_VPK_PRIORITY;
+    while (addresses.length < targets.length) {
+        if (slot > MAX_VPK_PRIORITY) {
+            idx++;
+            slot = MIN_VPK_PRIORITY;
+            if (idx > MAX_ADDON_FOLDERS - 1) throw new Error(ENABLE_LIMIT_MESSAGE);
+            continue;
+        }
+        if (!reservedByIndex.get(idx)?.has(slot)) addresses.push({ idx, slot });
+        slot++;
+    }
+
+    // Create the overflow folders the layout needs and make gameinfo list them
+    // before moving any files in (or the engine won't load them).
+    const maxIdx = addresses.reduce((mx, a) => Math.max(mx, a.idx), 0);
+    if (maxIdx >= 1) {
+        for (let k = 1; k <= maxIdx; k++) overflowAddonsPath(deadlockPath, k);
+        const status = fixGameinfo(deadlockPath);
+        if (!status.configured) {
+            throw new Error(
+                `Couldn't add the overflow mod folders to gameinfo.gi${status.message ? `: ${status.message}` : ''}. ` +
+                    'Open Settings and use Fix Configuration, then try again.'
+            );
         }
     }
 
-    const targetSet = new Set(orderedFileNames);
-    const reserved = new Set(
-        allMods.filter((m) => !targetSet.has(m.fileName)).map((m) => m.priority)
-    );
-
-    const assignments: { mod: Mod; newPriority: number; newFileName: string }[] = [];
-    let cursor = MIN_VPK_PRIORITY;
-    for (const fileName of orderedFileNames) {
-        while (reserved.has(cursor) && cursor <= MAX_VPK_PRIORITY) cursor++;
-        if (cursor > MAX_VPK_PRIORITY) {
-            throw new Error('No available priority slots (all 1-99 are used)');
+    type Assignment = { mod: Mod; toFolder: string; toFileName: string; toMetaKey: string };
+    const assignments: Assignment[] = [];
+    for (let i = 0; i < targets.length; i++) {
+        const mod = targets[i];
+        const { idx: toIdx, slot: toSlot } = addresses[i];
+        const toFolder = toIdx === 0 ? getAddonsPath(deadlockPath) : overflowAddonsPath(deadlockPath, toIdx);
+        const toFileName = `pak${String(toSlot).padStart(2, '0')}_dir.vpk`;
+        const toPath = join(toFolder, toFileName);
+        if (mod.path !== toPath) {
+            assignments.push({ mod, toFolder, toFileName, toMetaKey: metaKeyFor(toPath) });
         }
-        const mod = modByFileName.get(fileName)!;
-        const newFileName = renameWithPriority(fileName, cursor);
-        if (mod.priority !== cursor || newFileName !== fileName) {
-            assignments.push({ mod, newPriority: cursor, newFileName });
-        }
-        cursor++;
     }
-
     if (assignments.length === 0) return;
 
+    // Two-phase rename: source -> temp (in the TARGET folder) -> final. Unique
+    // temp names make cross-folder moves and same-folder slot swaps collision-free.
     const tmpId = randomBytes(4).toString('hex');
     type RenameStep = { fromPath: string; tmpPath: string; finalPath: string };
-    const steps: RenameStep[] = [];
-
-    for (const { mod, newFileName } of assignments) {
-        const parentDir = dirname(mod.path);
-        steps.push({
-            fromPath: join(parentDir, mod.fileName),
-            tmpPath: join(parentDir, `tmp${tmpId}_${mod.fileName}`),
-            finalPath: join(parentDir, newFileName),
-        });
-    }
+    const steps: RenameStep[] = assignments.map(({ mod, toFolder, toFileName }, i) => ({
+        fromPath: mod.path,
+        tmpPath: join(toFolder, `tmp${tmpId}_${i}_${toFileName}`),
+        finalPath: join(toFolder, toFileName),
+    }));
 
     const phase1Done: RenameStep[] = [];
     try {
@@ -569,10 +856,7 @@ export async function reorderMods(
     }
 
     migrateModMetadata(
-        assignments.map(({ mod, newFileName }) => ({
-            from: mod.fileName,
-            to: newFileName,
-        }))
+        assignments.map(({ mod, toMetaKey }) => ({ from: mod.metaKey, to: toMetaKey }))
     );
 }
 
@@ -595,9 +879,11 @@ export async function swapModPriority(
         throw new Error('Cannot swap mods with identical priorities');
     }
 
-    // Build a new ordered list where A and B's positions are swapped.
-    // We only reorder enabled mods to avoid touching disabled-mod priorities.
-    const enabled = mods.filter((m) => m.enabled).sort((x, y) => x.priority - y.priority);
+    // Build the enabled mods in global load order (folder first, then pakNN),
+    // swap A and B's positions, and hand the id order to reorderMods. We only
+    // reorder enabled mods to avoid touching disabled-mod priorities.
+    const globalPos = (m: Mod) => addonFolderIndex(m.path) * 100 + m.priority;
+    const enabled = mods.filter((m) => m.enabled).sort((x, y) => globalPos(x) - globalPos(y));
     const aIdx = enabled.findIndex((m) => m.id === modIdA);
     const bIdx = enabled.findIndex((m) => m.id === modIdB);
 
@@ -607,9 +893,9 @@ export async function swapModPriority(
         return;
     }
 
-    const orderedFileNames = enabled.map((m) => m.fileName);
-    [orderedFileNames[aIdx], orderedFileNames[bIdx]] = [orderedFileNames[bIdx], orderedFileNames[aIdx]];
-    await reorderMods(deadlockPath, orderedFileNames);
+    const orderedIds = enabled.map((m) => m.id);
+    [orderedIds[aIdx], orderedIds[bIdx]] = [orderedIds[bIdx], orderedIds[aIdx]];
+    await reorderMods(deadlockPath, orderedIds);
 }
 
 /**
@@ -637,7 +923,7 @@ async function directSwap(a: Mod, b: Mod): Promise<void> {
     for (const step of steps) await fs.rename(step.tmp, step.final);
 
     migrateModMetadata([
-        { from: a.fileName, to: renameWithPriority(a.fileName, b.priority) },
-        { from: b.fileName, to: renameWithPriority(b.fileName, a.priority) },
+        { from: a.metaKey, to: metaKeyFor(steps[0].final) },
+        { from: b.metaKey, to: metaKeyFor(steps[1].final) },
     ]);
 }

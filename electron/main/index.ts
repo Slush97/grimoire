@@ -1,7 +1,24 @@
-import { app, BrowserWindow, shell, session } from 'electron';
+import { app, BrowserWindow, shell, session, protocol } from 'electron';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
+import { SOUL_MODEL_SCHEME, registerSoulModelProtocol } from './services/soulContainerModels';
+import { HERO_POSE_SCHEME, registerHeroPoseProtocol } from './services/heroPoseModels';
+
+// The `grimoire-soul:` and `grimoire-hero:` schemes serve GLBs (soul-container
+// models and posed hero stills) out of the user's library to the renderer's 3D
+// viewers. Must be declared privileged before app-ready so fetch/streaming work
+// under the renderer's file:// origin.
+protocol.registerSchemesAsPrivileged([
+    {
+        scheme: SOUL_MODEL_SCHEME,
+        privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+    {
+        scheme: HERO_POSE_SCHEME,
+        privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+]);
 
 // Initialize the file logger before anything else so console.* calls in IPC
 // and service modules (imported below) flow into the rolling log file from
@@ -9,6 +26,13 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 // the user that file to attach to bug reports.
 import { initLogger } from './services/diagnostics';
 initLogger();
+
+// Start the event-loop lag monitor right after the logger so its periodic
+// "[event-loop] blocked Xms" warnings land in the same rolling file. The
+// monitor only logs when the loop is genuinely stalled (>=100ms in a 10s
+// window), so it stays quiet on a healthy session.
+import { initEventLoopMonitor } from './services/eventLoopMonitor';
+initEventLoopMonitor();
 
 import {
     GRIMOIRE_PROTOCOL,
@@ -46,10 +70,14 @@ import './ipc/updater';
 import './ipc/launch';
 import './ipc/social';
 import './ipc/diagnostics';
+import './ipc/portraits';
+import './ipc/abilitySounds';
+import './ipc/locker';
+import './ipc/previewCache';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
-import { loadSettings } from './services/settings';
+import { loadSettings, saveSettings } from './services/settings';
 import { backfillMissingMetadataHashes } from './services/metadata';
 
 let mainWindow: BrowserWindow | null = null;
@@ -155,6 +183,38 @@ function createWindow(): void {
         console.error('[Main] Renderer failed to load:', errorCode, errorDescription);
     });
 
+    // --- UI zoom (Ctrl +/-/0), persisted across launches. The renderer is dense
+    // and on hi-DPI laptops everything renders tiny, so let the user scale the
+    // whole UI. Driven through webContents.setZoomFactor via before-input-event
+    // (the menu bar is auto-hidden, so there's no View > Zoom to lean on).
+    const ZOOM_MIN = 0.5;
+    const ZOOM_MAX = 3.0;
+    const ZOOM_STEP = 0.1;
+    const clampZoom = (z: number) => Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(z * 10) / 10));
+    const persistZoom = (z: number) => {
+        try {
+            saveSettings({ ...loadSettings(), zoomFactor: z });
+        } catch (err) {
+            console.warn('[Main] Failed to persist zoom factor:', err);
+        }
+    };
+    // Zoom factor resets to 1 on every load, so re-apply the saved value each time.
+    mainWindow.webContents.on('did-finish-load', () => {
+        mainWindow?.webContents.setZoomFactor(clampZoom(loadSettings().zoomFactor ?? 1));
+    });
+    mainWindow.webContents.on('before-input-event', (event, input) => {
+        if (input.type !== 'keyDown' || !input.control || input.alt || input.meta || !mainWindow) return;
+        const wc = mainWindow.webContents;
+        let next: number | null = null;
+        if (input.key === '=' || input.key === '+' || input.key === 'Add') next = clampZoom(wc.getZoomFactor() + ZOOM_STEP);
+        else if (input.key === '-' || input.key === 'Subtract') next = clampZoom(wc.getZoomFactor() - ZOOM_STEP);
+        else if (input.key === '0') next = 1;
+        if (next === null) return;
+        event.preventDefault();
+        wc.setZoomFactor(next);
+        persistZoom(next);
+    });
+
     // Load the renderer
     if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
         mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL']);
@@ -218,6 +278,12 @@ if (!gotTheLock) {
         // Set app user model id for windows
         electronApp.setAppUserModelId('com.grimoire.modmanager');
 
+        // Serve per-mod soul-container GLBs from the user's library.
+        registerSoulModelProtocol();
+
+        // Serve per-hero posed stills from the user's library.
+        registerHeroPoseProtocol();
+
         // Default open or close DevTools by F12 in development
         app.on('browser-window-created', (_, window) => {
             optimizer.watchWindowShortcuts(window);
@@ -241,7 +307,17 @@ if (!gotTheLock) {
                             // entry is here so any future renderer-side asset (e.g. avatar URL
                             // not on Steam's CDN) doesn't trip CSP unexpectedly. Update when a
                             // dedicated grimoire-social production domain is locked.
-                            "connect-src 'self' https://gamebanana.com https://*.gamebanana.com https://api.deadlock-api.com https://*.workers.dev"
+                            //
+                            // The `grimoire-soul:`/`grimoire-hero:` schemes serve the
+                            // Locker's 3D GLBs; GLTFLoader fetches them, so they must be
+                            // allowed here or the load is blocked under the prod CSP (dev
+                            // has no CSP, which is why the 3D previews work in `pnpm dev`
+                            // but not in a packaged build). `blob:` is required too:
+                            // three's GLTFLoader extracts each embedded GLB texture into a
+                            // blob: URL and loads it via ImageBitmapLoader, which fetch()es
+                            // it; without blob: here the textures fail and models render
+                            // untextured (white).
+                            "connect-src 'self' blob: data: grimoire-soul: grimoire-hero: https://gamebanana.com https://*.gamebanana.com https://api.deadlock-api.com https://*.workers.dev"
                         ]
                     }
                 });

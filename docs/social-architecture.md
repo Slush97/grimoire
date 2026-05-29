@@ -165,7 +165,7 @@ All routes JSON, all responses include `{ error: string }` on failure. Auth via 
 
 **Validation done server-side at publish**:
 - Decode share code with the same parser the client uses (port `parsePortableProfile` to Workers; pure JS, no Node deps)
-- Reject if format/version unknown, mod count > 100, blob > 16 KB inflated
+- Reject if format/version unknown, mod count > 100, blob > 256 KB inflated
 - Recompute `has_nsfw`, `mod_count`, `primary_hero` from the blob (don't trust client-supplied values)
 - Title/description trimmed, length-capped, stripped of control chars
 

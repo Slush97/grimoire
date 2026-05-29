@@ -1,5 +1,7 @@
-import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
+  Check,
   Search,
   Loader2,
   Download,
@@ -7,6 +9,7 @@ import {
   ThumbsUp,
   X,
   Volume2,
+  VolumeX,
   RefreshCw,
   LayoutGrid,
   Grid3x3,
@@ -20,7 +23,9 @@ import {
   Library,
   ChevronDown,
   Upload,
+  Play,
 } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   browseMods,
   getModDetails,
@@ -37,32 +42,45 @@ import type {
   GameBananaCategoryNode,
 } from '../types/gamebanana';
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
-import { useAppStore } from '../stores/appStore';
+import {
+  useAppStore,
+  BROWSE_CARD_SIZE_MIN,
+  BROWSE_CARD_SIZE_MAX,
+  BROWSE_CARD_SIZE_DEFAULT,
+  BROWSE_COMPACT_CARD_THRESHOLD,
+} from '../stores/appStore';
+import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
+import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
+import { HeroSelect } from '../components/common/HeroSelect';
 import { Button, Tag } from '../components/common/ui';
+import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition } from '../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath } from '../lib/lockerUtils';
+import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates';
 
-const DEFAULT_PER_PAGE = 20;
+const DEFAULT_PER_PAGE = 36;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
+// Effective render mode derived from layout + card size. 'compact' is no
+// longer a user choice: it's what small cards become below the size threshold.
 type ViewMode = 'grid' | 'compact' | 'list';
+type BrowseCardDesign = 'classic' | 'readable';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
+const BROWSE_CARD_DESIGN_STORAGE_KEY = 'browseCardDesign';
 // Persist filter UI inputs across page navigation. The store keeps these in
 // memory so visiting Installed and coming back doesn't blow away the user's
 // current search/filter context. Kept out of localStorage so a fresh launch
 // starts clean — sessions, not preferences.
 
-// Only show these categories in the dropdown (lowercase for matching)
-const ALLOWED_CATEGORIES = new Set(['hud', 'other/misc', 'maps']);
-
 type CategoryOption = {
   id: number;
   label: string;
+  itemCount: number;
 };
 
 type FlattenOptions = {
@@ -86,7 +104,7 @@ function flattenCategories(
 
     const nextPath = parentPath ? `${parentPath} / ${node.name}` : node.name;
     if (includeEmpty || node.itemCount > 0) {
-      results.push({ id: node.id, label: nextPath });
+      results.push({ id: node.id, label: nextPath, itemCount: node.itemCount });
     }
 
     if (node.children && node.children.length > 0) {
@@ -108,6 +126,653 @@ function formatCount(n: number | null | undefined): string {
   if (value < 10_000) return `${(value / 1000).toFixed(1)}k`;
   if (value < 1_000_000) return `${Math.round(value / 1000)}k`;
   return `${(value / 1_000_000).toFixed(1)}m`;
+}
+
+type BrowseReadableChipTone = 'neutral' | 'accent' | 'danger' | 'info';
+
+type BrowseReadableChip = {
+  label: string;
+  tone?: BrowseReadableChipTone;
+  /** When set, the chip renders as the hero's round icon instead of a text pill. */
+  hero?: string;
+};
+
+type BrowseResultCacheEntry = {
+  mods: GameBananaMod[];
+  page: number;
+  hasMore: boolean;
+  totalCount: number;
+  scrollTop: number;
+};
+
+type QueuedDownloadState = {
+  position: number;
+};
+
+const BROWSE_READABLE_MAX_VISIBLE_CHIPS = 3;
+const BROWSE_READABLE_CHIP_GAP_WIDTH = 6;
+const BROWSE_READABLE_CHIP_OVERFLOW_WIDTH = 30;
+const BROWSE_READABLE_HERO_CHIP_WIDTH = 24;
+// Below this card width the "last updated" line moves to its own row under the
+// author instead of sharing the stats row, so it never squashes likes/views.
+const BROWSE_READABLE_UPDATED_INLINE_MIN = 300;
+const BROWSE_READABLE_CARD_MIN = 140;
+const BROWSE_READABLE_CARD_GOLDEN = 280;
+const BROWSE_READABLE_CARD_MAX = 340;
+const BROWSE_CARD_SIZE_STEP = 20;
+const BROWSE_GRID_OVERSCAN_ROWS = 4;
+
+type BrowseReadableDensity = 'micro' | 'compact' | 'full';
+
+function getReadableCardTargetWidth(cardSize: number): number {
+  const clampedSize = Math.min(BROWSE_CARD_SIZE_MAX, Math.max(BROWSE_CARD_SIZE_MIN, cardSize));
+
+  if (clampedSize <= BROWSE_CARD_SIZE_DEFAULT) {
+    const progress =
+      (clampedSize - BROWSE_CARD_SIZE_MIN) /
+      Math.max(1, BROWSE_CARD_SIZE_DEFAULT - BROWSE_CARD_SIZE_MIN);
+    return Math.round(
+      BROWSE_READABLE_CARD_MIN +
+        (BROWSE_READABLE_CARD_GOLDEN - BROWSE_READABLE_CARD_MIN) * progress
+    );
+  }
+
+  const progress =
+    (clampedSize - BROWSE_CARD_SIZE_DEFAULT) /
+    Math.max(1, BROWSE_CARD_SIZE_MAX - BROWSE_CARD_SIZE_DEFAULT);
+  return Math.round(
+    BROWSE_READABLE_CARD_GOLDEN +
+      (BROWSE_READABLE_CARD_MAX - BROWSE_READABLE_CARD_GOLDEN) * progress
+  );
+}
+
+function getReadableCardGridGap(targetWidth: number): number {
+  if (targetWidth <= 180) return 8;
+  if (targetWidth >= BROWSE_READABLE_CARD_GOLDEN) return 16;
+
+  const progress = (targetWidth - 180) / (BROWSE_READABLE_CARD_GOLDEN - 180);
+  return Math.round(8 + 8 * progress);
+}
+
+function getReadableDensity(targetWidth: number): BrowseReadableDensity {
+  if (targetWidth < 180) return 'micro';
+  if (targetWidth < 240) return 'compact';
+  return 'full';
+}
+
+function estimateReadableCardBodyHeight(density: BrowseReadableDensity, section: string): number {
+  const isSound = section === 'Sound';
+
+  if (density === 'micro') {
+    return 8 + 16 + (isSound ? 8 + 28 : 0) + 8 + 24 + 8;
+  }
+
+  if (density === 'compact') {
+    return 12 + 22 + 5 + 29 + (isSound ? 10 + 22 : 0) + 10 + 24 + 2;
+  }
+
+  return 14 + 24 + 6 + 32 + (isSound ? 10 + 38 : 0) + 10 + 28 + 6;
+}
+
+function estimateBrowseRowHeight(
+  columnWidth: number,
+  layout: BrowseLayout,
+  cardDesign: BrowseCardDesign,
+  viewMode: ViewMode,
+  section: string
+): number {
+  if (layout === 'list') return 112;
+  if (cardDesign === 'classic') {
+    return Math.ceil(columnWidth * (viewMode === 'compact' ? 0.75 : 2 / 3));
+  }
+
+  const density = getReadableDensity(columnWidth);
+  const mediaHeight =
+    density === 'micro'
+      ? columnWidth * 0.5625
+      : density === 'compact'
+        ? columnWidth * 0.56
+        : columnWidth * 0.571429;
+  const bodyHeight = estimateReadableCardBodyHeight(density, section);
+
+  return Math.ceil(mediaHeight + bodyHeight);
+}
+
+function readableChipTone(tone: BrowseReadableChipTone = 'neutral'): string {
+  switch (tone) {
+    case 'accent':
+      return 'border-accent/14 bg-accent/[0.04] text-accent/72';
+    case 'danger':
+      return 'border-state-danger/20 bg-state-danger/[0.05] text-state-danger/80';
+    case 'info':
+      return 'border-state-info/14 bg-state-info/[0.04] text-state-info/72';
+    default:
+      return 'border-white/[0.06] bg-white/[0.018] text-text-tertiary/72';
+  }
+}
+
+function normalizeReadableChipLabel(label: string | undefined): string | null {
+  const cleaned = label?.replace(/\s+/g, ' ').trim();
+  if (!cleaned) return null;
+
+  const lower = cleaned.toLowerCase();
+  if (lower === 'skins') return 'Skin';
+  if (lower === 'sounds') return 'Sound';
+  if (lower === 'mods') return 'Mod';
+  if (lower === 'hud' || lower === 'huds') return 'HUD';
+  if (lower === 'ui') return 'UI';
+  return cleaned;
+}
+
+function addReadableChip(chips: BrowseReadableChip[], label: string | undefined, tone?: BrowseReadableChipTone) {
+  const normalized = normalizeReadableChipLabel(label);
+  if (!normalized) return;
+
+  const exists = chips.some((chip) => chip.label.toLowerCase() === normalized.toLowerCase());
+  if (!exists) chips.push({ label: normalized, tone });
+}
+
+function dedupeModsById(mods: GameBananaMod[]): GameBananaMod[] {
+  const seen = new Set<number>();
+  return mods.filter((mod) => {
+    if (seen.has(mod.id)) return false;
+    seen.add(mod.id);
+    return true;
+  });
+}
+
+function appendUniqueModsById(previous: GameBananaMod[], next: GameBananaMod[]): GameBananaMod[] {
+  if (next.length === 0) return previous;
+
+  const seen = new Set(previous.map((mod) => mod.id));
+  const uniqueNext = next.filter((mod) => {
+    if (seen.has(mod.id)) return false;
+    seen.add(mod.id);
+    return true;
+  });
+
+  return uniqueNext.length === 0 ? previous : [...previous, ...uniqueNext];
+}
+
+function getReadableCardChips(mod: GameBananaMod, section: string, inferredHero: string | null): BrowseReadableChip[] {
+  const chips: BrowseReadableChip[] = [];
+  const isSoundSection = section === 'Sound';
+  const categoryLabel = mod.rootCategory?.name ?? section;
+
+  addReadableChip(chips, categoryLabel, isSoundSection ? 'accent' : 'neutral');
+  if (inferredHero) chips.push({ label: inferredHero, tone: 'info', hero: inferredHero });
+  if (mod.nsfw) addReadableChip(chips, '18+', 'danger');
+
+  // Hero icon stays leftmost as a consistent anchor across cards, then the
+  // NSFW flag, then the rest (category, etc.). Sort is stable, so chips of
+  // equal rank keep their insertion order.
+  const rank = (chip: BrowseReadableChip) => (chip.hero ? 0 : chip.label === '18+' ? 1 : 2);
+  chips.sort((a, b) => rank(a) - rank(b));
+
+  return chips;
+}
+
+function estimateReadableChipWidth(label: string): number {
+  return Math.ceil(label.length * 5.5 + 14);
+}
+
+function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
+  if (chip.hero) {
+    return (
+      <img
+        src={getHeroChipIconPath(chip.hero)}
+        alt={chip.label}
+        title={chip.label}
+        loading="lazy"
+        draggable={false}
+        className="h-6 w-6 shrink-0 rounded-full object-cover"
+      />
+    );
+  }
+  return (
+    <span
+      title={chip.label}
+      className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-[10px] font-medium leading-none ${readableChipTone(
+        chip.tone
+      )}`}
+    >
+      {chip.label}
+    </span>
+  );
+}
+
+function BrowseReadableChipRow({
+  chips,
+  availableWidth,
+  maxVisible = BROWSE_READABLE_MAX_VISIBLE_CHIPS,
+}: {
+  chips: BrowseReadableChip[];
+  availableWidth: number;
+  maxVisible?: number;
+}) {
+  const visibleChips: BrowseReadableChip[] = [];
+  let usedWidth = 0;
+  const rowWidth = Math.max(48, availableWidth);
+  const orderedChips = [...chips];
+
+  for (const [index, chip] of orderedChips.entries()) {
+    if (visibleChips.length >= maxVisible) break;
+
+    const remainingAfter = orderedChips.length - index - 1;
+    const chipWidth = chip.hero ? BROWSE_READABLE_HERO_CHIP_WIDTH : estimateReadableChipWidth(chip.label);
+    const gapBefore = visibleChips.length > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH : 0;
+    const overflowReserve = remainingAfter > 0 ? BROWSE_READABLE_CHIP_GAP_WIDTH + BROWSE_READABLE_CHIP_OVERFLOW_WIDTH : 0;
+
+    if (usedWidth + gapBefore + chipWidth + overflowReserve > rowWidth) break;
+
+    visibleChips.push(chip);
+    usedWidth += gapBefore + chipWidth;
+  }
+
+  const hiddenChips = orderedChips.filter(
+    (chip) => !visibleChips.some((visible) => visible.label === chip.label && visible.tone === chip.tone)
+  );
+
+  return (
+    <div className="flex h-6 min-w-0 items-start gap-[clamp(5px,2.1429cqw,7px)] overflow-visible">
+      {visibleChips.map((chip, index) => (
+        <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} />
+      ))}
+      {hiddenChips.length > 0 && (
+        <div className="group/hidden relative shrink-0">
+          <span
+            title={`${hiddenChips.length} more`}
+            className="inline-flex h-6 items-center rounded-sm border border-white/[0.06] bg-white/[0.018] px-2 text-[10px] font-medium leading-none text-text-tertiary/72"
+          >
+            +{hiddenChips.length}
+          </span>
+          <div className="pointer-events-none absolute left-0 top-[calc(100%+6px)] z-20 hidden min-w-max max-w-[180px] flex-wrap gap-1 rounded-md border border-white/[0.08] bg-bg-secondary/96 p-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md group-hover/hidden:flex">
+            {hiddenChips.map((chip, index) => (
+              <BrowseReadableChipBadge key={`${chip.label}-overflow-${index}`} chip={chip} />
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function gameBananaTimestampToIso(timestamp: number | undefined): string | null {
+  if (!timestamp || timestamp <= 0) return null;
+  const date = new Date(timestamp * 1000);
+  if (Number.isNaN(date.getTime())) return null;
+  return date.toISOString();
+}
+
+function BrowseReadableUpdatedLine({
+  timestamp,
+  variant = 'inline',
+}: {
+  timestamp?: number;
+  /** `inline` sits in the stats row; `block` is its own line under the author
+   *  (used on narrow cards where the stats row has no room for it). */
+  variant?: 'inline' | 'block';
+}) {
+  const iso = gameBananaTimestampToIso(timestamp);
+  const relative = iso ? formatRelativeDate(iso).replace(/(\d+)\s+(mo|yr)\s+ago/g, '$1$2 ago') : null;
+  const absolute = iso ? formatAbsoluteDate(iso) : null;
+  const isOutdated = typeof timestamp === 'number' && timestamp > 0 && isModOutdated(timestamp);
+
+  if (!relative) return null;
+
+  const title = absolute ? `${isOutdated ? 'Outdated. ' : ''}Last updated on GameBanana: ${absolute}` : undefined;
+
+  if (variant === 'block') {
+    return (
+      <p
+        className={`mt-1 truncate text-[clamp(9px,3.5714cqw,11px)] font-normal leading-[1.05] ${
+          isOutdated ? 'text-state-warning/70' : 'text-text-tertiary/55'
+        }`}
+        title={title}
+      >
+        ↻ {relative}
+      </p>
+    );
+  }
+
+  return (
+    <span
+      className={`inline-flex min-w-0 shrink items-center gap-0.5 truncate font-normal leading-none ${
+        isOutdated ? 'text-state-warning/80' : 'text-text-tertiary/55'
+      }`}
+      title={title}
+    >
+      ↻ {relative}
+    </span>
+  );
+}
+
+function usePrefersReducedMotion() {
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(() => (
+    typeof window !== 'undefined'
+      ? window.matchMedia('(prefers-reduced-motion: reduce)').matches
+      : false
+  ));
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-reduced-motion: reduce)');
+
+    const handleChange = (event: MediaQueryListEvent) => {
+      setPrefersReducedMotion(event.matches);
+    };
+
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, []);
+
+  return prefersReducedMotion;
+}
+
+function BrowseArtParallaxCard({
+  children,
+  disabled = false,
+}: {
+  children: React.ReactNode;
+  disabled?: boolean;
+}) {
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const effectDisabled = disabled || prefersReducedMotion;
+
+  const resetParallax = useCallback(() => {
+    const element = cardRef.current;
+    if (!element) return;
+
+    element.style.setProperty('--browse-art-x', '0px');
+    element.style.setProperty('--browse-art-y', '0px');
+    element.style.setProperty('--browse-art-rotate', '0deg');
+  }, []);
+
+  const handlePointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
+    if (effectDisabled || event.pointerType !== 'mouse') return;
+
+    const element = cardRef.current;
+    if (!element) return;
+
+    const rect = element.getBoundingClientRect();
+    const x = (event.clientX - rect.left) / Math.max(rect.width, 1);
+    const y = (event.clientY - rect.top) / Math.max(rect.height, 1);
+    const moveX = (0.5 - x) * 4;
+    const moveY = (0.5 - y) * 4;
+    const rotate = (x - 0.5) * 0.2;
+
+    element.style.setProperty('--browse-art-x', `${moveX.toFixed(2)}px`);
+    element.style.setProperty('--browse-art-y', `${moveY.toFixed(2)}px`);
+    element.style.setProperty('--browse-art-rotate', `${rotate.toFixed(2)}deg`);
+  }, [effectDisabled]);
+
+  useEffect(() => {
+    if (effectDisabled) resetParallax();
+  }, [effectDisabled, resetParallax]);
+
+  return (
+    <div
+      ref={cardRef}
+      className="browse-art-parallax-card group relative w-full"
+      data-parallax-disabled={effectDisabled ? 'true' : undefined}
+      onPointerMove={handlePointerMove}
+      onPointerCancel={resetParallax}
+      onPointerLeave={resetParallax}
+    >
+      {children}
+    </div>
+  );
+}
+
+function BrowseStatItem({
+  type,
+  icon,
+  value,
+  title,
+  align = 'start',
+  emphasis = 'muted',
+}: {
+  type: 'likes' | 'views' | 'downloads';
+  icon: LucideIcon;
+  value: string;
+  title: string;
+  align?: 'start' | 'center' | 'end';
+  emphasis?: 'muted' | 'strong';
+}) {
+  const alignmentClass =
+    align === 'center' ? 'browse-stat-item--center' : align === 'end' ? 'browse-stat-item--end' : 'browse-stat-item--start';
+
+  return (
+    <IconText
+      icon={icon}
+      className={`browse-stat-item ${alignmentClass}`}
+      title={title}
+      iconClassName={`browse-stat-icon browse-stat-icon--${type}${emphasis === 'strong' ? ' browse-stat-icon--strong' : ''}`}
+      valueClassName="browse-stat-value"
+    >
+      {value}
+    </IconText>
+  );
+}
+
+function BrowseReadableStatsRow({ mod, density, showUpdated }: { mod: GameBananaMod; density: BrowseReadableDensity; showUpdated: boolean }) {
+  const isMicro = density === 'micro';
+  const groupClass = isMicro
+    ? 'grid w-full grid-cols-2 items-center text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/70'
+    : 'flex h-5 min-w-0 flex-1 items-center gap-[clamp(5px,2.5cqw,10px)] text-[clamp(11px,4.3cqw,13px)] font-semibold text-text-tertiary/60';
+  const itemEmphasis = isMicro ? 'strong' : 'muted';
+
+  return (
+    <div className={groupClass}>
+      <BrowseStatItem
+        type="likes"
+        icon={ThumbsUp}
+        value={formatCount(mod.likeCount)}
+        title={`${mod.likeCount ?? 0} likes`}
+        align="start"
+        emphasis={itemEmphasis}
+      />
+      <BrowseStatItem
+        type="views"
+        icon={Eye}
+        value={formatCount(mod.viewCount)}
+        title={`${mod.viewCount ?? 0} views`}
+        align="start"
+        emphasis={itemEmphasis}
+      />
+      {showUpdated && <BrowseReadableUpdatedLine timestamp={mod.dateModified} variant="inline" />}
+    </div>
+  );
+}
+
+function BrowseSoundPlaceholder({ title }: { title: string }) {
+  const bars = [22, 38, 54, 30, 68, 46, 34, 58, 26, 42, 62, 36, 48, 28];
+
+  return (
+    <div
+      className="browse-sound-placeholder absolute inset-0 overflow-hidden bg-[radial-gradient(circle_at_24%_22%,rgba(249,115,22,0.22),transparent_30%),radial-gradient(circle_at_78%_18%,rgba(96,165,250,0.16),transparent_28%),linear-gradient(135deg,#151312,#22242a_55%,#121416)]"
+      role="img"
+      aria-label={`${title} audio preview`}
+    >
+      <div className="absolute inset-x-8 top-[46%] flex h-12 -translate-y-1/2 items-center justify-center gap-1.5 opacity-35">
+        {bars.map((height, index) => (
+          <span
+            key={`${title}-wave-${index}`}
+            className="browse-sound-wave-bar w-1 rounded-full bg-text-secondary"
+            style={{ height: `${height}%`, animationDelay: `${index * 38}ms` }}
+          />
+        ))}
+      </div>
+      <div className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-bg-primary/55 to-transparent" />
+    </div>
+  );
+}
+
+function BrowseReadableAction({
+  modName,
+  installed,
+  installedDisabled,
+  downloading,
+  queuePosition,
+  density,
+  iconOnlyOverride,
+  onQuickDownload,
+  onEnable,
+}: {
+  modName: string;
+  installed: boolean;
+  installedDisabled?: boolean;
+  downloading: boolean;
+  queuePosition?: number;
+  density: BrowseReadableDensity;
+  iconOnlyOverride?: boolean;
+  onQuickDownload: () => void;
+  onEnable?: () => void;
+}) {
+  const actionableEnable = installed && installedDisabled && !!onEnable;
+  const action = actionableEnable
+    ? 'enable'
+    : installed
+      ? 'installed'
+      : downloading
+        ? 'downloading'
+        : queuePosition
+          ? 'queued'
+          : 'install';
+  const label =
+    action === 'enable'
+      ? 'Enable'
+      : action === 'installed'
+        ? 'Installed'
+        : action === 'downloading'
+          ? 'Loading'
+          : action === 'queued'
+            ? `Queued ${queuePosition}`
+            : 'Install';
+  const iconOnly = iconOnlyOverride ?? density === 'micro';
+  const className = iconOnly
+    ? `browse-action-button browse-action-button--icon browse-action-button--${action}`
+    : `browse-action-button browse-action-button--${action}`;
+  const previousActionRef = useRef(action);
+  const previousQueuePositionRef = useRef(queuePosition);
+  const [completionPulse, setCompletionPulse] = useState(false);
+  const [queueShift, setQueueShift] = useState(false);
+
+  useEffect(() => {
+    const previousAction = previousActionRef.current;
+    const completedFromPending =
+      (action === 'installed' || action === 'enable') &&
+      (previousAction === 'downloading' || previousAction === 'queued');
+
+    if (completedFromPending) {
+      previousActionRef.current = action;
+      let endTimeout: number | null = null;
+      const startTimeout = window.setTimeout(() => {
+        setCompletionPulse(true);
+        endTimeout = window.setTimeout(() => setCompletionPulse(false), 620);
+      }, 0);
+      return () => {
+        window.clearTimeout(startTimeout);
+        if (endTimeout !== null) window.clearTimeout(endTimeout);
+      };
+    }
+
+    previousActionRef.current = action;
+    return undefined;
+  }, [action]);
+
+  useEffect(() => {
+    const previousQueuePosition = previousQueuePositionRef.current;
+    if (
+      typeof queuePosition === 'number' &&
+      typeof previousQueuePosition === 'number' &&
+      queuePosition !== previousQueuePosition
+    ) {
+      previousQueuePositionRef.current = queuePosition;
+      let endTimeout: number | null = null;
+      const startTimeout = window.setTimeout(() => {
+        setQueueShift(true);
+        endTimeout = window.setTimeout(() => setQueueShift(false), 260);
+      }, 0);
+      return () => {
+        window.clearTimeout(startTimeout);
+        if (endTimeout !== null) window.clearTimeout(endTimeout);
+      };
+    }
+
+    previousQueuePositionRef.current = queuePosition;
+    return undefined;
+  }, [queuePosition]);
+
+  const motionClassName = [
+    className,
+    completionPulse ? 'browse-action-button--complete-pop' : '',
+    queueShift ? 'browse-action-button--queue-shift' : '',
+  ].filter(Boolean).join(' ');
+  const icon =
+    action === 'downloading'
+      ? Loader2
+      : action === 'installed'
+        ? Check
+        : action === 'enable'
+          ? Power
+          : action === 'queued'
+            ? Clock
+            : Download;
+  const content = (
+    iconOnly ? (
+      <span className={`browse-action-button-icon browse-action-button-icon--${action}`}>
+        {React.createElement(icon, { 'aria-hidden': true, className: action === 'downloading' ? 'animate-spin' : undefined })}
+      </span>
+    ) : (
+      <>
+        <span className={`browse-action-button-icon browse-action-button-icon--${action}`}>
+          {React.createElement(icon, { 'aria-hidden': true, className: action === 'downloading' ? 'animate-spin' : undefined })}
+        </span>
+        <span className="browse-action-button-label">
+          {action === 'queued' ? (
+            <span key={queuePosition} className="browse-action-button-queue-value">{label}</span>
+          ) : (
+            label
+          )}
+        </span>
+      </>
+    )
+  );
+
+  if (action === 'install') {
+    return (
+      <button
+        type="button"
+        onClick={(event) => { event.stopPropagation(); onQuickDownload(); }}
+        className={`${motionClassName} cursor-pointer`}
+        title={`Install ${modName}`}
+        aria-label={`Install ${modName}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  if (action === 'enable' && onEnable) {
+    return (
+      <button
+        type="button"
+        onClick={(event) => { event.stopPropagation(); onEnable(); }}
+        className={`${motionClassName} cursor-pointer`}
+        title="Enable this mod (currently in your disabled folder)"
+        aria-label={`Enable ${modName}`}
+      >
+        {content}
+      </button>
+    );
+  }
+
+  return (
+    <span className={`${motionClassName} cursor-default`} title={label} aria-label={`${label} ${modName}`}>
+      {content}
+    </span>
+  );
 }
 
 // Treat Enter/Space as a click on role="button" divs (keyboard navigation).
@@ -156,25 +821,52 @@ function findCategoryByName(
 }
 
 export default function Browse() {
-  const { settings, loadSettings, loadMods, mods: installedMods, soundVolume, setSoundVolume, browseUi, setBrowseUi } = useAppStore();
+  const settings = useAppStore((s) => s.settings);
+  const loadSettings = useAppStore((s) => s.loadSettings);
+  const loadMods = useAppStore((s) => s.loadMods);
+  const installedMods = useAppStore((s) => s.mods);
+  const soundVolume = useAppStore((s) => s.soundVolume);
+  const setSoundVolume = useAppStore((s) => s.setSoundVolume);
+  const browseUi = useAppStore((s) => s.browseUi);
+  const setBrowseUi = useAppStore((s) => s.setBrowseUi);
   const browseSession = useAppStore((s) => s.browseSession);
   const setBrowseSession = useAppStore((s) => s.setBrowseSession);
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, viewMode, sort, section, heroCategoryId, categoryId } = browseUi;
+  const { search, layout, cardSize, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
+  const [previewCardSize, setPreviewCardSize] = useState(cardSize);
+  const activeCardSize = layout === 'list' ? cardSize : previewCardSize;
+  // Effective render mode: List is structural; otherwise small cards get the
+  // compact chrome automatically. ModCard/skeleton keep reading one ViewMode.
+  const viewMode: ViewMode =
+    layout === 'list' ? 'list' : activeCardSize < BROWSE_COMPACT_CARD_THRESHOLD ? 'compact' : 'grid';
+  const [browseViewportWidth, setBrowseViewportWidth] = useState(0);
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
-  const setViewMode = useCallback((v: ViewMode) => setBrowseUi({ viewMode: v }), [setBrowseUi]);
+  const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
+  const setCardSize = useCallback((v: number) => setBrowseUi({ cardSize: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
-  const setHeroCategoryId = useCallback((v: number | 'all') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
+  const setNsfw = useCallback((v: BrowseNsfwFilter) => setBrowseUi({ nsfw: v }), [setBrowseUi]);
+  const setAddedWithin = useCallback((v: BrowseTimeRange) => setBrowseUi({ addedWithin: v }), [setBrowseUi]);
+  const setAddedFrom = useCallback((v: string) => setBrowseUi({ addedFrom: v }), [setBrowseUi]);
+  const setAddedTo = useCallback((v: string) => setBrowseUi({ addedTo: v }), [setBrowseUi]);
+  const setHeroCategoryId = useCallback((v: number | 'all' | 'none') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
   const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
+  const commitCardSize = useCallback((nextSize: number) => {
+    setPreviewCardSize(nextSize);
+    setCardSize(nextSize);
+  }, [setCardSize]);
+
+  useEffect(() => {
+    setPreviewCardSize(cardSize);
+  }, [cardSize]);
 
   // Hydrate from session cache on mount so navigating away + back doesn't
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
   // change on Browse, but defensive) we ignore the stale cache.
-  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}`;
+  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}`;
   const initialCache = browseSession && browseSession.stamp === initialFilterStamp
     ? browseSession
     : null;
@@ -200,6 +892,16 @@ export default function Browse() {
   const [extracting, setExtracting] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(() => initialCache?.hasMore ?? true);
+  // A page>1 (or stale-results) fetch failure routes here instead of `error`
+  // so the already-loaded grid stays on screen and only the load-more row
+  // surfaces the failure. `error` stays reserved for the no-results case.
+  const [loadMoreError, setLoadMoreError] = useState<string | null>(null);
+  // Set when a browse fetch fails. Freezes the infinite-scroll observer so it
+  // stops auto-advancing the page into an API that's already refusing requests.
+  // Without this, a rate-limited fetch + auto-retry looped, flashing the grid
+  // between results and the error state (issue #99). Lifted on filter change,
+  // refresh, or an explicit retry.
+  const [autoLoadPaused, setAutoLoadPaused] = useState(false);
 
   // Last fetch's identity stamp. Value-comparison gate: if the next call to
   // fetchMods/searchLocal would target the same (page + filters), skip it.
@@ -208,8 +910,14 @@ export default function Browse() {
   // double effect run in dev — the second setup compares stamps and short-
   // circuits, instead of consuming a one-shot skip flag.
   const lastFetchedStampRef = useRef<string | null>(
-    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}` : null
+    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}` : null
   );
+  // Monotonic guard for browse/search requests. Filter changes and newer
+  // requests invalidate older responses so they cannot append stale pages into
+  // the current grid after the user switches filters.
+  const requestGenerationRef = useRef(0);
+  const pendingPageResetStampRef = useRef<string | null>(null);
+  const restoredCacheSkipStampRef = useRef<string | null>(null);
   // Cached scroll position waiting to be applied once the grid is mounted
   // and laid out. Cleared after restoration.
   const pendingScrollTopRef = useRef<number | null>(initialCache?.scrollTop ?? null);
@@ -221,6 +929,9 @@ export default function Browse() {
   // `scrollContainerRef.current`, so reading scrollTop from the DOM ref
   // there always returned 0 and the saved position was useless.
   const latestScrollTopRef = useRef<number>(initialCache?.scrollTop ?? 0);
+  const scrollCacheFrameRef = useRef<number | null>(null);
+  const scrollHoverTimeoutRef = useRef<number | null>(null);
+  const isBrowseScrollingRef = useRef(false);
   // When local search fails (e.g. SQLite error), this flips so the main fetch
   // effect falls back to the API path. Resets whenever filter inputs change.
   const [localSearchFailed, setLocalSearchFailed] = useState(false);
@@ -228,6 +939,7 @@ export default function Browse() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadQueue, setDownloadQueue] = useState<Array<{ modId: number; fileId: number; fileName: string }>>([]);
   const [playingModId, setPlayingModId] = useState<number | null>(null);
+  const [isBrowseScrolling, setIsBrowseScrolling] = useState(false);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -236,6 +948,16 @@ export default function Browse() {
   const [importProfileOpen, setImportProfileOpen] = useState(false);
   const [importMenuOpen, setImportMenuOpen] = useState(false);
   const importMenuRef = useRef<HTMLDivElement>(null);
+  const [viewMenuOpen, setViewMenuOpen] = useState(false);
+  const viewMenuRef = useRef<HTMLDivElement>(null);
+  const [browseCardDesign, setBrowseCardDesignState] = useState<BrowseCardDesign>(() => {
+    if (typeof window === 'undefined') return 'readable';
+    return window.localStorage.getItem(BROWSE_CARD_DESIGN_STORAGE_KEY) === 'classic' ? 'classic' : 'readable';
+  });
+  const setBrowseCardDesign = useCallback((design: BrowseCardDesign) => {
+    setBrowseCardDesignState(design);
+    window.localStorage.setItem(BROWSE_CARD_DESIGN_STORAGE_KEY, design);
+  }, []);
 
   // Load settings on mount (needed for hideNsfwPreviews)
   useEffect(() => {
@@ -280,6 +1002,25 @@ export default function Browse() {
     };
   }, [importMenuOpen]);
 
+  // Close the view menu on outside click or Escape.
+  useEffect(() => {
+    if (!viewMenuOpen) return;
+    const onMouseDown = (e: MouseEvent) => {
+      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) {
+        setViewMenuOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setViewMenuOpen(false);
+    };
+    window.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKey);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [viewMenuOpen]);
+
   // Check if local cache is available for search
   const [hasLocalCache, setHasLocalCache] = useState(false);
   useEffect(() => {
@@ -313,8 +1054,11 @@ export default function Browse() {
     fetchInitialQueueState();
   }, []);
 
+  // 'none' = client-side post-filter for Sound mods without a hero in the
+  // title. The fetch path sees it as "no category filter" so the API doesn't
+  // get a nonsense id; the actual exclusion happens against displayMods.
   const effectiveCategoryId =
-    heroCategoryId === 'all'
+    heroCategoryId === 'all' || heroCategoryId === 'none'
       ? (categoryId === 'all' ? undefined : categoryId)
       : heroCategoryId;
 
@@ -329,6 +1073,25 @@ export default function Browse() {
   }, [search]);
 
   const effectiveSearch = debouncedSearch;
+
+  // Custom-range date inputs (YYYY-MM-DD) -> inclusive Unix-second bounds for the
+  // local query. Parsed as UTC to line up with date_added (a UTC timestamp).
+  // Undefined when not in custom mode, blank, or unparseable.
+  const customAddedFrom = useMemo(() => {
+    if (addedWithin !== 'custom' || !addedFrom) return undefined;
+    const t = Date.parse(`${addedFrom}T00:00:00Z`);
+    return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
+  }, [addedWithin, addedFrom]);
+  const customAddedTo = useMemo(() => {
+    if (addedWithin !== 'custom' || !addedTo) return undefined;
+    const t = Date.parse(`${addedTo}T23:59:59Z`);
+    return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
+  }, [addedWithin, addedTo]);
+
+  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}`;
+  const browseResultsCacheRef = useRef<Map<string, BrowseResultCacheEntry>>(new Map());
+  const browseScrollCacheRef = useRef<Map<string, number>>(new Map());
+  const activeFetchFilterStampRef = useRef(fetchFilterStamp);
 
   // Keep a fresh `mods` reference outside the fetch closures so they can check
   // "did the user already have results visible?" without making `mods` a
@@ -351,6 +1114,41 @@ export default function Browse() {
     totalCountRef.current = _totalCount;
   }, [_totalCount]);
 
+  const cacheCurrentBrowseResults = useCallback((stamp: string) => {
+    const cachedMods = modsRef.current;
+    if (cachedMods.length === 0) return;
+    const scrollTop =
+      activeFetchFilterStampRef.current === stamp
+        ? latestScrollTopRef.current
+        : (browseScrollCacheRef.current.get(stamp) ?? 0);
+
+    browseResultsCacheRef.current.set(stamp, {
+      mods: cachedMods,
+      page: pageRef.current,
+      hasMore: hasMoreRef.current,
+      totalCount: totalCountRef.current,
+      scrollTop,
+    });
+    browseScrollCacheRef.current.set(stamp, scrollTop);
+  }, []);
+
+  useEffect(() => {
+    if (!initialCache || mods.length === 0) return;
+    browseResultsCacheRef.current.set(fetchFilterStamp, {
+      mods,
+      page,
+      hasMore,
+      totalCount: _totalCount,
+      scrollTop: initialCache.scrollTop,
+    });
+    browseScrollCacheRef.current.set(fetchFilterStamp, initialCache.scrollTop);
+    activeFetchFilterStampRef.current = fetchFilterStamp;
+    lastFetchedStampRef.current = `${page}|${fetchFilterStamp}`;
+    // Seed once from the route-level session cache; subsequent filter caches
+    // are maintained explicitly when the active filter stamp changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Restore cached scroll position once the first paint with hydrated mods
   // is on screen. useLayoutEffect (not useEffect) so we scroll before the
   // browser paints, avoiding a visible jump from 0 to the saved offset.
@@ -363,6 +1161,23 @@ export default function Browse() {
     pendingScrollTopRef.current = null;
   }, []);
 
+  useLayoutEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    const updateWidth = () => setBrowseViewportWidth(container.clientWidth);
+    updateWidth();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', updateWidth);
+      return () => window.removeEventListener('resize', updateWidth);
+    }
+
+    const observer = new ResizeObserver(updateWidth);
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, []);
+
   // Mirror scrollTop into a ref on every scroll. The unmount cleanup below
   // runs as a passive effect — by then React has already nulled
   // `scrollContainerRef.current`, so we can't read scrollTop off the DOM
@@ -371,10 +1186,44 @@ export default function Browse() {
     const container = scrollContainerRef.current;
     if (!container) return;
     const onScroll = () => {
-      latestScrollTopRef.current = container.scrollTop;
+      const nextScrollTop = container.scrollTop;
+      latestScrollTopRef.current = nextScrollTop;
+      if (!isBrowseScrollingRef.current) {
+        isBrowseScrollingRef.current = true;
+        setIsBrowseScrolling(true);
+      }
+      if (scrollHoverTimeoutRef.current !== null) {
+        window.clearTimeout(scrollHoverTimeoutRef.current);
+      }
+      scrollHoverTimeoutRef.current = window.setTimeout(() => {
+        scrollHoverTimeoutRef.current = null;
+        isBrowseScrollingRef.current = false;
+        setIsBrowseScrolling(false);
+      }, 140);
+      if (scrollCacheFrameRef.current !== null) return;
+      scrollCacheFrameRef.current = window.requestAnimationFrame(() => {
+        scrollCacheFrameRef.current = null;
+        const cachedScrollTop = latestScrollTopRef.current;
+        browseScrollCacheRef.current.set(activeFetchFilterStampRef.current, cachedScrollTop);
+        const cached = browseResultsCacheRef.current.get(activeFetchFilterStampRef.current);
+        if (cached) {
+          cached.scrollTop = cachedScrollTop;
+        }
+      });
     };
     container.addEventListener('scroll', onScroll, { passive: true });
-    return () => container.removeEventListener('scroll', onScroll);
+    return () => {
+      container.removeEventListener('scroll', onScroll);
+      if (scrollCacheFrameRef.current !== null) {
+        window.cancelAnimationFrame(scrollCacheFrameRef.current);
+        scrollCacheFrameRef.current = null;
+      }
+      if (scrollHoverTimeoutRef.current !== null) {
+        window.clearTimeout(scrollHoverTimeoutRef.current);
+        scrollHoverTimeoutRef.current = null;
+      }
+      isBrowseScrollingRef.current = false;
+    };
   }, []);
 
   // Persist session cache on unmount so navigating back resumes exactly
@@ -383,7 +1232,7 @@ export default function Browse() {
   useEffect(() => {
     return () => {
       const ui = useAppStore.getState().browseUi;
-      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}`;
+      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${ui.nsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}`;
       const cachedMods = modsRef.current;
       // Don't cache an empty state — would just bypass the next fetch
       // unhelpfully. Clear instead so the next mount starts fresh.
@@ -412,25 +1261,41 @@ export default function Browse() {
   const useLocalSearch = useMemo(() => {
     const hasSearchQuery = debouncedSearch.trim().length > 0;
     const hasHeroFilter = heroCategoryId !== 'all';
-    return (hasSearchQuery || hasHeroFilter) && hasLocalCache && !localSearchFailed;
-  }, [debouncedSearch, heroCategoryId, hasLocalCache, localSearchFailed]);
+    // NSFW and recency filters only the local catalog mirror can satisfy: the
+    // live API enriches NSFW after the fact and doesn't window by date, so route
+    // those through local search (the cache is a full mirror of the index).
+    const hasContentFilter = nsfw !== 'all' || addedWithin !== 'all';
+    // The v11 API has no alphabetical sort token, so name ordering also has to
+    // come from the local mirror (which sorts name COLLATE NOCASE ASC).
+    const needsLocalSort = sort === 'name';
+    return (hasSearchQuery || hasHeroFilter || hasContentFilter || needsLocalSort) && hasLocalCache && !localSearchFailed;
+  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, hasLocalCache, localSearchFailed]);
 
   // Reset the failure flag whenever the user changes filters so a one-off
   // backend error doesn't permanently disable local search.
   useEffect(() => {
     setLocalSearchFailed(false);
-  }, [debouncedSearch, heroCategoryId, section]);
+  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section, sort]);
 
   const fetchMods = useCallback(async () => {
     // Don't fetch from API if we're using local search
     if (useLocalSearch) return;
+    if (restoredCacheSkipStampRef.current === fetchFilterStamp) {
+      restoredCacheSkipStampRef.current = null;
+      return;
+    }
+    if (pendingPageResetStampRef.current === fetchFilterStamp && page !== 1) return;
+    if (page === 1 && pendingPageResetStampRef.current === fetchFilterStamp) {
+      pendingPageResetStampRef.current = null;
+    }
     // Value-compare gate: skip when we'd be re-fetching the exact same state
     // we already loaded. Covers cache hydration on mount AND React
     // StrictMode's double-effect setup. Set BEFORE the network call so
     // a second setup hitting this line sees the stamp and returns.
-    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}`;
+    const stamp = `${page}|${fetchFilterStamp}`;
     if (lastFetchedStampRef.current === stamp) return;
     lastFetchedStampRef.current = stamp;
+    const requestGeneration = ++requestGenerationRef.current;
 
     // On a fresh load (no results yet) show the skeleton; on a refetch keep
     // the stale list visible and just surface a soft progress indicator so
@@ -475,19 +1340,52 @@ export default function Browse() {
         }
       }
 
-      // Append results for infinite scroll
-      if (page === 1) {
-        setMods(enrichedRecords);
-      } else {
-        setMods(prev => [...prev, ...enrichedRecords]);
+      if (requestGeneration !== requestGenerationRef.current || lastFetchedStampRef.current !== stamp) {
+        return;
       }
+
+      const nextMods =
+        page === 1
+          ? dedupeModsById(enrichedRecords)
+          : appendUniqueModsById(modsRef.current, enrichedRecords);
+      const nextHasMore = response.records.length === perPage && page * perPage < response.totalCount;
+
+      setMods(nextMods);
       setTotalCount(response.totalCount);
-      setHasMore(response.records.length === perPage && page * perPage < response.totalCount);
+      setHasMore(nextHasMore);
+      modsRef.current = nextMods;
+      pageRef.current = page;
+      totalCountRef.current = response.totalCount;
+      hasMoreRef.current = nextHasMore;
+      const cachedScrollTop = browseScrollCacheRef.current.get(fetchFilterStamp) ?? latestScrollTopRef.current;
+      browseResultsCacheRef.current.set(fetchFilterStamp, {
+        mods: nextMods,
+        page,
+        hasMore: nextHasMore,
+        totalCount: response.totalCount,
+        scrollTop: cachedScrollTop,
+      });
+      browseScrollCacheRef.current.set(fetchFilterStamp, cachedScrollTop);
     } catch (err) {
-      setError(String(err));
+      if (requestGeneration !== requestGenerationRef.current || lastFetchedStampRef.current !== stamp) {
+        return;
+      }
+      const message = String(err);
+      // Keep any already-loaded results on screen: route the failure to the
+      // inline load-more row rather than `error`, which would blank the whole
+      // grid. Only a truly empty list falls back to the full-page error state.
+      if (modsRef.current.length > 0) {
+        setLoadMoreError(message);
+      } else {
+        setError(message);
+      }
+      // Stop the observer from auto-retrying against an API that just refused.
+      setAutoLoadPaused(true);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestGeneration === requestGenerationRef.current && lastFetchedStampRef.current === stamp) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, [
     page,
@@ -496,17 +1394,26 @@ export default function Browse() {
     section,
     perPage,
     effectiveCategoryId,
-    heroCategoryId,
+    fetchFilterStamp,
     useLocalSearch,
   ]);
 
   // Local search function using SQLite cache
   const searchLocal = useCallback(async () => {
+    if (restoredCacheSkipStampRef.current === fetchFilterStamp) {
+      restoredCacheSkipStampRef.current = null;
+      return;
+    }
+    if (pendingPageResetStampRef.current === fetchFilterStamp && page !== 1) return;
+    if (page === 1 && pendingPageResetStampRef.current === fetchFilterStamp) {
+      pendingPageResetStampRef.current = null;
+    }
     // Same value-compare gate as fetchMods so the shared stamp prevents
     // re-fetching cached state and survives StrictMode double-mount.
-    const stamp = `${page}|${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}`;
+    const stamp = `${page}|${fetchFilterStamp}`;
     if (lastFetchedStampRef.current === stamp) return;
     lastFetchedStampRef.current = stamp;
+    const requestGeneration = ++requestGenerationRef.current;
     // Same anti-flash logic as fetchMods: skeleton only on truly empty first
     // load. Subsequent refetches keep the previous result set visible until
     // the new one arrives.
@@ -549,6 +1456,10 @@ export default function Browse() {
         heroName: selectedHeroName,
         skinsCategoryId: skinsCat?.id,
         sortBy: sortMap[sort] || 'relevance',
+        nsfw,
+        addedWithin,
+        addedFrom: customAddedFrom,
+        addedTo: customAddedTo,
         limit: perPage,
         offset: (page - 1) * perPage,
       });
@@ -584,21 +1495,46 @@ export default function Browse() {
         })(),
       }));
 
-      if (page === 1) {
-        setMods(convertedMods);
-      } else {
-        setMods(prev => [...prev, ...convertedMods]);
+      if (requestGeneration !== requestGenerationRef.current || lastFetchedStampRef.current !== stamp) {
+        return;
       }
+
+      const nextMods =
+        page === 1
+          ? dedupeModsById(convertedMods)
+          : appendUniqueModsById(modsRef.current, convertedMods);
+      const nextHasMore = convertedMods.length === perPage && page * perPage < result.totalCount;
+
+      setMods(nextMods);
       setTotalCount(result.totalCount);
-      setHasMore(convertedMods.length === perPage && page * perPage < result.totalCount);
+      setHasMore(nextHasMore);
+      modsRef.current = nextMods;
+      pageRef.current = page;
+      totalCountRef.current = result.totalCount;
+      hasMoreRef.current = nextHasMore;
+      const cachedScrollTop = browseScrollCacheRef.current.get(fetchFilterStamp) ?? latestScrollTopRef.current;
+      browseResultsCacheRef.current.set(fetchFilterStamp, {
+        mods: nextMods,
+        page,
+        hasMore: nextHasMore,
+        totalCount: result.totalCount,
+        scrollTop: cachedScrollTop,
+      });
+      browseScrollCacheRef.current.set(fetchFilterStamp, cachedScrollTop);
     } catch (err) {
+      if (requestGeneration !== requestGenerationRef.current || lastFetchedStampRef.current !== stamp) {
+        return;
+      }
       console.error('Local search failed, falling back to API:', err);
+      lastFetchedStampRef.current = null;
       setLocalSearchFailed(true);
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestGeneration === requestGenerationRef.current && lastFetchedStampRef.current === stamp) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, modCategories]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, modCategories, fetchFilterStamp]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
@@ -606,18 +1542,54 @@ export default function Browse() {
   // StrictMode's double-effect run (the second setup sees the same stamp
   // and short-circuits, instead of consuming a one-shot skip flag).
   const lastResetFiltersRef = useRef<string | null>(
-    `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${perPage}`
+    fetchFilterStamp
   );
   useEffect(() => {
-    const current = `${debouncedSearch}|${sort}|${section}|${effectiveCategoryId}|${perPage}`;
+    const current = fetchFilterStamp;
     if (lastResetFiltersRef.current === current) return;
+    cacheCurrentBrowseResults(activeFetchFilterStampRef.current);
     lastResetFiltersRef.current = current;
+    activeFetchFilterStampRef.current = current;
+    requestGenerationRef.current += 1;
+    lastFetchedStampRef.current = null;
+
+    const cached = browseResultsCacheRef.current.get(current);
+    if (cached) {
+      pendingPageResetStampRef.current = null;
+      setMods(cached.mods);
+      setPage(cached.page);
+      setTotalCount(cached.totalCount);
+      setHasMore(cached.hasMore);
+      setLoading(false);
+      setLoadingMore(false);
+      setError(null);
+      setLoadMoreError(null);
+      setAutoLoadPaused(false);
+      lastFetchedStampRef.current = `${cached.page}|${current}`;
+      restoredCacheSkipStampRef.current = current;
+      latestScrollTopRef.current = cached.scrollTop;
+      browseScrollCacheRef.current.set(current, cached.scrollTop);
+      requestAnimationFrame(() => {
+        if (activeFetchFilterStampRef.current !== current) return;
+        const container = scrollContainerRef.current;
+        if (container) container.scrollTop = cached.scrollTop;
+      });
+      return;
+    }
+
+    if (page !== 1) {
+      pendingPageResetStampRef.current = current;
+    }
     // Reset pagination when filters change but keep previous results visible
     // until the new query lands. Blanking mods here is what produced the
     // skeleton flash on every keystroke pre-debounce.
     setPage(1);
     setHasMore(true);
-  }, [debouncedSearch, sort, section, effectiveCategoryId, perPage]);
+    // New filters: drop any prior load-more failure and re-enable
+    // auto-pagination for the fresh result set.
+    setLoadMoreError(null);
+    setAutoLoadPaused(false);
+  }, [cacheCurrentBrowseResults, fetchFilterStamp, page]);
 
   useEffect(() => {
     let active = true;
@@ -805,8 +1777,10 @@ export default function Browse() {
 
     observerRef.current = new IntersectionObserver(
       (entries) => {
-        // Load more when reaching bottom and not already loading
-        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore) {
+        // Load more when reaching bottom and not already loading. autoLoadPaused
+        // gates this after a fetch failure so a refusing API isn't hammered in a
+        // loop (the sentinel re-enters view when the grid shrinks).
+        if (entries[0].isIntersecting && hasMore && !loading && !loadingMore && !autoLoadPaused) {
           setPage(prev => prev + 1);
         }
       },
@@ -818,7 +1792,7 @@ export default function Browse() {
     }
 
     return () => observerRef.current?.disconnect();
-  }, [hasMore, loading, loadingMore]);
+  }, [hasMore, loading, loadingMore, autoLoadPaused]);
 
   // Background fetch download counts for visible mods (using global cache with TTL)
   // DISABLED: This makes N API calls per page load which is very slow and risks rate limiting.
@@ -874,6 +1848,14 @@ export default function Browse() {
       setMods([]);
       setHasMore(true);
       setPage(1);
+      setError(null);
+      setLoadMoreError(null);
+      setAutoLoadPaused(false);
+      browseResultsCacheRef.current.delete(fetchFilterStamp);
+      browseScrollCacheRef.current.delete(fetchFilterStamp);
+      requestGenerationRef.current += 1;
+      lastFetchedStampRef.current = null;
+      pendingPageResetStampRef.current = null;
       setRefreshKey(k => k + 1);
     } catch (err) {
       setError(String(err));
@@ -881,6 +1863,20 @@ export default function Browse() {
       setSyncing(false);
     }
   };
+
+  // Retry a failed browse fetch (full-page or load-more). Clears the failure
+  // flags, lifts the auto-pagination pause, and forces a re-fetch of the
+  // current page. The stamp guard would otherwise treat the retry as a
+  // duplicate and skip it, so the stamp is cleared too. loadingMore is set
+  // up front so the observer can't also advance the page in the same commit.
+  const handleRetryFetch = useCallback(() => {
+    setError(null);
+    setLoadMoreError(null);
+    setAutoLoadPaused(false);
+    setLoadingMore(true);
+    lastFetchedStampRef.current = null;
+    setRefreshKey((k) => k + 1);
+  }, []);
 
   const handleModClick = async (mod: GameBananaMod) => {
     try {
@@ -924,17 +1920,24 @@ export default function Browse() {
   const handleDownload = async (fileId: number, fileName: string) => {
     if (!selectedMod || !activeDeadlockPath) return;
 
-    setDownloading({ modId: selectedMod.id, fileId });
-    setDownloadProgress({ downloaded: 0, total: 0 });
-    setExtracting(false);
+    // The first file claims the active slot (shows progress); additional clicks
+    // queue behind it. The backend's download-queue-updated event is the source
+    // of truth for what's queued, so don't clobber the active progress UI here.
+    if (!downloading) {
+      setDownloading({ modId: selectedMod.id, fileId });
+      setDownloadProgress({ downloaded: 0, total: 0 });
+      setExtracting(false);
+    }
 
     try {
       await downloadMod(selectedMod.id, fileId, fileName, section, effectiveCategoryId);
     } catch (err) {
       setError(String(err));
-      setDownloading(null);
-      setDownloadProgress(null);
-      setExtracting(false);
+      // Reset the active UI only if the file that failed is the active one.
+      // Functional update reads fresh state, not this closure's snapshot.
+      setDownloading((cur) =>
+        cur && cur.modId === selectedMod.id && cur.fileId === fileId ? null : cur
+      );
     }
   };
 
@@ -996,18 +1999,28 @@ export default function Browse() {
   }, [modCategories]);
 
   const categoryOptions = useMemo(() => {
+    // Per-hero entries under Skins are handled by the dedicated Hero filter, so
+    // exclude them here. Everything else (Skins, Model Replacement, HUD,
+    // Gameplay Modifications, Maps, Music, Killsounds, ...) becomes a mod-type
+    // filter. This surfaces GameBanana's real categories instead of the old
+    // hardcoded hud/other-misc/maps allowlist (issue #91).
     const heroIds = new Set(heroOptions.map((hero) => hero.id));
+    const flat = flattenCategories(categories, '', { excludeIds: heroIds, includeEmpty: false });
 
-    // Get all flattened categories
-    let options = flattenCategories(categories, '', { excludeIds: heroIds, includeEmpty: false });
+    // GameBanana keeps several legacy duplicate categories that share a name
+    // (e.g. multiple "Skins" / "Other/Misc" buckets). Collapse by label and keep
+    // the most populated one so the dropdown stays short and points at the
+    // canonical category.
+    const byLabel = new Map<string, CategoryOption>();
+    for (const opt of flat) {
+      const key = opt.label.toLowerCase();
+      const existing = byLabel.get(key);
+      if (!existing || opt.itemCount > existing.itemCount) {
+        byLabel.set(key, opt);
+      }
+    }
 
-    // Only keep allowed categories (HUD, Other/Misc, Maps)
-    options = options.filter(opt => {
-      const lowerLabel = opt.label.toLowerCase();
-      return ALLOWED_CATEGORIES.has(lowerLabel);
-    });
-
-    return options;
+    return Array.from(byLabel.values()).sort((a, b) => a.label.localeCompare(b.label));
   }, [categories, heroOptions]);
 
   const installedIds = useMemo(() => {
@@ -1067,6 +2080,28 @@ export default function Browse() {
     }
     return map;
   }, [installedMods]);
+
+  const queuedByModId = useMemo(() => {
+    const map = new Map<number, QueuedDownloadState>();
+    downloadQueue.forEach((queued, index) => {
+      map.set(queued.modId, { position: index + 1 });
+    });
+    return map;
+  }, [downloadQueue]);
+
+  const selectedQueuedFileIds = useMemo(() => {
+    if (!selectedMod) return new Set<number>();
+    const ids = new Set<number>();
+    for (const queued of downloadQueue) {
+      if (queued.modId === selectedMod.id) ids.add(queued.fileId);
+    }
+    return ids;
+  }, [downloadQueue, selectedMod]);
+
+  const queuedModIds = useMemo(
+    () => new Set(downloadQueue.map((queued) => queued.modId)),
+    [downloadQueue]
+  );
 
   // Heal legacy 1-click installs that pre-date the forward fix. Those variants
   // have the right gameBananaId but no gameBananaFileId, so ModDetailsModal
@@ -1144,9 +2179,62 @@ export default function Browse() {
 
   // Just use all loaded mods - infinite scroll handles pagination.
   // Hide outdated mods if the user has opted in.
-  const displayMods = settings?.hideOutdatedMods
-    ? mods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified))
-    : mods;
+  const displayMods = useMemo(() => {
+    let nextMods = settings?.hideOutdatedMods
+      ? mods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified))
+      : mods;
+    // "(No hero)" Sound filter: GameBanana Sound categories don't carry hero
+    // metadata, so hero association is inferred from the title.
+    if (section === 'Sound' && heroCategoryId === 'none') {
+      nextMods = nextMods.filter((m) => inferHeroFromTitle(m.name) === null);
+    }
+
+    return nextMods;
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId]);
+
+  const readableCardTargetWidth = getReadableCardTargetWidth(activeCardSize);
+  const gridGap =
+    layout === 'list'
+      ? 12
+      : browseCardDesign === 'readable'
+        ? getReadableCardGridGap(readableCardTargetWidth)
+        : viewMode === 'compact'
+          ? 8
+          : 12;
+  const columnMinWidth =
+    layout === 'list'
+      ? Math.max(1, browseViewportWidth - 32)
+      : browseCardDesign === 'readable'
+        ? readableCardTargetWidth
+        : activeCardSize;
+  const contentWidth = Math.max(columnMinWidth, browseViewportWidth - 32);
+  const virtualColumnCount =
+    layout === 'list'
+      ? 1
+      : Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
+  const virtualColumnWidth =
+    layout === 'list'
+      ? contentWidth
+      : Math.floor((contentWidth - gridGap * (virtualColumnCount - 1)) / virtualColumnCount);
+  const virtualCardHeight = estimateBrowseRowHeight(
+    virtualColumnWidth,
+    layout,
+    browseCardDesign,
+    viewMode,
+    section
+  );
+  const virtualRowHeight = virtualCardHeight + gridGap;
+  const virtualRowCount = Math.ceil(displayMods.length / virtualColumnCount);
+  const rowVirtualizer = useVirtualizer({
+    count: virtualRowCount,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => virtualRowHeight,
+    overscan: BROWSE_GRID_OVERSCAN_ROWS,
+  });
+
+  useLayoutEffect(() => {
+    rowVirtualizer.measure();
+  }, [rowVirtualizer, virtualRowHeight, virtualColumnCount, gridGap, browseCardDesign]);
 
   if (!activeDeadlockPath) {
     return (
@@ -1161,9 +2249,9 @@ export default function Browse() {
   }
 
   return (
-    <div className="h-full overflow-y-auto" ref={scrollContainerRef}>
+    <div className={`h-full overflow-y-auto ${isBrowseScrolling ? 'browse-is-scrolling' : ''}`} ref={scrollContainerRef}>
       {/* Header with Search */}
-      <div className="sticky top-0 z-10 p-4 border-b border-border bg-bg-primary">
+      <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
         <form onSubmit={handleSearch}>
           <div className="flex flex-wrap items-center gap-2">
             {/* Search Input with integrated submit */}
@@ -1273,45 +2361,116 @@ export default function Browse() {
               )}
             </button>
 
-            {/* View Mode Toggle - Icon Only */}
-            <div className="flex items-center h-10 rounded-lg border border-border bg-bg-secondary p-1">
+            <div className="relative" ref={viewMenuRef}>
               <button
                 type="button"
-                onClick={() => setViewMode('grid')}
-                className={`p-1.5 rounded-md transition-colors cursor-pointer ${viewMode === 'grid'
-                  ? 'bg-bg-tertiary text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                title="Grid view"
+                onClick={() => setViewMenuOpen((v) => !v)}
+                aria-haspopup="dialog"
+                aria-expanded={viewMenuOpen}
+                className="flex h-10 items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                title="View options"
               >
-                <LayoutGrid className="w-5 h-5" />
+                <LayoutGrid className="h-4 w-4 text-text-secondary" />
+                <span>View</span>
+                <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
               </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('compact')}
-                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'compact'
-                  ? 'bg-bg-tertiary text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                title="Compact view"
-              >
-                <Grid3x3 className="w-5 h-5" />
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-colors cursor-pointer ${viewMode === 'list'
-                  ? 'bg-bg-tertiary text-text-primary'
-                  : 'text-text-secondary hover:text-text-primary'
-                  }`}
-                title="List view"
-              >
-                <List className="w-5 h-5" />
-              </button>
-            </div>
 
-            {/* Divider */}
-            <div className="w-px h-6 bg-border" />
+              {viewMenuOpen && (
+                <div
+                  className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-border bg-bg-secondary p-3 shadow-xl animate-fade-in"
+                  role="dialog"
+                  aria-label="View options"
+                >
+                  <div className="space-y-4">
+                    <div>
+                      <div className="mb-2 text-xs font-medium text-text-secondary">Layout</div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setLayout('grid')}
+                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
+                            layout === 'grid'
+                              ? 'border-accent/50 bg-accent/10 text-accent'
+                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                          }`}
+                        >
+                          <LayoutGrid className="h-4 w-4" />
+                          Grid
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setLayout('list')}
+                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
+                            layout === 'list'
+                              ? 'border-accent/50 bg-accent/10 text-accent'
+                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                          }`}
+                        >
+                          <List className="h-4 w-4" />
+                          List
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className={layout === 'list' ? 'opacity-45' : ''}>
+                      <div className="mb-2 flex items-center justify-between gap-3">
+                        <span className="text-xs font-medium text-text-secondary">Card size</span>
+                        <span className="inline-flex items-center gap-1 text-[11px] text-text-tertiary">
+                          <Grid3x3 className="h-3.5 w-3.5" />
+                          Grid only
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                        <input
+                          key={cardSize}
+                          type="range"
+                          min={BROWSE_CARD_SIZE_MIN}
+                          max={BROWSE_CARD_SIZE_MAX}
+                          step={BROWSE_CARD_SIZE_STEP}
+                          defaultValue={cardSize}
+                          disabled={layout === 'list'}
+                          onChange={(e) => setPreviewCardSize(Number(e.currentTarget.value))}
+                          onPointerUp={(e) => commitCardSize(Number(e.currentTarget.value))}
+                          onKeyUp={(e) => commitCardSize(Number(e.currentTarget.value))}
+                          onBlur={(e) => commitCardSize(Number(e.currentTarget.value))}
+                          aria-label="Card size"
+                          className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
+                        />
+                        <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                      </div>
+                    </div>
+
+                    <div className={layout === 'list' ? 'opacity-45' : ''}>
+                      <div className="mb-2 text-xs font-medium text-text-secondary">Card style</div>
+                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Browse card design">
+                        {(['readable', 'classic'] as const).map((design) => {
+                          const active = browseCardDesign === design;
+                          return (
+                            <button
+                              key={design}
+                              type="button"
+                              role="tab"
+                              aria-selected={active}
+                              disabled={layout === 'list'}
+                              onClick={() => setBrowseCardDesign(design)}
+                              className={`h-9 rounded-md border text-xs font-semibold transition-colors disabled:cursor-default ${
+                                active
+                                  ? 'border-accent/50 bg-accent/10 text-accent'
+                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                              }`}
+                            >
+                              {design === 'readable' ? 'Default' : 'Classic'}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                  </div>
+                </div>
+              )}
+            </div>
 
             {/* Section toggle — Mods vs Sounds as icon buttons */}
             {sections.length > 1 && (
@@ -1341,23 +2500,6 @@ export default function Browse() {
               </div>
             )}
 
-            {/* Global Volume Slider - visible when Sound section is selected */}
-            {section === 'Sound' && (
-              <div className="flex items-center h-10 gap-2 px-3 bg-bg-secondary border border-border rounded-lg">
-                <Volume2 className="w-4 h-4 text-text-secondary flex-shrink-0" />
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={Math.round(soundVolume * 100)}
-                  onChange={(e) => setSoundVolume(parseInt(e.target.value) / 100)}
-                  className="w-24 h-1.5 bg-bg-primary rounded-full appearance-none cursor-pointer accent-accent [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:bg-accent [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:cursor-pointer [&::-webkit-slider-thumb]:transition-transform [&::-webkit-slider-thumb]:hover:scale-110"
-                  title={`Volume: ${Math.round(soundVolume * 100)}%`}
-                />
-                <span className="text-xs text-text-secondary tabular-nums w-8">{Math.round(soundVolume * 100)}%</span>
-              </div>
-            )}
-
             <DynamicSelect
               value={sort}
               onChange={(val) => setSort(val as SortOption)}
@@ -1373,10 +2515,12 @@ export default function Browse() {
 
             {/* Filters popover — houses hero + category selectors. Collapses two
                 always-visible dropdowns into one control with an active-count badge. */}
-            {(heroOptions.length > 0 || categoryOptions.length > 0) && (() => {
+            {(heroOptions.length > 0 || categoryOptions.length > 0 || hasLocalCache) && (() => {
               const filterCount =
                 (heroCategoryId !== 'all' ? 1 : 0) +
-                (categoryId !== 'all' ? 1 : 0);
+                (categoryId !== 'all' ? 1 : 0) +
+                (nsfw !== 'all' ? 1 : 0) +
+                (addedWithin !== 'all' ? 1 : 0);
               return (
                 <div className="relative" ref={filtersRef}>
                   <button
@@ -1401,7 +2545,7 @@ export default function Browse() {
 
                   {filtersOpen && (
                     <div
-                      className="absolute right-0 top-full mt-2 z-20 w-72 bg-bg-secondary border border-border rounded-lg shadow-xl p-4 animate-fade-in"
+                      className="absolute right-0 top-full mt-2 z-50 w-72 bg-bg-secondary border border-border rounded-lg shadow-xl p-4 animate-fade-in"
                       role="dialog"
                       aria-label="Filters"
                     >
@@ -1413,6 +2557,10 @@ export default function Browse() {
                             onClick={() => {
                               setHeroCategoryId('all');
                               setCategoryId('all');
+                              setNsfw('all');
+                              setAddedWithin('all');
+                              setAddedFrom('');
+                              setAddedTo('');
                             }}
                             className="text-xs text-text-secondary hover:text-accent cursor-pointer"
                           >
@@ -1425,16 +2573,26 @@ export default function Browse() {
                         {heroOptions.length > 0 && (
                           <label className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">Hero</span>
-                            <select
+                            <HeroSelect
+                              ariaLabel="Filter by hero"
                               value={String(heroCategoryId)}
-                              onChange={(e) => setHeroCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
-                            >
-                              <option value="all">All Heroes</option>
-                              {heroOptions.map((hero) => (
-                                <option key={hero.id} value={String(hero.id)}>{hero.label}</option>
-                              ))}
-                            </select>
+                              onChange={(v) => {
+                                if (v === 'all') setHeroCategoryId('all');
+                                else if (v === 'none') setHeroCategoryId('none');
+                                else setHeroCategoryId(Number(v));
+                              }}
+                              options={[
+                                { value: 'all', label: 'All Heroes', muted: true },
+                                ...(section === 'Sound'
+                                  ? [{ value: 'none', label: 'No hero (item / UI / music)', muted: true }]
+                                  : []),
+                                ...heroOptions.map((hero) => ({
+                                  value: String(hero.id),
+                                  label: hero.label,
+                                  heroName: hero.label,
+                                })),
+                              ]}
+                            />
                           </label>
                         )}
 
@@ -1457,6 +2615,65 @@ export default function Browse() {
                             )}
                           </label>
                         )}
+
+                        {/* Content rating + recency are served by the local catalog
+                            mirror, so they only show once it's available. */}
+                        {hasLocalCache && (
+                          <label className="block">
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Content</span>
+                            <select
+                              value={nsfw}
+                              onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
+                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                            >
+                              <option value="all">All</option>
+                              <option value="sfw">SFW only</option>
+                              <option value="nsfw">NSFW only</option>
+                            </select>
+                          </label>
+                        )}
+
+                        {hasLocalCache && (
+                          <div className="block">
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Added</span>
+                            <select
+                              aria-label="Filter by date added"
+                              value={addedWithin}
+                              onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
+                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                            >
+                              <option value="all">Any time</option>
+                              <option value="today">Today</option>
+                              <option value="week">This week</option>
+                              <option value="month">This month</option>
+                              <option value="custom">Custom range</option>
+                            </select>
+                            {addedWithin === 'custom' && (
+                              <div className="mt-2 grid grid-cols-2 gap-2">
+                                <label className="block">
+                                  <span className="block text-[11px] text-text-tertiary mb-1">From</span>
+                                  <input
+                                    type="date"
+                                    value={addedFrom}
+                                    max={addedTo || undefined}
+                                    onChange={(e) => setAddedFrom(e.target.value)}
+                                    className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                                  />
+                                </label>
+                                <label className="block">
+                                  <span className="block text-[11px] text-text-tertiary mb-1">To</span>
+                                  <input
+                                    type="date"
+                                    value={addedTo}
+                                    min={addedFrom || undefined}
+                                    onChange={(e) => setAddedTo(e.target.value)}
+                                    className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                                  />
+                                </label>
+                              </div>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -1464,44 +2681,91 @@ export default function Browse() {
               );
             })()}
           </div>
+
+          {section === 'Sound' && (
+            <div className="mt-3 inline-flex max-w-full items-center gap-3 rounded-lg border border-border bg-bg-secondary/70 px-3 py-2">
+              <div className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-text-primary">
+                <Volume2 className="h-4 w-4 flex-shrink-0 text-text-secondary" />
+                <span>Preview volume</span>
+              </div>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={Math.round(soundVolume * 100)}
+                onChange={(e) => setSoundVolume(parseInt(e.target.value, 10) / 100)}
+                className="h-1.5 w-40 cursor-pointer accent-accent sm:w-48"
+                title={`Volume: ${Math.round(soundVolume * 100)}%`}
+                aria-label="Preview volume"
+              />
+              <span className="w-9 text-right text-xs tabular-nums text-text-secondary">
+                {Math.round(soundVolume * 100)}%
+              </span>
+            </div>
+          )}
         </form>
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 p-4">
+      <div className="relative z-0 flex-1 p-4">
         {(() => {
+          // Column min-width is the slider value, so the grid template can't be
+          // a static Tailwind class (the JIT scanner never sees it). Drive it
+          // with an inline style; gap still tracks the compact threshold.
           const gridClass =
-            viewMode === 'list'
+            layout === 'list'
               ? 'flex flex-col gap-3'
-              : viewMode === 'compact'
-                ? 'grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3'
-                : 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3';
+              : browseCardDesign === 'readable'
+                ? 'grid'
+                : viewMode === 'compact'
+                ? 'grid gap-2'
+                : 'grid gap-3';
+          const gridStyle =
+            layout === 'list'
+              ? undefined
+              : browseCardDesign === 'readable'
+                ? {
+                    gridTemplateColumns: `repeat(auto-fit, minmax(${readableCardTargetWidth}px, 1fr))`,
+                    gap: `${gridGap}px`,
+                  }
+                : { gridTemplateColumns: `repeat(auto-fill, minmax(${activeCardSize}px, 1fr))` };
           const hasActiveFilters =
-            search.trim().length > 0 || heroCategoryId !== 'all' || categoryId !== 'all' || sort !== 'default';
+            search.trim().length > 0 ||
+            heroCategoryId !== 'all' ||
+            categoryId !== 'all' ||
+            sort !== 'default' ||
+            nsfw !== 'all' ||
+            addedWithin !== 'all' ||
+            addedFrom.length > 0 ||
+            addedTo.length > 0;
 
           if (loading) {
             // Match perPage so the skeleton grid fills roughly the same footprint
             // as the real results once they arrive.
             return (
-              <div className={gridClass} aria-busy="true" aria-live="polite">
+              <div className={gridClass} style={gridStyle} aria-busy="true" aria-live="polite">
                 {Array.from({ length: DEFAULT_PER_PAGE }).map((_, i) => (
                   <ModCardSkeleton key={i} viewMode={viewMode} />
                 ))}
               </div>
             );
           }
-          if (error) {
-            return (
-              <EmptyState
-                icon={AlertTriangle}
-                title="Couldn't load mods"
-                description={renderErrorWithLinks(error)}
-                variant="error"
-                action={<Button onClick={fetchMods}>Retry</Button>}
-              />
-            );
-          }
+          // Only blank the page for the error/empty states when there are no
+          // results to show. When the grid already has mods, a fetch failure
+          // is surfaced inline at the load-more row instead (see below), so the
+          // grid never flashes out from under the user.
           if (displayMods.length === 0) {
+            if (error) {
+              return (
+                <EmptyState
+                  icon={AlertTriangle}
+                  title="Couldn't load mods"
+                  description={renderErrorWithLinks(error)}
+                  variant="error"
+                  action={<Button onClick={handleRetryFetch}>Retry</Button>}
+                />
+              );
+            }
             return (
               <EmptyState
                 icon={Search}
@@ -1515,6 +2779,10 @@ export default function Browse() {
                         setHeroCategoryId('all');
                         setCategoryId('all');
                         setSort('default');
+                        setNsfw('all');
+                        setAddedWithin('all');
+                        setAddedFrom('');
+                        setAddedTo('');
                       }}
                     >
                       Clear filters
@@ -1524,38 +2792,75 @@ export default function Browse() {
               />
             );
           }
+          const virtualRows = rowVirtualizer.getVirtualItems();
           return (
-            <div className={gridClass}>
-              {displayMods.map((mod) => {
-                const queueIndex = downloadQueue.findIndex(q => q.modId === mod.id);
-                const isQueued = queueIndex >= 0;
-                const installedLocal = installedByGbId.get(mod.id);
+            <div
+              className="relative w-full"
+              style={{ height: `${rowVirtualizer.getTotalSize()}px` }}
+            >
+              {virtualRows.map((virtualRow) => {
+                const rowStart = virtualRow.index * virtualColumnCount;
+                const rowMods = displayMods.slice(rowStart, rowStart + virtualColumnCount);
                 return (
-                  <ModCard
-                    key={mod.id}
-                    mod={mod}
-                    installed={installedIds.has(mod.id)}
-                    installedDisabled={!!installedLocal && !installedLocal.enabled}
-                    downloading={downloading?.modId === mod.id}
-                    queuePosition={isQueued ? queueIndex + 1 : undefined}
-                    viewMode={viewMode}
-                    section={section}
-                    volume={soundVolume}
-                    onVolumeChange={setSoundVolume}
-                    hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
-                    isPlaying={playingModId === mod.id}
-                    onPlayingChange={(playing) => {
-                      setPlayingModId((prev) => {
-                        if (playing) return mod.id;
-                        return prev === mod.id ? null : prev;
-                      });
+                  <div
+                    key={virtualRow.key}
+                    data-index={virtualRow.index}
+                    className={layout === 'list' ? 'absolute left-0 top-0 w-full' : 'absolute left-0 top-0 grid w-full'}
+                    style={{
+                      transform: `translateY(${virtualRow.start}px)`,
+                      height: `${virtualCardHeight}px`,
+                      gridTemplateColumns:
+                        layout === 'list'
+                          ? undefined
+                          : `repeat(${virtualColumnCount}, minmax(0, 1fr))`,
+                      gap: layout === 'list' ? undefined : `${gridGap}px`,
                     }}
-                    onClick={() => handleModClick(mod)}
-                    onQuickDownload={() => handleQuickDownload(mod)}
-                    onEnable={installedLocal && !installedLocal.enabled
-                      ? () => toggleMod(installedLocal.id)
-                      : undefined}
-                  />
+                  >
+                    {rowMods.map((mod, index) => {
+                      const queuedState = queuedByModId.get(mod.id);
+                      const installedLocal = installedByGbId.get(mod.id);
+                      return (
+                        <div
+                          key={mod.id}
+                          className="browse-result-card min-w-0 [contain:layout_style]"
+                          style={{ animationDelay: `${Math.min(index * 18, 72)}ms` }}
+                        >
+                          <MemoizedModCard
+                            key={mod.id}
+                            mod={mod}
+                            installed={installedIds.has(mod.id)}
+                            installedDisabled={!!installedLocal && !installedLocal.enabled}
+                            downloading={downloading?.modId === mod.id}
+                            queuePosition={queuedState?.position}
+                            viewMode={viewMode}
+                            cardDesign={browseCardDesign}
+                            cardSize={activeCardSize}
+                            cardWidth={virtualColumnWidth}
+                            cardHeight={virtualCardHeight}
+                            section={section}
+                            volume={soundVolume}
+                            onVolumeChange={setSoundVolume}
+                            hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+                            isPlaying={playingModId === mod.id}
+                            suppressHoverIntent={isBrowseScrolling}
+                            enableModId={installedLocal && !installedLocal.enabled ? installedLocal.id : undefined}
+                            actionContextKey={`${activeDeadlockPath ?? ''}|${section}|${effectiveCategoryId ?? ''}`}
+                            onPlayingChange={(playing) => {
+                              setPlayingModId((prev) => {
+                                if (playing) return mod.id;
+                                return prev === mod.id ? null : prev;
+                              });
+                            }}
+                            onClick={() => handleModClick(mod)}
+                            onQuickDownload={() => handleQuickDownload(mod)}
+                            onEnable={installedLocal && !installedLocal.enabled
+                              ? () => toggleMod(installedLocal.id)
+                              : undefined}
+                          />
+                        </div>
+                      );
+                    })}
+                  </div>
                 );
               })}
             </div>
@@ -1569,7 +2874,16 @@ export default function Browse() {
               <span className="text-sm">Loading more...</span>
             </div>
           )}
-          {!hasMore && mods.length > 0 && !loadingMore && (
+          {loadMoreError && !loadingMore && (
+            <div className="flex flex-col items-center gap-2 text-center max-w-md">
+              <div className="flex items-center gap-2 text-text-secondary">
+                <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
+                <span className="text-sm">Couldn't load more. {renderErrorWithLinks(loadMoreError)}</span>
+              </div>
+              <Button onClick={handleRetryFetch} variant="secondary" size="sm">Retry</Button>
+            </div>
+          )}
+          {!hasMore && !loadMoreError && mods.length > 0 && !loadingMore && (
             <span className="text-sm text-text-secondary">No more mods to load</span>
           )}
         </div>
@@ -1585,9 +2899,10 @@ export default function Browse() {
           installedFileStates={installedFileStates}
           onEnableFile={(modId) => toggleMod(modId)}
           downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
+          queuedFileIds={selectedQueuedFileIds}
           extracting={extracting}
           progress={downloadProgress}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           dateAdded={selectedModDates?.dateAdded}
           dateModified={selectedModDates?.dateModified}
           onClose={() => setSelectedMod(null)}
@@ -1597,9 +2912,9 @@ export default function Browse() {
 
       {collectionModalOpen && (
         <ImportCollectionModal
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           installedIds={installedIds}
-          queuedIds={new Set(downloadQueue.map((q) => q.modId))}
+          queuedIds={queuedModIds}
           activeDeadlockPath={activeDeadlockPath}
           onClose={() => setCollectionModalOpen(false)}
         />
@@ -1608,11 +2923,298 @@ export default function Browse() {
       {importProfileOpen && (
         <ImportProfileDialog
           activeDeadlockPath={activeDeadlockPath}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           onClose={() => setImportProfileOpen(false)}
           onImported={() => { void loadMods(); }}
         />
       )}
+    </div>
+  );
+}
+
+function ReadableBrowseModCard({
+  mod,
+  installed,
+  installedDisabled,
+  downloading,
+  queuePosition,
+  cardSize,
+  cardWidth,
+  cardHeight,
+  section,
+  volume,
+  onVolumeChange,
+  hideNsfwPreviews,
+  isPlaying,
+  suppressHoverIntent,
+  onPlayingChange,
+  onClick,
+  onQuickDownload,
+  onEnable,
+}: ModCardProps) {
+  const thumbnail = getModThumbnail(mod);
+  const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
+  const isSoundSection = section === 'Sound';
+  const hasAudioPreview = Boolean(audioPreview);
+  const inferredHero = inferHeroFromTitle(mod.name);
+  const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
+  const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
+  const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
+  const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
+  const readableDensity = getReadableDensity(readableCardWidth);
+  const [showVolumeSlider, setShowVolumeSlider] = useState(false);
+  const [audioControlsActive, setAudioControlsActive] = useState(false);
+  const readableScale = readableCardWidth / BROWSE_READABLE_CARD_GOLDEN;
+  const chipRowWidth = Math.round(readableCardWidth - 24 * readableScale);
+  const chips = getReadableCardChips(mod, section, inferredHero);
+  const showChips = readableDensity !== 'micro';
+  const showAuthor = readableDensity !== 'micro';
+  // "Last updated" sits in the stats row when the card is wide enough; on
+  // narrower cards it drops to its own line under the author so it can't
+  // squash the likes/views counts.
+  const showUpdated = readableDensity === 'full';
+  const updatedInline = showUpdated && readableCardWidth >= BROWSE_READABLE_UPDATED_INLINE_MIN;
+  const updatedOwnLine = showUpdated && !updatedInline;
+  const isMicro = readableDensity === 'micro';
+  const isCompactReadable = readableDensity === 'compact';
+  const actionIconOnly = readableCardWidth < 220;
+  const showInlineAudioPreview = isSoundSection && hasAudioPreview;
+  const cardFrameStyle = typeof cardHeight === 'number' ? { height: `${cardHeight}px` } : undefined;
+  const mediaHeightClass = isMicro
+    ? 'aspect-[16/9]'
+    : isCompactReadable
+      ? 'h-[56cqw]'
+      : 'h-[57.1429cqw]';
+  const bodyPaddingClass = isMicro
+    ? 'px-[clamp(8px,5cqw,10px)] pb-[clamp(7px,4.6429cqw,9px)] pt-[clamp(7px,4.6429cqw,9px)]'
+    : isCompactReadable
+      ? 'px-[clamp(12px,5cqw,14px)] pb-[clamp(12px,5cqw,14px)] pt-[clamp(12px,5cqw,14px)]'
+      : 'px-[clamp(14px,5cqw,16px)] pb-[clamp(14px,5cqw,16px)] pt-[clamp(14px,5cqw,16px)]';
+  const titleMarginClass = showChips
+    ? isCompactReadable
+      ? 'mt-[clamp(4px,2.5cqw,7px)]'
+      : 'mt-[clamp(5px,2.8571cqw,9px)]'
+    : 'mt-0';
+  const footerMarginClass = isMicro
+    ? 'mt-[clamp(6px,3.5714cqw,8px)]'
+    : 'mt-[clamp(7px,3.5714cqw,11px)]';
+  const footerHeightClass = isMicro
+    ? 'h-6'
+    : 'h-[clamp(24px,10cqw,32px)]';
+  const media = isSoundSection ? (
+    <div className="relative h-full w-full overflow-hidden bg-bg-tertiary">
+      {heroRenderUrl ? (
+        shouldHideNsfw ? (
+          <img
+            src={heroRenderUrl}
+            alt={inferredHero ?? mod.name}
+            loading="lazy"
+            decoding="async"
+            className="browse-card-media-zoom h-full w-full object-cover scale-105 blur-lg saturate-75"
+            style={{ objectPosition: `${heroFacePos}% 20%` }}
+          />
+        ) : (
+          <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
+            <img
+              src={heroRenderUrl}
+              alt={inferredHero ?? mod.name}
+              loading="lazy"
+              decoding="async"
+              className="browse-card-media-zoom h-full w-full object-cover"
+              style={{ objectPosition: `${heroFacePos}% 20%` }}
+            />
+          </ImageContextMenu>
+        )
+      ) : thumbnail ? (
+        <ModThumbnail
+          src={thumbnail}
+          alt={mod.name}
+          nsfw={mod.nsfw}
+          hideNsfw={hideNsfwPreviews}
+          className="h-full w-full"
+          imageFit="cover"
+          imagePosition="center top"
+          imageClassName="browse-card-media-zoom"
+        />
+      ) : (
+        <BrowseSoundPlaceholder title={mod.name} />
+      )}
+      {shouldHideNsfw && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/55 text-state-danger">
+          <AlertTriangle className="h-5 w-5" />
+          <span className="mt-1 text-[11px] font-semibold">NSFW hidden</span>
+        </div>
+      )}
+    </div>
+  ) : (
+    <ModThumbnail
+      src={thumbnail}
+      alt={mod.name}
+      nsfw={mod.nsfw}
+      hideNsfw={hideNsfwPreviews}
+      className="h-full w-full bg-bg-tertiary"
+      imageFit="cover"
+      imagePosition="center top"
+      imageClassName="browse-card-media-zoom"
+    />
+  );
+
+  useEffect(() => {
+    if (!suppressHoverIntent) return;
+    if (isPlaying) return;
+    const timeout = window.setTimeout(() => setAudioControlsActive(false), 0);
+    return () => window.clearTimeout(timeout);
+  }, [isPlaying, suppressHoverIntent]);
+
+  return (
+    <div
+      onClick={onClick}
+      onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+      onMouseEnter={() => {
+        if (!suppressHoverIntent) setAudioControlsActive(true);
+      }}
+      onMouseLeave={() => {
+        if (!isPlaying) setAudioControlsActive(false);
+      }}
+      onFocus={() => setAudioControlsActive(true)}
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
+          setAudioControlsActive(false);
+        }
+      }}
+      role="button"
+      tabIndex={0}
+      aria-label={`Open details for ${mod.name}`}
+      style={cardFrameStyle}
+      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-[#141414]/90 text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+        isPlaying
+          ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
+          : downloading
+            ? 'border-accent/40'
+            : 'border-white/[0.07]'
+      }`}
+    >
+      <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-md bg-bg-tertiary`}>
+        {media}
+      </div>
+
+      <div
+        className={`browse-readable-card-body relative flex flex-none flex-col ${bodyPaddingClass}`}
+      >
+        {showChips && (
+          <BrowseReadableChipRow
+            chips={chips}
+            availableWidth={chipRowWidth}
+            maxVisible={readableDensity === 'compact' ? 2 : BROWSE_READABLE_MAX_VISIBLE_CHIPS}
+          />
+        )}
+
+        <div className={`${titleMarginClass} min-w-0`}>
+          <h3
+            className={`block truncate font-bold text-[#eee8df] ${
+              isMicro
+                ? 'text-[13px] leading-4'
+                : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'
+            }`}
+            title={mod.name}
+          >
+            {mod.name}
+          </h3>
+          {showAuthor && (
+            <p className="-mt-0.5 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/64">
+              by {mod.submitter?.name ?? 'Unknown author'}
+            </p>
+          )}
+          {updatedOwnLine && <BrowseReadableUpdatedLine timestamp={mod.dateModified} variant="block" />}
+        </div>
+
+        {showInlineAudioPreview && (
+          <div
+            className={`mt-[clamp(8px,3.5714cqw,10px)] flex items-center rounded-[clamp(9px,3.5714cqw,12px)] border border-white/10 bg-bg-primary/55 px-[clamp(7px,2.8571cqw,9px)] text-text-secondary shadow-[0_1px_0_rgba(255,255,255,0.03)] ${
+              isMicro ? 'h-7' : 'h-[clamp(33px,12.8571cqw,41px)]'
+            }`}
+            onClick={(event) => event.stopPropagation()}
+          >
+            {audioControlsActive ? (
+              <>
+                <AudioPreviewPlayer
+                  src={audioPreview!}
+                  compact
+                  variant="inline"
+                  volume={volume}
+                  onPlayingChange={onPlayingChange}
+                  className="min-w-0 flex-1"
+                />
+                <div className="relative ml-[clamp(6px,2.1429cqw,8px)] flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setShowVolumeSlider((value) => !value)}
+                    className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                    title={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
+                    aria-label={showVolumeSlider ? 'Hide volume slider' : 'Show volume slider'}
+                    aria-expanded={showVolumeSlider}
+                  >
+                    {volume > 0 ? (
+                      <Volume2 className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
+                    ) : (
+                      <VolumeX className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
+                    )}
+                  </button>
+                  {showVolumeSlider && (
+                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-[#0a0c10]/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
+                      <input
+                        type="range"
+                        min={0}
+                        max={100}
+                        step={1}
+                        value={Math.round(volume * 100)}
+                        onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
+                        className="w-24 h-1 accent-accent cursor-pointer"
+                        title={`Volume: ${Math.round(volume * 100)}%`}
+                        aria-label="Volume"
+                      />
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className={`flex min-w-0 flex-1 items-center ${isMicro ? 'gap-2' : 'gap-4'}`}>
+                <span
+                  className={`flex flex-shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent/25 text-text-primary shadow-sm ${
+                    isMicro ? 'h-5 w-5' : 'h-8 w-8'
+                  }`}
+                >
+                  <Play className={`${isMicro ? 'h-3 w-3' : 'h-4 w-4'} ml-0.5 fill-current`} />
+                </span>
+                <span className="h-1.5 min-w-0 flex-1 rounded-full bg-bg-primary" />
+                {!isMicro && (
+                  <>
+                    <span className="flex-shrink-0 text-[10px] tabular-nums text-text-secondary">0:00</span>
+                    <span className="flex h-[clamp(24px,8.5714cqw,28px)] w-[clamp(24px,8.5714cqw,28px)] flex-shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/80">
+                      <Volume2 className="h-[clamp(13px,4.2857cqw,15px)] w-[clamp(13px,4.2857cqw,15px)]" />
+                    </span>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        )}
+
+        <div className={`${footerMarginClass} flex ${footerHeightClass} items-center justify-between gap-[clamp(6px,4.2857cqw,14px)]`}>
+          <BrowseReadableStatsRow mod={mod} density={readableDensity} showUpdated={updatedInline} />
+          <BrowseReadableAction
+            modName={mod.name}
+            installed={installed}
+            installedDisabled={installedDisabled}
+            downloading={downloading}
+            queuePosition={queuePosition}
+            density={readableDensity}
+            iconOnlyOverride={actionIconOnly}
+            onQuickDownload={onQuickDownload}
+            onEnable={onEnable}
+          />
+        </div>
+      </div>
     </div>
   );
 }
@@ -1626,11 +3228,18 @@ interface ModCardProps {
   downloading: boolean;
   queuePosition?: number;
   viewMode: ViewMode;
+  cardDesign: BrowseCardDesign;
+  cardSize: number;
+  cardWidth?: number;
+  cardHeight?: number;
   section: string;
   volume: number;
   onVolumeChange: (v: number) => void;
   hideNsfwPreviews: boolean;
   isPlaying: boolean;
+  suppressHoverIntent?: boolean;
+  enableModId?: string;
+  actionContextKey?: string;
   onPlayingChange: (playing: boolean) => void;
   onClick: () => void;
   onQuickDownload: () => void;
@@ -1663,9 +3272,11 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
-function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntent, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
+  // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
+  // see the size-threshold derivation of viewMode in the Browse component.
   const isCompact = viewMode === 'compact';
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
@@ -1675,6 +3286,14 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   const inferredHero = isSoundSection ? inferHeroFromTitle(mod.name) : null;
   const heroRenderUrl = inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
+  const [audioControlsActive, setAudioControlsActive] = useState(false);
+
+  useEffect(() => {
+    if (!suppressHoverIntent) return;
+    if (isPlaying) return;
+    const timeout = window.setTimeout(() => setAudioControlsActive(false), 0);
+    return () => window.clearTimeout(timeout);
+  }, [isPlaying, suppressHoverIntent]);
 
   // List view keeps original layout
   if (isList) {
@@ -1682,10 +3301,22 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
       <div
         onClick={onClick}
         onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+        onMouseEnter={() => {
+          if (!suppressHoverIntent) setAudioControlsActive(true);
+        }}
+        onMouseLeave={() => {
+          if (!isPlaying) setAudioControlsActive(false);
+        }}
+        onFocus={() => setAudioControlsActive(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
+            setAudioControlsActive(false);
+          }
+        }}
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
-        className={`relative bg-bg-secondary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
+        className={`browse-card-hover-surface relative bg-bg-secondary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
             : 'border-border hover:border-accent/50'
@@ -1694,14 +3325,18 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-md overflow-hidden">
           {isSoundSection ? (
             heroRenderUrl ? (
-              <img
-                src={heroRenderUrl}
-                alt={inferredHero ?? mod.name}
-                className="w-full h-full object-cover"
-                style={{ objectPosition: `${heroFacePos}% 25%` }}
-              />
+              <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
+                <img
+                  src={heroRenderUrl}
+                  alt={inferredHero ?? mod.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="browse-card-media-zoom w-full h-full object-cover"
+                  style={{ objectPosition: `${heroFacePos}% 25%` }}
+                />
+              </ImageContextMenu>
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
                 <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-accent/40 bg-accent/10 text-text-primary text-[10px] font-semibold">
@@ -1711,7 +3346,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </div>
             )
           ) : (
-            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+            <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -1745,20 +3380,20 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </button>
             )}
           </div>
-          <div className="flex items-center gap-3 text-text-secondary mt-1 text-xs flex-wrap">
-            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
-            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
-            )}
+          <div className="mt-1 flex flex-wrap items-center gap-3 text-xs text-text-secondary">
+            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
+            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.nsfw && <Tag tone="danger">18+</Tag>}
           </div>
           {mod.submitter && <p className="text-text-secondary mt-1 truncate text-xs">by {mod.submitter.name}</p>}
           {mod.dateModified > 0 && (
-            <div className={`flex items-center gap-1 mt-1 text-xs ${isModOutdated(mod.dateModified) ? 'text-state-warning' : 'text-text-secondary'}`}>
-              {isModOutdated(mod.dateModified) ? <AlertTriangle className="w-3 h-3 flex-shrink-0" /> : <Clock className="w-3 h-3 flex-shrink-0" />}
+            <IconText
+              icon={isModOutdated(mod.dateModified) ? AlertTriangle : Clock}
+              className={`mt-1 max-w-full text-xs ${isModOutdated(mod.dateModified) ? 'text-state-warning' : 'text-text-secondary'}`}
+              iconClassName="browse-meta-icon"
+            >
               <span className="truncate">{isModOutdated(mod.dateModified) ? 'Outdated · ' : ''}{formatDate(mod.dateModified)}</span>
-            </div>
+            </IconText>
           )}
         </div>
 
@@ -1769,7 +3404,17 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex-1 min-w-0">
-              <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} onPlayingChange={onPlayingChange} />
+              {audioControlsActive ? (
+                <AudioPreviewPlayer src={audioPreview!} compact variant="inline" volume={volume} onPlayingChange={onPlayingChange} />
+              ) : (
+                <div className="flex items-center gap-3 text-text-secondary">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent/25 text-text-primary">
+                    <Play className="h-4 w-4 ml-0.5 fill-current" />
+                  </span>
+                  <span className="h-1.5 min-w-0 flex-1 rounded-full bg-bg-primary" />
+                  <span className="shrink-0 text-[10px] tabular-nums">0:00</span>
+                </div>
+              )}
             </div>
             <div className="w-px h-4 bg-border flex-shrink-0" />
             <div className="flex items-center gap-1.5 flex-shrink-0">
@@ -1792,37 +3437,83 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
   }
 
   // Grid/Compact: overlay card — image fills card, info overlaid at bottom
+  if (cardDesign === 'readable') {
+    return (
+      <BrowseArtParallaxCard disabled={suppressHoverIntent}>
+        <ReadableBrowseModCard
+          mod={mod}
+          installed={installed}
+          installedDisabled={installedDisabled}
+          downloading={downloading}
+          queuePosition={queuePosition}
+          viewMode={viewMode}
+          cardDesign={cardDesign}
+          cardSize={cardSize}
+          cardWidth={cardWidth}
+          cardHeight={cardHeight}
+          section={section}
+          volume={volume}
+          onVolumeChange={onVolumeChange}
+          hideNsfwPreviews={hideNsfwPreviews}
+          isPlaying={isPlaying}
+          suppressHoverIntent={suppressHoverIntent}
+          onPlayingChange={onPlayingChange}
+          onClick={onClick}
+          onQuickDownload={onQuickDownload}
+          onEnable={onEnable}
+        />
+      </BrowseArtParallaxCard>
+    );
+  }
+
   const isOutdated = mod.dateModified > 0 && isModOutdated(mod.dateModified);
   return (
-    <div
-      onClick={onClick}
-      onKeyDown={(e) => handleCardKeyDown(e, onClick)}
-      role="button"
-      tabIndex={0}
-      aria-label={`Open details for ${mod.name}`}
-      className={`relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
-        isPlaying
-          ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
-          : downloading
-            ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
-            : installed
-              ? 'border-state-success/40 hover:border-state-success/70'
-              : 'border-border hover:border-accent/50'
-      }`}
-    >
+    <BrowseArtParallaxCard disabled={suppressHoverIntent}>
+      <div
+        onClick={onClick}
+        onKeyDown={(e) => handleCardKeyDown(e, onClick)}
+        onMouseEnter={() => {
+          if (!suppressHoverIntent) setAudioControlsActive(true);
+        }}
+        onMouseLeave={() => {
+          if (!isPlaying) setAudioControlsActive(false);
+        }}
+        onFocus={() => setAudioControlsActive(true)}
+        onBlur={(event) => {
+          if (!event.currentTarget.contains(event.relatedTarget as Node | null) && !isPlaying) {
+            setAudioControlsActive(false);
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-label={`Open details for ${mod.name}`}
+        className={`browse-card-hover-surface relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+          isPlaying
+            ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
+            : downloading
+              ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
+              : installed
+                ? 'border-state-success/40 hover:border-state-success/70'
+                : 'border-border hover:border-accent/50'
+        }`}
+      >
       {/* Full-bleed image */}
       <div className="absolute inset-0">
         {isSoundSection ? (
           <div className="w-full h-full relative">
             {heroRenderUrl ? (
-              <img
-                src={heroRenderUrl}
-                alt={inferredHero ?? mod.name}
-                className="w-full h-full object-cover"
-                style={{ objectPosition: `${heroFacePos}% 20%` }}
-              />
+              <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
+                <img
+                  src={heroRenderUrl}
+                  alt={inferredHero ?? mod.name}
+                  loading="lazy"
+                  decoding="async"
+                  className="browse-card-media-zoom w-full h-full object-cover"
+                  style={{ objectPosition: `${heroFacePos}% 20%` }}
+                />
+              </ImageContextMenu>
             ) : thumbnail ? (
-              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+              <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" />
             ) : (
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary" />
             )}
@@ -1845,7 +3536,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
             )}
           </div>
         ) : (
-          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" />
+          <ModThumbnail src={thumbnail} alt={mod.name} nsfw={mod.nsfw} hideNsfw={hideNsfwPreviews} className="w-full h-full" imageFit="cover" imagePosition="center top" imageClassName="browse-card-media-zoom" />
         )}
       </div>
 
@@ -1861,67 +3552,91 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               }
             : {
                 background:
-                  'linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 22%, rgba(0,0,0,0.25) 55%, transparent 80%)',
+                  'linear-gradient(to top, rgba(0,0,0,0.97) 0%, rgba(0,0,0,0.86) 30%, rgba(0,0,0,0.5) 55%, rgba(0,0,0,0.12) 78%, transparent 100%)',
               }
         }
       />
 
-      {/* Info — moved to TOP for audio-preview sound cards so it stops covering the player */}
+      {/* Info: moved to TOP for audio-preview sound cards so it stops covering the player.
+          State tags (NSFW/Installed/Outdated) live inside this block too, on a row
+          ABOVE the title. The default top-left overlay covers the title text on this
+          variant because the title is anchored at top:0 instead of bottom:0. */}
       {isSoundSection && hasAudioPreview ? (
         <div className={`absolute top-0 left-0 right-0 pointer-events-none ${isCompact ? 'p-2.5 pr-10' : 'p-3 pr-12'}`}>
+          {(mod.nsfw || installed || isOutdated) && (
+            <div className="flex flex-wrap items-center gap-1 mb-1.5">
+              {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
+              {installed && (
+                <Tag tone="success" variant="overlay">
+                  <span aria-hidden>✓</span>
+                  Installed
+                </Tag>
+              )}
+              {!installed && isOutdated && (
+                <Tag
+                  tone="warning"
+                  variant="overlay"
+                  icon={AlertTriangle}
+                  title={`Last updated ${formatDate(mod.dateModified)}`}
+                >
+                  Outdated
+                </Tag>
+              )}
+            </div>
+          )}
           <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
-            <span className="flex items-center gap-1"><ThumbsUp className="w-3 h-3" />{formatCount(mod.likeCount)}</span>
-            <span className="flex items-center gap-1"><Eye className="w-3 h-3" />{formatCount(mod.viewCount)}</span>
-            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="flex items-center gap-1"><Download className="w-3 h-3" />{formatCount(mod.downloadCount)}</span>
-            )}
+          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-[11px]' : 'text-xs'}`}>
+            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
+            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
         </div>
       ) : (
         <div className={`absolute bottom-0 left-0 right-0 ${isCompact ? 'p-2.5' : 'p-3'}`}>
           <h3 className={`font-semibold truncate text-white drop-shadow-[0_1px_3px_rgba(0,0,0,0.9)] ${isCompact ? 'text-sm' : 'text-base'}`}>{mod.name}</h3>
-          <div className={`flex items-center gap-3 text-white/90 mt-1 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] flex-wrap ${isCompact ? 'text-xs' : 'text-sm'}`}>
-            <span className="flex items-center gap-1"><ThumbsUp className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.likeCount)}</span>
-            <span className="flex items-center gap-1"><Eye className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.viewCount)}</span>
-            {typeof mod.downloadCount === 'number' && mod.downloadCount > 0 && (
-              <span className="flex items-center gap-1" title={`${mod.downloadCount} downloads`}>
-                <Download className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />{formatCount(mod.downloadCount)}
-              </span>
-            )}
+          <div className={`mt-1 flex flex-wrap items-center gap-3 text-white/90 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] ${isCompact ? 'text-xs' : 'text-sm'}`}>
+            <BrowseStatItem type="likes" icon={ThumbsUp} value={formatCount(mod.likeCount)} title={`${mod.likeCount ?? 0} likes`} />
+            <BrowseStatItem type="views" icon={Eye} value={formatCount(mod.viewCount)} title={`${mod.viewCount ?? 0} views`} />
             {mod.submitter && <span className="truncate">by {mod.submitter.name}</span>}
           </div>
           {mod.dateModified > 0 && isModOutdated(mod.dateModified) && (
-            <div className={`flex items-center gap-1 mt-1 text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}>
-              <AlertTriangle className={isCompact ? 'w-3 h-3 flex-shrink-0' : 'w-3.5 h-3.5 flex-shrink-0'} />
+            <IconText
+              icon={AlertTriangle}
+              className={`mt-1 max-w-full text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}
+              iconClassName="browse-meta-icon"
+            >
               <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
-            </div>
+            </IconText>
           )}
         </div>
       )}
 
       {/* State tag stack — top-left. Stacks NSFW / INSTALLED / OUTDATED so the
-          card is decodable without relying on icon color alone. */}
-      <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
-        {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
-        {installed && (
-          <Tag tone="success" variant="overlay">
-            <span aria-hidden>✓</span>
-            Installed
-          </Tag>
-        )}
-        {!installed && isOutdated && (
-          <Tag
-            tone="warning"
-            variant="overlay"
-            icon={AlertTriangle}
-            title={`Last updated ${formatDate(mod.dateModified)}`}
-          >
-            Outdated
-          </Tag>
-        )}
-      </div>
+          card is decodable without relying on icon color alone. Skipped for
+          sound+audio cards because those render the same tags inline above the
+          title (the title moves to top:0 on that variant and the absolute
+          overlay would cover it). */}
+      {!(isSoundSection && hasAudioPreview) && (
+        <div className="absolute top-2 left-2 z-10 flex flex-col gap-1 items-start">
+          {mod.nsfw && <Tag tone="danger" variant="overlay">18+</Tag>}
+          {installed && (
+            <Tag tone="success" variant="overlay">
+              <span aria-hidden>✓</span>
+              Installed
+            </Tag>
+          )}
+          {!installed && isOutdated && (
+            <Tag
+              tone="warning"
+              variant="overlay"
+              icon={AlertTriangle}
+              title={`Last updated ${formatDate(mod.dateModified)}`}
+            >
+              Outdated
+            </Tag>
+          )}
+        </div>
+      )}
 
       {/* Audio preview + volume, pinned to bottom with its own pointer-events layer.
           z-20 keeps it above the gradient + any overlays so clicks always land.
@@ -1931,19 +3646,40 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           className={`absolute bottom-0 left-0 right-0 z-20 ${isCompact ? 'p-2' : 'p-2.5'}`}
           onClick={(e) => e.stopPropagation()}
         >
-          <div className="flex items-center gap-3 backdrop-blur-md bg-black/60 rounded-full border border-white/10 px-3 py-2 shadow-lg">
+          <div className="flex items-center gap-3 backdrop-blur-md bg-bg-primary/85 rounded-full border border-white/10 px-3 py-2 shadow-lg">
             <div className="flex-1 min-w-0">
-              <AudioPreviewPlayer
-                src={audioPreview!}
-                compact
-                variant="inline"
-                volume={volume}
-                onPlayingChange={onPlayingChange}
-              />
+              {audioControlsActive ? (
+                <AudioPreviewPlayer
+                  src={audioPreview!}
+                  compact
+                  variant="inline"
+                  volume={volume}
+                  onPlayingChange={onPlayingChange}
+                />
+              ) : (
+                <div className="flex items-center gap-3 text-text-secondary">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-accent/50 bg-accent/25 text-text-primary">
+                    <Play className="h-4 w-4 ml-0.5 fill-current" />
+                  </span>
+                  <span className="h-1.5 min-w-0 flex-1 rounded-full bg-bg-primary" />
+                  <span className="shrink-0 text-[10px] tabular-nums">0:00</span>
+                </div>
+              )}
             </div>
             <div className="w-px h-5 bg-white/20 flex-shrink-0" />
             <div className="flex items-center gap-1.5 flex-shrink-0">
-              <Volume2 className="w-3.5 h-3.5 text-white/70" />
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onVolumeChange(volume > 0 ? 0 : 1);
+                }}
+                className="flex h-6 w-6 items-center justify-center rounded-full border border-white/10 bg-white/5 text-white/70 transition-colors hover:bg-white/10 hover:text-white cursor-pointer"
+                title={volume > 0 ? 'Mute' : 'Unmute'}
+                aria-label={volume > 0 ? 'Mute' : 'Unmute'}
+              >
+                {volume > 0 ? <Volume2 className="w-3.5 h-3.5" /> : <VolumeX className="w-3.5 h-3.5" />}
+              </button>
               <input
                 type="range"
                 min={0}
@@ -1968,7 +3704,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           // than forcing them to the Installed tab.
           <button
             onClick={(e) => { e.stopPropagation(); onEnable(); }}
-            className={`flex items-center gap-1.5 rounded-full bg-state-warning/90 hover:bg-state-warning text-black backdrop-blur-sm ring-1 ring-black/40 shadow-md font-semibold transition-colors cursor-pointer ${isCompact ? 'h-7 px-2 text-[11px]' : 'h-8 px-2.5 text-xs'}`}
+            className={`flex items-center gap-1.5 rounded-full bg-state-warning/90 hover:bg-state-warning text-bg-primary backdrop-blur-sm ring-1 ring-border shadow-md font-semibold transition-colors cursor-pointer ${isCompact ? 'h-7 px-2 text-[11px]' : 'h-8 px-2.5 text-xs'}`}
             title="Enable this mod (currently in your disabled folder)"
           >
             <Power className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
@@ -1976,18 +3712,18 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </button>
         ) : installed ? (
           <span
-            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-black/60 shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
+            className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
             title="Installed and enabled"
           >
             ✓
           </span>
         ) : downloading ? (
-          <div className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-black/60 shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
+          <div className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
             <Loader2 className={`animate-spin text-accent ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
           </div>
         ) : queuePosition ? (
           <div
-            className={`flex items-center justify-center bg-accent text-black rounded-full font-bold ring-1 ring-black/50 shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
+            className={`flex items-center justify-center bg-accent text-bg-primary rounded-full font-bold ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7 text-[11px]' : 'w-8 h-8 text-xs'}`}
             title={`Queued #${queuePosition}`}
           >
             {queuePosition}
@@ -1995,14 +3731,36 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         ) : (
           <button
             onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
-            className={`flex items-center justify-center rounded-full bg-black/70 backdrop-blur-sm ring-1 ring-black/60 shadow-md text-accent hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
+            className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-accent hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
             title="Install"
           >
             <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
           </button>
         )}
       </div>
-    </div>
+      </div>
+    </BrowseArtParallaxCard>
   );
 }
+
+const MemoizedModCard = React.memo(ModCard, (prev, next) => (
+  prev.mod === next.mod &&
+  prev.installed === next.installed &&
+  prev.installedDisabled === next.installedDisabled &&
+  prev.downloading === next.downloading &&
+  prev.queuePosition === next.queuePosition &&
+  prev.viewMode === next.viewMode &&
+  prev.cardDesign === next.cardDesign &&
+  prev.cardSize === next.cardSize &&
+  prev.cardWidth === next.cardWidth &&
+  prev.cardHeight === next.cardHeight &&
+  prev.section === next.section &&
+  prev.volume === next.volume &&
+  prev.hideNsfwPreviews === next.hideNsfwPreviews &&
+  prev.isPlaying === next.isPlaying &&
+  prev.suppressHoverIntent === next.suppressHoverIntent &&
+  prev.enableModId === next.enableModId &&
+  prev.actionContextKey === next.actionContextKey
+));
+
 

@@ -125,7 +125,7 @@ A log of the load-bearing decisions made while planning Grimoire Social. Each en
 - (-) Migrating to R2 later (e.g. if we add user-uploaded preview images) requires a copy
 - (-) Each row is ~1 KB heavier; row-count storage limits hit slightly sooner
 
-**Alternatives considered.** R2 + metadata in D1 (rejected: extra latency + consistency complexity for no benefit at 1 KB blobs). Hybrid (small inline, large in R2) (rejected: premature; profiles are bounded ~16 KB by validation cap).
+**Alternatives considered.** R2 + metadata in D1 (rejected: extra latency + consistency complexity for no benefit at 1 KB blobs). Hybrid (small inline, large in R2) (rejected: premature; profiles are bounded ~256 KB by validation cap).
 
 **Revisit when.** We add user-uploaded preview images, or median profile size exceeds ~10 KB.
 

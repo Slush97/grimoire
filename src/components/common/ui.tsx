@@ -109,7 +109,7 @@ export function Tag({
     const t = tones[tone];
     const isOverlay = variant === 'overlay';
     const surface = isOverlay
-        ? `bg-black/65 backdrop-blur-sm border ${t.overlayBorder} ${t.text} shadow-[0_1px_2px_rgba(0,0,0,0.35)]`
+        ? `bg-bg-primary/85 backdrop-blur-sm border ${t.overlayBorder} ${t.text} shadow-[0_1px_2px_rgba(0,0,0,0.35)]`
         : `${t.fill} border ${t.border} ${t.text} opacity-90`;
     return (
         <span

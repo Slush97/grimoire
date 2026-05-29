@@ -3,6 +3,7 @@ import { gzipSync, gunzipSync, constants as zlibConstants } from 'zlib';
 import { addProfile, generateProfileId, loadProfiles, type Profile, type ProfileMod } from './profiles';
 import { scanMods } from './mods';
 import { getModMetadata } from './metadata';
+import { isLockerManaged } from './lockerVpk';
 import { fetchModDetails } from './gamebanana';
 import type {
     PortableProfile,
@@ -40,10 +41,12 @@ export function encodeShareCode(json: string): string {
 }
 
 // Mirror the server-side cap so a malicious / corrupted share code can't
-// inflate into a multi-MB allocation in the Electron main process. The
-// previous implementation called gunzipSync with no maxOutputLength, which
-// let a 16 KB compressed payload expand up to ~16 MB before failing.
-const MAX_INFLATED_SHARE_CODE_BYTES = 16 * 1024;
+// inflate into a multi-MB allocation in the Electron main process. 256 KB
+// fits the worst realistic case (Deadlock's ~100-mod ceiling with every
+// optional hint filled measures ~70 KB pretty-printed; 150 mods ~106 KB)
+// with comfortable headroom for future schema growth, while still bounding
+// gzip-bomb risk to a trivial allocation.
+export const MAX_INFLATED_SHARE_CODE_BYTES = 256 * 1024;
 
 export function decodeShareCode(code: string): string {
     if (!code.startsWith(PORTABLE_PROFILE_SHARE_PREFIX)) {
@@ -62,6 +65,14 @@ export function decodeShareCode(code: string): string {
         });
     } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const tooLarge = /buffer/i.test(msg) && /larger|too large|exceed/i.test(msg);
+        if (tooLarge) {
+            const kb = Math.round(MAX_INFLATED_SHARE_CODE_BYTES / 1024);
+            throw new Error(
+                `Share code is too large to import (exceeds ${kb} KB after decompression). ` +
+                `Export the profile to a .modprofile.json file and load it from disk instead.`
+            );
+        }
         throw new Error(
             `Invalid share code (gzip payload rejected: ${msg.slice(0, 120)})`
         );
@@ -84,7 +95,11 @@ export async function buildPortableProfileFromInstalled(
     const warnings: string[] = [];
 
     for (const installedMod of installed) {
-        const metadata = getModMetadata(installedMod.fileName);
+        // Locker-managed VPKs (cards/sounds) are internal and have no GameBanana
+        // ref, so silently skip them rather than warning "Skipped local mod".
+        if (isLockerManaged(installedMod.metaKey)) continue;
+
+        const metadata = getModMetadata(installedMod.metaKey);
         const gbId = metadata?.gameBananaId ?? installedMod.gameBananaId;
         const fileId = metadata?.gameBananaFileId ?? installedMod.gameBananaFileId;
 
@@ -156,15 +171,44 @@ export async function buildPortableProfile(
 
     const installed = await scanMods(deadlockPath);
     const modByFileName = new Map(installed.map((m) => [m.fileName, m]));
+    // Resolve profile mods to live installed mods by stable id first, mirroring
+    // applyProfile's resolver (see profiles.ts buildProfileModResolver). Without
+    // this, a re-share after switching profiles loses every mod whose pakNN_
+    // prefix shifted via reorderMods: the saved profileMod.fileName no longer
+    // matches anything on disk, so both modByFileName and getModMetadata return
+    // undefined and the export warns "Skipped local mod" for known GameBanana
+    // installs.
+    const modByGbFile = new Map<string, typeof installed[number]>();
+    for (const m of installed) {
+        const meta = getModMetadata(m.metaKey);
+        if (typeof meta?.gameBananaId === 'number' && typeof meta?.gameBananaFileId === 'number') {
+            const key = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
+            if (!modByGbFile.has(key)) modByGbFile.set(key, m);
+        }
+    }
 
     const mods: PortableModEntry[] = [];
     const warnings: string[] = [];
 
     for (const profileMod of profile.mods) {
-        const installedMod = modByFileName.get(profileMod.fileName);
-        const metadata = getModMetadata(profileMod.fileName);
-        const gbId = metadata?.gameBananaId ?? installedMod?.gameBananaId;
-        const fileId = metadata?.gameBananaFileId ?? installedMod?.gameBananaFileId;
+        const stableKey =
+            typeof profileMod.gameBananaId === 'number' &&
+            typeof profileMod.gameBananaFileId === 'number'
+                ? `${profileMod.gameBananaId}:${profileMod.gameBananaFileId}`
+                : null;
+        const installedMod =
+            (stableKey ? modByGbFile.get(stableKey) : undefined) ??
+            modByFileName.get(profileMod.fileName);
+        const metadataKey = installedMod?.metaKey ?? profileMod.fileName;
+        const metadata = getModMetadata(metadataKey);
+        const gbId =
+            profileMod.gameBananaId ??
+            metadata?.gameBananaId ??
+            installedMod?.gameBananaId;
+        const fileId =
+            profileMod.gameBananaFileId ??
+            metadata?.gameBananaFileId ??
+            installedMod?.gameBananaFileId;
 
         if (!gbId || !fileId) {
             const label =
@@ -181,7 +225,7 @@ export async function buildPortableProfile(
             metadata?.sourceFileName ||
             undefined;
 
-        const vpkStem = vpkStemOf(profileMod.fileName);
+        const vpkStem = vpkStemOf(installedMod?.fileName ?? profileMod.fileName);
         mods.push({
             source: 'gamebanana',
             ref: {
@@ -373,7 +417,7 @@ async function buildInstalledIndex(deadlockPath: string): Promise<InstalledIndex
     const byVariant = new Map<string, string>();
     const byArchive = new Map<string, string>();
     for (const mod of installed) {
-        const meta = getModMetadata(mod.fileName);
+        const meta = getModMetadata(mod.metaKey);
         if (meta?.gameBananaId === undefined || meta?.gameBananaFileId === undefined) continue;
         const archiveKey = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
         if (!byArchive.has(archiveKey)) byArchive.set(archiveKey, mod.fileName);
@@ -490,10 +534,17 @@ export async function createProfileFromPortable(
         if (claimedVariants.has(fileName)) continue;
         claimedVariants.add(fileName);
 
+        // Persist the stable GameBanana ids alongside the fileName so
+        // applyProfile / buildPortableProfile can find this mod after a
+        // later reorder rotates its pakNN_ prefix. Without these, imported
+        // and snapshot-restored profiles regress to fileName-only lookups
+        // and re-export warns "Skipped local mod" the moment files move.
         profileMods.push({
             fileName,
             enabled: r.entry.enabled,
             priority: r.entry.priority,
+            gameBananaId: ref.submissionId,
+            gameBananaFileId: r.resolvedFileId,
         });
     }
 

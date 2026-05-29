@@ -29,7 +29,11 @@ jobs:
       - name: Setup pnpm
         uses: pnpm/action-setup@v6
         with:
-          version: 9
+          # Match the local pnpm that generates pnpm-lock.yaml (v10). pnpm 9
+          # mis-links the out-of-root @grimoire/social-types workspace package
+          # (../grimoire-social/packages/*), which makes tsc report it as an
+          # unresolved module and every social import cascades to implicit-any.
+          version: 10
 
       - name: Setup Node.js
         uses: actions/setup-node@v6

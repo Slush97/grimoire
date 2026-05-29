@@ -12,6 +12,7 @@ import {
   BookMarked,
   Settings2,
   AlertTriangle,
+  ArrowRight,
   Download,
   Play,
   Wand2,
@@ -114,7 +115,6 @@ export default function Sidebar() {
 
   useEffect(() => clearCollapseTimer, [clearCollapseTimer]);
 
-  const isFullyCollapsed = collapsed && !labelMounted;
   const labelTransitionClass = `overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out ${
     labelsVisible ? 'opacity-100 max-w-40' : 'opacity-0 max-w-0'
   }`;
@@ -263,6 +263,7 @@ export default function Sidebar() {
       label: string;
       tooltip: string;
       experimental?: 'crosshair' | 'stats' | 'social';
+      tone?: 'test';
       badge?: number;
       badgeTone?: BadgeTone;
     };
@@ -276,7 +277,6 @@ export default function Sidebar() {
       { to: '/stats', icon: Activity, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
       { to: '/conflicts', icon: Swords, label: 'Conflicts', tooltip: 'Mods that overwrite the same game files.', badge: conflictCount, badgeTone: 'warning' },
       { to: '/profiles', icon: BookMarked, label: 'Profiles', tooltip: 'Save and swap sets of enabled mods.' },
-      { to: '/settings', icon: Settings2, label: 'Settings', tooltip: 'Configure game path, NSFW, and preferences.' },
     ];
 
     return items.filter((item) => {
@@ -413,7 +413,7 @@ export default function Sidebar() {
 
       <nav className="flex-1 min-h-0 overflow-y-auto p-2">
         <ul className="space-y-0.5">
-          {navItems.map(({ to, icon: Icon, label, tooltip, badge, badgeTone }) => (
+          {navItems.map(({ to, icon: Icon, label, tooltip, tone, badge, badgeTone }) => (
             <li key={to}>
               <NavLink
                 to={to}
@@ -422,7 +422,11 @@ export default function Sidebar() {
                   `group relative flex items-center h-10 overflow-hidden leading-5 rounded-sm text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
                     collapsed ? '' : 'pr-3'
                   } ${
-                    isActive
+                    tone === 'test'
+                      ? isActive
+                        ? 'border-red-400/80 bg-red-500/25 text-red-100 font-bold hover:bg-red-500/30'
+                        : 'border-red-500/45 bg-red-500/10 text-red-200 font-bold hover:border-red-400/75 hover:bg-red-500/20 hover:text-red-100'
+                      : isActive
                       ? 'border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary font-medium'
                       : 'border-transparent text-text-primary/80 font-medium hover:bg-accent/5 hover:border-accent/25 hover:text-text-primary'
                   }`
@@ -432,7 +436,9 @@ export default function Sidebar() {
                   <>
                     <span className="flex h-full w-[46px] flex-shrink-0 items-center justify-center">
                       <Icon
-                        className="w-5 h-5 flex-shrink-0 text-text-primary/70 group-hover:text-text-primary"
+                        className={`w-5 h-5 flex-shrink-0 ${
+                          tone === 'test' ? 'text-red-200 group-hover:text-red-100' : 'text-text-primary/70 group-hover:text-text-primary'
+                        }`}
                         strokeWidth={isActive ? 2 : 1.75}
                       />
                     </span>
@@ -627,41 +633,67 @@ export default function Sidebar() {
           )}
         </div>
 
+        {/* Update flag: kept separate from the Settings button so it reads as an
+            unmistakable "act now" row. Only mounted when an update is actually
+            available. Wears the same `update-stripes` texture as Installed cards
+            with a pending update: a neutral surface under animated white diagonal
+            stripes, so the two read as the same "needs update" language without
+            leaning on the (user-configurable) accent color. */}
+        {updateAvailable && (
+          <button
+            type="button"
+            onClick={() => setUpdateModalOpen(true)}
+            title="Update available. Click to view release notes."
+            className="group update-stripes flex w-full h-10 items-center overflow-hidden rounded-sm border border-white/[0.08] bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-white/[0.14] text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+          >
+            <span className={actionIconClass}>
+              <Download className="w-[18px] h-[18px]" strokeWidth={2} />
+            </span>
+            {labelMounted && (
+              <span className={actionLabelClass} aria-hidden={!labelsVisible}>
+                Update available
+              </span>
+            )}
+            {labelMounted && (
+              <span
+                className={`flex h-full w-10 flex-shrink-0 items-center justify-center transition-opacity duration-200 ${
+                  labelsVisible ? 'opacity-100' : 'opacity-0'
+                }`}
+                aria-hidden={!labelsVisible}
+              >
+                <ArrowRight className="w-4 h-4 transition-transform duration-200 group-hover:translate-x-0.5" />
+              </span>
+            )}
+          </button>
+        )}
+
+        {/* Settings shortcut + version. A bordered button (not muted text) so it
+            reads as a real control; the app version sits on the trailing edge.
+            Always visible, including collapsed (gear only), since it's now the
+            bottom rail's anchor rather than an afterthought. */}
         <button
-          onClick={() => {
-            if (updateAvailable) setUpdateModalOpen(true);
-            else navigate('/settings');
-          }}
-          className={`flex w-full items-center rounded-sm text-xs text-text-secondary cursor-pointer hover:text-accent hover:bg-bg-tertiary transition-[color,background-color,padding,height,opacity] duration-200 ${
-            isFullyCollapsed
-              ? updateAvailable
-                ? 'h-7 justify-center px-0 opacity-100'
-                : 'h-0 px-[19px] opacity-0 pointer-events-none overflow-hidden'
-              : 'h-6 justify-center gap-2 pt-1 opacity-100'
-          }`}
-          title={updateAvailable ? 'Update available. Click to view release notes.' : 'Open Settings'}
-          aria-hidden={isFullyCollapsed && !updateAvailable}
-          tabIndex={isFullyCollapsed && !updateAvailable ? -1 : undefined}
+          type="button"
+          onClick={() => navigate('/settings')}
+          title="Open Settings"
+          className="flex w-full h-10 items-center overflow-hidden rounded-sm border border-border bg-bg-tertiary/30 text-text-secondary hover:bg-accent/5 hover:border-accent/30 hover:text-text-primary text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
         >
-          {!updateAvailable && (
-            <Settings2
-              className={`w-3.5 h-3.5 flex-shrink-0 transition-transform duration-200 ${
-                isFullyCollapsed ? 'translate-y-0' : '-translate-y-px'
-              }`}
-              strokeWidth={1.75}
-            />
-          )}
+          <span className={actionIconClass}>
+            <Settings2 className="w-[18px] h-[18px]" strokeWidth={1.75} />
+          </span>
           {labelMounted && (
-            <span className={labelTransitionClass} aria-hidden={!labelsVisible}>
-              {appVersion || 'v...'}
+            <span className={`font-medium ${actionLabelClass}`} aria-hidden={!labelsVisible}>
+              Settings
             </span>
           )}
-          {updateAvailable && (
-            <Download
-              className={`w-3.5 h-3.5 flex-shrink-0 text-accent animate-pulse transition-transform duration-200 ${
-                isFullyCollapsed ? 'translate-y-0' : '-translate-y-px'
+          {labelMounted && (
+            <span
+              className={`flex h-full flex-shrink-0 items-center pr-3 text-[11px] tabular-nums text-text-secondary/70 transition-opacity duration-200 ${
+                labelsVisible ? 'opacity-100' : 'opacity-0'
               }`}
-            />
+              aria-hidden={!labelsVisible}
+            >
+              {appVersion || 'v...'}
+            </span>
           )}
         </button>
       </div>

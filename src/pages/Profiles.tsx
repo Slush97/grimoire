@@ -21,7 +21,7 @@ import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { useSocialStore } from '../stores/socialStore';
 import { Card, Badge, Button } from '../components/common/ui';
-import { ConfirmModal, EmptyState, PageHeader } from '../components/common/PageComponents';
+import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
@@ -70,7 +70,12 @@ function getProfileModGroups(
 
   for (const profileMod of profileMods) {
     const mod = modByFileName.get(profileMod.fileName);
-    const key = mod?.gameBananaId ? `gamebanana:${mod.gameBananaId}` : `file:${profileMod.fileName}`;
+    // Prefer the saved stable id over the live scan: a multi-VPK pair whose
+    // pakNN_ prefix shifted since save would otherwise miss in modByFileName
+    // and split into two file:<fileName> groups, inflating the displayed
+    // count by one per stranded sibling.
+    const gbId = profileMod.gameBananaId ?? mod?.gameBananaId;
+    const key = gbId ? `gamebanana:${gbId}` : `file:${profileMod.fileName}`;
     const group = groups.get(key) ?? {
       key,
       name: mod?.name || fallbackFileLabel(profileMod.fileName),
@@ -116,6 +121,9 @@ export default function Profiles() {
   const [restoringSnapshotId, setRestoringSnapshotId] = useState<string | null>(null);
   const [deleteSnapshotConfirmId, setDeleteSnapshotConfirmId] = useState<string | null>(null);
   const [creatingSnapshot, setCreatingSnapshot] = useState(false);
+  const [selectedSnapshotIds, setSelectedSnapshotIds] = useState<Set<string>>(new Set());
+  const [bulkDeleteSnapshotsOpen, setBulkDeleteSnapshotsOpen] = useState(false);
+  const [bulkDeletingSnapshots, setBulkDeletingSnapshots] = useState(false);
 
   const { mods, loadMods } = useAppStore();
   const { getSettings: getCrosshairSettings, loadSettingsFromPreset } = useCrosshairStore();
@@ -188,12 +196,70 @@ export default function Profiles() {
     try {
       await deleteSnapshot(snapshotId);
       await loadSnapshotList();
+      setSelectedSnapshotIds((prev) => {
+        if (!prev.has(snapshotId)) return prev;
+        const next = new Set(prev);
+        next.delete(snapshotId);
+        return next;
+      });
     } catch (err) {
       setError(`Failed to delete snapshot: ${String(err)}`);
     } finally {
       setDeleteSnapshotConfirmId(null);
     }
   }, [loadSnapshotList]);
+
+  const toggleSnapshotSelected = useCallback((snapshotId: string) => {
+    setSelectedSnapshotIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(snapshotId)) next.delete(snapshotId);
+      else next.add(snapshotId);
+      return next;
+    });
+  }, []);
+
+  const handleBulkDeleteSnapshots = useCallback(async () => {
+    const ids = Array.from(selectedSnapshotIds);
+    if (ids.length === 0) {
+      setBulkDeleteSnapshotsOpen(false);
+      return;
+    }
+    setBulkDeletingSnapshots(true);
+    // Sequential, not Promise.all: deleteSnapshot rewrites the snapshots/
+    // directory listing on each call, and concurrent unlinks against the
+    // shared list scan have raced into "Snapshot not found" before.
+    const failures: string[] = [];
+    for (const id of ids) {
+      try {
+        await deleteSnapshot(id);
+      } catch (err) {
+        failures.push(String(err));
+      }
+    }
+    await loadSnapshotList();
+    setSelectedSnapshotIds(new Set());
+    setBulkDeleteSnapshotsOpen(false);
+    setBulkDeletingSnapshots(false);
+    if (failures.length > 0) {
+      setError(`Failed to delete ${failures.length} of ${ids.length} snapshots: ${failures[0]}`);
+    }
+  }, [selectedSnapshotIds, loadSnapshotList]);
+
+  // Drop selections that refer to snapshots no longer in the list (deleted
+  // elsewhere, refresh dropped them). Keeps the bulk-delete count honest.
+  useEffect(() => {
+    setSelectedSnapshotIds((prev) => {
+      if (prev.size === 0) return prev;
+      const validIds = new Set(snapshots.map((s) => s.snapshotId));
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (validIds.has(id)) next.add(id);
+        else changed = true;
+      }
+      return changed ? next : prev;
+    });
+  }, [snapshots]);
 
   const toggleExpand = (id: string) => {
     const next = new Set(expandedProfiles);
@@ -311,12 +377,6 @@ export default function Profiles() {
 
   return (
     <div className="p-6 h-full max-w-5xl mx-auto w-full flex flex-col overflow-hidden">
-      <PageHeader
-        title="Profiles"
-        description="Save and restore your mod configurations"
-        className="mb-6 shrink-0"
-      />
-
       <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
         <div className="space-y-6 pr-1">
           {error && (
@@ -404,9 +464,53 @@ export default function Profiles() {
                 Grimoire takes a snapshot of your installed mod set automatically before each mod update and before applying a profile. Restore re-downloads those mods from GameBanana, so a bad update or wrong-profile-applied can be rolled back. Snapshots store only the list of mods (their GameBanana IDs), never the VPK files, so disk cost stays tiny — they accumulate until you delete them. You can also capture one manually with the button above before experimenting.
               </p>
             ) : (
-              <ul className="divide-y divide-white/5">
+              <>
+                {(() => {
+                  const allSelected = snapshots.length > 0 && selectedSnapshotIds.size === snapshots.length;
+                  const someSelected = selectedSnapshotIds.size > 0 && !allSelected;
+                  const toggleAll = () => {
+                    if (allSelected) {
+                      setSelectedSnapshotIds(new Set());
+                    } else {
+                      setSelectedSnapshotIds(new Set(snapshots.map((s) => s.snapshotId)));
+                    }
+                  };
+                  return (
+                    <div className="flex items-center gap-3 pb-2 mb-1 border-b border-white/5 text-xs text-text-secondary">
+                      <label className="flex items-center gap-2 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                          onChange={toggleAll}
+                          aria-label={allSelected ? 'Clear selection' : 'Select all snapshots'}
+                          className="h-3.5 w-3.5 accent-orange-500"
+                        />
+                        <span>
+                          {selectedSnapshotIds.size === 0
+                            ? `Select to bulk delete (${snapshots.length})`
+                            : `${selectedSnapshotIds.size} selected`}
+                        </span>
+                      </label>
+                      {selectedSnapshotIds.size > 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          icon={Trash2}
+                          onClick={() => setBulkDeleteSnapshotsOpen(true)}
+                          className="ml-auto text-red-400 hover:text-red-300"
+                          title={`Delete the ${selectedSnapshotIds.size} selected snapshot${selectedSnapshotIds.size === 1 ? '' : 's'}.`}
+                        >
+                          Delete {selectedSnapshotIds.size}
+                        </Button>
+                      )}
+                    </div>
+                  );
+                })()}
+                <ul className="divide-y divide-white/5">
                 {snapshots.map((snap) => {
                   const isRestoring = restoringSnapshotId === snap.snapshotId;
+                  const isSelected = selectedSnapshotIds.has(snap.snapshotId);
                   const triggerLabel =
                     snap.trigger === 'pre-update'
                       ? 'Before update'
@@ -424,6 +528,13 @@ export default function Profiles() {
                       key={snap.snapshotId}
                       className="flex flex-wrap items-center gap-3 py-2.5"
                     >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggleSnapshotSelected(snap.snapshotId)}
+                        aria-label={isSelected ? 'Unselect snapshot' : 'Select snapshot'}
+                        className="h-3.5 w-3.5 accent-orange-500 shrink-0"
+                      />
                       <div className="min-w-0 flex-1">
                         <div
                           className="text-sm text-text-primary truncate"
@@ -464,7 +575,8 @@ export default function Profiles() {
                     </li>
                   );
                 })}
-              </ul>
+                </ul>
+              </>
             )}
           </Card>
 
@@ -574,18 +686,22 @@ export default function Profiles() {
 
                       <div className="flex flex-wrap items-center gap-2 pt-3 border-t border-white/5">
                         <div className="flex items-center gap-2 flex-1 min-w-0 basis-full @sm/profile-card:basis-auto">
-                          {!isActive && (
-                            <Button
-                              size="sm"
-                              className="flex-1 min-w-0"
-                              onClick={() => handleApplyProfile(profile.id)}
-                              disabled={isApplying || isUpdating}
-                              isLoading={isApplying}
-                              icon={Play}
-                            >
-                              Apply
-                            </Button>
-                          )}
+                          <Button
+                            size="sm"
+                            className="flex-1 min-w-0"
+                            onClick={() => handleApplyProfile(profile.id)}
+                            disabled={isApplying || isUpdating}
+                            isLoading={isApplying}
+                            icon={isActive ? RotateCcw : Play}
+                            variant={isActive ? 'secondary' : 'primary'}
+                            title={
+                              isActive
+                                ? 'Re-apply: snap mods back to this profile if they have drifted'
+                                : undefined
+                            }
+                          >
+                            {isActive ? 'Re-apply' : 'Apply'}
+                          </Button>
                           <Button
                             size="sm"
                             className="flex-1 min-w-0"
@@ -759,7 +875,7 @@ export default function Profiles() {
       {showImport && (
         <ImportProfileDialog
           activeDeadlockPath={getActiveDeadlockPath(settings)}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           onClose={() => setShowImport(false)}
           onImported={() => { void loadProfileList({ silent: true }); void loadMods(); }}
         />
@@ -770,7 +886,7 @@ export default function Profiles() {
       {restoringSnapshotJson !== null && (
         <ImportProfileDialog
           activeDeadlockPath={getActiveDeadlockPath(settings)}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
+          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           initialInput={restoringSnapshotJson}
           onClose={() => setRestoringSnapshotJson(null)}
           onImported={() => { void loadProfileList({ silent: true }); void loadMods(); }}
@@ -784,6 +900,16 @@ export default function Profiles() {
         title="Delete Snapshot"
         message="Delete this recovery snapshot? You won't be able to restore from it later."
         confirmLabel="Delete"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={bulkDeleteSnapshotsOpen}
+        onCancel={() => !bulkDeletingSnapshots && setBulkDeleteSnapshotsOpen(false)}
+        onConfirm={handleBulkDeleteSnapshots}
+        title="Delete Selected Snapshots"
+        message={`Delete ${selectedSnapshotIds.size} snapshot${selectedSnapshotIds.size === 1 ? '' : 's'}? Your installed mods are unaffected. You won't be able to restore from the deleted snapshots later.`}
+        confirmLabel={bulkDeletingSnapshots ? 'Deleting…' : `Delete ${selectedSnapshotIds.size}`}
         variant="danger"
       />
     </div>

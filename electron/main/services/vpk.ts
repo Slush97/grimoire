@@ -1,4 +1,6 @@
-import { openSync, readSync, closeSync, existsSync } from 'fs';
+import { openSync, readSync, closeSync, existsSync, statSync } from 'fs';
+import { heroForSoundCodename } from './heroSoundCodenames';
+import type { GlobalModType } from '../../../src/types/mod';
 
 /**
  * VPK Header Structure (Version 2):
@@ -26,6 +28,60 @@ function readNullTerminatedString(buffer: Buffer, offset: number): { str: string
     }
     const str = buffer.slice(offset, end).toString('utf-8');
     return { str, bytesRead: end - offset + 1 }; // +1 for null terminator
+}
+
+// Cache parsed VPK file lists keyed by (path, mtime, size). Conflict
+// detection re-parses every enabled VPK on each scan, which previously
+// pinned the main process for hundreds of ms with 60+ mods. Invalidates
+// automatically when the file changes on disk; entries for deleted/missing
+// VPKs are dropped opportunistically.
+interface VpkCacheEntry {
+    mtimeMs: number;
+    size: number;
+    paths: string[] | null;
+}
+const vpkParseCache = new Map<string, VpkCacheEntry>();
+
+export function invalidateVpkParseCache(vpkPath?: string): void {
+    if (vpkPath) {
+        vpkParseCache.delete(vpkPath);
+    } else {
+        vpkParseCache.clear();
+    }
+}
+
+/** Optional counters callers can pass through a batch of cache lookups to
+ *  measure hit rate. Conflict detection uses this to log whether the cache
+ *  is doing its job on a given user's machine. */
+export interface VpkParseStats {
+    hits: number;
+    misses: number;
+}
+
+/**
+ * Parsed VPK file list with on-disk-aware caching. Re-uses the previous
+ * parse when (path, mtime, size) is unchanged; otherwise falls through to
+ * `parseVpkDirectory` and stores the fresh result.
+ */
+export function parseVpkDirectoryCached(vpkPath: string, stats?: VpkParseStats): string[] | null {
+    let stat;
+    try {
+        stat = statSync(vpkPath);
+    } catch {
+        vpkParseCache.delete(vpkPath);
+        return null;
+    }
+
+    const cached = vpkParseCache.get(vpkPath);
+    if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+        if (stats) stats.hits++;
+        return cached.paths;
+    }
+
+    if (stats) stats.misses++;
+    const paths = parseVpkDirectory(vpkPath);
+    vpkParseCache.set(vpkPath, { mtimeMs: stat.mtimeMs, size: stat.size, paths });
+    return paths;
 }
 
 /**
@@ -189,6 +245,181 @@ export function extractHeroFromPath(filePath: string): string | null {
     }
 
     return null;
+}
+
+/**
+ * Sound mod path patterns. Sound mods don't live under `sounds/heroes/`
+ * the way skin VPKs do: they live under `sounds/abilities/<codename>/aN_X/`
+ * or, more rarely, under `sounds/heroes/<codename>/`. The codename is
+ * Deadlock's sound-path namespace (e.g. `ghost` for Lady Geist, `hornet`
+ * for Vindicta), translated via HERO_SOUND_CODENAMES below.
+ *
+ * `soundevents/` files (e.g. `soundevents/citadel/hero_ghost.vsndevts_c`)
+ * are also a strong signal but live outside `sounds/`. We match those too.
+ */
+const SOUND_HERO_PATTERNS: RegExp[] = [
+    /(?:^|\/)sounds\/abilities\/([a-z0-9_]+)\//i,
+    /(?:^|\/)sounds\/heroes\/([a-z0-9_]+)\//i,
+    /(?:^|\/)sounds\/[^/]+\/hero_([a-z0-9_]+)\//i,
+    // `soundevents/citadel/hero_<codename>.vsndevts_c` (hero_ prefix on file).
+    /(?:^|\/)soundevents\/[^/]*\/hero_([a-z0-9_]+)\.vsndevts/i,
+    // `soundevents/hero/<codename>.vsndevts_c` (hero is the folder, file is
+    // just the codename). Observed on pak04 "We don't talk Animal" which
+    // ships soundevents/hero/werewolf.vsndevts_c.
+    /(?:^|\/)soundevents\/hero\/([a-z0-9_]+)\.vsndevts/i,
+];
+
+/**
+ * Inspect a VPK's path list for sound-mod payloads and return the display
+ * name of the hero they target. Returns null when no recognized hero
+ * codename appears, or when the VPK touches more than one hero (we'd
+ * rather leave that case to manual tagging than pick the wrong one).
+ */
+export function inferHeroFromVpkPaths(paths: string[]): string | null {
+    const heroes = new Set<string>();
+    for (const filePath of paths) {
+        for (const pattern of SOUND_HERO_PATTERNS) {
+            const match = filePath.match(pattern);
+            if (!match) continue;
+            const hero = heroForSoundCodename(match[1]);
+            if (hero) {
+                heroes.add(hero);
+                break;
+            }
+        }
+        // Bail early once we've already seen a conflict: no point scanning
+        // the rest of a large VPK if the answer is already "ambiguous."
+        if (heroes.size > 1) return null;
+    }
+    return heroes.size === 1 ? [...heroes][0] : null;
+}
+
+/**
+ * Convenience wrapper: parse the VPK directory and run the path-based
+ * inference. Returns null when the VPK can't be parsed or no hero matches.
+ *
+ * Uses the cached parser because enrichMod calls this once per Sound mod on
+ * every scan, and failed inferences are not persisted: without the cache we
+ * re-open the same VPK on every get-mods, import, enable, and reorder.
+ */
+export function inferHeroFromVpk(vpkPath: string): string | null {
+    const paths = parseVpkDirectoryCached(vpkPath);
+    if (!paths || paths.length === 0) return null;
+    return inferHeroFromVpkPaths(paths);
+}
+
+/**
+ * Global (non-hero) cosmetic mod types the Locker groups on a second axis,
+ * alongside the per-hero piles. Detected from the VPK file tree because
+ * GameBanana's category labels are unreliable here: hideout portraits land in
+ * "Other/Misc", icon packs split between "Character HUD" and the hero's own
+ * name, and "QOL Lock" is tagged HUD but is really an announcer framework.
+ * The path signals below were verified against real installed mods.
+ * The GlobalModType union is shared from src/types/mod so the renderer's
+ * Locker grouping/UI agrees with this classifier.
+ */
+
+/**
+ * Hero skin / ability payload. A VPK touching any of these is a hero cosmetic
+ * and belongs on the Locker's hero axis, NOT a global slide — even if it also
+ * ships a few incidental icons. This guard is what keeps a skin bundle like
+ * "Yamato redesign" (mostly models/heroes_staging + particles/abilities, with
+ * 9 stray panorama/images/heroes icons) out of the Icons & Portraits bucket.
+ */
+const HERO_PAYLOAD_PATTERNS: RegExp[] = [
+    /(?:^|\/)models\/heroes(?:_wip|_staging)?\//i,
+    /(?:^|\/)materials\/(?:models\/)?heroes(?:_wip|_staging)?\//i,
+    /(?:^|\/)particles\/(?:heroes(?:_wip|_staging)?|abilities)\//i,
+];
+
+/**
+ * Model-based global signals are unambiguous: the file root names the type.
+ *   soul-container  models/props_gameplay/soul_container/   (7/7 mods)
+ *   hideout         models/hideout/                         (the 3D displays)
+ *   hud             panorama/layout|styles|images/hud/       (.vxml_c/.vcss_c)
+ * The icons case is special (see classifyGlobalModType) because the same
+ * panorama/images/heroes/ folder holds both global packs and single-hero art.
+ */
+const SOUL_CONTAINER_PATTERN = /(?:^|\/)models\/props_gameplay\/soul_container\//i;
+const HIDEOUT_PATTERN = /(?:^|\/)models\/hideout\//i;
+const HUD_PATTERN = /(?:^|\/)panorama\/(?:layout|styles|images\/hud)\//i;
+const HERO_IMAGE_PREFIX = /(?:^|\/)panorama\/images\/heroes\//i;
+// `sounds/mods/` is the file-level home for global SFX / announcer frameworks
+// (QOL Lock and its announcer packs). Distinct from hero SFX, which live under
+// `sounds/abilities|heroes|vo/<codename>/` (SOUND_HERO_PATTERNS), so this never
+// catches a hero-tied sound.
+const ANNOUNCER_PATTERN = /(?:^|\/)sounds\/mods\//i;
+
+/**
+ * Distinct hero codenames referenced by panorama/images/heroes files. The
+ * codename is the FILENAME prefix (before the first underscore), e.g.
+ * `drifter_card_psd` -> `drifter` (`vampirebat` = Mina, `archer` = Grey Talon).
+ * We key off the filename rather than the path segment after `heroes/` because
+ * some packs nest art in subfolders like `heroes/backgrounds/drifter_bg_psd` —
+ * counting the `backgrounds` folder as a hero would wrongly tip a single-hero
+ * mod over into the multi-hero "pack" bucket.
+ *
+ * We only need the cardinality, never the display name: a file set spanning
+ * many heroes is a global icon pack; a single hero's cards/portraits belong to
+ * that hero.
+ */
+function heroImageCodenames(paths: string[]): Set<string> {
+    const codenames = new Set<string>();
+    for (const p of paths) {
+        if (!HERO_IMAGE_PREFIX.test(p)) continue;
+        const basename = p.split('/').pop() ?? '';
+        const codename = basename.toLowerCase().split('_')[0];
+        if (codename) codenames.add(codename);
+    }
+    return codenames;
+}
+
+/**
+ * Classify a VPK's file tree as one of the global (non-hero) cosmetic types,
+ * or null when it's a hero cosmetic / unrecognized. Mirrors
+ * inferHeroFromVpkPaths: returns a single confident answer or nothing.
+ *
+ * The panorama/images/heroes case is decided by hero CARDINALITY, not the
+ * folder alone: a pack that reskins MANY heroes' cards is a global "Icons &
+ * Portraits" pack, but a file set for a SINGLE hero is that hero's portrait/
+ * card (often shipped alongside a skin) and belongs on the hero axis — so we
+ * return null and let the per-hero grouping claim it.
+ */
+/**
+ * Bump when the global-type patterns above change. enrichMod re-runs
+ * classification for mods whose stored result was a stale `null` stamped with
+ * an older version, so pattern improvements (e.g. new HUD paths) reach
+ * already-installed mods without a manual retag or a metadata migration.
+ */
+export const GLOBAL_CLASSIFIER_VERSION = 1;
+
+export function classifyGlobalModType(paths: string[]): GlobalModType | null {
+    if (paths.length === 0) return null;
+    // Hero skin / ability payload wins outright: those belong on the hero axis.
+    if (paths.some((p) => HERO_PAYLOAD_PATTERNS.some((re) => re.test(p)))) {
+        return null;
+    }
+    if (paths.some((p) => SOUL_CONTAINER_PATTERN.test(p))) return 'soul-container';
+    if (paths.some((p) => HIDEOUT_PATTERN.test(p))) return 'hideout';
+
+    const heroImages = heroImageCodenames(paths);
+    if (heroImages.size >= 2) return 'icons'; // multi-hero pack = global
+    if (heroImages.size === 1) return null; // one hero = that hero's content
+
+    if (paths.some((p) => HUD_PATTERN.test(p))) return 'hud';
+    if (paths.some((p) => ANNOUNCER_PATTERN.test(p))) return 'announcer';
+    return null;
+}
+
+/**
+ * Convenience wrapper: parse the VPK directory (cached) and classify. Returns
+ * null when the VPK can't be parsed or matches no global type. Cached because,
+ * like inferHeroFromVpk, this runs once per mod on every scan.
+ */
+export function classifyGlobalModFromVpk(vpkPath: string): GlobalModType | null {
+    const paths = parseVpkDirectoryCached(vpkPath);
+    if (!paths || paths.length === 0) return null;
+    return classifyGlobalModType(paths);
 }
 
 /**

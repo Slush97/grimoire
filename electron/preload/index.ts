@@ -8,13 +8,23 @@ import type {
 import type { SnapshotSummary, SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
 import type {
+    AbilitySlot,
+    AbilitySoundParams,
     AppSettings,
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
+    AssociateUnknownModArgs,
+    GlobalModType,
+    EditLocalModArgs,
+    LockerClearScope,
+    MergeModsArgs,
     Mod,
     ModConflict,
+    ExtractMergeSourceResult,
     UnknownModDetectionProgress,
+    UnknownModFileList,
     UnknownModFilterGuess,
+    UnmergeModResult,
 } from '../../src/types/mod';
 import type {
     LikeResponse,
@@ -49,16 +59,25 @@ export interface ElectronAPI {
     onUnknownModDetectionProgress: (callback: (progress: UnknownModDetectionProgress) => void) => () => void;
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
+    associateUnknownMod: (modId: string, args: AssociateUnknownModArgs) => Promise<Mod>;
+    listUnknownModFiles: (modId: string) => Promise<UnknownModFileList>;
+    editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
+    setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
+    setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
+    setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
-    reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
+    reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
+    mergeMods: (args: MergeModsArgs) => Promise<Mod>;
+    unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
+    extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
 
     // Launch
     launchModded: () => Promise<void>;
@@ -73,6 +92,7 @@ export interface ElectronAPI {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
+    getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
@@ -87,6 +107,7 @@ export interface ElectronAPI {
     downloadMinaVariations: () => Promise<string>;
 
     // Maintenance
+    copyImageToClipboard: (source: string) => Promise<void>;
     cleanupAddons: () => Promise<CleanupResult>;
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
@@ -105,6 +126,7 @@ export interface ElectronAPI {
     getDroppedFilePath: (file: File) => string;
 
     // Events
+    onGameBananaRateLimited: (callback: () => void) => () => void;
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
@@ -115,6 +137,7 @@ export interface ElectronAPI {
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
     getCurrentDownload: () => Promise<DownloadQueueItem | null>;
     removeFromQueue: (modId: number) => Promise<boolean>;
+    cancelActiveDownload: () => Promise<boolean>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
     // GameBanana 1-Click protocol handler
@@ -491,7 +514,7 @@ interface DownloadEventData {
 interface DownloadErrorData {
     modId: number;
     fileId: number;
-    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
+    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'CANCELLED_BY_USER' | 'UNKNOWN';
     message: string;
     helpUrl?: string;
 }
@@ -550,6 +573,11 @@ interface GameBananaModDetails {
     category?: unknown;
     files?: unknown[];
     previewMedia?: unknown;
+}
+
+interface GameBananaModFileList {
+    id: number;
+    files: Array<{ id: number; isArchived: boolean }>;
 }
 
 interface GameBananaSection {
@@ -764,22 +792,74 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('apply-unknown-mod-match', modId, args),
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) =>
         ipcRenderer.invoke('apply-unknown-custom-mod', modId, args),
+    associateUnknownMod: (modId: string, args: AssociateUnknownModArgs) =>
+        ipcRenderer.invoke('associate-unknown-mod', modId, args),
+    listUnknownModFiles: (modId: string) =>
+        ipcRenderer.invoke('list-unknown-mod-files', modId),
+    editLocalMod: (modId: string, args: EditLocalModArgs) =>
+        ipcRenderer.invoke('edit-local-mod', modId, args),
     setVariantLabel: (modId: string, label: string) =>
         ipcRenderer.invoke('set-variant-label', modId, label),
+    setModLockerHero: (modId: string, heroName: string | null) =>
+        ipcRenderer.invoke('set-mod-locker-hero', modId, heroName),
+    getHeroPortraits: (heroName: string) =>
+        ipcRenderer.invoke('get-hero-portraits', heroName),
+    getHeroAbilitySlots: (heroName: string) =>
+        ipcRenderer.invoke('get-hero-ability-slots', heroName),
+    applyHeroCard: (heroName: string, sourceFileName: string) =>
+        ipcRenderer.invoke('apply-hero-card', heroName, sourceFileName),
+    revertHeroCard: (heroName: string) =>
+        ipcRenderer.invoke('revert-hero-card', heroName),
+    getActiveHeroCard: (heroName: string) =>
+        ipcRenderer.invoke('get-active-hero-card', heroName),
+    getSoulModelInfo: (key: string) =>
+        ipcRenderer.invoke('get-soul-model-info', key),
+    exportSoulModel: (metaKey: string) =>
+        ipcRenderer.invoke('export-soul-model', metaKey),
+    clearSoulModel: (key: string) =>
+        ipcRenderer.invoke('clear-soul-model', key),
+    getHeroPoseInfo: (heroName: string, skinMetaKey?: string) =>
+        ipcRenderer.invoke('get-hero-pose-info', heroName, skinMetaKey),
+    exportHeroPose: (heroName: string, skinMetaKey?: string) =>
+        ipcRenderer.invoke('export-hero-pose', heroName, skinMetaKey),
+    getPreviewCacheSize: () =>
+        ipcRenderer.invoke('get-preview-cache-size'),
+    clearPreviewCache: () =>
+        ipcRenderer.invoke('clear-preview-cache'),
+    applyHeroSound: (heroName: string, slot: AbilitySlot, sourceFileName: string, params?: AbilitySoundParams) =>
+        ipcRenderer.invoke('apply-hero-sound', heroName, slot, sourceFileName, params),
+    revertHeroSound: (heroName: string, slot: AbilitySlot) =>
+        ipcRenderer.invoke('revert-hero-sound', heroName, slot),
+    getActiveHeroSounds: (heroName: string) =>
+        ipcRenderer.invoke('get-active-hero-sounds', heroName),
+    getLockerOverview: () =>
+        ipcRenderer.invoke('get-locker-overview'),
+    getLockerCardThumbnails: () =>
+        ipcRenderer.invoke('get-locker-card-thumbnails'),
+    clearLockerOverrides: (scope: LockerClearScope) =>
+        ipcRenderer.invoke('clear-locker-overrides', scope),
+    setModGlobalType: (modId: string, globalType: GlobalModType | null) =>
+        ipcRenderer.invoke('set-mod-global-type', modId, globalType),
+    setModIgnoreUpdates: (modId: string, ignore: boolean) =>
+        ipcRenderer.invoke('set-mod-ignore-updates', modId, ignore),
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
     ) => ipcRenderer.invoke('backfill-gamebanana-file-id', modId, payload),
     setModPriority: (modId: string, priority: number) =>
         ipcRenderer.invoke('set-mod-priority', modId, priority),
-    reorderMods: (orderedFileNames: string[]) =>
-        ipcRenderer.invoke('reorder-mods', orderedFileNames),
+    reorderMods: (orderedIds: string[]) =>
+        ipcRenderer.invoke('reorder-mods', orderedIds),
     swapModPriority: (modIdA: string, modIdB: string) =>
         ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
     importCustomMod: (args: ImportCustomModArgs) =>
         ipcRenderer.invoke('import-custom-mod', args),
     readImageDataUrl: (imagePath: string) =>
         ipcRenderer.invoke('read-image-data-url', imagePath),
+    mergeMods: (args: MergeModsArgs) => ipcRenderer.invoke('merge-mods', args),
+    unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
+    extractMergeSource: (mergedModId: string, sourceFileName: string) =>
+        ipcRenderer.invoke('extract-merge-source', mergedModId, sourceFileName),
 
     // Launch
     launchModded: () => ipcRenderer.invoke('launch-modded'),
@@ -799,6 +879,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => ipcRenderer.invoke('browse-mods', args),
     getModDetails: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-details', args),
+    getModFileList: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-file-list', args),
     getModComments: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-comments', args),
     downloadMod: (args: DownloadModArgs) => ipcRenderer.invoke('download-mod', args),
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
@@ -816,6 +897,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     downloadMinaVariations: () => ipcRenderer.invoke('download-mina-variations'),
 
     // Maintenance
+    copyImageToClipboard: (source: string) =>
+        ipcRenderer.invoke('copy-image-to-clipboard', source),
     cleanupAddons: () => ipcRenderer.invoke('cleanup-addons'),
     getGameinfoStatus: () => ipcRenderer.invoke('get-gameinfo-status'),
     fixGameinfo: () => ipcRenderer.invoke('fix-gameinfo'),
@@ -833,6 +916,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDroppedFilePath: (file: File) => webUtils.getPathForFile(file),
 
     // Events - return unsubscribe function
+    onGameBananaRateLimited: (callback: () => void) => {
+        const handler = () => callback();
+        ipcRenderer.on('gamebanana:rate-limited', handler);
+        return () => ipcRenderer.removeListener('gamebanana:rate-limited', handler);
+    },
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadProgressData) =>
             callback(data);
@@ -864,6 +952,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getDownloadQueue: () => ipcRenderer.invoke('get-download-queue'),
     getCurrentDownload: () => ipcRenderer.invoke('get-current-download'),
     removeFromQueue: (modId: number) => ipcRenderer.invoke('remove-from-queue', modId),
+    cancelActiveDownload: () => ipcRenderer.invoke('cancel-active-download'),
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, data: DownloadQueueData) => callback(data);
         ipcRenderer.on('download-queue-updated', handler);

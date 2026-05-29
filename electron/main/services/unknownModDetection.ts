@@ -7,7 +7,7 @@ import {
     type GameBananaMod,
     type GameBananaModsResponse,
 } from './gamebanana';
-import { parseVpkDirectory } from './vpk';
+import { parseVpkDirectory, parseVpkDirectoryCached } from './vpk';
 import { fingerprintFilesInWorkers, type FileFingerprintResult } from './workers';
 import {
     getUnknownCrcEntryCount,
@@ -30,6 +30,8 @@ import type {
 
 export type { UnknownModFilterGuess };
 
+type SignalStrength = 'strong' | 'medium' | 'weak';
+
 export interface UnknownModDetectionOptions {
     signal?: AbortSignal;
     requestId?: string;
@@ -43,10 +45,53 @@ export interface UnknownModCacheMatchInput {
     requestId?: string;
 }
 
+export interface VpkHeroGuess {
+    /** Canonical hero name, e.g. "Lady Geist". */
+    name: string;
+    /** Hero file/codename stem used for asset lookups. */
+    fileName: string;
+    /** Strongest file-tree signal backing this guess. */
+    strongestSignal: SignalStrength;
+}
+
+/**
+ * File-tree hero inference for unknown mods. Unlike inferHeroFromVpk (sound
+ * paths only), this runs the full content classifier (models, materials,
+ * particles, panorama, sounds), so it recognizes skins too. Pure local read:
+ * uses the cached VPK parse, no GameBanana calls. Returns null when no hero is
+ * found or when more than one hero shows a strong signal (ambiguous: better to
+ * leave it untagged than guess wrong). Callers decide the confidence bar; the
+ * Locker auto-tag only accepts strong/medium.
+ */
+export function inferHeroFromVpkTree(vpkPath: string): VpkHeroGuess | null {
+    const paths = parseVpkDirectoryCached(vpkPath);
+    if (!paths || paths.length === 0) return null;
+    const normalized = paths.map((path) => path.replace(/\\/g, '/').toLowerCase());
+    const hero = findHeroHint(normalized);
+    if (!hero) return null;
+    return {
+        name: hero.display,
+        fileName: hero.code,
+        strongestSignal: strongestHeroSignal(normalized),
+    };
+}
+
+function strongestHeroSignal(paths: string[]): SignalStrength {
+    if (paths.some((path) => /(?:^|\/)models\/heroes(?:_wip|_staging)?\//.test(path))) {
+        return 'strong';
+    }
+    if (paths.some((path) => /(?:^|\/)(?:materials\/models\/heroes|particles\/abilities|soundevents\/hero|sounds?|panorama\/images\/hud\/abilities)\//.test(path))) {
+        return 'medium';
+    }
+    return 'weak';
+}
+
 interface LocalVpkFingerprint {
     size: number;
     crc32: string;
 }
+
+type UnknownModFilterBase = Omit<UnknownModFilterGuess, 'crcMatch'>;
 
 interface SearchBucket {
     section: 'Mod' | 'Sound';
@@ -190,10 +235,15 @@ export async function detectUnknownModFilters(
     const emit = (progress: Omit<UnknownModDetectionProgress, 'modId'>) => {
         options.onProgress?.({ modId, requestId: options.requestId, ...progress });
     };
-    const empty = (status: UnknownModCrcMatchResult['status'], reason?: string): UnknownModFilterGuess => ({
-        modId,
-        fileName,
-        crcMatch: { status, reason },
+    const paths = parseVpkDirectory(vpkPath) ?? [];
+    const base = buildUnknownGuessBase(modId, fileName, paths);
+    const empty = (
+        status: UnknownModCrcMatchResult['status'],
+        reason?: string,
+        stats: Partial<UnknownModCrcMatchResult> = {}
+    ): UnknownModFilterGuess => ({
+        ...base,
+        crcMatch: emptyCrcMatch(status, reason, stats),
     });
 
     let bestMatch: UnknownModCrcMatchResult | null = null;
@@ -208,8 +258,7 @@ export async function detectUnknownModFilters(
         const cached = lookupUnknownCrcMatch(localFile.crc32, localFile.size);
         if (cached) {
             const result = {
-                modId,
-                fileName,
+                ...base,
                 crcMatch: toFoundMatch(cached, 'CRC-32 matched cached GameBanana archive data.'),
             };
             emit({
@@ -220,7 +269,6 @@ export async function detectUnknownModFilters(
             return result;
         }
 
-        const paths = parseVpkDirectory(vpkPath) ?? [];
         const buckets = chooseSearchBuckets(paths);
         const firstBucket = buckets[0];
         if (!firstBucket) {
@@ -295,7 +343,7 @@ export async function detectUnknownModFilters(
                             indexedEntries,
                             bytesFetched,
                             currentFileName: file.fileName,
-                            result: bestMatch ? { modId, fileName, crcMatch: bestMatch } : undefined,
+                            result: bestMatch ? { ...base, crcMatch: bestMatch } : undefined,
                         });
                         continue;
                     }
@@ -309,7 +357,7 @@ export async function detectUnknownModFilters(
                         indexedEntries,
                         bytesFetched,
                         currentFileName: file.fileName,
-                        result: bestMatch ? { modId, fileName, crcMatch: bestMatch } : undefined,
+                        result: bestMatch ? { ...base, crcMatch: bestMatch } : undefined,
                     });
                     try {
                         const archive = await fetchGameBananaArchiveVpkCrcEntries(file, { signal: options.signal });
@@ -352,7 +400,7 @@ export async function detectUnknownModFilters(
                                 indexedEntries,
                                 bytesFetched,
                                 currentFileName: file.fileName,
-                                result: { modId, fileName, crcMatch: bestMatch },
+                                result: { ...base, crcMatch: bestMatch },
                             });
                             console.log(`[UnknownCrc] Match found for ${fileName}: ${file.section}/${file.modId} file ${file.fileId}`);
                         }
@@ -376,7 +424,7 @@ export async function detectUnknownModFilters(
                             indexedEntries,
                             bytesFetched,
                             currentFileName: file.fileName,
-                            result: bestMatch ? { modId, fileName, crcMatch: bestMatch } : undefined,
+                            result: bestMatch ? { ...base, crcMatch: bestMatch } : undefined,
                         });
                     }
                 }
@@ -392,10 +440,18 @@ export async function detectUnknownModFilters(
         }
 
         const result = bestMatch
-            ? { modId, fileName, crcMatch: bestMatch }
+            ? { ...base, crcMatch: bestMatch }
             : empty(
                 'not-found',
-                `No CRC match found after checking ${checkedMods} candidate mod${checkedMods === 1 ? '' : 's'} across ${totalCandidateMods || checkedMods} bucket result${(totalCandidateMods || checkedMods) === 1 ? '' : 's'} (${checkedFiles} file${checkedFiles === 1 ? '' : 's'} checked). Cached CRC entries: ${getUnknownCrcEntryCount()}.`
+                `No CRC match found after checking ${checkedMods} candidate mod${checkedMods === 1 ? '' : 's'} across ${totalCandidateMods || checkedMods} bucket result${(totalCandidateMods || checkedMods) === 1 ? '' : 's'} (${checkedFiles} file${checkedFiles === 1 ? '' : 's'} checked). Cached CRC entries: ${getUnknownCrcEntryCount()}.`,
+                {
+                    searchedBuckets: buckets.map(bucketLabel),
+                    checkedMods,
+                    checkedFiles,
+                    bytesFetched,
+                    skipped7z: 0,
+                    errors: [],
+                }
             );
         emit({
             phase: 'complete',
@@ -410,7 +466,7 @@ export async function detectUnknownModFilters(
         return result;
     } catch (err) {
         if (bestMatch && options.signal?.aborted) {
-            const result = { modId, fileName, crcMatch: bestMatch };
+            const result = { ...base, crcMatch: bestMatch };
             emit({
                 phase: 'cancelled',
                 message: 'Stopped caching remaining files.',
@@ -482,8 +538,7 @@ export async function detectUnknownModCacheMatches(
         }
 
         const result = {
-            modId: input.modId,
-            fileName: input.fileName,
+            ...buildUnknownGuessBase(input.modId, input.fileName, []),
             crcMatch: toFoundMatch(cached, 'CRC-32 matched cached GameBanana archive data.'),
         };
         options.onProgress?.({
@@ -497,6 +552,52 @@ export async function detectUnknownModCacheMatches(
     }
 
     return [...results, ...skipped];
+}
+
+function buildUnknownGuessBase(modId: string, fileName: string, paths: string[]): UnknownModFilterBase {
+    const normalized = paths.map((path) => path.replace(/\\/g, '/').toLowerCase());
+    const hero = findHeroHint(normalized);
+    const bucket = chooseSearchBuckets(paths)[0];
+    const ranked = scoreCategories(normalized);
+
+    return {
+        modId,
+        fileName,
+        fileCount: paths.length,
+        section: bucket?.section ?? 'Mod',
+        search: bucket?.search ?? hero?.display ?? null,
+        heroName: hero?.display,
+        heroFileName: hero?.code,
+        categoryName: bucket?.categoryName,
+        confidence: hero || ranked[0]?.points >= 80 ? 'high' : ranked[0]?.points >= 30 ? 'medium' : 'low',
+        contentHints: ranked.slice(0, 3).map(({ key, points }) => `${CATEGORY_TARGETS[key].categoryName} (${points})`),
+        reasons: bucket ? [bucket.label] : ['No strong GameBanana category signal found in the VPK paths.'],
+        detectedHeroes: hero ? [{
+            name: hero.display,
+            fileName: hero.code,
+            score: ranked[0]?.points ?? 1,
+            strongestSignal: strongestHeroSignal(normalized),
+            clues: normalized.filter((path) => path.includes(hero.code) || normalizeHeroKey(path).includes(normalizeHeroKey(hero.display))).slice(0, 5),
+        }] : [],
+        samplePaths: paths.slice(0, 12),
+    };
+}
+
+function emptyCrcMatch(
+    status: UnknownModCrcMatchResult['status'],
+    reason?: string,
+    stats: Partial<UnknownModCrcMatchResult> = {}
+): UnknownModCrcMatchResult {
+    return {
+        status,
+        reason,
+        searchedBuckets: stats.searchedBuckets ?? [],
+        checkedMods: stats.checkedMods ?? 0,
+        checkedFiles: stats.checkedFiles ?? 0,
+        bytesFetched: stats.bytesFetched ?? 0,
+        skipped7z: stats.skipped7z ?? 0,
+        errors: stats.errors ?? [],
+    };
 }
 
 async function getLocalVpkFingerprint(vpkPath: string, signal?: AbortSignal): Promise<LocalVpkFingerprint | null> {
@@ -543,9 +644,8 @@ function rememberFingerprint(vpkPath: string, result: FileFingerprintResult): vo
 
 function cacheMiss(input: UnknownModCacheMatchInput, reason: string): UnknownModFilterGuess {
     return {
-        modId: input.modId,
-        fileName: input.fileName,
-        crcMatch: { status: 'not-found', reason },
+        ...buildUnknownGuessBase(input.modId, input.fileName, []),
+        crcMatch: emptyCrcMatch('not-found', reason),
     };
 }
 
@@ -801,7 +901,14 @@ function toFoundMatch(
         fileName: match.fileName,
         section: match.section,
         categoryName: match.categoryName ?? undefined,
+        confidence: 'exact',
         reason,
+        searchedBuckets: [],
+        checkedMods: 0,
+        checkedFiles: 0,
+        bytesFetched: 0,
+        skipped7z: 0,
+        errors: [],
     };
 }
 

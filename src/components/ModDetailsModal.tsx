@@ -7,6 +7,7 @@ import {
   ExternalLink,
   AlertTriangle,
   Clock,
+  RefreshCw,
   X,
   ChevronLeft,
   ChevronRight,
@@ -15,6 +16,8 @@ import {
   CheckCircle2,
   Power,
   Maximize2,
+  BellOff,
+  Bell,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type { GameBananaModDetails, GameBananaComment, GameBananaFile } from '../types/gamebanana';
@@ -23,6 +26,7 @@ import { getModComments } from '../lib/api';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
 import { ArchivedTag } from './common/ui';
+import ImageContextMenu from './ImageContextMenu';
 
 interface ModDetailsModalProps {
   mod: GameBananaModDetails;
@@ -41,12 +45,21 @@ interface ModDetailsModalProps {
    *  the local mod id of the disabled install. */
   onEnableFile?: (modId: string) => void;
   downloadingFileId: number | null;
+  /** GameBanana file ids for this mod that are queued behind the active
+   *  download. Their rows show a "Queued" state but other rows stay clickable,
+   *  so the user can line up several variants at once. */
+  queuedFileIds?: Set<number>;
   extracting: boolean;
   progress: { downloaded: number; total: number } | null;
   hideNsfwPreviews: boolean;
   dateAdded?: number;
   dateModified?: number;
   updateAvailable?: boolean;
+  /** When provided, render a toggle next to the Update/Installed badge that
+   *  flips the underlying mod's ignoreUpdates flag. Only meaningful in the
+   *  installed-mod path; Browse leaves both undefined. */
+  ignoreUpdates?: boolean;
+  onToggleIgnoreUpdates?: () => void;
   onClose: () => void;
   onDownload: (fileId: number, fileName: string) => void;
 }
@@ -60,12 +73,15 @@ export default function ModDetailsModal({
   installedFileStates,
   onEnableFile,
   downloadingFileId,
+  queuedFileIds = new Set<number>(),
   extracting,
   progress,
   hideNsfwPreviews,
   dateAdded,
   dateModified,
   updateAvailable,
+  ignoreUpdates,
+  onToggleIgnoreUpdates,
   onClose,
   onDownload,
 }: ModDetailsModalProps) {
@@ -133,8 +149,36 @@ export default function ModDetailsModal({
         if (e.key === 'ArrowRight') goToNext();
       }
     };
+    // Side mouse buttons (3 = back, 4 = forward) would otherwise let Chromium
+    // walk the router history out from under an open modal/lightbox. While this
+    // modal is mounted, repurpose both to close the topmost overlay (same
+    // precedence as Escape) and suppress the navigation. The physical
+    // back/forward mapping varies by mouse, so handle either button.
+    const isSideButton = (e: MouseEvent) => e.button === 3 || e.button === 4;
+    const suppressNav = (e: MouseEvent) => {
+      if (isSideButton(e)) e.preventDefault();
+    };
+    const handleMouseUp = (e: MouseEvent) => {
+      if (!isSideButton(e)) return;
+      e.preventDefault();
+      if (lightboxOpen) {
+        setLightboxOpen(false);
+      } else {
+        onClose();
+      }
+    };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    // mousedown/auxclick are the gesture's cancelable phases; preventing default
+    // on them is what actually blocks the history navigation in Chromium.
+    window.addEventListener('mousedown', suppressNav);
+    window.addEventListener('auxclick', suppressNav);
+    window.addEventListener('mouseup', handleMouseUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('mousedown', suppressNav);
+      window.removeEventListener('auxclick', suppressNav);
+      window.removeEventListener('mouseup', handleMouseUp);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onClose, images.length, lightboxOpen]);
 
@@ -159,9 +203,15 @@ export default function ModDetailsModal({
     setCurrentImageIndex((prev) => (prev < images.length - 1 ? prev + 1 : 0));
   };
 
-  const actionLabel = (fileId: number) => {
-    if (updateAvailable && installedFileIds.has(fileId)) return 'Update';
+  const actionLabel = (fileId: number, archived = false) => {
+    // A file you already own re-downloads itself = "Reinstall". A not-installed
+    // current file shown while an update is available is the update target:
+    // clicking it replaces the now-superseded installed version, so call it
+    // "Update". Archived files are never update targets (they're the old ones).
+    // Browse never sets updateAvailable, so its non-installed files stay
+    // "Install" (Browse adds files, it doesn't replace).
     if (installedFileIds.has(fileId)) return 'Reinstall';
+    if (updateAvailable && !archived) return 'Update';
     return 'Install';
   };
 
@@ -173,15 +223,23 @@ export default function ModDetailsModal({
 
   const renderFileRow = (file: GameBananaFile, archived = false) => {
     const isInstalled = installedFileIds.has(file.id);
-    const isUpdate = updateAvailable && isInstalled;
+    // Highlight the update *target* (the new, not-yet-installed current file),
+    // not the superseded file the user currently has, so the accent points at
+    // the row they should click to update. Archived files are never targets.
+    const isUpdate = !!updateAvailable && !isInstalled && !archived;
     const isActive = activeFileIds.has(file.id);
     const isDownloadingThis = downloadingFileId === file.id;
+    const isQueuedThis = queuedFileIds.has(file.id);
+    // Only this row's own download/queue state should lock its buttons. A
+    // download in progress on a *different* file must leave this row clickable
+    // so the user can queue several variants in one go.
+    const isBusyThis = isDownloadingThis || isQueuedThis;
     const installedFileState = installedFileStates?.get(file.id);
     const showEnablePill =
       !!installedFileState &&
       !installedFileState.enabled &&
       !!onEnableFile &&
-      !isDownloadingThis;
+      !isBusyThis;
     const pct = progress && progress.total > 0
       ? Math.round((progress.downloaded / progress.total) * 100)
       : null;
@@ -233,6 +291,18 @@ export default function ModDetailsModal({
             <span>{(file.fileSize / 1024 / 1024).toFixed(2)} MB</span>
             <span className="opacity-50">-</span>
             <span>{file.downloadCount.toLocaleString()} downloads</span>
+            {file.dateAdded && file.dateAdded > 0 && (
+              <>
+                <span className="opacity-50">-</span>
+                <span
+                  className="flex items-center gap-1"
+                  title={`Uploaded ${formatDate(file.dateAdded)} ${new Date(file.dateAdded * 1000).toLocaleTimeString()}`}
+                >
+                  <Clock className="w-3 h-3" />
+                  {formatDate(file.dateAdded)}
+                </span>
+              </>
+            )}
           </div>
           {isDownloadingThis && pct !== null && (
             <div className="mt-2 h-1 w-full rounded-full bg-bg-secondary overflow-hidden">
@@ -246,7 +316,7 @@ export default function ModDetailsModal({
         {showEnablePill && installedFileState && (
           <button
             onClick={() => onEnableFile!(installedFileState.modId)}
-            disabled={downloadingFileId !== null}
+            disabled={isBusyThis}
             title="Enable this mod"
             className="flex-shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-300 border border-yellow-500/40"
           >
@@ -256,7 +326,7 @@ export default function ModDetailsModal({
         )}
         <button
           onClick={() => onDownload(file.id, file.fileName)}
-          disabled={downloadingFileId !== null}
+          disabled={isBusyThis}
           className={`flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 min-w-[110px] text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
             isUpdate
               ? 'bg-accent hover:bg-accent-hover text-white'
@@ -270,10 +340,15 @@ export default function ModDetailsModal({
               <Loader2 className="w-4 h-4 animate-spin" />
               {extracting ? 'Extracting...' : pct !== null ? `${pct}%` : 'Starting'}
             </>
+          ) : isQueuedThis ? (
+            <>
+              <Clock className="w-4 h-4" />
+              Queued
+            </>
           ) : (
             <>
               <Download className="w-4 h-4" />
-              {actionLabel(file.id)}
+              {actionLabel(file.id, archived)}
             </>
           )}
         </button>
@@ -311,6 +386,38 @@ export default function ModDetailsModal({
                 Installed
               </span>
             )}
+            {/* Only surface the ignore-updates pill in the installed-mod
+                context (handler provided) and when it's actually relevant:
+                either there's an update available now, or the user already
+                opted out and might want to re-enable detection. */}
+            {onToggleIgnoreUpdates && installed && (ignoreUpdates || updateAvailable) && (
+              <button
+                type="button"
+                onClick={onToggleIgnoreUpdates}
+                className={
+                  ignoreUpdates
+                    ? 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-text-primary hover:border-accent/40 transition-colors'
+                    : 'inline-flex items-center gap-1 rounded-full bg-bg-tertiary px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-text-secondary border border-border hover:text-accent hover:border-accent/40 transition-colors'
+                }
+                title={
+                  ignoreUpdates
+                    ? 'Currently ignoring updates for this mod. Click to resume detection.'
+                    : 'Stop flagging updates for this mod (you can re-enable later).'
+                }
+              >
+                {ignoreUpdates ? (
+                  <>
+                    <BellOff className="w-2.5 h-2.5" />
+                    Updates ignored
+                  </>
+                ) : (
+                  <>
+                    <Bell className="w-2.5 h-2.5" />
+                    Ignore updates
+                  </>
+                )}
+              </button>
+            )}
             {outdated && (
               <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 border border-yellow-500/40">
                 <AlertTriangle className="w-2.5 h-2.5" />
@@ -323,8 +430,17 @@ export default function ModDetailsModal({
               </span>
             )}
           </div>
-          <h2 className="text-lg lg:text-xl font-bold leading-tight truncate min-w-0 flex-1" title={mod.name}>
-            {mod.name}
+          <h2 className="text-lg lg:text-xl font-bold leading-tight min-w-0 flex-1" title={mod.name}>
+            <a
+              href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              title={`View ${mod.name} on GameBanana`}
+              className="group flex min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+            >
+              <span className="truncate">{mod.name}</span>
+              <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+            </a>
           </h2>
           {(() => {
             // Hide the modified date when it formats to the same day as the
@@ -338,19 +454,26 @@ export default function ModDetailsModal({
             return (
               <div className="hidden md:flex items-center gap-3 text-xs text-text-secondary flex-shrink-0">
                 {addedStr && (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1" title={`Uploaded ${addedStr}`}>
                     <Clock className="w-3 h-3" />
+                    <span className="text-text-tertiary">Added</span>
                     <span className="text-text-primary">{addedStr}</span>
                   </span>
                 )}
                 {showModified && (
-                  <span className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}>
-                    <Clock className="w-3 h-3" />
+                  <span
+                    className={`flex items-center gap-1 ${outdated ? 'text-yellow-400' : ''}`}
+                    title={outdated
+                      ? `Last updated ${modifiedStr} (may be outdated for the current game version)`
+                      : `Last updated ${modifiedStr}`}
+                  >
+                    <RefreshCw className="w-3 h-3" />
+                    <span className={outdated ? 'text-yellow-300/80' : 'text-text-tertiary'}>Updated</span>
                     <span className={outdated ? 'text-yellow-300' : 'text-text-primary'}>{modifiedStr}</span>
                   </span>
                 )}
                 {totalDownloads > 0 && (
-                  <span className="flex items-center gap-1">
+                  <span className="flex items-center gap-1" title={`${totalDownloads.toLocaleString()} downloads`}>
                     <Download className="w-3 h-3" />
                     <span className="text-text-primary">{totalDownloads.toLocaleString()}</span>
                   </span>
@@ -383,13 +506,15 @@ export default function ModDetailsModal({
                 <div className="space-y-3" aria-label="Image previews">
                   {images.map((img, index) => {
                     const previewSrc = `${img.baseUrl}/${img.file530 || img.file}`;
+                    const fullSrc = `${img.baseUrl}/${img.file}`;
                     const ratio = imageRatios[index];
+                    const imageHidden = mod.nsfw && hideNsfwPreviews;
                     // Pre-load: hold a 16:9 placeholder so the column doesn't
                     // jump as images decode. Post-load: snap to the image's
                     // real aspect ratio so portraits, ultrawides, and UI
                     // screenshots all render at their natural shape - no
                     // letterboxing, no cropping, no blurred fill needed.
-                    return (
+                    const previewButton = (
                       <button
                         key={`${img.baseUrl}/${img.file}`}
                         type="button"
@@ -411,10 +536,10 @@ export default function ModDetailsModal({
                             }
                           }}
                           className={`absolute inset-0 w-full h-full object-cover transition-transform duration-200 group-hover:scale-[1.01] ${
-                            mod.nsfw && hideNsfwPreviews ? 'blur-xl scale-110' : ''
+                            imageHidden ? 'blur-xl scale-110' : ''
                           }`}
                         />
-                        {mod.nsfw && hideNsfwPreviews && (
+                        {imageHidden && (
                           <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-white/80 bg-black/40">
                             NSFW preview hidden
                           </div>
@@ -428,6 +553,17 @@ export default function ModDetailsModal({
                           <Maximize2 className="w-3.5 h-3.5" />
                         </span>
                       </button>
+                    );
+                    if (imageHidden) return previewButton;
+                    return (
+                      <ImageContextMenu
+                        key={`${img.baseUrl}/${img.file}`}
+                        src={previewSrc}
+                        copySrc={fullSrc}
+                        alt={`${mod.name} - Image ${index + 1}`}
+                      >
+                        {previewButton}
+                      </ImageContextMenu>
                     );
                   })}
                 </div>
@@ -632,12 +768,17 @@ export default function ModDetailsModal({
               </div>
             </>
           )}
-          <img
+          <ImageContextMenu
             src={currentImageFullUrl}
             alt={`${mod.name} - Image ${currentImageIndex + 1} (full size)`}
-            className="max-w-full max-h-full object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
+          >
+            <img
+              src={currentImageFullUrl}
+              alt={`${mod.name} - Image ${currentImageIndex + 1} (full size)`}
+              className="max-w-full max-h-full object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
+          </ImageContextMenu>
         </div>
       )}
     </div>

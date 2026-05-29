@@ -1,8 +1,8 @@
 import { createHash } from 'crypto';
-import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync } from 'fs';
+import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync } from 'fs';
 import { promises as fs } from 'fs';
 import { join } from 'path';
-import { getAddonsPath, getDisabledPath } from './deadlock';
+import { getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
 import { getMetadataPath } from '../utils/paths';
 
 export interface ModMetadata {
@@ -21,9 +21,78 @@ export interface ModMetadata {
     variantLabel?: string;  // User-provided label to disambiguate variants of the same mod
     fileDescription?: string;  // GameBanana file "header" (_sDescription) — author's per-file label, used as fallback when the user hasn't named the variant
     sourceFileName?: string;   // Original GameBanana filename stem (e.g. "galaxy_rem_gold") — used as a label fallback when the author didn't set a file header
+    /** Hero this mod belongs to in the Locker, by canonical hero name (e.g. "Lady Geist").
+     *  Two reasons to store it: (1) GameBanana sometimes leaves a Skin under the
+     *  generic "Skins" parent so categoryId never names a hero; (2) Sound mods
+     *  live under their own category tree entirely. Set automatically at download
+     *  time for Sound mods via inferHeroFromTitle, or manually by the user from
+     *  the Locker's unassigned section. Takes precedence over categoryId when
+     *  the locker maps mods to heroes. */
+    lockerHero?: string;
+    /** Provenance for lockerHero. Missing values are legacy inferred tags. */
+    lockerHeroSource?: import('../../../src/types/mod').LockerHeroSource;
+    /** Set once we've run the full VPK-tree hero inference for an UNKNOWN mod
+     *  (see inferHeroFromVpkTree). Lets enrichMod skip the re-parse on later
+     *  scans when the tree yielded no confident hero, the same way globalType
+     *  uses a null sentinel. Only meaningful for unknown mods. */
+    lockerHeroVpkChecked?: boolean;
+    /** Global (non-hero) cosmetic category, classified from the VPK file tree
+     *  (see classifyGlobalModType in vpk.ts). Tri-state: a GlobalModType when
+     *  the mod is a recognized global cosmetic, `null` when we classified it
+     *  and it is NOT one (a hero skin or unrecognized), and `undefined` when it
+     *  has not been classified yet. The null sentinel lets enrichMod skip
+     *  re-parsing every skin's VPK on subsequent scans. */
+    globalType?: import('../../../src/types/mod').GlobalModType | null;
+    /** Classifier version that produced `globalType`. Lets enrichMod re-run a
+     *  stale `null` result when the classifier patterns improve (see
+     *  GLOBAL_CLASSIFIER_VERSION in vpk.ts). Absent on pre-stamp metadata,
+     *  treated as version 0. */
+    globalTypeClassifierVersion?: number;
+    /** Set when this VPK was produced by mergeMods. The share code +
+     *  source list are the unroll payload. */
+    merged?: import('../../../src/types/mod').MergedModInfo;
+    /** Set on the single Locker cosmetics VPK that holds applied hero cards.
+     *  The card selection set; rebuilt on every apply/revert. Presence marks
+     *  the VPK as Locker-managed so other surfaces hide it. */
+    lockerCosmetics?: import('../../../src/types/mod').LockerCosmeticsInfo;
+    /** Set on the single Locker-managed sound VPK that holds applied per-ability
+     *  sounds. The selection set; rebuilt on every apply/revert. Presence marks
+     *  the VPK as Locker-managed so other surfaces hide it. Separate from
+     *  lockerCosmetics (disjoint paths, independent lifecycle). */
+    lockerSounds?: import('../../../src/types/mod').LockerSoundsInfo;
+    /** Per-ability sound classification from the VPK file tree. Tri-state like
+     *  globalType: an AbilitySoundClassification when the mod has recognized
+     *  hero ability/VO sounds, `null` when classified and it has none, and
+     *  `undefined` when not yet classified (so enrichMod skips the re-parse). */
+    abilitySounds?: import('../../../src/types/mod').AbilitySoundClassification | null;
+    /** Load-order slot this mod last held while enabled. Disabled mods now
+     *  get free-form filenames (no pakNN), so the priority is no longer encoded
+     *  in the name; we stash it here on disable and try to restore it on enable
+     *  when that slot is still free, so re-enabling returns the mod to roughly
+     *  where it was in load order. */
+    lastPriority?: number;
+    /** Manual opt-out from update detection. When true, the renderer
+     *  excludes this mod from the "update available" check even if the
+     *  installed gameBananaFileId is gone from the live file list. Useful
+     *  when the user wants to stay on a specific version after the author
+     *  replaces or rearranges files. */
+    ignoreUpdates?: boolean;
 }
 
 export type ModMetadataMap = Record<string, ModMetadata>;
+
+// In-memory cache of the parsed metadata.json. Without this, every enrichMod
+// call (one per installed mod) re-reads + re-parses the whole sidecar from
+// disk on the main thread; users with many mods see noticeable freezes on
+// import/get-mods. Invalidated via (mtimeMs, size) so external writes still
+// get picked up, and refreshed eagerly inside saveMetadata to avoid an
+// immediate re-read after we just wrote.
+interface MetadataCacheEntry {
+    mtimeMs: number;
+    size: number;
+    data: ModMetadataMap;
+}
+let metadataCache: MetadataCacheEntry | null = null;
 
 /**
  * Load mod metadata from disk
@@ -32,14 +101,27 @@ export function loadMetadata(): ModMetadataMap {
     const path = getMetadataPath();
 
     if (!existsSync(path)) {
+        metadataCache = null;
         return {};
     }
 
     try {
+        const stat = statSync(path);
+        if (
+            metadataCache &&
+            metadataCache.mtimeMs === stat.mtimeMs &&
+            metadataCache.size === stat.size
+        ) {
+            return metadataCache.data;
+        }
+
         const content = readFileSync(path, 'utf-8');
-        return JSON.parse(content) as ModMetadataMap;
+        const data = JSON.parse(content) as ModMetadataMap;
+        metadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, data };
+        return data;
     } catch (error) {
         console.warn('[Metadata] Failed to load metadata, returning empty:', error);
+        metadataCache = null;
         return {};
     }
 }
@@ -55,6 +137,12 @@ export function saveMetadata(metadata: ModMetadataMap): void {
     try {
         writeFileSync(tempPath, JSON.stringify(metadata, null, 2), 'utf-8');
         renameSync(tempPath, path);
+        try {
+            const stat = statSync(path);
+            metadataCache = { mtimeMs: stat.mtimeMs, size: stat.size, data: metadata };
+        } catch {
+            metadataCache = null;
+        }
     } catch (error) {
         try {
             if (existsSync(tempPath)) unlinkSync(tempPath);
@@ -106,18 +194,18 @@ export async function backfillMissingMetadataHashes(deadlockPath: string): Promi
     const missing = Object.entries(metadata).filter(([, data]) => !isValidSha256(data.sha256));
     if (missing.length === 0) return 0;
 
-    const filesByName = await collectInstalledVpkPaths(deadlockPath);
+    const filesByKey = await collectInstalledVpkPaths(deadlockPath);
     let updated = 0;
 
-    for (const [fileName, data] of missing) {
-        const filePath = filesByName.get(fileName.toLowerCase());
+    for (const [key, data] of missing) {
+        const filePath = filesByKey.get(key.toLowerCase());
         if (!filePath) continue;
 
         try {
             data.sha256 = await hashFileSha256(filePath);
             updated++;
         } catch (error) {
-            console.warn(`[Metadata] Failed to backfill SHA-256 for ${fileName}:`, error);
+            console.warn(`[Metadata] Failed to backfill SHA-256 for ${key}:`, error);
         }
     }
 
@@ -128,19 +216,23 @@ export async function backfillMissingMetadataHashes(deadlockPath: string): Promi
     return updated;
 }
 
+// Map every installed VPK to its absolute path, keyed by metaKey (lowercased) so
+// it lines up with the metaKey-keyed metadata entries. Scans every addon folder
+// (base + overflow) plus .disabled; for base/.disabled the key is the bare
+// filename, for overflow it's addons{N}/<file>.
 async function collectInstalledVpkPaths(deadlockPath: string): Promise<Map<string, string>> {
-    const filesByName = new Map<string, string>();
+    const filesByKey = new Map<string, string>();
 
-    for (const folder of [getAddonsPath(deadlockPath), getDisabledPath(deadlockPath)]) {
+    for (const folder of [...getAddonFolderPaths(deadlockPath), getDisabledPath(deadlockPath)]) {
         for (const entry of await fs.readdir(folder, { withFileTypes: true }).catch(() => [])) {
-            const key = entry.name.toLowerCase();
-            if (entry.isFile() && key.endsWith('_dir.vpk') && !filesByName.has(key)) {
-                filesByName.set(key, join(folder, entry.name));
-            }
+            if (!entry.isFile() || !entry.name.toLowerCase().endsWith('_dir.vpk')) continue;
+            const full = join(folder, entry.name);
+            const key = metaKeyFor(full).toLowerCase();
+            if (!filesByKey.has(key)) filesByKey.set(key, full);
         }
     }
 
-    return filesByName;
+    return filesByKey;
 }
 
 function isValidSha256(value: string | undefined): boolean {
@@ -176,15 +268,20 @@ export const deleteModMetadata = removeModMetadata;
  * Drop metadata entries whose VPK no longer exists on disk.
  *
  * Older versions of deleteMod removed the .vpk file but left metadata behind,
- * keyed by fileName. When the next mod was assigned the same pakNN_dir.vpk
+ * keyed by the mod's metaKey. When the next mod was assigned the same pakNN_dir.vpk
  * slot, setModMetadata's merge behavior leaked the dead mod's gameBananaId,
  * categoryName, thumbnail, etc. onto the new install (issue #26). Callers
- * pass the current valid set so users with pre-existing orphans self-heal
- * the next time the mods list is scanned.
+ * pass the current valid set (metaKeys) so users with pre-existing orphans
+ * self-heal the next time the mods list is scanned.
  */
-export function pruneOrphanMetadata(validFileNames: Set<string>): void {
+export function pruneOrphanMetadata(validKeys: Set<string>): void {
     const metadata = loadMetadata();
-    const orphans = Object.keys(metadata).filter((key) => !validFileNames.has(key));
+    // Synthetic `locker:*` keys hold the Locker-managed selection sets (cards /
+    // sounds), which live in citadel/grimoire and are NOT scanned filenames, so
+    // they must never be treated as orphans.
+    const orphans = Object.keys(metadata).filter(
+        (key) => !key.startsWith('locker:') && !validKeys.has(key),
+    );
     if (orphans.length === 0) return;
 
     for (const key of orphans) {

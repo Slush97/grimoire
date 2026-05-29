@@ -40,6 +40,9 @@ export default function Layout() {
   const [oneClickBanner, setOneClickBanner] = useState<OneClickToast | null>(null);
   const [suspiciousPrompt, setSuspiciousPrompt] = useState<OneClickSuspiciousFilesData | null>(null);
   const [multiVpkPrompt, setMultiVpkPrompt] = useState<MultiVpkPickData | null>(null);
+  // Shown when GameBanana starts returning 429s (the main process debounces the
+  // event so a burst of rejected requests surfaces one warning, not a flood).
+  const [rateLimited, setRateLimited] = useState(false);
 
   // Re-theme the app whenever the stored accent color changes. We pull
   // settings into the global store on mount so the value is available before
@@ -210,6 +213,22 @@ export default function Layout() {
     return unsubscribe;
   }, []);
 
+  // Surface GameBanana rate limiting app-wide. The heavy "Fix Unknown"
+  // auto-detect is the usual trigger, but any tab can hit it, so the warning
+  // lives here rather than inside one page.
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.onGameBananaRateLimited(() => {
+      setRateLimited(true);
+    });
+    return unsubscribe;
+  }, []);
+
+  useEffect(() => {
+    if (!rateLimited) return;
+    const t = setTimeout(() => setRateLimited(false), 8000);
+    return () => clearTimeout(t);
+  }, [rateLimited]);
+
   const respondToSuspicious = async (accepted: boolean) => {
     if (!suspiciousPrompt) return;
     await window.electronAPI.respondToOneClickSuspiciousFiles(
@@ -265,7 +284,7 @@ export default function Layout() {
   return (
     <div className="flex h-screen">
       <Sidebar />
-      <main className="flex-1 overflow-auto bg-bg-primary">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary">
         {gameinfoAlert && (
           <div className="sticky top-0 z-40 border-b border-yellow-500/30 bg-yellow-500/10 backdrop-blur-sm">
             <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 text-yellow-200">
@@ -284,7 +303,7 @@ export default function Layout() {
             </div>
           </div>
         )}
-        <div key={outletKey} className="animate-fade-in h-full">
+        <div key={outletKey} className="min-h-0 flex-1 overflow-auto animate-fade-in">
           <Outlet />
         </div>
       </main>
@@ -388,6 +407,24 @@ export default function Layout() {
           ) : null
         }
       />
+      {rateLimited && (
+        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2">
+          <div className="flex items-center gap-2 rounded-sm border border-yellow-500/40 bg-yellow-500/15 px-4 py-2 text-sm text-yellow-200 shadow-lg backdrop-blur-sm max-w-[460px]">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-400" />
+            <span className="flex-1">
+              GameBanana is rate-limiting Grimoire. Pause a moment before retrying.
+            </span>
+            <button
+              type="button"
+              onClick={() => setRateLimited(false)}
+              className="flex-shrink-0 text-yellow-300/70 hover:text-yellow-100"
+              aria-label="Dismiss"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       {multiVpkPrompt && (
         <MultiVpkPickerModal
           key={multiVpkPrompt.requestId}

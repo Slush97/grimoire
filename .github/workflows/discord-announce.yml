@@ -63,8 +63,20 @@ jobs:
         run: |
           set -euo pipefail
 
+          # Announce only the "What's New" block (New Features / Changed / Bug
+          # Fixes), not the intro, Downloads, Requirements, or changelog footer.
+          # Slice from the "## What's New" heading to the next "## " heading.
+          # Fall back to the full body if the notes don't use that structure.
+          BODY="$(awk '
+            /^## / && !/^## What.?s New/ { if (cap) exit }
+            /^## What.?s New/ { cap=1 }
+            cap { print }
+          ' release_body.md)"
+          if [ -z "${BODY//[[:space:]]/}" ]; then
+            BODY="$(cat release_body.md)"
+          fi
+
           # Discord embed description limit is 4096; truncate with a link to the full notes.
-          BODY="$(cat release_body.md)"
           MAX=4000
           if [ "${#BODY}" -gt "$MAX" ]; then
             BODY="${BODY:0:$MAX}"$'\n\n... (truncated, full notes: '"$URL"')'

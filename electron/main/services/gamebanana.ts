@@ -1,4 +1,20 @@
+import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
+
+// Debounce the rate-limit warning so a burst of 429s (e.g. the unknown-mod CRC
+// matcher fanning out) produces one toast, not a flood. Broadcasting via
+// BrowserWindow keeps this service free of an import cycle with ../index.
+const RATE_LIMIT_NOTIFY_INTERVAL_MS = 10_000;
+let lastRateLimitNotifyAt = 0;
+
+function notifyRateLimited(): void {
+    const now = Date.now();
+    if (now - lastRateLimitNotifyAt < RATE_LIMIT_NOTIFY_INTERVAL_MS) return;
+    lastRateLimitNotifyAt = now;
+    for (const win of BrowserWindow.getAllWindows()) {
+        win.webContents.send('gamebanana:rate-limited', {});
+    }
+}
 
 const GAMEBANANA_API_BASE = 'https://gamebanana.com/apiv11';
 const GAMEBANANA_CORE_ITEM_DATA = 'https://api.gamebanana.com/Core/Item/Data';
@@ -230,6 +246,7 @@ interface FileRaw {
     _nFilesize: number;
     _sDownloadUrl: string;
     _nDownloadCount: number;
+    _tsDateAdded?: number;
     _sDescription?: string;
     _bIsArchived?: boolean;
     _sMd5Checksum?: string;
@@ -362,6 +379,9 @@ async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaR
             });
 
             if (!response.ok) {
+                if (response.status === 429) {
+                    notifyRateLimited();
+                }
                 const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
                 if (response.status === 429 && retryAfterMs !== null && retryAfterMs <= 60_000 && attempt === 0) {
                     request.cleanup();
@@ -587,12 +607,14 @@ export async function fetchSubmissions(
     options: GameBananaRequestOptions = {}
 ): Promise<GameBananaModsResponse> {
     let url: string;
-    // GameBanana v11 API only reliably supports likes/views sorting
-    // Default API order is already sorted by recent submissions, so 'new', 'recent', 'updated' don't need explicit sort
+    // The API's default order is already newest-submission-first, so 'recent'/'new'
+    // and 'default' need no explicit sort. 'updated' is distinct (date modified, not
+    // added) and must be requested explicitly or it silently mirrors 'recent'.
     const sortMap: Record<string, string> = {
         likes: 'Generic_MostLiked',
         popular: 'Generic_MostLiked',
         views: 'Generic_MostViewed',
+        updated: 'Generic_LatestModified',
     };
 
     // Fields to request from GameBanana API (including NSFW flag)
@@ -688,6 +710,7 @@ export async function fetchModDetails(
             fileSize: f._nFilesize,
             downloadUrl: f._sDownloadUrl,
             downloadCount: f._nDownloadCount,
+            dateAdded: f._tsDateAdded,
             description: f._sDescription,
             isArchived: f._bIsArchived ?? false,
         })),
@@ -704,6 +727,42 @@ export async function fetchModDetails(
                     : undefined,
             }
         : undefined,
+    };
+}
+
+export interface GameBananaModFileListEntry {
+    id: number;
+    isArchived: boolean;
+}
+
+export interface GameBananaModFileList {
+    id: number;
+    files: GameBananaModFileListEntry[];
+}
+
+interface ModFileListRaw {
+    _idRow: number;
+    _aFiles?: Array<{ _idRow: number; _bIsArchived?: boolean }>;
+}
+
+/**
+ * Slim variant of fetchModDetails that asks GameBanana for only the file list.
+ * The Installed page's update check uses this to scan every installed mod
+ * cheaply on mount - the full details payload (description, preview media,
+ * category) is wasteful when we only compare file ids.
+ */
+export async function fetchModFileList(
+    modId: number,
+    section = 'Mod'
+): Promise<GameBananaModFileList> {
+    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_aFiles`;
+    const raw = await fetchJson<ModFileListRaw>(url);
+    return {
+        id: raw._idRow,
+        files: (raw._aFiles ?? []).map((f) => ({
+            id: f._idRow,
+            isArchived: f._bIsArchived ?? false,
+        })),
     };
 }
 

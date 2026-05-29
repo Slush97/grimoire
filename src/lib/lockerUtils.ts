@@ -1,5 +1,5 @@
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import type { Mod } from '../types/mod';
+import type { GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
@@ -93,6 +93,34 @@ export const HERO_NAMES = SHARED_HERO_NAMES;
 export const HERO_ALIASES = SHARED_HERO_ALIASES;
 
 /**
+ * Display-name aliases that collapse roster duplicates to one canonical label.
+ * The shared roster carries both "Doorman" (GameBanana's category name, the one
+ * wired into every client-side map: face position, stats id, sound codename)
+ * and "The Doorman" (the deadlock-api roster name, appended later with the
+ * "Old Gods, New Blood" batch). They are the same hero, so the tag menu shows a
+ * single "Doorman". Kept client-side only: the shared roster and server-side
+ * inference are untouched.
+ */
+const HERO_DISPLAY_ALIASES: Readonly<Record<string, string>> = {
+  'The Doorman': 'Doorman',
+};
+
+/** Canonical display name for a hero, collapsing roster duplicates (see above). */
+export function canonicalHeroName(name: string | undefined | null): string {
+  if (!name) return '';
+  return HERO_DISPLAY_ALIASES[name] ?? name;
+}
+
+/**
+ * The hero roster for tag-menu display: canonicalized (duplicates collapsed),
+ * de-duplicated, and alphabetized. The Locker tag menu sorts its own roster
+ * (built from GameBanana categories), so the Installed menu uses this to match.
+ */
+export const HERO_NAMES_SORTED: readonly string[] = Array.from(
+  new Set(SHARED_HERO_NAMES.map(canonicalHeroName))
+).sort((a, b) => a.localeCompare(b));
+
+/**
  * Infer the Deadlock hero associated with a mod title. Re-exported from the
  * shared package; see @grimoire/social-types/heroes for the matcher details.
  */
@@ -132,12 +160,29 @@ export function heroAssetBaseName(name: string): string {
   return name.trim().replace(/\s+/g, '_');
 }
 
+export function heroIconAssetName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/&/g, 'and')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
+}
+
 export function getHeroRenderPath(name: string): string {
   return getAssetPath(`/locker/heroes/${heroAssetBaseName(name)}_Render.png`);
 }
 
 export function getHeroNamePath(name: string): string {
   return getAssetPath(`/locker/names/${heroAssetBaseName(name)}_name.png`);
+}
+
+export function getHeroIconPath(name: string): string {
+  return getAssetPath(`/heroes/icons/${heroIconAssetName(name)}.png`);
+}
+
+export function getHeroChipIconPath(name: string): string {
+  return getAssetPath(`/heroes/chip-icons/${heroIconAssetName(name)}.png`);
 }
 
 export function getHeroWikiUrl(name: string): string {
@@ -227,7 +272,23 @@ export function detectMinaTextures(mods: Mod[]) {
 }
 
 export function isLockerManagedMod(mod: Mod): boolean {
-  if (mod.sourceSection !== 'Mod') return false;
+  // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
+  // (applied per-ability sounds) are managed artifacts, never hero skin cards
+  // in their own right.
+  if (mod.lockerCosmetics) return false;
+  if (mod.lockerSounds) return false;
+
+  // Sound-section mods are the Sounds tab's domain (see isLockerManagedSound),
+  // never hero skins. They get an auto hero-tag at download time, so guard on
+  // the section explicitly before the lockerHero escape hatch below — otherwise
+  // a hero-tagged sound (e.g. a "Seven Ult Sound Replacer") falls through that
+  // hatch and surfaces in the Skins pile.
+  if (mod.sourceSection === 'Sound') return false;
+
+  // A manual Locker hero tag is an explicit user intent to manage this VPK as
+  // a hero skin, including custom local imports that do not have GameBanana
+  // section metadata.
+  if (mod.sourceSection !== 'Mod' && !mod.lockerHero) return false;
 
   const lower = mod.fileName.toLowerCase();
   // Internal Midnight Mina preset files are managed by the custom variants UI,
@@ -236,6 +297,103 @@ export function isLockerManagedMod(mod: Mod): boolean {
   if (lower.includes('sts_midnight_mina_') && !lower.includes('textures')) return false;
 
   return true;
+}
+
+/**
+ * GameBanana Sound subcategories that aren't per-hero. Killsounds and music
+ * stingers play across the whole match, announcer/UI sounds are global UX.
+ * These belong on Installed but would just sit in the Locker's "Unassigned"
+ * bucket forever (no hero to tag), so we drop them at the eligibility check
+ * instead. Lowercased for case-insensitive compare.
+ */
+const GLOBAL_SOUND_CATEGORIES: ReadonlySet<string> = new Set([
+  'killsounds',
+  'in-game music',
+  'music',
+  'announcer',
+  'ui',
+  'ui sounds',
+  'misc',
+]);
+
+/**
+ * Sound-section equivalent of isLockerManagedMod. Drops Sound mods whose
+ * GameBanana category is one of the global (non-hero) buckets — see
+ * GLOBAL_SOUND_CATEGORIES. Hero-specific subcategories (Abilities, VOs,
+ * etc.) flow through.
+ */
+export function isLockerManagedSound(mod: Mod): boolean {
+  if (mod.sourceSection !== 'Sound') return false;
+  // An explicit hero tag (auto-set from the title at download, or set by hand)
+  // means this sound is hero-specific and belongs in that hero's Sounds tab,
+  // even when GameBanana filed it under a global music/UI category. The
+  // GLOBAL_SOUND_CATEGORIES drop exists only for sounds with no hero to tag;
+  // without this short-circuit, a "Seven Ult Sound Replacer" categorized as
+  // "In-Game Music" gets dropped here and then mis-surfaces under Skins.
+  if (mod.lockerHero) return true;
+  const category = mod.categoryName?.trim().toLowerCase();
+  if (category && GLOBAL_SOUND_CATEGORIES.has(category)) return false;
+  return true;
+}
+
+/**
+ * Lowercased GameBanana category name for the Killstreak Music sound category
+ * (cat 5895 — see docs/gamebanana_categories_reference.md).
+ */
+const KILLSTREAK_MUSIC_CATEGORY = 'killstreak music';
+
+/**
+ * True for Sound mods filed under GameBanana's "Killstreak Music" category.
+ * This music plays match-wide (no hero), so the Locker treats it as a global
+ * type on the Global card rather than per-hero sounds. Used by
+ * getEffectiveGlobalType; kept narrow (category only) on purpose.
+ */
+/** Minimal mod shape the global-type helpers read. Lets card components pass a
+ *  structural subset of Mod (e.g. ModCardProps['mod']) without the full type. */
+type GlobalTypeModFields = Pick<Mod, 'globalType' | 'lockerHero' | 'sourceSection' | 'categoryName'>;
+
+export function isKillstreakMusicSound(mod: GlobalTypeModFields): boolean {
+  return (
+    mod.sourceSection === 'Sound' &&
+    mod.categoryName?.trim().toLowerCase() === KILLSTREAK_MUSIC_CATEGORY
+  );
+}
+
+/** Lowercased GameBanana "Announcer" sound category name. */
+const ANNOUNCER_CATEGORY = 'announcer';
+
+/**
+ * True for Sound mods filed under GameBanana's "Announcer" category. These play
+ * match-wide with no hero, so the Locker surfaces them on the Global card's
+ * Announcer / SFX slide rather than dropping them (GLOBAL_SOUND_CATEGORIES) or
+ * mis-filing them under a hero. Path-classifiable announcer frameworks (QOL
+ * Lock, `sounds/mods/`) already carry a 'announcer' globalType from the
+ * main-process classifier; this rescues the sound-only packs that don't.
+ */
+export function isAnnouncerSound(mod: GlobalTypeModFields): boolean {
+  return (
+    mod.sourceSection === 'Sound' &&
+    mod.categoryName?.trim().toLowerCase() === ANNOUNCER_CATEGORY
+  );
+}
+
+/**
+ * A mod's effective Locker global type. Prefers the persisted globalType (the
+ * VPK-path classification, or a manual override set via the Global card's
+ * retag menu), then derives 'killstreak-music' from the GameBanana category.
+ *
+ * Killstreak music can't be path-classified (a Sound VPK is just `sounds/`),
+ * so it's derived here instead of in the main-process classifier. Deriving it
+ * live also means it lights up for mods that were already installed before the
+ * category existed, with no metadata migration. A manual override still wins,
+ * since `mod.globalType` is checked first.
+ */
+export function getEffectiveGlobalType(mod: GlobalTypeModFields): GlobalModType | undefined {
+  if (mod.globalType) return mod.globalType;
+  if (isKillstreakMusicSound(mod)) return 'killstreak-music';
+  // A hero tag wins: hero-tied SFX belong on that hero's Sounds tab, not here.
+  if (!mod.lockerHero && isAnnouncerSound(mod)) return 'announcer';
+  return undefined;
 }
 
 export function getLockerSkinKey(mod: Mod): string {
@@ -372,6 +530,68 @@ export function findMinaVariant(
   );
 }
 
+/**
+ * Display labels for the global (non-hero) cosmetic types. The "Icons &
+ * Portraits" merge is deliberate: icon packs and "portrait" packs write the
+ * same panorama/images/heroes files, so they're one category (see
+ * classifyGlobalModType).
+ */
+export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
+  'soul-container': 'Soul Containers',
+  hideout: 'Hideout',
+  icons: 'Icon Packs',
+  hud: 'HUD',
+  announcer: 'Announcer / SFX',
+  'killstreak-music': 'Killstreak Music',
+};
+
+/** Carousel/section order for the global types. */
+export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
+  'soul-container',
+  'hideout',
+  'icons',
+  'hud',
+  'announcer',
+  'killstreak-music',
+];
+
+export type GlobalModGroups = Record<GlobalModType, Mod[]>;
+
+/**
+ * Bucket mods by their classified global type. Mods with no globalType (hero
+ * cosmetics and anything that matched no signal) are simply omitted. Each
+ * bucket sorts enabled mods first (so the active ones are always at the top),
+ * then by priority within each enabled/disabled half.
+ */
+export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
+  const groups: GlobalModGroups = {
+    'soul-container': [],
+    hideout: [],
+    icons: [],
+    hud: [],
+    announcer: [],
+    'killstreak-music': [],
+  };
+  for (const mod of mods) {
+    const type = getEffectiveGlobalType(mod);
+    if (type && groups[type]) {
+      groups[type].push(mod);
+    }
+  }
+  for (const type of GLOBAL_MOD_TYPE_ORDER) {
+    groups[type].sort((a, b) => {
+      if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
+      return a.priority - b.priority;
+    });
+  }
+  return groups;
+}
+
+/** Total number of mods classified into any global type. */
+export function countGlobalMods(mods: Mod[]): number {
+  return mods.reduce((n, mod) => (getEffectiveGlobalType(mod) ? n + 1 : n), 0);
+}
+
 export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: string }[]) {
   const map = new Map<number, Mod[]>();
   const unassigned: Mod[] = [];
@@ -385,12 +605,26 @@ export function groupModsByCategory(mods: Mod[], heroList?: { id: number; name: 
   }
 
   for (const mod of mods) {
-    let categoryId = mod.categoryId;
+    let categoryId: number | undefined;
 
-    // If mod has a generic category (like "Skins" parent), try to infer from mod name
-    if (!categoryId || mod.categoryName?.toLowerCase() === 'skins') {
+    // 1. Manual override wins. Users tag a mod when GameBanana left it under
+    //    the generic "Skins" parent or when the title doesn't mention the hero.
+    if (mod.lockerHero) {
+      categoryId = heroNameToId.get(mod.lockerHero.toLowerCase());
+    }
+
+    // 2. Author-supplied categoryId is the next best signal, but skip it when
+    //    the category is "Skins" itself (the generic parent), since that
+    //    points at a virtual node, not a hero.
+    if (!categoryId && mod.categoryId && mod.categoryName?.toLowerCase() !== 'skins') {
+      categoryId = mod.categoryId;
+    }
+
+    // 3. Fall back to fuzzy match on the mod's display name. Same logic the
+    //    "Skins"-parent branch used to do; broadened to also fire when there's
+    //    no categoryId at all (sound mods, custom imports).
+    if (!categoryId) {
       const nameLower = mod.name?.toLowerCase() || '';
-      // Check for hero names in the mod name
       for (const [heroName, heroId] of heroNameToId) {
         if (nameLower.includes(heroName)) {
           categoryId = heroId;

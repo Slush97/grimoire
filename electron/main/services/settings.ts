@@ -8,13 +8,20 @@ export interface AppSettings {
     devDeadlockPath: string | null;
     hideNsfwPreviews: boolean;
     hideOutdatedMods: boolean;       // Hide GameBanana mods flagged as outdated in Browse
-    autoDisableSiblingVariants: boolean; // When re-downloading a GB mod, auto-disable older variants
+    autoDisableSiblingVariants: boolean; // Installing a different file of an already-enabled mod disables the prior variant (not about updates)
     steamLaunchOptions: string;      // Args written to Steam's localconfig.vdf for Deadlock just before launch
     activeProfileId: string | null;  // Currently active profile
     autoSaveProfile: boolean;        // Auto-save when mods change
     experimentalStats: boolean;
     experimentalCrosshair: boolean;
     experimentalSocial: boolean;     // Grimoire Social: Discover page + publish/account UI
+    /** Auto-match unknown local VPKs against GameBanana (CRC-32 + filter
+     *  search). Off by default while the matching path is reworked: the
+     *  current implementation hits GameBanana rate limits hard on libraries
+     *  with many unknown files. When off, the "Fix unknown" UI still opens
+     *  but the search/find buttons and bulk auto-find are hidden, leaving
+     *  only the manual "Make Custom Mod" path. */
+    experimentalUnknownModMatching: boolean;
     hasCompletedSetup: boolean;      // First-run setup completed
     /** Mod pairs the user has dismissed in the Conflicts page. New entries use
      *  stable per-mod identities (GameBanana mod/file ids when available)
@@ -27,13 +34,19 @@ export interface AppSettings {
     /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
      *  focus rings throughout the app. */
     accentColor: string;
+    /** Order used to render absolute dates (mod/file upload + update dates). */
+    dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY';
+    /** UI zoom factor (webContents.setZoomFactor). Driven by Ctrl +/-/0 and
+     *  persisted so hi-DPI laptops keep their preferred scale across launches.
+     *  1 = 100%. */
+    zoomFactor?: number;
 }
 
 const DEFAULT_SETTINGS: AppSettings = {
     deadlockPath: null,
     devMode: false,
     devDeadlockPath: null,
-    hideNsfwPreviews: false,
+    hideNsfwPreviews: true,
     hideOutdatedMods: false,
     autoDisableSiblingVariants: true,
     steamLaunchOptions: '',
@@ -42,10 +55,13 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalStats: false,
     experimentalCrosshair: false,
     experimentalSocial: false,
+    experimentalUnknownModMatching: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,
     accentColor: '#f97316',
+    dateFormat: 'MM/DD/YYYY',
+    zoomFactor: 1,
 };
 
 /**

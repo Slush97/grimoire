@@ -1,5 +1,5 @@
 import { scanMods, Mod } from './mods';
-import { parseVpkDirectory } from './vpk';
+import { parseVpkDirectoryCached, type VpkParseStats } from './vpk';
 import { loadSettings } from './settings';
 import { getModMetadata } from './metadata';
 
@@ -61,8 +61,25 @@ function normalizeIdentityPart(value: string): string {
     return value.trim().toLowerCase().replace(/\s+/g, ' ');
 }
 
+/** The addon folder an enabled mod lives in, derived from its metaKey: the bare
+ *  filename (no slash) means the base citadel/addons; `addonsN/<file>` means
+ *  overflow folder N. Used to scope pakNN priority-collision grouping per folder. */
+function folderOf(mod: Mod): string {
+    const slash = mod.metaKey.indexOf('/');
+    return slash === -1 ? 'addons' : mod.metaKey.slice(0, slash);
+}
+
+/** Message for a priority (same-slot) conflict. Two mods only reach here when
+ *  they share a folder AND a pakNN, so naming the slot (and the overflow folder,
+ *  when not base) is enough to tell the user which slot to change. */
+function priorityConflictDetail(mod: Mod): string {
+    const folder = folderOf(mod);
+    const pak = `pak${String(mod.priority).padStart(2, '0')}`;
+    return folder === 'addons' ? `Both use ${pak}` : `Both use ${folder}/${pak}`;
+}
+
 export function modConflictIdentity(mod: Mod): string {
-    const metadata = getModMetadata(mod.fileName);
+    const metadata = getModMetadata(mod.metaKey);
     if (typeof metadata?.gameBananaId === 'number' && metadata.gameBananaId > 0) {
         if (typeof metadata.gameBananaFileId === 'number' && metadata.gameBananaFileId > 0) {
             return `gb:${metadata.gameBananaId}:file:${metadata.gameBananaFileId}`;
@@ -125,11 +142,26 @@ function createConflict(
  * Two mods conflict if they have overlapping file paths.
  */
 export async function detectConflicts(deadlockPath: string): Promise<ModConflict[]> {
+    // Track scan duration + cache hit rate so user-supplied diagnostic
+    // reports tell us whether the conflict scan is actually the thing
+    // freezing the main process on their machine. Without this we can
+    // only infer from code review.
+    const scanStart = Date.now();
+    const vpkStats: VpkParseStats = { hits: 0, misses: 0 };
+
     const mods = await scanMods(deadlockPath);
-    const enabledMods = mods.filter(m => m.enabled);
+    // The Locker cosmetics VPK and the Locker sound VPK deliberately override
+    // the paths of the mods they pulled from (that's how a chosen card / sound
+    // wins), so they would otherwise report a file conflict against every
+    // source. Exclude them.
+    const enabledMods = mods.filter(m => {
+        const meta = getModMetadata(m.metaKey);
+        return m.enabled && !meta?.lockerCosmetics && !meta?.lockerSounds;
+    });
     const conflicts: ModConflict[] = [];
 
     if (enabledMods.length < 2) {
+        console.log(`[detectConflicts] enabled=${enabledMods.length} took=${Date.now() - scanStart}ms (trivial)`);
         return [];
     }
 
@@ -139,25 +171,27 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     const markReported = (a: Mod, b: Mod) => reportedPairs.add(conflictPairKey(a.id, b.id));
     const wasReported = (a: Mod, b: Mod) => reportedPairs.has(conflictPairKey(a.id, b.id));
 
-    const priorityMap = new Map<number, Mod[]>();
+    // A pakNN load-order slot only collides WITHIN a single addon folder: base
+    // citadel/addons/pak05 and an overflow citadel/addons1/pak05 are mounted via
+    // separate SearchPaths, so they are NOT a real priority conflict (each folder
+    // has its own pak01-pak99 namespace, Model A). Group by (folder, pakNN), not
+    // raw pakNN. The folder comes from metaKey: bare filename (no slash) = base
+    // addons, `addonsN/<file>` = overflow folder N.
+    const priorityMap = new Map<string, Mod[]>();
     for (const mod of enabledMods) {
-        const existing = priorityMap.get(mod.priority) || [];
+        const key = `${folderOf(mod)}#${mod.priority}`;
+        const existing = priorityMap.get(key) || [];
         existing.push(mod);
-        priorityMap.set(mod.priority, existing);
+        priorityMap.set(key, existing);
     }
 
-    for (const [priority, modsWithPriority] of priorityMap) {
+    for (const modsWithPriority of priorityMap.values()) {
         if (modsWithPriority.length > 1) {
             for (let i = 0; i < modsWithPriority.length; i++) {
                 for (let j = i + 1; j < modsWithPriority.length; j++) {
                     const a = modsWithPriority[i];
                     const b = modsWithPriority[j];
-                    conflicts.push(createConflict(
-                        a,
-                        b,
-                        'priority',
-                        `Both use pak${String(priority).padStart(2, '0')}`
-                    ));
+                    conflicts.push(createConflict(a, b, 'priority', priorityConflictDetail(a)));
                     markReported(a, b);
                 }
             }
@@ -167,7 +201,7 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     // Parse VPK file lists
     const modFileLists = new Map<string, Set<string>>();
     for (const mod of enabledMods) {
-        const files = parseVpkDirectory(mod.path);
+        const files = parseVpkDirectoryCached(mod.path, vpkStats);
         if (files && files.length > 0) {
             modFileLists.set(mod.id, new Set(files));
         }
@@ -220,5 +254,11 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
             !ignored.has(conflictPairKey(c.modA, c.modB))
         );
 
+    console.log(
+        `[detectConflicts] enabled=${enabledMods.length} ` +
+        `pairs=${filtered.length} ` +
+        `vpkCache=${vpkStats.hits}/${vpkStats.hits + vpkStats.misses} ` +
+        `took=${Date.now() - scanStart}ms`
+    );
     return filtered;
 }

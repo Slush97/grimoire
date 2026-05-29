@@ -1,20 +1,38 @@
 import type {
     Mod,
     AppSettings,
+    GlobalModType,
     ModConflict,
     UnknownModDetectionProgress,
     UnknownModFilterGuess,
     ApplyUnknownModMatchArgs,
     ApplyUnknownCustomModArgs,
+    AssociateUnknownModArgs,
+    UnknownModFileList,
+    EditLocalModArgs,
+    MergeModsArgs,
+    UnmergeModResult,
+    ExtractMergeSourceResult,
+    ApplyHeroCardResult,
+    HeroAbilitySlot,
+    AbilitySlot,
+    AbilitySoundParams,
+    ActiveHeroSound,
+    ApplyHeroSoundResult,
+    LockerOverview,
+    LockerCardThumbnail,
+    LockerClearScope,
 } from './mod';
 import type {
     GameBananaModsResponse,
     GameBananaModDetails,
+    GameBananaModFileList,
     GameBananaSection,
     GameBananaCategoryNode,
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
 } from './gamebanana';
+import type { HeroPortrait, SoulModelInfo, HeroPoseInfo } from './portrait';
 
 export interface BrowseModsArgs {
     page: number;
@@ -130,7 +148,7 @@ export interface DownloadEventData {
 export interface DownloadErrorData {
     modId: number;
     fileId: number;
-    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'UNKNOWN';
+    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'CANCELLED_BY_USER' | 'UNKNOWN';
     message: string;
     helpUrl?: string;
 }
@@ -195,6 +213,10 @@ export interface SearchLocalModsOptions {
     heroName?: string;
     skinsCategoryId?: number;
     sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
+    nsfw?: 'all' | 'sfw' | 'nsfw';
+    addedWithin?: 'all' | 'today' | 'week' | 'month' | 'custom';
+    addedFrom?: number;
+    addedTo?: number;
     limit?: number;
     offset?: number;
 }
@@ -287,16 +309,50 @@ export interface ElectronAPI {
     onUnknownModDetectionProgress: (callback: (progress: UnknownModDetectionProgress) => void) => () => void;
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
+    associateUnknownMod: (modId: string, args: AssociateUnknownModArgs) => Promise<Mod>;
+    listUnknownModFiles: (modId: string) => Promise<UnknownModFileList>;
+    editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
+    setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
+    getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;
+    getHeroAbilitySlots: (heroName: string) => Promise<HeroAbilitySlot[]>;
+    applyHeroCard: (heroName: string, sourceFileName: string) => Promise<ApplyHeroCardResult>;
+    revertHeroCard: (heroName: string) => Promise<ApplyHeroCardResult>;
+    getActiveHeroCard: (
+        heroName: string
+    ) => Promise<{ sourceFileName: string; variants: string[] } | null>;
+    getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
+    exportSoulModel: (metaKey: string) => Promise<SoulModelInfo>;
+    clearSoulModel: (key: string) => Promise<void>;
+    getHeroPoseInfo: (heroName: string, skinMetaKey?: string) => Promise<HeroPoseInfo>;
+    exportHeroPose: (heroName: string, skinMetaKey?: string) => Promise<HeroPoseInfo>;
+    getPreviewCacheSize: () => Promise<{ bytes: number }>;
+    clearPreviewCache: () => Promise<{ bytesFreed: number }>;
+    applyHeroSound: (
+        heroName: string,
+        slot: AbilitySlot,
+        sourceFileName: string,
+        params?: AbilitySoundParams
+    ) => Promise<ApplyHeroSoundResult>;
+    revertHeroSound: (heroName: string, slot: AbilitySlot) => Promise<ApplyHeroSoundResult>;
+    getActiveHeroSounds: (heroName: string) => Promise<ActiveHeroSound[]>;
+    getLockerOverview: () => Promise<LockerOverview>;
+    getLockerCardThumbnails: () => Promise<LockerCardThumbnail[]>;
+    clearLockerOverrides: (scope: LockerClearScope) => Promise<void>;
+    setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
+    setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (
       modId: string,
       payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
-    reorderMods: (orderedFileNames: string[]) => Promise<Mod[]>;
+    reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
+    mergeMods: (args: MergeModsArgs) => Promise<Mod>;
+    unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
+    extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
 
     // Launch
     launchModded: () => Promise<void>;
@@ -311,6 +367,7 @@ export interface ElectronAPI {
     // GameBanana
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
+    getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: { modId: number; section?: string; page?: number }) => Promise<{ comments: Array<{ id: number; text: string; dateAdded: number; poster: { id: number; name: string; avatarUrl?: string } }>; totalCount: number }>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
@@ -325,6 +382,7 @@ export interface ElectronAPI {
     downloadMinaVariations: () => Promise<string>;
 
     // Maintenance
+    copyImageToClipboard: (source: string) => Promise<void>;
     cleanupAddons: () => Promise<CleanupResult>;
     getGameinfoStatus: () => Promise<GameinfoStatus>;
     fixGameinfo: () => Promise<GameinfoStatus>;
@@ -342,6 +400,7 @@ export interface ElectronAPI {
     getDroppedFilePath: (file: File) => string;
 
     // Events
+    onGameBananaRateLimited: (callback: () => void) => () => void;
     onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
     onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
     onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
@@ -352,6 +411,7 @@ export interface ElectronAPI {
     getDownloadQueue: () => Promise<DownloadQueueItem[]>;
     getCurrentDownload: () => Promise<DownloadQueueItem | null>;
     removeFromQueue: (modId: number) => Promise<boolean>;
+    cancelActiveDownload: () => Promise<boolean>;
     onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
 
     // GameBanana 1-Click protocol handler
@@ -584,6 +644,8 @@ export interface ProfileMod {
     fileName: string;
     enabled: boolean;
     priority: number;
+    gameBananaId?: number;
+    gameBananaFileId?: number;
 }
 
 export interface ProfileCrosshairSettings {
