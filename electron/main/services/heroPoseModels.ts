@@ -80,6 +80,24 @@ function modelFile(key: string): string {
 }
 
 /**
+ * Cache schema version for stored poses. Bump when the export pipeline changes
+ * in a way that invalidates cached GLBs: a bundled-vpkmerge fix, a shell-drop
+ * rule change, or a Deadlock patch that reworks a hero's model. A cached GLB is
+ * served only when its sidecar marker matches this; on a mismatch the pose is
+ * treated as absent and regenerated in place (the new GLB overwrites the old, so
+ * no per-version directories pile up on disk).
+ *
+ * v2: bundled vpkmerge gained deterministic hero-model discovery, `--require-pose`
+ * (so clipless WIP heroes fall back to the 2D portrait instead of a T-pose), and
+ * the comic-outline (`*jitter*`) shell drop. Pre-v2 GLBs (unversioned) are stale.
+ */
+const POSE_CACHE_VERSION = '2';
+
+function versionFile(key: string): string {
+    return join(modelDir(key), '.cache-version');
+}
+
+/**
  * Resolve a skin mod's metaKey to its on-disk VPK path. An overflow mod's key
  * is folder-qualified (`addons{N}/<file>`); a base-addons or .disabled mod's
  * key is a bare filename. Mirrors soulContainerModels.resolveModVpk: resolving
@@ -118,6 +136,13 @@ export interface HeroPoseInfo {
 async function infoForKey(key: string): Promise<HeroPoseInfo> {
     try {
         const stat = await fs.stat(modelFile(key));
+        const version = await fs.readFile(versionFile(key), 'utf8').catch(() => '');
+        if (version.trim() !== POSE_CACHE_VERSION) {
+            // Pre-versioning or stale-version GLB (e.g. a T-pose baked before
+            // --require-pose, or pre-rework textures): report absent so it
+            // regenerates with the current pipeline.
+            return { hasModel: false, mtimeMs: null, key };
+        }
         return { hasModel: true, mtimeMs: stat.mtimeMs, key };
     } catch {
         return { hasModel: false, mtimeMs: null, key };
@@ -204,9 +229,14 @@ async function runHeroPoseExport(
                 '--base',
                 pak01,
                 '--pose',
+                // Refuse to bake a static bind/T-pose: a clipless WIP hero
+                // (Apollo, Billy, Celeste, Mina, Paige, Rem) errors here and the
+                // Locker falls back to the 2D portrait instead of an unposed model.
+                '--require-pose',
                 '--out',
                 out,
             ]);
+            await fs.writeFile(versionFile(key), POSE_CACHE_VERSION);
             return infoForKey(key);
         } catch (err) {
             lastError = err;

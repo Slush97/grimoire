@@ -14,11 +14,17 @@ mesh and emits a *static* `.glb`:
   meshes, so there is no `SkinnedMesh` and no skin-strip hack (contrast the
   soul-container path, which strips a degenerate skin; see
   `electron/main/services/soulContainerModels.ts`).
-- Deadlock's `*_outline` inverted-hull and additive `*_glow` shells are dropped
-  on export (both render as a white halo when loaded as plain glTF), so the
-  long-standing outline-halo bug does not appear here.
+- Deadlock's NPR shells are dropped on export (they render as a white halo when
+  loaded as plain glTF): the `*_outline` inverted hull, the additive `*_glow`,
+  and the comic-style inked outline (`*jitter*`, e.g. Billy's
+  `punkgoat_border_jitter01` on parts `*_head_jitter01`). Detection is by
+  material/mesh-part name; it never inspects texture-param names, so the
+  `g_tJitterMask` input on normal materials is unaffected (vpkmerge v0.6.1).
 - For a skin, the menu-pose clip is mapped from `--base` (the base pak) onto the
   skin rig by bone name (skins ship 0 clips), so a skin VPK still poses.
+- `--require-pose` (vpkmerge v0.6.1): a clipless WIP hero would only bake a
+  static bind/T-pose, so the export errors instead and the Locker falls back to
+  the 2D portrait rather than showing an unposed model. See coverage below.
 - Sub-second per hero.
 
 Net: the renderer reuses the same minimal three.js path as the soul-container
@@ -49,19 +55,27 @@ Renderer:
 - `src/pages/LockerHero.tsx`: `view3d` state, active-skin metaKey resolution,
   the toggle button, lazy-loaded `HeroPoseViewer`.
 
-## Requires vpkmerge v0.6.0
+## Requires vpkmerge v0.6.0 (v0.6.1 for the pose/texture/outline fixes)
 
 `--pose` only exists from vpkmerge v0.6.0 on (commit `aa96f71`), together with
 the 8-influence skinning fix that unblocks Dynamo + Apollo (`e3a73ba`). Against
 the v0.5.0 binary the `--pose` flag does not exist and the feature fails at
 runtime. The bundled binary is pinned in `scripts/fetch-vpkmerge.mjs`
-(`VPKMERGE_VERSION` + the three sha256s); it must be at v0.6.0 or later.
+(`VPKMERGE_VERSION` + the three sha256s).
+
+v0.6.1 adds three fixes the Locker depends on: deterministic hero-model
+discovery (the `valve_pak` directory is a `HashMap`, so a hero with two
+`<codename>.vmdl_c` such as Infernus's `inferno_v4` + old `heroes_wip/inferno`
+used to resolve to a random one per export, posing or T-posing at random; it now
+prefers the non-`heroes_wip` dir and highest `_vN`), `--require-pose`, and the
+`*jitter*` shell drop. Bump `VPKMERGE_VERSION` + the three sha256s to the v0.6.1
+release to ship them.
 
 ## Model-codename coverage (verified against the installed pak, 2026-05-28)
 
 `--hero` discovery matches the body-model FILE basename (`<basename>.vmdl_c`
 under any `/heroes*` path, ignoring the `_vN` dir). All 38 GameBanana roster
-heroes pose with v0.6.0:
+heroes resolve to a model:
 
 - 33 resolve from their panorama codename (`codenamesForHero` in
   `heroPortraits.ts`), incl. Dynamo=`dynamo`, Ivy=`tengu`, Infernus=`inferno`.
@@ -83,6 +97,25 @@ overridden entry.)
 The service tries the override(s) first, then the panorama codename(s); a hero
 that resolves nothing falls back to the 2D portrait in the UI.
 
+**Six heroes resolve a model but cannot pose** (verified 2026-05-29). Their
+current body model lives under `models/heroes_wip/` and bakes *zero* animation
+clips into the `.vmdl_c` (the clips ship as external `clips/` files morphic does
+not follow), so `--pose` can only produce a static bind/T-pose. With
+`--require-pose` the export errors and the Locker shows the 2D portrait instead:
+
+| Hero | model codename | model path |
+|---|---|---|
+| Apollo | fencer | `heroes_wip/fencer` |
+| Billy | punkgoat | `heroes_wip/punkgoat` |
+| Celeste | unicorn | `heroes_wip/unicorn` |
+| Mina | vampirebat | `heroes_wip/vampirebat` |
+| Paige | bookworm | `heroes_wip/bookworm` |
+| Rem | familiar | `heroes_wip/familiar` |
+
+These will start posing on their own once Valve finalizes them (moves the model
+to `heroes_staging` with baked clips, as the other heroes already are) or once
+morphic learns to resolve external `clips/`. No Grimoire change needed then.
+
 ## Storage and serving
 
 Pose stills live at `userData/hero-poses/<sanitized-key>/model.glb`. The renderer
@@ -92,6 +125,16 @@ the privileged `grimoire-hero:` scheme as
 (under a fixed `m` host) because it contains characters a standard scheme's host
 parser forbids (`::`, and a `/` for overflow skins). The `?v=<mtime>` cache-busts
 the renderer URL after a re-export.
+
+Each pose dir carries a `.cache-version` marker (`POSE_CACHE_VERSION` in
+`heroPoseModels.ts`). `getHeroPoseInfo` reports a GLB as present only when the
+marker matches; on a mismatch (or a pre-versioning GLB with no marker) the pose
+is treated as absent and regenerated in place. Bump the constant whenever the
+export pipeline changes in a way that invalidates cached GLBs (a bundled-vpkmerge
+fix, a shell-drop rule change, or a Deadlock patch that reworks a hero), so stale
+poses regenerate transparently instead of serving an old render. v2 covers the
+v0.6.1 binary swap (deterministic discovery, `--require-pose`, `*jitter*` drop)
+and the recent Mirage/Mina-style in-place model reworks.
 
 ## Known limitations / follow-ups
 
