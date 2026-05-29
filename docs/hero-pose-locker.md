@@ -98,9 +98,12 @@ the renderer URL after a re-export.
 These match the shipped `soulContainerModels.ts` behavior and are deliberately
 left for a later pass:
 
-- **No cache eviction.** Each still is ~16 MB and every `(hero, skin)` combo
-  caches its own. The `hero-poses/` directory grows unbounded. A size/LRU cap
-  (and/or a clear hook on skin changes) is a follow-up.
+- **No *automatic* cache eviction.** Each still is ~16 MB and every
+  `(hero, skin)` combo caches its own, so `hero-poses/` grows with use. Users can
+  reclaim it manually via Settings -> Local preview cache -> Clear (wipes
+  `hero-poses`, `soul-models`, `portrait-cache`, and `locker-card-thumbs`; see
+  `electron/main/services/previewCache.ts`). An automatic size/LRU cap (and/or a
+  clear hook on skin changes) is still a follow-up.
 - **Stale cache on in-place skin replacement.** `getHeroPoseInfo` only checks
   that the stored GLB exists; it does not compare against the source skin VPK's
   mtime. Replacing a skin while keeping the same VPK filename leaves a stale

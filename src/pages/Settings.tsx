@@ -45,6 +45,14 @@ function ReleaseVersionLink({ version, className = '' }: { version?: string | nu
   );
 }
 
+/** Human-readable byte size (MB below a GB, GB above). */
+function formatBytes(bytes: number): string {
+  if (bytes <= 0) return '0 MB';
+  const mb = bytes / (1024 * 1024);
+  if (mb < 1024) return `${mb.toFixed(mb < 10 ? 1 : 0)} MB`;
+  return `${(mb / 1024).toFixed(1)} GB`;
+}
+
 export default function Settings() {
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
   const [localPath, setLocalPath] = useState<string | null>(null);
@@ -64,6 +72,10 @@ export default function Settings() {
   const [isWipingCache, setIsWipingCache] = useState(false);
   const [wipeResult, setWipeResult] = useState<string | null>(null);
   const [wipeConfirmOpen, setWipeConfirmOpen] = useState(false);
+  const [previewCacheBytes, setPreviewCacheBytes] = useState<number | null>(null);
+  const [isClearingPreview, setIsClearingPreview] = useState(false);
+  const [previewResult, setPreviewResult] = useState<string | null>(null);
+  const [previewConfirmOpen, setPreviewConfirmOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetResult, setResetResult] = useState<string | null>(null);
 
@@ -451,6 +463,13 @@ export default function Settings() {
     return unsub;
   }, []);
 
+  useEffect(() => {
+    window.electronAPI
+      .getPreviewCacheSize()
+      .then((r) => setPreviewCacheBytes(r.bytes))
+      .catch(() => setPreviewCacheBytes(null));
+  }, []);
+
   const handleSyncDatabase = async () => {
     setIsSyncing(true);
     setSyncProgress(null);
@@ -477,6 +496,21 @@ export default function Settings() {
       setWipeResult(String(err));
     } finally {
       setIsWipingCache(false);
+    }
+  };
+
+  const handleClearPreviewCache = async () => {
+    setPreviewConfirmOpen(false);
+    setIsClearingPreview(true);
+    setPreviewResult(null);
+    try {
+      const { bytesFreed } = await window.electronAPI.clearPreviewCache();
+      setPreviewCacheBytes(0);
+      setPreviewResult(`Cleared ${formatBytes(bytesFreed)}.`);
+    } catch (err) {
+      setPreviewResult(String(err));
+    } finally {
+      setIsClearingPreview(false);
     }
   };
 
@@ -1225,6 +1259,40 @@ export default function Settings() {
             </div>
           </div>
         </Card>
+
+        {/* Local preview cache - Full Width */}
+        <Card title="Local preview cache" icon={HardDrive} className="lg:col-span-2">
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
+            <div className="flex-1">
+              <div className="flex items-center gap-4 mb-2">
+                <div className="text-2xl font-bold font-valvepulp text-text-primary">
+                  {previewCacheBytes != null ? formatBytes(previewCacheBytes) : '---'}
+                </div>
+                <Badge variant="info">On Disk</Badge>
+              </div>
+              <p className="text-xs text-text-secondary">
+                3D model stills, hero portraits, and locker card thumbnails. These
+                rebuild automatically from your installed mods when next viewed.
+                Your installed mods are not affected.
+              </p>
+              {previewResult && (
+                <p className="text-xs text-text-secondary mt-2 animate-fade-in">{previewResult}</p>
+              )}
+            </div>
+
+            <div className="flex gap-3 shrink-0">
+              <Button
+                onClick={() => setPreviewConfirmOpen(true)}
+                disabled={isClearingPreview || !previewCacheBytes}
+                isLoading={isClearingPreview}
+                variant="danger"
+                icon={Trash2}
+              >
+                Clear
+              </Button>
+            </div>
+          </div>
+        </Card>
       </div>
 
       {/* Changelog Modal */}
@@ -1304,6 +1372,16 @@ export default function Settings() {
         title="Wipe mod cache?"
         message="This removes all cached mod metadata and sync state. The next Browse session will re-sync from GameBanana (a few minutes on first run). Your installed mods are not affected."
         confirmLabel="Wipe Cache"
+        variant="danger"
+      />
+
+      <ConfirmModal
+        isOpen={previewConfirmOpen}
+        onCancel={() => setPreviewConfirmOpen(false)}
+        onConfirm={handleClearPreviewCache}
+        title="Clear preview cache?"
+        message="This deletes the cached 3D model stills, hero portraits, and locker card thumbnails to reclaim disk. They regenerate on demand the next time you view them (a brief pause on first view). Your installed mods are not affected."
+        confirmLabel="Clear"
         variant="danger"
       />
 

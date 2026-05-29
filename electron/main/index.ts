@@ -73,6 +73,7 @@ import './ipc/diagnostics';
 import './ipc/portraits';
 import './ipc/abilitySounds';
 import './ipc/locker';
+import './ipc/previewCache';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';

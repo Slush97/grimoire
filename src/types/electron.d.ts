@@ -323,6 +323,8 @@ export interface ElectronAPI {
     clearSoulModel: (key: string) => Promise<void>;
     getHeroPoseInfo: (heroName: string, skinMetaKey?: string) => Promise<HeroPoseInfo>;
     exportHeroPose: (heroName: string, skinMetaKey?: string) => Promise<HeroPoseInfo>;
+    getPreviewCacheSize: () => Promise<{ bytes: number }>;
+    clearPreviewCache: () => Promise<{ bytesFreed: number }>;
     applyHeroSound: (
         heroName: string,
         slot: AbilitySlot,
