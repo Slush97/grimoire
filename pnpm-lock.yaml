@@ -23,9 +23,6 @@ importers:
       '@dnd-kit/utilities':
         specifier: ^3.2.2
         version: 3.2.2(react@19.2.3)
-      '@grimoire/social-types':
-        specifier: workspace:*
-        version: link:../../../../grimoire-social/packages/social-types
       '@radix-ui/react-context-menu':
         specifier: ^2.2.16
         version: 2.2.16(@types/react-dom@19.2.3(@types/react@19.2.7))(@types/react@19.2.7)(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
@@ -90,6 +87,9 @@ importers:
       '@eslint/js':
         specifier: ^9.39.1
         version: 9.39.2
+      '@grimoire/social-types':
+        specifier: workspace:*
+        version: link:../grimoire-social/packages/social-types
       '@tailwindcss/vite':
         specifier: ^4.1.18
         version: 4.1.18(vite@6.4.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2))
@@ -154,7 +154,7 @@ importers:
         specifier: ^6.3.0
         version: 6.4.1(@types/node@24.10.4)(jiti@2.6.1)(lightningcss@1.30.2)
 
-  ../../../../grimoire-social/packages/social-types:
+  ../grimoire-social/packages/social-types:
     dependencies:
       zod:
         specifier: ^3.23.0
