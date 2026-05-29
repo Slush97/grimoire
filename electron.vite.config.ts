@@ -13,7 +13,7 @@ import { resolve } from 'path';
 const SOCIAL_TYPES_ROOT = resolve(__dirname, '../grimoire-social/packages/social-types/src');
 const socialTypesAlias = {
     '@grimoire/social-types/heroes': resolve(SOCIAL_TYPES_ROOT, 'heroes.ts'),
-    '@grimoire/social-types': resolve(SOCIAL_TYPES_ROOT, 'schemas.ts'),
+    '@grimoire/social-types': resolve(SOCIAL_TYPES_ROOT, 'index.ts'),
 };
 
 // Bake the social Worker URL at build time. Dev runs (electron-vite dev) fall
