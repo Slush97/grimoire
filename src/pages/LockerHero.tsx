@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Layers, Star, Music, Shirt, Images } from 'lucide-react';
+import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { ArrowLeft, Layers, Star, Music, Shirt, Images, Box, Loader2 } from 'lucide-react';
 import { Skeleton } from '../components/common/Skeleton';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -13,6 +13,8 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
+// three.js viewer is heavy; only pull the chunk when the user flips to 3D.
+const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
 import {
@@ -368,7 +370,14 @@ export function LockerHeroView({
 }: LockerHeroViewProps) {
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
+  const [view3d, setView3d] = useState(false);
   const [section, setSection] = useState<'skins' | 'sounds' | 'cards'>('skins');
+  // The active skin to pose: the hero's first enabled skin mod, if any. Its
+  // metaKey is the source VPK; undefined poses the vanilla base model.
+  const activeSkinMetaKey = useMemo(
+    () => skinList.find((mod) => mod.enabled)?.metaKey,
+    [skinList]
+  );
   const hasSounds = soundList.length > 0;
   // If the active section runs out of mods (e.g. user deleted their last
   // sound for this hero) drop back to skins so the panel isn't stuck empty.
@@ -410,7 +419,21 @@ export function LockerHeroView({
           frosted overlay reads as a dark frosted panel — same look as if the
           portrait extended that far. */}
       <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
-        {renderSrc ? (
+        {view3d ? (
+          <Suspense
+            fallback={
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-white/80" />
+              </div>
+            }
+          >
+            <HeroPoseViewer
+              key={`${hero.name}:${activeSkinMetaKey ?? 'vanilla'}`}
+              heroName={hero.name}
+              skinMetaKey={activeSkinMetaKey}
+            />
+          </Suspense>
+        ) : renderSrc ? (
           <img
             src={renderSrc}
             alt={hero.name}
@@ -422,9 +445,28 @@ export function LockerHeroView({
             {hero.name}
           </div>
         )}
-        {/* Bottom gradient for depth */}
-        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        {/* Bottom gradient for depth (2D only; the 3D viewer owns its frame) */}
+        {!view3d && (
+          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
+        )}
       </div>
+
+      {/* 2D portrait <-> live 3D pose toggle. lg+ only, matching the preview
+          area; sits above the frosted panel so it's always clickable. */}
+      <button
+        type="button"
+        onClick={() => setView3d((v) => !v)}
+        aria-pressed={view3d}
+        title={view3d ? 'Show 2D portrait' : 'Show live 3D pose'}
+        className={`hidden lg:flex absolute top-4 right-4 z-20 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+          view3d
+            ? 'border-accent/60 bg-accent/20 text-text-primary'
+            : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
+        }`}
+      >
+        <Box className="h-3.5 w-3.5" />
+        {view3d ? '2D' : '3D'}
+      </button>
 
       {/* Progressive frosted-glass background — every layer (including the
           base heavy blur) is masked with a long, smooth taper so nothing has

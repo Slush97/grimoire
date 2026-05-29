@@ -1,5 +1,5 @@
 import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
-import type { HeroPortrait, SoulModelInfo } from '../types/portrait';
+import type { HeroPortrait, SoulModelInfo, HeroPoseInfo } from '../types/portrait';
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
@@ -140,6 +140,23 @@ export async function exportSoulModel(metaKey: string): Promise<SoulModelInfo> {
 /** Delete a soul-container mod's exported model. */
 export async function clearSoulModel(key: string): Promise<void> {
   return window.electronAPI.clearSoulModel(key);
+}
+
+/** Whether a hero's posed 3D still exists for the given active skin (+ mtime, key). */
+export async function getHeroPoseInfo(
+  heroName: string,
+  skinMetaKey?: string
+): Promise<HeroPoseInfo> {
+  return window.electronAPI.getHeroPoseInfo(heroName, skinMetaKey);
+}
+
+/** Generate a hero's posed 3D still via the bundled vpkmerge `--pose` exporter.
+ *  Pass the active skin's metaKey to pose that skin; omit for a vanilla pose. */
+export async function exportHeroPose(
+  heroName: string,
+  skinMetaKey?: string
+): Promise<HeroPoseInfo> {
+  return window.electronAPI.exportHeroPose(heroName, skinMetaKey);
 }
 
 export async function applyHeroSound(

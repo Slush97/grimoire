@@ -8,6 +8,11 @@ import {
     clearSoulModel,
     type SoulModelInfo,
 } from '../services/soulContainerModels';
+import {
+    getHeroPoseInfo,
+    exportHeroPose,
+    type HeroPoseInfo,
+} from '../services/heroPoseModels';
 import type { HeroPortrait } from '../../../src/types/portrait';
 import type { ApplyHeroCardResult } from '../../../src/types/mod';
 
@@ -76,5 +81,21 @@ ipcMain.handle(
     'clear-soul-model',
     async (_, key: string): Promise<void> => {
         return clearSoulModel(key);
+    }
+);
+
+ipcMain.handle(
+    'get-hero-pose-info',
+    async (_, heroName: string, skinMetaKey?: string): Promise<HeroPoseInfo> => {
+        return getHeroPoseInfo(heroName, skinMetaKey);
+    }
+);
+
+ipcMain.handle(
+    'export-hero-pose',
+    async (_, heroName: string, skinMetaKey?: string): Promise<HeroPoseInfo> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return exportHeroPose(deadlockPath, heroName, skinMetaKey);
     }
 );

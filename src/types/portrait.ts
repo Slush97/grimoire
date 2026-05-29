@@ -32,3 +32,16 @@ export interface SoulModelInfo {
   hasModel: boolean;
   mtimeMs: number | null;
 }
+
+/**
+ * Whether a hero's posed 3D still exists in the user's library (for the given
+ * active skin), its mtime (to cache-bust the `grimoire-hero:` URL after a
+ * re-export), and the storage `key` the renderer builds that URL from. The key
+ * is returned rather than recomputed because export can fall back from a skin
+ * to a vanilla pose, which changes it.
+ */
+export interface HeroPoseInfo {
+  hasModel: boolean;
+  mtimeMs: number | null;
+  key: string;
+}

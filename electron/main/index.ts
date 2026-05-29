@@ -3,13 +3,19 @@ import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { SOUL_MODEL_SCHEME, registerSoulModelProtocol } from './services/soulContainerModels';
+import { HERO_POSE_SCHEME, registerHeroPoseProtocol } from './services/heroPoseModels';
 
-// The `grimoire-soul:` scheme serves per-mod soul-container GLBs out of the
-// user's library to the renderer's 3D viewer. Must be declared privileged
-// before app-ready so fetch/streaming work under the renderer's file:// origin.
+// The `grimoire-soul:` and `grimoire-hero:` schemes serve GLBs (soul-container
+// models and posed hero stills) out of the user's library to the renderer's 3D
+// viewers. Must be declared privileged before app-ready so fetch/streaming work
+// under the renderer's file:// origin.
 protocol.registerSchemesAsPrivileged([
     {
         scheme: SOUL_MODEL_SCHEME,
+        privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+    {
+        scheme: HERO_POSE_SCHEME,
         privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
     },
 ]);
@@ -273,6 +279,9 @@ if (!gotTheLock) {
 
         // Serve per-mod soul-container GLBs from the user's library.
         registerSoulModelProtocol();
+
+        // Serve per-hero posed stills from the user's library.
+        registerHeroPoseProtocol();
 
         // Default open or close DevTools by F12 in development
         app.on('browser-window-created', (_, window) => {

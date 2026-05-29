@@ -808,6 +808,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('export-soul-model', metaKey),
     clearSoulModel: (key: string) =>
         ipcRenderer.invoke('clear-soul-model', key),
+    getHeroPoseInfo: (heroName: string, skinMetaKey?: string) =>
+        ipcRenderer.invoke('get-hero-pose-info', heroName, skinMetaKey),
+    exportHeroPose: (heroName: string, skinMetaKey?: string) =>
+        ipcRenderer.invoke('export-hero-pose', heroName, skinMetaKey),
     applyHeroSound: (heroName: string, slot: AbilitySlot, sourceFileName: string, params?: AbilitySoundParams) =>
         ipcRenderer.invoke('apply-hero-sound', heroName, slot, sourceFileName, params),
     revertHeroSound: (heroName: string, slot: AbilitySlot) =>
