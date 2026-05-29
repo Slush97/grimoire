@@ -27,24 +27,27 @@ export interface Mod {
 export interface UnknownModFilterGuess {
   modId: string;
   fileName: string;
-  fileCount: number;
-  section: 'Mod' | 'Sound';
-  search: string | null;
-  heroName?: string;
-  heroFileName?: string;
-  categoryName?: string;
-  confidence: 'high' | 'medium' | 'low';
-  contentHints: string[];
-  reasons: string[];
-  detectedHeroes: Array<{
-    name: string;
-    fileName: string;
-    score: number;
-    strongestSignal: 'strong' | 'medium' | 'weak';
-    clues: string[];
-  }>;
-  samplePaths: string[];
   crcMatch: UnknownModCrcMatchResult;
+}
+
+export interface UnknownModDetectionProgress {
+  modId: string;
+  requestId?: string;
+  phase: 'fingerprinting' | 'cache-hit' | 'searching' | 'fetching-files' | 'indexing' | 'found' | 'caching-remaining' | 'complete' | 'cancelled' | 'error';
+  message: string;
+  checkedFiles?: number;
+  totalFiles?: number;
+  indexedEntries?: number;
+  bytesFetched?: number;
+  currentFileName?: string;
+  bucket?: {
+    section: string;
+    categoryId?: number;
+    categoryName?: string;
+    search?: string;
+    label?: string;
+  };
+  result?: UnknownModFilterGuess;
 }
 
 export interface UnknownModCrcMatchResult {
@@ -55,16 +58,9 @@ export interface UnknownModCrcMatchResult {
   nsfw?: boolean;
   fileId?: number;
   fileName?: string;
-  section?: 'Mod' | 'Sound';
+  section?: string;
   categoryName?: string;
-  confidence?: 'exact';
   reason?: string;
-  searchedBuckets: string[];
-  checkedMods: number;
-  checkedFiles: number;
-  bytesFetched: number;
-  skipped7z: number;
-  errors: string[];
 }
 
 export interface ApplyUnknownModMatchArgs {
@@ -72,7 +68,7 @@ export interface ApplyUnknownModMatchArgs {
   modName: string;
   gameBananaFileId?: number;
   sourceFileName?: string;
-  sourceSection?: 'Mod' | 'Sound';
+  sourceSection?: string;
   categoryName?: string;
   thumbnailUrl?: string;
   nsfw?: boolean;

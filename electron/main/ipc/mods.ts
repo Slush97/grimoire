@@ -16,12 +16,22 @@ import {
 import { getAddonsPath } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
-import { detectUnknownModFilters, type UnknownModFilterGuess } from '../services/unknownModDetection';
+import {
+    detectUnknownModCacheMatches,
+    detectUnknownModFilters,
+    type UnknownModCacheMatchInput,
+    type UnknownModFilterGuess,
+} from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
 import { getMainWindow } from '../index';
 import type { ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
+
+interface UnknownCacheBulkRequest {
+    modId: string;
+    requestId?: string;
+}
 
 /**
  * Get the active deadlock path from settings
@@ -125,7 +135,7 @@ ipcMain.handle('delete-mod', async (_, modId: string): Promise<void> => {
 });
 
 // detect-unknown-mod-filters
-ipcMain.handle('detect-unknown-mod-filters', async (_, modId: string): Promise<UnknownModFilterGuess> => {
+ipcMain.handle('detect-unknown-mod-filters', async (event, modId: string, requestId?: string): Promise<UnknownModFilterGuess> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
@@ -139,13 +149,55 @@ ipcMain.handle('detect-unknown-mod-filters', async (_, modId: string): Promise<U
     const controller = new AbortController();
     unknownDetectionControllers.set(modId, controller);
     try {
-        return await detectUnknownModFilters(mod.id, mod.fileName, mod.path, { signal: controller.signal });
+        return await detectUnknownModFilters(mod.id, mod.fileName, mod.path, {
+            signal: controller.signal,
+            requestId,
+            onProgress: (progress) => event.sender.send('unknown-mod-detection-progress', progress),
+        });
     } finally {
         if (unknownDetectionControllers.get(modId) === controller) {
             unknownDetectionControllers.delete(modId);
         }
     }
 });
+
+// detect-unknown-mod-cache-bulk
+ipcMain.handle(
+    'detect-unknown-mod-cache-bulk',
+    async (event, requests: UnknownCacheBulkRequest[]): Promise<UnknownModFilterGuess[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const mods = await scanMods(deadlockPath);
+        const byId = new Map(mods.map((mod) => [mod.id, mod]));
+        const inputs: UnknownModCacheMatchInput[] = [];
+        const missing: UnknownModFilterGuess[] = [];
+
+        for (const request of requests) {
+            const mod = byId.get(request.modId);
+            if (!mod) {
+                missing.push({
+                    modId: request.modId,
+                    fileName: '',
+                    crcMatch: { status: 'not-found', reason: `Mod not found: ${request.modId}` },
+                });
+                continue;
+            }
+            inputs.push({
+                modId: mod.id,
+                fileName: mod.fileName,
+                vpkPath: mod.path,
+                requestId: request.requestId,
+            });
+        }
+
+        const results = await detectUnknownModCacheMatches(inputs, {
+            onProgress: (progress) => event.sender.send('unknown-mod-detection-progress', progress),
+        });
+        return [...results, ...missing];
+    }
+);
 
 // cancel-unknown-mod-detection
 ipcMain.handle('cancel-unknown-mod-detection', async (_, modId: string): Promise<void> => {
@@ -170,6 +222,9 @@ ipcMain.handle(
         if (!Number.isFinite(match.gameBananaFileId) || !match.sourceFileName?.trim()) {
             throw new Error('The matched GameBanana file is missing download information');
         }
+
+        unknownDetectionControllers.get(modId)?.abort();
+        unknownDetectionControllers.delete(modId);
 
         const mods = await scanMods(deadlockPath);
         const target = mods.find((m) => m.id === modId);

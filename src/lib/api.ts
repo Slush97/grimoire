@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs } from '../types/mod';
+import type { Mod, AppSettings, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs } from '../types/mod';
 import type {
   GameBananaModsResponse,
   GameBananaModDetails,
@@ -59,12 +59,24 @@ export async function deleteMod(modId: string): Promise<void> {
   return window.electronAPI.deleteMod(modId);
 }
 
-export async function detectUnknownModFilters(modId: string): Promise<UnknownModFilterGuess> {
-  return window.electronAPI.detectUnknownModFilters(modId);
+export async function detectUnknownModFilters(modId: string, requestId?: string): Promise<UnknownModFilterGuess> {
+  return window.electronAPI.detectUnknownModFilters(modId, requestId);
+}
+
+export async function detectUnknownModCacheBulk(
+  requests: Array<{ modId: string; requestId?: string }>
+): Promise<UnknownModFilterGuess[]> {
+  return window.electronAPI.detectUnknownModCacheBulk(requests);
 }
 
 export async function cancelUnknownModDetection(modId: string): Promise<void> {
   return window.electronAPI.cancelUnknownModDetection(modId);
+}
+
+export function onUnknownModDetectionProgress(
+  callback: (progress: UnknownModDetectionProgress) => void
+): () => void {
+  return window.electronAPI.onUnknownModDetectionProgress(callback);
 }
 
 export async function applyUnknownModMatch(modId: string, args: ApplyUnknownModMatchArgs): Promise<Mod> {

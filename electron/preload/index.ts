@@ -13,6 +13,7 @@ import type {
     ApplyUnknownModMatchArgs,
     Mod,
     ModConflict,
+    UnknownModDetectionProgress,
     UnknownModFilterGuess,
 } from '../../src/types/mod';
 import type {
@@ -42,8 +43,10 @@ export interface ElectronAPI {
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
-    detectUnknownModFilters: (modId: string) => Promise<UnknownModFilterGuess>;
+    detectUnknownModFilters: (modId: string, requestId?: string) => Promise<UnknownModFilterGuess>;
+    detectUnknownModCacheBulk: (requests: Array<{ modId: string; requestId?: string }>) => Promise<UnknownModFilterGuess[]>;
     cancelUnknownModDetection: (modId: string) => Promise<void>;
+    onUnknownModDetectionProgress: (callback: (progress: UnknownModDetectionProgress) => void) => () => void;
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
@@ -746,10 +749,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),
     disableMod: (modId: string) => ipcRenderer.invoke('disable-mod', modId),
     deleteMod: (modId: string) => ipcRenderer.invoke('delete-mod', modId),
-    detectUnknownModFilters: (modId: string) =>
-        ipcRenderer.invoke('detect-unknown-mod-filters', modId),
+    detectUnknownModFilters: (modId: string, requestId?: string) =>
+        ipcRenderer.invoke('detect-unknown-mod-filters', modId, requestId),
+    detectUnknownModCacheBulk: (requests: Array<{ modId: string; requestId?: string }>) =>
+        ipcRenderer.invoke('detect-unknown-mod-cache-bulk', requests),
     cancelUnknownModDetection: (modId: string) =>
         ipcRenderer.invoke('cancel-unknown-mod-detection', modId),
+    onUnknownModDetectionProgress: (callback: (progress: UnknownModDetectionProgress) => void) => {
+        const listener = (_event: Electron.IpcRendererEvent, progress: UnknownModDetectionProgress) => callback(progress);
+        ipcRenderer.on('unknown-mod-detection-progress', listener);
+        return () => ipcRenderer.removeListener('unknown-mod-detection-progress', listener);
+    },
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) =>
         ipcRenderer.invoke('apply-unknown-mod-match', modId, args),
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) =>

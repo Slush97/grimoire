@@ -1,9 +1,10 @@
 import { gamebananaRateLimiter } from './rateLimiter';
 
 const GAMEBANANA_API_BASE = 'https://gamebanana.com/apiv11';
-const GAMEBANANA_API_V12_BASE = 'https://gamebanana.com/apiv12';
 const GAMEBANANA_CORE_ITEM_DATA = 'https://api.gamebanana.com/Core/Item/Data';
 const DEADLOCK_GAME_ID = 20948;
+const CORE_ITEM_DATA_MAX_URL_LENGTH = 7_500;
+const DEBUG_GAMEBANANA = process.env.GRIMOIRE_DEBUG_GAMEBANANA === '1';
 
 // Types for GameBanana API responses
 export interface GameBananaSection {
@@ -86,10 +87,20 @@ export interface GameBananaFile {
     isArchived: boolean;
 }
 
-export interface GameBananaFileWithRawPaths extends GameBananaFile {
-    rawVpkPaths: string[];
-    rawVpkPathsError?: string;
+export interface GameBananaFileMetadata extends GameBananaFile {
     md5?: string;
+}
+
+export interface GameBananaFileMetadataRequest {
+    id: number;
+    section: string;
+}
+
+export interface GameBananaFileMetadataResult {
+    modId: number;
+    section: string;
+    files: GameBananaFileMetadata[];
+    error?: string;
 }
 
 export interface GameBananaComment {
@@ -313,6 +324,12 @@ function throwIfAborted(signal?: AbortSignal): void {
     }
 }
 
+function debugGameBanana(...args: unknown[]): void {
+    if (DEBUG_GAMEBANANA) {
+        console.log(...args);
+    }
+}
+
 function createTimeoutSignal(timeoutMs: number, externalSignal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
@@ -329,84 +346,95 @@ function createTimeoutSignal(timeoutMs: number, externalSignal?: AbortSignal): {
 }
 
 async function fetchJson<T>(url: string, timeoutMs = 30000, options: GameBananaRequestOptions = {}): Promise<T> {
-    throwIfAborted(options.signal);
-    // Apply rate limiting before making request
-    await gamebananaRateLimiter.acquire();
-    throwIfAborted(options.signal);
+    for (let attempt = 0; attempt < 2; attempt++) {
+        throwIfAborted(options.signal);
+        await gamebananaRateLimiter.acquire();
+        throwIfAborted(options.signal);
 
-    // Create abort controller for timeout
-    const request = createTimeoutSignal(timeoutMs, options.signal);
-
-    try {
-        const response = await fetch(url, {
-            headers: {
-                Accept: 'application/json',
-                'User-Agent': 'DeadlockModManager/1.0',
-            },
-            signal: request.signal,
-        });
-
-        if (!response.ok) {
-            throw new Error(`GameBanana API error: ${response.status} ${response.statusText}`);
-        }
-
-        // Check for empty response body
-        const text = await response.text();
-        if (!text || text.trim() === '') {
-            throw new Error('GameBanana API returned empty response');
-        }
-
+        const request = createTimeoutSignal(timeoutMs, options.signal);
         try {
-            return JSON.parse(text) as T;
-        } catch (err) {
-            console.error('[fetchJson] Failed to parse JSON:', text.slice(0, 200));
-            throw new Error(`GameBanana API returned invalid JSON: ${err}`);
-        }
-    } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-            if (options.signal?.aborted) {
-                throw new Error('GameBanana request cancelled');
+            const response = await fetch(url, {
+                headers: {
+                    Accept: 'application/json',
+                    'User-Agent': 'DeadlockModManager/1.0',
+                },
+                signal: request.signal,
+            });
+
+            if (!response.ok) {
+                const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'));
+                if (response.status === 429 && retryAfterMs !== null && retryAfterMs <= 60_000 && attempt === 0) {
+                    request.cleanup();
+                    await delayWithAbort(retryAfterMs, options.signal);
+                    continue;
+                }
+                throw new Error(`GameBanana API error: ${response.status} ${response.statusText}`);
             }
-            throw new Error(`GameBanana API request timed out after ${timeoutMs / 1000} seconds`);
+
+            const text = await response.text();
+            if (!text || text.trim() === '') {
+                throw new Error('GameBanana API returned empty response');
+            }
+
+            try {
+                return JSON.parse(text) as T;
+            } catch (err) {
+                console.error('[fetchJson] Failed to parse JSON:', text.slice(0, 200));
+                throw new Error(`GameBanana API returned invalid JSON: ${err}`);
+            }
+        } catch (err) {
+            if (err instanceof Error && err.name === 'AbortError') {
+                if (options.signal?.aborted) {
+                    throw new Error('GameBanana request cancelled');
+                }
+                throw new Error(`GameBanana API request timed out after ${timeoutMs / 1000} seconds`);
+            }
+            throw err;
+        } finally {
+            request.cleanup();
         }
-        throw err;
-    } finally {
-        request.cleanup();
     }
+
+    throw new Error('GameBanana API request failed');
 }
 
-async function fetchText(url: string, timeoutMs = 30000, options: GameBananaRequestOptions = {}): Promise<string> {
-    throwIfAborted(options.signal);
-    await gamebananaRateLimiter.acquire();
-    throwIfAborted(options.signal);
+function parseRetryAfterMs(value: string | null): number | null {
+    if (!value) return null;
 
-    const request = createTimeoutSignal(timeoutMs, options.signal);
-
-    try {
-        const response = await fetch(url, {
-            headers: {
-                Accept: 'text/plain',
-                'User-Agent': 'DeadlockModManager/1.0',
-            },
-            signal: request.signal,
-        });
-
-        if (!response.ok) {
-            throw new Error(`GameBanana API error: ${response.status} ${response.statusText}`);
-        }
-
-        return response.text();
-    } catch (err) {
-        if (err instanceof Error && err.name === 'AbortError') {
-            if (options.signal?.aborted) {
-                throw new Error('GameBanana request cancelled');
-            }
-            throw new Error(`GameBanana API request timed out after ${timeoutMs / 1000} seconds`);
-        }
-        throw err;
-    } finally {
-        request.cleanup();
+    const seconds = Number(value);
+    if (Number.isFinite(seconds)) {
+        return Math.max(1_000, seconds * 1000);
     }
+
+    const date = Date.parse(value);
+    if (Number.isFinite(date)) {
+        return Math.max(1_000, date - Date.now());
+    }
+
+    return null;
+}
+
+function delayWithAbort(ms: number, signal?: AbortSignal): Promise<void> {
+    return new Promise((resolve, reject) => {
+        if (signal?.aborted) {
+            reject(new Error('GameBanana request cancelled'));
+            return;
+        }
+
+        const cleanup = () => {
+            clearTimeout(timeout);
+            signal?.removeEventListener('abort', abort);
+        };
+        const abort = () => {
+            cleanup();
+            reject(new Error('GameBanana request cancelled'));
+        };
+        const timeout = setTimeout(() => {
+            cleanup();
+            resolve();
+        }, ms);
+        signal?.addEventListener('abort', abort, { once: true });
+    });
 }
 
 /**
@@ -520,9 +548,9 @@ export async function fetchModComments(
 export async function fetchSections(): Promise<GameBananaSection[]> {
     // Rust: /Game/{id}/CategoryTree
     const url = `${GAMEBANANA_API_BASE}/Game/${DEADLOCK_GAME_ID}/CategoryTree`;
-    console.log('[fetchSections] URL:', url);
+    debugGameBanana('[fetchSections] URL:', url);
     const raw = await fetchJson<SectionRaw[] | Record<string, SectionRaw>>(url);
-    console.log('[fetchSections] Response type:', typeof raw, Array.isArray(raw));
+    debugGameBanana('[fetchSections] Response type:', typeof raw, Array.isArray(raw));
 
     // Handle both array and object response formats
     const sections = Array.isArray(raw) ? raw : Object.values(raw);
@@ -538,7 +566,7 @@ export async function fetchCategoryTree(
 ): Promise<GameBananaCategoryNode[]> {
     // Rust: /Util/{model}/NestedStructure?_idGameRow={id}
     const url = `${GAMEBANANA_API_BASE}/Util/${categoryModel}/NestedStructure?_idGameRow=${DEADLOCK_GAME_ID}`;
-    console.log('[fetchCategoryTree] URL:', url);
+    debugGameBanana('[fetchCategoryTree] URL:', url);
     const raw = await fetchJson<CategoryNodeRaw[] | Record<string, CategoryNodeRaw>>(url, 30000, options);
 
     // Handle both array and object response formats
@@ -612,9 +640,9 @@ export async function fetchSubmissions(
         url = `${GAMEBANANA_API_BASE}/${model}/Index?${params.toString()}`;
     }
 
-    console.log('[fetchSubmissions] URL:', url);
+    debugGameBanana('[fetchSubmissions] URL:', url);
     const raw = await fetchJson<ApiResponseRaw>(url, 30000, options);
-    console.log('[fetchSubmissions] Response:', JSON.stringify(raw).slice(0, 500));
+    debugGameBanana('[fetchSubmissions] Response:', JSON.stringify(raw).slice(0, 500));
 
     // Handle case where response is an array instead of object
     const records = Array.isArray(raw) ? raw : (raw._aRecords || []);
@@ -637,7 +665,7 @@ export async function fetchModDetails(
 ): Promise<GameBananaModDetails> {
     // Fetch mod details with NSFW flag
     const url = `${GAMEBANANA_API_BASE}/${section}/${modId}?_csvProperties=_idRow,_sName,_sText,_bIsNsfw,_aCategory,_aFiles,_aPreviewMedia`;
-    console.log('[fetchModDetails] URL:', url);
+    debugGameBanana('[fetchModDetails] URL:', url);
     const raw = await fetchJson<ModDetailsRaw>(url);
 
     return {
@@ -679,45 +707,122 @@ export async function fetchModDetails(
     };
 }
 
-function isVpkPath(path: string): boolean {
-    const normalized = path.replace(/\\/g, '/').trim().toLowerCase();
-    return normalized.endsWith('.vpk') && !normalized.endsWith('/');
-}
-
-function parseRawVpkPaths(rawFileList: string): string[] {
-    return [...new Set(
-        rawFileList
-            .split(/\r?\n/)
-            .map((line) => line.trim().replace(/\\/g, '/'))
-            .filter(isVpkPath)
-    )].sort((a, b) => a.localeCompare(b));
-}
-
-export async function fetchRawVpkPaths(fileId: number, options: GameBananaRequestOptions = {}): Promise<string[]> {
-    const text = await fetchText(`${GAMEBANANA_API_V12_BASE}/File/${fileId}/RawFileList`, 30000, options);
-    return parseRawVpkPaths(text);
-}
-
-export async function fetchModFilesWithRawPaths(
-    modId: number,
-    section = 'Mod',
+export async function fetchModsFilesMetadata(
+    mods: GameBananaFileMetadataRequest[],
     includeArchived = true,
     options: GameBananaRequestOptions = {}
-): Promise<GameBananaFileWithRawPaths[]> {
+): Promise<GameBananaFileMetadataResult[]> {
+    if (mods.length === 0) return [];
+
+    const chunks = chunkCoreItemDataRequests(mods);
+    if (chunks.length > 1) {
+        const results: GameBananaFileMetadataResult[] = [];
+        for (const chunk of chunks) {
+            results.push(...await fetchModsFilesMetadata(chunk, includeArchived, options));
+        }
+        return results;
+    }
+
+    const params = buildFilesMetadataParams(mods);
+    const requestUrl = `${GAMEBANANA_CORE_ITEM_DATA}?${params.toString()}`;
+    console.log(
+        `[GameBananaFiles] Metadata request (${mods.length} mod(s), ${requestUrl.length} chars, includeArchived=${includeArchived})`
+    );
+
+    const raw = await fetchJson<unknown>(requestUrl, 60000, options);
+    const items = normalizeCoreItemDataResponse(raw);
+    const results = mods.map((mod, index) => mapCoreFileMetadataResult(mod, items[index], includeArchived));
+    const fileCount = results.reduce((total, result) => total + result.files.length, 0);
+    const errorCount = results.filter((result) => result.error).length;
+    console.log(
+        `[GameBananaFiles] Metadata response (${results.length} mod(s), ${fileCount} file(s), ${errorCount} error(s))`
+    );
+
+    return results;
+}
+
+function normalizeCoreItemDataResponse(raw: unknown): unknown[] {
+    if (Array.isArray(raw)) return raw;
+    if (raw && typeof raw === 'object') {
+        const keyed = raw as Record<string, unknown>;
+        const numericKeys = Object.keys(keyed)
+            .filter((key) => /^\d+$/.test(key))
+            .sort((a, b) => Number(a) - Number(b));
+        if (numericKeys.length > 0) {
+            const items: unknown[] = [];
+            for (const key of numericKeys) {
+                items[Number(key)] = keyed[key];
+            }
+            return items;
+        }
+    }
+    return [raw];
+}
+
+function buildFilesMetadataParams(mods: GameBananaFileMetadataRequest[]): URLSearchParams {
     const params = new URLSearchParams({
-        itemtype: section,
-        itemid: String(modId),
-        fields: 'name,Files().aFiles()',
         return_keys: '1',
         format: 'json_min',
     });
-    const raw = await fetchJson<Record<string, unknown>>(`${GAMEBANANA_CORE_ITEM_DATA}?${params.toString()}`, 30000, options);
-    const filesRaw = raw['Files().aFiles()'];
+    mods.forEach((mod, index) => {
+        params.set(`itemtype[${index}]`, mod.section);
+        params.set(`itemid[${index}]`, String(mod.id));
+        params.set(`fields[${index}]`, 'name,Files().aFiles()');
+    });
+    return params;
+}
+
+function chunkCoreItemDataRequests(mods: GameBananaFileMetadataRequest[]): GameBananaFileMetadataRequest[][] {
+    const chunks: GameBananaFileMetadataRequest[][] = [];
+    let current: GameBananaFileMetadataRequest[] = [];
+
+    for (const mod of mods) {
+        const next = [...current, mod];
+        const urlLength = `${GAMEBANANA_CORE_ITEM_DATA}?${buildFilesMetadataParams(next).toString()}`.length;
+        if (current.length > 0 && urlLength > CORE_ITEM_DATA_MAX_URL_LENGTH) {
+            chunks.push(current);
+            current = [mod];
+        } else {
+            current = next;
+        }
+    }
+
+    if (current.length > 0) chunks.push(current);
+    return chunks;
+}
+
+function mapCoreFileMetadataResult(
+    mod: GameBananaFileMetadataRequest,
+    item: unknown,
+    includeArchived: boolean
+): GameBananaFileMetadataResult {
+    if (!item || typeof item !== 'object') {
+        return { modId: mod.id, section: mod.section, files: [], error: 'GameBanana returned no metadata for this mod' };
+    }
+    if ('error' in item) {
+        return {
+            modId: mod.id,
+            section: mod.section,
+            files: [],
+            error: String((item as { error?: unknown }).error ?? 'GameBanana returned an item error'),
+        };
+    }
+
+    return {
+        modId: mod.id,
+        section: mod.section,
+        files: parseCoreFilesMetadata(item, includeArchived),
+    };
+}
+
+function parseCoreFilesMetadata(raw: object, includeArchived: boolean): GameBananaFileMetadata[] {
+    const keyed = raw as Record<string, unknown>;
+    const filesRaw = keyed['Files().aFiles()'] ?? (Array.isArray(raw) ? raw[1] : undefined);
     if (!filesRaw || typeof filesRaw !== 'object') {
         return [];
     }
 
-    const files: Array<Omit<GameBananaFileWithRawPaths, 'rawVpkPaths'>> = [];
+    const files: GameBananaFileMetadata[] = [];
     for (const [key, value] of Object.entries(filesRaw as Record<string, CoreFileRaw>)) {
         if (!value || typeof value !== 'object') continue;
 
@@ -739,24 +844,7 @@ export async function fetchModFilesWithRawPaths(
         });
     }
 
-    const filesWithRawPaths = await Promise.all(
-        files.map(async (file) => {
-            try {
-                return {
-                    ...file,
-                    rawVpkPaths: await fetchRawVpkPaths(file.id, options),
-                };
-            } catch (err) {
-                return {
-                    ...file,
-                    rawVpkPaths: [],
-                    rawVpkPathsError: err instanceof Error ? err.message : String(err),
-                };
-            }
-        })
-    );
-
-    return filesWithRawPaths.sort((a, b) => Number(a.isArchived) - Number(b.isArchived));
+    return files.sort((a, b) => Number(a.isArchived) - Number(b.isArchived));
 }
 
 function mapSubmitter(raw: ModRaw['_aSubmitter']): GameBananaSubmitter | undefined {

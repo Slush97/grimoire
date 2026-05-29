@@ -33,6 +33,34 @@ export interface SyncState {
 
 let db: Database.Database | null = null;
 
+const SEARCH_SCHEMA_SQL = `
+    CREATE VIRTUAL TABLE IF NOT EXISTS mods_fts USING fts5(
+        name,
+        category_name,
+        submitter_name,
+        content='mods',
+        content_rowid='id',
+        tokenize='porter unicode61'
+    );
+
+    CREATE TRIGGER IF NOT EXISTS mods_ai AFTER INSERT ON mods BEGIN
+        INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
+        VALUES (new.id, new.name, new.category_name, new.submitter_name);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS mods_ad AFTER DELETE ON mods BEGIN
+        INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
+        VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS mods_au AFTER UPDATE ON mods BEGIN
+        INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
+        VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
+        INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
+        VALUES (new.id, new.name, new.category_name, new.submitter_name);
+    END;
+`;
+
 /**
  * Get the database file path
  */
@@ -92,34 +120,6 @@ export function initDatabase(): Database.Database {
             CREATE INDEX IF NOT EXISTS idx_mods_date_modified ON mods(date_modified);
             CREATE INDEX IF NOT EXISTS idx_mods_like_count ON mods(like_count);
 
-            -- Full-text search virtual table
-            CREATE VIRTUAL TABLE IF NOT EXISTS mods_fts USING fts5(
-                name,
-                category_name,
-                submitter_name,
-                content='mods',
-                content_rowid='id',
-                tokenize='porter unicode61'
-            );
-
-            -- Triggers to keep FTS in sync
-            CREATE TRIGGER IF NOT EXISTS mods_ai AFTER INSERT ON mods BEGIN
-                INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
-                VALUES (new.id, new.name, new.category_name, new.submitter_name);
-            END;
-
-            CREATE TRIGGER IF NOT EXISTS mods_ad AFTER DELETE ON mods BEGIN
-                INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
-                VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
-            END;
-
-            CREATE TRIGGER IF NOT EXISTS mods_au AFTER UPDATE ON mods BEGIN
-                INSERT INTO mods_fts(mods_fts, rowid, name, category_name, submitter_name)
-                VALUES ('delete', old.id, old.name, old.category_name, old.submitter_name);
-                INSERT INTO mods_fts(rowid, name, category_name, submitter_name)
-                VALUES (new.id, new.name, new.category_name, new.submitter_name);
-            END;
-
             -- Sync state tracking
             CREATE TABLE IF NOT EXISTS sync_state (
                 section TEXT PRIMARY KEY,
@@ -127,6 +127,8 @@ export function initDatabase(): Database.Database {
                 total_count INTEGER,
                 pages_synced INTEGER
             );
+
+            ${SEARCH_SCHEMA_SQL}
         `);
 
         // Run migrations for existing databases
@@ -436,18 +438,75 @@ export function getModsNsfwStatus(ids: number[]): Record<number, boolean> {
  * Run database migrations for schema updates
  */
 function runMigrations(database: Database.Database): void {
-    // Check if download_count column exists
-    const tableInfo = database.prepare("PRAGMA table_info(mods)").all() as Array<{ name: string }>;
-    const hasDownloadCount = tableInfo.some(col => col.name === 'download_count');
+    dropLegacyCrcTables(database);
+
+    let tableInfo = getTableColumns(database, 'mods');
+    const legacyColumns = ['tags', 'file_metadata_source_date_modified', 'file_metadata_checked_at'];
+    const hasLegacyColumns = legacyColumns.some((column) => tableInfo.includes(column));
+    if (hasLegacyColumns || shouldRebuildSearch(database)) {
+        console.log('[ModDatabase] Running migration: rebuilding mods search index');
+        dropSearchObjects(database);
+    }
+
+    const hasDownloadCount = tableInfo.includes('download_count');
 
     if (!hasDownloadCount) {
         console.log('[ModDatabase] Running migration: adding download_count column');
         database.exec('ALTER TABLE mods ADD COLUMN download_count INTEGER');
     }
 
-    const hasAudioUrl = tableInfo.some(col => col.name === 'audio_url');
+    const hasAudioUrl = tableInfo.includes('audio_url');
     if (!hasAudioUrl) {
         console.log('[ModDatabase] Running migration: adding audio_url column');
         database.exec('ALTER TABLE mods ADD COLUMN audio_url TEXT');
     }
+
+    tableInfo = getTableColumns(database, 'mods');
+    for (const column of legacyColumns) {
+        if (tableInfo.includes(column)) {
+            console.log(`[ModDatabase] Running migration: removing legacy ${column} column`);
+            database.exec(`ALTER TABLE mods DROP COLUMN ${column}`);
+        }
+    }
+
+    database.exec(SEARCH_SCHEMA_SQL);
+}
+
+function dropLegacyCrcTables(database: Database.Database): void {
+    const legacyTables = [
+        'gamebanana_file_sync_state',
+        'archive_crc_probes',
+        'archive_vpk_crc_entries',
+        'gamebanana_files',
+    ];
+    const existing = database.prepare(`
+        SELECT name
+        FROM sqlite_master
+        WHERE type = 'table'
+          AND name IN (${legacyTables.map(() => '?').join(',')})
+    `).all(...legacyTables) as Array<{ name: string }>;
+
+    if (existing.length === 0) return;
+
+    const names = existing.map((row) => row.name);
+    console.log(`[ModDatabase] Removing legacy CRC cache tables: ${names.join(', ')}`);
+    database.exec(names.map((name) => `DROP TABLE IF EXISTS ${name};`).join('\n'));
+}
+
+function getTableColumns(database: Database.Database, tableName: string): string[] {
+    return (database.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{ name: string }>).map((column) => column.name);
+}
+
+function shouldRebuildSearch(database: Database.Database): boolean {
+    const columns = getTableColumns(database, 'mods_fts');
+    return columns.length > 0 && columns.join('|') !== 'name|category_name|submitter_name';
+}
+
+function dropSearchObjects(database: Database.Database): void {
+    database.exec(`
+        DROP TRIGGER IF EXISTS mods_ai;
+        DROP TRIGGER IF EXISTS mods_ad;
+        DROP TRIGGER IF EXISTS mods_au;
+        DROP TABLE IF EXISTS mods_fts;
+    `);
 }

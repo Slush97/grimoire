@@ -20,6 +20,7 @@ export interface ArchiveVpkCrcOptions {
 }
 
 const ZIP_EOCD = Buffer.from([0x50, 0x4b, 0x05, 0x06]);
+const ZIP_LOCAL_FILE = Buffer.from([0x50, 0x4b, 0x03, 0x04]);
 const ZIP_CENTRAL_FILE = Buffer.from([0x50, 0x4b, 0x01, 0x02]);
 const RAR4_MARKER = Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x00]);
 const RAR5_MARKER = Buffer.from([0x52, 0x61, 0x72, 0x21, 0x1a, 0x07, 0x01, 0x00]);
@@ -37,6 +38,7 @@ const RAR5_FILE_UNIX_TIME = 0x0002;
 const RAR5_FILE_CRC32 = 0x0004;
 const DEFAULT_ZIP_TAIL_BYTES = 65_536;
 const MAX_ZIP_TAIL_BYTES = 4 * 1024 * 1024;
+const MAX_IGNORED_RANGE_FALLBACK_BYTES = 256 * 1024;
 const RAR_HEADER_BYTES = 4096;
 const SEVEN_Z_START_HEADER_BYTES = 32;
 const MAX_7Z_HEADER_BYTES = 8 * 1024 * 1024;
@@ -98,6 +100,25 @@ function archiveTypeForName(fileName: string): ArchiveVpkCrcResult['archiveType'
     return 'unknown';
 }
 
+function archiveTypeForHeader(header: Buffer): ArchiveVpkCrcResult['archiveType'] {
+    if (
+        header.subarray(0, ZIP_LOCAL_FILE.length).equals(ZIP_LOCAL_FILE) ||
+        header.subarray(0, ZIP_EOCD.length).equals(ZIP_EOCD)
+    ) {
+        return 'zip';
+    }
+    if (
+        header.subarray(0, RAR5_MARKER.length).equals(RAR5_MARKER) ||
+        header.subarray(0, RAR4_MARKER.length).equals(RAR4_MARKER)
+    ) {
+        return 'rar';
+    }
+    if (header.subarray(0, SEVEN_Z_SIGNATURE.length).equals(SEVEN_Z_SIGNATURE)) {
+        return '7z';
+    }
+    return 'unknown';
+}
+
 function isVpkArchiveEntry(name: string): boolean {
     const normalized = name.replace(/\\/g, '/').toLowerCase();
     return normalized.endsWith('.vpk') && !normalized.endsWith('/');
@@ -111,18 +132,37 @@ function readU32(buffer: Buffer, offset: number): number {
     return buffer.readUInt32LE(offset);
 }
 
-export async function crc32File(filePath: string): Promise<string> {
+export async function crc32File(filePath: string, signal?: AbortSignal): Promise<string> {
+    throwIfAborted(signal);
     let crc = 0xffffffff;
-    const stream = createReadStream(filePath);
+    const stream = createReadStream(filePath, { highWaterMark: 1024 * 1024 });
+    const abort = () => stream.destroy(new Error('CRC-32 file read cancelled'));
+    let bytesSinceYield = 0;
+    signal?.addEventListener('abort', abort, { once: true });
 
-    for await (const chunk of stream) {
-        const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
-        for (const byte of buffer) {
-            crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ byte) & 0xff];
+    try {
+        for await (const chunk of stream) {
+            throwIfAborted(signal);
+            const buffer = typeof chunk === 'string' ? Buffer.from(chunk) : chunk;
+            for (let index = 0; index < buffer.length; index++) {
+                crc = (crc >>> 8) ^ CRC32_TABLE[(crc ^ buffer[index]) & 0xff];
+            }
+
+            bytesSinceYield += buffer.length;
+            if (bytesSinceYield >= 8 * 1024 * 1024) {
+                bytesSinceYield = 0;
+                await yieldToEventLoop();
+            }
         }
+    } finally {
+        signal?.removeEventListener('abort', abort);
     }
 
     return ((crc ^ 0xffffffff) >>> 0).toString(16).padStart(8, '0');
+}
+
+function yieldToEventLoop(): Promise<void> {
+    return new Promise((resolve) => setImmediate(resolve));
 }
 
 function decodeArchiveName(raw: Buffer): string {
@@ -159,12 +199,76 @@ async function fetchArchiveRange(
         throw new Error(`Archive range request failed: ${response.status} ${response.statusText}`);
     }
 
-    const buffer = Buffer.from(await response.arrayBuffer());
-    if (response.status === 200 && buffer.length > expected) {
-        throw new Error(`Archive server ignored range request (${buffer.length} bytes for ${expected} requested)`);
+    if (response.status !== 206) {
+        const contentLength = parseContentLength(response.headers.get('content-length'));
+        if (response.status === 200 && contentLength !== null && contentLength <= MAX_IGNORED_RANGE_FALLBACK_BYTES) {
+            return Buffer.from(await response.arrayBuffer());
+        }
+        throw new Error(`Archive server ignored range request for ${expected} requested bytes`);
     }
 
+    const buffer = Buffer.from(await response.arrayBuffer());
     return buffer;
+}
+
+function parseContentRangeTotal(value: string | null): number | null {
+    const match = value?.match(/^bytes\s+(\d+)-(\d+)\/(\d+)$/i);
+    if (!match) return null;
+
+    const total = Number(match[3]);
+    return Number.isFinite(total) && total > 0 ? total : null;
+}
+
+function parseContentLength(value: string | null): number | null {
+    const length = Number(value);
+    return Number.isFinite(length) && length >= 0 ? length : null;
+}
+
+async function fetchArchiveSuffixRange(
+    url: string,
+    suffixBytes: number,
+    signal?: AbortSignal
+): Promise<{ buffer: Buffer; totalSize: number }> {
+    if (suffixBytes <= 0) {
+        throw new Error(`Invalid archive suffix range ${suffixBytes}`);
+    }
+
+    throwIfAborted(signal);
+    validateDownloadUrl(url);
+
+    const response = await fetch(url, {
+        headers: {
+            Range: `bytes=-${suffixBytes}`,
+            'User-Agent': 'DeadlockModManager/1.0',
+        },
+        redirect: 'follow',
+        signal,
+    });
+    throwIfAborted(signal);
+
+    if (!response.ok && response.status !== 206) {
+        throw new Error(`Archive range request failed: ${response.status} ${response.statusText}`);
+    }
+    if (response.status !== 206) {
+        const contentLength = parseContentLength(response.headers.get('content-length'));
+        if (response.status === 200 && contentLength !== null && contentLength <= MAX_IGNORED_RANGE_FALLBACK_BYTES) {
+            const buffer = Buffer.from(await response.arrayBuffer());
+            return { buffer, totalSize: contentLength || buffer.length };
+        }
+        throw new Error(`Archive server ignored suffix range request for ${suffixBytes} requested bytes`);
+    }
+
+    const totalSize = parseContentRangeTotal(response.headers.get('content-range'));
+    if (!totalSize) {
+        throw new Error('Archive range response did not include a usable Content-Range size');
+    }
+
+    const buffer = Buffer.from(await response.arrayBuffer());
+    if (buffer.length > suffixBytes) {
+        throw new Error(`Archive suffix range request returned ${buffer.length} bytes for ${suffixBytes} requested`);
+    }
+
+    return { buffer, totalSize };
 }
 
 function parseZipCentralDirectory(tail: Buffer, totalSize: number): ArchiveVpkCrcEntry[] {
@@ -220,29 +324,29 @@ function parseZipCentralDirectory(tail: Buffer, totalSize: number): ArchiveVpkCr
 
 async function fetchZipVpkCrcEntries(
     downloadUrl: string,
-    fileSize: number,
     signal?: AbortSignal
 ): Promise<ArchiveVpkCrcResult> {
-    let bytesToFetch = Math.min(DEFAULT_ZIP_TAIL_BYTES, fileSize);
+    let bytesToFetch = DEFAULT_ZIP_TAIL_BYTES;
+    let maxTailBytes = MAX_ZIP_TAIL_BYTES;
     let bytesFetched = 0;
 
-    while (bytesToFetch <= Math.min(MAX_ZIP_TAIL_BYTES, fileSize)) {
+    while (bytesToFetch <= maxTailBytes) {
         throwIfAborted(signal);
-        const start = Math.max(0, fileSize - bytesToFetch);
-        const tail = await fetchArchiveRange(downloadUrl, start, fileSize - 1, signal);
-        bytesFetched += tail.length;
+        const probe = await fetchArchiveSuffixRange(downloadUrl, bytesToFetch, signal);
+        bytesFetched += probe.buffer.length;
+        maxTailBytes = Math.min(MAX_ZIP_TAIL_BYTES, probe.totalSize);
 
         try {
             return {
                 archiveType: 'zip',
-                entries: parseZipCentralDirectory(tail, fileSize),
+                entries: parseZipCentralDirectory(probe.buffer, probe.totalSize),
                 bytesFetched,
             };
         } catch (err) {
-            if (!(err instanceof NeedMoreArchiveBytes) || bytesToFetch >= Math.min(MAX_ZIP_TAIL_BYTES, fileSize)) {
+            if (!(err instanceof NeedMoreArchiveBytes) || bytesToFetch >= maxTailBytes) {
                 throw err;
             }
-            bytesToFetch = Math.min(bytesToFetch * 2, MAX_ZIP_TAIL_BYTES, fileSize);
+            bytesToFetch = Math.min(bytesToFetch * 2, maxTailBytes);
         }
     }
 
@@ -1122,7 +1226,7 @@ function parseRar5FileHeader(headerData: Buffer, pos: number, dataSize: number):
         pos += 4;
     }
 
-    let crc32 = '';
+    let crc32: string | undefined;
     if (fileFlags.value & RAR5_FILE_CRC32) {
         if (pos + 4 > headerData.length) throw new NeedMoreArchiveBytes('RAR5 CRC32 is truncated');
         crc32 = readU32(headerData, pos).toString(16).padStart(8, '0');
@@ -1138,7 +1242,7 @@ function parseRar5FileHeader(headerData: Buffer, pos: number, dataSize: number):
     if (nameEnd > headerData.length) throw new NeedMoreArchiveBytes('RAR5 file name is truncated');
     const name = decodeArchiveName(headerData.subarray(pos, nameEnd)).replace(/\\/g, '/');
 
-    if ((fileFlags.value & RAR5_FILE_DIRECTORY) || !isVpkArchiveEntry(name)) {
+    if ((fileFlags.value & RAR5_FILE_DIRECTORY) || !isVpkArchiveEntry(name) || !crc32) {
         return undefined;
     }
 
@@ -1313,23 +1417,35 @@ export async function fetchGameBananaArchiveVpkCrcEntries(file: {
     fileSize: number;
     downloadUrl: string;
 }, options: ArchiveVpkCrcOptions = {}): Promise<ArchiveVpkCrcResult> {
-    const archiveType = archiveTypeForName(file.fileName);
+    let archiveType = archiveTypeForName(file.fileName);
+    let sniffBytesFetched = 0;
     throwIfAborted(options.signal);
 
+    if (archiveType === 'unknown' && file.fileSize > 0) {
+        const header = await fetchArchiveRange(file.downloadUrl, 0, Math.min(7, file.fileSize - 1), options.signal);
+        sniffBytesFetched = header.length;
+        archiveType = archiveTypeForHeader(header);
+    }
+
+    const addSniffBytes = (result: ArchiveVpkCrcResult): ArchiveVpkCrcResult => ({
+        ...result,
+        bytesFetched: result.bytesFetched + sniffBytesFetched,
+    });
+
     if (archiveType === 'zip') {
-        return fetchZipVpkCrcEntries(file.downloadUrl, file.fileSize, options.signal);
+        return addSniffBytes(await fetchZipVpkCrcEntries(file.downloadUrl, options.signal));
     }
     if (archiveType === 'rar') {
-        return fetchRar4VpkCrcEntries(file.downloadUrl, file.fileSize, options.signal);
+        return addSniffBytes(await fetchRar4VpkCrcEntries(file.downloadUrl, file.fileSize, options.signal));
     }
     if (archiveType === '7z') {
-        return fetch7zVpkCrcEntries(file.downloadUrl, file.fileSize, options.signal);
+        return addSniffBytes(await fetch7zVpkCrcEntries(file.downloadUrl, file.fileSize, options.signal));
     }
 
     return {
         archiveType,
         entries: [],
-        bytesFetched: 0,
+        bytesFetched: sniffBytesFetched,
         unsupportedReason: `Unsupported archive type for ${file.fileName}`,
     };
 }

@@ -1,158 +1,46 @@
 import { promises as fs } from 'fs';
-import { basename } from 'path';
+import { crc32File, fetchGameBananaArchiveVpkCrcEntries } from './archiveCrc';
 import {
-    fetchCategoryTree,
-    fetchModFilesWithRawPaths,
+    fetchModsFilesMetadata,
     fetchSubmissions,
-    type GameBananaCategoryNode,
-    type GameBananaFileWithRawPaths,
+    type GameBananaFileMetadataResult,
     type GameBananaMod,
+    type GameBananaModsResponse,
 } from './gamebanana';
-import {
-    crc32File,
-    fetchGameBananaArchiveVpkCrcEntries,
-    type ArchiveVpkCrcEntry,
-} from './archiveCrc';
 import { parseVpkDirectory } from './vpk';
-import type { UnknownModCrcMatchResult, UnknownModFilterGuess } from '../../../src/types/mod';
+import { fingerprintFilesInWorkers, type FileFingerprintResult } from './workers';
+import {
+    getUnknownCrcEntryCount,
+    getUnknownCrcFilesForMods,
+    lookupUnknownCrcMatch,
+    lookupUnknownCrcMatches,
+    replaceUnknownCrcEntries,
+    updateUnknownCrcFileStatus,
+    upsertUnknownCrcFiles,
+    UNKNOWN_CRC_PARSER_VERSION,
+    type UnknownCrcFile,
+    type UnknownCrcFileInput,
+    type UnknownCrcLookupMatch,
+} from './unknownCrcCache';
+import type {
+    UnknownModCrcMatchResult,
+    UnknownModDetectionProgress,
+    UnknownModFilterGuess,
+} from '../../../src/types/mod';
 
 export type { UnknownModFilterGuess };
 
-type UnknownModFilterBase = Omit<UnknownModFilterGuess, 'crcMatch'>;
-
 export interface UnknownModDetectionOptions {
     signal?: AbortSignal;
+    requestId?: string;
+    onProgress?: (progress: UnknownModDetectionProgress) => void;
 }
 
-type SignalStrength = 'strong' | 'medium' | 'weak';
-
-interface HeroNamePair {
-    name: string;
+export interface UnknownModCacheMatchInput {
+    modId: string;
     fileName: string;
-}
-
-interface HeroSignal {
-    hero: HeroNamePair;
-    strength: SignalStrength;
-    clue: string;
-}
-
-interface SignalPattern {
-    pattern: RegExp;
-    strength: SignalStrength;
-    label: string;
-}
-
-// These names mirror the current GameBanana Deadlock > Mods > Skins categories.
-// Each hero intentionally has only two names: the GameBanana display name and
-// the common VPK folder/file token used by Deadlock assets.
-const HERO_NAME_PAIRS: HeroNamePair[] = [
-    { name: 'Abrams', fileName: 'atlas' },
-    { name: 'Apollo', fileName: 'fencer' },
-    { name: 'Bebop', fileName: 'bebop' },
-    { name: 'Billy', fileName: 'punkgoat' },
-    { name: 'Calico', fileName: 'nano' },
-    { name: 'Celeste', fileName: 'unicorn' },
-    { name: 'Doorman', fileName: 'doorman' },
-    { name: 'Drifter', fileName: 'drifter' },
-    { name: 'Dynamo', fileName: 'dynamo' },
-    { name: 'Graves', fileName: 'necro' },
-    { name: 'Grey Talon', fileName: 'orion' },
-    { name: 'Haze', fileName: 'haze' },
-    { name: 'Holliday', fileName: 'astro' },
-    { name: 'Infernus', fileName: 'inferno' },
-    { name: 'Ivy', fileName: 'tengu' },
-    { name: 'Kelvin', fileName: 'kelvin' },
-    { name: 'Lady Geist', fileName: 'geist' },
-    { name: 'Lash', fileName: 'lash' },
-    { name: 'McGinnis', fileName: 'forge' },
-    { name: 'Mina', fileName: 'vampirebat' },
-    { name: 'Mirage', fileName: 'mirage' },
-    { name: 'Mo & Krill', fileName: 'krill' },
-    { name: 'Paige', fileName: 'bookworm' },
-    { name: 'Paradox', fileName: 'chrono' },
-    { name: 'Pocket', fileName: 'synth' },
-    { name: 'Rem', fileName: 'familiar' },
-    { name: 'Seven', fileName: 'gigawatt' },
-    { name: 'Shiv', fileName: 'shiv' },
-    { name: 'Silver', fileName: 'werewolf' },
-    { name: 'Sinclair', fileName: 'magician' },
-    { name: 'Venator', fileName: 'priest' },
-    { name: 'Victor', fileName: 'frank' },
-    { name: 'Vindicta', fileName: 'hornet' },
-    { name: 'Viscous', fileName: 'viscous' },
-    { name: 'Vyper', fileName: 'viper' },
-    { name: 'Warden', fileName: 'warden' },
-    { name: 'Wraith', fileName: 'wraith' },
-    { name: 'Yamato', fileName: 'yamato' },
-];
-
-const HERO_BY_KEY = new Map<string, HeroNamePair>();
-for (const hero of HERO_NAME_PAIRS) {
-    HERO_BY_KEY.set(normalizeHeroKey(hero.name), hero);
-    HERO_BY_KEY.set(normalizeHeroKey(hero.fileName), hero);
-}
-
-const HERO_SIGNAL_PATTERNS: SignalPattern[] = [
-    { pattern: /(?:^|\/)models\/heroes(?:_wip|_staging)?\/([^/]+)/i, strength: 'strong', label: 'model hero folder' },
-    { pattern: /(?:^|\/)materials\/models\/heroes(?:_wip|_staging)?\/([^/]+)/i, strength: 'strong', label: 'model material folder' },
-    { pattern: /(?:^|\/)materials\/heroes(?:_wip|_staging)?\/([^/]+)/i, strength: 'medium', label: 'hero material folder' },
-    { pattern: /(?:^|\/)animgraphs\/animgraph2\/hero\/([^/]+)/i, strength: 'medium', label: 'hero animgraph folder' },
-    { pattern: /(?:^|\/)panorama\/images\/heroes\/(?:backgrounds|hero_names)\/([^/]+)/i, strength: 'medium', label: 'hero select UI' },
-    { pattern: /(?:^|\/)panorama\/images\/hud\/abilities\/([^/]+)/i, strength: 'medium', label: 'ability UI' },
-    { pattern: /(?:^|\/)particles\/abilities\/([^/]+)/i, strength: 'medium', label: 'ability particles' },
-    { pattern: /(?:^|\/)materials\/particle\/abilities\/([^/]+)/i, strength: 'medium', label: 'ability particle materials' },
-    { pattern: /(?:^|\/)soundevents\/hero\/([^/]+)/i, strength: 'medium', label: 'hero sound events' },
-    { pattern: /(?:^|\/)sounds\/vo\/([^/]+)/i, strength: 'medium', label: 'voice folder' },
-    { pattern: /(?:^|\/)sounds\/abilities\/([^/]+)/i, strength: 'medium', label: 'ability sounds' },
-    { pattern: /(?:^|\/)sounds\/weapons\/([^/]+)/i, strength: 'medium', label: 'weapon sounds' },
-    { pattern: /(?:^|\/)scripts\/tagged_sounds\/([^/.]+)/i, strength: 'weak', label: 'tagged sound script' },
-];
-
-const SCORE: Record<SignalStrength, number> = {
-    strong: 100,
-    medium: 40,
-    weak: 15,
-};
-
-export async function detectUnknownModFilters(
-    modId: string,
-    fileName: string,
-    vpkPath: string,
-    options: UnknownModDetectionOptions = {}
-): Promise<UnknownModFilterGuess> {
-    throwIfAborted(options.signal);
-    const paths = parseVpkDirectory(vpkPath) ?? [];
-    const normalizedPaths = paths.map(normalizePath);
-    const contentHints = detectContentHints(normalizedPaths);
-    const heroSignals = detectHeroSignals(normalizedPaths);
-    const detectedHeroes = summarizeHeroSignals(heroSignals);
-    const primaryHero = choosePrimaryHero(detectedHeroes);
-    const kind = chooseFilterKind(contentHints, primaryHero);
-
-    const search = primaryHero?.name ?? kind.searchFallback ?? null;
-    const reasons = buildReasons(kind, primaryHero, detectedHeroes, contentHints);
-
-    const guessWithoutMatch: UnknownModFilterBase = {
-        modId,
-        fileName,
-        fileCount: paths.length,
-        section: kind.section,
-        search,
-        heroName: primaryHero?.name,
-        heroFileName: primaryHero?.fileName,
-        categoryName: kind.categoryName,
-        confidence: chooseConfidence(primaryHero, kind, paths.length),
-        contentHints,
-        reasons,
-        detectedHeroes,
-        samplePaths: paths.slice(0, 8),
-    };
-
-    return {
-        ...guessWithoutMatch,
-        crcMatch: await findUnknownModCrcMatch(vpkPath, guessWithoutMatch, options),
-    };
+    vpkPath: string;
+    requestId?: string;
 }
 
 interface LocalVpkFingerprint {
@@ -160,326 +48,785 @@ interface LocalVpkFingerprint {
     crc32: string;
 }
 
-interface CandidateBucket {
+interface SearchBucket {
     section: 'Mod' | 'Sound';
     categoryId?: number;
+    categoryName?: string;
     search?: string;
     label: string;
 }
 
-let modCategoryTreePromise: Promise<GameBananaCategoryNode[]> | null = null;
-const MAX_CRC_ERROR_MESSAGES = 8;
-const CANDIDATE_CHECK_CONCURRENCY = 4;
+interface HeroHint {
+    code: string;
+    display: string;
+    skinCategoryId: number;
+}
 
-async function findUnknownModCrcMatch(
+interface CategoryTarget {
+    section: 'Mod' | 'Sound';
+    categoryId?: number;
+    categoryName: string;
+}
+
+const CANDIDATE_PAGE_SIZE = 50;
+const LOCAL_FINGERPRINT_CACHE_MAX = 128;
+const CACHE_FINGERPRINT_CONCURRENCY = 8;
+const CATEGORIES = {
+    skins: 33295,
+    modelReplacement: 33154,
+    hud: 31713,
+    maps: 37225,
+    gameplay: 33331,
+    modMisc: 31710,
+} as const;
+
+const CATEGORY_TARGETS = {
+    skins: { section: 'Mod', categoryId: CATEGORIES.skins, categoryName: 'Skins' },
+    modelReplacement: { section: 'Mod', categoryId: CATEGORIES.modelReplacement, categoryName: 'Model Replacement' },
+    hud: { section: 'Mod', categoryId: CATEGORIES.hud, categoryName: 'HUD' },
+    maps: { section: 'Mod', categoryId: CATEGORIES.maps, categoryName: 'Maps' },
+    gameplay: { section: 'Mod', categoryId: CATEGORIES.gameplay, categoryName: 'Gameplay' },
+    modMisc: { section: 'Mod', categoryId: CATEGORIES.modMisc, categoryName: 'Other/Misc' },
+    soundMisc: { section: 'Sound', categoryName: 'Sounds' },
+} as const satisfies Record<string, CategoryTarget>;
+
+type CategoryKey = keyof typeof CATEGORY_TARGETS;
+
+interface CategoryPathRule {
+    pattern: RegExp;
+    points: Partial<Record<CategoryKey, number>>;
+}
+
+const CATEGORY_TIE_BREAKERS: CategoryKey[] = [
+    'skins',
+    'modelReplacement',
+    'hud',
+    'soundMisc',
+    'maps',
+    'gameplay',
+    'modMisc',
+];
+
+const CATEGORY_PATH_RULES: CategoryPathRule[] = [
+    { pattern: /(?:^|\/)models\/heroes(?:_wip|_staging)?\//, points: { skins: 120, modelReplacement: 80 } },
+    { pattern: /(?:^|\/)materials\/models\/heroes(?:_wip|_staging)?\//, points: { skins: 100, modelReplacement: 70 } },
+    { pattern: /(?:^|\/)materials\/heroes(?:_wip|_staging)?\//, points: { skins: 80, modelReplacement: 50 } },
+    { pattern: /(?:^|\/)animgraphs\/animgraph2\/hero\//, points: { skins: 60, modelReplacement: 40 } },
+    { pattern: /(?:^|\/)models\//, points: { modelReplacement: 80, skins: 40 } },
+    { pattern: /(?:^|\/)materials\/models\//, points: { modelReplacement: 60, skins: 30 } },
+    { pattern: /(?:^|\/)particles\/abilities\//, points: { skins: 50, modelReplacement: 30 } },
+    { pattern: /(?:^|\/)materials\/particle\/abilities\//, points: { skins: 40, modelReplacement: 25 } },
+    { pattern: /(?:^|\/)particles\//, points: { modelReplacement: 25, modMisc: 15 } },
+    { pattern: /(?:^|\/)panorama\/images\/heroes\//, points: { hud: 50, skins: 25 } },
+    { pattern: /(?:^|\/)panorama\/images\/hud\/abilities\//, points: { hud: 60, skins: 25 } },
+    { pattern: /(?:^|\/)panorama\//, points: { hud: 90, gameplay: 20 } },
+    { pattern: /(?:^|\/)hud\//, points: { hud: 80 } },
+    { pattern: /(?:^|\/)maps\//, points: { maps: 120 } },
+    { pattern: /(?:^|\/)materials\/skybox\//, points: { maps: 100 } },
+    { pattern: /(?:^|\/)postprocessing\/|\.vpost_c$/, points: { modMisc: 80, gameplay: 20 } },
+    { pattern: /(?:^|\/)scripts\/tagged_sounds\//, points: { soundMisc: 80 } },
+    { pattern: /(?:^|\/)soundevents\/hero\//, points: { soundMisc: 80 } },
+    { pattern: /(?:^|\/)sounds?\//, points: { soundMisc: 80 } },
+    { pattern: /(?:^|\/)scripts\//, points: { gameplay: 40, modMisc: 20 } },
+    { pattern: /\.vjs_c$|\.vxml_c$|\.vcss_c$/, points: { hud: 30 } },
+];
+const MODEL_PATH_PATTERN = /(?:^|\/)(?:models\/|materials\/models\/|materials\/heroes(?:_wip|_staging)?\/|animgraphs\/animgraph2\/hero\/)/;
+
+const FAILED_RETRY_SECONDS = 6 * 60 * 60;
+
+const HERO_HINTS: HeroHint[] = [
+    { display: 'Abrams', code: 'atlas', skinCategoryId: 33306 },
+    { display: 'Apollo', code: 'fencer', skinCategoryId: 42673 },
+    { display: 'Bebop', code: 'bebop', skinCategoryId: 33307 },
+    { display: 'Billy', code: 'punkgoat', skinCategoryId: 41491 },
+    { display: 'Calico', code: 'nano', skinCategoryId: 41649 },
+    { display: 'Celeste', code: 'unicorn', skinCategoryId: 42672 },
+    { display: 'Doorman', code: 'doorman', skinCategoryId: 40060 },
+    { display: 'Drifter', code: 'drifter', skinCategoryId: 41492 },
+    { display: 'Dynamo', code: 'dynamo', skinCategoryId: 33308 },
+    { display: 'Graves', code: 'necro', skinCategoryId: 42674 },
+    { display: 'Grey Talon', code: 'orion', skinCategoryId: 33310 },
+    { display: 'Haze', code: 'haze', skinCategoryId: 33311 },
+    { display: 'Holliday', code: 'astro', skinCategoryId: 36472 },
+    { display: 'Infernus', code: 'inferno', skinCategoryId: 33312 },
+    { display: 'Ivy', code: 'tengu', skinCategoryId: 33313 },
+    { display: 'Kelvin', code: 'kelvin', skinCategoryId: 33314 },
+    { display: 'Lady Geist', code: 'geist', skinCategoryId: 33315 },
+    { display: 'Lash', code: 'lash', skinCategoryId: 33316 },
+    { display: 'McGinnis', code: 'forge', skinCategoryId: 33317 },
+    { display: 'Mina', code: 'vampirebat', skinCategoryId: 41313 },
+    { display: 'Mirage', code: 'mirage', skinCategoryId: 33318 },
+    { display: 'Mo & Krill', code: 'krill', skinCategoryId: 33319 },
+    { display: 'Paige', code: 'bookworm', skinCategoryId: 39672 },
+    { display: 'Paradox', code: 'chrono', skinCategoryId: 33320 },
+    { display: 'Pocket', code: 'synth', skinCategoryId: 33321 },
+    { display: 'Rem', code: 'familiar', skinCategoryId: 42675 },
+    { display: 'Seven', code: 'gigawatt', skinCategoryId: 33322 },
+    { display: 'Shiv', code: 'shiv', skinCategoryId: 33323 },
+    { display: 'Silver', code: 'werewolf', skinCategoryId: 42671 },
+    { display: 'Sinclair', code: 'magician', skinCategoryId: 36529 },
+    { display: 'Venator', code: 'priest', skinCategoryId: 42676 },
+    { display: 'Victor', code: 'frank', skinCategoryId: 39980 },
+    { display: 'Vindicta', code: 'hornet', skinCategoryId: 33324 },
+    { display: 'Viscous', code: 'viscous', skinCategoryId: 33325 },
+    { display: 'Vyper', code: 'viper', skinCategoryId: 33330 },
+    { display: 'Warden', code: 'warden', skinCategoryId: 33326 },
+    { display: 'Wraith', code: 'wraith', skinCategoryId: 33327 },
+    { display: 'Yamato', code: 'yamato', skinCategoryId: 33328 },
+];
+
+const localFingerprintCache = new Map<string, {
+    size: number;
+    mtimeMs: number;
+    fingerprint: LocalVpkFingerprint;
+}>();
+
+export async function detectUnknownModFilters(
+    modId: string,
+    fileName: string,
     vpkPath: string,
-    guess: UnknownModFilterBase,
-    options: UnknownModDetectionOptions
-): Promise<UnknownModCrcMatchResult> {
-    const empty = (status: UnknownModCrcMatchResult['status'], reason?: string): UnknownModCrcMatchResult => ({
-        status,
-        reason,
-        searchedBuckets: [],
-        checkedMods: 0,
-        checkedFiles: 0,
-        bytesFetched: 0,
-        skipped7z: 0,
-        errors: [],
+    options: UnknownModDetectionOptions = {}
+): Promise<UnknownModFilterGuess> {
+    const emit = (progress: Omit<UnknownModDetectionProgress, 'modId'>) => {
+        options.onProgress?.({ modId, requestId: options.requestId, ...progress });
+    };
+    const empty = (status: UnknownModCrcMatchResult['status'], reason?: string): UnknownModFilterGuess => ({
+        modId,
+        fileName,
+        crcMatch: { status, reason },
     });
 
-    if (!guess.heroName && !guess.categoryName) {
-        return empty('not-found', 'No useful hero or category clue was found, so CRC matching was not attempted.');
-    }
+    let bestMatch: UnknownModCrcMatchResult | null = null;
 
     try {
-        throwIfAborted(options.signal);
-        const buckets = await buildCandidateBuckets(guess, options);
-        if (buckets.length === 0) {
-            return empty('not-found', 'No GameBanana candidate bucket could be inferred from this VPK.');
-        }
-
-        const localFile = await getLocalVpkFingerprint(vpkPath);
+        emit({ phase: 'fingerprinting', message: 'Reading local VPK fingerprint...' });
+        const localFile = await getLocalVpkFingerprint(vpkPath, options.signal);
         if (!localFile) {
             return empty('not-found', 'No local VPK file was found.');
         }
 
-        const result: UnknownModCrcMatchResult = {
-            status: 'not-found',
-            reason: 'No GameBanana file matched this local VPK by CRC-32.',
-            searchedBuckets: buckets.map((bucket) => bucket.label),
-            checkedMods: 0,
-            checkedFiles: 0,
-            bytesFetched: 0,
-            skipped7z: 0,
-            errors: [],
-        };
+        const cached = lookupUnknownCrcMatch(localFile.crc32, localFile.size);
+        if (cached) {
+            const result = {
+                modId,
+                fileName,
+                crcMatch: toFoundMatch(cached, 'CRC-32 matched cached GameBanana archive data.'),
+            };
+            emit({
+                phase: 'cache-hit',
+                message: 'Found a cached CRC match.',
+                result,
+            });
+            return result;
+        }
+
+        const paths = parseVpkDirectory(vpkPath) ?? [];
+        const buckets = chooseSearchBuckets(paths);
+        const firstBucket = buckets[0];
+        if (!firstBucket) {
+            return empty('not-found', 'No useful VPK clues were found for a GameBanana search.');
+        }
+
+        let checkedFiles = 0;
+        let checkedMods = 0;
+        let discoveredFiles = 0;
+        let indexedEntries = 0;
+        let bytesFetched = 0;
+        let totalCandidateMods = 0;
+        let sawCandidateMods = false;
+        const seenFileIds = new Set<number>();
 
         for (const bucket of buckets) {
-            throwIfAborted(options.signal);
-            const candidates = await fetchBucketCandidates(bucket, options);
-            for (let start = 0; start < candidates.length; start += CANDIDATE_CHECK_CONCURRENCY) {
-                throwIfAborted(options.signal);
-                const batch = candidates.slice(start, start + CANDIDATE_CHECK_CONCURRENCY);
-                const checks = await Promise.all(
-                    batch.map((candidate) => checkCandidateForCrcMatch(candidate, bucket, localFile, options))
-                );
+            emit({
+                phase: 'searching',
+                message: describeBucket(bucket),
+                bucket,
+                checkedFiles,
+                totalFiles: discoveredFiles,
+                indexedEntries,
+                bytesFetched,
+            });
+            let page = 1;
+            let totalPages = 1;
 
-                for (const check of checks) {
-                    result.checkedMods += 1;
-                    result.checkedFiles += check.checkedFiles;
-                    result.bytesFetched += check.bytesFetched;
-                    result.skipped7z += check.skipped7z;
-                    for (const message of check.errors) {
-                        appendCrcError(result, message);
+            while (page <= totalPages && !bestMatch) {
+                throwIfAborted(options.signal);
+                const pageResult = await fetchCandidateModsPage(bucket, page, options.signal);
+                const perPage = pageResult.perPage || CANDIDATE_PAGE_SIZE;
+                totalCandidateMods += page === 1 ? pageResult.totalCount : 0;
+                totalPages = Math.max(1, Math.ceil((pageResult.totalCount || pageResult.records.length) / perPage));
+                const candidateMods = pageResult.records.filter((mod) => mod.hasFiles);
+                checkedMods += candidateMods.length;
+
+                if (candidateMods.length === 0) {
+                    page++;
+                    continue;
+                }
+                sawCandidateMods = true;
+
+                emit({
+                    phase: 'fetching-files',
+                    message: `Fetching file metadata for ${bucketLabel(bucket)} page ${page}/${totalPages} (${candidateMods.length} candidate mod${candidateMods.length === 1 ? '' : 's'})...`,
+                    bucket,
+                    checkedFiles,
+                    totalFiles: discoveredFiles,
+                    indexedEntries,
+                    bytesFetched,
+                });
+
+                const files = (await getCandidateFiles(candidateMods, bucket, options.signal))
+                    .filter((file) => {
+                        if (seenFileIds.has(file.fileId)) return false;
+                        seenFileIds.add(file.fileId);
+                        return true;
+                    });
+                discoveredFiles += files.length;
+
+                for (const file of files) {
+                    throwIfAborted(options.signal);
+                    if (!shouldProbeArchive(file)) {
+                        checkedFiles++;
+                        emit({
+                            phase: bestMatch ? 'caching-remaining' : 'indexing',
+                            message: bestMatch ? 'Caching remaining files on this page...' : 'Checking cached archive status...',
+                            bucket,
+                            checkedFiles,
+                            totalFiles: discoveredFiles,
+                            indexedEntries,
+                            bytesFetched,
+                            currentFileName: file.fileName,
+                            result: bestMatch ? { modId, fileName, crcMatch: bestMatch } : undefined,
+                        });
+                        continue;
+                    }
+
+                    emit({
+                        phase: bestMatch ? 'caching-remaining' : 'indexing',
+                        message: bestMatch ? 'Caching remaining files on this page...' : `Checking archive CRC data for ${bucketLabel(bucket)} page ${page}/${totalPages}...`,
+                        bucket,
+                        checkedFiles,
+                        totalFiles: discoveredFiles,
+                        indexedEntries,
+                        bytesFetched,
+                        currentFileName: file.fileName,
+                        result: bestMatch ? { modId, fileName, crcMatch: bestMatch } : undefined,
+                    });
+                    try {
+                        const archive = await fetchGameBananaArchiveVpkCrcEntries(file, { signal: options.signal });
+                        bytesFetched += archive.bytesFetched;
+
+                        if (archive.unsupportedReason) {
+                            updateUnknownCrcFileStatus(file.fileId, {
+                                status: 'unsupported',
+                                archiveType: archive.archiveType,
+                                bytesFetched: archive.bytesFetched,
+                                error: archive.unsupportedReason,
+                            });
+                            console.log(`[UnknownCrc] Skipped ${file.section}/${file.modId} file ${file.fileId} (${file.fileName}): ${archive.unsupportedReason}`);
+                        } else {
+                            replaceUnknownCrcEntries(file.fileId, archive.entries, {
+                                archiveType: archive.archiveType,
+                                bytesFetched: archive.bytesFetched,
+                            });
+                            indexedEntries += archive.entries.length;
+                            logIndexedFile(file, archive.entries.length, archive.bytesFetched);
+                        }
+
+                        const matchedEntry = archive.entries.find((entry) =>
+                            entry.crc32.toLowerCase() === localFile.crc32 && entry.uncompressedSize === localFile.size
+                        );
+                        if (!bestMatch && matchedEntry) {
+                            bestMatch = toFoundMatch({
+                                ...file,
+                                entryName: matchedEntry.name,
+                                crc32: matchedEntry.crc32,
+                                uncompressedSize: matchedEntry.uncompressedSize,
+                                compressedSize: matchedEntry.compressedSize,
+                            }, `CRC-32 matched ${matchedEntry.name}.`);
+                            emit({
+                                phase: 'found',
+                                message: 'Found a matching GameBanana file. Caching the rest of this page...',
+                                bucket,
+                                checkedFiles,
+                                totalFiles: discoveredFiles,
+                                indexedEntries,
+                                bytesFetched,
+                                currentFileName: file.fileName,
+                                result: { modId, fileName, crcMatch: bestMatch },
+                            });
+                            console.log(`[UnknownCrc] Match found for ${fileName}: ${file.section}/${file.modId} file ${file.fileId}`);
+                        }
+                    } catch (err) {
+                        throwIfAborted(options.signal);
+                        updateUnknownCrcFileStatus(file.fileId, {
+                            status: 'failed',
+                            archiveType: null,
+                            bytesFetched: 0,
+                            error: errorMessage(err),
+                        });
+                        console.warn(`[UnknownCrc] Failed ${file.section}/${file.modId} file ${file.fileId} (${file.fileName}): ${errorMessage(err)}`);
+                    } finally {
+                        checkedFiles++;
+                        emit({
+                            phase: bestMatch ? 'caching-remaining' : 'indexing',
+                            message: bestMatch ? 'Caching remaining files on this page...' : `Checking archive CRC data for ${bucketLabel(bucket)} page ${page}/${totalPages}...`,
+                            bucket,
+                            checkedFiles,
+                            totalFiles: discoveredFiles,
+                            indexedEntries,
+                            bytesFetched,
+                            currentFileName: file.fileName,
+                            result: bestMatch ? { modId, fileName, crcMatch: bestMatch } : undefined,
+                        });
                     }
                 }
 
-                const match = checks.find((check) => check.match)?.match;
-                if (match) {
-                    return {
-                        ...result,
-                        ...match,
-                        status: 'found',
-                        confidence: 'exact',
-                        reason: 'CRC-32 matched the local VPK file.',
-                    };
-                }
+                page++;
             }
+
+            if (bestMatch) break;
         }
 
+        if (!sawCandidateMods) {
+            return empty('not-found', `No GameBanana candidates with files were returned for ${buckets.map(describeBucket).join('; ')}.`);
+        }
+
+        const result = bestMatch
+            ? { modId, fileName, crcMatch: bestMatch }
+            : empty(
+                'not-found',
+                `No CRC match found after checking ${checkedMods} candidate mod${checkedMods === 1 ? '' : 's'} across ${totalCandidateMods || checkedMods} bucket result${(totalCandidateMods || checkedMods) === 1 ? '' : 's'} (${checkedFiles} file${checkedFiles === 1 ? '' : 's'} checked). Cached CRC entries: ${getUnknownCrcEntryCount()}.`
+            );
+        emit({
+            phase: 'complete',
+            message: bestMatch ? 'Finished caching the matched result page.' : 'Search finished with no match.',
+            bucket: firstBucket,
+            checkedFiles,
+            totalFiles: discoveredFiles,
+            indexedEntries,
+            bytesFetched,
+            result: bestMatch ? result : undefined,
+        });
         return result;
     } catch (err) {
-        return {
-            status: 'error',
-            reason: errorMessage(err),
-            searchedBuckets: [],
-            checkedMods: 0,
-            checkedFiles: 0,
-            bytesFetched: 0,
-            skipped7z: 0,
-            errors: [errorMessage(err)],
-        };
+        if (bestMatch && options.signal?.aborted) {
+            const result = { modId, fileName, crcMatch: bestMatch };
+            emit({
+                phase: 'cancelled',
+                message: 'Stopped caching remaining files.',
+                result,
+            });
+            return result;
+        }
+
+        const cancelled = options.signal?.aborted;
+        emit({
+            phase: cancelled ? 'cancelled' : 'error',
+            message: cancelled ? 'Search cancelled.' : errorMessage(err),
+        });
+        return empty(cancelled ? 'not-found' : 'error', cancelled ? 'Search cancelled.' : errorMessage(err));
     }
 }
 
-async function getLocalVpkFingerprint(vpkPath: string): Promise<LocalVpkFingerprint | null> {
-    const primaryFileName = basename(vpkPath);
-    if (!primaryFileName.toLowerCase().endsWith('_dir.vpk')) return null;
+export async function detectUnknownModCacheMatches(
+    inputs: UnknownModCacheMatchInput[],
+    options: Pick<UnknownModDetectionOptions, 'onProgress'> = {}
+): Promise<UnknownModFilterGuess[]> {
+    const vpkInputs = inputs.filter((input) => input.vpkPath.toLowerCase().endsWith('.vpk'));
+    const skipped = inputs
+        .filter((input) => !input.vpkPath.toLowerCase().endsWith('.vpk'))
+        .map((input) => cacheMiss(input, 'No local VPK file was found.'));
 
-    const [stats, crc32] = await Promise.all([
-        fs.stat(vpkPath),
-        crc32File(vpkPath),
-    ]);
-    return { size: stats.size, crc32 };
+    for (const input of vpkInputs) {
+        options.onProgress?.({
+            modId: input.modId,
+            requestId: input.requestId,
+            phase: 'fingerprinting',
+            message: 'Checking local CRC cache...',
+        });
+    }
+
+    const fingerprints = await fingerprintFilesInWorkers(
+        vpkInputs.map((input) => ({ id: input.modId, filePath: input.vpkPath })),
+        { concurrency: CACHE_FINGERPRINT_CONCURRENCY }
+    );
+    const inputById = new Map(vpkInputs.map((input) => [input.modId, input]));
+    const results: UnknownModFilterGuess[] = [];
+    const fingerprintResults: Array<{ input: UnknownModCacheMatchInput; fingerprint: FileFingerprintResult }> = [];
+
+    for (const fingerprint of fingerprints) {
+        const input = inputById.get(fingerprint.id);
+        if (!input) {
+            continue;
+        }
+        if (fingerprint.error) {
+            results.push(cacheMiss(input, fingerprint.error));
+            continue;
+        }
+
+        rememberFingerprint(input.vpkPath, fingerprint);
+        fingerprintResults.push({ input, fingerprint });
+    }
+
+    const cachedMatches = lookupUnknownCrcMatches(fingerprintResults.map(({ fingerprint }) => ({
+        key: fingerprint.id,
+        crc32: fingerprint.crc32,
+        uncompressedSize: fingerprint.size,
+    })));
+
+    for (const { input, fingerprint } of fingerprintResults) {
+        const cached = cachedMatches.get(fingerprint.id);
+        if (!cached) {
+            results.push(cacheMiss(input, 'No cached CRC match found yet.'));
+            continue;
+        }
+
+        const result = {
+            modId: input.modId,
+            fileName: input.fileName,
+            crcMatch: toFoundMatch(cached, 'CRC-32 matched cached GameBanana archive data.'),
+        };
+        options.onProgress?.({
+            modId: input.modId,
+            requestId: input.requestId,
+            phase: 'cache-hit',
+            message: 'Found a cached CRC match.',
+            result,
+        });
+        results.push(result);
+    }
+
+    return [...results, ...skipped];
 }
 
-async function buildCandidateBuckets(
-    guess: UnknownModFilterBase,
-    options: UnknownModDetectionOptions
-): Promise<CandidateBucket[]> {
-    throwIfAborted(options.signal);
-    const modCategories = await getModCategoryTree(options);
-    throwIfAborted(options.signal);
-    const buckets: CandidateBucket[] = [];
-    const add = (bucket: CandidateBucket) => {
-        const key = candidateBucketKey(bucket);
-        if (!buckets.some((existing) => candidateBucketKey(existing) === key)) {
+async function getLocalVpkFingerprint(vpkPath: string, signal?: AbortSignal): Promise<LocalVpkFingerprint | null> {
+    if (!vpkPath.toLowerCase().endsWith('.vpk')) return null;
+
+    throwIfAborted(signal);
+    const stats = await fs.stat(vpkPath);
+    const cached = localFingerprintCache.get(vpkPath);
+    if (cached?.size === stats.size && cached.mtimeMs === stats.mtimeMs) {
+        return cached.fingerprint;
+    }
+
+    const fingerprint = {
+        size: stats.size,
+        crc32: await crc32File(vpkPath, signal),
+    };
+    localFingerprintCache.set(vpkPath, {
+        size: stats.size,
+        mtimeMs: stats.mtimeMs,
+        fingerprint,
+    });
+    if (localFingerprintCache.size > LOCAL_FINGERPRINT_CACHE_MAX) {
+        const oldestKey = localFingerprintCache.keys().next().value;
+        if (oldestKey) localFingerprintCache.delete(oldestKey);
+    }
+    return fingerprint;
+}
+
+function rememberFingerprint(vpkPath: string, result: FileFingerprintResult): void {
+    if (result.error) return;
+    localFingerprintCache.set(vpkPath, {
+        size: result.size,
+        mtimeMs: result.mtimeMs,
+        fingerprint: {
+            size: result.size,
+            crc32: result.crc32.toLowerCase(),
+        },
+    });
+    if (localFingerprintCache.size > LOCAL_FINGERPRINT_CACHE_MAX) {
+        const oldestKey = localFingerprintCache.keys().next().value;
+        if (oldestKey) localFingerprintCache.delete(oldestKey);
+    }
+}
+
+function cacheMiss(input: UnknownModCacheMatchInput, reason: string): UnknownModFilterGuess {
+    return {
+        modId: input.modId,
+        fileName: input.fileName,
+        crcMatch: { status: 'not-found', reason },
+    };
+}
+
+async function fetchCandidateModsPage(
+    bucket: SearchBucket,
+    page: number,
+    signal?: AbortSignal
+): Promise<GameBananaModsResponse> {
+    const response = await fetchSubmissions(
+        bucket.section,
+        page,
+        CANDIDATE_PAGE_SIZE,
+        bucket.search,
+        bucket.categoryId,
+        'default',
+        { signal }
+    );
+    console.log(
+        `[UnknownCrc] Candidate bucket ${bucket.section}/${bucket.categoryName ?? 'All'} search="${bucket.search ?? ''}" page ${page} returned ${response.records.length}/${response.totalCount}`
+    );
+    return response;
+}
+
+async function getCandidateFiles(
+    candidateMods: GameBananaMod[],
+    bucket: SearchBucket,
+    signal?: AbortSignal
+): Promise<UnknownCrcFile[]> {
+    const cachedByMod = getUnknownCrcFilesForMods(candidateMods.map((mod) => ({
+        modId: mod.id,
+        section: bucket.section,
+        dateModified: mod.dateModified,
+    })));
+    const cachedFiles: UnknownCrcFile[] = [];
+    const uncachedMods: GameBananaMod[] = [];
+
+    for (const mod of candidateMods) {
+        const cached = cachedByMod.get(`${bucket.section}:${mod.id}`);
+        if (cached?.length) {
+            cachedFiles.push(...cached);
+        } else {
+            uncachedMods.push(mod);
+        }
+    }
+
+    if (uncachedMods.length === 0) {
+        return sortCandidateFiles(cachedFiles);
+    }
+
+    const metadata = await fetchModsFilesMetadata(
+        uncachedMods.map((mod) => ({ id: mod.id, section: bucket.section })),
+        true,
+        { signal }
+    );
+    return sortCandidateFiles([
+        ...cachedFiles,
+        ...cacheCandidateFiles(uncachedMods, metadata, bucket),
+    ]);
+}
+
+function cacheCandidateFiles(
+    mods: GameBananaMod[],
+    results: GameBananaFileMetadataResult[],
+    bucket: SearchBucket
+): UnknownCrcFile[] {
+    const modByKey = new Map(mods.map((mod) => [`${bucket.section}:${mod.id}`, mod]));
+    const files: UnknownCrcFileInput[] = [];
+
+    for (const result of results) {
+        if (result.error) {
+            console.warn(`[UnknownCrc] File metadata failed for ${result.section}/${result.modId}: ${result.error}`);
+            continue;
+        }
+
+        const mod = modByKey.get(`${result.section}:${result.modId}`);
+        if (!mod) continue;
+        for (const file of result.files) {
+            files.push({
+                fileId: file.id,
+                modId: mod.id,
+                modName: mod.name,
+                section: result.section,
+                categoryName: bucket.categoryName ?? mod.rootCategory?.name ?? null,
+                thumbnailUrl: getThumbnailUrl(mod),
+                nsfw: mod.nsfw,
+                dateModified: mod.dateModified,
+                fileName: file.fileName,
+                fileSize: file.fileSize,
+                downloadUrl: file.downloadUrl,
+                isArchived: file.isArchived,
+                md5: file.md5 ?? null,
+            });
+        }
+    }
+
+    console.log(`[UnknownCrc] Cached metadata for ${mods.length} candidate mod(s), ${files.length} file(s).`);
+    return sortCandidateFiles(upsertUnknownCrcFiles(files));
+}
+
+function sortCandidateFiles(files: UnknownCrcFile[]): UnknownCrcFile[] {
+    return files.slice()
+        .sort((a, b) => Number(a.isArchived) - Number(b.isArchived) || b.dateModified - a.dateModified || b.fileId - a.fileId);
+}
+
+function chooseSearchBuckets(paths: string[]): SearchBucket[] {
+    const normalized = paths.map((path) => path.replace(/\\/g, '/').toLowerCase());
+    const hero = findHeroHint(normalized);
+    const ranked = scoreCategories(normalized);
+
+    if (ranked.length === 0) {
+        ranked.push({ key: 'modMisc', points: 1 });
+    }
+
+    const seen = new Set<string>();
+    // Unknown search intentionally probes only the best-scoring Browser bucket.
+    // CRC cache hits handle future searches, while one bucket keeps each live
+    // search bounded and avoids hammering GameBanana.
+    const buckets: SearchBucket[] = [];
+    for (const { key, points } of ranked.slice(0, 1)) {
+        const target = resolveCategoryTarget(key, hero);
+        const search = searchForTarget(key, hero);
+        const bucket = {
+            ...target,
+            search,
+            label: buildBucketLabel(key, target, points, hero, search),
+        };
+        const dedupeKey = `${bucket.section}:${bucket.categoryId ?? ''}:${bucket.search ?? ''}`;
+        if (!seen.has(dedupeKey)) {
+            seen.add(dedupeKey);
             buckets.push(bucket);
         }
-    };
-
-    if (guess.heroName && guess.section === 'Sound') {
-        add({ section: 'Sound', search: guess.heroName, label: `Sounds search: ${guess.heroName}` });
-        add({ section: 'Mod', search: guess.heroName, label: `Mods search: ${guess.heroName}` });
-        return buckets;
-    }
-
-    if (guess.heroName) {
-        const skins = findCategoryByName(modCategories, 'Skins');
-        const heroCategory = skins?.children?.find(
-            (category) => normalizeHeroKey(category.name) === normalizeHeroKey(guess.heroName!)
-        );
-
-        if (heroCategory) {
-            add({ section: 'Mod', categoryId: heroCategory.id, label: `Mods / Skins / ${heroCategory.name}` });
-        }
-        add({ section: 'Mod', search: guess.heroName, label: `Mods search: ${guess.heroName}` });
-        add({ section: 'Sound', search: guess.heroName, label: `Sounds search: ${guess.heroName}` });
-        return buckets;
-    }
-
-    if (guess.categoryName) {
-        const category = findCategoryByName(modCategories, guess.categoryName);
-        if (category) {
-            add({ section: 'Mod', categoryId: category.id, label: `Mods / ${category.name}` });
-        }
-    }
-    if (guess.search) {
-        add({ section: 'Mod', search: guess.search, label: `Mods search: ${guess.search}` });
     }
 
     return buckets;
 }
 
-function candidateBucketKey(bucket: CandidateBucket): string {
-    return `${bucket.section}|${bucket.categoryId ?? ''}|${bucket.search ?? ''}`;
-}
-
-function appendCrcError(result: UnknownModCrcMatchResult, message: string): void {
-    if (result.errors.length < MAX_CRC_ERROR_MESSAGES) {
-        result.errors.push(message);
-    }
-}
-
-interface CandidateCrcCheck {
-    checkedFiles: number;
-    bytesFetched: number;
-    skipped7z: number;
-    errors: string[];
-    match?: Pick<
-        UnknownModCrcMatchResult,
-        'modId' | 'modName' | 'thumbnailUrl' | 'nsfw' | 'fileId' | 'fileName' | 'section' | 'categoryName'
-    >;
-}
-
-async function checkCandidateForCrcMatch(
-    candidate: GameBananaMod,
-    bucket: CandidateBucket,
-    localFile: LocalVpkFingerprint,
-    options: UnknownModDetectionOptions
-): Promise<CandidateCrcCheck> {
-    const result: CandidateCrcCheck = {
-        checkedFiles: 0,
-        bytesFetched: 0,
-        skipped7z: 0,
-        errors: [],
-    };
-
-    let files: GameBananaFileWithRawPaths[];
-    try {
-        throwIfAborted(options.signal);
-        files = await fetchModFilesWithRawPaths(candidate.id, bucket.section, true, { signal: options.signal });
-    } catch (err) {
-        result.errors.push(`${candidate.name}: failed to read files (${errorMessage(err)})`);
-        return result;
-    }
-
-    for (const file of files) {
-        throwIfAborted(options.signal);
-        if (file.rawVpkPathsError) {
-            result.errors.push(`${candidate.name} / ${file.fileName}: RawFileList failed (${file.rawVpkPathsError})`);
-            continue;
-        }
-        if (!rawVpkPathsCouldMatch(file.rawVpkPaths)) {
-            continue;
-        }
-
-        result.checkedFiles++;
-        try {
-            const archive = await fetchGameBananaArchiveVpkCrcEntries(file, { signal: options.signal });
-            result.bytesFetched += archive.bytesFetched;
-            if (archive.archiveType === '7z' && archive.unsupportedReason) {
-                result.skipped7z++;
+function scoreCategories(paths: string[]): Array<{ key: CategoryKey; points: number }> {
+    const scores = new Map<CategoryKey, number>();
+    const hasModelPath = paths.some((path) => MODEL_PATH_PATTERN.test(path));
+    for (const path of paths) {
+        for (const rule of CATEGORY_PATH_RULES) {
+            if (!rule.pattern.test(path)) continue;
+            for (const key of Object.keys(rule.points) as CategoryKey[]) {
+                const points = rule.points[key] ?? 0;
+                scores.set(key, (scores.get(key) ?? 0) + points);
             }
-            if (archiveMatchesLocalVpk(localFile, archive.entries)) {
-                result.match = {
-                    modId: candidate.id,
-                    modName: candidate.name,
-                    thumbnailUrl: thumbnailUrlForCandidate(candidate),
-                    nsfw: candidate.nsfw,
-                    fileId: file.id,
-                    fileName: file.fileName,
-                    section: bucket.section,
-                    categoryName: candidate.rootCategory?.name,
-                };
-                return result;
-            }
-        } catch (err) {
-            result.errors.push(`${candidate.name} / ${file.fileName}: ${errorMessage(err)}`);
         }
     }
 
-    return result;
+    return [...scores.entries()]
+        .map(([key, points]) => ({ key, points }))
+        .filter(({ key, points }) => points > 0 && !(hasModelPath && key === 'soundMisc'))
+        .sort((a, b) => b.points - a.points || categoryTieBreaker(a.key) - categoryTieBreaker(b.key));
 }
 
-function thumbnailUrlForCandidate(candidate: GameBananaMod): string | undefined {
-    const image = candidate.previewMedia?.images?.[0];
-    if (!image?.baseUrl) return undefined;
-
-    const file = image.file530 || image.file || image.file220;
-    return file ? `${image.baseUrl}/${file}` : undefined;
+function categoryTieBreaker(key: CategoryKey): number {
+    const index = CATEGORY_TIE_BREAKERS.indexOf(key);
+    return index === -1 ? CATEGORY_TIE_BREAKERS.length : index;
 }
 
-async function getModCategoryTree(options: UnknownModDetectionOptions = {}): Promise<GameBananaCategoryNode[]> {
-    if (options.signal) {
-        return fetchCategoryTree('ModCategory', { signal: options.signal });
-    }
-    modCategoryTreePromise ??= fetchCategoryTree('ModCategory');
-    return modCategoryTreePromise;
-}
-
-function findCategoryByName(
-    categories: GameBananaCategoryNode[],
-    name: string
-): GameBananaCategoryNode | undefined {
-    for (const category of categories) {
-        if (category.name.toLowerCase() === name.toLowerCase()) {
-            return category;
-        }
-        const child = category.children ? findCategoryByName(category.children, name) : undefined;
-        if (child) return child;
+function searchForTarget(key: CategoryKey, hero: HeroHint | null): string | undefined {
+    if (!hero) return undefined;
+    if (key === 'skins') return undefined;
+    if (key === 'modelReplacement' || CATEGORY_TARGETS[key].section === 'Sound') {
+        return hero.display;
     }
     return undefined;
 }
 
-async function fetchBucketCandidates(
-    bucket: CandidateBucket,
-    options: UnknownModDetectionOptions
-): Promise<GameBananaMod[]> {
-    const perPage = 50;
-    const maxPages = 4;
-    const byId = new Map<number, GameBananaMod>();
+function resolveCategoryTarget(key: CategoryKey, hero: HeroHint | null): CategoryTarget {
+    if (key === 'skins' && hero) {
+        return {
+            section: 'Mod',
+            categoryId: hero.skinCategoryId,
+            categoryName: `Skins/${hero.display}`,
+        };
+    }
+    return CATEGORY_TARGETS[key];
+}
 
-    for (let page = 1; page <= maxPages; page++) {
-        throwIfAborted(options.signal);
-        const response = await fetchSubmissions(
-            bucket.section,
-            page,
-            perPage,
-            bucket.search,
-            bucket.categoryId,
-            undefined,
-            { signal: options.signal }
-        );
+function buildBucketLabel(
+    key: CategoryKey,
+    target: CategoryTarget,
+    points: number,
+    hero: HeroHint | null,
+    search?: string
+): string {
+    const prefix = `${target.categoryName} scored ${points} from VPK paths.`;
+    if (key === 'skins' && hero) return `${prefix} Using ${hero.display}'s Skins category.`;
+    return search && hero ? `${prefix} Searching ${hero.display}.` : prefix;
+}
 
-        for (const mod of response.records) {
-            if (mod.hasFiles) byId.set(mod.id, mod);
-        }
+function shouldProbeArchive(file: UnknownCrcFile): boolean {
+    if (file.status === 'pending') return true;
+    if (file.status === 'unsupported') return file.parserVersion < UNKNOWN_CRC_PARSER_VERSION;
+    if (file.status === 'failed') {
+        return !file.checkedAt || (Date.now() / 1000) - file.checkedAt >= FAILED_RETRY_SECONDS;
+    }
+    return false;
+}
 
-        if (response.isComplete || response.records.length < perPage) {
-            break;
+function findHeroHint(paths: string[]): HeroHint | null {
+    const scores = new Map<HeroHint, number>();
+
+    for (const path of paths) {
+        const segments = path.split(/[/_.\s-]+/).filter(Boolean).map(normalizeHeroKey);
+        const compactPath = normalizeHeroKey(path);
+        for (const hero of HERO_HINTS) {
+            const code = normalizeHeroKey(hero.code);
+            const display = normalizeHeroKey(hero.display);
+            if (
+                segments.includes(code) ||
+                segments.includes(display) ||
+                (code.length > 3 && compactPath.includes(code)) ||
+                (display.length > 4 && compactPath.includes(display))
+            ) {
+                scores.set(hero, (scores.get(hero) ?? 0) + scoreHeroPath(path));
+            }
         }
     }
 
-    return [...byId.values()];
+    const best = [...scores.entries()].sort((a, b) => b[1] - a[1])[0];
+    return best?.[0] ?? null;
 }
 
-// Accept any .vpk inside the archive, not just *_dir.vpk. Mod authors often
-// ship a single non-chunked VPK (e.g. demomanbebop.vpk) and Grimoire renames
-// it to pakNN_dir.vpk on install. The bytes are preserved, so CRC still
-// matches: but the old `_dir.vpk`-only filter skipped these archives before
-// any CRC check could happen. See GB 678174 for a repro case.
-function rawVpkPathsCouldMatch(rawPaths: string[]): boolean {
-    if (rawPaths.length === 0) return false;
-    return rawPaths.some((rawPath) => rawPath.toLowerCase().endsWith('.vpk'));
+function normalizeHeroKey(value: string): string {
+    return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
-function archiveMatchesLocalVpk(localFile: LocalVpkFingerprint, archiveEntries: ArchiveVpkCrcEntry[]): boolean {
-    return archiveEntries.some((entry) => (
-        entry.name.toLowerCase().endsWith('.vpk') &&
-        entry.uncompressedSize === localFile.size &&
-        entry.crc32.toLowerCase() === localFile.crc32
-    ));
+function scoreHeroPath(path: string): number {
+    if (/models\/heroes(?:_wip|_staging)?\//.test(path)) return 4;
+    if (/materials\/models\/heroes(?:_wip|_staging)?\//.test(path)) return 3;
+    if (/soundevents|sounds?|scripts\/tagged_sounds|particles\/abilities|panorama\/images\/hud\/abilities/.test(path)) return 2;
+    return 1;
+}
+
+function toFoundMatch(
+    match: UnknownCrcLookupMatch | (UnknownCrcFile & {
+        entryName: string;
+        crc32: string;
+        uncompressedSize: number;
+        compressedSize: number;
+    }),
+    reason: string
+): UnknownModCrcMatchResult {
+    return {
+        status: 'found',
+        modId: match.modId,
+        modName: match.modName,
+        thumbnailUrl: match.thumbnailUrl ?? undefined,
+        nsfw: match.nsfw,
+        fileId: match.fileId,
+        fileName: match.fileName,
+        section: match.section,
+        categoryName: match.categoryName ?? undefined,
+        reason,
+    };
+}
+
+function getThumbnailUrl(mod: GameBananaMod): string | null {
+    const thumbnail = mod.previewMedia?.images?.[0];
+    return thumbnail ? `${thumbnail.baseUrl}/${thumbnail.file530 || thumbnail.file || thumbnail.file220}` : null;
+}
+
+function describeBucket(bucket: SearchBucket): string {
+    const category = bucket.categoryName ? `/${bucket.categoryName}` : '';
+    const search = bucket.search ? ` for "${bucket.search}"` : '';
+    return `Searching ${bucket.section}${category}${search}. ${bucket.label}`;
+}
+
+function bucketLabel(bucket: SearchBucket): string {
+    const category = bucket.categoryName ?? (bucket.categoryId ? `Category ${bucket.categoryId}` : 'All');
+    const search = bucket.search ? ` search "${bucket.search}"` : '';
+    return `${bucket.section}/${category}${search}`;
+}
+
+function logIndexedFile(file: UnknownCrcFile, entryCount: number, bytesFetched: number): void {
+    const detail = entryCount === 0 ? 'no VPK entries found' : `${entryCount} VPK entr${entryCount === 1 ? 'y' : 'ies'}`;
+    console.log(
+        `[UnknownCrc] Indexed ${file.section}/${file.modId} file ${file.fileId} (${file.fileName}): ${detail}; fetched ${bytesFetched.toLocaleString()} bytes`
+    );
 }
 
 function errorMessage(err: unknown): string {
@@ -490,205 +837,4 @@ function throwIfAborted(signal?: AbortSignal): void {
     if (signal?.aborted) {
         throw new Error('Unknown mod search cancelled');
     }
-}
-
-function normalizePath(path: string): string {
-    return path.replace(/\\/g, '/').toLowerCase();
-}
-
-function normalizeHeroKey(value: string): string {
-    return value
-        .replace(/^hero_/i, '')
-        .replace(/&/g, ' and ')
-        .replace(/[^a-z0-9]+/gi, ' ')
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, ' ');
-}
-
-function tokenVariants(raw: string): string[] {
-    const normalized = normalizeHeroKey(raw);
-    const compact = normalized.replace(/\s+/g, '');
-    const first = normalized.split(' ')[0] ?? normalized;
-    const withoutSuffix = normalized
-        .replace(/\s+(?:v\d+|copy|alt|temp|test)\b.*$/i, '')
-        .trim();
-    const withoutNumberSuffix = normalized
-        .replace(/\s+v?\d+\b.*$/i, '')
-        .trim();
-
-    return [...new Set([normalized, compact, withoutSuffix, withoutNumberSuffix, first].filter(Boolean))];
-}
-
-function findHeroFromToken(raw: string): HeroNamePair | null {
-    for (const variant of tokenVariants(raw)) {
-        const exact = HERO_BY_KEY.get(variant);
-        if (exact) return exact;
-    }
-
-    const normalized = ` ${normalizeHeroKey(raw)} `;
-    for (const hero of HERO_NAME_PAIRS) {
-        const displayName = normalizeHeroKey(hero.name);
-        const fileName = normalizeHeroKey(hero.fileName);
-        if (normalized.includes(` ${displayName} `) || normalized.includes(` ${fileName} `)) {
-            return hero;
-        }
-    }
-
-    return null;
-}
-
-function detectHeroSignals(paths: string[]): HeroSignal[] {
-    const signals: HeroSignal[] = [];
-
-    for (const path of paths) {
-        for (const { pattern, strength, label } of HERO_SIGNAL_PATTERNS) {
-            const match = path.match(pattern);
-            if (!match?.[1]) continue;
-
-            const hero = findHeroFromToken(match[1]);
-            if (!hero) continue;
-            signals.push({
-                hero,
-                strength,
-                clue: `${label}: ${match[1]}`,
-            });
-        }
-    }
-
-    return signals;
-}
-
-function summarizeHeroSignals(signals: HeroSignal[]): UnknownModFilterGuess['detectedHeroes'] {
-    const byHero = new Map<string, {
-        name: string;
-        fileName: string;
-        score: number;
-        strongestSignal: SignalStrength;
-        clues: Set<string>;
-    }>();
-
-    for (const signal of signals) {
-        const existing = byHero.get(signal.hero.name) ?? {
-            name: signal.hero.name,
-            fileName: signal.hero.fileName,
-            score: 0,
-            strongestSignal: signal.strength,
-            clues: new Set<string>(),
-        };
-        existing.score += SCORE[signal.strength];
-        if (SCORE[signal.strength] > SCORE[existing.strongestSignal]) {
-            existing.strongestSignal = signal.strength;
-        }
-        if (existing.clues.size < 5) existing.clues.add(signal.clue);
-        byHero.set(signal.hero.name, existing);
-    }
-
-    return [...byHero.values()]
-        .map((hero) => ({
-            ...hero,
-            clues: [...hero.clues],
-        }))
-        .sort((a, b) => b.score - a.score);
-}
-
-function choosePrimaryHero(
-    heroes: UnknownModFilterGuess['detectedHeroes']
-): UnknownModFilterGuess['detectedHeroes'][number] | undefined {
-    const strong = heroes.filter((hero) => hero.strongestSignal === 'strong');
-    if (strong.length > 0) return strong[0];
-    return heroes[0];
-}
-
-function detectContentHints(paths: string[]): string[] {
-    const hints = new Set<string>();
-
-    for (const path of paths) {
-        if (/^models\/|\/models\//i.test(path) || /^materials\/models\//i.test(path)) hints.add('Model');
-        if (/^sounds\/|^soundevents\//i.test(path)) hints.add('Sound');
-        if (/^panorama\//i.test(path)) hints.add('UI');
-        if (/^panorama\/images\/heroes\/(?:backgrounds|hero_names)\//i.test(path)) hints.add('Hero Select UI');
-        if (/^particles\/|^materials\/particle\//i.test(path)) hints.add('VFX');
-        if (/^postprocessing\//i.test(path) || /\.vpost_c$/i.test(path)) hints.add('Post Processing');
-        if (/^maps\//i.test(path)) hints.add('Map');
-        if (/^materials\/skybox\//i.test(path)) hints.add('Skybox');
-        if (/weapons?\//i.test(path)) hints.add('Weapon');
-    }
-
-    return [...hints];
-}
-
-function chooseFilterKind(
-    hints: string[],
-    primaryHero: UnknownModFilterGuess['detectedHeroes'][number] | undefined
-): { section: 'Mod' | 'Sound'; categoryName?: string; searchFallback?: string } {
-    const has = (hint: string) => hints.includes(hint);
-    const modelLike = has('Model') || has('VFX');
-    const soundOnly = has('Sound') && !modelLike && !has('UI') && !has('Map') && !has('Skybox');
-
-    if (soundOnly) {
-        return { section: 'Sound' };
-    }
-
-    if (has('Map') || has('Skybox')) {
-        return { section: 'Mod', categoryName: 'Maps', searchFallback: has('Skybox') ? 'skybox' : 'map' };
-    }
-
-    if (has('UI') && !modelLike) {
-        return { section: 'Mod', categoryName: 'HUD', searchFallback: primaryHero ? undefined : 'hud' };
-    }
-
-    if (has('Post Processing')) {
-        return { section: 'Mod', categoryName: 'Other/Misc', searchFallback: 'postprocess' };
-    }
-
-    if (modelLike) {
-        return { section: 'Mod', categoryName: primaryHero ? 'Skins' : 'Model Replacement' };
-    }
-
-    return { section: 'Mod', categoryName: 'Other/Misc' };
-}
-
-function chooseConfidence(
-    primaryHero: UnknownModFilterGuess['detectedHeroes'][number] | undefined,
-    kind: { categoryName?: string },
-    fileCount: number
-): UnknownModFilterGuess['confidence'] {
-    if (primaryHero?.strongestSignal === 'strong') return 'high';
-    if (primaryHero || kind.categoryName) return 'medium';
-    if (fileCount > 0) return 'low';
-    return 'low';
-}
-
-function buildReasons(
-    kind: { section: 'Mod' | 'Sound'; categoryName?: string },
-    primaryHero: UnknownModFilterGuess['detectedHeroes'][number] | undefined,
-    detectedHeroes: UnknownModFilterGuess['detectedHeroes'],
-    hints: string[]
-): string[] {
-    const reasons: string[] = [];
-
-    if (primaryHero) {
-        reasons.push(
-            `Detected ${primaryHero.name} from ${primaryHero.strongestSignal} VPK path clues (${primaryHero.fileName}).`
-        );
-    }
-    if (detectedHeroes.length > 1) {
-        reasons.push(
-            `Using ${primaryHero?.name ?? detectedHeroes[0].name} first because it has the strongest/most repeated clues.`
-        );
-    }
-    if (kind.section === 'Sound') {
-        reasons.push('Sound-only contents map best to the Browser Sound section.');
-    } else {
-        reasons.push('Contents map best to the Browser Mods section.');
-    }
-    if (kind.categoryName) {
-        reasons.push(`Suggested category filter: ${kind.categoryName}.`);
-    }
-    if (hints.length > 0) {
-        reasons.push(`Content hints: ${hints.join(', ')}.`);
-    }
-
-    return reasons;
 }

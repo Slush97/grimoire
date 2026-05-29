@@ -2,6 +2,7 @@ import type {
     Mod,
     AppSettings,
     ModConflict,
+    UnknownModDetectionProgress,
     UnknownModFilterGuess,
     ApplyUnknownModMatchArgs,
     ApplyUnknownCustomModArgs,
@@ -280,8 +281,10 @@ export interface ElectronAPI {
     enableMod: (modId: string) => Promise<Mod>;
     disableMod: (modId: string) => Promise<Mod>;
     deleteMod: (modId: string) => Promise<void>;
-    detectUnknownModFilters: (modId: string) => Promise<UnknownModFilterGuess>;
+    detectUnknownModFilters: (modId: string, requestId?: string) => Promise<UnknownModFilterGuess>;
+    detectUnknownModCacheBulk: (requests: Array<{ modId: string; requestId?: string }>) => Promise<UnknownModFilterGuess[]>;
     cancelUnknownModDetection: (modId: string) => Promise<void>;
+    onUnknownModDetectionProgress: (callback: (progress: UnknownModDetectionProgress) => void) => () => void;
     applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
     applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;

@@ -26,9 +26,9 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, cancelUnknownModDetection, applyUnknownModMatch, applyUnknownCustomMod } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, UnknownModFilterGuess } from '../types/mod';
+import type { Mod, UnknownModDetectionProgress, UnknownModFilterGuess } from '../types/mod';
 import type { GameBananaModDetails } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
@@ -39,12 +39,42 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { Button, Tag } from '../components/common/ui';
 import { PageHeader, ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
+const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
+const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
+
 function formatBytes(bytes: number): string {
   if (bytes === 0) return '0 B';
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
+}
+
+function pauseUnknownFindQueue(ms = 0): Promise<void> {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+
+function unknownModCacheKey(mod: Pick<Mod, 'id' | 'fileName' | 'size' | 'installedAt' | 'sha256'>): string {
+  return [mod.id, mod.fileName, mod.size, mod.installedAt, mod.sha256 ?? ''].join('|');
+}
+
+function sameUnknownCache(
+  left: Record<string, UnknownModFilterGuess>,
+  right: Record<string, UnknownModFilterGuess>
+): boolean {
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every((key) => left[key] === right[key]);
+}
+
+function clearUnknownCacheForMod(
+  cache: Record<string, UnknownModFilterGuess>,
+  mod: Mod
+): Record<string, UnknownModFilterGuess> {
+  const next = { ...cache };
+  delete next[unknownModCacheKey(mod)];
+  delete next[mod.id];
+  return next;
 }
 
 type DropPosition = 'before' | 'after';
@@ -174,6 +204,23 @@ function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
  */
 const updateCheckCache = new Map<number, Set<number> | null>();
 
+async function runLimited<T>(
+  items: T[],
+  concurrency: number,
+  worker: (item: T) => Promise<void>,
+): Promise<void> {
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const item = items[next++];
+      if (item !== undefined) {
+        await worker(item);
+      }
+    }
+  });
+  await Promise.all(workers);
+}
+
 export default function Installed() {
   const navigate = useNavigate();
   const {
@@ -243,8 +290,93 @@ export default function Installed() {
   const [unknownFilterCache, setUnknownFilterCache] = useState<Record<string, UnknownModFilterGuess>>({});
   const [unknownFilterPendingIds, setUnknownFilterPendingIds] = useState<Set<string>>(new Set());
   const [unknownFilterErrors, setUnknownFilterErrors] = useState<Record<string, string>>({});
+  const [unknownDetectionProgress, setUnknownDetectionProgress] = useState<Record<string, UnknownModDetectionProgress>>({});
   const unknownRequestSeqRef = useRef(0);
-  const unknownRequestIdsRef = useRef<Record<string, number>>({});
+  const unknownRequestIdsRef = useRef<Record<string, string>>({});
+  const unknownModKeyByIdRef = useRef<Record<string, string>>({});
+  const unknownProgressQueueRef = useRef<Record<string, UnknownModDetectionProgress>>({});
+  const unknownProgressFlushRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const nextKeys: Record<string, string> = {};
+    for (const mod of mods) {
+      if (mod.isUnknown) {
+        nextKeys[mod.id] = unknownModCacheKey(mod);
+      }
+    }
+    unknownModKeyByIdRef.current = nextKeys;
+
+    setUnknownFilterCache((prev) => {
+      const next: Record<string, UnknownModFilterGuess> = {};
+      for (const mod of mods) {
+        if (!mod.isUnknown) continue;
+        const key = nextKeys[mod.id];
+        const cached = prev[key] ?? prev[mod.id];
+        if (cached) next[key] = cached;
+      }
+      return sameUnknownCache(prev, next) ? prev : next;
+    });
+  }, [mods]);
+
+  useEffect(() => {
+    const flush = () => {
+      unknownProgressFlushRef.current = null;
+      const queued = Object.values(unknownProgressQueueRef.current);
+      unknownProgressQueueRef.current = {};
+      if (queued.length === 0) return;
+
+      setUnknownDetectionProgress((prev) => {
+        const next = { ...prev };
+        for (const progress of queued) {
+          next[progress.modId] = progress;
+        }
+        return next;
+      });
+
+      const withResults = queued.filter((progress) => progress.result);
+      if (withResults.length > 0) {
+        setUnknownFilterCache((prev) => {
+          const next = { ...prev };
+          for (const progress of withResults) {
+            const cacheKey = unknownModKeyByIdRef.current[progress.modId] ?? progress.modId;
+            next[cacheKey] = progress.result!;
+          }
+          return next;
+        });
+        setUnknownFilterGuess((current) => {
+          if (!current) return current;
+          const progress = withResults.find((item) => item.modId === current.mod.id);
+          return progress?.result
+            ? { ...current, result: progress.result, error: undefined, cancelled: false }
+            : current;
+        });
+      }
+    };
+
+    const unsubscribe = onUnknownModDetectionProgress((progress) => {
+      const activeRequestId = unknownRequestIdsRef.current[progress.modId];
+      if (progress.requestId && activeRequestId !== progress.requestId) {
+        return;
+      }
+      unknownProgressQueueRef.current[progress.modId] = progress;
+      const immediate = !!progress.result || ['cache-hit', 'found', 'complete', 'cancelled', 'error'].includes(progress.phase);
+      if (immediate) {
+        if (unknownProgressFlushRef.current !== null) {
+          window.clearTimeout(unknownProgressFlushRef.current);
+        }
+        flush();
+      } else if (unknownProgressFlushRef.current === null) {
+        unknownProgressFlushRef.current = window.setTimeout(flush, 100);
+      }
+    });
+
+    return () => {
+      unsubscribe();
+      if (unknownProgressFlushRef.current !== null) {
+        window.clearTimeout(unknownProgressFlushRef.current);
+      }
+    };
+  }, []);
 
   // Drag-and-drop reorder state. `draggingSection` scopes drops so dragging
   // an enabled card can't drop onto a disabled card and vice-versa.
@@ -333,6 +465,8 @@ export default function Installed() {
     setDetailsDates(null);
   };
 
+  const getUnknownCache = (mod: Mod) => unknownFilterCache[unknownModCacheKey(mod)];
+
   const inspectUnknownModFilters = async (
     mod: Mod,
     force = false,
@@ -345,13 +479,13 @@ export default function Installed() {
       return;
     }
 
-    const cached = unknownFilterCache[mod.id];
+    const cached = getUnknownCache(mod);
     if (cached && !force) {
       if (focus) setUnknownFilterGuess({ mod, loading: false, result: cached });
       return;
     }
 
-    const requestId = ++unknownRequestSeqRef.current;
+    const requestId = String(++unknownRequestSeqRef.current);
     unknownRequestIdsRef.current[mod.id] = requestId;
     setUnknownFilterPendingIds((prev) => new Set(prev).add(mod.id));
     setUnknownFilterErrors((prev) => {
@@ -359,9 +493,14 @@ export default function Installed() {
       delete next[mod.id];
       return next;
     });
+    setUnknownDetectionProgress((prev) => {
+      const next = { ...prev };
+      delete next[mod.id];
+      return next;
+    });
     if (focus) setUnknownFilterGuess({ mod, loading: true });
     try {
-      const result = await detectUnknownModFilters(mod.id);
+      const result = await detectUnknownModFilters(mod.id, requestId);
       if (unknownRequestIdsRef.current[mod.id] !== requestId) return;
       delete unknownRequestIdsRef.current[mod.id];
       setUnknownFilterPendingIds((prev) => {
@@ -370,7 +509,7 @@ export default function Installed() {
         return next;
       });
       if (result.crcMatch.status !== 'error') {
-        setUnknownFilterCache((prev) => ({ ...prev, [mod.id]: result }));
+        setUnknownFilterCache((prev) => ({ ...prev, [unknownModCacheKey(mod)]: result }));
       }
       setUnknownFilterGuess((current) =>
         current?.mod.id === mod.id ? { mod: current.mod, loading: false, result } : current
@@ -399,19 +538,19 @@ export default function Installed() {
   const openUnknownModFix = (mod: Mod, mode: 'single' | 'bulk' = 'single') => {
     setUnknownFixMode(mode);
     setUnknownFilterGuess({ mod, loading: unknownFilterPendingIds.has(mod.id) });
-    // Auto-kick the search when there's no cached result and nothing in
-    // flight. Otherwise the user has to click Find inside the modal after
-    // already clicking Fix outside — one click too many, and confusing
-    // because the modal just sits idle.
-    if (mode === 'single' && !unknownFilterCache[mod.id] && !unknownFilterPendingIds.has(mod.id)) {
-      void inspectUnknownModFilters(mod, false, mode);
-    }
   };
 
   const applyUnknownMatch = async (mod: Mod, match: FoundUnknownMatch) => {
     if (!match.modId || !match.modName) {
       throw new Error('Matched mod is missing GameBanana metadata');
     }
+    delete unknownRequestIdsRef.current[mod.id];
+    await cancelUnknownModDetection(mod.id).catch(() => undefined);
+    setUnknownFilterPendingIds((prev) => {
+      const next = new Set(prev);
+      next.delete(mod.id);
+      return next;
+    });
     await applyUnknownModMatch(mod.id, {
       gameBananaId: match.modId,
       modName: match.modName,
@@ -423,12 +562,13 @@ export default function Installed() {
       nsfw: match.nsfw,
     });
     await loadMods();
-    setUnknownFilterCache((prev) => {
+    setUnknownFilterCache((prev) => clearUnknownCacheForMod(prev, mod));
+    setUnknownFilterErrors((prev) => {
       const next = { ...prev };
       delete next[mod.id];
       return next;
     });
-    setUnknownFilterErrors((prev) => {
+    setUnknownDetectionProgress((prev) => {
       const next = { ...prev };
       delete next[mod.id];
       return next;
@@ -457,6 +597,7 @@ export default function Installed() {
   };
 
   const cancelUnknownMatch = (mod: Mod) => {
+    const cached = getUnknownCache(mod);
     delete unknownRequestIdsRef.current[mod.id];
     void cancelUnknownModDetection(mod.id).catch(() => undefined);
     setUnknownFilterPendingIds((prev) => {
@@ -469,8 +610,19 @@ export default function Installed() {
       delete next[mod.id];
       return next;
     });
+    setUnknownDetectionProgress((prev) => ({
+      ...prev,
+      [mod.id]: {
+        modId: mod.id,
+        phase: 'cancelled',
+        message: cached ? 'Stopped caching remaining files.' : 'Search cancelled.',
+        result: cached,
+      },
+    }));
     setUnknownFilterGuess((current) =>
-      current?.mod.id === mod.id ? { mod: current.mod, loading: false, cancelled: true } : current
+      current?.mod.id === mod.id
+        ? { mod: current.mod, loading: false, result: cached ?? current.result, cancelled: !cached && !current.result }
+        : current
     );
   };
 
@@ -482,21 +634,140 @@ export default function Installed() {
 
   const findAllUnknownMods = (unknowns: Mod[]) => {
     const queued = unknowns.filter(
-      (mod) => !unknownFilterPendingIds.has(mod.id) && !unknownFilterCache[mod.id]
+      (mod) => !unknownFilterPendingIds.has(mod.id) && !getUnknownCache(mod)
     );
-    void runUnknownFindQueue(queued);
+    void runUnknownFindAllQueue(queued);
   };
 
-  const runUnknownFindQueue = async (queued: Mod[]) => {
+  const retryAllNoMatchUnknownMods = (unknowns: Mod[]) => {
+    const queued = unknowns.filter(
+      (mod) => !unknownFilterPendingIds.has(mod.id) && getUnknownCache(mod)?.crcMatch.status === 'not-found'
+    );
+    void runUnknownFindQueue(queued, true);
+  };
+
+  const runUnknownFindQueue = async (queued: Mod[], force = false) => {
+    if (queued.length === 0) return;
+    await pauseUnknownFindQueue();
     let nextIndex = 0;
-    const workerCount = Math.min(2, queued.length);
+    const workerCount = Math.min(UNKNOWN_FIND_QUEUE_CONCURRENCY, queued.length);
     const workers = Array.from({ length: workerCount }, async () => {
       while (nextIndex < queued.length) {
         const mod = queued[nextIndex++];
-        await inspectUnknownModFilters(mod, false, 'bulk', false);
+        await inspectUnknownModFilters(mod, force, 'bulk', false);
+        await pauseUnknownFindQueue(UNKNOWN_FIND_QUEUE_PAUSE_MS);
       }
     });
     await Promise.all(workers);
+  };
+
+  const runUnknownFindAllQueue = async (queued: Mod[]) => {
+    if (queued.length === 0) return;
+    const misses = await runUnknownCacheQueue(queued);
+    const networkQueue = misses.filter(
+      (mod) => !unknownRequestIdsRef.current[mod.id]
+    );
+    await runUnknownFindQueue(networkQueue);
+  };
+
+  const runUnknownCacheQueue = async (queued: Mod[]): Promise<Mod[]> => {
+    const active = queued.filter((mod) => !unknownFilterPendingIds.has(mod.id) && !getUnknownCache(mod));
+    if (active.length === 0) return [];
+
+    const requestIds = Object.fromEntries(
+      active.map((mod) => [mod.id, String(++unknownRequestSeqRef.current)])
+    );
+    for (const mod of active) {
+      unknownRequestIdsRef.current[mod.id] = requestIds[mod.id];
+    }
+    setUnknownFilterPendingIds((prev) => {
+      const next = new Set(prev);
+      active.forEach((mod) => next.add(mod.id));
+      return next;
+    });
+    setUnknownFilterErrors((prev) => {
+      const next = { ...prev };
+      active.forEach((mod) => delete next[mod.id]);
+      return next;
+    });
+    setUnknownDetectionProgress((prev) => {
+      const next = { ...prev };
+      for (const mod of active) {
+        next[mod.id] = {
+          modId: mod.id,
+          requestId: requestIds[mod.id],
+          phase: 'fingerprinting',
+          message: 'Checking local CRC cache...',
+        };
+      }
+      return next;
+    });
+
+    const byId = new Map(active.map((mod) => [mod.id, mod]));
+    const misses: Mod[] = [];
+    let results: UnknownModFilterGuess[];
+    try {
+      results = await detectUnknownModCacheBulk(
+        active.map((mod) => ({ modId: mod.id, requestId: requestIds[mod.id] }))
+      );
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      setUnknownFilterPendingIds((prev) => {
+        const next = new Set(prev);
+        active.forEach((mod) => next.delete(mod.id));
+        return next;
+      });
+      setUnknownDetectionProgress((prev) => {
+        const next = { ...prev };
+        for (const mod of active) {
+          next[mod.id] = {
+            modId: mod.id,
+            requestId: requestIds[mod.id],
+            phase: 'complete',
+            message: `Cache check failed. Queued for online search. ${message}`,
+          };
+        }
+        return next;
+      });
+      active.forEach((mod) => {
+        if (unknownRequestIdsRef.current[mod.id] === requestIds[mod.id]) {
+          delete unknownRequestIdsRef.current[mod.id];
+          misses.push(mod);
+        }
+      });
+      return misses;
+    }
+
+    for (const result of results) {
+      const mod = byId.get(result.modId);
+      if (!mod || unknownRequestIdsRef.current[mod.id] !== requestIds[mod.id]) continue;
+
+      delete unknownRequestIdsRef.current[mod.id];
+      if (result.crcMatch.status === 'found') {
+        setUnknownFilterCache((prev) => ({ ...prev, [unknownModCacheKey(mod)]: result }));
+      } else {
+        misses.push(mod);
+        setUnknownDetectionProgress((prev) => ({
+          ...prev,
+          [mod.id]: {
+            modId: mod.id,
+            requestId: requestIds[mod.id],
+            phase: 'complete',
+            message: 'No cached match found. Queued for online search.',
+          },
+        }));
+      }
+      setUnknownFilterGuess((current) =>
+        current?.mod.id === mod.id ? { mod: current.mod, loading: false, result } : current
+      );
+    }
+
+    setUnknownFilterPendingIds((prev) => {
+      const next = new Set(prev);
+      active.forEach((mod) => next.delete(mod.id));
+      return next;
+    });
+    return misses;
   };
 
   const viewUnknownMatch = (mod: Mod, match: FoundUnknownMatch) => {
@@ -1010,22 +1281,20 @@ export default function Installed() {
         }
       }
 
-      await Promise.all(
-        Array.from(uniqueIds.entries()).map(async ([gbId, section]) => {
-          if (updateCheckCache.has(gbId)) return;
-          try {
-            const details = await getModDetails(gbId, section);
-            const liveIds = new Set(
-              (details.files ?? [])
-                .filter((f) => !f.isArchived)
-                .map((f) => f.id),
-            );
-            updateCheckCache.set(gbId, liveIds.size > 0 ? liveIds : null);
-          } catch {
-            // Network or API failure: leave uncached so a later mount retries.
-          }
-        }),
-      );
+      await runLimited(Array.from(uniqueIds.entries()), 3, async ([gbId, section]) => {
+        if (updateCheckCache.has(gbId)) return;
+        try {
+          const details = await getModDetails(gbId, section);
+          const liveIds = new Set(
+            (details.files ?? [])
+              .filter((f) => !f.isArchived)
+              .map((f) => f.id),
+          );
+          updateCheckCache.set(gbId, liveIds.size > 0 ? liveIds : null);
+        } catch {
+          // Network or API failure: leave uncached so a later mount retries.
+        }
+      });
 
       if (cancelled) return;
       const available = new Set<string>();
@@ -1089,17 +1358,23 @@ export default function Installed() {
   const unknownMods = mods
     .filter((mod) => mod.isUnknown)
     .sort((a, b) => a.priority - b.priority);
+  const unknownFilterCacheById: Record<string, UnknownModFilterGuess> = {};
+  for (const mod of unknownMods) {
+    const cached = getUnknownCache(mod);
+    if (cached) {
+      unknownFilterCacheById[mod.id] = cached;
+    }
+  }
   const selectedUnknownState = unknownFilterGuess
     ? {
         mod: unknownFilterGuess.mod,
         loading: unknownFilterPendingIds.has(unknownFilterGuess.mod.id),
-        result: unknownFilterPendingIds.has(unknownFilterGuess.mod.id)
-          ? undefined
-          : unknownFilterCache[unknownFilterGuess.mod.id] ?? unknownFilterGuess.result,
+        result: getUnknownCache(unknownFilterGuess.mod) ?? unknownFilterGuess.result,
         error: unknownFilterPendingIds.has(unknownFilterGuess.mod.id)
           ? undefined
           : unknownFilterErrors[unknownFilterGuess.mod.id] ?? unknownFilterGuess.error,
         cancelled: unknownFilterPendingIds.has(unknownFilterGuess.mod.id) ? false : unknownFilterGuess.cancelled,
+        progress: unknownDetectionProgress[unknownFilterGuess.mod.id],
       }
     : null;
   // Filter by search query (case-insensitive substring on name). Drag-and-drop
@@ -1791,7 +2066,7 @@ export default function Installed() {
           unknownMods={unknownMods}
           state={selectedUnknownState}
           hideNsfwPreviews={settings?.hideNsfwPreviews ?? false}
-          cache={unknownFilterCache}
+          cache={unknownFilterCacheById}
           pendingIds={unknownFilterPendingIds}
           errors={unknownFilterErrors}
           onSelect={(mod) => openUnknownModFix(mod, 'bulk')}
@@ -1799,6 +2074,7 @@ export default function Installed() {
           onViewMatch={viewUnknownMatch}
           onMakeCustom={makeUnknownCustomMod}
           onFindAll={findAllUnknownMods}
+          onRetryAll={retryAllNoMatchUnknownMods}
           onFind={(mod) => void inspectUnknownModFilters(mod, false, 'bulk')}
           onRetry={(mod) => void inspectUnknownModFilters(mod, true, 'bulk')}
           onCancel={cancelUnknownMatch}
@@ -1818,12 +2094,13 @@ export default function Installed() {
           onImport={async ({ name, thumbnailDataUrl, nsfw }) => {
             await applyUnknownCustomMod(customUnknownMod.id, { name, thumbnailDataUrl, nsfw });
             await loadMods();
-            setUnknownFilterCache((prev) => {
+            setUnknownFilterCache((prev) => clearUnknownCacheForMod(prev, customUnknownMod));
+            setUnknownFilterErrors((prev) => {
               const next = { ...prev };
               delete next[customUnknownMod.id];
               return next;
             });
-            setUnknownFilterErrors((prev) => {
+            setUnknownDetectionProgress((prev) => {
               const next = { ...prev };
               delete next[customUnknownMod.id];
               return next;
@@ -1986,6 +2263,7 @@ function UnknownFilterGuessModal({
     result?: UnknownModFilterGuess;
     error?: string;
     cancelled?: boolean;
+    progress?: UnknownModDetectionProgress;
   };
   hideNsfwPreviews: boolean;
   onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
@@ -2059,6 +2337,7 @@ function BulkUnknownFixModal({
   onViewMatch,
   onMakeCustom,
   onFindAll,
+  onRetryAll,
   onFind,
   onRetry,
   onCancel,
@@ -2071,6 +2350,7 @@ function BulkUnknownFixModal({
     result?: UnknownModFilterGuess;
     error?: string;
     cancelled?: boolean;
+    progress?: UnknownModDetectionProgress;
   };
   hideNsfwPreviews: boolean;
   cache: Record<string, UnknownModFilterGuess>;
@@ -2081,12 +2361,16 @@ function BulkUnknownFixModal({
   onViewMatch: (mod: Mod, match: FoundUnknownMatch) => void;
   onMakeCustom: (mod: Mod) => void;
   onFindAll: (mods: Mod[]) => void;
+  onRetryAll: (mods: Mod[]) => void;
   onFind: (mod: Mod) => void;
   onRetry: (mod: Mod) => void;
   onCancel: (mod: Mod) => void;
   onClose: () => void;
 }) {
   const findableCount = unknownMods.filter((mod) => !pendingIds.has(mod.id) && !cache[mod.id]).length;
+  const retryableCount = unknownMods.filter(
+    (mod) => !pendingIds.has(mod.id) && cache[mod.id]?.crcMatch.status === 'not-found'
+  ).length;
 
   return (
     <div
@@ -2111,6 +2395,16 @@ function BulkUnknownFixModal({
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={RotateCcw}
+              disabled={retryableCount === 0}
+              onClick={() => onRetryAll(unknownMods)}
+              title="Retry every unknown mod that previously had no match"
+            >
+              Retry all
+            </Button>
             <Button
               variant="primary"
               size="sm"
@@ -2140,12 +2434,12 @@ function BulkUnknownFixModal({
               const isSelected = state.mod.id === mod.id;
               const isLoading = pendingIds.has(mod.id);
               const hasError = !!errors[mod.id];
-              const statusLabel = isLoading
-                ? 'Searching'
-                : hasError
-                  ? 'Error'
-                : cachedMatch?.status === 'found'
+              const statusLabel = cachedMatch?.status === 'found'
                   ? 'Found'
+                : isLoading
+                  ? 'Searching'
+                  : hasError
+                    ? 'Error'
                   : cachedMatch?.status === 'not-found'
                     ? 'No match'
                     : 'Unknown';
@@ -2214,6 +2508,7 @@ function UnknownMatchPanel({
     result?: UnknownModFilterGuess;
     error?: string;
     cancelled?: boolean;
+    progress?: UnknownModDetectionProgress;
   };
   hideNsfwPreviews: boolean;
   onApplyMatch: (mod: Mod, match: FoundUnknownMatch) => Promise<void>;
@@ -2223,7 +2518,7 @@ function UnknownMatchPanel({
   onRetry: (mod: Mod) => void;
   onCancel: (mod: Mod) => void;
 }) {
-  const { mod, loading, result, error, cancelled } = state;
+  const { mod, loading, result, error, cancelled, progress } = state;
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const match = result?.crcMatch;
@@ -2266,7 +2561,16 @@ function UnknownMatchPanel({
         <div className="rounded-md bg-bg-tertiary/50 border border-white/5 px-4 py-4 text-sm text-text-secondary flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3 min-w-0">
             <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
-            <span>Finding a matching mod...</span>
+            <div className="min-w-0">
+              <div className="truncate">{progress?.message ?? 'Finding a matching mod...'}</div>
+              {typeof progress?.checkedFiles === 'number' && typeof progress.totalFiles === 'number' && (
+                <div className="text-xs text-text-tertiary mt-0.5">
+                  {progress.checkedFiles}/{progress.totalFiles} files
+                  {typeof progress.indexedEntries === 'number' ? `, ${progress.indexedEntries} VPK entries` : ''}
+                  {typeof progress.bytesFetched === 'number' ? `, ${formatBytes(progress.bytesFetched)} fetched` : ''}
+                </div>
+              )}
+            </div>
           </div>
           <Button
             variant="secondary"
@@ -2316,11 +2620,6 @@ function UnknownMatchPanel({
                 <p className="text-sm text-text-secondary mt-1">
                   {match.reason ?? 'No GameBanana archive matched this local VPK by CRC-32.'}
                 </p>
-                <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-text-tertiary">
-                  <span>{match.checkedMods} mods checked</span>
-                  <span>{match.checkedFiles} files checked</span>
-                  <span>{match.bytesFetched.toLocaleString()} bytes fetched</span>
-                </div>
               </div>
             </div>
           </div>
@@ -2405,7 +2704,7 @@ function UnknownMatchCard({
           />
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-wider text-state-success">
-              Likely Match
+              Match
             </div>
             <h3 className="text-base font-semibold text-text-primary mt-1 truncate" title={match.modName}>
               {match.modName ?? 'GameBanana mod'}
@@ -2416,11 +2715,15 @@ function UnknownMatchCard({
               </p>
             )}
           </div>
-          <Tag tone="success">Exact CRC</Tag>
+          <Tag tone="success">CRC Match</Tag>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mt-3">
-          {match.section && <Tag tone="neutral">{match.section === 'Mod' ? 'Mods' : 'Sounds'}</Tag>}
+          {match.section && (
+            <Tag tone="neutral">
+              {match.section === 'Mod' ? 'Mods' : match.section === 'Sound' ? 'Sounds' : match.section}
+            </Tag>
+          )}
           {match.categoryName && <Tag tone="neutral">{match.categoryName}</Tag>}
           {typeof match.modId === 'number' && <Tag tone="neutral">Mod #{match.modId}</Tag>}
           {typeof match.fileId === 'number' && <Tag tone="neutral">File #{match.fileId}</Tag>}
@@ -2430,12 +2733,6 @@ function UnknownMatchCard({
           <p className="text-xs text-text-secondary mt-3">{match.reason}</p>
         )}
 
-        <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-text-tertiary">
-          <span>{match.checkedMods} mods checked</span>
-          <span>{match.checkedFiles} files checked</span>
-          <span>{match.bytesFetched.toLocaleString()} bytes fetched</span>
-          {match.skipped7z > 0 && <span>{match.skipped7z} 7z skipped</span>}
-        </div>
       </div>
 
       <div className="border-t border-state-success/20 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
