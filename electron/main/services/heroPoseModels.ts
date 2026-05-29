@@ -134,6 +134,14 @@ export async function getHeroPoseInfo(
 }
 
 /**
+ * In-flight pose exports, keyed by the requested (hero, skin) so concurrent
+ * identical requests collapse onto one vpkmerge run. Without this, a rapid 3D
+ * toggle or React's strict-mode double-invoke can launch two processes writing
+ * the same `model.glb` at once and corrupt it.
+ */
+const inFlightExports = new Map<string, Promise<HeroPoseInfo>>();
+
+/**
  * Generate a hero's pose still by running the bundled `vpkmerge model export
  * --pose`. The body model is auto-discovered from the hero's codename
  * (`--hero`), trying any divergent body-model basename first and falling back
@@ -141,8 +149,28 @@ export async function getHeroPoseInfo(
  * mesh + textures; a texture-only or absent skin falls back to the base pak's
  * mesh while the skin's textures still win. Falls back to a vanilla pose if the
  * skin VPK can't be resolved.
+ *
+ * Concurrent identical requests share one run (see inFlightExports).
  */
 export async function exportHeroPose(
+    deadlockPath: string,
+    heroName: string,
+    skinMetaKey?: string
+): Promise<HeroPoseInfo> {
+    const requestKey = poseKey(heroName, skinMetaKey);
+    const existing = inFlightExports.get(requestKey);
+    if (existing) return existing;
+
+    const work = runHeroPoseExport(deadlockPath, heroName, skinMetaKey);
+    inFlightExports.set(requestKey, work);
+    try {
+        return await work;
+    } finally {
+        inFlightExports.delete(requestKey);
+    }
+}
+
+async function runHeroPoseExport(
     deadlockPath: string,
     heroName: string,
     skinMetaKey?: string

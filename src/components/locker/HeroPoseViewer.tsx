@@ -81,6 +81,7 @@ function PosedModel({ scene }: { scene: THREE.Object3D }) {
  *  controls don't fight it; dragging just reorients the camera. */
 function Controls() {
   const { camera, gl } = useThree();
+  const controlsRef = useRef<OrbitControls | null>(null);
   useEffect(() => {
     const controls = new OrbitControls(camera, gl.domElement);
     controls.enableDamping = true;
@@ -88,8 +89,16 @@ function Controls() {
     controls.minDistance = 1.6;
     controls.maxDistance = 6;
     controls.target.set(0, 0, 0);
-    return () => controls.dispose();
+    controlsRef.current = controls;
+    return () => {
+      controlsRef.current = null;
+      controls.dispose();
+    };
   }, [camera, gl]);
+  // enableDamping requires update() every frame: without it the inertial glide
+  // after a drag never runs (and on some three builds the orbit barely tracks).
+  // The frame loop is already alive from PosedModel's turntable useFrame.
+  useFrame(() => controlsRef.current?.update());
   return null;
 }
 
