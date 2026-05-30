@@ -60,6 +60,11 @@ export interface ModMetadata {
      *  the VPK as Locker-managed so other surfaces hide it. Separate from
      *  lockerCosmetics (disjoint paths, independent lifecycle). */
     lockerSounds?: import('../../../src/types/mod').LockerSoundsInfo;
+    /** Set on the single Locker-managed colors VPK that holds applied ability
+     *  recolors. The selection set; rebuilt on every apply/revert. Presence
+     *  marks the VPK as Locker-managed. Separate from lockerCosmetics/lockerSounds
+     *  (disjoint paths, independent lifecycle). */
+    lockerColors?: import('../../../src/types/mod').LockerColorsInfo;
     /** Per-ability sound classification from the VPK file tree. Tri-state like
      *  globalType: an AbilitySoundClassification when the mod has recognized
      *  hero ability/VO sounds, `null` when classified and it has none, and

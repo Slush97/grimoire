@@ -832,6 +832,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('revert-hero-sound', heroName, slot),
     getActiveHeroSounds: (heroName: string) =>
         ipcRenderer.invoke('get-active-hero-sounds', heroName),
+    getHeroColorSupport: (heroName: string) =>
+        ipcRenderer.invoke('get-hero-color-support', heroName),
+    applyHeroColor: (heroName: string, hue: number, saturation: number, brightness: number) =>
+        ipcRenderer.invoke('apply-hero-color', heroName, hue, saturation, brightness),
+    previewHeroColor: (heroName: string, hue: number, saturation: number, brightness: number) =>
+        ipcRenderer.invoke('preview-hero-color', heroName, hue, saturation, brightness),
+    revertHeroColor: (heroName: string) =>
+        ipcRenderer.invoke('revert-hero-color', heroName),
+    getActiveHeroColor: (heroName: string) =>
+        ipcRenderer.invoke('get-active-hero-color', heroName),
     getLockerOverview: () =>
         ipcRenderer.invoke('get-locker-overview'),
     getLockerCardThumbnails: () =>

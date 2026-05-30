@@ -72,6 +72,7 @@ import './ipc/social';
 import './ipc/diagnostics';
 import './ipc/portraits';
 import './ipc/abilitySounds';
+import './ipc/abilityColors';
 import './ipc/locker';
 import './ipc/previewCache';
 

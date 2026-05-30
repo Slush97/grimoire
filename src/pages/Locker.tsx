@@ -1070,11 +1070,18 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                           background shows through; other types keep a solid bg. */}
                       <div
                         className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] ${
-                          activeType === 'soul-container'
-                            ? 'bg-white/[0.04] backdrop-blur-md'
-                            : 'bg-bg-tertiary'
+                          activeType === 'soul-container' ? '' : 'bg-bg-tertiary'
                         }`}
                       >
+                        {/* Frosted-glass panel for soul containers, kept as a
+                            separate inner layer rather than on the media container
+                            itself: a backdrop-filter turns its element into a
+                            stacking context, which would sink this subtree (and
+                            the retag kebab below) under the z-10 full-card toggle
+                            and swallow the kebab's clicks. */}
+                        {activeType === 'soul-container' && (
+                          <div className="pointer-events-none absolute inset-0 bg-white/[0.04] backdrop-blur-md" />
+                        )}
                         {/* Soul containers show a live 3D model on a clear window
                             (no 2D thumbnail behind it); other types show their
                             GameBanana thumbnail. */}

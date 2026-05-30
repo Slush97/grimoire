@@ -58,6 +58,7 @@ import {
   ChevronRight,
   Folder,
   FileText,
+  Banana,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -464,7 +465,7 @@ export default function Installed() {
   const refreshLockerOverrideCount = useCallback(async () => {
     try {
       const ov = await getLockerOverview();
-      setLockerOverrideCount(ov.cards.length + ov.sounds.length);
+      setLockerOverrideCount(ov.cards.length + ov.sounds.length + ov.colors.length);
     } catch {
       setLockerOverrideCount(0);
     }
@@ -2341,7 +2342,12 @@ export default function Installed() {
           onTagGlobal={async (globalType) => {
             await setModGlobalType(mod.id, globalType);
           }}
-          onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
+          onFixUnknown={
+            // Any local (unlinked, non-merged) mod can search GameBanana and
+            // link, not just ones flagged "unknown": naming a local mod via
+            // Edit Local clears isUnknown but it still has no GameBanana source.
+            entryIsLocal(entry) && !mod.merged ? () => openUnknownModFix(mod, 'single') : undefined
+          }
           fixingUnknown={unknownFilterPendingIds.has(mod.id)}
           loadPosition={loadPositionById.get(mod.id)}
           loadCount={enabledModCount}
@@ -2808,9 +2814,9 @@ export default function Installed() {
               title={selectMode ? 'Exit selection mode' : 'Select multiple mods for bulk delete, enable, or disable'}
             />
 
-            {/* Locker overrides: hero cards + ability sounds applied off the
-                mod list. The badge shows how many are active; the popup reviews,
-                previews, and removes them. */}
+            {/* Locker overrides: hero cards + ability sounds + ability colors
+                applied off the mod list. The badge shows how many are active;
+                the popup reviews, previews, and removes them. */}
             <div className="relative">
               <Button
                 variant="secondary"
@@ -2818,7 +2824,7 @@ export default function Installed() {
                 icon={Wand2}
                 className="!px-2.5"
                 aria-label="Locker overrides"
-                title="Locker overrides: review and remove applied hero cards and ability sounds"
+                title="Locker overrides: review and remove applied hero cards, ability sounds, and ability colors"
               />
               {lockerOverrideCount > 0 && (
                 <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-bg-primary">
@@ -3580,8 +3586,12 @@ function UnknownFilterGuessModal({
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
           <div className="min-w-0">
             <h2 id="unknown-filter-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
-              <Wrench className="w-4 h-4 text-orange-400" />
-              Fix Unknown Mod
+              {mod.isUnknown ? (
+                <Wrench className="w-4 h-4 text-orange-400" />
+              ) : (
+                <Link2 className="w-4 h-4 text-accent" />
+              )}
+              {mod.isUnknown ? 'Fix Unknown Mod' : 'Link to GameBanana'}
             </h2>
             <p className="text-xs text-text-secondary mt-1 truncate" title={mod.fileName}>
               {mod.fileName}
@@ -4197,7 +4207,9 @@ function UnknownManualSearch({
           <span className="font-medium text-text-primary">Find it on GameBanana and link it.</span>{' '}
           Results update as you type, or open GameBanana (or the Browse tab) side by side to
           find the mod, then search for it here. Linking tags this exact file: nothing is
-          re-downloaded.
+          re-downloaded. Use the{' '}
+          <Banana className="inline-block w-3.5 h-3.5 -mt-0.5 text-yellow-400" /> button on any
+          result to open it on GameBanana and download there directly.
         </div>
       </div>
 
@@ -4262,6 +4274,12 @@ function UnknownManualSearch({
         <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
           {results.map((gbMod) => {
             const isSel = selected?.id === gbMod.id;
+            // Direct GameBanana page so the user can download it there (often
+            // faster than Grimoire's queue) while still linking it here. Prefer
+            // the record's own URL; fall back to one built from the id/section.
+            const gbUrl =
+              gbMod.profileUrl ||
+              `https://gamebanana.com/${section === 'Sound' ? 'sounds' : 'mods'}/${gbMod.id}`;
             return (
               <div
                 key={gbMod.id}
@@ -4269,28 +4287,41 @@ function UnknownManualSearch({
                   isSel ? 'bg-accent/10 border-accent/40' : 'bg-bg-primary/40 border-white/5 hover:border-white/15'
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => void selectMod(gbMod)}
-                  className="w-full text-left flex items-center gap-3 p-2 cursor-pointer"
-                >
-                  <ModThumbnail
-                    src={getModThumbnail(gbMod)}
-                    alt={gbMod.name}
-                    nsfw={gbMod.nsfw}
-                    hideNsfw
-                    className="w-16 h-11 rounded bg-bg-primary border border-white/10 flex-shrink-0"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-text-primary truncate" title={gbMod.name}>
-                      {gbMod.name}
+                <div className="flex items-center pr-2">
+                  <button
+                    type="button"
+                    onClick={() => void selectMod(gbMod)}
+                    className="min-w-0 flex-1 text-left flex items-center gap-3 p-2 cursor-pointer"
+                  >
+                    <ModThumbnail
+                      src={getModThumbnail(gbMod)}
+                      alt={gbMod.name}
+                      nsfw={gbMod.nsfw}
+                      hideNsfw
+                      className="w-16 h-11 rounded bg-bg-primary border border-white/10 flex-shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-text-primary truncate" title={gbMod.name}>
+                        {gbMod.name}
+                      </div>
+                      <div className="text-[11px] text-text-tertiary truncate">
+                        {gbMod.rootCategory?.name ?? (section === 'Mod' ? 'Mods' : 'Sounds')} · #{gbMod.id}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-text-tertiary truncate">
-                      {gbMod.rootCategory?.name ?? (section === 'Mod' ? 'Mods' : 'Sounds')} · #{gbMod.id}
-                    </div>
-                  </div>
-                  {isSel && <Check className="w-4 h-4 text-accent flex-shrink-0" />}
-                </button>
+                    {isSel && <Check className="w-4 h-4 text-accent flex-shrink-0" />}
+                  </button>
+
+                  <a
+                    href={gbUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Open ${gbMod.name} on GameBanana to download it directly`}
+                    aria-label={`Open ${gbMod.name} on GameBanana`}
+                    className="flex-shrink-0 ml-1 inline-flex items-center justify-center w-9 h-9 rounded-md border border-white/10 bg-bg-primary/60 text-text-tertiary transition-colors hover:border-yellow-400/50 hover:text-yellow-400 hover:bg-yellow-400/5"
+                  >
+                    <Banana className="w-4 h-4" />
+                  </a>
+                </div>
 
                 {isSel && (
                   <div className="border-t border-white/5 px-2.5 py-2.5 space-y-2">
@@ -5565,24 +5596,25 @@ function ModCard({
                 )}
               </>
             )}
-            {mod.isUnknown && (
+            {onFixUnknown && (
               <button
                 type="button"
                 role="menuitem"
                 onClick={(e) => {
                   e.stopPropagation();
                   setMenuOpen(false);
-                  onFixUnknown?.();
+                  onFixUnknown();
                 }}
-                disabled={!onFixUnknown}
                 className={menuItemClasses}
               >
                 {fixingUnknown ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
+                ) : mod.isUnknown ? (
                   <Wrench className="w-3.5 h-3.5" />
+                ) : (
+                  <Link2 className="w-3.5 h-3.5" />
                 )}
-                Fix unknown match
+                {mod.isUnknown ? 'Fix unknown match' : 'Link to GameBanana'}
               </button>
             )}
             {mod.merged && onCopyShareCode && (

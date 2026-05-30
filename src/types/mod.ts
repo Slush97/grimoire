@@ -176,10 +176,12 @@ export interface LockerOverviewSound {
 export interface LockerOverview {
   cards: LockerOverviewCard[];
   sounds: LockerOverviewSound[];
+  /** Applied ability-color recolors, one per hero (see LockerColorSelection). */
+  colors: LockerColorSelection[];
 }
 
 /** Which slice of Locker overrides to clear. */
-export type LockerClearScope = 'all' | 'cards' | 'sounds';
+export type LockerClearScope = 'all' | 'cards' | 'sounds' | 'colors';
 
 /** One applied hero card decoded to a preview thumbnail, for the popup. Decoded
  *  on demand from the managed cosmetics VPK (the real applied art, not the
@@ -199,6 +201,60 @@ export interface ActiveHeroSound {
    *  sound picker compares this against each mod's metaKey to mark the active row. */
   sourceFileName: string;
   params?: AbilitySoundParams;
+}
+
+/**
+ * One per-hero ability-color choice inside the Locker colors VPK. The user
+ * recolored this hero's ability VFX (particles + color textures + baked vertex
+ * colors) to a single absolute `hue`; the rebuild bakes that hero's VFX (cached
+ * by codename+hue) and folds it into the consolidated colors VPK. At most one
+ * selection per hero.
+ */
+export interface LockerColorSelection {
+  heroName: string;
+  /** Model/particle codename the recolor targets (Paige = `bookworm`). */
+  heroCodename: string;
+  /** Absolute hue (0-359 degrees) every ability color is set to. */
+  hue: number;
+  /** Saturation scale applied on top of each source color (1 = keep source, >1
+   *  lifts pale washed-out areas toward the picked color, <1 mutes to a pastel).
+   *  Hue alone can't make e.g. a light blue: saturation + brightness do. */
+  saturation: number;
+  /** Brightness (HSV value) scale (1 = keep source, >1 lighter, <1 darker). */
+  brightness: number;
+  addedAt: string;
+}
+
+/**
+ * Manifest on the single Locker-managed colors VPK that holds every applied
+ * ability recolor. Presence marks the VPK as Locker-managed so other surfaces
+ * hide it. Rebuilt on every apply/revert. Separate from lockerCosmetics (cards)
+ * and lockerSounds (disjoint paths, independent lifecycle).
+ */
+export interface LockerColorsInfo {
+  /** One entry per hero (heroCodename). */
+  colors: LockerColorSelection[];
+  rebuiltAt: string;
+}
+
+/** The color applied for a hero's ability VFX, read back so the color picker can
+ *  reflect the active selection. */
+export interface ActiveHeroColor {
+  /** Applied absolute hue (0-359 degrees). */
+  hue: number;
+  /** Applied saturation scale (1 = source). */
+  saturation: number;
+  /** Applied brightness scale (1 = source). */
+  brightness: number;
+}
+
+export interface ApplyHeroColorResult {
+  /** The applied hue (0-359), or null after a revert. */
+  hue: number | null;
+  /** The applied saturation scale, or null after a revert. */
+  saturation: number | null;
+  /** The applied brightness scale, or null after a revert. */
+  brightness: number | null;
 }
 
 /**

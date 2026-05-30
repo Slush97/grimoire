@@ -95,6 +95,7 @@ Design docs and references live in `docs/`:
 - `deadlock-api-architecture.md` + `DEADLOCK_STATS_API.md` - deadlock-api.com integration
 - `design-overhaul-brief.md` - UI design language reference
 - `social-architecture.md` + `social-architecture-decisions.md` - Architecture and ADRs for the planned `grimoire-social` companion service (see below)
+- `ability-vfx-recolor.md` - Hero ability VFX layer extraction + in app recoloring. Read before touching `detectVfxLayer`/`extractVfxLayer` (in `vpk.ts`/`modMerger.ts`) or building the recolor/Locker surface. Covers why particle recolor must use an in place scalar patch, not a KV3 re-encode.
 
 ## Companion Service: grimoire-social
 

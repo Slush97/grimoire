@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Layers, Star, Music, Shirt, Images, Box, Loader2 } from 'lucide-react';
+import { ArrowLeft, Layers, Star, Music, Shirt, Images, Box, Loader2, Palette } from 'lucide-react';
 import { Skeleton } from '../components/common/Skeleton';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -13,6 +13,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
+import HeroColorPicker from '../components/locker/HeroColorPicker';
 // three.js viewer is heavy; only pull the chunk when the user flips to 3D.
 const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
 import type { GameBananaCategoryNode } from '../types/gamebanana';
@@ -371,7 +372,7 @@ export function LockerHeroView({
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [view3d, setView3d] = useState(false);
-  const [section, setSection] = useState<'skins' | 'sounds' | 'cards'>('skins');
+  const [section, setSection] = useState<'skins' | 'sounds' | 'cards' | 'colors'>('skins');
   // The active skin to pose: the hero's first enabled skin mod, if any. Its
   // metaKey is the source VPK; undefined poses the vanilla base model.
   const activeSkinMetaKey = useMemo(
@@ -559,13 +560,15 @@ export function LockerHeroView({
             <span className="text-sm text-text-secondary">
               {activeSection === 'cards'
                 ? 'Card art'
-                : activeSection === 'sounds'
-                  ? soundCount > 0
-                    ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}`
-                    : 'No sounds'
-                  : skinCount > 0
-                    ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}`
-                    : 'No skins'}
+                : activeSection === 'colors'
+                  ? 'Ability color'
+                  : activeSection === 'sounds'
+                    ? soundCount > 0
+                      ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}`
+                      : 'No sounds'
+                    : skinCount > 0
+                      ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}`
+                      : 'No skins'}
             </span>
           </div>
 
@@ -620,12 +623,28 @@ export function LockerHeroView({
               <Images className="w-3.5 h-3.5" />
               Cards
             </button>
+            <button
+              type="button"
+              role="tab"
+              aria-selected={activeSection === 'colors'}
+              onClick={() => setSection('colors')}
+              className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
+                activeSection === 'colors'
+                  ? 'bg-accent/15 text-text-primary border border-accent/40'
+                  : 'text-text-secondary hover:text-text-primary border border-transparent'
+              }`}
+            >
+              <Palette className="w-3.5 h-3.5" />
+              Colors
+            </button>
           </div>
 
-          {/* Skin / Sound / Card selection */}
+          {/* Skin / Sound / Card / Color selection */}
           <div className="space-y-4">
             {activeSection === 'cards' ? (
               <HeroCardPicker heroName={hero.name} />
+            ) : activeSection === 'colors' ? (
+              <HeroColorPicker heroName={hero.name} />
             ) : activeSection === 'sounds' ? (
               <HeroSoundPicker heroName={hero.name} soundList={soundList} onSelect={onSelect} />
             ) : (
