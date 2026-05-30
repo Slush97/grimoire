@@ -423,6 +423,75 @@ export function classifyGlobalModFromVpk(vpkPath: string): GlobalModType | null 
 }
 
 /**
+ * Ability-VFX layer roots. A hero's recolorable ability effects live in two
+ * particle dirs, keyed by the model/particle codename (Paige = `bookworm`),
+ * which is the namespace used by `models/`+`particles/abilities/`, NOT the
+ * sound-path codename used by SOUND_HERO_PATTERNS:
+ *   particles/abilities/<codename>/   (the 4 abilities + ult, melee, dash)
+ *   particles/weapon_fx/<codename>/   (primary-fire muzzle/tracer/impact fx)
+ * Isolating exactly these lets the recolor be layered onto a different body
+ * skin. The ult-dragon material (models/heroes_wip/<codename>/materials/) and
+ * ability sounds are deliberately out of scope here: the dragon has no path
+ * convention separating it from the body model, so it's handled by a
+ * regenerate-from-base hue shift instead of extraction (see docs).
+ */
+const VFX_LAYER_PATTERNS: RegExp[] = [
+    /(?:^|\/)particles\/abilities\/([a-z0-9_]+)\//i,
+    /(?:^|\/)particles\/weapon_fx\/([a-z0-9_]+)\//i,
+];
+
+export interface VfxLayer {
+    /** Model/particle codename the VFX targets (e.g. `bookworm` = Paige). */
+    codename: string;
+    /** Every `particles/{abilities,weapon_fx}/<codename>/` entry in the VPK. */
+    paths: string[];
+    /** Split-plan prefixes that select exactly this layer (no leading slash,
+     *  to match valve_pak entry paths and vpkmerge's starts_with predicate). */
+    prefixes: string[];
+}
+
+/**
+ * Detect a single-hero ability-VFX layer in a VPK's path list. Returns null
+ * when no ability/weapon_fx particles are present, or when more than one
+ * codename appears (we won't guess which hero owns a mixed VPK). Mirrors
+ * inferHeroFromVpkPaths' "one confident answer or nothing" contract.
+ */
+export function detectVfxLayer(paths: string[]): VfxLayer | null {
+    const byCodename = new Map<string, string[]>();
+    for (const filePath of paths) {
+        for (const re of VFX_LAYER_PATTERNS) {
+            const match = filePath.match(re);
+            if (!match) continue;
+            const codename = match[1].toLowerCase();
+            const list = byCodename.get(codename);
+            if (list) list.push(filePath);
+            else byCodename.set(codename, [filePath]);
+            break;
+        }
+    }
+    if (byCodename.size !== 1) return null;
+    const [codename, vfxPaths] = [...byCodename][0];
+    return {
+        codename,
+        paths: vfxPaths.sort(),
+        prefixes: [
+            `particles/abilities/${codename}/`,
+            `particles/weapon_fx/${codename}/`,
+        ],
+    };
+}
+
+/**
+ * Convenience wrapper: parse the VPK directory (cached) and detect a VFX layer.
+ * Returns null when the VPK can't be parsed or carries no single-hero VFX.
+ */
+export function detectVfxLayerFromVpk(vpkPath: string): VfxLayer | null {
+    const paths = parseVpkDirectoryCached(vpkPath);
+    if (!paths || paths.length === 0) return null;
+    return detectVfxLayer(paths);
+}
+
+/**
  * Best-effort label derived from a VPK's file tree (VPKs have no authored
  * title). Returns null when nothing distinctive matches — caller should
  * fall back to the filename rather than guess.

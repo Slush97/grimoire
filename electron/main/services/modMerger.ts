@@ -1,5 +1,6 @@
 import { promises as fs, existsSync } from 'fs';
 import { join, dirname } from 'path';
+import { tmpdir } from 'os';
 import { spawn } from 'child_process';
 import { randomUUID, createHash } from 'crypto';
 import { app } from 'electron';
@@ -166,6 +167,37 @@ export async function verifyVpkOutput(path: string): Promise<void> {
         }
     } finally {
         await fh.close();
+    }
+}
+
+/**
+ * Extract a hero's ability-VFX layer from a skin VPK into a standalone addon
+ * VPK via `vpkmerge split`, routing only the ability/weapon_fx particle dirs
+ * (`prefixes` from detectVfxLayer in vpk.ts) and dropping everything else (no
+ * residual). The result overrides the base particles in-place, so it can be
+ * layered onto a different body skin. Pass the prefixes from a non-null
+ * detectVfxLayer() result; an empty/non-matching set yields a useless VPK.
+ */
+export async function extractVfxLayer(
+    srcVpkPath: string,
+    outVpkPath: string,
+    prefixes: string[]
+): Promise<void> {
+    if (prefixes.length === 0) {
+        throw new Error('No VFX prefixes to extract.');
+    }
+    // `split` writes each output to the path named INSIDE the plan, so the
+    // destination lives in the plan JSON rather than argv. With no residual,
+    // unmatched entries (body model, dragon material, shared masks) are dropped.
+    await fs.mkdir(dirname(outVpkPath), { recursive: true });
+    const plan = { outputs: [{ path: outVpkPath, prefixes }] };
+    const planPath = join(tmpdir(), `grimoire-vfx-split-${randomUUID()}.json`);
+    await fs.writeFile(planPath, JSON.stringify(plan));
+    try {
+        await runVpkmerge(['split', srcVpkPath, '--plan', planPath]);
+        await verifyVpkOutput(outVpkPath);
+    } finally {
+        try { await fs.unlink(planPath); } catch { /* best-effort temp cleanup */ }
     }
 }
 
