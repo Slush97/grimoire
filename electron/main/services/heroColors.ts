@@ -73,8 +73,10 @@ const COLOR_CODENAME_BY_HERO: Readonly<Record<string, string>> = {
  *  v2: recolor target gained saturation + brightness scales (was hue-only).
  *  v3: KV3-v4 particle patch + Graves (necro) ability-prop textures and
  *  g_vColorTint material tints (zombie/jar/gravestone).
- *  v4: Graves picker-hand albedo + transmissive textures + necro_hands tint. */
-const RECIPE_CACHE_VERSION = 4;
+ *  v4: Graves picker-hand albedo + transmissive textures + necro_hands tint.
+ *  v5: Graves hand flame aura (g_vSelfIllumTint on necro_flame_effect*).
+ *  v6: Infernus body self-illum accents + flame materials + arm flame ramp. */
+const RECIPE_CACHE_VERSION = 6;
 
 /** The recolor codename for a hero, or null when no recipe is pinned for it. */
 export function colorCodenameForHero(heroName: string): string | null {
