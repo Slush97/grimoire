@@ -51,12 +51,56 @@ const MODEL_CODENAME_OVERRIDES: Readonly<Record<string, string[]>> = {
     Seven: ['gigawatt_prisoner'],
 };
 
+/**
+ * Heroes Valve reworked in the "6 hero update": the current body model moved to
+ * `models/heroes_wip/<name>/<name>.vmdl_c` (a fresh dir keyed by the display
+ * name) while the pre-rework model stayed behind under
+ * `heroes_staging/<codename>[_vN]`. `--hero <codename>` discovery picks the
+ * highest-`_vN` basename match, so for these heroes it lands on the STALE model
+ * and the Locker showed the wrong body. Pin the exact current entry instead.
+ *
+ * An explicit `--entry` is also more correct than `--hero` once a skin is active:
+ * a modern skin overrides the game's canonical path (these very paths), which a
+ * codename/version mismatch in discovery could miss, silently falling back to
+ * the vanilla base mesh.
+ *
+ * Verified against the installed pak (2026-05-29) and reconciled live in-game by
+ * a community reporter (#bugs "3D Preview pulling wrong model"): each entry
+ * decodes, carries a real menu pose, and is the current model. Viscous is a
+ * no-op today (`--hero viscous` already resolves here) but pinned for the same
+ * skin-path robustness. Deliberately NOT pinned: Infernus (its current
+ * `heroes_wip/inferno` ships no menu/idle pose clip, so `--require-pose` would
+ * drop it to a 2D portrait; `--hero inferno` already resolves to a poseable
+ * same-size model) and Billy (`punkgoat` ships the rig but no pose clip and
+ * already falls back to 2D).
+ */
+const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
+    Abrams: 'models/heroes_wip/abrams/abrams.vmdl_c',
+    McGinnis: 'models/heroes_wip/mcginnis/mcginnis.vmdl_c',
+    Pocket: 'models/heroes_wip/pocket/pocket.vmdl_c',
+    Ivy: 'models/heroes_wip/ivy/ivy.vmdl_c',
+    'Lady Geist': 'models/heroes_wip/geist/geist.vmdl_c',
+    Viscous: 'models/heroes_staging/viscous/viscous.vmdl_c',
+};
+
 /** Model codenames to try for a hero, most-specific first: any divergent
  *  body-model basename, then the panorama codename(s) that cover the rest of
  *  the roster. De-duplicated, order preserved. */
 function modelCodenamesForHero(heroName: string): string[] {
     const ordered = [...(MODEL_CODENAME_OVERRIDES[heroName] ?? []), ...codenamesForHero(heroName)];
     return [...new Set(ordered)];
+}
+
+/**
+ * The vpkmerge `model export` selectors to try for a hero, in order. A reworked
+ * hero with a pinned entry resolves to a single exact `--entry`; everyone else
+ * falls back to `--hero <codename>` auto-discovery for each candidate codename.
+ * Each element is the discriminating arg pair spliced into the export command.
+ */
+function modelSelectorsForHero(heroName: string): string[][] {
+    const entry = MODEL_ENTRY_OVERRIDES[heroName];
+    if (entry) return [['--entry', entry]];
+    return modelCodenamesForHero(heroName).map((codename) => ['--hero', codename]);
 }
 
 function sanitize(value: string): string {
@@ -90,8 +134,12 @@ function modelFile(key: string): string {
  * v2: bundled vpkmerge gained deterministic hero-model discovery, `--require-pose`
  * (so clipless WIP heroes fall back to the 2D portrait instead of a T-pose), and
  * the comic-outline (`*jitter*`) shell drop. Pre-v2 GLBs (unversioned) are stale.
+ *
+ * v3: reworked heroes (Abrams, McGinnis, Pocket, Ivy, Lady Geist, ...) now pin
+ * their exact current `heroes_wip` entry instead of `--hero` discovery, which had
+ * been resolving to the stale pre-rework body. Pre-v3 GLBs cached the wrong model.
  */
-const POSE_CACHE_VERSION = '2';
+const POSE_CACHE_VERSION = '3';
 
 function versionFile(key: string): string {
     return join(modelDir(key), '.cache-version');
@@ -168,9 +216,11 @@ const inFlightExports = new Map<string, Promise<HeroPoseInfo>>();
 
 /**
  * Generate a hero's pose still by running the bundled `vpkmerge model export
- * --pose`. The body model is auto-discovered from the hero's codename
- * (`--hero`), trying any divergent body-model basename first and falling back
- * to the panorama codename(s). `skinMetaKey` (the active skin VPK) supplies the
+ * --pose`. The body model is selected by modelSelectorsForHero: a reworked hero
+ * uses its pinned exact `--entry`, otherwise the model is auto-discovered from
+ * the hero's codename (`--hero`), trying any divergent body-model basename first
+ * and falling back to the panorama codename(s). `skinMetaKey` (the active skin
+ * VPK) supplies the
  * mesh + textures; a texture-only or absent skin falls back to the base pak's
  * mesh while the skin's textures still win. Falls back to a vanilla pose if the
  * skin VPK can't be resolved.
@@ -200,8 +250,8 @@ async function runHeroPoseExport(
     heroName: string,
     skinMetaKey?: string
 ): Promise<HeroPoseInfo> {
-    const codenames = modelCodenamesForHero(heroName);
-    if (codenames.length === 0) {
+    const selectors = modelSelectorsForHero(heroName);
+    if (selectors.length === 0) {
         throw new Error(`No known model codename for hero "${heroName}".`);
     }
 
@@ -217,15 +267,14 @@ async function runHeroPoseExport(
     const out = modelFile(key);
 
     let lastError: unknown;
-    for (const codename of codenames) {
+    for (const selector of selectors) {
         try {
             await runVpkmerge([
                 'model',
                 'export',
                 '--vpk',
                 sourceVpk,
-                '--hero',
-                codename,
+                ...selector,
                 '--base',
                 pak01,
                 '--pose',
