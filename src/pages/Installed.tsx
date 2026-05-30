@@ -2075,7 +2075,12 @@ export default function Installed() {
           onTagGlobal={async (globalType) => {
             await setModGlobalType(mod.id, globalType);
           }}
-          onFixUnknown={mod.isUnknown ? () => openUnknownModFix(mod, 'single') : undefined}
+          onFixUnknown={
+            // Any local (unlinked, non-merged) mod can search GameBanana and
+            // link, not just ones flagged "unknown": naming a local mod via
+            // Edit Local clears isUnknown but it still has no GameBanana source.
+            entryIsLocal(entry) && !mod.merged ? () => openUnknownModFix(mod, 'single') : undefined
+          }
           fixingUnknown={unknownFilterPendingIds.has(mod.id)}
           loadPosition={loadPositionById.get(mod.id)}
           loadCount={enabledModCount}
@@ -3311,8 +3316,12 @@ function UnknownFilterGuessModal({
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-white/10">
           <div className="min-w-0">
             <h2 id="unknown-filter-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
-              <Wrench className="w-4 h-4 text-orange-400" />
-              Fix Unknown Mod
+              {mod.isUnknown ? (
+                <Wrench className="w-4 h-4 text-orange-400" />
+              ) : (
+                <Link2 className="w-4 h-4 text-accent" />
+              )}
+              {mod.isUnknown ? 'Fix Unknown Mod' : 'Link to GameBanana'}
             </h2>
             <p className="text-xs text-text-secondary mt-1 truncate" title={mod.fileName}>
               {mod.fileName}
@@ -5293,24 +5302,25 @@ function ModCard({
                 )}
               </>
             )}
-            {mod.isUnknown && (
+            {onFixUnknown && (
               <button
                 type="button"
                 role="menuitem"
                 onClick={(e) => {
                   e.stopPropagation();
                   setMenuOpen(false);
-                  onFixUnknown?.();
+                  onFixUnknown();
                 }}
-                disabled={!onFixUnknown}
                 className={menuItemClasses}
               >
                 {fixingUnknown ? (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                ) : (
+                ) : mod.isUnknown ? (
                   <Wrench className="w-3.5 h-3.5" />
+                ) : (
+                  <Link2 className="w-3.5 h-3.5" />
                 )}
-                Fix unknown match
+                {mod.isUnknown ? 'Fix unknown match' : 'Link to GameBanana'}
               </button>
             )}
             {mod.merged && onCopyShareCode && (
