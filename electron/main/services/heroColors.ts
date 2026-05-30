@@ -106,6 +106,13 @@ function currentColorSelections(): LockerColorSelection[] {
     return (getModMetadata(LOCKER_COLORS_KEY)?.lockerColors?.colors ?? []).map(withScales);
 }
 
+/** Applied ability-color recolors (one per hero), for the Locker Overrides popup
+ *  and its count badge. Reads the colors manifest only, so it's cheap (no bake)
+ *  and mirrors listAppliedCards / listAppliedSounds. */
+export function listAppliedColors(): LockerColorSelection[] {
+    return currentColorSelections();
+}
+
 /** Cache path for one hero's baked recolor addon, keyed by
  *  codename+hue+saturation+brightness+version so the same target is baked once
  *  and reused across rebuilds. Scales are encoded as integer percents (no dots,

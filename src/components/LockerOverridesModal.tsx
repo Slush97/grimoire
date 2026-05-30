@@ -4,6 +4,7 @@ import {
     X,
     Image as ImageIcon,
     Volume2,
+    Palette,
     Wand2,
     RotateCcw,
     RefreshCw,
@@ -19,6 +20,7 @@ import {
     clearLockerOverrides,
     revertHeroCard,
     revertHeroSound,
+    revertHeroColor,
     applyHeroSound,
     getGameRunningStatus,
 } from '../lib/api';
@@ -38,10 +40,19 @@ const PITCH_MAX = 2;
 /** Re-apply (rebuild the sound VPK) this long after the last slider move. */
 const PARAM_COMMIT_DELAY_MS = 600;
 
-type Tab = 'cards' | 'sounds';
+type Tab = 'cards' | 'sounds' | 'colors';
 
 function abilityLabel(slot: AbilitySlot): string {
     return slot === 4 ? 'Ultimate' : `Ability ${slot}`;
+}
+
+/** Representative CSS swatch for an applied recolor. Hue is absolute; the
+ *  saturation/brightness scales (1 = source) are mapped onto a vivid mid chip so
+ *  it reads as "roughly this color" without baking the real preview PNG. */
+function swatchColor(hue: number, saturation: number, brightness: number): string {
+    const s = Math.max(0, Math.min(100, Math.round(saturation * 60)));
+    const l = Math.max(0, Math.min(100, Math.round(brightness * 50)));
+    return `hsl(${Math.round(hue)}, ${s}%, ${l}%)`;
 }
 
 /** Strip the `_dir.vpk` tail for a friendlier source label. */
@@ -140,9 +151,10 @@ function ParamSliders({
 
 /**
  * Cross-hero management popup for the Grimoire-managed Locker overrides (hero
- * cards + per-ability sounds). They live in citadel/grimoire, off the mod list
- * and the 99-slot budget, so this is the one place to review everything that's
- * applied, preview it, retune sounds, and remove individual overrides.
+ * cards + per-ability sounds + per-hero ability colors). They live in
+ * citadel/grimoire, off the mod list and the 99-slot budget, so this is the one
+ * place to review everything that's applied, preview it, retune sounds, and
+ * remove individual overrides.
  *
  * "Remove" reverts a single override (rebuild the managed VPK from the
  * remaining selections); it never deletes the source mod, hence Remove not
@@ -210,10 +222,12 @@ export function LockerOverridesModal({
             .catch(() => setGameRunning(false));
     }, [refresh]);
 
-    // Default to the tab that actually has content on open.
+    // Default to the first tab that actually has content on open.
     useEffect(() => {
         if (!overview) return;
-        if (overview.cards.length === 0 && overview.sounds.length > 0) setTab('sounds');
+        if (overview.cards.length > 0) return;
+        if (overview.sounds.length > 0) setTab('sounds');
+        else if (overview.colors.length > 0) setTab('colors');
     }, [overview]);
 
     // Decode the real applied card art whenever the applied-card SET changes
@@ -298,6 +312,20 @@ export function LockerOverridesModal({
         }
     };
 
+    const removeColor = async (heroName: string) => {
+        if (busy) return;
+        setRemoving(`color:${heroName}`);
+        setActionError(null);
+        try {
+            await revertHeroColor(heroName);
+            await afterChange();
+        } catch (err) {
+            setActionError(String(err));
+        } finally {
+            setRemoving(null);
+        }
+    };
+
     const clearTab = async (which: Tab) => {
         if (busy) return;
         setClearing(which);
@@ -355,6 +383,7 @@ export function LockerOverridesModal({
 
     const cards = overview?.cards ?? [];
     const sounds = overview?.sounds ?? [];
+    const colors = overview?.colors ?? [];
 
     return (
         <div
@@ -394,6 +423,7 @@ export function LockerOverridesModal({
                     {([
                         { id: 'cards' as const, label: 'Hero Cards', icon: ImageIcon, count: cards.length },
                         { id: 'sounds' as const, label: 'Ability Sounds', icon: Volume2, count: sounds.length },
+                        { id: 'colors' as const, label: 'Ability Colors', icon: Palette, count: colors.length },
                     ]).map(({ id, label, icon: Icon, count }) => (
                         <button
                             key={id}
@@ -588,6 +618,66 @@ export function LockerOverridesModal({
                             </div>
                         )
                     )}
+
+                    {tab === 'colors' && (
+                        colors.length === 0 ? (
+                            <EmptyState
+                                kind="colors"
+                                onOpenLocker={() => {
+                                    onClose();
+                                    navigate('/locker');
+                                }}
+                            />
+                        ) : (
+                            <div className="space-y-3">
+                                {colors.map((color) => {
+                                    const key = `color:${color.heroName}`;
+                                    const isRemoving = removing === key;
+                                    return (
+                                        <div
+                                            key={key}
+                                            className="flex items-center gap-3 overflow-hidden rounded-md border border-border bg-bg-tertiary/40 p-2.5"
+                                        >
+                                            <HeroIcon heroName={color.heroName} />
+                                            <span
+                                                className="h-9 w-9 flex-shrink-0 rounded-full ring-1 ring-white/15"
+                                                style={{
+                                                    backgroundColor: swatchColor(
+                                                        color.hue,
+                                                        color.saturation,
+                                                        color.brightness,
+                                                    ),
+                                                }}
+                                                aria-hidden
+                                            />
+                                            <div className="min-w-0 flex-1">
+                                                <div className="truncate text-sm font-medium text-text-primary">
+                                                    {color.heroName}
+                                                </div>
+                                                <div className="truncate text-xs text-text-secondary tabular-nums">
+                                                    Hue {Math.round(color.hue)}&deg;
+                                                    {color.saturation !== 1 &&
+                                                        ` · Sat ${color.saturation.toFixed(2)}x`}
+                                                    {color.brightness !== 1 &&
+                                                        ` · Bright ${color.brightness.toFixed(2)}x`}
+                                                </div>
+                                            </div>
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                icon={isRemoving ? undefined : RotateCcw}
+                                                isLoading={isRemoving}
+                                                disabled={busy}
+                                                onClick={() => removeColor(color.heroName)}
+                                            >
+                                                Remove
+                                            </Button>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )
+                    )}
                 </div>
 
                 {/* Footer: per-tab clear-all + a link to add more in the Locker. */}
@@ -603,7 +693,9 @@ export function LockerOverridesModal({
                         <ExternalLink className="h-3.5 w-3.5" />
                         Add or change in the Locker
                     </button>
-                    {((tab === 'cards' && cards.length > 0) || (tab === 'sounds' && sounds.length > 0)) && (
+                    {((tab === 'cards' && cards.length > 0) ||
+                        (tab === 'sounds' && sounds.length > 0) ||
+                        (tab === 'colors' && colors.length > 0)) && (
                         <Button
                             variant="danger"
                             size="sm"
@@ -612,7 +704,7 @@ export function LockerOverridesModal({
                             disabled={busy}
                             onClick={() => clearTab(tab)}
                         >
-                            Remove all {tab === 'cards' ? 'cards' : 'sounds'}
+                            Remove all {tab === 'cards' ? 'cards' : tab === 'sounds' ? 'sounds' : 'colors'}
                         </Button>
                     )}
                 </div>
@@ -629,12 +721,13 @@ function EmptyState({
     kind: Tab;
     onOpenLocker: () => void;
 }) {
-    const Icon = kind === 'cards' ? ImageIcon : Volume2;
+    const Icon = kind === 'cards' ? ImageIcon : kind === 'sounds' ? Volume2 : Palette;
+    const noun = kind === 'cards' ? 'hero card' : kind === 'sounds' ? 'ability sound' : 'ability color';
     return (
         <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <Icon className="h-8 w-8 text-text-secondary/50" />
             <p className="text-sm text-text-secondary">
-                No {kind === 'cards' ? 'hero card' : 'ability sound'} overrides applied yet.
+                No {noun} overrides applied yet.
             </p>
             <Button variant="secondary" size="sm" icon={ExternalLink} onClick={onOpenLocker}>
                 Open the Locker

@@ -435,7 +435,7 @@ export default function Installed() {
   const refreshLockerOverrideCount = useCallback(async () => {
     try {
       const ov = await getLockerOverview();
-      setLockerOverrideCount(ov.cards.length + ov.sounds.length);
+      setLockerOverrideCount(ov.cards.length + ov.sounds.length + ov.colors.length);
     } catch {
       setLockerOverrideCount(0);
     }
@@ -2542,9 +2542,9 @@ export default function Installed() {
               title={selectMode ? 'Exit selection mode' : 'Select multiple mods for bulk delete, enable, or disable'}
             />
 
-            {/* Locker overrides: hero cards + ability sounds applied off the
-                mod list. The badge shows how many are active; the popup reviews,
-                previews, and removes them. */}
+            {/* Locker overrides: hero cards + ability sounds + ability colors
+                applied off the mod list. The badge shows how many are active;
+                the popup reviews, previews, and removes them. */}
             <div className="relative">
               <Button
                 variant="secondary"
@@ -2552,7 +2552,7 @@ export default function Installed() {
                 icon={Wand2}
                 className="!px-2.5"
                 aria-label="Locker overrides"
-                title="Locker overrides: review and remove applied hero cards and ability sounds"
+                title="Locker overrides: review and remove applied hero cards, ability sounds, and ability colors"
               />
               {lockerOverrideCount > 0 && (
                 <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-bg-primary">

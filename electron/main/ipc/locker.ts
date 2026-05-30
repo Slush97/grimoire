@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import { loadSettings } from '../services/settings';
 import { listAppliedCards, clearAllHeroCards, getAppliedCardThumbnails } from '../services/heroCards';
 import { listAppliedSounds, clearAllHeroSounds } from '../services/heroSounds';
-import { clearAllHeroColors } from '../services/heroColors';
+import { clearAllHeroColors, listAppliedColors } from '../services/heroColors';
 import type { LockerCardThumbnail, LockerClearScope, LockerOverview } from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as the other locker IPC). */
@@ -15,16 +15,18 @@ function getActiveDeadlockPath(): string | null {
 }
 
 // Cross-cutting Locker IPC: a summary of everything the Locker is currently
-// overriding (cards + ability sounds), plus a bulk clear. Drives the
-// Installed-tab "Locker Overrides" popup (toolbar Wand2 icon).
+// overriding (cards + ability sounds + ability colors), plus a bulk clear.
+// Drives the Installed-tab "Locker Overrides" popup (toolbar Wand2 icon).
 ipcMain.handle('get-locker-overview', async (): Promise<LockerOverview> => {
     const deadlockPath = getActiveDeadlockPath();
-    if (!deadlockPath) return { cards: [], sounds: [] };
+    if (!deadlockPath) return { cards: [], sounds: [], colors: [] };
     const [cards, sounds] = await Promise.all([
         listAppliedCards(deadlockPath),
         listAppliedSounds(deadlockPath),
     ]);
-    return { cards, sounds };
+    // Colors come from the metadata manifest (synchronous, no path needed).
+    const colors = listAppliedColors();
+    return { cards, sounds, colors };
 });
 
 // Lazy companion to the overview: decode the real applied card art into one

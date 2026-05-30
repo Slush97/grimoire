@@ -176,6 +176,8 @@ export interface LockerOverviewSound {
 export interface LockerOverview {
   cards: LockerOverviewCard[];
   sounds: LockerOverviewSound[];
+  /** Applied ability-color recolors, one per hero (see LockerColorSelection). */
+  colors: LockerColorSelection[];
 }
 
 /** Which slice of Locker overrides to clear. */
