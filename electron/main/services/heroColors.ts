@@ -15,8 +15,10 @@
  * re-bakes a hero whose hue actually changed; everyone else's cached addon is
  * merged in. Clearing a hero just drops it from the set and rebuilds.
  *
- * Only heroes with a pinned recipe in vpkmerge are supported (Paige / `bookworm`
- * today); colorCodenameForHero gates the rest.
+ * Only heroes with a pinned recipe in vpkmerge are supported; colorCodenameForHero
+ * gates the rest. The in-place particle patcher handles both KV3 v4 and v5 blocks,
+ * so older-roster heroes (Seven, Wraith, Infernus, whose base particles are v4-heavy)
+ * recolor at full coverage just like the all-v5 heroes (Mina, Celeste, Graves, Paige).
  *
  * NOTE: addons mount only at game start, so an applied color change needs a full
  * Deadlock restart to take effect.
@@ -47,16 +49,32 @@ import type {
  */
 const COLOR_CODENAME_BY_HERO: Readonly<Record<string, string>> = {
     Paige: 'bookworm',
-    // Celeste is particle-only (no color textures / vertex colors), so her recipe
-    // has no preview_texture and the live swatch falls back to the approximate
-    // chip (representative for a flat particle color). recolor-hero still bakes her.
+    // Particle-only heroes (no color textures / vertex colors): their recipe has no
+    // preview_texture, so the live swatch falls back to the approximate CSS chip;
+    // recolor-hero still bakes them. The patcher handles v4 + v5 particles, so each
+    // recolors at full coverage. Keep this in lockstep with `recipe_for` in
+    // vpkmerge-core/src/hero_recolor.rs.
     Celeste: 'unicorn',
+    Mina: 'vampirebat',
+    Seven: 'gigawatt',
+    Wraith: 'wraith',
+    Infernus: 'inferno',
+    // Graves: PARTICLES recolor fully and cover most of her VFX (her large ability
+    // maps, e.g. necro_soul_01, are grayscale and tinted by the particle color). Two
+    // small gaps remain, tracked in `recipe_for` (vpkmerge hero_recolor.rs): the
+    // gravestone's green transmissive glow (a 4x4 chromatic texture, hue-shiftable)
+    // and the pickup-sphere/jar tint (a material g_vColorTint CONSTANT, which needs
+    // an in-place .vmat_c patch, not a texture). Neither blocks shipping her here.
+    Graves: 'necro',
 };
 
 /** Bumped when the recolor recipe/binary changes in a way that should re-bake
  *  cached addons. Part of the cache filename so a stale bake is never reused.
- *  v2: recolor target gained saturation + brightness scales (was hue-only). */
-const RECIPE_CACHE_VERSION = 2;
+ *  v2: recolor target gained saturation + brightness scales (was hue-only).
+ *  v3: KV3-v4 particle patch + Graves (necro) ability-prop textures and
+ *  g_vColorTint material tints (zombie/jar/gravestone).
+ *  v4: Graves picker-hand albedo + transmissive textures + necro_hands tint. */
+const RECIPE_CACHE_VERSION = 4;
 
 /** The recolor codename for a hero, or null when no recipe is pinned for it. */
 export function colorCodenameForHero(heroName: string): string | null {
