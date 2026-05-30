@@ -60,6 +60,31 @@ Color transform: convert each color to HSV, set the hue to the target, and keep 
 
 Prototype: `vpkmerge/vpkmerge-core/examples/recolor_particles.rs` (the walk + HSV + patch + pack). To productionize, promote it to a `vpkmerge particle recolor` subcommand and bump the Grimoire binary pin.
 
+## Texture recolor: identifying color-bearing assets (handoff)
+
+Particle-param recolor only tints effects that render through a white/grayscale mask. Where a bullet or ability renders with a texture that has baked-in color (an albedo / color ramp / self-illum color), the param tint multiplies over that color and the result is muddy, not the new hue. Those `.vtex_c` need their own hue shift (the same texture pipeline as the dragon).
+
+Identifier (next agent runs this): `vpkmerge-core/examples/recolor_assets.rs`
+
+```
+cargo run --example recolor_assets -- <base pak01_dir.vpk> bookworm
+```
+
+It walks each ability/weapon_fx particle's KV3 for material refs (`.vmat`), each material for texture refs (`.vtex`), then classifies every texture by mean saturation over opaque pixels, with two filters:
+- name-based data-map exclusion (`normal`/`rough`/`ao`/`mask`/`metal`/`selfillummask`): packed normal maps read ~0.5 saturation but carry no albedo, so exclude by name not chroma.
+- hero-specific vs shared: only recolor textures whose path names the codename. Shared `materials/default/*` and generic `materials/particle/{projected,model}/*` are used by other heroes; recoloring them bleeds across the roster.
+
+Paige (bookworm) result, 26 referenced textures:
+- **Recolor target (hero-specific, color-bearing): 1** - `materials/particle/abilities/bookworm/bookworm_projectile_self_illum_vmat_g_tcolor_*` (sat 0.92), her projectile/bullet color.
+- Shared color (do NOT recolor): the generic projected cone self-illum + a default texture.
+- 23 data maps / masks: tinted by particle param, no texture recolor needed.
+
+Coverage gaps this particle-centric scan does NOT cover, and the next agent should add:
+1. Ability/projectile **models** (`.vmdl_c`: sword, book, dragon) -> their materials -> albedo textures. The dragon albedo and `bookworm_book_color_*` carry the hero's color and are reached via models, not particle materials. Extend the walk to follow `.vmdl` refs in particles and the hero's own ability models.
+2. HUD **ability icons** (panorama UI images), which no particle references at all.
+
+Heuristic is a starting filter, not ground truth: print the saturation and eyeball borderline cases (decode to PNG with the texture path) before committing a recolor.
+
 ## Dragon (planned)
 
 The ult dragon recolors via a texture hue shift, not particles. Decode the base dragon color texture (`morphic::decode`), rotate hue on the `Image`, re-encode with `replace_face_mip_chain`, and pack the `.vtex_c` at its base path so it overrides in place (no `.vmat_c` edit, sidestepping the content hashed texture rename). Exposed via a new `vpkmerge texture` subcommand. UI: explicit hue degrees with a live preview.
