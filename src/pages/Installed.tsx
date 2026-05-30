@@ -58,6 +58,7 @@ import {
   ChevronRight,
   Folder,
   FileText,
+  Banana,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAppStore } from '../stores/appStore';
@@ -3901,7 +3902,9 @@ function UnknownManualSearch({
           <span className="font-medium text-text-primary">Find it on GameBanana and link it.</span>{' '}
           Results update as you type, or open GameBanana (or the Browse tab) side by side to
           find the mod, then search for it here. Linking tags this exact file: nothing is
-          re-downloaded.
+          re-downloaded. Use the{' '}
+          <Banana className="inline-block w-3.5 h-3.5 -mt-0.5 text-yellow-400" /> button on any
+          result to open it on GameBanana and download there directly.
         </div>
       </div>
 
@@ -3966,6 +3969,12 @@ function UnknownManualSearch({
         <div className="max-h-64 overflow-y-auto space-y-1.5 pr-1">
           {results.map((gbMod) => {
             const isSel = selected?.id === gbMod.id;
+            // Direct GameBanana page so the user can download it there (often
+            // faster than Grimoire's queue) while still linking it here. Prefer
+            // the record's own URL; fall back to one built from the id/section.
+            const gbUrl =
+              gbMod.profileUrl ||
+              `https://gamebanana.com/${section === 'Sound' ? 'sounds' : 'mods'}/${gbMod.id}`;
             return (
               <div
                 key={gbMod.id}
@@ -3973,28 +3982,41 @@ function UnknownManualSearch({
                   isSel ? 'bg-accent/10 border-accent/40' : 'bg-bg-primary/40 border-white/5 hover:border-white/15'
                 }`}
               >
-                <button
-                  type="button"
-                  onClick={() => void selectMod(gbMod)}
-                  className="w-full text-left flex items-center gap-3 p-2 cursor-pointer"
-                >
-                  <ModThumbnail
-                    src={getModThumbnail(gbMod)}
-                    alt={gbMod.name}
-                    nsfw={gbMod.nsfw}
-                    hideNsfw
-                    className="w-16 h-11 rounded bg-bg-primary border border-white/10 flex-shrink-0"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-text-primary truncate" title={gbMod.name}>
-                      {gbMod.name}
+                <div className="flex items-center pr-2">
+                  <button
+                    type="button"
+                    onClick={() => void selectMod(gbMod)}
+                    className="min-w-0 flex-1 text-left flex items-center gap-3 p-2 cursor-pointer"
+                  >
+                    <ModThumbnail
+                      src={getModThumbnail(gbMod)}
+                      alt={gbMod.name}
+                      nsfw={gbMod.nsfw}
+                      hideNsfw
+                      className="w-16 h-11 rounded bg-bg-primary border border-white/10 flex-shrink-0"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-medium text-text-primary truncate" title={gbMod.name}>
+                        {gbMod.name}
+                      </div>
+                      <div className="text-[11px] text-text-tertiary truncate">
+                        {gbMod.rootCategory?.name ?? (section === 'Mod' ? 'Mods' : 'Sounds')} · #{gbMod.id}
+                      </div>
                     </div>
-                    <div className="text-[11px] text-text-tertiary truncate">
-                      {gbMod.rootCategory?.name ?? (section === 'Mod' ? 'Mods' : 'Sounds')} · #{gbMod.id}
-                    </div>
-                  </div>
-                  {isSel && <Check className="w-4 h-4 text-accent flex-shrink-0" />}
-                </button>
+                    {isSel && <Check className="w-4 h-4 text-accent flex-shrink-0" />}
+                  </button>
+
+                  <a
+                    href={gbUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`Open ${gbMod.name} on GameBanana to download it directly`}
+                    aria-label={`Open ${gbMod.name} on GameBanana`}
+                    className="flex-shrink-0 ml-1 inline-flex items-center justify-center w-9 h-9 rounded-md border border-white/10 bg-bg-primary/60 text-text-tertiary transition-colors hover:border-yellow-400/50 hover:text-yellow-400 hover:bg-yellow-400/5"
+                  >
+                    <Banana className="w-4 h-4" />
+                  </a>
+                </div>
 
                 {isSel && (
                   <div className="border-t border-white/5 px-2.5 py-2.5 space-y-2">
