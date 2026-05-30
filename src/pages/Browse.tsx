@@ -44,10 +44,12 @@ import type {
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
 import {
   useAppStore,
-  BROWSE_CARD_SIZE_MIN,
-  BROWSE_CARD_SIZE_MAX,
-  BROWSE_CARD_SIZE_DEFAULT,
-  BROWSE_COMPACT_CARD_THRESHOLD,
+  BROWSE_CARD_COLUMN_MIN_WIDTH,
+  BROWSE_CARD_GRID_GAP,
+  BROWSE_CARD_COLUMNS_MIN,
+  BROWSE_CARD_COLUMNS_DEFAULT,
+  BROWSE_CARD_COLUMNS_MAX,
+  BROWSE_COMPACT_CARD_COLUMNS,
 } from '../stores/appStore';
 import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
@@ -66,8 +68,8 @@ import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates';
 
 const DEFAULT_PER_PAGE = 36;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
-// Effective render mode derived from layout + card size. 'compact' is no
-// longer a user choice: it's what small cards become below the size threshold.
+// Effective render mode derived from layout + cards per row. 'compact' is no
+// longer a user choice: it's what denser rows become past the column threshold.
 type ViewMode = 'grid' | 'compact' | 'list';
 type BrowseCardDesign = 'classic' | 'readable';
 const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
@@ -156,42 +158,33 @@ const BROWSE_READABLE_HERO_CHIP_WIDTH = 24;
 // Below this card width the "last updated" line moves to its own row under the
 // author instead of sharing the stats row, so it never squashes likes/views.
 const BROWSE_READABLE_UPDATED_INLINE_MIN = 300;
-const BROWSE_READABLE_CARD_MIN = 140;
 const BROWSE_READABLE_CARD_GOLDEN = 280;
-const BROWSE_READABLE_CARD_MAX = 340;
-const BROWSE_CARD_SIZE_STEP = 20;
 const BROWSE_GRID_OVERSCAN_ROWS = 4;
 
 type BrowseReadableDensity = 'micro' | 'compact' | 'full';
 
-function getReadableCardTargetWidth(cardSize: number): number {
-  const clampedSize = Math.min(BROWSE_CARD_SIZE_MAX, Math.max(BROWSE_CARD_SIZE_MIN, cardSize));
-
-  if (clampedSize <= BROWSE_CARD_SIZE_DEFAULT) {
-    const progress =
-      (clampedSize - BROWSE_CARD_SIZE_MIN) /
-      Math.max(1, BROWSE_CARD_SIZE_DEFAULT - BROWSE_CARD_SIZE_MIN);
-    return Math.round(
-      BROWSE_READABLE_CARD_MIN +
-        (BROWSE_READABLE_CARD_GOLDEN - BROWSE_READABLE_CARD_MIN) * progress
-    );
-  }
-
-  const progress =
-    (clampedSize - BROWSE_CARD_SIZE_DEFAULT) /
-    Math.max(1, BROWSE_CARD_SIZE_MAX - BROWSE_CARD_SIZE_DEFAULT);
-  return Math.round(
-    BROWSE_READABLE_CARD_GOLDEN +
-      (BROWSE_READABLE_CARD_MAX - BROWSE_READABLE_CARD_GOLDEN) * progress
-  );
+function getBrowseGridContentWidth(viewportWidth: number): number {
+  const fallbackWidth =
+    BROWSE_CARD_COLUMN_MIN_WIDTH * BROWSE_CARD_COLUMNS_DEFAULT +
+    BROWSE_CARD_GRID_GAP * (BROWSE_CARD_COLUMNS_DEFAULT - 1);
+  return Math.max(BROWSE_CARD_COLUMN_MIN_WIDTH, (viewportWidth || fallbackWidth + 32) - 32);
 }
 
-function getReadableCardGridGap(targetWidth: number): number {
-  if (targetWidth <= 180) return 8;
-  if (targetWidth >= BROWSE_READABLE_CARD_GOLDEN) return 16;
+function getMaxBrowseCardColumns(contentWidth: number): number {
+  const widthMax = Math.max(
+    1,
+    Math.floor((contentWidth + BROWSE_CARD_GRID_GAP) / (BROWSE_CARD_COLUMN_MIN_WIDTH + BROWSE_CARD_GRID_GAP))
+  );
+  return Math.min(BROWSE_CARD_COLUMNS_MAX, widthMax);
+}
 
-  const progress = (targetWidth - 180) / (BROWSE_READABLE_CARD_GOLDEN - 180);
-  return Math.round(8 + 8 * progress);
+function getMinBrowseCardColumns(maxColumns: number): number {
+  return Math.min(BROWSE_CARD_COLUMNS_MIN, maxColumns);
+}
+
+function clampBrowseCardColumns(columns: number, maxColumns: number): number {
+  const minColumns = getMinBrowseCardColumns(maxColumns);
+  return Math.min(maxColumns, Math.max(minColumns, Math.round(columns)));
 }
 
 function getReadableDensity(targetWidth: number): BrowseReadableDensity {
@@ -218,12 +211,11 @@ function estimateBrowseRowHeight(
   columnWidth: number,
   layout: BrowseLayout,
   cardDesign: BrowseCardDesign,
-  viewMode: ViewMode,
   section: string
 ): number {
   if (layout === 'list') return 112;
   if (cardDesign === 'classic') {
-    return Math.ceil(columnWidth * (viewMode === 'compact' ? 0.75 : 2 / 3));
+    return Math.ceil(columnWidth * 0.5625);
   }
 
   const density = getReadableDensity(columnWidth);
@@ -834,17 +826,19 @@ export default function Browse() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
-  const { search, layout, cardSize, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
-  const [previewCardSize, setPreviewCardSize] = useState(cardSize);
-  const activeCardSize = layout === 'list' ? cardSize : previewCardSize;
+  const { search, layout, cardColumns, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId } = browseUi;
+  const [browseViewportWidth, setBrowseViewportWidth] = useState(0);
+  const browseGridContentWidth = getBrowseGridContentWidth(browseViewportWidth);
+  const maxBrowseCardColumns = getMaxBrowseCardColumns(browseGridContentWidth);
+  const minBrowseCardColumns = getMinBrowseCardColumns(maxBrowseCardColumns);
+  const effectiveBrowseCardColumns = clampBrowseCardColumns(cardColumns, maxBrowseCardColumns);
   // Effective render mode: List is structural; otherwise small cards get the
   // compact chrome automatically. ModCard/skeleton keep reading one ViewMode.
   const viewMode: ViewMode =
-    layout === 'list' ? 'list' : activeCardSize < BROWSE_COMPACT_CARD_THRESHOLD ? 'compact' : 'grid';
-  const [browseViewportWidth, setBrowseViewportWidth] = useState(0);
+    layout === 'list' ? 'list' : effectiveBrowseCardColumns >= BROWSE_COMPACT_CARD_COLUMNS ? 'compact' : 'grid';
   const setSearch = useCallback((v: string) => setBrowseUi({ search: v }), [setBrowseUi]);
   const setLayout = useCallback((v: BrowseLayout) => setBrowseUi({ layout: v }), [setBrowseUi]);
-  const setCardSize = useCallback((v: number) => setBrowseUi({ cardSize: v }), [setBrowseUi]);
+  const setCardColumns = useCallback((v: number) => setBrowseUi({ cardColumns: v }), [setBrowseUi]);
   const setSort = useCallback((v: SortOption) => setBrowseUi({ sort: v }), [setBrowseUi]);
   const setSection = useCallback((v: string) => setBrowseUi({ section: v }), [setBrowseUi]);
   const setNsfw = useCallback((v: BrowseNsfwFilter) => setBrowseUi({ nsfw: v }), [setBrowseUi]);
@@ -853,15 +847,6 @@ export default function Browse() {
   const setAddedTo = useCallback((v: string) => setBrowseUi({ addedTo: v }), [setBrowseUi]);
   const setHeroCategoryId = useCallback((v: number | 'all' | 'none') => setBrowseUi({ heroCategoryId: v }), [setBrowseUi]);
   const setCategoryId = useCallback((v: number | 'all') => setBrowseUi({ categoryId: v }), [setBrowseUi]);
-  const commitCardSize = useCallback((nextSize: number) => {
-    setPreviewCardSize(nextSize);
-    setCardSize(nextSize);
-  }, [setCardSize]);
-
-  useEffect(() => {
-    setPreviewCardSize(cardSize);
-  }, [cardSize]);
-
   // Hydrate from session cache on mount so navigating away + back doesn't
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
@@ -2192,26 +2177,19 @@ export default function Browse() {
     return nextMods;
   }, [mods, settings?.hideOutdatedMods, section, heroCategoryId]);
 
-  const readableCardTargetWidth = getReadableCardTargetWidth(activeCardSize);
   const gridGap =
     layout === 'list'
       ? 12
-      : browseCardDesign === 'readable'
-        ? getReadableCardGridGap(readableCardTargetWidth)
-        : viewMode === 'compact'
-          ? 8
-          : 12;
-  const columnMinWidth =
-    layout === 'list'
-      ? Math.max(1, browseViewportWidth - 32)
-      : browseCardDesign === 'readable'
-        ? readableCardTargetWidth
-        : activeCardSize;
-  const contentWidth = Math.max(columnMinWidth, browseViewportWidth - 32);
+      : viewMode === 'compact'
+        ? 8
+        : BROWSE_CARD_GRID_GAP;
+  const contentWidth = layout === 'list'
+    ? Math.max(1, browseViewportWidth - 32)
+    : browseGridContentWidth;
   const virtualColumnCount =
     layout === 'list'
       ? 1
-      : Math.max(1, Math.floor((contentWidth + gridGap) / (columnMinWidth + gridGap)));
+      : effectiveBrowseCardColumns;
   const virtualColumnWidth =
     layout === 'list'
       ? contentWidth
@@ -2220,7 +2198,6 @@ export default function Browse() {
     virtualColumnWidth,
     layout,
     browseCardDesign,
-    viewMode,
     section
   );
   const virtualRowHeight = virtualCardHeight + gridGap;
@@ -2414,30 +2391,27 @@ export default function Browse() {
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
                       <div className="mb-2 flex items-center justify-between gap-3">
-                        <span className="text-xs font-medium text-text-secondary">Card size</span>
+                        <span className="text-xs font-medium text-text-secondary">Cards per row</span>
                         <span className="inline-flex items-center gap-1 text-[11px] text-text-tertiary">
                           <Grid3x3 className="h-3.5 w-3.5" />
                           Grid only
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                        <LayoutGrid className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                         <input
-                          key={cardSize}
                           type="range"
-                          min={BROWSE_CARD_SIZE_MIN}
-                          max={BROWSE_CARD_SIZE_MAX}
-                          step={BROWSE_CARD_SIZE_STEP}
-                          defaultValue={cardSize}
+                          min={minBrowseCardColumns}
+                          max={maxBrowseCardColumns}
+                          step={1}
+                          value={effectiveBrowseCardColumns}
                           disabled={layout === 'list'}
-                          onChange={(e) => setPreviewCardSize(Number(e.currentTarget.value))}
-                          onPointerUp={(e) => commitCardSize(Number(e.currentTarget.value))}
-                          onKeyUp={(e) => commitCardSize(Number(e.currentTarget.value))}
-                          onBlur={(e) => commitCardSize(Number(e.currentTarget.value))}
-                          aria-label="Card size"
+                          onChange={(e) => setCardColumns(Number(e.currentTarget.value))}
+                          aria-label="Cards per row"
+                          aria-valuetext={`${effectiveBrowseCardColumns} cards per row`}
                           className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                         />
-                        <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                        <Grid3x3 className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                       </div>
                     </div>
 
@@ -2709,9 +2683,8 @@ export default function Browse() {
       {/* Main Content */}
       <div className="relative z-0 flex-1 p-4">
         {(() => {
-          // Column min-width is the slider value, so the grid template can't be
-          // a static Tailwind class (the JIT scanner never sees it). Drive it
-          // with an inline style; gap still tracks the compact threshold.
+          // The slider controls card count, so grid templates use fixed column
+          // counts instead of min-widths. That keeps each tick visually distinct.
           const gridClass =
             layout === 'list'
               ? 'flex flex-col gap-3'
@@ -2725,10 +2698,10 @@ export default function Browse() {
               ? undefined
               : browseCardDesign === 'readable'
                 ? {
-                    gridTemplateColumns: `repeat(auto-fit, minmax(${readableCardTargetWidth}px, 1fr))`,
+                    gridTemplateColumns: `repeat(${effectiveBrowseCardColumns}, minmax(0, 1fr))`,
                     gap: `${gridGap}px`,
                   }
-                : { gridTemplateColumns: `repeat(auto-fill, minmax(${activeCardSize}px, 1fr))` };
+                : { gridTemplateColumns: `repeat(${effectiveBrowseCardColumns}, minmax(0, 1fr))` };
           const hasActiveFilters =
             search.trim().length > 0 ||
             heroCategoryId !== 'all' ||
@@ -2834,7 +2807,6 @@ export default function Browse() {
                             queuePosition={queuedState?.position}
                             viewMode={viewMode}
                             cardDesign={browseCardDesign}
-                            cardSize={activeCardSize}
                             cardWidth={virtualColumnWidth}
                             cardHeight={virtualCardHeight}
                             section={section}
@@ -2938,7 +2910,6 @@ function ReadableBrowseModCard({
   installedDisabled,
   downloading,
   queuePosition,
-  cardSize,
   cardWidth,
   cardHeight,
   section,
@@ -2960,7 +2931,7 @@ function ReadableBrowseModCard({
   const heroRenderUrl = isSoundSection && inferredHero ? getHeroRenderPath(inferredHero) : undefined;
   const heroFacePos = inferredHero ? getHeroFacePosition(inferredHero) : 55;
   const shouldHideNsfw = Boolean(mod.nsfw && hideNsfwPreviews);
-  const readableCardWidth = cardWidth ?? getReadableCardTargetWidth(cardSize);
+  const readableCardWidth = cardWidth ?? BROWSE_READABLE_CARD_GOLDEN;
   const readableDensity = getReadableDensity(readableCardWidth);
   const [showVolumeSlider, setShowVolumeSlider] = useState(false);
   const [audioControlsActive, setAudioControlsActive] = useState(false);
@@ -3229,7 +3200,6 @@ interface ModCardProps {
   queuePosition?: number;
   viewMode: ViewMode;
   cardDesign: BrowseCardDesign;
-  cardSize: number;
   cardWidth?: number;
   cardHeight?: number;
   section: string;
@@ -3260,9 +3230,8 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
       </div>
     );
   }
-  const aspect = viewMode === 'compact' ? 'aspect-[4/3]' : 'aspect-[3/2]';
   return (
-    <div className={`relative bg-bg-tertiary border border-border rounded-lg overflow-hidden ${aspect}`}>
+    <div className="relative aspect-video overflow-hidden rounded-lg border border-border bg-bg-tertiary">
       <div className="absolute inset-0 skeleton-shimmer bg-bg-secondary" />
       <div className="absolute bottom-0 left-0 right-0 p-3 space-y-2">
         <div className="h-3.5 bg-bg-tertiary/80 skeleton-shimmer rounded w-3/4" />
@@ -3272,11 +3241,11 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
   );
 }
 
-function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntent, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
+function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntent, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
-  // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
-  // see the size-threshold derivation of viewMode in the Browse component.
+  // Compact chrome kicks in for higher cards-per-row counts; see the viewMode
+  // derivation in the Browse component.
   const isCompact = viewMode === 'compact';
   const isList = viewMode === 'list';
   const isSoundSection = section === 'Sound';
@@ -3448,7 +3417,6 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           queuePosition={queuePosition}
           viewMode={viewMode}
           cardDesign={cardDesign}
-          cardSize={cardSize}
           cardWidth={cardWidth}
           cardHeight={cardHeight}
           section={section}
@@ -3487,7 +3455,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
-        className={`browse-card-hover-surface relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+        className={`browse-card-hover-surface relative isolate aspect-video bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
             : downloading
@@ -3751,7 +3719,6 @@ const MemoizedModCard = React.memo(ModCard, (prev, next) => (
   prev.queuePosition === next.queuePosition &&
   prev.viewMode === next.viewMode &&
   prev.cardDesign === next.cardDesign &&
-  prev.cardSize === next.cardSize &&
   prev.cardWidth === next.cardWidth &&
   prev.cardHeight === next.cardHeight &&
   prev.section === next.section &&

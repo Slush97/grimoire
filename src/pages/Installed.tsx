@@ -377,15 +377,42 @@ function buildCompactPriorityOrder(entries: ModEntry[]): Mod[] {
 const updateCheckCache = new Map<number, Set<number> | null>();
 let installedPageScrollTop = 0;
 
-// Card-size slider bounds (grid column min-width, in px). The slider replaces
-// the old fixed Cards/Compact presets: drag controls how wide each card gets,
-// and the layout reflows columns to fit. Below COMPACT_CARD_THRESHOLD cards
-// drop to the leaner "compact" treatment (fewer chips, shorter media frame),
-// so small sizes stay readable without a separate view mode.
-const CARD_SIZE_MIN = 190;
-const CARD_SIZE_MAX = 360;
-const CARD_SIZE_DEFAULT = 300;
-const COMPACT_CARD_THRESHOLD = 255;
+// Card grid controls are column-count based: the slider chooses how many cards
+// fit in one row, and each card stretches evenly inside that fixed grid.
+// Higher column counts use the leaner "compact" treatment.
+const CARD_COLUMN_MIN_WIDTH = 190;
+const CARD_GRID_GAP = 16;
+const CARD_COLUMNS_MIN = 2;
+const CARD_COLUMNS_DEFAULT = 3;
+const COMPACT_CARD_COLUMNS = 4;
+
+function getInstalledGridWidth(container: HTMLDivElement | null): number {
+  const fallbackWidth =
+    typeof window !== 'undefined'
+      ? window.innerWidth - 48
+      : CARD_COLUMN_MIN_WIDTH * CARD_COLUMNS_DEFAULT + CARD_GRID_GAP * (CARD_COLUMNS_DEFAULT - 1);
+  let contentWidth = container?.clientWidth ?? fallbackWidth;
+
+  if (container) {
+    const styles = window.getComputedStyle(container);
+    contentWidth -= parseFloat(styles.paddingLeft) + parseFloat(styles.paddingRight);
+  }
+
+  return Math.max(CARD_COLUMN_MIN_WIDTH, Math.floor(contentWidth));
+}
+
+function getMaxCardColumns(width: number): number {
+  return Math.max(1, Math.floor((width + CARD_GRID_GAP) / (CARD_COLUMN_MIN_WIDTH + CARD_GRID_GAP)));
+}
+
+function getMinCardColumns(maxColumns: number): number {
+  return Math.min(CARD_COLUMNS_MIN, maxColumns);
+}
+
+function clampCardColumns(columns: number, maxColumns: number): number {
+  const minColumns = getMinCardColumns(maxColumns);
+  return Math.min(maxColumns, Math.max(minColumns, Math.round(columns)));
+}
 
 export default function Installed() {
   const navigate = useNavigate();
@@ -430,32 +457,33 @@ export default function Installed() {
     (m) => !m.lockerCosmetics && !m.lockerSounds && !absorbedFileNames.has(m.fileName)
   );
   // Layout = the user's structural choice (cards grid vs horizontal list).
-  // cardSize = grid column min-width driven by the size slider. The effective
-  // three-way `viewMode` below is derived from both so the rest of the page
-  // (and ModCard) keeps reading a single ViewMode unchanged.
+  // cardColumns is the desired number of cards per row. It stays stable across
+  // window resizes; rendering clamps it only when the window is too narrow.
   const [layout, setLayout] = useState<'grid' | 'list'>(() => {
     const stored = localStorage.getItem('installedLayout');
     if (stored === 'grid' || stored === 'list') return stored;
     // Migrate from the old three-mode key: only 'list' carried structure.
     return localStorage.getItem('installedViewMode') === 'list' ? 'list' : 'grid';
   });
-  const [cardSize, setCardSize] = useState<number>(() => {
-    const stored = Number(localStorage.getItem('installedCardSize'));
-    if (Number.isFinite(stored) && stored >= CARD_SIZE_MIN && stored <= CARD_SIZE_MAX) {
-      return stored;
+  const [installedGridWidth, setInstalledGridWidth] = useState(() => getInstalledGridWidth(null));
+  const [cardColumns, setCardColumns] = useState<number>(() => {
+    const storedColumns = Number(localStorage.getItem('installedCardColumns'));
+    if (Number.isFinite(storedColumns)) {
+      return Math.max(CARD_COLUMNS_MIN, Math.round(storedColumns));
     }
-    // Migrate: the old 'compact' preset becomes a small card; anything else
-    // (including 'grid' and 'list') lands on the default size.
-    return localStorage.getItem('installedViewMode') === 'compact' ? 210 : CARD_SIZE_DEFAULT;
+    return CARD_COLUMNS_DEFAULT;
   });
+  const maxCardColumns = getMaxCardColumns(installedGridWidth);
+  const minCardColumns = getMinCardColumns(maxCardColumns);
+  const effectiveCardColumns = clampCardColumns(cardColumns, maxCardColumns);
   useEffect(() => {
     localStorage.setItem('installedLayout', layout);
   }, [layout]);
   useEffect(() => {
-    localStorage.setItem('installedCardSize', String(cardSize));
-  }, [cardSize]);
+    localStorage.setItem('installedCardColumns', String(cardColumns));
+  }, [cardColumns]);
   const viewMode: ViewMode =
-    layout === 'list' ? 'list' : cardSize < COMPACT_CARD_THRESHOLD ? 'compact' : 'grid';
+    layout === 'list' ? 'list' : effectiveCardColumns >= COMPACT_CARD_COLUMNS ? 'compact' : 'grid';
   // Locker overrides (hero cards + ability sounds) live off the mod list in
   // citadel/grimoire. The toolbar icon opens the manage popup; the badge shows
   // how many are applied. Count is fetched on mount (covers changes made over
@@ -718,6 +746,28 @@ export default function Installed() {
   const latestInstalledScrollTopRef = useRef(
     installedPageScrollTop || useAppStore.getState().installedScrollTop
   );
+
+  useLayoutEffect(() => {
+    const container = installedScrollRef.current;
+    const updateInstalledGridWidth = () => {
+      setInstalledGridWidth(getInstalledGridWidth(installedScrollRef.current));
+    };
+
+    updateInstalledGridWidth();
+
+    if (typeof ResizeObserver === 'undefined' || !container) {
+      window.addEventListener('resize', updateInstalledGridWidth);
+      return () => window.removeEventListener('resize', updateInstalledGridWidth);
+    }
+
+    const observer = new ResizeObserver(updateInstalledGridWidth);
+    observer.observe(container);
+    window.addEventListener('resize', updateInstalledGridWidth);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateInstalledGridWidth);
+    };
+  }, []);
 
   useLayoutEffect(() => {
     const restoreScroll = () => {
@@ -2005,7 +2055,7 @@ export default function Installed() {
   }
 
   if (modsLoading) {
-    return <InstalledSkeleton viewMode={viewMode} cardSize={cardSize} />;
+    return <InstalledSkeleton viewMode={viewMode} cardColumns={effectiveCardColumns} />;
   }
 
   if (modsError) {
@@ -2448,7 +2498,7 @@ export default function Installed() {
     const gridStyle =
       layout === 'list'
         ? undefined
-        : { gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` };
+        : { gridTemplateColumns: `repeat(${effectiveCardColumns}, minmax(0, 1fr))` };
 
     return (
       <DndContext
@@ -2834,28 +2884,29 @@ export default function Installed() {
               )}
             </div>
 
-            {/* Card-size slider: only meaningful in grid layout, so it's
+            {/* Cards-per-row slider: only meaningful in grid layout, so it's
                 disabled (and dimmed) while List is active rather than hidden,
                 keeping the toolbar from reflowing as you switch. */}
             <div
               className={`order-last flex items-center gap-2 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 transition-opacity ${
                 layout === 'list' ? 'opacity-40' : ''
               }`}
-              title="Card size"
+              title="Cards per row"
             >
-              <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+              <LayoutGrid className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
               <input
                 type="range"
-                min={CARD_SIZE_MIN}
-                max={CARD_SIZE_MAX}
-                step={5}
-                value={cardSize}
+                min={minCardColumns}
+                max={maxCardColumns}
+                step={1}
+                value={effectiveCardColumns}
                 disabled={layout === 'list'}
-                onChange={(e) => setCardSize(Number(e.target.value))}
-                aria-label="Card size"
+                onChange={(e) => setCardColumns(Number(e.target.value))}
+                aria-label="Cards per row"
+                aria-valuetext={`${effectiveCardColumns} cards per row`}
                 className="h-1.5 w-24 cursor-pointer accent-accent disabled:cursor-default"
               />
-              <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+              <Grid3x3 className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
             </div>
 
             <ViewModeToggle
@@ -3484,7 +3535,7 @@ export default function Installed() {
   );
 }
 
-function InstalledSkeleton({ viewMode, cardSize }: { viewMode: ViewMode; cardSize: number }) {
+function InstalledSkeleton({ viewMode, cardColumns }: { viewMode: ViewMode; cardColumns: number }) {
   const isGridLike = viewMode !== 'list';
   const rows = viewMode === 'compact' ? 12 : viewMode === 'grid' ? 8 : 6;
   return (
@@ -3503,7 +3554,7 @@ function InstalledSkeleton({ viewMode, cardSize }: { viewMode: ViewMode; cardSiz
         }
         style={
           isGridLike
-            ? { gridTemplateColumns: `repeat(auto-fill, minmax(${cardSize}px, 1fr))` }
+            ? { gridTemplateColumns: `repeat(${cardColumns}, minmax(0, 1fr))` }
             : undefined
         }
       >
@@ -5401,7 +5452,7 @@ function ModCard({
       ? 'flex flex-col gap-0 p-2'
       : 'flex flex-col gap-0 p-2.5';
   const mediaSpacingClasses = 'mb-2';
-  const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
+  const mediaFrameClasses = 'aspect-video';
   const audioOverlayClasses = isCompact
     ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer'
     : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2.5 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer';
