@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
 import type { HeroPortrait, SoulModelInfo, HeroPoseInfo } from '../types/portrait';
 import type {
   GameBananaModsResponse,
@@ -177,6 +177,25 @@ export async function revertHeroSound(
 
 export async function getActiveHeroSounds(heroName: string): Promise<ActiveHeroSound[]> {
   return window.electronAPI.getActiveHeroSounds(heroName);
+}
+
+export async function getHeroColorSupport(heroName: string): Promise<boolean> {
+  return window.electronAPI.getHeroColorSupport(heroName);
+}
+
+export async function applyHeroColor(
+  heroName: string,
+  hue: number
+): Promise<ApplyHeroColorResult> {
+  return window.electronAPI.applyHeroColor(heroName, hue);
+}
+
+export async function revertHeroColor(heroName: string): Promise<ApplyHeroColorResult> {
+  return window.electronAPI.revertHeroColor(heroName);
+}
+
+export async function getActiveHeroColor(heroName: string): Promise<ActiveHeroColor | null> {
+  return window.electronAPI.getActiveHeroColor(heroName);
 }
 
 export async function getLockerOverview(): Promise<LockerOverview> {

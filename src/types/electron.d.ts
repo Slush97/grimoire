@@ -18,6 +18,8 @@ import type {
     AbilitySoundParams,
     ActiveHeroSound,
     ApplyHeroSoundResult,
+    ActiveHeroColor,
+    ApplyHeroColorResult,
     LockerOverview,
     LockerCardThumbnail,
     LockerClearScope,
@@ -333,6 +335,10 @@ export interface ElectronAPI {
     ) => Promise<ApplyHeroSoundResult>;
     revertHeroSound: (heroName: string, slot: AbilitySlot) => Promise<ApplyHeroSoundResult>;
     getActiveHeroSounds: (heroName: string) => Promise<ActiveHeroSound[]>;
+    getHeroColorSupport: (heroName: string) => Promise<boolean>;
+    applyHeroColor: (heroName: string, hue: number) => Promise<ApplyHeroColorResult>;
+    revertHeroColor: (heroName: string) => Promise<ApplyHeroColorResult>;
+    getActiveHeroColor: (heroName: string) => Promise<ActiveHeroColor | null>;
     getLockerOverview: () => Promise<LockerOverview>;
     getLockerCardThumbnails: () => Promise<LockerCardThumbnail[]>;
     clearLockerOverrides: (scope: LockerClearScope) => Promise<void>;

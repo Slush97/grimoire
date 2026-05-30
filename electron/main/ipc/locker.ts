@@ -2,6 +2,7 @@ import { ipcMain } from 'electron';
 import { loadSettings } from '../services/settings';
 import { listAppliedCards, clearAllHeroCards, getAppliedCardThumbnails } from '../services/heroCards';
 import { listAppliedSounds, clearAllHeroSounds } from '../services/heroSounds';
+import { clearAllHeroColors } from '../services/heroColors';
 import type { LockerCardThumbnail, LockerClearScope, LockerOverview } from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as the other locker IPC). */
@@ -42,5 +43,6 @@ ipcMain.handle(
         if (!deadlockPath) throw new Error('No Deadlock path configured');
         if (scope === 'cards' || scope === 'all') await clearAllHeroCards(deadlockPath);
         if (scope === 'sounds' || scope === 'all') await clearAllHeroSounds(deadlockPath);
+        if (scope === 'colors' || scope === 'all') await clearAllHeroColors(deadlockPath);
     },
 );

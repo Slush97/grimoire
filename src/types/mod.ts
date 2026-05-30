@@ -179,7 +179,7 @@ export interface LockerOverview {
 }
 
 /** Which slice of Locker overrides to clear. */
-export type LockerClearScope = 'all' | 'cards' | 'sounds';
+export type LockerClearScope = 'all' | 'cards' | 'sounds' | 'colors';
 
 /** One applied hero card decoded to a preview thumbnail, for the popup. Decoded
  *  on demand from the managed cosmetics VPK (the real applied art, not the
@@ -199,6 +199,46 @@ export interface ActiveHeroSound {
    *  sound picker compares this against each mod's metaKey to mark the active row. */
   sourceFileName: string;
   params?: AbilitySoundParams;
+}
+
+/**
+ * One per-hero ability-color choice inside the Locker colors VPK. The user
+ * recolored this hero's ability VFX (particles + color textures + baked vertex
+ * colors) to a single absolute `hue`; the rebuild bakes that hero's VFX (cached
+ * by codename+hue) and folds it into the consolidated colors VPK. At most one
+ * selection per hero.
+ */
+export interface LockerColorSelection {
+  heroName: string;
+  /** Model/particle codename the recolor targets (Paige = `bookworm`). */
+  heroCodename: string;
+  /** Absolute hue (0-359 degrees) every ability color is set to. */
+  hue: number;
+  addedAt: string;
+}
+
+/**
+ * Manifest on the single Locker-managed colors VPK that holds every applied
+ * ability recolor. Presence marks the VPK as Locker-managed so other surfaces
+ * hide it. Rebuilt on every apply/revert. Separate from lockerCosmetics (cards)
+ * and lockerSounds (disjoint paths, independent lifecycle).
+ */
+export interface LockerColorsInfo {
+  /** One entry per hero (heroCodename). */
+  colors: LockerColorSelection[];
+  rebuiltAt: string;
+}
+
+/** The hue applied for a hero's ability VFX, read back so the color picker can
+ *  reflect the active selection. */
+export interface ActiveHeroColor {
+  /** Applied absolute hue (0-359 degrees). */
+  hue: number;
+}
+
+export interface ApplyHeroColorResult {
+  /** The applied hue (0-359), or null after a revert. */
+  hue: number | null;
 }
 
 /**

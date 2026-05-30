@@ -30,10 +30,12 @@ import { readStash } from './launch';
  *  VPK filename so they never collide with a user mod). */
 export const LOCKER_CARDS_KEY = 'locker:cards';
 export const LOCKER_SOUNDS_KEY = 'locker:sounds';
+export const LOCKER_COLORS_KEY = 'locker:colors';
 
 /** Fixed filenames inside citadel/grimoire. */
 const GRIMOIRE_CARDS_FILE = 'pak01_dir.vpk';
 const GRIMOIRE_SOUNDS_FILE = 'pak02_dir.vpk';
+const GRIMOIRE_COLORS_FILE = 'pak03_dir.vpk';
 
 /** Absolute path to the managed cards VPK in citadel/grimoire. */
 export function lockerCardsVpkPath(deadlockPath: string): string {
@@ -43,6 +45,13 @@ export function lockerCardsVpkPath(deadlockPath: string): string {
 /** Absolute path to the managed sounds VPK in citadel/grimoire. */
 export function lockerSoundsVpkPath(deadlockPath: string): string {
     return join(getGrimoirePath(deadlockPath), GRIMOIRE_SOUNDS_FILE);
+}
+
+/** Absolute path to the managed ability-colors VPK in citadel/grimoire. The
+ *  colors VPK never lived in citadel/addons (it's a feature newer than the
+ *  grimoire search path), so unlike cards/sounds it has no migration path. */
+export function lockerColorsVpkPath(deadlockPath: string): string {
+    return join(getGrimoirePath(deadlockPath), GRIMOIRE_COLORS_FILE);
 }
 
 /** Whether the grimoire search path (and addons) is active in gameinfo.gi. The
