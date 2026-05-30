@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, Layers, MoreVertical, Music, PowerOff, Shield, Shirt, Star } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Layers, MoreVertical, Music, PowerOff, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   applyMinaVariant,
@@ -84,7 +84,7 @@ function prewarmLockerImage(src: string | undefined) {
 }
 
 export default function Locker() {
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, setBrowseUi } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -203,6 +203,18 @@ export default function Locker() {
   const goToHero = useCallback(
     (hero: HeroCategory) => navigate(`/locker/hero/${hero.id}`),
     [navigate]
+  );
+  const openHeroInBrowse = useCallback(
+    (hero: HeroCategory) => {
+      setBrowseUi({
+        section: 'Mod',
+        heroCategoryId: hero.id,
+        categoryId: 'all',
+        search: '',
+      });
+      navigate('/browse');
+    },
+    [navigate, setBrowseUi]
   );
   const selectedHeroRouteParam = useMemo(() => {
     const match = location.pathname.match(/^\/locker\/hero\/([^/]+)\/?$/);
@@ -557,6 +569,7 @@ export default function Locker() {
               soundCount={countLockerSkins(heroSounds.map.get(hero.id) ?? [])}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onNavigate={() => goToHero(hero)}
+              onBrowse={() => openHeroInBrowse(hero)}
               onToggleFavorite={() =>
                 setFavoriteHeroes((prev) =>
                   prev.includes(hero.id)
@@ -608,6 +621,7 @@ export default function Locker() {
               sounds={heroSounds.map.get(hero.id) ?? []}
               expanded={expandedHeroes.has(hero.id)}
               onToggleExpanded={() => toggleHeroExpanded(hero.id)}
+              onBrowseSkins={() => openHeroInBrowse(hero)}
               onSelect={(modId) => setActiveSkin(hero.id, modId)}
               onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
               isFavorite={favoriteHeroes.includes(hero.id)}
@@ -788,6 +802,7 @@ interface HeroCardProps {
   sounds: Mod[];
   expanded: boolean;
   onToggleExpanded: () => void;
+  onBrowseSkins: () => void;
   onSelect: (modId: string) => void;
   onToggleVariant: (modId: string) => void;
   isFavorite: boolean;
@@ -815,6 +830,7 @@ interface HeroGalleryCardProps {
   soundCount: number;
   isFavorite: boolean;
   onNavigate: () => void;
+  onBrowse: () => void;
   onToggleFavorite: () => void;
 }
 
@@ -1280,6 +1296,7 @@ function HeroGalleryCard({
   soundCount,
   isFavorite,
   onNavigate,
+  onBrowse,
   onToggleFavorite,
 }: HeroGalleryCardProps) {
   const renderLocal = getHeroRenderPath(hero.name);
@@ -1374,6 +1391,19 @@ function HeroGalleryCard({
         onClick={(event) => {
           event.preventDefault();
           event.stopPropagation();
+          onBrowse();
+        }}
+        aria-label={`Browse ${hero.name} skins`}
+        title={`Browse ${hero.name} skins`}
+        className="absolute right-9 top-2 z-20 flex items-center justify-center rounded-full border border-white/30 bg-black/40 p-1 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100"
+      >
+        <ExternalLink className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
           onToggleFavorite();
         }}
         aria-label={isFavorite ? 'Unfavorite' : 'Favorite'}
@@ -1438,6 +1468,7 @@ function HeroCard({
   sounds,
   expanded,
   onToggleExpanded,
+  onBrowseSkins,
   onSelect,
   onToggleVariant,
   isFavorite,
@@ -1608,6 +1639,11 @@ function HeroCard({
           onToggleVariant={onToggleVariant}
           hideNsfwPreviews={hideNsfwPreviews}
           showDownloadable={activeSection === 'skins'}
+          browseAction={
+            activeSection === 'skins'
+              ? { label: 'Browse', onClick: onBrowseSkins }
+              : undefined
+          }
           useHeroPortraitThumbnails={activeSection === 'sounds'}
           heroName={hero.name}
           emptyMessage={
