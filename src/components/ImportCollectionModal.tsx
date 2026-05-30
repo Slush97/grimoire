@@ -747,7 +747,8 @@ export default function ImportCollectionModal({
           file.id,
           file.fileName,
           row.item.modelName,
-          row.item.rootCategory?.id
+          row.item.rootCategory?.id,
+          details.name ?? row.item.name
         ).catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
           if (message === 'Cancelled by user') {

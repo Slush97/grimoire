@@ -20,8 +20,16 @@ export interface DownloadModArgs {
     modId: number;
     fileId: number;
     fileName: string;
+    modName?: string;
     section?: string;
     categoryId?: number;
+}
+
+interface DownloadQueueItem {
+    modId: number;
+    fileId: number;
+    fileName: string;
+    modName?: string;
 }
 
 export interface DownloadInstallResult {
@@ -164,7 +172,7 @@ interface QueuedDownload {
 
 const downloadQueue: QueuedDownload[] = [];
 let isProcessingQueue = false;
-let currentDownloadInfo: { modId: number; fileId: number; fileName: string } | null = null;
+let currentDownloadInfo: DownloadQueueItem | null = null;
 
 // Cancellation handle for the in-flight phase of the current download. The
 // active phase (HTTP fetch, multi-VPK picker prompt) installs a teardown
@@ -175,18 +183,19 @@ let currentCancelHandler: (() => void) | null = null;
 /**
  * Get the current download queue state for UI display
  */
-export function getDownloadQueue(): Array<{ modId: number; fileId: number; fileName: string }> {
+export function getDownloadQueue(): DownloadQueueItem[] {
     return downloadQueue.map(item => ({
         modId: item.args.modId,
         fileId: item.args.fileId,
         fileName: item.args.fileName,
+        modName: item.args.modName,
     }));
 }
 
 /**
  * Get the currently downloading item
  */
-export function getCurrentDownload(): { modId: number; fileId: number; fileName: string } | null {
+export function getCurrentDownload(): DownloadQueueItem | null {
     return currentDownloadInfo;
 }
 
@@ -285,6 +294,7 @@ export function downloadModFromUrl(
         modId,
         fileId,
         fileName,
+        modName: oneClick.enrichedDetails?.name,
         section: oneClick.modType ?? 'Mod',
     };
 
@@ -334,6 +344,7 @@ async function processQueue(): Promise<void> {
             modId: item.args.modId,
             fileId: item.args.fileId,
             fileName: item.args.fileName,
+            modName: item.args.modName,
         };
         emitQueueUpdate(); // Notify UI that queue changed and current download started
         try {

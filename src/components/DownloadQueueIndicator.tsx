@@ -138,6 +138,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     if (totalItems === 0) return null;
 
     const currentFileName = queueState.currentDownload?.fileName ?? 'Preparing…';
+    const currentTooltip = queueState.currentDownload?.modName ?? currentFileName;
 
     return (
         <div className={`pointer-events-auto ${className}`}>
@@ -163,7 +164,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                             )}
                         </span>
                         <div className="min-w-0 flex-1">
-                            <div className="truncate text-[13px] font-medium leading-tight text-text-primary" title={currentFileName}>
+                            <div className="truncate text-[13px] font-medium leading-tight text-text-primary" title={currentTooltip}>
                                 {currentFileName}
                             </div>
                             <div className="mt-0.5 flex items-center gap-1.5 text-[11px] text-text-secondary">
@@ -238,7 +239,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 <Loader2 className="h-3.5 w-3.5 flex-shrink-0 animate-spin text-accent" />
                                 <p
                                     className="min-w-0 flex-1 truncate text-sm font-medium text-text-primary"
-                                    title={currentFileName}
+                                    title={currentTooltip}
                                 >
                                     {currentFileName}
                                 </p>
@@ -296,7 +297,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                         </span>
                                         <span
                                             className="flex-1 truncate text-xs text-text-secondary"
-                                            title={item.fileName}
+                                            title={item.modName ?? item.fileName}
                                         >
                                             {item.fileName}
                                         </span>

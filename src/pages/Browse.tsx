@@ -1930,7 +1930,7 @@ export default function Browse() {
     }
 
     try {
-      await downloadMod(selectedMod.id, fileId, fileName, section, effectiveCategoryId);
+      await downloadMod(selectedMod.id, fileId, fileName, section, effectiveCategoryId, selectedMod.name);
     } catch (err) {
       setError(String(err));
       // Reset the active UI only if the file that failed is the active one.
@@ -1975,7 +1975,7 @@ export default function Browse() {
         setExtracting(false);
       }
 
-      await downloadMod(mod.id, file.id, file.fileName, section, effectiveCategoryId);
+      await downloadMod(mod.id, file.id, file.fileName, section, effectiveCategoryId, details.name ?? mod.name);
     } catch (err) {
       setError(String(err));
       // Only clear downloading state if this was the active download
@@ -2537,7 +2537,7 @@ export default function Browse() {
                     <SlidersHorizontal className="w-4 h-4" />
                     <span>Filters</span>
                     {filterCount > 0 && (
-                      <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[11px] font-semibold flex items-center justify-center">
+                      <span className="grid h-[18px] min-w-[18px] place-items-center rounded-full bg-accent px-1 font-sans text-[11px] font-bold leading-[18px] text-black tabular-nums">
                         {filterCount}
                       </span>
                     )}

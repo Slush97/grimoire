@@ -391,6 +391,7 @@ ipcMain.handle(
             modId: match.gameBananaId,
             fileId: match.gameBananaFileId,
             fileName: match.sourceFileName,
+            modName: match.modName,
             section: match.sourceSection ?? 'Mod',
         }, getMainWindow());
         const installedFileNames = new Set(downloadResult.installedVpks);

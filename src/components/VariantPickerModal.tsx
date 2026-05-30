@@ -1,4 +1,23 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import {
+    DndContext,
+    DragOverlay,
+    KeyboardSensor,
+    PointerSensor,
+    closestCenter,
+    useSensor,
+    useSensors,
+    type DragEndEvent,
+    type DragStartEvent,
+} from '@dnd-kit/core';
+import {
+    SortableContext,
+    arrayMove,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import {
     X,
     Check,
@@ -9,15 +28,16 @@ import {
     Pencil,
     ChevronUp,
     ChevronDown,
-    GripVertical,
     AlertTriangle,
     Download,
 } from 'lucide-react';
 import type { Mod } from '../types/mod';
-import { ArchivedTag, Button, Tag } from './common/ui';
+import { ArchivedTag, Button, CheckboxMark, Tag } from './common/ui';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 
 type DropPosition = 'before' | 'after';
+type VariantSection = 'enabled' | 'disabled';
+type VariantDraftOrder = { section: VariantSection; ids: string[] } | null;
 
 interface Props {
     /** Display name shared by the variants (use primary.name). */
@@ -60,6 +80,51 @@ function formatBytes(bytes: number): string {
     return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
+function orderVariantsByIds(variants: Mod[], ids: string[]): Mod[] {
+    if (variants.length !== ids.length) return variants;
+    const byId = new Map(variants.map((variant) => [variant.id, variant]));
+    const ordered = ids.map((id) => byId.get(id)).filter((variant): variant is Mod => Boolean(variant));
+    return ordered.length === variants.length ? ordered : variants;
+}
+
+function SortableVariantRow({
+    id,
+    disabled,
+    children,
+}: {
+    id: string;
+    disabled: boolean;
+    children: ReactNode;
+}) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id, disabled });
+
+    const style: CSSProperties = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.32 : undefined,
+        position: 'relative',
+        zIndex: isDragging ? 1 : undefined,
+    };
+
+    return (
+        <div
+            ref={setNodeRef}
+            style={style}
+            {...attributes}
+            {...listeners}
+        >
+            {children}
+        </div>
+    );
+}
+
 /**
  * Variant picker for grouped mods. Shown when a card represents multiple
  * VPKs sharing a GameBanana mod id. Any combination can be enabled.
@@ -85,30 +150,28 @@ export default function VariantPickerModal({
     const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
     const editInputRef = useRef<HTMLInputElement | null>(null);
     const [draggingId, setDraggingId] = useState<string | null>(null);
-    const [dropTargetId, setDropTargetId] = useState<string | null>(null);
-    const [dropPosition, setDropPosition] = useState<DropPosition | null>(null);
-    const handleDownRef = useRef(false);
+    const [draggingSection, setDraggingSection] = useState<VariantSection | null>(null);
+    const [dragDraftOrder, setDragDraftOrder] = useState<VariantDraftOrder>(null);
+    const sortableSensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: { distance: 8 },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
 
     const resetDrag = () => {
         setDraggingId(null);
-        setDropTargetId(null);
-        setDropPosition(null);
-        handleDownRef.current = false;
+        setDraggingSection(null);
+        setDragDraftOrder(null);
     };
 
-    const orderedVariants = [
-        ...variants.filter((v) => v.enabled),
-        ...variants.filter((v) => !v.enabled),
-    ];
-
-    const isNoopDrop = (sourceId: string, targetId: string, position: DropPosition) => {
-        if (sourceId === targetId) return true;
-        const sourceIdx = orderedVariants.findIndex((v) => v.id === sourceId);
-        const targetIdx = orderedVariants.findIndex((v) => v.id === targetId);
-        if (sourceIdx === -1 || targetIdx === -1) return false;
-        return position === 'before'
-            ? sourceIdx === targetIdx - 1
-            : sourceIdx === targetIdx + 1;
+    const variantsForSection = (section: VariantSection) => {
+        const sectionVariants = variants.filter((v) => v.enabled === (section === 'enabled'));
+        return dragDraftOrder?.section === section
+            ? orderVariantsByIds(sectionVariants, dragDraftOrder.ids)
+            : sectionVariants;
     };
 
     const editingId = editing?.id ?? null;
@@ -184,6 +247,308 @@ export default function VariantPickerModal({
         }
     };
 
+    const handleSortableDragStart = ({ active }: DragStartEvent, section: VariantSection) => {
+        setDraggingId(String(active.id));
+        setDraggingSection(section);
+    };
+
+    const handleSortableDragEnd = async ({ active, over }: DragEndEvent, section: VariantSection) => {
+        const activeId = String(active.id);
+        const overId = over ? String(over.id) : null;
+        if (!overId || activeId === overId) {
+            resetDrag();
+            return;
+        }
+
+        const sectionVariants = variantsForSection(section);
+        const oldIndex = sectionVariants.findIndex((variant) => variant.id === activeId);
+        const newIndex = sectionVariants.findIndex((variant) => variant.id === overId);
+        if (oldIndex === -1 || newIndex === -1) {
+            resetDrag();
+            return;
+        }
+
+        const source = sectionVariants[oldIndex];
+        const target = sectionVariants[newIndex];
+        if (!source || !target || source.enabled !== target.enabled) {
+            resetDrag();
+            return;
+        }
+
+        const nextIds = arrayMove(sectionVariants.map((variant) => variant.id), oldIndex, newIndex);
+        setDragDraftOrder({ section, ids: nextIds });
+        setPending(`move:${activeId}:drag`);
+        try {
+            await onReorderVariantTo(source, target, oldIndex < newIndex ? 'after' : 'before');
+        } finally {
+            setPending(null);
+            resetDrag();
+        }
+    };
+
+    const renderVariantRow = (
+        v: Mod,
+        idx: number,
+        sectionVariants: Mod[],
+        overlay = false
+    ) => {
+        const isActive = v.enabled;
+        const isPending = pending === v.id;
+        const isDeletePending = pending === `delete:${v.id}`;
+        const isEditing = !overlay && editing?.id === v.id;
+        const isRenamePending = pending === `rename:${v.id}`;
+        const canMoveUp = idx > 0;
+        const canMoveDown = idx < sectionVariants.length - 1;
+        const showReorder = sectionVariants.length > 1;
+        const isMoveUpPending = pending === `move:${v.id}:up`;
+        const isMoveDownPending = pending === `move:${v.id}:down`;
+        const hasUpdate = variantsWithUpdate?.has(v.id) ?? false;
+        const conflictDetails = conflictsByVariantId[v.id] ?? [];
+        const primaryTitle =
+            v.variantLabel ??
+            v.fileDescription ??
+            v.sourceFileName ??
+            v.fileName;
+        const showSecondaryFileName =
+            !!v.variantLabel || !!v.fileDescription || !!v.sourceFileName;
+
+        return (
+            <div
+                className={`relative flex items-center gap-3 rounded-lg border p-3 transition-colors ${
+                    isActive
+                        ? 'border-accent/40 bg-accent/5'
+                        : 'border-border bg-bg-tertiary hover:bg-white/5'
+                } ${hasUpdate ? 'update-stripes' : ''} ${overlay ? 'shadow-2xl ring-1 ring-accent/30' : ''}`}
+            >
+                <button
+                    type="button"
+                    onClick={overlay ? undefined : () => pick(v)}
+                    disabled={overlay || !!pending || isEditing}
+                    className="flex-1 min-w-0 text-left cursor-pointer disabled:cursor-default disabled:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
+                    title={isActive ? 'Disable this file' : 'Enable this file'}
+                    aria-pressed={isActive}
+                >
+                    <div className="flex items-center gap-3">
+                        <CheckboxMark checked={isActive} />
+                        <div className="min-w-0 flex-1">
+                            {isEditing ? (
+                                <input
+                                    ref={editInputRef}
+                                    type="text"
+                                    value={editing.draft}
+                                    onChange={(e) => setEditing({ id: v.id, draft: e.target.value })}
+                                    onClick={(e) => e.stopPropagation()}
+                                    onKeyDown={(e) => {
+                                        e.stopPropagation();
+                                        if (e.key === 'Enter') {
+                                            e.preventDefault();
+                                            void commitRename(v);
+                                        } else if (e.key === 'Escape') {
+                                            e.preventDefault();
+                                            cancelRename();
+                                        }
+                                    }}
+                                    placeholder="e.g. Red preset"
+                                    maxLength={80}
+                                    className="w-full bg-bg-secondary border border-accent/50 rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
+                                />
+                            ) : (
+                                <div className="flex items-center gap-2 min-w-0">
+                                    <span
+                                        className={`truncate ${showSecondaryFileName ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
+                                        title={primaryTitle}
+                                    >
+                                        {primaryTitle}
+                                    </span>
+                                    {v.isArchived && <ArchivedTag />}
+                                    {hasUpdate && (
+                                        <Tag
+                                            tone="accent"
+                                            icon={Download}
+                                            title="A newer version is available on GameBanana"
+                                            className="flex-shrink-0 uppercase tracking-wide"
+                                        >
+                                            Update
+                                        </Tag>
+                                    )}
+                                    {conflictDetails.length > 0 && (
+                                        <Tag
+                                            tone="warning"
+                                            icon={AlertTriangle}
+                                            title={conflictDetails.join(', ')}
+                                            className="flex-shrink-0"
+                                        >
+                                            Conflict
+                                        </Tag>
+                                    )}
+                                </div>
+                            )}
+                            <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5 min-w-0">
+                                <span className="flex-shrink-0">{formatBytes(v.size)}</span>
+                                <span className="opacity-50 flex-shrink-0">-</span>
+                                <span className="flex-shrink-0">Slot #{v.priority}</span>
+                                <span className="opacity-50 flex-shrink-0">-</span>
+                                <span
+                                    className="flex-shrink-0 tabular-nums"
+                                    title={`Installed ${formatAbsoluteDate(v.installedAt)}`}
+                                >
+                                    {formatRelativeDate(v.installedAt)}
+                                </span>
+                                {showSecondaryFileName && !isEditing && (
+                                    <>
+                                        <span className="opacity-50 flex-shrink-0">-</span>
+                                        <span className="font-mono truncate opacity-70" title={v.fileName}>
+                                            {v.fileName}
+                                        </span>
+                                    </>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </button>
+                {isEditing ? (
+                    <div className="flex items-center gap-1 flex-shrink-0">
+                        <button
+                            type="button"
+                            onClick={() => commitRename(v)}
+                            disabled={!!pending}
+                            className="p-1.5 text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:opacity-50"
+                            title="Save"
+                            aria-label="Save file name"
+                        >
+                            {isRenamePending ? (
+                                <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <Check className="w-4 h-4" />
+                            )}
+                        </button>
+                        <button
+                            type="button"
+                            onClick={cancelRename}
+                            disabled={!!pending}
+                            className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors cursor-pointer disabled:opacity-50"
+                            title="Cancel"
+                            aria-label="Cancel rename"
+                        >
+                            <X className="w-4 h-4" />
+                        </button>
+                    </div>
+                ) : (
+                    <>
+                        {showReorder && (
+                            <div className="flex flex-col gap-0.5 flex-shrink-0">
+                                <button
+                                    type="button"
+                                    onClick={() => move(v, 'up')}
+                                    disabled={overlay || !!pending || !canMoveUp}
+                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                    title={canMoveUp ? 'Move up' : 'Already first in load order'}
+                                    aria-label="Move file up in load order"
+                                >
+                                    {isMoveUpPending ? (
+                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <ChevronUp className="w-3.5 h-3.5" />
+                                    )}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => move(v, 'down')}
+                                    disabled={overlay || !!pending || !canMoveDown}
+                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
+                                    title={canMoveDown ? 'Move down' : 'Already last in load order'}
+                                    aria-label="Move file down in load order"
+                                >
+                                    {isMoveDownPending ? (
+                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                                    ) : (
+                                        <ChevronDown className="w-3.5 h-3.5" />
+                                    )}
+                                </button>
+                            </div>
+                        )}
+                        <button
+                            type="button"
+                            onClick={() => startRename(v)}
+                            disabled={overlay || !!pending}
+                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+                            title={v.variantLabel ? 'Rename file' : 'Give this file a name'}
+                            aria-label="Rename file"
+                        >
+                            <Pencil className="w-4 h-4" />
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => handleDelete(v)}
+                            disabled={overlay || !!pending}
+                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+                            title={`Delete ${primaryTitle}`}
+                            aria-label={`Delete ${primaryTitle}`}
+                        >
+                            {isDeletePending ? (
+                                <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                            ) : (
+                                <Trash2 className="w-4 h-4" />
+                            )}
+                        </button>
+                    </>
+                )}
+                {isPending && (
+                    <span className="text-xs text-accent">Saving...</span>
+                )}
+            </div>
+        );
+    };
+
+    const renderSortableVariantSection = (section: VariantSection) => {
+        const sectionVariants = variantsForSection(section);
+        if (sectionVariants.length === 0) return null;
+
+        const activeVariant = draggingSection === section
+            ? sectionVariants.find((variant) => variant.id === draggingId)
+            : undefined;
+        const activeIndex = activeVariant
+            ? sectionVariants.findIndex((variant) => variant.id === activeVariant.id)
+            : -1;
+        const sectionCanReorder = sectionVariants.length > 1 && !editing && !pending;
+
+        return (
+            <DndContext
+                sensors={sortableSensors}
+                collisionDetection={closestCenter}
+                onDragStart={(event) => handleSortableDragStart(event, section)}
+                onDragEnd={(event) => {
+                    void handleSortableDragEnd(event, section);
+                }}
+                onDragCancel={resetDrag}
+            >
+                <SortableContext
+                    items={sectionVariants.map((variant) => variant.id)}
+                    strategy={verticalListSortingStrategy}
+                >
+                    <div className="space-y-1.5">
+                        {sectionVariants.map((variant, idx) => (
+                            <SortableVariantRow
+                                key={variant.id}
+                                id={variant.id}
+                                disabled={!sectionCanReorder}
+                            >
+                                {renderVariantRow(variant, idx, sectionVariants)}
+                            </SortableVariantRow>
+                        ))}
+                    </div>
+                </SortableContext>
+                <DragOverlay>
+                    {activeVariant ? (
+                        <div className="pointer-events-none opacity-95 shadow-2xl">
+                            {renderVariantRow(activeVariant, activeIndex, sectionVariants, true)}
+                        </div>
+                    ) : null}
+                </DragOverlay>
+            </DndContext>
+        );
+    };
+
     return (
         <div
             className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
@@ -246,300 +611,9 @@ export default function VariantPickerModal({
                 </div>
 
                 <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
-                    {orderedVariants.map((v, idx) => {
-                        const isActive = v.enabled;
-                        const isPending = pending === v.id;
-                        const isDeletePending = pending === `delete:${v.id}`;
-                        const isEditing = editing?.id === v.id;
-                        const isRenamePending = pending === `rename:${v.id}`;
-                        const prev = idx > 0 ? orderedVariants[idx - 1] : null;
-                        const nextSibling = idx < orderedVariants.length - 1 ? orderedVariants[idx + 1] : null;
-                        const canMoveUp = !!prev && prev.enabled === v.enabled;
-                        const canMoveDown = !!nextSibling && nextSibling.enabled === v.enabled;
-                        const showReorder = variants.length > 1;
-                        const isMoveUpPending = pending === `move:${v.id}:up`;
-                        const isMoveDownPending = pending === `move:${v.id}:down`;
-                        const isDragging = draggingId === v.id;
-                        const isDropTarget = dropTargetId === v.id;
-                        const hasUpdate = variantsWithUpdate?.has(v.id) ?? false;
-                        const conflictDetails = conflictsByVariantId[v.id] ?? [];
-                        const primaryTitle =
-                            v.variantLabel ??
-                            v.fileDescription ??
-                            v.sourceFileName ??
-                            v.fileName;
-                        const showSecondaryFileName =
-                            !!v.variantLabel || !!v.fileDescription || !!v.sourceFileName;
-
-                        return (
-                            <div
-                                key={v.id}
-                                draggable={showReorder && !isEditing && !pending}
-                                onDragStart={(e) => {
-                                    if (!handleDownRef.current) {
-                                        e.preventDefault();
-                                        return;
-                                    }
-                                    handleDownRef.current = false;
-                                    e.dataTransfer.effectAllowed = 'move';
-                                    try {
-                                        e.dataTransfer.setData('text/plain', v.id);
-                                    } catch {
-                                        // Some drag implementations do not allow setting data.
-                                    }
-                                    setDraggingId(v.id);
-                                }}
-                                onDragOver={(e) => {
-                                    if (!draggingId || draggingId === v.id) return;
-                                    const source = variants.find((x) => x.id === draggingId);
-                                    if (!source || source.enabled !== v.enabled) return;
-                                    e.preventDefault();
-                                    e.dataTransfer.dropEffect = 'move';
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const midY = rect.top + rect.height / 2;
-                                    const pos: DropPosition = e.clientY < midY ? 'before' : 'after';
-                                    setDropTargetId(v.id);
-                                    setDropPosition(pos);
-                                }}
-                                onDragLeave={(e) => {
-                                    if (e.currentTarget.contains(e.relatedTarget as Node)) return;
-                                    if (dropTargetId === v.id) {
-                                        setDropTargetId(null);
-                                        setDropPosition(null);
-                                    }
-                                }}
-                                onDrop={async (e) => {
-                                    e.preventDefault();
-                                    const sourceId = draggingId;
-                                    const pos = dropPosition;
-                                    resetDrag();
-                                    if (!sourceId || sourceId === v.id || !pos) return;
-                                    if (isNoopDrop(sourceId, v.id, pos)) return;
-                                    const source = variants.find((x) => x.id === sourceId);
-                                    if (!source || source.enabled !== v.enabled) return;
-                                    setPending(`move:${sourceId}:drag`);
-                                    try {
-                                        await onReorderVariantTo(source, v, pos);
-                                    } finally {
-                                        setPending(null);
-                                    }
-                                }}
-                                onDragEnd={resetDrag}
-                                className={`relative flex items-center gap-3 p-3 rounded-lg border transition-colors ${
-                                    isActive
-                                        ? 'border-accent/40 bg-accent/5'
-                                        : 'border-border bg-bg-tertiary hover:bg-white/5'
-                                } ${hasUpdate ? 'update-stripes' : ''} ${isDragging ? 'opacity-50' : ''}`}
-                            >
-                                {isDropTarget && dropPosition && (
-                                    <span
-                                        aria-hidden
-                                        className={`absolute left-2 right-2 ${dropPosition === 'before' ? '-top-[3px]' : '-bottom-[3px]'} h-[3px] bg-accent pointer-events-none rounded-full`}
-                                    />
-                                )}
-                                {showReorder && (
-                                    <div
-                                        onMouseDown={() => {
-                                            handleDownRef.current = true;
-                                        }}
-                                        onMouseUp={() => {
-                                            handleDownRef.current = false;
-                                        }}
-                                        className="flex-shrink-0 p-1 text-text-secondary hover:text-text-primary cursor-grab active:cursor-grabbing select-none"
-                                        title="Drag to reorder"
-                                        aria-label="Drag to reorder"
-                                    >
-                                        <GripVertical className="w-4 h-4" />
-                                    </div>
-                                )}
-                                <button
-                                    type="button"
-                                    onClick={() => pick(v)}
-                                    disabled={!!pending || isEditing}
-                                    className="flex-1 min-w-0 text-left cursor-pointer disabled:cursor-default disabled:opacity-100 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded"
-                                    title={isActive ? 'Disable this file' : 'Enable this file'}
-                                    aria-pressed={isActive}
-                                >
-                                    <div className="flex items-center gap-3">
-                                        <span
-                                            className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center ${
-                                                isActive ? 'border-accent bg-accent' : 'border-border bg-bg-secondary'
-                                            }`}
-                                            aria-hidden
-                                        >
-                                            {isActive && <Check className="w-2.5 h-2.5 text-black" strokeWidth={3} />}
-                                        </span>
-                                        <div className="min-w-0 flex-1">
-                                            {isEditing ? (
-                                                <input
-                                                    ref={editInputRef}
-                                                    type="text"
-                                                    value={editing.draft}
-                                                    onChange={(e) => setEditing({ id: v.id, draft: e.target.value })}
-                                                    onClick={(e) => e.stopPropagation()}
-                                                    onKeyDown={(e) => {
-                                                        e.stopPropagation();
-                                                        if (e.key === 'Enter') {
-                                                            e.preventDefault();
-                                                            void commitRename(v);
-                                                        } else if (e.key === 'Escape') {
-                                                            e.preventDefault();
-                                                            cancelRename();
-                                                        }
-                                                    }}
-                                                    placeholder="e.g. Red preset"
-                                                    maxLength={80}
-                                                    className="w-full bg-bg-secondary border border-accent/50 rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
-                                                />
-                                            ) : (
-                                                <div className="flex items-center gap-2 min-w-0">
-                                                    <span
-                                                        className={`truncate ${showSecondaryFileName ? 'text-sm text-text-primary font-medium' : 'font-mono text-sm text-text-primary'}`}
-                                                        title={primaryTitle}
-                                                    >
-                                                        {primaryTitle}
-                                                    </span>
-                                                    {v.isArchived && <ArchivedTag />}
-                                                    {hasUpdate && (
-                                                        <Tag
-                                                            tone="accent"
-                                                            icon={Download}
-                                                            title="A newer version is available on GameBanana"
-                                                            className="flex-shrink-0 uppercase tracking-wide"
-                                                        >
-                                                            Update
-                                                        </Tag>
-                                                    )}
-                                                    {conflictDetails.length > 0 && (
-                                                        <Tag
-                                                            tone="warning"
-                                                            icon={AlertTriangle}
-                                                            title={conflictDetails.join(', ')}
-                                                            className="flex-shrink-0"
-                                                        >
-                                                            Conflict
-                                                        </Tag>
-                                                    )}
-                                                </div>
-                                            )}
-                                            <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5 min-w-0">
-                                                <span className="flex-shrink-0">{formatBytes(v.size)}</span>
-                                                <span className="opacity-50 flex-shrink-0">-</span>
-                                                <span className="flex-shrink-0">Slot #{v.priority}</span>
-                                                <span className="opacity-50 flex-shrink-0">•</span>
-                                                <span
-                                                    className="flex-shrink-0 tabular-nums"
-                                                    title={`Installed ${formatAbsoluteDate(v.installedAt)}`}
-                                                >
-                                                    {formatRelativeDate(v.installedAt)}
-                                                </span>
-                                                {showSecondaryFileName && !isEditing && (
-                                                    <>
-                                                        <span className="opacity-50 flex-shrink-0">-</span>
-                                                        <span className="font-mono truncate opacity-70" title={v.fileName}>
-                                                            {v.fileName}
-                                                        </span>
-                                                    </>
-                                                )}
-                                            </div>
-                                        </div>
-                                    </div>
-                                </button>
-                                {isEditing ? (
-                                    <div className="flex items-center gap-1 flex-shrink-0">
-                                        <button
-                                            type="button"
-                                            onClick={() => commitRename(v)}
-                                            disabled={!!pending}
-                                            className="p-1.5 text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:opacity-50"
-                                            title="Save"
-                                            aria-label="Save file name"
-                                        >
-                                            {isRenamePending ? (
-                                                <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                            ) : (
-                                                <Check className="w-4 h-4" />
-                                            )}
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={cancelRename}
-                                            disabled={!!pending}
-                                            className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors cursor-pointer disabled:opacity-50"
-                                            title="Cancel"
-                                            aria-label="Cancel rename"
-                                        >
-                                            <X className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <>
-                                        {showReorder && (
-                                            <div className="flex flex-col gap-0.5 flex-shrink-0">
-                                                <button
-                                                    type="button"
-                                                    onClick={() => move(v, 'up')}
-                                                    disabled={!!pending || !canMoveUp}
-                                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                                    title={canMoveUp ? 'Move up' : idx === 0 ? 'Already first in load order' : 'Adjacent file is in a different section'}
-                                                    aria-label="Move file up in load order"
-                                                >
-                                                    {isMoveUpPending ? (
-                                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                                    ) : (
-                                                        <ChevronUp className="w-3.5 h-3.5" />
-                                                    )}
-                                                </button>
-                                                <button
-                                                    type="button"
-                                                    onClick={() => move(v, 'down')}
-                                                    disabled={!!pending || !canMoveDown}
-                                                    className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
-                                                    title={canMoveDown ? 'Move down' : idx === orderedVariants.length - 1 ? 'Already last in load order' : 'Adjacent file is in a different section'}
-                                                    aria-label="Move file down in load order"
-                                                >
-                                                    {isMoveDownPending ? (
-                                                        <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                                    ) : (
-                                                        <ChevronDown className="w-3.5 h-3.5" />
-                                                    )}
-                                                </button>
-                                            </div>
-                                        )}
-                                        <button
-                                            type="button"
-                                            onClick={() => startRename(v)}
-                                            disabled={!!pending}
-                                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
-                                            title={v.variantLabel ? 'Rename file' : 'Give this file a name'}
-                                            aria-label="Rename file"
-                                        >
-                                            <Pencil className="w-4 h-4" />
-                                        </button>
-                                        <button
-                                            type="button"
-                                            onClick={() => handleDelete(v)}
-                                            disabled={!!pending}
-                                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
-                                            title={`Delete ${primaryTitle}`}
-                                            aria-label={`Delete ${primaryTitle}`}
-                                        >
-                                            {isDeletePending ? (
-                                                <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                                            ) : (
-                                                <Trash2 className="w-4 h-4" />
-                                            )}
-                                        </button>
-                                    </>
-                                )}
-                                {isPending && (
-                                    <span className="text-xs text-accent">Saving...</span>
-                                )}
-                            </div>
-                        );
-                    })}
+                    {renderSortableVariantSection('enabled')}
+                    {renderSortableVariantSection('disabled')}
                 </div>
-
                 <div className="flex items-center justify-between gap-3 p-5 border-t border-border">
                     {anyActive ? (
                         <Button

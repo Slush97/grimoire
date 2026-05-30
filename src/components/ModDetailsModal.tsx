@@ -436,9 +436,9 @@ export default function ModDetailsModal({
               target="_blank"
               rel="noopener noreferrer"
               title={`View ${mod.name} on GameBanana`}
-              className="group flex min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+              className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
             >
-              <span className="truncate">{mod.name}</span>
+              <span className="min-w-0 truncate">{mod.name}</span>
               <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
             </a>
           </h2>
@@ -629,7 +629,7 @@ export default function ModDetailsModal({
                           type="button"
                           onClick={() => setArchivedFilesOpen((open) => !open)}
                           aria-expanded={archivedFilesOpen}
-                          className="w-full flex items-center justify-between gap-3 rounded-lg border border-border bg-bg-secondary/80 px-3 py-2 text-left text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
+                          className="w-full flex items-center justify-between gap-3 px-1 py-1.5 text-left text-sm text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
                         >
                           <span className="flex items-center gap-2 min-w-0">
                             {archivedFilesOpen ? (
@@ -639,8 +639,8 @@ export default function ModDetailsModal({
                             )}
                             <span className="font-medium truncate">Archived files</span>
                           </span>
-                          <span className="flex-shrink-0 rounded-full bg-bg-primary px-2 py-0.5 text-[11px] text-text-tertiary border border-border">
-                            {archivedFiles.length}
+                          <span className="flex-shrink-0 text-[11px] leading-none text-text-tertiary">
+                            ({archivedFiles.length})
                           </span>
                         </button>
                         {archivedFilesOpen && (

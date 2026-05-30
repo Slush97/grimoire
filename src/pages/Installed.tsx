@@ -1230,7 +1230,7 @@ export default function Installed() {
         await deleteMod(sourceMod.id);
       }
 
-      await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
+      await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId, detailsMod.name);
 
       // Deleting the source removes the only enabled sibling, so the backend's
       // auto-disable promotion never fires and the freshly downloaded file stays
@@ -1383,6 +1383,7 @@ export default function Installed() {
               r.fileName,
               r.snapshot.section,
               r.snapshot.categoryId,
+              details.name,
             );
             completed.push({
               gameBananaId: r.snapshot.gameBananaId,

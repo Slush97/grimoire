@@ -20,7 +20,7 @@ import type { AppSettings } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { useSocialStore } from '../stores/socialStore';
-import { Card, Badge, Button } from '../components/common/ui';
+import { Card, Badge, Button, CheckboxMark } from '../components/common/ui';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
@@ -484,8 +484,9 @@ export default function Profiles() {
                           ref={(el) => { if (el) el.indeterminate = someSelected; }}
                           onChange={toggleAll}
                           aria-label={allSelected ? 'Clear selection' : 'Select all snapshots'}
-                          className="h-3.5 w-3.5 accent-orange-500"
+                          className="peer sr-only"
                         />
+                        <CheckboxMark checked={allSelected} indeterminate={someSelected} />
                         <span>
                           {selectedSnapshotIds.size === 0
                             ? `Select to bulk delete (${snapshots.length})`
@@ -528,13 +529,16 @@ export default function Profiles() {
                       key={snap.snapshotId}
                       className="flex flex-wrap items-center gap-3 py-2.5"
                     >
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => toggleSnapshotSelected(snap.snapshotId)}
-                        aria-label={isSelected ? 'Unselect snapshot' : 'Select snapshot'}
-                        className="h-3.5 w-3.5 accent-orange-500 shrink-0"
-                      />
+                      <label className="shrink-0 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={isSelected}
+                          onChange={() => toggleSnapshotSelected(snap.snapshotId)}
+                          aria-label={isSelected ? 'Unselect snapshot' : 'Select snapshot'}
+                          className="peer sr-only"
+                        />
+                        <CheckboxMark checked={isSelected} />
+                      </label>
                       <div className="min-w-0 flex-1">
                         <div
                           className="text-sm text-text-primary truncate"

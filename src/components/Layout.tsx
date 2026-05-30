@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
-import { AlertTriangle, Check, Download, Loader2 } from 'lucide-react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
 import Sidebar from './Sidebar';
 import WelcomeModal from './WelcomeModal';
 import SyncIndicator from './SyncIndicator';
@@ -22,22 +22,9 @@ export default function Layout() {
   const [loading, setLoading] = useState(true);
   const [gameinfoAlert, setGameinfoAlert] = useState<string | null>(null);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
-  // Toast state for 1-click installs. Lives through the full install
-  // lifecycle: starting → downloading (with %) → extracting → success/error.
-  // modId is the GB mod id from the protocol URL — used to filter download
-  // events so we don't react to unrelated downloads from the Browse tab.
-  type OneClickToast =
-    | { phase: 'starting'; modId: number | undefined; label: string }
-    | {
-        phase: 'downloading';
-        modId: number | undefined;
-        label: string;
-        progress: { downloaded: number; total: number };
-      }
-    | { phase: 'extracting'; modId: number | undefined; label: string }
-    | { phase: 'success'; modId: number | undefined; label: string }
-    | { phase: 'error'; modId: number | undefined; label: string; message: string };
-  const [oneClickBanner, setOneClickBanner] = useState<OneClickToast | null>(null);
+  // Normal one-click download progress is handled by DownloadQueueIndicator.
+  // This only catches failures before a download can be queued.
+  const [oneClickError, setOneClickError] = useState<{ label: string; message: string } | null>(null);
   const [suspiciousPrompt, setSuspiciousPrompt] = useState<OneClickSuspiciousFilesData | null>(null);
   const [multiVpkPrompt, setMultiVpkPrompt] = useState<MultiVpkPickData | null>(null);
   // Shown when GameBanana starts returning 429s (the main process debounces the
@@ -115,89 +102,20 @@ export default function Layout() {
   useEffect(() => {
     const unsubscribe = window.electronAPI.onOneClickInstall((data) => {
       if (data.error) {
-        setOneClickBanner({
-          phase: 'error',
-          modId: data.modId,
-          label: data.modName ?? 'mod',
-          message: data.error,
-        });
+        setOneClickError({ label: data.modName ?? 'mod', message: data.error });
         return;
       }
-      const label = data.modName ?? (() => {
-        try {
-          const u = new URL(data.archiveUrl);
-          const last = u.pathname.split('/').filter(Boolean).pop();
-          // Fall back to the archive filename only when it looks like one
-          // (has a recognized extension); otherwise just say "mod" — bare
-          // numeric paths like /dl/12345 aren't user-facing.
-          if (last && /\.(zip|7z|rar|vpk)$/i.test(last)) return decodeURIComponent(last);
-          return 'mod';
-        } catch {
-          return 'mod';
-        }
-      })();
-      setOneClickBanner({ phase: 'starting', modId: data.modId, label });
+      setOneClickError(null);
       navigate('/');
     });
     return unsubscribe;
   }, [navigate]);
 
-  // Mirror the download lifecycle into the 1-click toast. We use the modId
-  // from the protocol URL as the join key so unrelated downloads from the
-  // Browse tab don't hijack the banner.
   useEffect(() => {
-    const progressUnsub = window.electronAPI.onDownloadProgress((data) => {
-      setOneClickBanner((prev) => {
-        if (!prev || prev.modId === undefined || prev.modId !== data.modId) return prev;
-        if (prev.phase === 'success' || prev.phase === 'error') return prev;
-        return {
-          phase: 'downloading',
-          modId: prev.modId,
-          label: prev.label,
-          progress: { downloaded: data.downloaded, total: data.total },
-        };
-      });
-    });
-    const extractingUnsub = window.electronAPI.onDownloadExtracting((data) => {
-      setOneClickBanner((prev) => {
-        if (!prev || prev.modId === undefined || prev.modId !== data.modId) return prev;
-        return { phase: 'extracting', modId: prev.modId, label: prev.label };
-      });
-    });
-    const completeUnsub = window.electronAPI.onDownloadComplete((data) => {
-      setOneClickBanner((prev) => {
-        if (!prev || prev.modId === undefined || prev.modId !== data.modId) return prev;
-        return { phase: 'success', modId: prev.modId, label: prev.label };
-      });
-    });
-    const errorUnsub = window.electronAPI.onDownloadError((data) => {
-      setOneClickBanner((prev) => {
-        if (!prev || prev.modId === undefined || prev.modId !== data.modId) return prev;
-        return { phase: 'error', modId: prev.modId, label: prev.label, message: data.message };
-      });
-    });
-    return () => {
-      progressUnsub();
-      extractingUnsub();
-      completeUnsub();
-      errorUnsub();
-    };
-  }, []);
-
-  // Auto-dismiss only at terminal states. While in flight (starting,
-  // downloading, extracting) the toast stays put so the user can watch
-  // the percentage tick up.
-  useEffect(() => {
-    if (!oneClickBanner) return;
-    if (oneClickBanner.phase === 'success') {
-      const t = setTimeout(() => setOneClickBanner(null), 2500);
-      return () => clearTimeout(t);
-    }
-    if (oneClickBanner.phase === 'error') {
-      const t = setTimeout(() => setOneClickBanner(null), 8000);
-      return () => clearTimeout(t);
-    }
-  }, [oneClickBanner]);
+    if (!oneClickError) return;
+    const t = setTimeout(() => setOneClickError(null), 8000);
+    return () => clearTimeout(t);
+  }, [oneClickError]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onOneClickSuspiciousFiles((data) => {
@@ -312,65 +230,12 @@ export default function Layout() {
         <DownloadQueueIndicator />
         <SyncIndicator />
       </div>
-      {oneClickBanner && (
+      {oneClickError && (
         <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2">
-          {(() => {
-            const isError = oneClickBanner.phase === 'error';
-            const isSuccess = oneClickBanner.phase === 'success';
-            const pct =
-              oneClickBanner.phase === 'downloading' && oneClickBanner.progress.total > 0
-                ? Math.min(
-                    100,
-                    Math.round(
-                      (oneClickBanner.progress.downloaded / oneClickBanner.progress.total) * 100
-                    )
-                  )
-                : null;
-            const message =
-              oneClickBanner.phase === 'error'
-                ? oneClickBanner.message
-                : oneClickBanner.phase === 'success'
-                ? `Installed ${oneClickBanner.label}`
-                : oneClickBanner.phase === 'extracting'
-                ? `Extracting ${oneClickBanner.label}…`
-                : oneClickBanner.phase === 'downloading'
-                ? `Downloading ${oneClickBanner.label}${pct !== null ? ` — ${pct}%` : ''}`
-                : `Installing ${oneClickBanner.label} from GameBanana…`;
-            const icon = isError ? (
-              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-            ) : isSuccess ? (
-              <Check className="h-4 w-4 flex-shrink-0" />
-            ) : oneClickBanner.phase === 'extracting' ||
-              oneClickBanner.phase === 'starting' ? (
-              <Loader2 className="h-4 w-4 flex-shrink-0 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 flex-shrink-0" />
-            );
-            return (
-              <div
-                className={`flex flex-col gap-1.5 overflow-hidden rounded-sm border text-sm shadow-lg backdrop-blur-sm min-w-[260px] max-w-[420px] ${
-                  isError
-                    ? 'border-red-500/40 bg-red-500/15 text-red-200'
-                    : isSuccess
-                    ? 'border-green-500/40 bg-green-500/15 text-green-200'
-                    : 'border-accent/40 bg-accent/15 text-accent-foreground'
-                }`}
-              >
-                <div className="flex items-center gap-2 px-4 py-2">
-                  {icon}
-                  <span className="truncate">{message}</span>
-                </div>
-                {pct !== null && (
-                  <div className="h-1 w-full bg-bg-secondary/40">
-                    <div
-                      className="h-full bg-accent transition-all duration-200"
-                      style={{ width: `${pct}%` }}
-                    />
-                  </div>
-                )}
-              </div>
-            );
-          })()}
+          <div className="flex w-[min(420px,calc(100vw-2rem))] items-center justify-center gap-2 px-2 py-1 text-sm font-semibold text-red-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]">
+            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+            <span className="truncate">{oneClickError.label}: {oneClickError.message}</span>
+          </div>
         </div>
       )}
       <ConfirmModal

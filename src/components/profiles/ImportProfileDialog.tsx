@@ -11,7 +11,7 @@ import {
   ChevronDown,
   ChevronRight,
 } from 'lucide-react';
-import { Button } from '../common/ui';
+import { Button, CheckboxMark } from '../common/ui';
 import ModThumbnail from '../ModThumbnail';
 import SocialProfileHeader, { type SocialProfileSeed } from '../social/SocialProfileHeader';
 import {
@@ -560,7 +560,9 @@ export default function ImportProfileDialog({
           ref.submissionId,
           fileId,
           fileName,
-          ref.section || 'Mod'
+          ref.section || 'Mod',
+          undefined,
+          row.details?.name ?? row.mod.entry.hint?.name
         ).catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
           setRows((prev) =>
@@ -828,9 +830,10 @@ export default function ImportProfileDialog({
                           checked={includeAutoexec}
                           onChange={(e) => setIncludeAutoexec(e.target.checked)}
                           disabled={importing || !!importedProfileName}
-                          className="accent-accent cursor-pointer disabled:cursor-not-allowed"
+                          className="peer sr-only"
                           aria-label="Include autoexec commands from this profile"
                         />
+                        <CheckboxMark checked={includeAutoexec} disabled={importing || !!importedProfileName} />
                         <span className="font-medium">
                           Include {cmds.length} autoexec {cmds.length === 1 ? 'command' : 'commands'}
                         </span>
@@ -878,8 +881,9 @@ export default function ImportProfileDialog({
                     checked={selectableCount > 0 && selectedCount === selectableCount}
                     onChange={toggleAll}
                     disabled={selectableCount === 0 || importing}
-                    className="accent-accent cursor-pointer flex-shrink-0"
+                    className="peer sr-only"
                   />
+                  <CheckboxMark checked={selectableCount > 0 && selectedCount === selectableCount} disabled={selectableCount === 0 || importing} />
                   <span className="truncate">
                     {selectedCount === selectableCount && selectableCount > 0
                       ? 'Deselect all'
@@ -892,8 +896,9 @@ export default function ImportProfileDialog({
                     checked={skipNsfw}
                     onChange={(e) => setSkipNsfw(e.target.checked)}
                     disabled={importing}
-                    className="accent-accent cursor-pointer flex-shrink-0"
+                    className="peer sr-only"
                   />
+                  <CheckboxMark checked={skipNsfw} disabled={importing} />
                   <span>Skip NSFW</span>
                 </label>
               </div>
@@ -992,14 +997,17 @@ export default function ImportProfileDialog({
                         </div>
                       )}
                       <div className="flex items-center gap-3 sm:gap-4">
-                        <input
-                          type="checkbox"
-                          checked={r.selected && !blocked}
-                          onChange={() => toggleRow(idx)}
-                          disabled={blocked || importing}
-                          className="w-4 h-4 accent-accent cursor-pointer disabled:cursor-not-allowed flex-shrink-0"
-                          aria-label={`Toggle ${hint?.name ?? 'mod'}`}
-                        />
+                        <label className={`flex-shrink-0 ${blocked || importing ? 'cursor-not-allowed' : 'cursor-pointer'}`}>
+                          <input
+                            type="checkbox"
+                            checked={r.selected && !blocked}
+                            onChange={() => toggleRow(idx)}
+                            disabled={blocked || importing}
+                            className="peer sr-only"
+                            aria-label={`Toggle ${hint?.name ?? 'mod'}`}
+                          />
+                          <CheckboxMark checked={r.selected && !blocked} disabled={blocked || importing} />
+                        </label>
                         <ModThumbnail
                           src={hint?.thumbnailUrl}
                           alt={hint?.name ?? 'Mod'}
@@ -1165,27 +1173,28 @@ export default function ImportProfileDialog({
                                           checked={explicit}
                                           onChange={() => toggleVariantPick(idx, file)}
                                           disabled={importing}
-                                          className="accent-accent cursor-pointer disabled:cursor-default"
+                                          className="peer sr-only"
                                         />
-                                      <span className="truncate flex-1" title={file.fileName}>
-                                        {file.fileName}
-                                      </span>
-                                      {file.isArchived && (
-                                        <span className="text-text-tertiary text-[11px] uppercase tracking-wide">
-                                          archived
+                                        <CheckboxMark checked={explicit} disabled={importing} />
+                                        <span className="truncate flex-1" title={file.fileName}>
+                                          {file.fileName}
                                         </span>
-                                      )}
-                                      <span
-                                        className="text-text-tertiary text-xs tabular-nums inline-flex items-center gap-1"
-                                        title={`${file.downloadCount.toLocaleString()} downloads`}
-                                      >
-                                        <Download className="w-3 h-3" />
-                                        {file.downloadCount.toLocaleString()}
-                                      </span>
-                                    </label>
-                                  </li>
-                                );
-                              })}
+                                        {file.isArchived && (
+                                          <span className="text-text-tertiary text-[11px] uppercase tracking-wide">
+                                            archived
+                                          </span>
+                                        )}
+                                        <span
+                                          className="text-text-tertiary text-xs tabular-nums inline-flex items-center gap-1"
+                                          title={`${file.downloadCount.toLocaleString()} downloads`}
+                                        >
+                                          <Download className="w-3 h-3" />
+                                          {file.downloadCount.toLocaleString()}
+                                        </span>
+                                      </label>
+                                    </li>
+                                  );
+                                })}
                               </ul>
                             </>
                           )}

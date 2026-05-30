@@ -1,5 +1,5 @@
 import { type ReactNode } from 'react';
-import { type LucideIcon } from 'lucide-react';
+import { Check, type LucideIcon } from 'lucide-react';
 
 interface CardProps {
     children?: ReactNode;
@@ -126,6 +126,34 @@ export function ArchivedTag({ className = '' }: { className?: string }) {
     return (
         <span className={`flex-shrink-0 text-[10px] uppercase tracking-wide bg-bg-primary text-text-secondary rounded px-1.5 py-0.5 border border-border ${className}`}>
             Archived
+        </span>
+    );
+}
+
+export function CheckboxMark({
+    checked,
+    indeterminate = false,
+    disabled = false,
+    className = '',
+}: {
+    checked: boolean;
+    indeterminate?: boolean;
+    disabled?: boolean;
+    className?: string;
+}) {
+    const active = checked || indeterminate;
+    return (
+        <span
+            aria-hidden
+            className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors peer-focus-visible:ring-2 peer-focus-visible:ring-accent ${
+                active ? 'border-accent bg-accent' : 'border-border bg-bg-secondary'
+            } ${disabled ? 'opacity-50' : ''} ${className}`}
+        >
+            {checked ? (
+                <Check className="w-2.5 h-2.5 text-black" strokeWidth={3} />
+            ) : indeterminate ? (
+                <span className="w-2 h-0.5 rounded-full bg-black" />
+            ) : null}
         </span>
     );
 }

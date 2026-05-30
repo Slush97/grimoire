@@ -382,9 +382,10 @@ export async function downloadMod(
   fileId: number,
   fileName: string,
   section?: string,
-  categoryId?: number
+  categoryId?: number,
+  modName?: string
 ): Promise<void> {
-  return window.electronAPI.downloadMod({ modId, fileId, fileName, section, categoryId });
+  return window.electronAPI.downloadMod({ modId, fileId, fileName, section, categoryId, modName });
 }
 
 export async function getGamebananaSections(): Promise<GameBananaSection[]> {
