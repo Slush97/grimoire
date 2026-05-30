@@ -89,11 +89,18 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewFailed, setPreviewFailed] = useState(false);
+  // Set when this hero has no live preview (e.g. particle-only heroes carry no
+  // color texture to swatch); we then stop attempting it and show the CSS chip.
+  const [previewUnavailable, setPreviewUnavailable] = useState(false);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
     setLoading(true);
+    // Fresh hero: drop any prior hero's preview state.
+    setPreviewUrl(null);
+    setPreviewFailed(false);
+    setPreviewUnavailable(false);
     Promise.all([
       getHeroColorSupport(heroName),
       getActiveHeroColor(heroName),
@@ -127,7 +134,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
   // sliders stay smooth. Best-effort: if it can't render (no game path, old
   // binary) we silently fall back to the approximate CSS swatch.
   useEffect(() => {
-    if (!supported || busy) return;
+    if (!supported || busy || previewUnavailable) return;
     let cancelled = false;
     setPreviewLoading(true);
     const handle = setTimeout(() => {
@@ -137,9 +144,12 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
           setPreviewUrl(url);
           setPreviewFailed(false);
         })
-        .catch(() => {
+        .catch((err) => {
           if (cancelled || !mounted.current) return;
           setPreviewFailed(true);
+          // A particle-only hero has no swatch to render: stop retrying every
+          // tick and just show the CSS chip. Other (transient) errors keep trying.
+          if (String(err).includes('particle-only')) setPreviewUnavailable(true);
         })
         .finally(() => {
           if (!cancelled && mounted.current) setPreviewLoading(false);
@@ -149,7 +159,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [heroName, hue, saturation, brightness, supported, busy]);
+  }, [heroName, hue, saturation, brightness, supported, busy, previewUnavailable]);
 
   const refreshGameRunning = async () => {
     try {

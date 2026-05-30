@@ -47,6 +47,10 @@ import type {
  */
 const COLOR_CODENAME_BY_HERO: Readonly<Record<string, string>> = {
     Paige: 'bookworm',
+    // Celeste is particle-only (no color textures / vertex colors), so her recipe
+    // has no preview_texture and the live swatch falls back to the approximate
+    // chip (representative for a flat particle color). recolor-hero still bakes her.
+    Celeste: 'unicorn',
 };
 
 /** Bumped when the recolor recipe/binary changes in a way that should re-bake

@@ -160,10 +160,20 @@ Core API (also for the Grimoire UI): `recolor_model_vertex_colors(bytes, hue) ->
 
 Full diagnosis + workflow: `vpkmerge/docs/handoff-vertex-color-recolor.md`.
 
+## Supported heroes (recipes)
+
+Per-hero recipes are pinned in vpkmerge `recipe_for` (`vpkmerge-core/src/hero_recolor.rs`) and gated in Grimoire by `COLOR_CODENAME_BY_HERO` (`heroColors.ts`). Add a hero in lockstep: a recipe in vpkmerge + a `DisplayName: 'codename'` line in Grimoire.
+
+- **Paige** (`bookworm`): all three mechanisms (267 particles + 9 color textures + 2 vertex-color models). `preview_texture` = `bookworm_ui_effects_color`.
+- **Celeste** (`unicorn`): **particle-only**: her ability VFX carry color purely through `.vpcf_c` params (no color-bearing textures, no baked vertex colors), so the recipe is just the `particles/abilities/unicorn/` prefix. Pinned from her in-game pink recolor mod (target hue ~329). Because there is no color texture, `preview_texture` is `None`: `recolor_hero_preview_png` returns a clear error and the picker falls back to the approximate CSS chip (which is representative for a flat particle color). The full bake still works via `recolor-hero`.
+
+This is why `HeroRecolorRecipe.preview_texture` is `Option<String>` and the empty `texture_entries`/`model_entries` are valid (a particle-only hero recolors fine with only the prefix).
+
 ## Status summary
 
 - Built: VFX layer detection + extraction (Grimoire), `morphic::patch_kv3_resource_scalars` (the particle recolor primitive), `vpkmerge texture` (+ `vpkmerge_core::recolor`, the texture recolor primitive), and `vpkmerge model recolor` (the vertex-color recolor primitive) - all multi-entry batch -> one addon.
 - Done for Paige (in game): particle recolor to purple (`pak02`) + the 9-texture ability/bullet/model recolor to purple (`pak04`) + the **ult horse/knight vertex-color recolor to purple**. Confirmed in game: bullets, abilities 1/2/3, and the ult body all read purple.
 - **Three color mechanisms, not two.** Beyond particles (params) and model/self-illum textures, the **ult horse/knight is colored by baked mesh vertex colors** (material `bookworm_knight.vmat`: `F_PAINT_VERTEX_COLORS=1`, gray albedo, `g_bApplyTintToVertexColors=0`), so it stayed green after the first two passes and a tint can't fix it. The vertex-color recolor (above) handles it - **in-game confirmed purple**. Two lessons baked in: find the rendered model via the ult's model particle (`bookworm_ultimate_model.vpcf_c` -> `models/particle/bookworm_horse_knight.vmdl`, not the `heroes_wip` copies), and never re-encode meshopt (convert it to uncompressed instead).
 - Built: the Locker UI (`HeroColorPicker.tsx`): hue + saturation + brightness sliders, full-color presets (incl. light blue), and a live recolored preview via `recolor-hero --preview-png` (fast, no bake). Saturation/brightness scales fix the hue-only "drowned out" look and unlock pastel colors. The bundled `resources/vpkmerge` binary was rebuilt with the scale flags (local dev; a tagged vpkmerge release + pin bump is still pending).
-- Pending: the `vpkmerge particle recolor` subcommand (promote `recolor_particles.rs`); a vpkmerge release + Grimoire pin bump; and the in-game confirmation of a saturation/brightness-tuned (non-hue-only) Paige bake.
+- Built: **Celeste** (`unicorn`) as the 2nd supported hero, particle-only (recipe + Grimoire registration); `preview_texture` is now `Option` to model heroes with no color texture.
+- Pending: the `vpkmerge particle recolor` subcommand (promote `recolor_particles.rs`); a vpkmerge release + Grimoire pin bump; rebuilding the bundled `resources/vpkmerge` binary with the Celeste recipe; and the in-game confirmation of a saturation/brightness-tuned (non-hue-only) Paige bake + the Celeste recolor.
