@@ -1,6 +1,6 @@
 # Ability VFX layer + recolor
 
-Status: in progress. Particle layer extraction and particle recoloring are proven end to end (verified in game on Paige). The dragon texture recolor, the `vpkmerge` CLI surface, and the Locker UI are still to build.
+Status: in progress. Particle layer extraction and particle recoloring are proven end to end (verified in game on Paige). The texture recolor primitive (dragon, projectile) now ships as `vpkmerge texture`; the particle-recolor CLI surface and the Locker UI are still to build, and the in-game dragon check is still pending.
 
 ## Goal
 
@@ -60,37 +60,97 @@ Color transform: convert each color to HSV, set the hue to the target, and keep 
 
 Prototype: `vpkmerge/vpkmerge-core/examples/recolor_particles.rs` (the walk + HSV + patch + pack). To productionize, promote it to a `vpkmerge particle recolor` subcommand and bump the Grimoire binary pin.
 
-## Texture recolor: identifying color-bearing assets (handoff)
+## Texture recolor: the color-bearing asset set (Paige, done)
 
-Particle-param recolor only tints effects that render through a white/grayscale mask. Where a bullet or ability renders with a texture that has baked-in color (an albedo / color ramp / self-illum color), the param tint multiplies over that color and the result is muddy, not the new hue. Those `.vtex_c` need their own hue shift (the same texture pipeline as the dragon).
+Particle-param recolor only tints effects that render through a white/grayscale mask. Where a bullet or ability renders with a texture that has baked-in color (an albedo / color ramp / self-illum color), the param tint multiplies over that color and the result is muddy, not the new hue. Those `.vtex_c` need their own hue shift.
 
-Identifier (next agent runs this): `vpkmerge-core/examples/recolor_assets.rs`
+The particle-only scan (`recolor_assets.rs`, particle -> material -> texture) found just 1 hero-specific color-bearing texture (the projectile self-illum). The rest are reached via **models**, which that scan doesn't follow. The reliable way to find the full set turned out to be a saturation sweep over every `bookworm*.vtex_c` in the base pak, classifying by chroma + name (a throwaway scan; productionizing it is optional). Paige's color-bearing **ability VFX** textures are all green (hue 120-164); her portrait/card art is orange (hue ~28, leave it); the rest are grayscale data maps (tinted by the particle param, no recolor). Note some live in shared dirs (`materials/particle/{projected,ground}/`) but are **hero-named**, so overriding those exact paths only touches Paige.
+
+The 9 recolored (all set to hue 280 to match the particle recolor):
+
+| Entry | What | Notes |
+|---|---|---|
+| `materials/particle/abilities/bookworm/bookworm_projectile_self_illum_vmat_g_tcolor_7b26a19f` | bullets | 4x4 color swatch |
+| `materials/particle/projected/bookworm_aoe_ground_projected_vmat_g_tselfillum_670d93d` | AOE | hero-named in shared dir |
+| `materials/particle/ground/ground_streak_bookworm_psd_5a44028c` | ground streak | near-black, low impact |
+| `models/heroes_wip/bookworm/materials/bookworm_ui_effects_color_psd_a29be817` | effects | 2048 |
+| `models/heroes_wip/bookworm/materials/bookworm_shield_illustrated_color_psd_81f5497b` | shield | 2048 |
+| `models/heroes_wip/bookworm/materials/bookworm_sword_illustrated_color_psd_4eb22603` | sword | 512x2048, alpha-0 RGB decal |
+| `models/heroes_wip/bookworm/materials/bookworm_stone_illustrated_color_psd_8ed29960` | stone | 4096x4096 (slow re-encode) |
+| `models/heroes_wip/bookworm/materials/bookworm_dragon_color_tga_ed3d3b5` | dragon body | 2048 |
+| `materials/models/particle/bookworm/neutral_black_dragon_color_psd_b8c8249f` | particle dragon | 2048 |
+
+Excluded on purpose: the brown book object (`bookworm_book_color_dragon`, hue 20, not the green VFX), the orange portrait/loadout cards, grayscale `bookworm_graphic*`/`knight`/`effects_flat` (tinted by param), and all data maps (ao/rough/normal/mask/metal/outline/transmissive). HUD ability icons (panorama) are also left (grayscale or separate concern).
+
+Built into the CLI: `vpkmerge texture` now takes **several entries -> one addon**: `vpkmerge texture E1 E2 ... --from-vpk pak01_dir.vpk --hue 280 --encode-vpk paige_vfx_textures_dir.vpk`. Each entry recolors and packs at its own path, overriding the base in place.
+
+### Cross-check against the "blue paige vfx" reference mod
+
+`blue_paige_vfx` (a light-blue Paige mod, `pak75_dir.vpk`) overrides 276 entries: **267 `.vpcf_c` (particles) recolored blue + 8 dragon `.vtex_c` + 1 `bookworm_dragon.vmat_c`**. But of those 8, only the dragon albedo/ao/rough/tintmask got new content hashes, and decoding the new albedo shows it is **still green** - the mod re-exported the dragon material (and repointed the `.vmat`) without actually recoloring the body, and left the sword/shield/stone/projectile model textures untouched. So that mod recolors the *effects* (particles) but not the *model albedos*. Confirms the split: particles are one axis, the 9 model/self-illum color textures above are the other, and a complete recolor needs both. (It also shows the heavier material-rename approach; our in-place override at the base path avoids the `.vmat` edit.)
+
+## Dragon / texture recolor (built: `vpkmerge texture`)
+
+The ult dragon (and the projectile self-illum from the texture scan) recolor via a texture hue shift, not particles. Built as `vpkmerge texture` on top of a new `vpkmerge_core::recolor` module:
 
 ```
-cargo run --example recolor_assets -- <base pak01_dir.vpk> bookworm
+# loose file, eyeball a preview first, then write the recolored .vtex_c:
+vpkmerge texture dragon_color.vtex_c --hue 280 --preview dragon_280.png --encode dragon_280.vtex_c
+
+# straight from the base pak into a standalone addon that overrides in place:
+vpkmerge texture models/heroes_wip/bookworm/materials/bookworm_dragon_color.vtex_c \
+  --from-vpk pak01_dir.vpk --hue 280 --encode-vpk dragon_recolor_dir.vpk
 ```
 
-It walks each ability/weapon_fx particle's KV3 for material refs (`.vmat`), each material for texture refs (`.vtex`), then classifies every texture by mean saturation over opaque pixels, with two filters:
-- name-based data-map exclusion (`normal`/`rough`/`ao`/`mask`/`metal`/`selfillummask`): packed normal maps read ~0.5 saturation but carry no albedo, so exclude by name not chroma.
-- hero-specific vs shared: only recolor textures whose path names the codename. Shared `materials/default/*` and generic `materials/particle/{projected,model}/*` are used by other heroes; recoloring them bleeds across the roster.
+Mechanism: `morphic::decode` the top mip, set every pixel's hue to the target (keeping each pixel's saturation and value), then `morphic::replace_mip_chain` re-encodes the full mip chain in the texture's own format. The bytes pack at the source entry path and override the base texture in place, no `.vmat_c` edit (sidestepping the content-hashed texture rename).
 
-Paige (bookworm) result, 26 referenced textures:
-- **Recolor target (hero-specific, color-bearing): 1** - `materials/particle/abilities/bookworm/bookworm_projectile_self_illum_vmat_g_tcolor_*` (sat 0.92), her projectile/bullet color.
-- Shared color (do NOT recolor): the generic projected cone self-illum + a default texture.
-- 23 data maps / masks: tinted by particle param, no texture recolor needed.
+Decisions worth knowing:
+- **Hue is set (absolute), not rotated**, to match the particle recolor: the same hue value lands the dragon, the projectile, and the particle params on one color. Neutral pixels (saturation 0: white highlights, black shadows) stay neutral, since their chroma is zero at any hue. So a fire dragon at `--hue 280` keeps its value/saturation structure but reads purple.
+- **Operates on the stored 8-bit display channels**, the same space the particle `Color32` recolor edits, so the two paths stay consistent.
+- **LDR (8-bit) only.** An HDR (f16) texture is refused with a clear error rather than silently mangled; the Deadlock color maps this targets are all LDR.
+- `--preview <PNG>` is the design-intent color straight off the decode (fast, no re-encode); the same `recolor_texture_image` primitive is what a live UI hue slider should call. The lossy `BCn` re-encode only happens on `--encode` / `--encode-vpk`.
 
-Coverage gaps this particle-centric scan does NOT cover, and the next agent should add:
-1. Ability/projectile **models** (`.vmdl_c`: sword, book, dragon) -> their materials -> albedo textures. The dragon albedo and `bookworm_book_color_*` carry the hero's color and are reached via models, not particle materials. Extend the walk to follow `.vmdl` refs in particles and the hero's own ability models.
-2. HUD **ability icons** (panorama UI images), which no particle references at all.
+Core API (also for the Grimoire UI): `recolor_texture_hue(bytes, hue) -> Vec<u8>` (full re-encode), `recolor_texture_image(bytes, hue) -> Image` (fast preview), `recolor_texture_preview_png(bytes, hue) -> Vec<u8>`, `inspect_texture(bytes) -> TextureSummary`, plus `read_vpk_entry(vpk, entry)` for callers without a `valve_pak` dep. Covered by unit tests in `vpkmerge-core/src/recolor.rs` (documented-example color, hue wrap, neutral-pixel invariance, hue-set with S/V preserved on the chromatic fixture, loadable round-trip, HDR rejection).
 
-Heuristic is a starting filter, not ground truth: print the saturation and eyeball borderline cases (decode to PNG with the texture path) before committing a recolor.
+The 9 entry paths are listed in the table above.
 
-## Dragon (planned)
+### Installed for in-game test (Paige, purple)
 
-The ult dragon recolors via a texture hue shift, not particles. Decode the base dragon color texture (`morphic::decode`), rotate hue on the `Image`, re-encode with `replace_face_mip_chain`, and pack the `.vtex_c` at its base path so it overrides in place (no `.vmat_c` edit, sidestepping the content hashed texture rename). Exposed via a new `vpkmerge texture` subcommand. UI: explicit hue degrees with a live preview.
+In the local Deadlock addons folder (`game/citadel/addons/`):
+- `pak02_dir.vpk` (pre-existing): the **particle** recolor, 188 `.vpcf_c` to hue 280.
+- `pak04_dir.vpk` (this work): the 9 **VFX textures** above, all hue 280, one 47 MB addon. Built with `vpkmerge texture <9 entries> --from-vpk pak01_dir.vpk --hue 280 --encode-vpk ...`. Source copy in `vpkmerge/.scratch/paige_vfx_textures_hue280_dir.vpk`.
+
+Together = a complete purple Paige (effects + model/self-illum albedos). Still pending: load in game and confirm each ability reads purple (placement is manual, so Grimoire's "apply" may renumber/remove `pak04`; re-test before re-running Grimoire). To remove: delete `addons/pak04_dir.vpk`.
+
+## Vertex-color recolor (built + in-game confirmed: `vpkmerge model recolor`)
+
+The ult horse/knight is the **third** color mechanism: its green is baked into the mesh's per-vertex `COLOR` attribute, which neither the particle param edit nor the texture recolor reaches (its material `bookworm_knight.vmat` has `g_bApplyTintToVertexColors = 0`, so a tint cannot touch the vertex colors). Built as `vpkmerge model recolor`; **confirmed purple in game**.
+
+**The body that renders is found via the ult's model particle, not by guessing the name.** Paige's ult body is `models/particle/bookworm_horse_knight.vmdl_c` (referenced by `bookworm_ultimate_model.vpcf_c`); the `heroes_wip/bookworm/bookworm_horse*` models are **not** spawned by the ult (editing them did nothing). `bookworm_mace` (melee swing) is the mace.
+
+```
+# recolor the ult body + mace into one addon (each overrides its base entry):
+vpkmerge model recolor --vpk pak01_dir.vpk --hue 280 \
+  --encode-vpk ultbody_hue280_dir.vpk \
+  models/particle/bookworm_horse_knight.vmdl_c \
+  models/particle/bookworm_mace.vmdl_c
+
+# --list first to see each model's color-bearing vertex buffers.
+```
+
+Mechanism: decode each mesh's vertex buffer, set every `COLOR` vertex's hue to the target (keeping saturation + value, **the same `set_hue` the texture/particle recolor uses**, so one hue lands all three mechanisms), write it back. Positions/normals/UVs/skin weights are byte-preserved.
+
+The encoding was the hard part (two wrong turns, both now handled), because the *engine* is stricter than morphic's own decoder:
+- **Uncompressed** buffer (hero models): the COLOR bytes are patched **in place** in the file (byte-identical except the color lane; no container rebuild/realign).
+- **Meshopt** buffer (`models/particle/*`): **not re-encoded** - morphic's meshopt encoder emits codec v1 all-literal, Valve wrote these as v0, and the re-encode renders garbled in game. Instead the buffer is decoded, color-edited, and stored **uncompressed**, flipping `m_bMeshoptCompressed` to false in the CTRL registry byte-faithfully (`morphic::kv3::set_bools`). The engine reads uncompressed buffers natively.
+- **Hue is set (absolute), 8-bit display space**, identical to the texture path - no linear-space adjustment was needed in game.
+
+Core API (also for the Grimoire UI): `recolor_model_vertex_colors(bytes, hue) -> (Vec<u8>, ModelRecolorStats)`, `recolor_models_to_addon(vpk, entries, base, hue, out)`; in `morphic`, `recolor_vertex_buffer` / `read_vertex_colors` / `OnDiskBuffer::write_colors` / `kv3::set_bools`. Tested: `write_colors` lane isolation (unit) + `recolor_vertex_colors_round_trips_local` (gated on a real pak; asserts the meshopt->uncompressed conversion + byte-identical geometry on both paths).
+
+Full diagnosis + workflow: `vpkmerge/docs/handoff-vertex-color-recolor.md`.
 
 ## Status summary
 
-- Built: VFX layer detection + extraction (Grimoire), `morphic::patch_kv3_resource_scalars` (the recolor primitive).
-- Proven via prototype: particle recolor to an arbitrary hue.
-- Pending: `vpkmerge particle recolor` + `vpkmerge texture` subcommands (and a vpkmerge release + pin bump), the dragon texture recolor, and the Locker UI (hue slider + live preview).
+- Built: VFX layer detection + extraction (Grimoire), `morphic::patch_kv3_resource_scalars` (the particle recolor primitive), `vpkmerge texture` (+ `vpkmerge_core::recolor`, the texture recolor primitive), and `vpkmerge model recolor` (the vertex-color recolor primitive) - all multi-entry batch -> one addon.
+- Done for Paige (in game): particle recolor to purple (`pak02`) + the 9-texture ability/bullet/model recolor to purple (`pak04`) + the **ult horse/knight vertex-color recolor to purple**. Confirmed in game: bullets, abilities 1/2/3, and the ult body all read purple.
+- **Three color mechanisms, not two.** Beyond particles (params) and model/self-illum textures, the **ult horse/knight is colored by baked mesh vertex colors** (material `bookworm_knight.vmat`: `F_PAINT_VERTEX_COLORS=1`, gray albedo, `g_bApplyTintToVertexColors=0`), so it stayed green after the first two passes and a tint can't fix it. The vertex-color recolor (above) handles it - **in-game confirmed purple**. Two lessons baked in: find the rendered model via the ult's model particle (`bookworm_ultimate_model.vpcf_c` -> `models/particle/bookworm_horse_knight.vmdl`, not the `heroes_wip` copies), and never re-encode meshopt (convert it to uncompressed instead).
+- Pending: the `vpkmerge particle recolor` subcommand (promote `recolor_particles.rs`); a vpkmerge release + Grimoire pin bump; and the Locker UI (hue slider + live preview, calling `recolor_texture_image`).
