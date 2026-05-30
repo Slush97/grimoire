@@ -784,16 +784,28 @@ export async function fetchModsFilesMetadata(
 
     const params = buildFilesMetadataParams(mods);
     const requestUrl = `${GAMEBANANA_CORE_ITEM_DATA}?${params.toString()}`;
-    console.log(
+    debugGameBanana(
         `[GameBananaFiles] Metadata request (${mods.length} mod(s), ${requestUrl.length} chars, includeArchived=${includeArchived})`
     );
 
     const raw = await fetchJson<unknown>(requestUrl, 60000, options);
     const items = normalizeCoreItemDataResponse(raw);
+    // Core/Item/Data returns one positional slot per requested item, in request
+    // order (a missing mod still occupies its slot as `{"name":null}`), so
+    // results map back by index. A length mismatch means the response was
+    // truncated/reshaped: `items[index]` is then undefined for the tail, which
+    // mapCoreFileMetadataResult turns into a per-mod error rather than pairing a
+    // file with the wrong mod's identity. Surface it so it's diagnosable instead
+    // of silently dropping metadata.
+    if (items.length !== mods.length) {
+        console.warn(
+            `[GameBananaFiles] Metadata response slot count (${items.length}) does not match request count (${mods.length}); affected mods will fall back to no-metadata for this batch.`
+        );
+    }
     const results = mods.map((mod, index) => mapCoreFileMetadataResult(mod, items[index], includeArchived));
     const fileCount = results.reduce((total, result) => total + result.files.length, 0);
     const errorCount = results.filter((result) => result.error).length;
-    console.log(
+    debugGameBanana(
         `[GameBananaFiles] Metadata response (${results.length} mod(s), ${fileCount} file(s), ${errorCount} error(s))`
     );
 

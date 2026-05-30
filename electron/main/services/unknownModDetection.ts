@@ -113,7 +113,24 @@ interface CategoryTarget {
     categoryName: string;
 }
 
+// Per-file / per-page progress logs fire dozens of times during one search, so
+// gate them behind a debug flag (matching gamebanana.ts's GRIMOIRE_DEBUG_*
+// pattern). Milestones (match found, page cap) and failures stay unconditional.
+const DEBUG_UNKNOWN_CRC = process.env.GRIMOIRE_DEBUG_UNKNOWN_CRC === '1';
+function debugUnknownCrc(...args: unknown[]): void {
+    if (DEBUG_UNKNOWN_CRC) {
+        console.log(...args);
+    }
+}
+
 const CANDIDATE_PAGE_SIZE = 50;
+// Cap how many pages of a single bucket one live search will sweep. Without it,
+// a mod that resolves to a broad category (e.g. all Skins, no hero detected)
+// would page through the entire category, each page costing a submissions fetch
+// + bulk metadata + per-file archive probes, and likely trip GameBanana rate
+// limits. Misses are cached as they go, so a later "Retry" resumes where this
+// left off rather than redoing the swept pages.
+const MAX_LIVE_SEARCH_PAGES = 8;
 const LOCAL_FINGERPRINT_CACHE_MAX = 128;
 const CACHE_FINGERPRINT_CONCURRENCY = 8;
 const CATEGORIES = {
@@ -282,6 +299,7 @@ export async function detectUnknownModFilters(
         let bytesFetched = 0;
         let totalCandidateMods = 0;
         let sawCandidateMods = false;
+        let reachedPageCap = false;
         const seenFileIds = new Set<number>();
 
         for (const bucket of buckets) {
@@ -297,7 +315,7 @@ export async function detectUnknownModFilters(
             let page = 1;
             let totalPages = 1;
 
-            while (page <= totalPages && !bestMatch) {
+            while (page <= totalPages && page <= MAX_LIVE_SEARCH_PAGES && !bestMatch) {
                 throwIfAborted(options.signal);
                 const pageResult = await fetchCandidateModsPage(bucket, page, options.signal);
                 const perPage = pageResult.perPage || CANDIDATE_PAGE_SIZE;
@@ -370,7 +388,7 @@ export async function detectUnknownModFilters(
                                 bytesFetched: archive.bytesFetched,
                                 error: archive.unsupportedReason,
                             });
-                            console.log(`[UnknownCrc] Skipped ${file.section}/${file.modId} file ${file.fileId} (${file.fileName}): ${archive.unsupportedReason}`);
+                            debugUnknownCrc(`[UnknownCrc] Skipped ${file.section}/${file.modId} file ${file.fileId} (${file.fileName}): ${archive.unsupportedReason}`);
                         } else {
                             replaceUnknownCrcEntries(file.fileId, archive.entries, {
                                 archiveType: archive.archiveType,
@@ -432,6 +450,11 @@ export async function detectUnknownModFilters(
                 page++;
             }
 
+            if (!bestMatch && totalPages > MAX_LIVE_SEARCH_PAGES) {
+                reachedPageCap = true;
+                console.log(`[UnknownCrc] Reached the ${MAX_LIVE_SEARCH_PAGES}-page live-search cap for ${bucketLabel(bucket)} (${totalPages} pages total); remaining pages cached on next retry.`);
+            }
+
             if (bestMatch) break;
         }
 
@@ -439,11 +462,14 @@ export async function detectUnknownModFilters(
             return empty('not-found', `No GameBanana candidates with files were returned for ${buckets.map(describeBucket).join('; ')}.`);
         }
 
+        const cappedNote = reachedPageCap
+            ? ` Stopped at the first ${MAX_LIVE_SEARCH_PAGES} pages to stay within GameBanana rate limits; "Retry" resumes from the cached results.`
+            : '';
         const result = bestMatch
             ? { ...base, crcMatch: bestMatch }
             : empty(
                 'not-found',
-                `No CRC match found after checking ${checkedMods} candidate mod${checkedMods === 1 ? '' : 's'} across ${totalCandidateMods || checkedMods} bucket result${(totalCandidateMods || checkedMods) === 1 ? '' : 's'} (${checkedFiles} file${checkedFiles === 1 ? '' : 's'} checked). Cached CRC entries: ${getUnknownCrcEntryCount()}.`,
+                `No CRC match found after checking ${checkedMods} candidate mod${checkedMods === 1 ? '' : 's'} across ${totalCandidateMods || checkedMods} bucket result${(totalCandidateMods || checkedMods) === 1 ? '' : 's'} (${checkedFiles} file${checkedFiles === 1 ? '' : 's'} checked).${cappedNote} Cached CRC entries: ${getUnknownCrcEntryCount()}.`,
                 {
                     searchedBuckets: buckets.map(bucketLabel),
                     checkedMods,
@@ -663,7 +689,7 @@ async function fetchCandidateModsPage(
         'default',
         { signal }
     );
-    console.log(
+    debugUnknownCrc(
         `[UnknownCrc] Candidate bucket ${bucket.section}/${bucket.categoryName ?? 'All'} search="${bucket.search ?? ''}" page ${page} returned ${response.records.length}/${response.totalCount}`
     );
     return response;
@@ -741,7 +767,7 @@ function cacheCandidateFiles(
         }
     }
 
-    console.log(`[UnknownCrc] Cached metadata for ${mods.length} candidate mod(s), ${files.length} file(s).`);
+    debugUnknownCrc(`[UnknownCrc] Cached metadata for ${mods.length} candidate mod(s), ${files.length} file(s).`);
     return sortCandidateFiles(upsertUnknownCrcFiles(files));
 }
 
@@ -856,13 +882,21 @@ function findHeroHint(paths: string[]): HeroHint | null {
         for (const hero of HERO_HINTS) {
             const code = normalizeHeroKey(hero.code);
             const display = normalizeHeroKey(hero.display);
-            if (
-                segments.includes(code) ||
-                segments.includes(display) ||
+            // An exact codename/display in a path *segment* is reliable. A bare
+            // substring match (e.g. a short code like "nano" landing inside an
+            // unrelated token) is not, so it counts for far less. This only
+            // steers which GameBanana bucket gets searched, the actual install
+            // is still gated on a CRC-32 match, so a wrong guess costs a miss,
+            // never a wrong match.
+            const exact = segments.includes(code) || segments.includes(display);
+            const fuzzy = !exact && (
                 (code.length > 3 && compactPath.includes(code)) ||
                 (display.length > 4 && compactPath.includes(display))
-            ) {
+            );
+            if (exact) {
                 scores.set(hero, (scores.get(hero) ?? 0) + scoreHeroPath(path));
+            } else if (fuzzy) {
+                scores.set(hero, (scores.get(hero) ?? 0) + 1);
             }
         }
     }
@@ -931,7 +965,7 @@ function bucketLabel(bucket: SearchBucket): string {
 
 function logIndexedFile(file: UnknownCrcFile, entryCount: number, bytesFetched: number): void {
     const detail = entryCount === 0 ? 'no VPK entries found' : `${entryCount} VPK entr${entryCount === 1 ? 'y' : 'ies'}`;
-    console.log(
+    debugUnknownCrc(
         `[UnknownCrc] Indexed ${file.section}/${file.modId} file ${file.fileId} (${file.fileName}): ${detail}; fetched ${bytesFetched.toLocaleString()} bytes`
     );
 }

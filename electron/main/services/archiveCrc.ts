@@ -86,6 +86,12 @@ const CRC32_TABLE = (() => {
 
 class NeedMoreArchiveBytes extends Error { }
 
+// Thrown when a server (or CDN mirror) ignores a `Range: bytes=-N` suffix
+// request and returns the full body instead. GameBanana's primary filecache
+// honors suffix ranges, but mirrors can differ, so ZIP probing falls back to an
+// explicit start-end range when the file size is known.
+class SuffixRangeUnsupported extends Error { }
+
 function throwIfAborted(signal?: AbortSignal): void {
     if (signal?.aborted) {
         throw new Error('Unknown mod search cancelled');
@@ -255,7 +261,7 @@ async function fetchArchiveSuffixRange(
             const buffer = Buffer.from(await response.arrayBuffer());
             return { buffer, totalSize: contentLength || buffer.length };
         }
-        throw new Error(`Archive server ignored suffix range request for ${suffixBytes} requested bytes`);
+        throw new SuffixRangeUnsupported(`Archive server ignored suffix range request for ${suffixBytes} requested bytes`);
     }
 
     const totalSize = parseContentRangeTotal(response.headers.get('content-range'));
@@ -322,9 +328,32 @@ function parseZipCentralDirectory(tail: Buffer, totalSize: number): ArchiveVpkCr
     return entries.sort((a, b) => a.name.localeCompare(b.name));
 }
 
+// Fetch the trailing `suffixBytes` of a ZIP. Prefers a `bytes=-N` suffix range
+// (works without knowing the file size); if a server/mirror ignores suffix
+// ranges, falls back to an explicit start-end range using the known file size so
+// CRC probing keeps working everywhere instead of erroring out.
+async function fetchZipTail(
+    url: string,
+    suffixBytes: number,
+    fileSize: number | undefined,
+    signal?: AbortSignal
+): Promise<{ buffer: Buffer; totalSize: number }> {
+    try {
+        return await fetchArchiveSuffixRange(url, suffixBytes, signal);
+    } catch (err) {
+        if (!(err instanceof SuffixRangeUnsupported) || !fileSize || fileSize <= 0) {
+            throw err;
+        }
+        const start = Math.max(0, fileSize - suffixBytes);
+        const buffer = await fetchArchiveRange(url, start, fileSize - 1, signal);
+        return { buffer, totalSize: fileSize };
+    }
+}
+
 async function fetchZipVpkCrcEntries(
     downloadUrl: string,
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    fileSize?: number
 ): Promise<ArchiveVpkCrcResult> {
     let bytesToFetch = DEFAULT_ZIP_TAIL_BYTES;
     let maxTailBytes = MAX_ZIP_TAIL_BYTES;
@@ -332,7 +361,7 @@ async function fetchZipVpkCrcEntries(
 
     while (bytesToFetch <= maxTailBytes) {
         throwIfAborted(signal);
-        const probe = await fetchArchiveSuffixRange(downloadUrl, bytesToFetch, signal);
+        const probe = await fetchZipTail(downloadUrl, bytesToFetch, fileSize, signal);
         bytesFetched += probe.buffer.length;
         maxTailBytes = Math.min(MAX_ZIP_TAIL_BYTES, probe.totalSize);
 
@@ -1433,7 +1462,7 @@ export async function fetchGameBananaArchiveVpkCrcEntries(file: {
     });
 
     if (archiveType === 'zip') {
-        return addSniffBytes(await fetchZipVpkCrcEntries(file.downloadUrl, options.signal));
+        return addSniffBytes(await fetchZipVpkCrcEntries(file.downloadUrl, options.signal, file.fileSize));
     }
     if (archiveType === 'rar') {
         return addSniffBytes(await fetchRar4VpkCrcEntries(file.downloadUrl, file.fileSize, options.signal));

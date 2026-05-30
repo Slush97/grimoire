@@ -443,7 +443,8 @@ function runMigrations(database: Database.Database): void {
     let tableInfo = getTableColumns(database, 'mods');
     const legacyColumns = ['tags', 'file_metadata_source_date_modified', 'file_metadata_checked_at'];
     const hasLegacyColumns = legacyColumns.some((column) => tableInfo.includes(column));
-    if (hasLegacyColumns || shouldRebuildSearch(database)) {
+    const rebuildSearch = hasLegacyColumns || shouldRebuildSearch(database);
+    if (rebuildSearch) {
         console.log('[ModDatabase] Running migration: rebuilding mods search index');
         dropSearchObjects(database);
     }
@@ -470,6 +471,19 @@ function runMigrations(database: Database.Database): void {
     }
 
     database.exec(SEARCH_SCHEMA_SQL);
+
+    // Recreating mods_fts above leaves the index empty: its sync triggers only
+    // fire on future writes, not for rows already in `mods`. Repopulate it from
+    // the existing content table so search keeps working immediately, instead of
+    // returning nothing until the next full catalog sync.
+    if (rebuildSearch) {
+        try {
+            database.exec(`INSERT INTO mods_fts(mods_fts) VALUES('rebuild');`);
+            console.log('[ModDatabase] Repopulated mods search index from existing rows');
+        } catch (err) {
+            console.warn('[ModDatabase] Failed to repopulate search index (will refill on next sync):', err);
+        }
+    }
 }
 
 function dropLegacyCrcTables(database: Database.Database): void {
