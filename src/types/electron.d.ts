@@ -336,7 +336,18 @@ export interface ElectronAPI {
     revertHeroSound: (heroName: string, slot: AbilitySlot) => Promise<ApplyHeroSoundResult>;
     getActiveHeroSounds: (heroName: string) => Promise<ActiveHeroSound[]>;
     getHeroColorSupport: (heroName: string) => Promise<boolean>;
-    applyHeroColor: (heroName: string, hue: number) => Promise<ApplyHeroColorResult>;
+    applyHeroColor: (
+        heroName: string,
+        hue: number,
+        saturation: number,
+        brightness: number,
+    ) => Promise<ApplyHeroColorResult>;
+    previewHeroColor: (
+        heroName: string,
+        hue: number,
+        saturation: number,
+        brightness: number,
+    ) => Promise<string>;
     revertHeroColor: (heroName: string) => Promise<ApplyHeroColorResult>;
     getActiveHeroColor: (heroName: string) => Promise<ActiveHeroColor | null>;
     getLockerOverview: () => Promise<LockerOverview>;

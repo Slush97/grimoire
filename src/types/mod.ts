@@ -214,6 +214,12 @@ export interface LockerColorSelection {
   heroCodename: string;
   /** Absolute hue (0-359 degrees) every ability color is set to. */
   hue: number;
+  /** Saturation scale applied on top of each source color (1 = keep source, >1
+   *  lifts pale washed-out areas toward the picked color, <1 mutes to a pastel).
+   *  Hue alone can't make e.g. a light blue: saturation + brightness do. */
+  saturation: number;
+  /** Brightness (HSV value) scale (1 = keep source, >1 lighter, <1 darker). */
+  brightness: number;
   addedAt: string;
 }
 
@@ -229,16 +235,24 @@ export interface LockerColorsInfo {
   rebuiltAt: string;
 }
 
-/** The hue applied for a hero's ability VFX, read back so the color picker can
+/** The color applied for a hero's ability VFX, read back so the color picker can
  *  reflect the active selection. */
 export interface ActiveHeroColor {
   /** Applied absolute hue (0-359 degrees). */
   hue: number;
+  /** Applied saturation scale (1 = source). */
+  saturation: number;
+  /** Applied brightness scale (1 = source). */
+  brightness: number;
 }
 
 export interface ApplyHeroColorResult {
   /** The applied hue (0-359), or null after a revert. */
   hue: number | null;
+  /** The applied saturation scale, or null after a revert. */
+  saturation: number | null;
+  /** The applied brightness scale, or null after a revert. */
+  brightness: number | null;
 }
 
 /**

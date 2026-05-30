@@ -2,6 +2,8 @@
 
 Status: in progress. Particle layer extraction and particle recoloring are proven end to end (verified in game on Paige). The texture recolor primitive (dragon, projectile) now ships as `vpkmerge texture`; the particle-recolor CLI surface and the Locker UI are still to build, and the in-game dragon check is still pending.
 
+The recolor target is no longer hue-only: it carries a **saturation scale** and a **brightness scale** on top of the hue (see "Color accuracy" below), so pale/pastel colors like light blue are reachable, and the washed-out look of a hue-only retint on low-saturation source textures is fixable. The Locker picker (`HeroColorPicker.tsx`) exposes hue + saturation + brightness sliders with a **live recolored preview** (a real ability texture run through the recolor, not a CSS guess).
+
 ## Goal
 
 Two related capabilities for a hero's ability visual effects (VFX), independent of the body skin:
@@ -56,7 +58,17 @@ The fix is a byte faithful, in place patch that changes only the color channels 
 
 Build the edits by walking the decoded value tree for color/tint keyed integer arrays (length 3 or 4, values 0 to 255) and emitting `(path + Index(channel), new_value)` per RGB channel. Color channels (including 0 and 255) are stored as typed bytes, so all patch cleanly (188 of 267 Paige files carry color; 0 patch errors). The other 79 files get their color elsewhere (material, dragon) and are left alone.
 
-Color transform: convert each color to HSV, set the hue to the target, and keep each color's saturation and value. Gradients then keep their light to dark fade (cleaner than a flat retint). Verified `m_ConstantColor [0,255,148,255] -> [170,0,255,255]` at hue 280 (purple), output stays v5, renders correctly in game.
+Color transform: convert each color to HSV, set the hue to the target, then scale its saturation and value by the target's scales (1.0 = keep source). Gradients then keep their light to dark fade (cleaner than a flat retint). Verified `m_ConstantColor [0,255,148,255] -> [170,0,255,255]` at hue 280 (purple), unit scales, output stays v5, renders correctly in game.
+
+## Color accuracy: saturation + brightness scales (built)
+
+Hue-only recolor inherits each source pixel's saturation and value. Paige's color textures (self-illum ramps, the illustrated albedos) carry a lot of pale, low-saturation pixels, so a hue-only retint reads "drowned out": the right hue but a washed, muddy version of the picked color. And hue alone can't express a color like *light blue* at all, since light/pastel is the saturation + brightness axes, not hue.
+
+Fix: the recolor target is now `Recolor { hue, saturation, value }` (`vpkmerge-core/src/recolor.rs`). `set_color(rgb, hue, sat_scale, val_scale)` sets the hue, then **scales** saturation and value (both clamped, value always kept structural so the gradient survives). `saturation > 1` lifts pale areas toward the picked color; `value > 1` lightens (pastel), `< 1` darkens (ink). Neutral pixels (saturation 0: white cores, black shadows) stay neutral under any saturation scale, so hot cores don't get tinted. All three mechanisms (particles, textures, vertex colors) take the one `Recolor`, so the scales land them on the same color. `set_hue` is kept as the `(1.0, 1.0)` convenience the original tests pin.
+
+CLI: `--saturation <SCALE>` and `--brightness <SCALE>` (default 1.0) on `texture`, `recolor-hero`, and `model recolor`. Plus `recolor-hero --preview-png <FILE>`: a fast path that recolors only the recipe's representative texture (`preview_texture`, Paige = `bookworm_ui_effects_color`) and writes a PNG swatch, no bake/re-encode (~170 ms), for the live UI preview. Core API: `recolor_hero_preview_png(vpk, base, codename, recolor)`.
+
+Grimoire: `LockerColorSelection` / `ActiveHeroColor` / `ApplyHeroColorResult` carry `saturation` + `brightness`; the bake cache key includes them (integer-percent encoded, e.g. `_s60_b140_`) and `RECIPE_CACHE_VERSION` bumped to 2. `previewHeroColor` IPC returns a `data:` PNG the picker shows as a debounced live swatch.
 
 Prototype: `vpkmerge/vpkmerge-core/examples/recolor_particles.rs` (the walk + HSV + patch + pack). To productionize, promote it to a `vpkmerge particle recolor` subcommand and bump the Grimoire binary pin.
 
@@ -104,12 +116,12 @@ vpkmerge texture models/heroes_wip/bookworm/materials/bookworm_dragon_color.vtex
 Mechanism: `morphic::decode` the top mip, set every pixel's hue to the target (keeping each pixel's saturation and value), then `morphic::replace_mip_chain` re-encodes the full mip chain in the texture's own format. The bytes pack at the source entry path and override the base texture in place, no `.vmat_c` edit (sidestepping the content-hashed texture rename).
 
 Decisions worth knowing:
-- **Hue is set (absolute), not rotated**, to match the particle recolor: the same hue value lands the dragon, the projectile, and the particle params on one color. Neutral pixels (saturation 0: white highlights, black shadows) stay neutral, since their chroma is zero at any hue. So a fire dragon at `--hue 280` keeps its value/saturation structure but reads purple.
+- **Hue is set (absolute), not rotated**, to match the particle recolor: the same hue value lands the dragon, the projectile, and the particle params on one color. Saturation and brightness are **scaled** (default 1.0), not set, so the texture keeps its structure (a flat set would wipe the gradient). Neutral pixels (saturation 0: white highlights, black shadows) stay neutral under any saturation scale, since their chroma is zero. So a fire dragon at `--hue 280` keeps its value/saturation structure but reads purple; `--saturation 1.4` makes it pop, `--brightness 1.3` lightens it.
 - **Operates on the stored 8-bit display channels**, the same space the particle `Color32` recolor edits, so the two paths stay consistent.
 - **LDR (8-bit) only.** An HDR (f16) texture is refused with a clear error rather than silently mangled; the Deadlock color maps this targets are all LDR.
 - `--preview <PNG>` is the design-intent color straight off the decode (fast, no re-encode); the same `recolor_texture_image` primitive is what a live UI hue slider should call. The lossy `BCn` re-encode only happens on `--encode` / `--encode-vpk`.
 
-Core API (also for the Grimoire UI): `recolor_texture_hue(bytes, hue) -> Vec<u8>` (full re-encode), `recolor_texture_image(bytes, hue) -> Image` (fast preview), `recolor_texture_preview_png(bytes, hue) -> Vec<u8>`, `inspect_texture(bytes) -> TextureSummary`, plus `read_vpk_entry(vpk, entry)` for callers without a `valve_pak` dep. Covered by unit tests in `vpkmerge-core/src/recolor.rs` (documented-example color, hue wrap, neutral-pixel invariance, hue-set with S/V preserved on the chromatic fixture, loadable round-trip, HDR rejection).
+Core API (also for the Grimoire UI): `recolor_texture_hue(bytes, recolor) -> Vec<u8>` (full re-encode), `recolor_texture_image(bytes, recolor) -> Image` (fast preview), `recolor_texture_preview_png(bytes, recolor) -> Vec<u8>`, `inspect_texture(bytes) -> TextureSummary`, plus `read_vpk_entry(vpk, entry)` for callers without a `valve_pak` dep. All recolor entry points now take a `Recolor { hue, saturation, value }` (was a bare `hue: f64`). Covered by unit tests in `vpkmerge-core/src/recolor.rs` (documented-example color, hue wrap, neutral-pixel invariance, hue-set with S/V preserved on the chromatic fixture, loadable round-trip, HDR rejection).
 
 The 9 entry paths are listed in the table above.
 
@@ -153,4 +165,5 @@ Full diagnosis + workflow: `vpkmerge/docs/handoff-vertex-color-recolor.md`.
 - Built: VFX layer detection + extraction (Grimoire), `morphic::patch_kv3_resource_scalars` (the particle recolor primitive), `vpkmerge texture` (+ `vpkmerge_core::recolor`, the texture recolor primitive), and `vpkmerge model recolor` (the vertex-color recolor primitive) - all multi-entry batch -> one addon.
 - Done for Paige (in game): particle recolor to purple (`pak02`) + the 9-texture ability/bullet/model recolor to purple (`pak04`) + the **ult horse/knight vertex-color recolor to purple**. Confirmed in game: bullets, abilities 1/2/3, and the ult body all read purple.
 - **Three color mechanisms, not two.** Beyond particles (params) and model/self-illum textures, the **ult horse/knight is colored by baked mesh vertex colors** (material `bookworm_knight.vmat`: `F_PAINT_VERTEX_COLORS=1`, gray albedo, `g_bApplyTintToVertexColors=0`), so it stayed green after the first two passes and a tint can't fix it. The vertex-color recolor (above) handles it - **in-game confirmed purple**. Two lessons baked in: find the rendered model via the ult's model particle (`bookworm_ultimate_model.vpcf_c` -> `models/particle/bookworm_horse_knight.vmdl`, not the `heroes_wip` copies), and never re-encode meshopt (convert it to uncompressed instead).
-- Pending: the `vpkmerge particle recolor` subcommand (promote `recolor_particles.rs`); a vpkmerge release + Grimoire pin bump; and the Locker UI (hue slider + live preview, calling `recolor_texture_image`).
+- Built: the Locker UI (`HeroColorPicker.tsx`): hue + saturation + brightness sliders, full-color presets (incl. light blue), and a live recolored preview via `recolor-hero --preview-png` (fast, no bake). Saturation/brightness scales fix the hue-only "drowned out" look and unlock pastel colors. The bundled `resources/vpkmerge` binary was rebuilt with the scale flags (local dev; a tagged vpkmerge release + pin bump is still pending).
+- Pending: the `vpkmerge particle recolor` subcommand (promote `recolor_particles.rs`); a vpkmerge release + Grimoire pin bump; and the in-game confirmation of a saturation/brightness-tuned (non-hue-only) Paige bake.

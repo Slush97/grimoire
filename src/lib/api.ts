@@ -185,9 +185,21 @@ export async function getHeroColorSupport(heroName: string): Promise<boolean> {
 
 export async function applyHeroColor(
   heroName: string,
-  hue: number
+  hue: number,
+  saturation: number,
+  brightness: number
 ): Promise<ApplyHeroColorResult> {
-  return window.electronAPI.applyHeroColor(heroName, hue);
+  return window.electronAPI.applyHeroColor(heroName, hue, saturation, brightness);
+}
+
+/** Render a fast PNG swatch of the recolor target as a data URL (live preview). */
+export async function previewHeroColor(
+  heroName: string,
+  hue: number,
+  saturation: number,
+  brightness: number
+): Promise<string> {
+  return window.electronAPI.previewHeroColor(heroName, hue, saturation, brightness);
 }
 
 export async function revertHeroColor(heroName: string): Promise<ApplyHeroColorResult> {

@@ -5,6 +5,7 @@ import {
     revertHeroColor,
     getActiveHeroColor,
     getHeroColorSupport,
+    previewHeroColor,
 } from '../services/heroColors';
 import type { ActiveHeroColor, ApplyHeroColorResult } from '../../../src/types/mod';
 
@@ -28,10 +29,31 @@ ipcMain.handle(
 
 ipcMain.handle(
     'apply-hero-color',
-    async (_, heroName: string, hue: number): Promise<ApplyHeroColorResult> => {
+    async (
+        _,
+        heroName: string,
+        hue: number,
+        saturation: number,
+        brightness: number,
+    ): Promise<ApplyHeroColorResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return applyHeroColor(deadlockPath, heroName, hue);
+        return applyHeroColor(deadlockPath, heroName, hue, saturation, brightness);
+    },
+);
+
+ipcMain.handle(
+    'preview-hero-color',
+    async (
+        _,
+        heroName: string,
+        hue: number,
+        saturation: number,
+        brightness: number,
+    ): Promise<string> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return previewHeroColor(deadlockPath, heroName, hue, saturation, brightness);
     },
 );
 
