@@ -2604,7 +2604,7 @@ export default function Installed() {
                 title="Sort and filter installed mods"
               />
               {activeAdjustmentCount > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-bg-primary">
+                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground ring-2 ring-bg-primary">
                   {activeAdjustmentCount}
                 </span>
               )}
@@ -2736,7 +2736,7 @@ export default function Installed() {
                             >
                               <span
                                 className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
-                                  checked ? 'border-accent bg-accent text-white' : 'border-border'
+                                  checked ? 'border-accent bg-accent text-accent-foreground' : 'border-border'
                                 }`}
                               >
                                 {checked && <Check className="h-3 w-3" />}
@@ -2827,7 +2827,7 @@ export default function Installed() {
                 title="Locker overrides: review and remove applied hero cards, ability sounds, and ability colors"
               />
               {lockerOverrideCount > 0 && (
-                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-white ring-2 ring-bg-primary">
+                <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground ring-2 ring-bg-primary">
                   {lockerOverrideCount}
                 </span>
               )}
@@ -5715,7 +5715,7 @@ function ModCard({
               selected ? 'bg-accent border-accent' : 'bg-bg-primary/85 border-white/40'
             }`}
           >
-            {selected && <Check className="w-4 h-4 text-white" strokeWidth={3} />}
+            {selected && <Check className="w-4 h-4 text-accent-foreground" strokeWidth={3} />}
           </div>
         </>
         )}

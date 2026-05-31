@@ -180,7 +180,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                     {group.modFileName.replace(/_dir\.vpk$/, '')}
                   </span>
                   {isApplied ? (
-                    <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+                    <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
                       <Check className="h-2.5 w-2.5" /> Applied
                     </span>
                   ) : (

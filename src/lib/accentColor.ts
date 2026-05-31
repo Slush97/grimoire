@@ -34,6 +34,23 @@ function darken(hex: string, amount = 0.12): string {
 }
 
 /**
+ * Readable text/icon color (white or near-black) for a solid swatch of `hex`.
+ *
+ * Uses WCAG relative luminance. The 0.35 threshold sits just above the shipped
+ * Ember orange (L ~ 0.32) so the default keeps white text, while genuinely
+ * light accents (cyan ~ 0.38, emerald ~ 0.36, amber ~ 0.44) flip to near-black.
+ * Near-black is the app's bg-primary so it reads as "ink" rather than pure #000.
+ */
+export function accentForeground(hex: string): string {
+  const m = (hex || '').replace('#', '').match(/.{2}/g);
+  if (!m) return '#ffffff';
+  const [r, g, b] = m.map((c) => parseInt(c, 16) / 255);
+  const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  const luminance = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+  return luminance > 0.35 ? '#0f0f0f' : '#ffffff';
+}
+
+/**
  * Write the accent color to the document root as CSS variables. Tailwind's
  * @theme tokens read these at use-site (e.g. `bg-accent`), so every component
  * already wired to `--color-accent` updates without rerendering.
@@ -48,4 +65,5 @@ export function applyAccentColor(color: string | null | undefined): void {
   const root = document.documentElement;
   root.style.setProperty('--color-accent', base);
   root.style.setProperty('--color-accent-hover', hover);
+  root.style.setProperty('--color-accent-foreground', accentForeground(base));
 }
