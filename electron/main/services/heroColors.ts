@@ -35,6 +35,7 @@ import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import type {
     ActiveHeroColor,
     ApplyHeroColorResult,
+    ApplyHeroPrismResult,
     LockerColorSelection,
     LockerColorsInfo,
 } from '../../../src/types/mod';
@@ -66,6 +67,11 @@ const COLOR_CODENAME_BY_HERO: Readonly<Record<string, string>> = {
     // and the pickup-sphere/jar tint (a material g_vColorTint CONSTANT, which needs
     // an in-place .vmat_c patch, not a texture). Neither blocks shipping her here.
     Graves: 'necro',
+    // Yamato: particles + a handful of chromatic textures (the green blade-dash
+    // self-illum and the shadow-redemption status maps, plus the shadow-form body
+    // albedo). Her recipe also carries the prism animation targets, so she is a
+    // strong Rainbow candidate. Keep in lockstep with `recipe_for`.
+    Yamato: 'yamato',
 };
 
 /** Bumped when the recolor recipe/binary changes in a way that should re-bake
@@ -144,6 +150,27 @@ function colorCachePath(codename: string, hue: number, sat: number, brightness: 
     return join(dir, `${codename}_h${hue}_s${s}_b${b}_v${RECIPE_CACHE_VERSION}_dir.vpk`);
 }
 
+/** Cache path for one hero's baked rainbow-prism addon. Keyed by codename + the
+ *  spectrum tuning (hue rotation + saturation/brightness scales) + animated flag +
+ *  version. The prism spreads the hero's own colors across a spectrum; the tuning
+ *  rotates/scales that spectrum, so it's part of the cache identity. */
+function prismCachePath(
+    codename: string,
+    hue: number,
+    sat: number,
+    brightness: number,
+    animated: boolean,
+): string {
+    const dir = join(app.getPath('userData'), 'ability-colors');
+    const s = Math.round(sat * 100);
+    const b = Math.round(brightness * 100);
+    const anim = animated ? '_anim' : '';
+    return join(
+        dir,
+        `${codename}_prism_h${hue}_s${s}_b${b}${anim}_v${RECIPE_CACHE_VERSION}_dir.vpk`,
+    );
+}
+
 /**
  * Ensure a hero's recolor addon for (hue, saturation, brightness) exists in the
  * cache, baking it via `vpkmerge recolor-hero` (reading the base game VFX from
@@ -187,6 +214,53 @@ async function ensureHeroColorBake(
     return cachePath;
 }
 
+/**
+ * Ensure a hero's rainbow-prism addon exists in the cache, baking it via
+ * `vpkmerge prism` (reading the base game VFX from pak01) if missing. With
+ * `animated`, passes `--animated` so the spectrum sweeps over each particle's
+ * lifetime. Same temp-then-rename discipline as the single-hue bake.
+ */
+async function ensureHeroPrismBake(
+    pak01: string,
+    codename: string,
+    hue: number,
+    sat: number,
+    brightness: number,
+    animated: boolean,
+): Promise<string> {
+    const cachePath = prismCachePath(codename, hue, sat, brightness, animated);
+    if (existsSync(cachePath)) return cachePath;
+
+    const dir = join(app.getPath('userData'), 'ability-colors');
+    await fs.mkdir(dir, { recursive: true });
+    const tmp = join(dir, `.${codename}_prism_${randomUUID()}_dir.vpk`);
+    try {
+        // In prism mode `hue` is the spectrum rotation (degrees), not an absolute hue.
+        const args = [
+            'prism',
+            '--hero',
+            codename,
+            '--vpk',
+            pak01,
+            '--hue-offset',
+            String(hue),
+            '--saturation',
+            String(sat),
+            '--brightness',
+            String(brightness),
+            '--encode-vpk',
+            tmp,
+        ];
+        if (animated) args.push('--animated');
+        await runVpkmerge(args);
+        await verifyVpkOutput(tmp);
+        await fs.rename(tmp, cachePath);
+    } finally {
+        await fs.unlink(tmp).catch(() => {});
+    }
+    return cachePath;
+}
+
 interface RebuildResult {
     fileName: string | null;
 }
@@ -220,17 +294,26 @@ async function rebuildLockerColors(
         throw new Error('Base game pak01_dir.vpk not found; check the Deadlock path in Settings.');
     }
 
-    // Bake (or reuse) each hero's recolor addon.
+    // Bake (or reuse) each hero's recolor addon: single hue or rainbow prism.
     const caches: string[] = [];
     for (const sel of valid) {
         caches.push(
-            await ensureHeroColorBake(
-                pak01,
-                sel.heroCodename,
-                sel.hue,
-                sel.saturation,
-                sel.brightness,
-            ),
+            sel.mode === 'prism'
+                ? await ensureHeroPrismBake(
+                      pak01,
+                      sel.heroCodename,
+                      sel.hue,
+                      sel.saturation,
+                      sel.brightness,
+                      sel.animated ?? false,
+                  )
+                : await ensureHeroColorBake(
+                      pak01,
+                      sel.heroCodename,
+                      sel.hue,
+                      sel.saturation,
+                      sel.brightness,
+                  ),
         );
     }
 
@@ -298,6 +381,48 @@ export async function applyHeroColor(
     return { hue: normHue, saturation: normSat, brightness: normBright };
 }
 
+/**
+ * Apply hero X's rainbow-prism recolor (static or animated), replacing any prior
+ * color for that hero. Bakes the prism (cached by codename + animated) and folds
+ * it into the managed colors VPK, exactly like the single-hue apply.
+ */
+export async function applyHeroPrism(
+    deadlockPath: string,
+    heroName: string,
+    hue: number,
+    saturation: number,
+    brightness: number,
+    animated: boolean,
+): Promise<ApplyHeroPrismResult> {
+    vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
+    const codename = colorCodenameForHero(heroName);
+    if (!codename) {
+        throw new Error(`Ability color recolor isn't available for ${heroName} yet.`);
+    }
+    ensureGrimoireConfigured(deadlockPath);
+
+    // In prism mode `hue` is the spectrum rotation; saturation/brightness scale it.
+    const normHue = normalizeHue(hue);
+    const normSat = normalizeSaturation(saturation);
+    const normBright = normalizeBrightness(brightness);
+    const current = currentColorSelections();
+    const next: LockerColorSelection[] = [
+        ...current.filter((s) => s.heroCodename !== codename),
+        {
+            heroName,
+            heroCodename: codename,
+            hue: normHue,
+            saturation: normSat,
+            brightness: normBright,
+            mode: 'prism',
+            animated,
+            addedAt: new Date().toISOString(),
+        },
+    ];
+    await rebuildLockerColors(deadlockPath, next);
+    return { hue: normHue, saturation: normSat, brightness: normBright, animated };
+}
+
 /** Remove hero X's ability color, reverting its VFX to vanilla. */
 export async function revertHeroColor(
     deadlockPath: string,
@@ -321,7 +446,13 @@ export function getActiveHeroColor(heroName: string): ActiveHeroColor | null {
     if (!codename) return null;
     const sel = currentColorSelections().find((s) => s.heroCodename === codename);
     return sel
-        ? { hue: sel.hue, saturation: sel.saturation, brightness: sel.brightness }
+        ? {
+              hue: sel.hue,
+              saturation: sel.saturation,
+              brightness: sel.brightness,
+              mode: sel.mode ?? 'hue',
+              animated: sel.animated ?? false,
+          }
         : null;
 }
 

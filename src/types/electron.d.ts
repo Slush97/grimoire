@@ -21,6 +21,7 @@ import type {
     ApplyHeroSoundResult,
     ActiveHeroColor,
     ApplyHeroColorResult,
+    ApplyHeroPrismResult,
     LockerOverview,
     LockerCardThumbnail,
     LockerClearScope,
@@ -345,6 +346,13 @@ export interface ElectronAPI {
         saturation: number,
         brightness: number,
     ) => Promise<ApplyHeroColorResult>;
+    applyHeroPrism: (
+        heroName: string,
+        hue: number,
+        saturation: number,
+        brightness: number,
+        animated: boolean,
+    ) => Promise<ApplyHeroPrismResult>;
     previewHeroColor: (
         heroName: string,
         hue: number,
