@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="resources/icon.png" width="128" height="128" alt="Grimoire">
+ <img width="684" height="214" alt="image" src="https://github.com/user-attachments/assets/fc1917ed-b8a0-4671-ad2c-9389e8b830d9" />
   <h1>Grimoire</h1>
   <p>A mod manager for Deadlock.</p>
 
