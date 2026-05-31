@@ -14,16 +14,17 @@ interface ConflictReorderActionsProps {
   orderedEnabledIds: string[];
   /** True while a reorder for this pair is in flight. */
   busy: boolean;
-  /** Reorder so `winnerId` loads immediately after `loserId` (later = wins). */
+  /** Reorder so `winnerId` loads immediately before `loserId` (earlier = wins). */
   onSetWinner: (winnerId: string, loserId: string) => void;
 }
 
 /**
- * Inline load-order control for a conflict card. The mod that loads later wins
- * overlapping files, so "wins" places the chosen mod immediately after the
- * other in load order. For a priority conflict (shared pak slot) the reorder
- * also separates the two into distinct slots, clearing the conflict; for a file
- * overlap the pair stays flagged but the winner is now deterministic.
+ * Inline load-order control for a conflict card. The mod that loads first (the
+ * lower pakNN slot, an earlier SearchPaths entry) wins overlapping files, so
+ * "wins" places the chosen mod immediately before the other in load order. For
+ * a priority conflict (shared pak slot) the reorder also separates the two into
+ * distinct slots, clearing the conflict; for a file overlap the pair stays
+ * flagged but the winner is now deterministic.
  */
 export default function ConflictReorderActions({
   conflict,
@@ -38,13 +39,15 @@ export default function ConflictReorderActions({
   // Reordering only moves mods that hold a load-order slot. A disabled mod has
   // none, so guard the control until both sides are enabled.
   const bothEnabled = aIdx !== -1 && bIdx !== -1;
-  const aWins = bothEnabled && aIdx > bIdx;
-  const bWins = bothEnabled && bIdx > aIdx;
+  // Lower load-order slot (earlier SearchPaths entry, lower pakNN) wins shared
+  // files, so the mod at the smaller index is the current winner.
+  const aWins = bothEnabled && aIdx < bIdx;
+  const bWins = bothEnabled && bIdx < aIdx;
 
   const label =
     conflict.conflictType === 'file' ? 'Wins shared files' : 'Resolve by load order';
   const hint = bothEnabled
-    ? 'The mod that loads later overrides shared files. This sets the pair adjacent in load order.'
+    ? 'The mod that loads first overrides shared files. This sets the pair adjacent in load order.'
     : 'Enable both mods to set their load order.';
 
   const renderButton = (mod: ConflictModRef, other: ConflictModRef, isWinner: boolean) => (
@@ -57,7 +60,7 @@ export default function ConflictReorderActions({
           ? 'Enable both mods to set their load order.'
           : isWinner
             ? `${mod.name} already wins this conflict`
-            : `Make ${mod.name} win (load it after ${other.name})`
+            : `Make ${mod.name} win (load it before ${other.name})`
       }
       className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
         isWinner
