@@ -204,16 +204,26 @@ export async function applyHeroColor(
   return window.electronAPI.applyHeroColor(heroName, hue, saturation, brightness);
 }
 
-/** Apply the rainbow prism to a hero's ability VFX. In prism mode `hue` is the
- *  spectrum rotation (degrees); saturation/brightness scale the spectrum. */
+/** Apply the rainbow prism (or a custom gradient) to a hero's ability VFX. In
+ *  prism/gradient mode `hue` is the spectrum rotation (degrees); saturation/
+ *  brightness scale the spectrum. A non-null `gradient` spec (preset name or
+ *  `pos:hue:sat,...` stops) switches from the full rainbow to that ramp. */
 export async function applyHeroPrism(
   heroName: string,
   hue: number,
   saturation: number,
   brightness: number,
-  animated: boolean
+  animated: boolean,
+  gradient: string | null
 ): Promise<ApplyHeroPrismResult> {
-  return window.electronAPI.applyHeroPrism(heroName, hue, saturation, brightness, animated);
+  return window.electronAPI.applyHeroPrism(
+    heroName,
+    hue,
+    saturation,
+    brightness,
+    animated,
+    gradient
+  );
 }
 
 /** Render a fast PNG swatch of the recolor target as a data URL (live preview). */

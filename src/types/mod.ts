@@ -223,12 +223,17 @@ export interface LockerColorSelection {
   /** Brightness (HSV value) scale (1 = keep source, >1 lighter, <1 darker). */
   brightness: number;
   /** Recolor mode. 'hue' (or absent, for older persisted entries) = one absolute
-   *  color via `recolor-hero`. 'prism' = a rainbow spectrum via `vpkmerge prism`;
-   *  in prism mode hue/saturation/brightness are ignored. */
-  mode?: 'hue' | 'prism';
-  /** Prism only: animate the spectrum so it sweeps over each particle's lifetime
-   *  (`prism --animated`). Ignored in hue mode. */
+   *  color via `recolor-hero`. 'prism' = a rainbow spectrum via `vpkmerge prism`.
+   *  'gradient' = a prism spread over a custom gradient (see `gradient`). In
+   *  prism/gradient modes hue is a spectrum rotation, not an absolute color. */
+  mode?: 'hue' | 'prism' | 'gradient';
+  /** Prism/gradient only: animate the spectrum so it sweeps over each particle's
+   *  lifetime (`prism --animated`). Ignored in hue mode. */
   animated?: boolean;
+  /** Gradient mode only: the `--gradient` spec, either a preset name
+   *  (fire/ice/toxic/sunset/ocean/neon/gold/void) or a stop list
+   *  `pos:hue:sat,...`. */
+  gradient?: string;
   addedAt: string;
 }
 
@@ -253,11 +258,13 @@ export interface ActiveHeroColor {
   saturation: number;
   /** Applied brightness scale (1 = source). */
   brightness: number;
-  /** Which recolor is applied: a single hue or the rainbow prism. Absent on
-   *  older persisted entries (treat as 'hue'). */
-  mode?: 'hue' | 'prism';
-  /** Prism only: whether the applied spectrum is animated. */
+  /** Which recolor is applied: a single hue, the rainbow prism, or a custom
+   *  gradient. Absent on older persisted entries (treat as 'hue'). */
+  mode?: 'hue' | 'prism' | 'gradient';
+  /** Prism/gradient only: whether the applied spectrum is animated. */
   animated?: boolean;
+  /** Gradient mode only: the applied gradient spec (preset name or stop list). */
+  gradient?: string;
 }
 
 export interface ApplyHeroColorResult {
@@ -269,7 +276,7 @@ export interface ApplyHeroColorResult {
   brightness: number | null;
 }
 
-/** Result of applying the rainbow prism to a hero's ability VFX. */
+/** Result of applying the rainbow prism (or a custom gradient) to a hero's VFX. */
 export interface ApplyHeroPrismResult {
   /** Applied spectrum rotation in degrees (prism reuses the hue field as a rotation). */
   hue: number;
@@ -279,6 +286,8 @@ export interface ApplyHeroPrismResult {
   brightness: number;
   /** Whether the applied spectrum animates over each particle's lifetime. */
   animated: boolean;
+  /** The applied gradient spec, or null for the full rainbow. */
+  gradient: string | null;
 }
 
 /**

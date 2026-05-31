@@ -842,7 +842,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         saturation: number,
         brightness: number,
         animated: boolean,
-    ) => ipcRenderer.invoke('apply-hero-prism', heroName, hue, saturation, brightness, animated),
+        gradient: string | null,
+    ) =>
+        ipcRenderer.invoke(
+            'apply-hero-prism',
+            heroName,
+            hue,
+            saturation,
+            brightness,
+            animated,
+            gradient,
+        ),
     previewHeroColor: (heroName: string, hue: number, saturation: number, brightness: number) =>
         ipcRenderer.invoke('preview-hero-color', heroName, hue, saturation, brightness),
     revertHeroColor: (heroName: string) =>

@@ -71,6 +71,11 @@
   --color-bg-tertiary: #242424;
   --color-accent: #f97316;
   --color-accent-hover: #ea580c;
+  /* Foreground (text/icon) color for solid `bg-accent` surfaces. Flips between
+     white and near-black based on the accent's luminance so a light user accent
+     (cyan, emerald, amber) stays readable. Computed at runtime in
+     applyAccentColor(); this default matches the shipped Ember orange. */
+  --color-accent-foreground: #ffffff;
   --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #8a8a94;

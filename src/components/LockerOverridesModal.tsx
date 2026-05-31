@@ -26,6 +26,12 @@ import {
 } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import { getHeroChipIconPath } from '../lib/lockerUtils';
+import {
+    rainbowCss,
+    gradientCss,
+    stopsForSpec,
+    gradientLabelOf,
+} from '../lib/abilityColorPreview';
 import type {
     AbilitySlot,
     AbilitySoundParams,
@@ -633,6 +639,41 @@ export function LockerOverridesModal({
                                 {colors.map((color) => {
                                     const key = `color:${color.heroName}`;
                                     const isRemoving = removing === key;
+                                    const mode = color.mode ?? 'hue';
+                                    // The swatch + label reflect the recolor MODE: a flat hue
+                                    // chip, the rainbow prism, or the chosen gradient ramp (sampled
+                                    // the same way the engine bakes it).
+                                    const swatchStyle =
+                                        mode === 'prism'
+                                            ? {
+                                                  background: rainbowCss(
+                                                      color.hue,
+                                                      color.saturation,
+                                                      color.brightness,
+                                                  ),
+                                              }
+                                            : mode === 'gradient'
+                                              ? {
+                                                    background: gradientCss(
+                                                        stopsForSpec(color.gradient),
+                                                        color.hue,
+                                                        color.saturation,
+                                                        color.brightness,
+                                                    ),
+                                                }
+                                              : {
+                                                    backgroundColor: swatchColor(
+                                                        color.hue,
+                                                        color.saturation,
+                                                        color.brightness,
+                                                    ),
+                                                };
+                                    const headline =
+                                        mode === 'prism'
+                                            ? `Rainbow · rot ${Math.round(color.hue)}°`
+                                            : mode === 'gradient'
+                                              ? `${gradientLabelOf(color.gradient)} gradient · rot ${Math.round(color.hue)}°`
+                                              : `Hue ${Math.round(color.hue)}°`;
                                     return (
                                         <div
                                             key={key}
@@ -641,13 +682,7 @@ export function LockerOverridesModal({
                                             <HeroIcon heroName={color.heroName} />
                                             <span
                                                 className="h-9 w-9 flex-shrink-0 rounded-full ring-1 ring-white/15"
-                                                style={{
-                                                    backgroundColor: swatchColor(
-                                                        color.hue,
-                                                        color.saturation,
-                                                        color.brightness,
-                                                    ),
-                                                }}
+                                                style={swatchStyle}
                                                 aria-hidden
                                             />
                                             <div className="min-w-0 flex-1">
@@ -655,7 +690,7 @@ export function LockerOverridesModal({
                                                     {color.heroName}
                                                 </div>
                                                 <div className="truncate text-xs text-text-secondary tabular-nums">
-                                                    Hue {Math.round(color.hue)}&deg;
+                                                    {headline}
                                                     {color.saturation !== 1 &&
                                                         ` · Sat ${color.saturation.toFixed(2)}x`}
                                                     {color.brightness !== 1 &&

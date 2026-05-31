@@ -193,7 +193,7 @@ function SoundSourceRow({
         {isBusy ? (
           <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-accent" />
         ) : isActive ? (
-          <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+          <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
             <Check className="h-2.5 w-2.5" /> Applied
           </span>
         ) : (
@@ -256,7 +256,7 @@ function SoundToggleRow({
           )}
         </span>
         {mod.enabled ? (
-          <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-white">
+          <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
             <Check className="h-2.5 w-2.5" /> On
           </span>
         ) : (

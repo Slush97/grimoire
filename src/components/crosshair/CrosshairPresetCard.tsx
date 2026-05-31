@@ -40,7 +40,7 @@ export default function CrosshairPresetCard({
                 {/* Active indicator */}
                 {isActive && (
                     <div className="absolute top-2 right-2 bg-accent rounded-full p-1">
-                        <Check className="w-3 h-3 text-white" />
+                        <Check className="w-3 h-3 text-accent-foreground" />
                     </div>
                 )}
 

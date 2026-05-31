@@ -353,7 +353,7 @@ export default function Layout() {
                     ? 'border-red-500/40 bg-red-500/15 text-red-200'
                     : isSuccess
                     ? 'border-green-500/40 bg-green-500/15 text-green-200'
-                    : 'border-accent/40 bg-accent/15 text-accent-foreground'
+                    : 'border-accent/40 bg-accent/15 text-text-primary'
                 }`}
               >
                 <div className="flex items-center gap-2 px-4 py-2">

@@ -352,6 +352,7 @@ export interface ElectronAPI {
         saturation: number,
         brightness: number,
         animated: boolean,
+        gradient: string | null,
     ) => Promise<ApplyHeroPrismResult>;
     previewHeroColor: (
         heroName: string,

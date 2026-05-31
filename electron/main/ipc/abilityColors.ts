@@ -56,10 +56,19 @@ ipcMain.handle(
         saturation: number,
         brightness: number,
         animated: boolean,
+        gradient: string | null,
     ): Promise<ApplyHeroPrismResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return applyHeroPrism(deadlockPath, heroName, hue, saturation, brightness, animated);
+        return applyHeroPrism(
+            deadlockPath,
+            heroName,
+            hue,
+            saturation,
+            brightness,
+            animated,
+            gradient,
+        );
     },
 );
 
