@@ -314,6 +314,10 @@ async function reconcileEnabledDisabledCollisions(
     ]);
     const enabledByName = new Map(enabledEntries.map((entry) => [entry.toLowerCase(), entry]));
 
+    // Names already present in .disabled (lowercased). Kept current as we rename
+    // so two collisions healed in one pass can't be given the same new name.
+    const takenDisabledNames = new Set(disabledEntries.map((entry) => entry.toLowerCase()));
+
     for (const disabledEntry of disabledEntries) {
         const enabledEntry = enabledByName.get(disabledEntry.toLowerCase());
         if (!enabledEntry) continue;
@@ -330,10 +334,22 @@ async function reconcileEnabledDisabledCollisions(
             continue;
         }
 
-        const priority = await findNextAvailablePriority(deadlockPath);
+        // Contents differ, so keep both, but the disabled copy must lose the
+        // bare-filename id namespace it shares with the base-folder file. Give it
+        // a free-form name (exactly as disableMod does) rather than a scarce pakNN
+        // slot: disabled VPKs aren't loaded by the engine, so they need no
+        // load-order number, and the free-form namespace has no 99-slot cap.
+        // (The old pakNN allocator scanned only base addons + .disabled and threw
+        // the 990 "enable limit" here once the base folder was full - which is the
+        // norm for anyone who has spilled into overflow folders. Because that throw
+        // happened before the heal completed, the collision never cleared and every
+        // get-mods/get-conflicts/launch scan failed permanently.)
         const metadata = getModMetadata(enabledEntry);
         const owner = await getCollisionMetadataOwner(metadata?.sha256, join(disabledPath, disabledEntry));
-        const renamedFileName = await renameModFileToPriority(disabledPath, disabledEntry, priority);
+        const preferredName = metadata?.modName ?? metadata?.sourceFileName ?? metadata?.variantLabel;
+        const renamedFileName = makeDisabledFileName(disabledEntry, takenDisabledNames, preferredName);
+        await fs.rename(join(disabledPath, disabledEntry), join(disabledPath, renamedFileName));
+        takenDisabledNames.add(renamedFileName.toLowerCase());
         moveCollisionMetadata(enabledEntry, renamedFileName, owner, metadata);
         console.warn(
             `[mods] Renamed conflicting disabled VPK ${disabledEntry} to ${renamedFileName}; contents differ from enabled copy.`
@@ -380,28 +396,6 @@ async function getCollisionMetadataOwner(
     return disabledHash.sha256.toLowerCase() === sha256.toLowerCase() ? 'disabled' : 'enabled';
 }
 
-async function renameModFileToPriority(
-    folder: string,
-    fileName: string,
-    priority: number
-): Promise<string> {
-    const finalName = fileNameForPriority(fileName, priority);
-    if (existsSync(join(folder, finalName))) {
-        throw new Error(`Cannot rename conflicting disabled mod: target already exists (${finalName})`);
-    }
-
-    await fs.rename(join(folder, fileName), join(folder, finalName));
-    return finalName;
-}
-
-function fileNameForPriority(fileName: string, priority: number): string {
-    const renamed = renameWithPriority(fileName, priority);
-    if (renamed !== fileName) return renamed;
-
-    const priorityStr = String(Math.min(MAX_VPK_PRIORITY, priority)).padStart(2, '0');
-    return `pak${priorityStr}_dir.vpk`;
-}
-
 /**
  * Move a mod to a folder under an explicit destination filename, migrating its
  * metadata to follow the rename. Callers compute a collision-free destination
@@ -440,55 +434,6 @@ async function moveModToFolderAs(
         priority: parseVpkPriority(destinationFileName) ?? targetMod.priority,
         path: destinationPath,
     };
-}
-
-/**
- * Get the set of used priorities in BOTH addons AND disabled folders (async)
- * This prevents conflicts when downloading new mods
- */
-export async function getUsedPriorities(deadlockPath: string): Promise<Set<number>> {
-    const addonsPath = getAddonsPath(deadlockPath);
-    const disabledPath = getDisabledPath(deadlockPath);
-    const usedPriorities = new Set<number>();
-
-    const scanPriorities = async (folder: string) => {
-        if (!existsSync(folder)) return;
-        const entries = await fs.readdir(folder);
-        for (const entry of entries) {
-            const priority = parseVpkPriority(entry);
-            if (priority !== null) {
-                usedPriorities.add(priority);
-            }
-        }
-    };
-
-    await Promise.all([
-        scanPriorities(addonsPath),
-        scanPriorities(disabledPath),
-    ]);
-
-    return usedPriorities;
-}
-
-/**
- * Find the next available priority number that doesn't conflict (async)
- * Checks BOTH addons and disabled folders to avoid overwriting disabled mods
- */
-export async function findNextAvailablePriority(deadlockPath: string, startFrom = MIN_VPK_PRIORITY): Promise<number> {
-    const usedPriorities = await getUsedPriorities(deadlockPath);
-
-    // Find next available starting from startFrom (default 1)
-    let priority = startFrom;
-    while (usedPriorities.has(priority) && priority < MAX_VPK_PRIORITY) {
-        priority++;
-    }
-
-    // If all numbers up to 99 are taken, this is an error
-    if (priority >= MAX_VPK_PRIORITY && usedPriorities.has(MAX_VPK_PRIORITY)) {
-        throw new Error(ENABLE_LIMIT_MESSAGE);
-    }
-
-    return priority;
 }
 
 interface AllocatedSlot {
@@ -551,8 +496,7 @@ async function allocateSlot(
 /**
  * Absolute path a brand-new ENABLED VPK should be written to (custom local
  * import, merge output), honoring the multi-folder overflow model so the create
- * still succeeds when the base addons folder is full. Unlike
- * findNextAvailablePriority (base + .disabled only), this spills into overflow
+ * still succeeds when the base addons folder is full: this spills into overflow
  * folders and mints a new one at capacity. Throws ENABLE_LIMIT_MESSAGE at the cap.
  *
  * The caller writes the VPK to this path and then keys its metadata by

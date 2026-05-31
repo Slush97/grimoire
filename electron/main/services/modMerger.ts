@@ -630,8 +630,8 @@ export async function extractMergeSource(
     // then swap it into the target's exact path. Staying in-folder keeps the
     // merge at its original load-order position (folder + pakNN) and needs no free
     // slot elsewhere, which matters once the merge lives in an overflow folder:
-    // the old findNextAvailablePriority + setModPriority path is base-only and
-    // would wrongly fail (or move the merge to base) for an overflowed merge.
+    // a base-only "next free pakNN" + setModPriority path would wrongly fail (or
+    // move the merge to the base folder) for a merge that lives in an overflow folder.
     const targetDir = dirname(target.path);
     const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
     try {
