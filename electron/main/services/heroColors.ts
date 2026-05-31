@@ -50,12 +50,22 @@ import type {
  */
 const COLOR_CODENAME_BY_HERO: Readonly<Record<string, string>> = {
     Paige: 'bookworm',
+    // Added from local disabled-mod particle scans + vpkmerge texture audits.
+    Abrams: 'abrams',
+    Apollo: 'fencer',
+    Calico: 'nano',
+    'Lady Geist': 'ghost',
+    Lash: 'lash',
+    McGinnis: 'mcginnis',
+    Pocket: 'pocket',
+    Sinclair: 'magician',
     // Particle-only heroes (no color textures / vertex colors): their recipe has no
     // preview_texture, so the live swatch falls back to the approximate CSS chip;
     // recolor-hero still bakes them. The patcher handles v4 + v5 particles, so each
     // recolors at full coverage. Keep this in lockstep with `recipe_for` in
     // vpkmerge-core/src/hero_recolor.rs.
     Celeste: 'unicorn',
+    Holliday: 'astro',
     Mina: 'vampirebat',
     Seven: 'gigawatt',
     Wraith: 'wraith',
@@ -160,14 +170,18 @@ function prismCachePath(
     sat: number,
     brightness: number,
     animated: boolean,
+    gradient: string | null,
 ): string {
     const dir = join(app.getPath('userData'), 'ability-colors');
     const s = Math.round(sat * 100);
     const b = Math.round(brightness * 100);
     const anim = animated ? '_anim' : '';
+    // Gradient is part of the bake identity. Sanitize the spec into a filesystem-
+    // safe token (preset name stays readable, custom stops keep their structure).
+    const grad = gradient ? `_g${gradient.replace(/[^a-z0-9]+/gi, '-')}` : '';
     return join(
         dir,
-        `${codename}_prism_h${hue}_s${s}_b${b}${anim}_v${RECIPE_CACHE_VERSION}_dir.vpk`,
+        `${codename}_prism_h${hue}_s${s}_b${b}${anim}${grad}_v${RECIPE_CACHE_VERSION}_dir.vpk`,
     );
 }
 
@@ -227,15 +241,17 @@ async function ensureHeroPrismBake(
     sat: number,
     brightness: number,
     animated: boolean,
+    gradient: string | null,
 ): Promise<string> {
-    const cachePath = prismCachePath(codename, hue, sat, brightness, animated);
+    const cachePath = prismCachePath(codename, hue, sat, brightness, animated, gradient);
     if (existsSync(cachePath)) return cachePath;
 
     const dir = join(app.getPath('userData'), 'ability-colors');
     await fs.mkdir(dir, { recursive: true });
     const tmp = join(dir, `.${codename}_prism_${randomUUID()}_dir.vpk`);
     try {
-        // In prism mode `hue` is the spectrum rotation (degrees), not an absolute hue.
+        // In prism mode `hue` is the spectrum rotation (degrees), not an absolute hue;
+        // `gradient` (when set) spreads the spectrum over a preset/custom ramp.
         const args = [
             'prism',
             '--hero',
@@ -252,6 +268,7 @@ async function ensureHeroPrismBake(
             tmp,
         ];
         if (animated) args.push('--animated');
+        if (gradient) args.push('--gradient', gradient);
         await runVpkmerge(args);
         await verifyVpkOutput(tmp);
         await fs.rename(tmp, cachePath);
@@ -294,11 +311,12 @@ async function rebuildLockerColors(
         throw new Error('Base game pak01_dir.vpk not found; check the Deadlock path in Settings.');
     }
 
-    // Bake (or reuse) each hero's recolor addon: single hue or rainbow prism.
+    // Bake (or reuse) each hero's recolor addon: single hue, rainbow prism, or a
+    // custom gradient (prism + a gradient spec).
     const caches: string[] = [];
     for (const sel of valid) {
         caches.push(
-            sel.mode === 'prism'
+            sel.mode === 'prism' || sel.mode === 'gradient'
                 ? await ensureHeroPrismBake(
                       pak01,
                       sel.heroCodename,
@@ -306,6 +324,7 @@ async function rebuildLockerColors(
                       sel.saturation,
                       sel.brightness,
                       sel.animated ?? false,
+                      sel.mode === 'gradient' ? (sel.gradient ?? null) : null,
                   )
                 : await ensureHeroColorBake(
                       pak01,
@@ -393,6 +412,7 @@ export async function applyHeroPrism(
     saturation: number,
     brightness: number,
     animated: boolean,
+    gradient: string | null,
 ): Promise<ApplyHeroPrismResult> {
     vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
     const codename = colorCodenameForHero(heroName);
@@ -401,10 +421,12 @@ export async function applyHeroPrism(
     }
     ensureGrimoireConfigured(deadlockPath);
 
-    // In prism mode `hue` is the spectrum rotation; saturation/brightness scale it.
+    // In prism/gradient mode `hue` is the spectrum rotation; saturation/brightness
+    // scale it. A non-empty `gradient` spec switches to gradient mode.
     const normHue = normalizeHue(hue);
     const normSat = normalizeSaturation(saturation);
     const normBright = normalizeBrightness(brightness);
+    const grad = gradient && gradient.trim() ? gradient.trim() : null;
     const current = currentColorSelections();
     const next: LockerColorSelection[] = [
         ...current.filter((s) => s.heroCodename !== codename),
@@ -414,13 +436,14 @@ export async function applyHeroPrism(
             hue: normHue,
             saturation: normSat,
             brightness: normBright,
-            mode: 'prism',
+            mode: grad ? 'gradient' : 'prism',
             animated,
+            ...(grad ? { gradient: grad } : {}),
             addedAt: new Date().toISOString(),
         },
     ];
     await rebuildLockerColors(deadlockPath, next);
-    return { hue: normHue, saturation: normSat, brightness: normBright, animated };
+    return { hue: normHue, saturation: normSat, brightness: normBright, animated, gradient: grad };
 }
 
 /** Remove hero X's ability color, reverting its VFX to vanilla. */
@@ -452,6 +475,7 @@ export function getActiveHeroColor(heroName: string): ActiveHeroColor | null {
               brightness: sel.brightness,
               mode: sel.mode ?? 'hue',
               animated: sel.animated ?? false,
+              ...(sel.gradient ? { gradient: sel.gradient } : {}),
           }
         : null;
 }
