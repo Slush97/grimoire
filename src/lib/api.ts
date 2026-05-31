@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
 import type { HeroPortrait, SoulModelInfo, HeroPoseInfo } from '../types/portrait';
 import type {
   GameBananaModsResponse,
@@ -202,6 +202,18 @@ export async function applyHeroColor(
   brightness: number
 ): Promise<ApplyHeroColorResult> {
   return window.electronAPI.applyHeroColor(heroName, hue, saturation, brightness);
+}
+
+/** Apply the rainbow prism to a hero's ability VFX. In prism mode `hue` is the
+ *  spectrum rotation (degrees); saturation/brightness scale the spectrum. */
+export async function applyHeroPrism(
+  heroName: string,
+  hue: number,
+  saturation: number,
+  brightness: number,
+  animated: boolean
+): Promise<ApplyHeroPrismResult> {
+  return window.electronAPI.applyHeroPrism(heroName, hue, saturation, brightness, animated);
 }
 
 /** Render a fast PNG swatch of the recolor target as a data URL (live preview). */

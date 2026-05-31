@@ -213,7 +213,7 @@ export default function Conflicts() {
   };
 
   /**
-   * Reorder so `winnerId` loads immediately after `loserId` (later load wins
+   * Reorder so `winnerId` loads immediately before `loserId` (earlier load wins
    * overlapping files). Reuses reorderMods with the full enabled-mod ordering,
    * the same path the Installed load-order editor uses. For a priority conflict
    * the dense renumber also splits the shared slot, clearing the pair; a file
@@ -230,7 +230,7 @@ export default function Conflicts() {
       }
       order.splice(winnerIdx, 1);
       const loserIdx = order.indexOf(loserId);
-      order.splice(loserIdx + 1, 0, winnerId);
+      order.splice(loserIdx, 0, winnerId);
       await reorderMods(order);
       await loadMods();
       await loadConflicts();

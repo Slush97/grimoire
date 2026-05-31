@@ -222,6 +222,13 @@ export interface LockerColorSelection {
   saturation: number;
   /** Brightness (HSV value) scale (1 = keep source, >1 lighter, <1 darker). */
   brightness: number;
+  /** Recolor mode. 'hue' (or absent, for older persisted entries) = one absolute
+   *  color via `recolor-hero`. 'prism' = a rainbow spectrum via `vpkmerge prism`;
+   *  in prism mode hue/saturation/brightness are ignored. */
+  mode?: 'hue' | 'prism';
+  /** Prism only: animate the spectrum so it sweeps over each particle's lifetime
+   *  (`prism --animated`). Ignored in hue mode. */
+  animated?: boolean;
   addedAt: string;
 }
 
@@ -240,12 +247,17 @@ export interface LockerColorsInfo {
 /** The color applied for a hero's ability VFX, read back so the color picker can
  *  reflect the active selection. */
 export interface ActiveHeroColor {
-  /** Applied absolute hue (0-359 degrees). */
+  /** Applied absolute hue (0-359 degrees). Meaningless in prism mode. */
   hue: number;
   /** Applied saturation scale (1 = source). */
   saturation: number;
   /** Applied brightness scale (1 = source). */
   brightness: number;
+  /** Which recolor is applied: a single hue or the rainbow prism. Absent on
+   *  older persisted entries (treat as 'hue'). */
+  mode?: 'hue' | 'prism';
+  /** Prism only: whether the applied spectrum is animated. */
+  animated?: boolean;
 }
 
 export interface ApplyHeroColorResult {
@@ -255,6 +267,18 @@ export interface ApplyHeroColorResult {
   saturation: number | null;
   /** The applied brightness scale, or null after a revert. */
   brightness: number | null;
+}
+
+/** Result of applying the rainbow prism to a hero's ability VFX. */
+export interface ApplyHeroPrismResult {
+  /** Applied spectrum rotation in degrees (prism reuses the hue field as a rotation). */
+  hue: number;
+  /** Applied saturation scale on the spectrum. */
+  saturation: number;
+  /** Applied brightness scale on the spectrum. */
+  brightness: number;
+  /** Whether the applied spectrum animates over each particle's lifetime. */
+  animated: boolean;
 }
 
 /**

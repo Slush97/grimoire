@@ -1774,8 +1774,8 @@ export default function Installed() {
    *
    * The picker shows a group's variants sorted by priority, so the
    * before/after semantics match what the user sees: drop "before" puts
-   * the source at the neighbor's slot (loads earlier); drop "after" puts
-   * it just past the neighbor (loads later, wins overlapping files).
+   * the source at the neighbor's slot (loads earlier, wins overlapping
+   * files); drop "after" puts it just past the neighbor (loads later).
    *
    * Implementation: splice the source out of its section list, re-find the
    * neighbor's index (it may have shifted when source was removed), splice

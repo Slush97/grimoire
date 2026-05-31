@@ -2,12 +2,17 @@ import { ipcMain } from 'electron';
 import { loadSettings } from '../services/settings';
 import {
     applyHeroColor,
+    applyHeroPrism,
     revertHeroColor,
     getActiveHeroColor,
     getHeroColorSupport,
     previewHeroColor,
 } from '../services/heroColors';
-import type { ActiveHeroColor, ApplyHeroColorResult } from '../../../src/types/mod';
+import type {
+    ActiveHeroColor,
+    ApplyHeroColorResult,
+    ApplyHeroPrismResult,
+} from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as ipc/abilitySounds.ts). */
 function getActiveDeadlockPath(): string | null {
@@ -39,6 +44,22 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
         return applyHeroColor(deadlockPath, heroName, hue, saturation, brightness);
+    },
+);
+
+ipcMain.handle(
+    'apply-hero-prism',
+    async (
+        _,
+        heroName: string,
+        hue: number,
+        saturation: number,
+        brightness: number,
+        animated: boolean,
+    ): Promise<ApplyHeroPrismResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return applyHeroPrism(deadlockPath, heroName, hue, saturation, brightness, animated);
     },
 );
 

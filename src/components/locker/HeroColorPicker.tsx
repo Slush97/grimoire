@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
-import { Palette, Loader2, AlertCircle, Check, RefreshCw, RotateCcw } from 'lucide-react';
+import { Palette, Loader2, AlertCircle, Check, RefreshCw, RotateCcw, Sparkles } from 'lucide-react';
 import {
   applyHeroColor,
+  applyHeroPrism,
   previewHeroColor,
   revertHeroColor,
   getActiveHeroColor,
@@ -61,6 +62,19 @@ function approxSwatch(hue: number, saturation: number, brightness: number): stri
 
 const pct = (scale: number): number => Math.round(scale * 100);
 
+/** Rainbow swatch for the prism preview, rotated + scaled to mirror the spectrum
+ *  tuning (no per-pixel bake to show). `hue` rotates the start; saturation and
+ *  brightness scale the chips, matching what `prism --hue-offset/--saturation/
+ *  --brightness` does to the baked VFX. */
+function rainbowGradient(hue: number, saturation: number, brightness: number): string {
+  const s = clamp(Math.round(85 * saturation), 0, 100);
+  const l = clamp(Math.round(55 * brightness), 12, 92);
+  const stops = [0, 60, 120, 180, 240, 300, 360]
+    .map((d) => `hsl(${Math.round((hue + d) % 360)}, ${s}%, ${l}%)`)
+    .join(', ');
+  return `linear-gradient(135deg, ${stops})`;
+}
+
 /**
  * EXPERIMENTAL: recolor a hero's ability VFX (particles + color textures + baked
  * vertex colors) to a chosen color. The target is hue + a saturation scale + a
@@ -81,6 +95,12 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
   const [hue, setHue] = useState(DEFAULT_HUE);
   const [saturation, setSaturation] = useState(DEFAULT_SCALE);
   const [brightness, setBrightness] = useState(DEFAULT_SCALE);
+  // Recolor mode: a single picked color, or the rainbow prism (static/animated).
+  const [mode, setMode] = useState<'hue' | 'prism'>('hue');
+  const [animated, setAnimated] = useState(false);
+  // What's applied in-game: the mode (null = nothing) and, for prism, its animated flag.
+  const [activeMode, setActiveMode] = useState<'hue' | 'prism' | null>(null);
+  const [activeAnimated, setActiveAnimated] = useState(false);
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [changed, setChanged] = useState(false);
@@ -97,10 +117,12 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
   useEffect(() => {
     mounted.current = true;
     setLoading(true);
-    // Fresh hero: drop any prior hero's preview state.
+    // Fresh hero: drop any prior hero's preview + mode state.
     setPreviewUrl(null);
     setPreviewFailed(false);
     setPreviewUnavailable(false);
+    setMode('hue');
+    setAnimated(false);
     Promise.all([
       getHeroColorSupport(heroName),
       getActiveHeroColor(heroName),
@@ -109,10 +131,16 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
       .then(([isSupported, active, status]) => {
         if (!mounted.current) return;
         setSupported(isSupported);
+        const activeM = active ? (active.mode ?? 'hue') : null;
+        setActiveMode(activeM);
         setActiveHue(active?.hue ?? null);
         setActiveSaturation(active?.saturation ?? null);
         setActiveBrightness(active?.brightness ?? null);
-        if (active) {
+        setActiveAnimated(active?.animated ?? false);
+        if (active && activeM === 'prism') {
+          setMode('prism');
+          setAnimated(active.animated ?? false);
+        } else if (active) {
           setHue(active.hue);
           setSaturation(active.saturation);
           setBrightness(active.brightness);
@@ -134,7 +162,8 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
   // sliders stay smooth. Best-effort: if it can't render (no game path, old
   // binary) we silently fall back to the approximate CSS swatch.
   useEffect(() => {
-    if (!supported || busy || previewUnavailable) return;
+    // Prism has no per-pixel swatch to bake; it shows a rainbow chip instead.
+    if (!supported || busy || previewUnavailable || mode === 'prism') return;
     let cancelled = false;
     setPreviewLoading(true);
     const handle = setTimeout(() => {
@@ -159,7 +188,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [heroName, hue, saturation, brightness, supported, busy, previewUnavailable]);
+  }, [heroName, hue, saturation, brightness, supported, busy, previewUnavailable, mode]);
 
   const refreshGameRunning = async () => {
     try {
@@ -174,11 +203,22 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
     setBusy(true);
     setActionError(null);
     try {
-      const result = await applyHeroColor(heroName, hue, saturation, brightness);
-      if (!mounted.current) return;
-      setActiveHue(result.hue);
-      setActiveSaturation(result.saturation);
-      setActiveBrightness(result.brightness);
+      if (mode === 'prism') {
+        const result = await applyHeroPrism(heroName, hue, saturation, brightness, animated);
+        if (!mounted.current) return;
+        setActiveMode('prism');
+        setActiveHue(result.hue);
+        setActiveSaturation(result.saturation);
+        setActiveBrightness(result.brightness);
+        setActiveAnimated(result.animated);
+      } else {
+        const result = await applyHeroColor(heroName, hue, saturation, brightness);
+        if (!mounted.current) return;
+        setActiveMode('hue');
+        setActiveHue(result.hue);
+        setActiveSaturation(result.saturation);
+        setActiveBrightness(result.brightness);
+      }
       setChanged(true);
       await refreshGameRunning();
     } catch (err) {
@@ -195,9 +235,11 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
     try {
       await revertHeroColor(heroName);
       if (!mounted.current) return;
+      setActiveMode(null);
       setActiveHue(null);
       setActiveSaturation(null);
       setActiveBrightness(null);
+      setActiveAnimated(false);
       setChanged(true);
       await refreshGameRunning();
     } catch (err) {
@@ -213,12 +255,18 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
     setBrightness(p.brightness);
   };
 
-  const applied = activeHue !== null;
+  const applied = activeMode !== null;
   const dirty =
-    !applied ||
-    activeHue !== hue ||
-    activeSaturation !== saturation ||
-    activeBrightness !== brightness;
+    mode === 'prism'
+      ? activeMode !== 'prism' ||
+        activeAnimated !== animated ||
+        activeHue !== hue ||
+        activeSaturation !== saturation ||
+        activeBrightness !== brightness
+      : activeMode !== 'hue' ||
+        activeHue !== hue ||
+        activeSaturation !== saturation ||
+        activeBrightness !== brightness;
 
   const swatchCss = approxSwatch(hue, saturation, brightness);
 
@@ -255,19 +303,54 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
       {!loading && !error && supported && (
         <>
           <p className="text-xs text-text-secondary">
-            Recolor {heroName}&apos;s ability effects (particles, projectiles, and the ult body) to
-            a color. Adjust hue, saturation, and brightness; the preview shows a real ability
-            texture recolored to your pick.
+            Recolor {heroName}&apos;s ability effects (particles, projectiles, and the ult body).
+            Pick a single color, or spread the VFX across a rainbow with Prism.
           </p>
+
+          {/* Mode toggle: a single picked color vs the rainbow prism. */}
+          <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setMode('hue')}
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors disabled:cursor-not-allowed ${
+                mode === 'hue'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Palette className="h-3.5 w-3.5" /> Single Color
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setMode('prism')}
+              className={`flex items-center gap-1.5 rounded px-2.5 py-1 font-medium transition-colors disabled:cursor-not-allowed ${
+                mode === 'prism'
+                  ? 'bg-accent text-white'
+                  : 'text-text-secondary hover:text-text-primary'
+              }`}
+            >
+              <Sparkles className="h-3.5 w-3.5" /> Rainbow
+            </button>
+          </div>
 
           {/* Live recolored preview + current target */}
           <div className="flex items-center gap-3">
             <div
               className="relative h-14 w-14 flex-shrink-0 overflow-hidden rounded-md border border-border shadow-inner"
-              style={{ backgroundColor: swatchCss }}
-              aria-label={`Hue ${hue}, saturation ${pct(saturation)}%, brightness ${pct(brightness)}%`}
+              style={
+                mode === 'prism'
+                  ? { background: rainbowGradient(hue, saturation, brightness) }
+                  : { backgroundColor: swatchCss }
+              }
+              aria-label={
+                mode === 'prism'
+                  ? `Rainbow prism${animated ? ', animated' : ''}`
+                  : `Hue ${hue}, saturation ${pct(saturation)}%, brightness ${pct(brightness)}%`
+              }
             >
-              {previewUrl && !previewFailed && (
+              {mode === 'hue' && previewUrl && !previewFailed && (
                 <img
                   src={previewUrl}
                   alt="Ability color preview"
@@ -275,7 +358,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
                   style={{ imageRendering: 'auto' }}
                 />
               )}
-              {previewLoading && (
+              {mode === 'hue' && previewLoading && (
                 <div className="absolute inset-0 flex items-center justify-center bg-black/20">
                   <Loader2 className="h-4 w-4 animate-spin text-white/80" />
                 </div>
@@ -283,21 +366,28 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
             </div>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-text-primary tabular-nums">
-                {hue}&deg; &middot; S {pct(saturation)}% &middot; B {pct(brightness)}%
+                {mode === 'prism'
+                  ? `Rainbow${animated ? ' (animated)' : ''} · rot ${hue}° · S ${pct(saturation)}% · B ${pct(brightness)}%`
+                  : `${hue}° · S ${pct(saturation)}% · B ${pct(brightness)}%`}
               </div>
               <div className="text-[11px] text-text-secondary">
                 {!applied
                   ? 'No color applied'
                   : !dirty
                     ? 'Applied'
-                    : `Applied: ${activeHue}° / S ${pct(activeSaturation ?? 1)}% / B ${pct(activeBrightness ?? 1)}%`}
+                    : activeMode === 'prism'
+                      ? `Applied: Rainbow${activeAnimated ? ' (animated)' : ''} · rot ${activeHue ?? 0}°`
+                      : `Applied: ${activeHue}° / S ${pct(activeSaturation ?? 1)}% / B ${pct(activeBrightness ?? 1)}%`}
               </div>
             </div>
           </div>
 
-          {/* Hue slider over a rainbow track */}
+          {/* Hue slider over a rainbow track. In prism mode it rotates where the
+              spectrum starts rather than picking one color. */}
           <label className="block space-y-1">
-            <span className="text-[11px] font-medium text-text-secondary">Hue</span>
+            <span className="text-[11px] font-medium text-text-secondary">
+              {mode === 'prism' ? 'Rainbow rotation' : 'Hue'}
+            </span>
             <input
               type="range"
               min={0}
@@ -354,7 +444,8 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
             />
           </label>
 
-          {/* Preset colors (each sets hue + saturation + brightness) */}
+          {/* Preset colors (single-color mode only; each sets hue + saturation + brightness) */}
+          {mode === 'hue' && (
           <div className="flex flex-wrap gap-1.5">
             {PRESETS.map((p) => {
               const selected =
@@ -375,6 +466,28 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
               );
             })}
           </div>
+          )}
+
+          {mode === 'prism' && (
+            <div className="space-y-2">
+              <label className="flex items-center gap-2 text-xs text-text-secondary">
+                <input
+                  type="checkbox"
+                  checked={animated}
+                  disabled={busy}
+                  onChange={(e) => setAnimated(e.target.checked)}
+                  className="h-3.5 w-3.5 accent-accent disabled:cursor-not-allowed"
+                />
+                <span className="font-medium text-text-primary">Animated</span>
+                <span>sweep the spectrum over each effect&apos;s lifetime</span>
+              </label>
+              <p className="text-[11px] text-text-secondary/80">
+                Prism spreads {heroName}&apos;s existing ability colors across a rainbow instead of
+                one hue. Use the sliders above to rotate the spectrum and tune its saturation /
+                brightness. Animated adds a moving sweep on the showy effects (glow, beams, trails).
+              </p>
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center gap-2 pt-1">
@@ -389,7 +502,7 @@ export default function HeroColorPicker({ heroName }: HeroColorPickerProps) {
               ) : (
                 <Check className="h-3.5 w-3.5" />
               )}
-              {applied && !dirty ? 'Applied' : 'Apply Color'}
+              {applied && !dirty ? 'Applied' : mode === 'prism' ? 'Apply Rainbow' : 'Apply Color'}
             </button>
             {applied && (
               <button
