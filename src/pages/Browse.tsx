@@ -824,6 +824,7 @@ export default function Browse() {
   const settings = useAppStore((s) => s.settings);
   const loadSettings = useAppStore((s) => s.loadSettings);
   const loadMods = useAppStore((s) => s.loadMods);
+  const deleteMod = useAppStore((s) => s.deleteMod);
   const installedMods = useAppStore((s) => s.mods);
   const soundVolume = useAppStore((s) => s.soundVolume);
   const setSoundVolume = useAppStore((s) => s.setSoundVolume);
@@ -2907,6 +2908,7 @@ export default function Browse() {
           dateModified={selectedModDates?.dateModified}
           onClose={() => setSelectedMod(null)}
           onDownload={handleDownload}
+          onDeleteFile={deleteMod}
         />
       )}
 
@@ -3762,5 +3764,4 @@ const MemoizedModCard = React.memo(ModCard, (prev, next) => (
   prev.enableModId === next.enableModId &&
   prev.actionContextKey === next.actionContextKey
 ));
-
 

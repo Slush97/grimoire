@@ -199,9 +199,34 @@ interface ToggleProps {
     disabled?: boolean;
 }
 
+interface ToggleIndicatorProps {
+    checked: boolean;
+    disabled?: boolean;
+    className?: string;
+}
+
+export function ToggleIndicator({ checked, disabled, className = '' }: ToggleIndicatorProps) {
+    return (
+        <span
+            aria-hidden
+            className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full border transition-colors duration-150 ease-out motion-reduce:transition-none ${
+                checked
+                    ? 'border-accent/55 bg-accent/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)] ring-1 ring-accent/25 group-hover:border-accent/75 group-hover:bg-accent/20 group-hover/toggle:border-accent/75 group-hover/toggle:bg-accent/20'
+                    : 'border-white/15 bg-white/[0.16] group-hover:border-white/25 group-hover:bg-white/[0.22] group-hover/toggle:border-white/25 group-hover/toggle:bg-white/[0.22]'
+            } ${disabled ? 'opacity-60' : ''} ${className}`}
+        >
+            <span
+                className={`absolute left-0.5 h-5 w-5 rounded-full bg-zinc-300 shadow-[0_1px_2px_rgba(0,0,0,0.35)] ring-1 transition-transform duration-150 ease-out motion-reduce:transition-none ${
+                    checked ? 'translate-x-5' : 'translate-x-0'
+                } ${checked ? 'ring-accent/45' : 'ring-white/35'}`}
+            />
+        </span>
+    );
+}
+
 export function Toggle({ checked, onChange, label, description, className = '', disabled }: ToggleProps) {
     return (
-        <label className={`flex items-start gap-3 cursor-pointer group ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
+        <label className={`flex items-start gap-3 group ${disabled ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'} ${className}`}>
             <div className="relative shrink-0 mt-0.5">
                 <input
                     type="checkbox"
@@ -209,8 +234,14 @@ export function Toggle({ checked, onChange, label, description, className = '', 
                     checked={checked}
                     onChange={(e) => !disabled && onChange(e.target.checked)}
                     disabled={disabled}
+                    role="switch"
+                    aria-checked={checked}
                 />
-                <div className="w-11 h-6 bg-bg-tertiary peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-primary rounded-full peer peer-checked:after:translate-x-full rtl:peer-checked:after:-translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:start-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-accent border border-white/5"></div>
+                <ToggleIndicator
+                    checked={checked}
+                    disabled={disabled}
+                    className="peer-focus-visible:ring-2 peer-focus-visible:ring-accent/70 peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-bg-primary peer-disabled:cursor-not-allowed"
+                />
             </div>
             <div>
                 {label && <span className="block text-sm font-medium text-text-primary group-hover:text-white transition-colors">{label}</span>}

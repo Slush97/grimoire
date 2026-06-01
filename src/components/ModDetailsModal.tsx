@@ -19,6 +19,7 @@ import {
   Maximize2,
   BellOff,
   Bell,
+  Trash2,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type { GameBananaModDetails, GameBananaComment, GameBananaFile } from '../types/gamebanana';
@@ -63,6 +64,9 @@ interface ModDetailsModalProps {
   onToggleIgnoreUpdates?: () => void;
   onClose: () => void;
   onDownload: (fileId: number, fileName: string) => void;
+  /** Browse-only file removal. Receives the local installed mod id that backs
+   *  the GameBanana file row. */
+  onDeleteFile?: (modId: string) => Promise<void> | void;
 }
 
 export default function ModDetailsModal({
@@ -85,6 +89,7 @@ export default function ModDetailsModal({
   onToggleIgnoreUpdates,
   onClose,
   onDownload,
+  onDeleteFile,
 }: ModDetailsModalProps) {
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
@@ -105,6 +110,8 @@ export default function ModDetailsModal({
   // can size to its real proportions instead of being forced into 16:9
   // (which letterboxed portraits and chopped UI screenshots).
   const [imageRatios, setImageRatios] = useState<Record<number, number>>({});
+  const [deleteCandidate, setDeleteCandidate] = useState<{ modId: string; fileName: string } | null>(null);
+  const [deleteInProgress, setDeleteInProgress] = useState(false);
 
   useEffect(() => {
     setArchivedFilesOpen(false);
@@ -134,6 +141,10 @@ export default function ModDetailsModal({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        if (deleteCandidate) {
+          if (!deleteInProgress) setDeleteCandidate(null);
+          return;
+        }
         // Lightbox eats ESC before the modal does, so users can dismiss the
         // zoomed view without losing their place on the detail card.
         if (lightboxOpen) {
@@ -181,7 +192,7 @@ export default function ModDetailsModal({
       window.removeEventListener('mouseup', handleMouseUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, images.length, lightboxOpen]);
+  }, [onClose, images.length, lightboxOpen, deleteCandidate, deleteInProgress]);
 
   const currentImage = images[currentImageIndex];
   // The lightbox loads the original GB asset for detail inspection.
@@ -241,6 +252,7 @@ export default function ModDetailsModal({
       !installedFileState.enabled &&
       !!onEnableFile &&
       !isBusyThis;
+    const showDeleteButton = !!installedFileState && !!onDeleteFile;
     const pct = progress && progress.total > 0
       ? Math.round((progress.downloaded / progress.total) * 100)
       : null;
@@ -314,45 +326,59 @@ export default function ModDetailsModal({
             </div>
           )}
         </div>
-        {showEnablePill && installedFileState && (
-          <button
-            onClick={() => onEnableFile!(installedFileState.modId)}
-            disabled={isBusyThis}
-            title="Enable this mod"
-            className="flex-shrink-0 flex items-center justify-center gap-1.5 px-3 py-2 text-sm font-medium rounded-md transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed bg-yellow-500/15 hover:bg-yellow-500/25 text-yellow-300 border border-yellow-500/40"
-          >
-            <Power className="w-3.5 h-3.5" />
-            Enable
-          </button>
-        )}
-        <button
-          onClick={() => onDownload(file.id, file.fileName)}
-          disabled={isBusyThis}
-          className={`flex-shrink-0 flex items-center justify-center gap-2 px-4 py-2 min-w-[110px] text-sm font-medium rounded-md transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer ${
-            isUpdate
-              ? 'bg-accent hover:bg-accent-hover text-accent-foreground'
-              : isInstalled
-                ? 'bg-bg-secondary hover:bg-bg-primary text-text-primary border border-border'
-                : 'bg-accent hover:bg-accent-hover text-accent-foreground'
-          }`}
-        >
-          {isDownloadingThis ? (
-            <>
-              <Loader2 className="w-4 h-4 animate-spin" />
-              {extracting ? 'Extracting...' : pct !== null ? `${pct}%` : 'Starting'}
-            </>
-          ) : isQueuedThis ? (
-            <>
-              <Clock className="w-4 h-4" />
-              Queued
-            </>
-          ) : (
-            <>
-              <Download className="w-4 h-4" />
-              {actionLabel(file.id, archived)}
-            </>
+        <div className="flex flex-shrink-0 items-center gap-2">
+          {showEnablePill && installedFileState && (
+            <button
+              type="button"
+              onClick={() => onEnableFile!(installedFileState.modId)}
+              disabled={isBusyThis}
+              title="Enable this mod"
+              className="flex items-center justify-center gap-1.5 rounded-md border border-yellow-500/40 bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-300 transition-colors hover:bg-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            >
+              <Power className="w-3.5 h-3.5" />
+              Enable
+            </button>
           )}
-        </button>
+          {showDeleteButton && installedFileState && (
+            <button
+              type="button"
+              onClick={() => setDeleteCandidate({ modId: installedFileState.modId, fileName: file.fileName })}
+              disabled={isBusyThis || deleteInProgress}
+              title={`Delete ${file.fileName}`}
+              aria-label={`Delete ${file.fileName}`}
+              className="flex h-9 w-9 items-center justify-center rounded-md border border-state-danger/35 bg-state-danger/10 text-state-danger transition-colors hover:border-state-danger/55 hover:bg-state-danger/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => onDownload(file.id, file.fileName)}
+            disabled={isBusyThis}
+            className={`flex min-w-[110px] items-center justify-center gap-2 rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
+              isUpdate || !isInstalled
+                ? 'border-accent/45 bg-accent/10 text-text-primary hover:border-accent/65 hover:bg-accent/20'
+                : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-primary'
+            }`}
+          >
+            {isDownloadingThis ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                {extracting ? 'Extracting...' : pct !== null ? `${pct}%` : 'Starting'}
+              </>
+            ) : isQueuedThis ? (
+              <>
+                <Clock className="w-4 h-4" />
+                Queued
+              </>
+            ) : (
+              <>
+                <Download className="w-4 h-4" />
+                {actionLabel(file.id, archived)}
+              </>
+            )}
+          </button>
+        </div>
       </div>
     );
   };
@@ -492,6 +518,60 @@ export default function ModDetailsModal({
             <X className="w-5 h-5" />
           </button>
         </div>
+
+        {deleteCandidate && (
+          <div
+            className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4"
+            role="alertdialog"
+            aria-modal="true"
+            aria-labelledby="delete-file-title"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!deleteInProgress) setDeleteCandidate(null);
+            }}
+          >
+            <div
+              className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h3 id="delete-file-title" className="text-lg font-semibold text-text-primary">
+                Delete installed file?
+              </h3>
+              <p className="mt-2 text-sm leading-relaxed text-text-secondary">
+                Delete <span className="font-medium text-text-primary">{deleteCandidate.fileName}</span> from your installed mods?
+                This action cannot be undone.
+              </p>
+              <div className="mt-5 flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={() => setDeleteCandidate(null)}
+                  disabled={deleteInProgress}
+                  className="rounded-md border border-border bg-bg-tertiary px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    if (!onDeleteFile || !deleteCandidate) return;
+                    setDeleteInProgress(true);
+                    try {
+                      await onDeleteFile(deleteCandidate.modId);
+                      setDeleteCandidate(null);
+                    } finally {
+                      setDeleteInProgress(false);
+                    }
+                  }}
+                  disabled={deleteInProgress}
+                  className="inline-flex items-center gap-2 rounded-md border border-state-danger/35 bg-state-danger/10 px-4 py-2 text-sm font-medium text-state-danger transition-colors hover:border-state-danger/55 hover:bg-state-danger/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                >
+                  {deleteInProgress && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Delete
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Body - single scroll on narrow (everything flows top to bottom),
             two independently-scrollable columns on lg+. Independent scroll
