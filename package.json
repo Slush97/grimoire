@@ -9,13 +9,6 @@
   },
   "type": "module",
   "main": "dist/main/index.js",
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "esbuild",
-      "better-sqlite3",
-      "electron"
-    ]
-  },
   "scripts": {
     "postinstall": "node scripts/fetch-vpkmerge.mjs",
     "fetch-vpkmerge": "node scripts/fetch-vpkmerge.mjs",
