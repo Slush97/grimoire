@@ -699,8 +699,81 @@ body {
   animation: fadeIn 0.3s ease-out forwards;
 }
 
+.grimoire-sidebar {
+  width: 14rem;
+  transition: width 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: width;
+}
+
+.grimoire-sidebar[data-collapsed='true'] {
+  width: 4rem;
+}
+
+.sidebar-title-shell,
+.sidebar-collapse-toggle {
+  transition:
+    right 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    color 160ms ease-out,
+    background-color 160ms ease-out;
+  will-change: right;
+}
+
+.sidebar-title-text {
+  white-space: nowrap;
+  transition:
+    opacity 180ms ease-out,
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, transform;
+}
+
+.sidebar-title-text--visible {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sidebar-title-text--hidden {
+  opacity: 0;
+  transform: translateX(-0.25rem);
+}
+
+.sidebar-collapsible-label {
+  overflow: hidden;
+  white-space: nowrap;
+  transition:
+    opacity 180ms ease-out,
+    max-width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: opacity, max-width, transform;
+}
+
+.sidebar-collapsible-label--visible {
+  max-width: 10rem;
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.sidebar-collapsible-label--hidden {
+  max-width: 0;
+  opacity: 0;
+  transform: translateX(-0.25rem);
+}
+
+.sidebar-active-indicator {
+  contain: paint;
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.sidebar-offset-transition {
+  transition: left 260ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
 .sidebar-active-backdrop {
   transform-origin: center;
+}
+
+.sidebar-active-backdrop__image {
+  will-change: transform;
 }
 
 /* Skeleton shimmer — used for async-loading placeholders. Surfaces apply
@@ -910,12 +983,30 @@ body {
   .browse-card-media-zoom,
   .browse-readable-card-media::after,
   .browse-sound-placeholder::before,
-  .browse-sound-wave-bar {
+  .browse-sound-wave-bar,
+  .grimoire-sidebar,
+  .sidebar-title-shell,
+  .sidebar-collapse-toggle,
+  .sidebar-title-text,
+  .sidebar-collapsible-label,
+  .sidebar-active-indicator,
+  .sidebar-offset-transition {
     transition-duration: 0.01ms;
   }
 
   .browse-card-media-zoom {
     transform: none !important;
+    will-change: auto;
+  }
+
+  .grimoire-sidebar,
+  .sidebar-title-shell,
+  .sidebar-collapse-toggle,
+  .sidebar-title-text,
+  .sidebar-collapsible-label,
+  .sidebar-active-indicator,
+  .sidebar-offset-transition,
+  .sidebar-active-backdrop__image {
     will-change: auto;
   }
 

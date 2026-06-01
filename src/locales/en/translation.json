@@ -1,0 +1,81 @@
+{
+  "common": {
+    "view": "View"
+  },
+  "nav": {
+    "installed": "Installed",
+    "browse": "Browse",
+    "discover": "Discover",
+    "locker": "Locker",
+    "conflicts": "Conflicts",
+    "profiles": "Profiles",
+    "crosshair": "Crosshair",
+    "autoexec": "Autoexec",
+    "stats": "Stats",
+    "settings": "Settings"
+  },
+  "settings": {
+    "language": {
+      "label": "Language",
+      "description": "Choose the app language, or follow your system preference.",
+      "systemDefault": "System default"
+    }
+  },
+  "sidebar": {
+    "expandSidebar": "Expand sidebar",
+    "collapseSidebar": "Collapse sidebar",
+    "openSettings": "Open Settings",
+    "launchModded": "Launch Modded",
+    "launchVanilla": "Launch Vanilla",
+    "stopGame": "Stop Game",
+    "updateAvailable": "Update available",
+    "updateAvailableTitle": "Update available. Click to view release notes.",
+    "tooltip": {
+      "installed": "Mods currently in your Deadlock addons folder.",
+      "browse": "Discover and download mods from GameBanana.",
+      "discover": "Browse and import profiles published by other Grimoire users.",
+      "discoverNew_one": "{{count}} new published profile.",
+      "discoverNew_other": "{{count}} new published profiles.",
+      "locker": "Active cosmetic skins, organized by hero.",
+      "crosshair": "Custom crosshair editor.",
+      "autoexec": "Console commands that run at game launch.",
+      "stats": "Match history and personal stats.",
+      "conflicts": "Mods that overwrite the same game files.",
+      "profiles": "Save and swap sets of enabled mods."
+    },
+    "launch": {
+      "noPath": "Configure your Deadlock path in Settings first",
+      "moddedStash": "Restores stashed mods first, then launches Deadlock via Steam",
+      "moddedDefault": "Launch Deadlock with mods active",
+      "vanillaStash": "A vanilla session is already active. Restore mods first.",
+      "vanillaDefault": "Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts",
+      "stopTitle": "Stop the running Deadlock process"
+    },
+    "vanilla": {
+      "stashed": "Vanilla: {{count}} stashed",
+      "restore": "Restore",
+      "restoreNowTitle": "Restore stashed mods now",
+      "collapsedTitle_one": "Vanilla session active. {{count}} mod stashed. Click to restore now.",
+      "collapsedTitle_other": "Vanilla session active. {{count}} mods stashed. Click to restore now."
+    },
+    "toast": {
+      "restoredAfterVanilla_one": "Restored {{count}} mod after vanilla launch.",
+      "restoredAfterVanilla_other": "Restored {{count}} mods after vanilla launch.",
+      "restoreFailedRetry_one": "Couldn't restore {{count}} mod. Make sure Deadlock is closed, then retry.",
+      "restoreFailedRetry_other": "Couldn't restore {{count}} mods. Make sure Deadlock is closed, then retry.",
+      "restoreFailedRunning_one": "Couldn't restore {{count}} mod. Is Deadlock still running?",
+      "restoreFailedRunning_other": "Couldn't restore {{count}} mods. Is Deadlock still running?",
+      "restored_one": "Restored {{count}} mod.",
+      "restored_other": "Restored {{count}} mods.",
+      "disabledVariants_one": "Disabled older variant: {{names}}.",
+      "disabledVariants_other": "Disabled older variants: {{names}}.",
+      "andMore": " and {{count}} more",
+      "stopped": "Stopped Deadlock.",
+      "notRunning": "Deadlock was not running.",
+      "stoppedRestoreFailed_one": "Stopped Deadlock, but couldn't restore {{count}} mod.",
+      "stoppedRestoreFailed_other": "Stopped Deadlock, but couldn't restore {{count}} mods.",
+      "restoredStashed_one": "Restored {{count}} stashed mod.",
+      "restoredStashed_other": "Restored {{count}} stashed mods."
+    }
+  }
+}

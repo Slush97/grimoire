@@ -605,6 +605,8 @@ export interface AppSettings {
   sidebarHeroHighlight?: string | null;
   /** Order used to render absolute dates (mod/file upload + update dates). */
   dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY';
+  /** Preferred UI language. Null uses the OS/browser language when available. */
+  language?: string | null;
   /** UI zoom factor (Ctrl +/-/0), persisted across launches. 1 = 100%. */
   zoomFactor?: number;
 }

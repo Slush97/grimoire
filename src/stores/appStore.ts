@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { Mod, AppSettings, EditLocalModArgs, GlobalModType } from '../types/mod';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
+import { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
 
 // Cache entry with timestamp for TTL support
@@ -252,6 +253,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const settings = await api.getSettings();
       setDateFormat(settings.dateFormat);
+      applyLanguagePreference(settings.language);
       set({ settings, settingsLoading: false });
     } catch (err) {
       set({ settingsError: String(err), settingsLoading: false });
@@ -264,6 +266,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       await api.setSettings(settings);
       setDateFormat(settings.dateFormat);
+      applyLanguagePreference(settings.language);
       set({ settings, settingsLoading: false });
       // Reload mods if path changed
       if (getActiveDeadlockPath(settings)) {
@@ -505,4 +508,3 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ installedScrollTop: Math.max(0, scrollTop) });
   },
 }));
-

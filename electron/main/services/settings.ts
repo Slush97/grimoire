@@ -38,6 +38,8 @@ export interface AppSettings {
     sidebarHeroHighlight?: string | null;
     /** Order used to render absolute dates (mod/file upload + update dates). */
     dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY';
+    /** Preferred UI language. Null uses the OS/browser language when available. */
+    language?: string | null;
     /** UI zoom factor (webContents.setZoomFactor). Driven by Ctrl +/-/0 and
      *  persisted so hi-DPI laptops keep their preferred scale across launches.
      *  1 = 100%. */
@@ -64,6 +66,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     accentColor: '#f97316',
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',
+    language: null,
     zoomFactor: 1,
 };
 

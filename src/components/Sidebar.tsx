@@ -1,4 +1,5 @@
-import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   Boxes,
@@ -41,7 +42,7 @@ import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
 
 const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
-const LABEL_TRANSITION_MS = 200;
+const LABEL_TRANSITION_MS = 260;
 const DISCOVER_LAST_SEEN_KEY = 'grimoire:discover:last-seen-created-at';
 const DISCOVER_BADGE_POLL_MS = 2 * 60 * 1000;
 const GRIMOIRE_TITLE_ICON = getAssetPath('/grimoire-title-icon.svg');
@@ -70,6 +71,14 @@ function writeDiscoverLastSeen(createdAt: number): void {
   } catch {
     /* quota / private mode */
   }
+}
+
+function writeSidebarWidthVariable(collapsed: boolean): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.style.setProperty(
+    '--grimoire-sidebar-width',
+    collapsed ? '4rem' : '14rem'
+  );
 }
 
 function newestCreatedAt(profiles: Array<{ created_at: number }>): number {
@@ -156,6 +165,7 @@ function LaunchButtonBackdrop({
 }
 
 export default function Sidebar() {
+  const { t } = useTranslation();
   const [conflictCount, setConflictCount] = useState(0);
   const [discoverNotificationCount, setDiscoverNotificationCount] = useState(0);
   const [appVersion, setAppVersion] = useState('');
@@ -190,6 +200,12 @@ export default function Sidebar() {
   const [labelMounted, setLabelMounted] = useState<boolean>(() => !readCollapsedPreference());
   const collapseTimerRef = useRef<number | null>(null);
   const labelFrameRef = useRef<number | null>(null);
+  const navListRef = useRef<HTMLUListElement | null>(null);
+  const navItemRefs = useRef<Array<HTMLLIElement | null>>([]);
+  const [activeNavMetrics, setActiveNavMetrics] = useState<{
+    top: number;
+    height: number;
+  } | null>(null);
 
   const clearCollapseTimer = useCallback(() => {
     if (collapseTimerRef.current !== null) {
@@ -205,6 +221,7 @@ export default function Sidebar() {
   const toggleCollapsed = useCallback(() => {
     clearCollapseTimer();
     if (collapsed) {
+      writeSidebarWidthVariable(false);
       setCollapsed(false);
       setLabelMounted(true);
       setLabelsVisible(false);
@@ -215,6 +232,7 @@ export default function Sidebar() {
         });
       });
     } else {
+      writeSidebarWidthVariable(true);
       setLabelMounted(true);
       setLabelsVisible(false);
       setCollapsed(true);
@@ -227,11 +245,11 @@ export default function Sidebar() {
 
   useEffect(() => clearCollapseTimer, [clearCollapseTimer]);
 
-  const labelTransitionClass = `overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-200 ease-out ${
-    labelsVisible ? 'opacity-100 max-w-40' : 'opacity-0 max-w-0'
+  const labelTransitionClass = `sidebar-collapsible-label ${
+    labelsVisible ? 'sidebar-collapsible-label--visible' : 'sidebar-collapsible-label--hidden'
   }`;
-  const titleTransitionClass = `whitespace-nowrap transition-opacity duration-200 ease-out ${
-    labelsVisible ? 'opacity-100' : 'opacity-0'
+  const titleTransitionClass = `sidebar-title-text ${
+    labelsVisible ? 'sidebar-title-text--visible' : 'sidebar-title-text--hidden'
   }`;
   const navLabelClass = `flex-1 ${labelTransitionClass}`;
   const actionLabelClass = `flex-1 text-left ${labelTransitionClass}`;
@@ -250,14 +268,11 @@ export default function Sidebar() {
   const settingsActive = location.pathname.startsWith('/settings');
   const discoverActive = location.pathname.startsWith('/discover');
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     try {
       localStorage.setItem(COLLAPSED_KEY, collapsed ? '1' : '0');
     } catch { /* quota / private mode */ }
-    document.documentElement.style.setProperty(
-      '--grimoire-sidebar-width',
-      collapsed ? '4rem' : '14rem'
-    );
+    writeSidebarWidthVariable(collapsed);
   }, [collapsed]);
 
   const refreshStashStatus = useCallback(async () => {
@@ -389,19 +404,19 @@ export default function Sidebar() {
       if (result.failed.length > 0) {
         setToast({
           kind: 'error',
-          text: `Couldn't restore ${result.failed.length} mod(s). Make sure Deadlock is closed, then retry.`,
+          text: t('sidebar.toast.restoreFailedRetry', { count: result.failed.length }),
         });
       } else if (result.restored > 0) {
         setToast({
           kind: 'info',
-          text: `Restored ${result.restored} mod${result.restored === 1 ? '' : 's'} after vanilla launch.`,
+          text: t('sidebar.toast.restoredAfterVanilla', { count: result.restored }),
         });
       }
       refreshStashStatus();
       loadMods();
     });
     return unsub;
-  }, [refreshStashStatus, loadMods]);
+  }, [refreshStashStatus, loadMods, t]);
 
   useEffect(() => {
     if (!toast) return;
@@ -420,19 +435,19 @@ export default function Sidebar() {
       if (!data.disabled.length) return;
       const names = data.disabled.map((m) => m.name);
       const head = names.slice(0, 2).join(', ');
-      const tail = names.length > 2 ? ` and ${names.length - 2} more` : '';
+      const tail = names.length > 2 ? t('sidebar.toast.andMore', { count: names.length - 2 }) : '';
       setToast({
         kind: 'info',
-        text: `Disabled older variant${names.length === 1 ? '' : 's'}: ${head}${tail}.`,
+        text: t('sidebar.toast.disabledVariants', { count: names.length, names: `${head}${tail}` }),
         action: {
-          label: 'View',
+          label: t('common.view'),
           onClick: () => navigate('/'),
         },
       });
       loadMods();
     });
     return unsub;
-  }, [loadMods, navigate]);
+  }, [loadMods, navigate, t]);
 
   const navItems = useMemo(() => {
     type BadgeTone = 'muted' | 'warning' | 'info';
@@ -447,25 +462,25 @@ export default function Sidebar() {
       badgeTone?: BadgeTone;
     };
     const items: NavItem[] = [
-      { to: '/', icon: Boxes, label: 'Installed', tooltip: 'Mods currently in your Deadlock addons folder.', badge: installedCount, badgeTone: 'muted' },
-      { to: '/browse', icon: Compass, label: 'Browse', tooltip: 'Discover and download mods from GameBanana.' },
+      { to: '/', icon: Boxes, label: t('nav.installed'), tooltip: t('sidebar.tooltip.installed'), badge: installedCount, badgeTone: 'muted' },
+      { to: '/browse', icon: Compass, label: t('nav.browse'), tooltip: t('sidebar.tooltip.browse') },
       {
         to: '/discover',
         icon: Globe2,
-        label: 'Discover',
+        label: t('nav.discover'),
         tooltip: discoverNotificationCount > 0
-          ? `${discoverNotificationCount} new published ${discoverNotificationCount === 1 ? 'profile' : 'profiles'}.`
-          : 'Browse and import profiles published by other Grimoire users.',
+          ? t('sidebar.tooltip.discoverNew', { count: discoverNotificationCount })
+          : t('sidebar.tooltip.discover'),
         experimental: 'social',
         badge: discoverNotificationCount,
         badgeTone: 'info',
       },
-      { to: '/locker', icon: Vault, label: 'Locker', tooltip: 'Active cosmetic skins, organized by hero.' },
-      { to: '/crosshair', icon: Target, label: 'Crosshair', tooltip: 'Custom crosshair editor.', experimental: 'crosshair' },
-      { to: '/autoexec', icon: ScrollText, label: 'Autoexec', tooltip: 'Console commands that run at game launch.' },
-      { to: '/stats', icon: Activity, label: 'Stats', tooltip: 'Match history and personal stats.', experimental: 'stats' },
-      { to: '/conflicts', icon: Swords, label: 'Conflicts', tooltip: 'Mods that overwrite the same game files.', badge: conflictCount, badgeTone: 'warning' },
-      { to: '/profiles', icon: BookMarked, label: 'Profiles', tooltip: 'Save and swap sets of enabled mods.' },
+      { to: '/locker', icon: Vault, label: t('nav.locker'), tooltip: t('sidebar.tooltip.locker') },
+      { to: '/crosshair', icon: Target, label: t('nav.crosshair'), tooltip: t('sidebar.tooltip.crosshair'), experimental: 'crosshair' },
+      { to: '/autoexec', icon: ScrollText, label: t('nav.autoexec'), tooltip: t('sidebar.tooltip.autoexec') },
+      { to: '/stats', icon: Activity, label: t('nav.stats'), tooltip: t('sidebar.tooltip.stats'), experimental: 'stats' },
+      { to: '/conflicts', icon: Swords, label: t('nav.conflicts'), tooltip: t('sidebar.tooltip.conflicts'), badge: conflictCount, badgeTone: 'warning' },
+      { to: '/profiles', icon: BookMarked, label: t('nav.profiles'), tooltip: t('sidebar.tooltip.profiles') },
     ];
 
     return items.filter((item) => {
@@ -474,7 +489,57 @@ export default function Sidebar() {
       if (item.experimental === 'social') return settings?.experimentalSocial;
       return true;
     });
-  }, [settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, conflictCount, discoverNotificationCount, installedCount]);
+  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, conflictCount, discoverNotificationCount, installedCount]);
+
+  const activeNavIndex = useMemo(
+    () =>
+      navItems.findIndex(({ to }) =>
+        to === '/'
+          ? location.pathname === '/'
+          : location.pathname === to || location.pathname.startsWith(`${to}/`)
+      ),
+    [location.pathname, navItems]
+  );
+  const activeNavTone = activeNavIndex >= 0 ? navItems[activeNavIndex]?.tone : undefined;
+
+  const measureActiveNavItem = useCallback(() => {
+    const list = navListRef.current;
+    const item = activeNavIndex >= 0 ? navItemRefs.current[activeNavIndex] : null;
+
+    if (!list || !item) {
+      setActiveNavMetrics(null);
+      return;
+    }
+
+    const next = {
+      top: item.offsetTop,
+      height: item.offsetHeight,
+    };
+
+    setActiveNavMetrics((prev) =>
+      prev && prev.top === next.top && prev.height === next.height ? prev : next
+    );
+  }, [activeNavIndex]);
+
+  useLayoutEffect(() => {
+    measureActiveNavItem();
+  }, [measureActiveNavItem, navItems.length, collapsed]);
+
+  useEffect(() => {
+    const list = navListRef.current;
+    const item = activeNavIndex >= 0 ? navItemRefs.current[activeNavIndex] : null;
+    if (!list || !item || typeof ResizeObserver === 'undefined') return;
+
+    const observer = new ResizeObserver(measureActiveNavItem);
+    observer.observe(list);
+    observer.observe(item);
+    window.addEventListener('resize', measureActiveNavItem);
+
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', measureActiveNavItem);
+    };
+  }, [activeNavIndex, measureActiveNavItem]);
 
   const handleLaunchModded = async () => {
     if (launchPending || stopPending) return;
@@ -521,16 +586,17 @@ export default function Sidebar() {
       if (restoreResult?.failed.length) {
         setToast({
           kind: 'error',
-          text: `Stopped Deadlock, but couldn't restore ${restoreResult.failed.length} mod${restoreResult.failed.length === 1 ? '' : 's'}.`,
+          text: t('sidebar.toast.stoppedRestoreFailed', { count: restoreResult.failed.length }),
         });
       } else {
         const restored = restoreResult?.restored ?? 0;
         const restoreText = restored > 0
-          ? ` Restored ${restored} stashed mod${restored === 1 ? '' : 's'}.`
+          ? ` ${t('sidebar.toast.restoredStashed', { count: restored })}`
           : '';
+        const base = result.wasRunning ? t('sidebar.toast.stopped') : t('sidebar.toast.notRunning');
         setToast({
           kind: 'info',
-          text: result.wasRunning ? `Stopped Deadlock.${restoreText}` : `Deadlock was not running.${restoreText}`,
+          text: `${base}${restoreText}`,
         });
       }
       if (restoreResult) {
@@ -554,12 +620,12 @@ export default function Sidebar() {
       if (result.failed.length > 0) {
         setToast({
           kind: 'error',
-          text: `Couldn't restore ${result.failed.length} mod(s). Is Deadlock still running?`,
+          text: t('sidebar.toast.restoreFailedRunning', { count: result.failed.length }),
         });
       } else {
         setToast({
           kind: 'info',
-          text: `Restored ${result.restored} mod${result.restored === 1 ? '' : 's'}.`,
+          text: t('sidebar.toast.restored', { count: result.restored }),
         });
       }
     } catch (err) {
@@ -575,12 +641,13 @@ export default function Sidebar() {
 
   return (
     <aside
-      className={`${collapsed ? 'w-16' : 'w-56'} bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 transition-[width] duration-200 ease-out`}
+      data-collapsed={collapsed}
+      className="grimoire-sidebar bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden"
     >
       <div className="relative flex h-11 flex-shrink-0 items-center overflow-hidden border-b border-border px-3">
         {labelMounted && (
           <div
-            className={`pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center ${
+            className={`sidebar-title-shell pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center ${
               collapsed ? 'right-[46px]' : 'right-9'
             }`}
           >
@@ -597,9 +664,9 @@ export default function Sidebar() {
         <button
           type="button"
           onClick={toggleCollapsed}
-          title={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
-          className={`absolute top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-[right,color,background-color] duration-200 ease-out cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
+          title={collapsed ? t('sidebar.expandSidebar') : t('sidebar.collapseSidebar')}
+          aria-label={collapsed ? t('sidebar.expandSidebar') : t('sidebar.collapseSidebar')}
+          className={`sidebar-collapse-toggle absolute top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
             collapsed ? 'right-[18px]' : 'right-2'
           }`}
         >
@@ -612,84 +679,100 @@ export default function Sidebar() {
       </div>
 
       <nav className="flex-1 min-h-0 overflow-y-auto p-2">
-        <ul className="space-y-0.5">
-          {navItems.map(({ to, icon: Icon, label, tooltip, tone, badge, badgeTone }) => (
-            <li key={to}>
-              <NavLink
-                to={to}
-                title={collapsed ? `${label}: ${tooltip}` : tooltip}
-                className={({ isActive }) =>
-                  `group relative flex items-center h-10 overflow-hidden leading-5 rounded-sm text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
-                    collapsed ? '' : 'pr-3'
-                  } ${
-                    tone === 'test'
-                      ? isActive
-                        ? 'border-red-400/80 bg-red-500/25 text-red-100 font-bold hover:bg-red-500/30'
-                        : 'border-red-500/45 bg-red-500/10 text-red-200 font-bold hover:border-red-400/75 hover:bg-red-500/20 hover:text-red-100'
-                      : isActive
-                      ? sidebarHeroHighlightSrc
-                        ? 'border-white/15 bg-bg-tertiary text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
-                        : 'border-accent/40 bg-bg-tertiary text-text-primary font-medium hover:border-accent/60'
-                      : 'border-transparent text-text-primary/80 font-medium hover:bg-accent/5 hover:border-accent/25 hover:text-text-primary'
-                  }`
-                }
+        <div className="relative">
+          {activeNavIndex >= 0 && activeNavMetrics && activeNavTone !== 'test' && (
+            <div
+              aria-hidden
+              className="sidebar-active-indicator pointer-events-none absolute left-0 right-0 z-0 overflow-hidden rounded-sm"
+              style={{
+                height: activeNavMetrics.height,
+                transform: `translate3d(0, ${activeNavMetrics.top}px, 0)`,
+              }}
+            >
+              <SidebarActiveBackdrop
+                heroSrc={sidebarHeroHighlightSrc}
+                heroPositionX={sidebarHeroHighlightX}
+              />
+            </div>
+          )}
+          <ul ref={navListRef} className="relative z-10 space-y-0.5">
+            {navItems.map(({ to, icon: Icon, label, tooltip, tone, badge, badgeTone }, index) => (
+              <li
+                key={to}
+                ref={(node) => {
+                  navItemRefs.current[index] = node;
+                }}
               >
-                {({ isActive }) => (
-                  <>
-                    {isActive && tone !== 'test' && (
-                      <SidebarActiveBackdrop
-                        heroSrc={sidebarHeroHighlightSrc}
-                        heroPositionX={sidebarHeroHighlightX}
-                      />
-                    )}
-                    <span className="relative z-10 flex h-full w-[46px] flex-shrink-0 items-center justify-center">
-                      <Icon
-                        className={`w-5 h-5 flex-shrink-0 ${
-                          tone === 'test' ? 'text-red-200 group-hover:text-red-100' : 'text-text-primary/70 group-hover:text-text-primary'
-                        }`}
-                        strokeWidth={isActive ? 2 : 1.75}
-                      />
-                    </span>
-                    {labelMounted && (
-                      <span className={`relative z-10 ${navLabelClass}`} aria-hidden={!labelsVisible}>
-                        {label}
-                      </span>
-                    )}
-                    {badge !== undefined && badge > 0 && (
-                      collapsed ? (
-                        // In collapsed mode, only surface action/status badges.
-                        // The Installed count is informational, so it shouldn't
-                        // crowd the rail.
-                        badgeTone !== 'muted' ? (
-                          <span
-                            aria-hidden
-                            className={`absolute top-1 right-1 w-2 h-2 rounded-sm ring-2 ring-bg-secondary ${
-                              badgeTone === 'warning' ? 'bg-state-warning' : 'bg-accent'
-                            }`}
-                          />
-                        ) : null
-                      ) : (
-                        <span
-                          className={`inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-sm px-1 text-[11px] font-semibold tabular-nums leading-none transition-opacity duration-150 ${
-                            labelsVisible ? 'opacity-100' : 'opacity-0'
-                          } relative z-10 ${
-                            badgeTone === 'warning'
-                              ? 'bg-state-warning/90 text-black'
-                              : badgeTone === 'info'
-                                ? 'border border-accent/60 bg-accent/15 text-accent'
-                              : 'border border-text-primary/50 text-text-primary/80'
+                <NavLink
+                  to={to}
+                  title={collapsed ? `${label}: ${tooltip}` : tooltip}
+                  className={({ isActive }) =>
+                    `group relative flex items-center h-10 overflow-hidden leading-5 rounded-sm text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
+                      collapsed ? '' : 'pr-3'
+                    } ${
+                      tone === 'test'
+                        ? isActive
+                          ? 'border-red-400/80 bg-red-500/25 text-red-100 font-bold hover:bg-red-500/30'
+                          : 'border-red-500/45 bg-red-500/10 text-red-200 font-bold hover:border-red-400/75 hover:bg-red-500/20 hover:text-red-100'
+                        : isActive
+                        ? sidebarHeroHighlightSrc
+                          ? 'border-white/15 text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
+                          : 'border-accent/40 text-text-primary font-medium hover:border-accent/60'
+                        : 'border-transparent text-text-primary/80 font-medium hover:bg-accent/5 hover:border-accent/25 hover:text-text-primary'
+                    }`
+                  }
+                >
+                  {({ isActive }) => (
+                    <>
+                      <span className="relative z-10 flex h-full w-[46px] flex-shrink-0 items-center justify-center">
+                        <Icon
+                          className={`w-5 h-5 flex-shrink-0 ${
+                            tone === 'test' ? 'text-red-200 group-hover:text-red-100' : 'text-text-primary/70 group-hover:text-text-primary'
                           }`}
-                        >
-                          {formatBadgeCount(badge)}
+                          strokeWidth={isActive ? 2 : 1.75}
+                        />
+                      </span>
+                      {labelMounted && (
+                        <span className={`relative z-10 ${navLabelClass}`} aria-hidden={!labelsVisible}>
+                          {label}
                         </span>
-                      )
-                    )}
-                  </>
-                )}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+                      )}
+                      {badge !== undefined && badge > 0 && (
+                        collapsed ? (
+                          // In collapsed mode, only surface action/status badges.
+                          // The Installed count is informational, so it shouldn't
+                          // crowd the rail.
+                          badgeTone !== 'muted' ? (
+                            <span
+                              aria-hidden
+                              className={`absolute top-1 right-1 w-2 h-2 rounded-sm ring-2 ring-bg-secondary ${
+                                badgeTone === 'warning' ? 'bg-state-warning' : 'bg-accent'
+                              }`}
+                            />
+                          ) : null
+                        ) : (
+                          <span
+                            className={`inline-flex h-5 min-w-[1.25rem] shrink-0 items-center justify-center rounded-sm px-1 text-[11px] font-semibold tabular-nums leading-none transition-opacity duration-150 ${
+                              labelsVisible ? 'opacity-100' : 'opacity-0'
+                            } relative z-10 ${
+                              badgeTone === 'warning'
+                                ? 'bg-state-warning/90 text-black'
+                                : badgeTone === 'info'
+                                  ? 'border border-accent/60 bg-accent/15 text-accent'
+                                  : 'border border-text-primary/50 text-text-primary/80'
+                            }`}
+                          >
+                            {formatBadgeCount(badge)}
+                          </span>
+                        )
+                      )}
+                    </>
+                  )}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        </div>
       </nav>
 
       <div className="flex-shrink-0 border-t border-border p-3 space-y-2">
@@ -698,7 +781,7 @@ export default function Sidebar() {
             <button
               onClick={handleRestoreNow}
               disabled={restorePending}
-              title={`Vanilla session active. ${stashStatus.modCount ?? 0} mod${stashStatus.modCount === 1 ? '' : 's'} stashed. Click to restore now.`}
+              title={t('sidebar.vanilla.collapsedTitle', { count: stashStatus.modCount ?? 0 })}
               className="w-full flex items-center justify-center h-10 rounded-sm border border-yellow-500/40 bg-yellow-500/10 text-yellow-200 hover:bg-yellow-500/20 transition-colors disabled:opacity-60 disabled:cursor-not-allowed cursor-pointer"
             >
               {restorePending ? (
@@ -711,12 +794,12 @@ export default function Sidebar() {
             <div className="rounded-sm border border-yellow-500/40 bg-yellow-500/10 px-2.5 py-2 text-xs text-yellow-200 flex items-center gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
               <span className="flex-1 leading-tight">
-                Vanilla: {stashStatus.modCount ?? 0} stashed
+                {t('sidebar.vanilla.stashed', { count: stashStatus.modCount ?? 0 })}
               </span>
               <button
                 onClick={handleRestoreNow}
                 disabled={restorePending}
-                title="Restore stashed mods now"
+                title={t('sidebar.vanilla.restoreNowTitle')}
                 className="flex items-center gap-1 px-1.5 py-0.5 rounded-sm bg-yellow-500/20 hover:bg-yellow-500/30 disabled:opacity-60 transition-colors cursor-pointer disabled:cursor-not-allowed font-medium"
               >
                 {restorePending ? (
@@ -724,7 +807,7 @@ export default function Sidebar() {
                 ) : (
                   <RotateCcw className="w-3 h-3" />
                 )}
-                Restore
+                {t('sidebar.vanilla.restore')}
               </button>
             </div>
           )
@@ -770,7 +853,7 @@ export default function Sidebar() {
             <button
               onClick={handleStopGame}
               disabled={stopPending || !!launchPending}
-              title="Stop the running Deadlock process"
+              title={t('sidebar.launch.stopTitle')}
               className={`flex w-full items-center overflow-hidden rounded-sm bg-red-500/10 text-red-300 ring-1 ring-red-500/40 hover:bg-red-500/20 hover:ring-red-500/50 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                 collapsed ? 'h-10' : 'h-11'
               }`}
@@ -784,7 +867,7 @@ export default function Sidebar() {
               </span>
               {labelMounted && (
                 <span className={actionLabelClass} aria-hidden={!labelsVisible}>
-                  Stop Game
+                  {t('sidebar.stopGame')}
                 </span>
               )}
             </button>
@@ -795,10 +878,10 @@ export default function Sidebar() {
             disabled={!canLaunch || !!launchPending || stopPending}
             title={
               !canLaunch
-                ? 'Configure your Deadlock path in Settings first'
+                ? t('sidebar.launch.noPath')
                 : stashStatus.active
-                  ? 'Restores stashed mods first, then launches Deadlock via Steam'
-                  : 'Launch Deadlock with mods active'
+                  ? t('sidebar.launch.moddedStash')
+                  : t('sidebar.launch.moddedDefault')
             }
             className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
           >
@@ -812,7 +895,7 @@ export default function Sidebar() {
             </span>
             {labelMounted && (
               <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
-                Launch Modded
+                {t('sidebar.launchModded')}
               </span>
             )}
           </button>
@@ -822,10 +905,10 @@ export default function Sidebar() {
             disabled={!canLaunch || !!launchPending || stopPending || stashStatus.active}
             title={
               !canLaunch
-                ? 'Configure your Deadlock path in Settings first'
+                ? t('sidebar.launch.noPath')
                 : stashStatus.active
-                  ? 'A vanilla session is already active. Restore mods first.'
-                  : 'Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts'
+                  ? t('sidebar.launch.vanillaStash')
+                  : t('sidebar.launch.vanillaDefault')
             }
             className="group relative flex w-full h-8 items-center overflow-hidden rounded-sm text-text-primary/85 ring-1 ring-white/10 hover:text-text-primary hover:ring-amber-400/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
           >
@@ -839,7 +922,7 @@ export default function Sidebar() {
             </span>
             {labelMounted && (
               <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
-                Launch Vanilla
+                {t('sidebar.launchVanilla')}
               </span>
             )}
           </button>
@@ -857,7 +940,7 @@ export default function Sidebar() {
           <button
             type="button"
             onClick={() => setUpdateModalOpen(true)}
-            title="Update available. Click to view release notes."
+            title={t('sidebar.updateAvailableTitle')}
             className="group update-stripes flex w-full h-10 items-center overflow-hidden rounded-sm border border-white/[0.08] bg-bg-tertiary text-text-primary hover:bg-bg-secondary hover:border-white/[0.14] text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
           >
             <span className={actionIconClass}>
@@ -865,7 +948,7 @@ export default function Sidebar() {
             </span>
             {labelMounted && (
               <span className={actionLabelClass} aria-hidden={!labelsVisible}>
-                Update available
+                {t('sidebar.updateAvailable')}
               </span>
             )}
             {labelMounted && (
@@ -888,7 +971,7 @@ export default function Sidebar() {
         <button
           type="button"
           onClick={() => navigate('/settings')}
-          title="Open Settings"
+          title={t('sidebar.openSettings')}
           aria-current={settingsActive ? 'page' : undefined}
           className={`group relative flex w-full h-10 items-center overflow-hidden rounded-sm border text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
             settingsActive
@@ -909,7 +992,7 @@ export default function Sidebar() {
           </span>
           {labelMounted && (
             <span className={`relative z-10 font-medium ${actionLabelClass}`} aria-hidden={!labelsVisible}>
-              Settings
+              {t('nav.settings')}
             </span>
           )}
           {labelMounted && (

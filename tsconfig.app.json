@@ -7,6 +7,7 @@
     "module": "ESNext",
     "types": ["vite/client"],
     "skipLibCheck": true,
+    "resolveJsonModule": true,
 
     /* Resolve the shared @grimoire/social-types workspace package directly from
        the sibling checkout. pnpm's symlink for this out-of-root package

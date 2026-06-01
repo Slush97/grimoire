@@ -1,5 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github, Globe, FileText, Bug, Copy, ChevronDown } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import DOMPurify from 'dompurify';
@@ -16,6 +17,7 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
+import { AVAILABLE_LANGUAGES, languageDisplayName } from '../i18n';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
@@ -55,6 +57,7 @@ function formatBytes(bytes: number): string {
 }
 
 export default function Settings() {
+  const { t } = useTranslation();
   const { settings, settingsLoading, loadSettings, saveSettings, detectDeadlock } = useAppStore();
   const [localPath, setLocalPath] = useState<string | null>(null);
   const [validationResult, setValidationResult] = useState<boolean | null>(null);
@@ -311,6 +314,12 @@ export default function Settings() {
   const handleDateFormatChange = async (format: 'MM/DD/YYYY' | 'DD/MM/YYYY') => {
     if (settings && settings.dateFormat !== format) {
       await saveSettings({ ...settings, dateFormat: format });
+    }
+  };
+
+  const handleLanguageChange = async (language: string | null) => {
+    if (settings && (settings.language ?? null) !== language) {
+      await saveSettings({ ...settings, language });
     }
   };
 
@@ -1115,6 +1124,33 @@ export default function Settings() {
                 })}
               </div>
             </div>
+
+            {AVAILABLE_LANGUAGES.length > 1 && (
+              <>
+                <div className="h-px bg-white/5" />
+
+                <div>
+                  <label className="text-sm font-medium text-text-primary block">
+                    {t('settings.language.label')}
+                  </label>
+                  <p className="text-xs text-text-secondary mt-0.5 mb-2">
+                    {t('settings.language.description')}
+                  </p>
+                  <select
+                    value={settings?.language ?? ''}
+                    onChange={(event) => handleLanguageChange(event.target.value || null)}
+                    className="w-full max-w-xs rounded-md border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary"
+                  >
+                    <option value="">{t('settings.language.systemDefault')}</option>
+                    {AVAILABLE_LANGUAGES.map((code) => (
+                      <option key={code} value={code}>
+                        {languageDisplayName(code)}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </>
+            )}
           </div>
         </Card>
 
