@@ -2192,6 +2192,14 @@ export default function Browse() {
 
     return nextMods;
   }, [mods, settings?.hideOutdatedMods, section, heroCategoryId]);
+  const selectedModIndex = selectedMod
+    ? displayMods.findIndex((mod) => mod.id === selectedMod.id)
+    : -1;
+  const previousSelectedMod = selectedModIndex > 0 ? displayMods[selectedModIndex - 1] : undefined;
+  const nextSelectedMod =
+    selectedModIndex >= 0 && selectedModIndex < displayMods.length - 1
+      ? displayMods[selectedModIndex + 1]
+      : undefined;
 
   const readableCardTargetWidth = getReadableCardTargetWidth(activeCardSize);
   const gridGap =
@@ -2908,6 +2916,12 @@ export default function Browse() {
           dateModified={selectedModDates?.dateModified}
           onClose={() => setSelectedMod(null)}
           onDownload={handleDownload}
+          onNavigatePrevious={
+            previousSelectedMod ? () => void handleModClick(previousSelectedMod) : undefined
+          }
+          onNavigateNext={nextSelectedMod ? () => void handleModClick(nextSelectedMod) : undefined}
+          previousLabel={previousSelectedMod?.name}
+          nextLabel={nextSelectedMod?.name}
           onDeleteFile={deleteMod}
         />
       )}
@@ -3764,4 +3778,3 @@ const MemoizedModCard = React.memo(ModCard, (prev, next) => (
   prev.enableModId === next.enableModId &&
   prev.actionContextKey === next.actionContextKey
 ));
-

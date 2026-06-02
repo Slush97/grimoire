@@ -66,6 +66,7 @@ export interface BrowseUiState {
 const LAYOUT_KEY = 'browseLayout';
 const CARD_SIZE_KEY = 'browseCardSize';
 const SORT_KEY = 'browseSort';
+const SOUND_VOLUME_KEY = 'grimoire:sound-preview-volume';
 // Pre-slider key holding 'grid' | 'compact' | 'dense' | 'list'. Read once for
 // migration so existing users keep a comparable layout and card size.
 const LEGACY_VIEW_MODE_KEY = 'browseViewMode';
@@ -116,6 +117,19 @@ function readPersistedSort(): BrowseSortOption {
     // ignore
   }
   return 'default';
+}
+
+function readPersistedSoundVolume(): number {
+  try {
+    const raw = localStorage.getItem(SOUND_VOLUME_KEY);
+    if (raw !== null) {
+      const n = Number(raw);
+      if (Number.isFinite(n)) return Math.min(1, Math.max(0, n));
+    }
+  } catch {
+    // localStorage may be unavailable.
+  }
+  return 0.7;
 }
 
 const DEFAULT_BROWSE_UI: BrowseUiState = {
@@ -171,6 +185,7 @@ interface AppState {
 
   // Global sound preview volume (0-1)
   soundVolume: number;
+  previewAudioPlaying: boolean;
 
   // Browse-page UI state (preserved across page nav)
   browseUi: BrowseUiState;
@@ -213,6 +228,7 @@ interface AppState {
 
   // Sound volume
   setSoundVolume: (volume: number) => void;
+  setPreviewAudioPlaying: (playing: boolean) => void;
 
   // Browse UI state
   setBrowseUi: (partial: Partial<BrowseUiState>) => void;
@@ -242,7 +258,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   modsError: null,
   modsNotice: null,
   downloadCountsCache: new Map(),
-  soundVolume: 0.7,
+  soundVolume: readPersistedSoundVolume(),
+  previewAudioPlaying: false,
   browseUi: { ...DEFAULT_BROWSE_UI },
   browseSession: null,
   installedScrollTop: 0,
@@ -472,7 +489,17 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // Set global sound preview volume
   setSoundVolume: (volume: number) => {
-    set({ soundVolume: Math.max(0, Math.min(1, volume)) });
+    const next = Math.max(0, Math.min(1, volume));
+    set({ soundVolume: next });
+    try {
+      localStorage.setItem(SOUND_VOLUME_KEY, String(next));
+    } catch {
+      // localStorage may be unavailable.
+    }
+  },
+
+  setPreviewAudioPlaying: (playing: boolean) => {
+    set({ previewAudioPlaying: playing });
   },
 
   // Patch Browse UI state. Use a partial so callers can update one field at

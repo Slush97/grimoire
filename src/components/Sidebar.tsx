@@ -21,6 +21,8 @@ import {
   Loader2,
   Menu,
   Square,
+  Volume2,
+  VolumeX,
 } from 'lucide-react';
 import {
   getConflicts,
@@ -45,9 +47,11 @@ const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
 const LABEL_TRANSITION_MS = 260;
 const DISCOVER_LAST_SEEN_KEY = 'grimoire:discover:last-seen-created-at';
 const DISCOVER_BADGE_POLL_MS = 2 * 60 * 1000;
+const PREVIEW_VOLUME_HIDE_DELAY_MS = 60 * 1000;
 const GRIMOIRE_TITLE_ICON = getAssetPath('/grimoire-title-icon.svg');
 const LAUNCH_MODDED_BG = getAssetPath('/locker/launch-modded-bg.webp');
 const LAUNCH_VANILLA_BG = getAssetPath('/locker/launch-vanilla-bg.jpg');
+const PREVIEW_VOLUME_BG = getAssetPath('/sidebar/preview-volume-bg.jpg');
 
 function readCollapsedPreference(): boolean {
   if (typeof window === 'undefined') return false;
@@ -173,6 +177,9 @@ export default function Sidebar() {
   const settings = useAppStore((state) => state.settings);
   const mods = useAppStore((state) => state.mods);
   const loadMods = useAppStore((state) => state.loadMods);
+  const soundVolume = useAppStore((state) => state.soundVolume);
+  const setSoundVolume = useAppStore((state) => state.setSoundVolume);
+  const previewAudioPlaying = useAppStore((state) => state.previewAudioPlaying);
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -198,7 +205,9 @@ export default function Sidebar() {
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsedPreference);
   const [labelsVisible, setLabelsVisible] = useState<boolean>(() => !readCollapsedPreference());
   const [labelMounted, setLabelMounted] = useState<boolean>(() => !readCollapsedPreference());
+  const [showPreviewVolume, setShowPreviewVolume] = useState(false);
   const collapseTimerRef = useRef<number | null>(null);
+  const previewVolumeHideTimerRef = useRef<number | null>(null);
   const labelFrameRef = useRef<number | null>(null);
   const navListRef = useRef<HTMLUListElement | null>(null);
   const navItemRefs = useRef<Array<HTMLLIElement | null>>([]);
@@ -215,6 +224,13 @@ export default function Sidebar() {
     if (labelFrameRef.current !== null) {
       window.cancelAnimationFrame(labelFrameRef.current);
       labelFrameRef.current = null;
+    }
+  }, []);
+
+  const clearPreviewVolumeHideTimer = useCallback(() => {
+    if (previewVolumeHideTimerRef.current !== null) {
+      window.clearTimeout(previewVolumeHideTimerRef.current);
+      previewVolumeHideTimerRef.current = null;
     }
   }, []);
 
@@ -244,6 +260,21 @@ export default function Sidebar() {
   }, [clearCollapseTimer, collapsed]);
 
   useEffect(() => clearCollapseTimer, [clearCollapseTimer]);
+
+  useEffect(() => {
+    clearPreviewVolumeHideTimer();
+    if (previewAudioPlaying) {
+      setShowPreviewVolume(true);
+      return clearPreviewVolumeHideTimer;
+    }
+    if (showPreviewVolume) {
+      previewVolumeHideTimerRef.current = window.setTimeout(() => {
+        setShowPreviewVolume(false);
+        previewVolumeHideTimerRef.current = null;
+      }, PREVIEW_VOLUME_HIDE_DELAY_MS);
+    }
+    return clearPreviewVolumeHideTimer;
+  }, [clearPreviewVolumeHideTimer, previewAudioPlaying, showPreviewVolume]);
 
   const labelTransitionClass = `sidebar-collapsible-label ${
     labelsVisible ? 'sidebar-collapsible-label--visible' : 'sidebar-collapsible-label--hidden'
@@ -849,6 +880,50 @@ export default function Sidebar() {
         )}
 
         <div className="space-y-1">
+          {showPreviewVolume && (collapsed ? (
+            <button
+              type="button"
+              onClick={() => setSoundVolume(soundVolume > 0 ? 0 : 0.7)}
+              title={`Preview volume: ${Math.round(soundVolume * 100)}%`}
+              aria-label={`Preview volume: ${Math.round(soundVolume * 100)}%`}
+              className="group relative flex h-8 w-full items-center justify-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-accent/35 hover:text-text-primary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 animate-fade-in"
+            >
+              <LaunchButtonBackdrop src={PREVIEW_VOLUME_BG} position="center 43%" />
+              {soundVolume > 0 ? (
+                <Volume2 className="relative z-10 h-4 w-4 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+              ) : (
+                <VolumeX className="relative z-10 h-4 w-4 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+              )}
+            </button>
+          ) : (
+            <div className="group relative flex h-10 w-full items-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] animate-fade-in">
+              <LaunchButtonBackdrop src={PREVIEW_VOLUME_BG} position="center 43%" />
+              <button
+                type="button"
+                onClick={() => setSoundVolume(soundVolume > 0 ? 0 : 0.7)}
+                title={soundVolume > 0 ? 'Mute preview volume' : 'Unmute preview volume'}
+                aria-label={soundVolume > 0 ? 'Mute preview volume' : 'Unmute preview volume'}
+                className="relative z-10 flex h-full w-10 flex-shrink-0 items-center justify-center text-text-primary/85 transition-colors hover:text-text-primary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+              >
+                {soundVolume > 0 ? (
+                  <Volume2 className="h-4 w-4 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+                ) : (
+                  <VolumeX className="h-4 w-4 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+                )}
+              </button>
+              <input
+                type="range"
+                min="0"
+                max="100"
+                value={Math.round(soundVolume * 100)}
+                onChange={(e) => setSoundVolume(parseInt(e.target.value, 10) / 100)}
+                title={`Preview volume: ${Math.round(soundVolume * 100)}%`}
+                aria-label="Preview volume"
+                className="relative z-10 mr-3 h-1.5 min-w-0 flex-1 cursor-pointer accent-accent"
+              />
+            </div>
+          ))}
+
           {gameRunning || stopPending ? (
             <button
               onClick={handleStopGame}

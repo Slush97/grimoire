@@ -8,6 +8,7 @@ import type {
   GameBananaCategoryNode,
   GameBananaMod,
   GameBananaCommentsResponse,
+  GameBananaModUpdatesResponse,
   GameBananaCollection,
   GameBananaCollectionItemsResponse,
 } from '../types/gamebanana';
@@ -20,6 +21,7 @@ export type {
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaMod,
+  GameBananaModUpdatesResponse,
   GameBananaCollection,
   GameBananaCollectionItemsResponse,
 };
@@ -397,6 +399,10 @@ export async function getModDetails(modId: number, section?: string): Promise<Ga
 
 export async function getModComments(modId: number, section?: string, page = 1): Promise<GameBananaCommentsResponse> {
   return window.electronAPI.getModComments({ modId, section, page });
+}
+
+export async function getModUpdates(modId: number, section?: string, page = 1): Promise<GameBananaModUpdatesResponse> {
+  return window.electronAPI.getModUpdates({ modId, section, page });
 }
 
 export async function downloadMod(

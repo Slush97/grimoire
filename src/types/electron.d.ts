@@ -30,6 +30,7 @@ import type {
     GameBananaModsResponse,
     GameBananaModDetails,
     GameBananaModFileList,
+    GameBananaModUpdatesResponse,
     GameBananaSection,
     GameBananaCategoryNode,
     GameBananaCollection,
@@ -196,6 +197,8 @@ export interface MultiVpkPickData {
     /** filename → human-readable label derived from VPK contents. Missing
      *  entries fall back to the filename in the picker. */
     vpkLabels?: Record<string, string>;
+    /** filename → file size in bytes. */
+    vpkFileSizes?: Record<string, number>;
 }
 
 export interface SyncProgressData {
@@ -395,6 +398,7 @@ export interface ElectronAPI {
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
     getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: { modId: number; section?: string; page?: number }) => Promise<{ comments: Array<{ id: number; text: string; dateAdded: number; poster: { id: number; name: string; avatarUrl?: string } }>; totalCount: number }>;
+    getModUpdates: (args: { modId: number; section?: string; page?: number }) => Promise<GameBananaModUpdatesResponse>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;

@@ -94,6 +94,7 @@ export interface ElectronAPI {
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
     getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
     getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
+    getModUpdates: (args: GetModCommentsArgs) => Promise<GameBananaModUpdatesResponse>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
@@ -557,6 +558,7 @@ interface MultiVpkPickData {
     modName: string;
     vpkFileNames: string[];
     vpkLabels?: Record<string, string>;
+    vpkFileSizes?: Record<string, number>;
 }
 
 interface GameBananaModsResponse {
@@ -578,6 +580,17 @@ interface GameBananaModDetails {
 interface GameBananaModFileList {
     id: number;
     files: Array<{ id: number; isArchived: boolean }>;
+}
+
+interface GameBananaModUpdatesResponse {
+    updates: Array<{
+        id: number;
+        version?: string;
+        title?: string;
+        text?: string;
+        dateAdded: number;
+    }>;
+    totalCount: number;
 }
 
 interface GameBananaSection {
@@ -908,6 +921,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getModDetails: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-details', args),
     getModFileList: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-file-list', args),
     getModComments: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-comments', args),
+    getModUpdates: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-updates', args),
     downloadMod: (args: DownloadModArgs) => ipcRenderer.invoke('download-mod', args),
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
     getGameBananaCategories: (args: GetCategoriesArgs) =>

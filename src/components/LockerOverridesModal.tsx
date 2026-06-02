@@ -176,6 +176,7 @@ export function LockerOverridesModal({
     const navigate = useNavigate();
     const mods = useAppStore((s) => s.mods);
     const loadMods = useAppStore((s) => s.loadMods);
+    const soundVolume = useAppStore((s) => s.soundVolume);
 
     const [overview, setOverview] = useState<LockerOverview | null>(null);
     const [tab, setTab] = useState<Tab>('cards');
@@ -602,6 +603,7 @@ export function LockerOverridesModal({
                                                         src={mod.audioUrl}
                                                         compact
                                                         variant="inline"
+                                                        volume={soundVolume}
                                                     />
                                                 </div>
                                             )}

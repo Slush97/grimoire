@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
+import { useAppStore } from '../stores/appStore';
 
 interface AudioPreviewPlayerProps {
     src: string;
@@ -29,12 +30,18 @@ export default function AudioPreviewPlayer({
     onPlayingChange,
 }: AudioPreviewPlayerProps) {
     const audioRef = useRef<HTMLAudioElement>(null);
+    const onPlayingChangeRef = useRef(onPlayingChange);
+    const setPreviewAudioPlaying = useAppStore((state) => state.setPreviewAudioPlaying);
     const [isPlaying, setIsPlaying] = useState(false);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
     const [isMuted, setIsMuted] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState(false);
+
+    useEffect(() => {
+        onPlayingChangeRef.current = onPlayingChange;
+    }, [onPlayingChange]);
 
     // Apply external volume to audio element
     useEffect(() => {
@@ -65,13 +72,20 @@ export default function AudioPreviewPlayer({
         } else {
             // Stop any other playing audio
             if (currentlyPlaying && currentlyPlaying !== audio) {
-                currentlyPlaying.pause();
-                currentlyPlaying.currentTime = 0;
+                const previous = currentlyPlaying;
+                currentlyPlaying = audio;
+                previous.pause();
+                previous.currentTime = 0;
+            } else {
+                currentlyPlaying = audio;
             }
-            currentlyPlaying = audio;
             onPlay?.();
             setIsLoading(true);
             audio.play().catch(() => {
+                if (currentlyPlaying === audio) {
+                    currentlyPlaying = null;
+                    setPreviewAudioPlaying(false);
+                }
                 setError(true);
                 setIsLoading(false);
             });
@@ -104,26 +118,37 @@ export default function AudioPreviewPlayer({
         const audio = audioRef.current;
         if (!audio) return;
 
-        // Set initial volume
-        audio.volume = volume;
-
         const handleTimeUpdate = () => setCurrentTime(audio.currentTime);
         const handleDurationChange = () => setDuration(audio.duration);
         const handlePlay = () => {
+            currentlyPlaying = audio;
             setIsPlaying(true);
             setIsLoading(false);
-            onPlayingChange?.(true);
+            setPreviewAudioPlaying(true);
+            onPlayingChangeRef.current?.(true);
         };
         const handlePause = () => {
             setIsPlaying(false);
-            onPlayingChange?.(false);
+            if (currentlyPlaying === audio) {
+                currentlyPlaying = null;
+                setPreviewAudioPlaying(false);
+            }
+            onPlayingChangeRef.current?.(false);
         };
         const handleEnded = () => {
             setIsPlaying(false);
             setCurrentTime(0);
-            onPlayingChange?.(false);
+            if (currentlyPlaying === audio) {
+                currentlyPlaying = null;
+                setPreviewAudioPlaying(false);
+            }
+            onPlayingChangeRef.current?.(false);
         };
         const handleError = () => {
+            if (currentlyPlaying === audio) {
+                currentlyPlaying = null;
+                setPreviewAudioPlaying(false);
+            }
             setError(true);
             setIsLoading(false);
         };
@@ -150,9 +175,10 @@ export default function AudioPreviewPlayer({
             if (currentlyPlaying === audio) {
                 audio.pause();
                 currentlyPlaying = null;
+                setPreviewAudioPlaying(false);
             }
         };
-    }, []);
+    }, [setPreviewAudioPlaying]);
 
     if (error) {
         return (

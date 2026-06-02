@@ -112,6 +112,19 @@ export interface GameBananaCommentsResponse {
   totalCount: number;
 }
 
+export interface GameBananaModUpdate {
+  id: number;
+  version?: string;
+  title?: string;
+  text?: string;
+  dateAdded: number;
+}
+
+export interface GameBananaModUpdatesResponse {
+  updates: GameBananaModUpdate[];
+  totalCount: number;
+}
+
 export interface GameBananaCollection {
   id: number;
   name: string;

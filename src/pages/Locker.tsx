@@ -989,6 +989,7 @@ interface LockerGlobalViewProps {
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
 function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType }: LockerGlobalViewProps) {
+  const soundVolume = useAppStore((s) => s.soundVolume);
   const available = GLOBAL_MOD_TYPE_ORDER.filter((type) => groups[type].length > 0);
   const [selectedType, setSelectedType] = useState<GlobalModType>(
     () => available[0] ?? 'soul-container'
@@ -1288,7 +1289,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                           onClick={(e) => e.stopPropagation()}
                           onMouseDown={(e) => e.stopPropagation()}
                         >
-                          <AudioPreviewPlayer src={mod.audioUrl} compact />
+                          <AudioPreviewPlayer src={mod.audioUrl} compact volume={soundVolume} />
                         </div>
                       )}
 

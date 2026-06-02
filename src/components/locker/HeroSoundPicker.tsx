@@ -149,6 +149,7 @@ function SoundSourceRow({
   anyBusy,
   params,
   saving,
+  soundVolume,
   onPick,
   onParamChange,
 }: {
@@ -160,6 +161,7 @@ function SoundSourceRow({
   anyBusy: boolean;
   params: AbilitySoundParams;
   saving: boolean;
+  soundVolume: number;
   onPick: () => void;
   onParamChange: (next: AbilitySoundParams) => void;
 }) {
@@ -208,7 +210,7 @@ function SoundSourceRow({
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <AudioPreviewPlayer src={mod.audioUrl} compact variant="inline" />
+          <AudioPreviewPlayer src={mod.audioUrl} compact variant="inline" volume={soundVolume} />
         </div>
       )}
       {isActive && (
@@ -223,10 +225,12 @@ function SoundSourceRow({
 function SoundToggleRow({
   mod,
   heroName,
+  soundVolume,
   onSelect,
 }: {
   mod: Mod;
   heroName: string;
+  soundVolume: number;
   onSelect: (modId: string) => void;
 }) {
   const otherSlots = slotsForMod(mod, heroName);
@@ -269,7 +273,7 @@ function SoundToggleRow({
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <AudioPreviewPlayer src={mod.audioUrl} compact variant="inline" />
+          <AudioPreviewPlayer src={mod.audioUrl} compact variant="inline" volume={soundVolume} />
         </div>
       )}
     </div>
@@ -288,6 +292,7 @@ function SoundToggleRow({
  */
 export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroSoundPickerProps) {
   const loadMods = useAppStore((s) => s.loadMods);
+  const soundVolume = useAppStore((s) => s.soundVolume);
   // The parent LockerHeroView is keyed by hero.id, so this component remounts
   // per hero; initial state stands in for the per-hero reset (no setState in the
   // effect body, only in async callbacks).
@@ -558,6 +563,7 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
                         anyBusy={anyBusy}
                         params={paramsBySlot.get(slot.slot) ?? {}}
                         saving={savingSlot === slot.slot}
+                        soundVolume={soundVolume}
                         onPick={() => handlePick(slot.slot, mod)}
                         onParamChange={(next) => handleParamChange(slot.slot, next)}
                       />
@@ -579,7 +585,13 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
               </p>
               <div className="space-y-1.5">
                 {other.map((mod) => (
-                  <SoundToggleRow key={mod.id} mod={mod} heroName={heroName} onSelect={onSelect} />
+                  <SoundToggleRow
+                    key={mod.id}
+                    mod={mod}
+                    heroName={heroName}
+                    soundVolume={soundVolume}
+                    onSelect={onSelect}
+                  />
                 ))}
               </div>
             </div>

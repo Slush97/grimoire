@@ -7,6 +7,7 @@ import {
     fetchModDetails,
     fetchModFileList,
     fetchModComments,
+    fetchModUpdates,
     fetchCollection,
     fetchCollectionItems,
     GameBananaSection,
@@ -14,6 +15,7 @@ import {
     GameBananaModsResponse,
     GameBananaModDetails,
     GameBananaModFileList,
+    GameBananaModUpdatesResponse,
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
 } from '../services/gamebanana';
@@ -36,6 +38,12 @@ interface GetModDetailsArgs {
 }
 
 interface GetModCommentsArgs {
+    modId: number;
+    section?: string;
+    page?: number;
+}
+
+interface GetModUpdatesArgs {
     modId: number;
     section?: string;
     page?: number;
@@ -145,6 +153,15 @@ ipcMain.handle(
     async (_, args: GetModCommentsArgs) => {
         const { modId, section = 'Mod', page = 1 } = args;
         return fetchModComments(modId, section, page);
+    }
+);
+
+// get-mod-updates
+ipcMain.handle(
+    'get-mod-updates',
+    async (_, args: GetModUpdatesArgs): Promise<GameBananaModUpdatesResponse> => {
+        const { modId, section = 'Mod', page = 1 } = args;
+        return fetchModUpdates(modId, section, page);
     }
 );
 

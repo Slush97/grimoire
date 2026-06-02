@@ -130,6 +130,19 @@ export interface GameBananaComment {
     };
 }
 
+export interface GameBananaModUpdate {
+    id: number;
+    version?: string;
+    title?: string;
+    text?: string;
+    dateAdded: number;
+}
+
+export interface GameBananaModUpdatesResponse {
+    updates: GameBananaModUpdate[];
+    totalCount: number;
+}
+
 export interface GameBananaModDetails {
     id: number;
     name: string;
@@ -271,6 +284,28 @@ interface PostsResponseRaw {
         _nRecordCount: number;
         _nPerpage: number;
         _bIsComplete: boolean;
+    };
+}
+
+interface UpdateRaw {
+    _idRow?: number;
+    _sVersion?: string;
+    _sName?: string;
+    _sTitle?: string;
+    _sText?: string;
+    _sDescription?: string;
+    _sChangeLog?: string;
+    _tsDateAdded?: number;
+    _tsDateModified?: number;
+    _tsDateUpdated?: number;
+}
+
+interface UpdatesResponseRaw {
+    _aRecords?: UpdateRaw[];
+    _aMetadata?: {
+        _nRecordCount?: number;
+        _nPerpage?: number;
+        _bIsComplete?: boolean;
     };
 }
 
@@ -559,6 +594,33 @@ export async function fetchModComments(
             },
         })),
         totalCount: raw._aMetadata._nRecordCount,
+    };
+}
+
+/**
+ * Fetch update/changelog records for a mod. GameBanana's update payloads are
+ * sparse across item types, so map the common field names and let the renderer
+ * hide empty records.
+ */
+export async function fetchModUpdates(
+    modId: number,
+    section = 'Mod',
+    page = 1,
+    perPage = 5
+): Promise<GameBananaModUpdatesResponse> {
+    const url = `${GAMEBANANA_API_BASE}/${section}/${modId}/Updates?_nPerpage=${perPage}&_nPage=${page}`;
+    const raw = await fetchJson<UpdatesResponseRaw | UpdateRaw[]>(url);
+    const records = Array.isArray(raw) ? raw : raw._aRecords ?? [];
+
+    return {
+        updates: records.map((update, index) => ({
+            id: update._idRow ?? index,
+            version: update._sVersion,
+            title: update._sTitle ?? update._sName,
+            text: update._sText ?? update._sChangeLog ?? update._sDescription,
+            dateAdded: update._tsDateAdded ?? update._tsDateModified ?? update._tsDateUpdated ?? 0,
+        })),
+        totalCount: Array.isArray(raw) ? records.length : raw._aMetadata?._nRecordCount ?? records.length,
     };
 }
 

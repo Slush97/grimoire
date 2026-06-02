@@ -2,6 +2,7 @@ import { useMemo } from 'react';
 import { ChevronDown } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, type MinaPreset, type MinaSelection, type MinaVariant } from '../../lib/lockerUtils';
+import { useAppStore } from '../../stores/appStore';
 import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
@@ -108,6 +109,7 @@ export default function HeroSkinsPanel({
   onApplyMinaVariant,
 }: HeroSkinsPanelProps) {
   const hasMods = mods.length > 0;
+  const soundVolume = useAppStore((s) => s.soundVolume);
   const groups = useMemo(() => groupVariants(mods), [mods]);
 
   // TEMPORARY: Hide Mina variant customization UI until feature is stable
@@ -473,7 +475,7 @@ export default function HeroSkinsPanel({
                   onClick={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
                 >
-                  <AudioPreviewPlayer src={primary.audioUrl} compact />
+                  <AudioPreviewPlayer src={primary.audioUrl} compact volume={soundVolume} />
                 </div>
               )}
               {isMulti && (

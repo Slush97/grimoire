@@ -751,6 +751,7 @@ export default function Installed() {
     const section = m.sourceSection ?? 'Mod';
     const categoryId = m.categoryId ?? 0;
     setDetailsLoading(true);
+    setDetailsMod(null);
     setDetailsError(null);
     setDetailsSection(section);
     setDetailsCategoryId(categoryId);
@@ -2129,6 +2130,25 @@ export default function Installed() {
     ? sortEntries(disabledEntries.filter(matchesAllFilters))
     : [];
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
+  const detailsNavigationEntries = [...visibleEnabled, ...visibleDisabled].filter(
+    (entry) => typeof entryPrimaryMod(entry).gameBananaId === 'number'
+  );
+  const detailsNavigationIndex = detailsSourceModId
+    ? detailsNavigationEntries.findIndex((entry) =>
+        entry.kind === 'single'
+          ? entry.mod.id === detailsSourceModId
+          : entry.variants.some((variant) => variant.id === detailsSourceModId)
+      )
+    : -1;
+  const previousDetailsEntry =
+    detailsNavigationIndex > 0 ? detailsNavigationEntries[detailsNavigationIndex - 1] : undefined;
+  const nextDetailsEntry =
+    detailsNavigationIndex >= 0 && detailsNavigationIndex < detailsNavigationEntries.length - 1
+      ? detailsNavigationEntries[detailsNavigationIndex + 1]
+      : undefined;
+  const navigateToDetailsEntry = (entry: ModEntry) => {
+    void openModDetails(entryPrimaryMod(entry));
+  };
 
   const selectAllVisible = () => {
     const ids = new Set<string>();
@@ -3159,6 +3179,14 @@ export default function Installed() {
           onToggleIgnoreUpdates={handleToggleIgnoreUpdates}
           onClose={closeModDetails}
           onDownload={handleDetailsDownload}
+          onNavigatePrevious={
+            previousDetailsEntry ? () => navigateToDetailsEntry(previousDetailsEntry) : undefined
+          }
+          onNavigateNext={
+            nextDetailsEntry ? () => navigateToDetailsEntry(nextDetailsEntry) : undefined
+          }
+          previousLabel={previousDetailsEntry ? entryName(previousDetailsEntry) : undefined}
+          nextLabel={nextDetailsEntry ? entryName(nextDetailsEntry) : undefined}
         />
       )}
 

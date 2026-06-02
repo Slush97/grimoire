@@ -8,6 +8,15 @@ interface Props {
     onCancel: () => void;
 }
 
+function formatBytes(bytes: number): string {
+    if (!Number.isFinite(bytes) || bytes <= 0) return '';
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.min(units.length - 1, Math.floor(Math.log(bytes) / Math.log(1024)));
+    const n = bytes / Math.pow(1024, i);
+    const value = i === 0 ? String(Math.round(n)) : n.toFixed(n >= 10 ? 1 : 2).replace(/\.0$/, '');
+    return `${value} ${units[i]}`;
+}
+
 /**
  * Multi-VPK picker. Shown when an archive (Warden Remodel, etc.) yields more
  * than one .vpk after extraction. Previously the install pipeline silently
@@ -94,6 +103,8 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                         {data.vpkFileNames.map((vpk) => {
                             const isChecked = selected.has(vpk);
                             const label = data.vpkLabels?.[vpk];
+                            const size = data.vpkFileSizes?.[vpk];
+                            const sizeLabel = typeof size === 'number' ? formatBytes(size) : '';
                             return (
                                 <label
                                     key={vpk}
@@ -120,6 +131,11 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                                             <span className="font-mono text-xs truncate block" title={vpk}>{vpk}</span>
                                         )}
                                     </div>
+                                    {sizeLabel && (
+                                        <span className="flex-shrink-0 rounded bg-bg-primary/70 px-1.5 py-0.5 text-[11px] tabular-nums text-text-secondary border border-white/5">
+                                            {sizeLabel}
+                                        </span>
+                                    )}
                                 </label>
                             );
                         })}

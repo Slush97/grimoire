@@ -22,9 +22,10 @@ import {
   Trash2,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import type { GameBananaModDetails, GameBananaComment, GameBananaFile } from '../types/gamebanana';
+import type { GameBananaModDetails, GameBananaComment, GameBananaFile, GameBananaModUpdate } from '../types/gamebanana';
 import { isModOutdated, formatDate } from '../types/gamebanana';
-import { getModComments } from '../lib/api';
+import { getModComments, getModUpdates } from '../lib/api';
+import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
 import { ArchivedTag } from './common/ui';
@@ -64,6 +65,10 @@ interface ModDetailsModalProps {
   onToggleIgnoreUpdates?: () => void;
   onClose: () => void;
   onDownload: (fileId: number, fileName: string) => void;
+  onNavigatePrevious?: () => void;
+  onNavigateNext?: () => void;
+  previousLabel?: string;
+  nextLabel?: string;
   /** Browse-only file removal. Receives the local installed mod id that backs
    *  the GameBanana file row. */
   onDeleteFile?: (modId: string) => Promise<void> | void;
@@ -89,10 +94,15 @@ export default function ModDetailsModal({
   onToggleIgnoreUpdates,
   onClose,
   onDownload,
+  onNavigatePrevious,
+  onNavigateNext,
+  previousLabel,
+  nextLabel,
   onDeleteFile,
 }: ModDetailsModalProps) {
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
+  const soundVolume = useAppStore((state) => state.soundVolume);
   // Cursor into the images array - only the lightbox cares about this now
   // that previews are stacked vertically rather than swapped via carousel.
   // It tracks which image is currently zoomed and which one keyboard arrows
@@ -101,6 +111,10 @@ export default function ModDetailsModal({
   const [comments, setComments] = useState<GameBananaComment[]>([]);
   const [commentsLoading, setCommentsLoading] = useState(true);
   const [commentsTotalCount, setCommentsTotalCount] = useState(0);
+  const [updates, setUpdates] = useState<GameBananaModUpdate[]>([]);
+  const [updatesLoading, setUpdatesLoading] = useState(true);
+  const [updatesTotalCount, setUpdatesTotalCount] = useState(0);
+  const [updatesError, setUpdatesError] = useState<string | null>(null);
   const [archivedFilesOpen, setArchivedFilesOpen] = useState(false);
   // Lightbox state - when true, the selected image renders full-screen at
   // its native GB resolution so the user can inspect detail the inline
@@ -139,6 +153,33 @@ export default function ModDetailsModal({
   }, [mod.id, section]);
 
   useEffect(() => {
+    let cancelled = false;
+    setUpdatesLoading(true);
+    setUpdatesError(null);
+    getModUpdates(mod.id, section)
+      .then((res) => {
+        if (!cancelled) {
+          setUpdates(res.updates.filter((update) => update.text || update.title || update.version));
+          setUpdatesTotalCount(res.totalCount);
+        }
+      })
+      .catch((err) => {
+        if (!cancelled) {
+          console.error('[ModDetailsModal] Failed to load updates:', err);
+          setUpdates([]);
+          setUpdatesTotalCount(0);
+          setUpdatesError(String(err).replace(/^Error:\s*/, ''));
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setUpdatesLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mod.id, section]);
+
+  useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         if (deleteCandidate) {
@@ -154,11 +195,26 @@ export default function ModDetailsModal({
         }
       }
       // Arrow keys only navigate while the lightbox is open - otherwise
-      // they'd silently mutate hidden state while the user scrolls the
-      // description with the cursor.
+      // they step between mods when the caller provides modal navigation.
       if (lightboxOpen && images.length > 1) {
         if (e.key === 'ArrowLeft') goToPrevious();
         if (e.key === 'ArrowRight') goToNext();
+      } else if (!deleteCandidate) {
+        const target = e.target as HTMLElement | null;
+        const tag = target?.tagName?.toLowerCase();
+        const editing =
+          tag === 'input' ||
+          tag === 'textarea' ||
+          tag === 'select' ||
+          target?.isContentEditable;
+        if (!editing && e.key === 'ArrowLeft' && onNavigatePrevious) {
+          e.preventDefault();
+          onNavigatePrevious();
+        }
+        if (!editing && e.key === 'ArrowRight' && onNavigateNext) {
+          e.preventDefault();
+          onNavigateNext();
+        }
       }
     };
     // Side mouse buttons (3 = back, 4 = forward) would otherwise let Chromium
@@ -192,7 +248,15 @@ export default function ModDetailsModal({
       window.removeEventListener('mouseup', handleMouseUp);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onClose, images.length, lightboxOpen, deleteCandidate, deleteInProgress]);
+  }, [
+    onClose,
+    images.length,
+    lightboxOpen,
+    deleteCandidate,
+    deleteInProgress,
+    onNavigatePrevious,
+    onNavigateNext,
+  ]);
 
   const currentImage = images[currentImageIndex];
   // The lightbox loads the original GB asset for detail inspection.
@@ -232,6 +296,8 @@ export default function ModDetailsModal({
   const archivedFiles = files.filter((file) => file.isArchived);
   const totalDownloads = files.reduce((sum, f) => sum + f.downloadCount, 0);
   const outdated = dateModified ? isModOutdated(dateModified) : false;
+  const formatUpdateVersion = (version: string) =>
+    version.trim().match(/^v/i) ? version.trim() : `v${version.trim()}`;
 
   const renderFileRow = (file: GameBananaFile, archived = false) => {
     const isInstalled = installedFileIds.has(file.id);
@@ -387,16 +453,44 @@ export default function ModDetailsModal({
 
   const modal = (
     <div
-      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 z-50 animate-fade-in"
+      className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4 md:px-24 z-50 animate-fade-in"
       onClick={onClose}
       role="dialog"
       aria-modal="true"
       aria-label={mod.name}
     >
       <div
-        className="relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-hidden flex flex-col border border-border shadow-2xl"
+        className="relative bg-bg-secondary rounded-xl w-full max-w-4xl lg:max-w-6xl max-h-[90vh] overflow-visible flex flex-col border border-border shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
+        {onNavigatePrevious && !lightboxOpen && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigatePrevious();
+            }}
+            aria-label={previousLabel ? `Previous mod: ${previousLabel}` : 'Previous mod'}
+            title={previousLabel ? `Previous: ${previousLabel}` : 'Previous mod'}
+            className="absolute -left-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
+          >
+            <ChevronLeft className="h-8 w-8" />
+          </button>
+        )}
+        {onNavigateNext && !lightboxOpen && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onNavigateNext();
+            }}
+            aria-label={nextLabel ? `Next mod: ${nextLabel}` : 'Next mod'}
+            title={nextLabel ? `Next: ${nextLabel}` : 'Next mod'}
+            className="absolute -right-16 top-1/2 z-20 flex h-14 w-14 -translate-y-1/2 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-primary shadow-2xl transition-colors hover:border-accent/60 hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
+          >
+            <ChevronRight className="h-8 w-8" />
+          </button>
+        )}
         {/* Header - single row. Status badges, category, title, and dense
             metadata cluster all fit on one line so the modal's vertical
             budget goes to content, not chrome. Title shrinks/truncates
@@ -670,6 +764,7 @@ export default function ModDetailsModal({
                     <AudioPreviewPlayer
                       src={audioPreviewUrl}
                       className="w-full"
+                      volume={soundVolume}
                     />
                   </div>
                 </div>
@@ -698,6 +793,60 @@ export default function ModDetailsModal({
                   </div>
                 </section>
               )}
+
+              <section>
+                <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2 flex items-center gap-2">
+                  <RefreshCw className="w-3.5 h-3.5" />
+                  Changelog {updatesTotalCount > 0 && <span className="normal-case tracking-normal text-text-secondary/70">({updatesTotalCount})</span>}
+                </h3>
+                {updatesLoading ? (
+                  <div className="space-y-2">
+                    {Array.from({ length: 2 }).map((_, i) => (
+                      <div key={i} className="rounded-lg border border-border bg-bg-tertiary p-3">
+                        <div className="mb-2 flex items-center gap-2">
+                          <Skeleton className="h-3 w-20" />
+                          <Skeleton className="h-2.5 w-14" />
+                        </div>
+                        <Skeleton className="h-2.5 w-full" />
+                        <Skeleton className="mt-1.5 h-2.5 w-2/3" />
+                      </div>
+                    ))}
+                  </div>
+                ) : updatesError ? (
+                  <p className="rounded-lg border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-secondary">
+                    Changelog unavailable.
+                  </p>
+                ) : updates.length === 0 ? (
+                  <p className="text-sm text-text-secondary py-1">No changelog entries found</p>
+                ) : (
+                  <div className="space-y-2">
+                    {updates.map((update) => (
+                      <article key={update.id} className="rounded-lg border border-border bg-bg-tertiary p-3">
+                        <div className="mb-1.5 flex flex-wrap items-center gap-2">
+                          {(update.version || update.title) && (
+                            <h4 className="min-w-0 text-sm font-semibold text-text-primary">
+                              {update.version ? formatUpdateVersion(update.version) : update.title}
+                              {update.version && update.title ? ` - ${update.title}` : ''}
+                            </h4>
+                          )}
+                          {update.dateAdded > 0 && (
+                            <span className="flex items-center gap-1 text-[11px] text-text-tertiary">
+                              <Clock className="w-3 h-3" />
+                              {formatDate(update.dateAdded)}
+                            </span>
+                          )}
+                        </div>
+                        {update.text && (
+                          <div
+                            className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
+                            dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(update.text) }}
+                          />
+                        )}
+                      </article>
+                    ))}
+                  </div>
+                )}
+              </section>
 
               {files.length > 0 && (
                 <section>

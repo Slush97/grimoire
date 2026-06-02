@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye } from 'lucide-react';
+import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2 } from 'lucide-react';
 import {
   getConflicts,
   disableMod,
@@ -14,8 +14,10 @@ import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { Button } from '../components/common/ui';
-import { PageHeader, EmptyState, ConfirmModal } from '../components/common/PageComponents';
+import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, type ViewMode } from '../components/common/PageComponents';
 import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
+
+const CONFLICTS_VIEW_MODE_KEY = 'grimoire:conflicts-view-mode';
 
 /** Global load-order rank of a mod: lower = loads first. The pakNN (mod.priority)
  *  repeats per overflow folder, so fold in the folder index from metaKey
@@ -122,11 +124,20 @@ export default function Conflicts() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [disableTarget, setDisableTarget] = useState<ModWithThumbnail | null>(null);
+  const [viewMode, setViewMode] = useState<ViewMode>(() => {
+    try {
+      return localStorage.getItem(CONFLICTS_VIEW_MODE_KEY) === 'list' ? 'list' : 'grid';
+    } catch {
+      return 'grid';
+    }
+  });
   // Bulk-ignore confirmation. `ignoringAll` blocks the modal action while
   // the sequential ignoreConflict calls run so the user can't cancel
   // mid-iteration and leave the page in a partial state.
   const [ignoreAllConfirmOpen, setIgnoreAllConfirmOpen] = useState(false);
   const [ignoringAll, setIgnoringAll] = useState(false);
+  const [clearIgnoredConfirmOpen, setClearIgnoredConfirmOpen] = useState(false);
+  const [clearingIgnored, setClearingIgnored] = useState(false);
   const [disabling, setDisabling] = useState(false);
   // Tracks which pair the user is currently toggling so we can disable just
   // that row's buttons during the round-trip without freezing the whole page.
@@ -301,9 +312,44 @@ export default function Conflicts() {
     }
   };
 
+  const handleClearIgnored = async () => {
+    if (ignored.size === 0) return;
+    setClearingIgnored(true);
+    const keys = Array.from(ignored);
+    const failures: string[] = [];
+    try {
+      for (const key of keys) {
+        const [modA, modB] = key.split('::');
+        if (!modA || !modB) continue;
+        try {
+          await unignoreConflict(modA, modB);
+        } catch (err) {
+          failures.push(`${key}: ${String(err)}`);
+        }
+      }
+      await loadConflicts();
+      if (failures.length > 0) {
+        console.warn('[Conflicts] clear ignored failures:', failures);
+        setError(`Failed to clear ${failures.length} ignored pair${failures.length === 1 ? '' : 's'}. See console for details.`);
+      }
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } finally {
+      setClearingIgnored(false);
+      setClearIgnoredConfirmOpen(false);
+    }
+  };
+
   useEffect(() => {
     loadConflicts();
   }, []);
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(CONFLICTS_VIEW_MODE_KEY, viewMode === 'list' ? 'list' : 'grid');
+    } catch {
+      // localStorage may be unavailable.
+    }
+  }, [viewMode]);
 
   const confirmDisable = async () => {
     if (!disableTarget) return;
@@ -371,6 +417,16 @@ export default function Conflicts() {
         action={
           <div className="flex items-center gap-2">
             {conflicts.length > 0 && (
+              <ViewModeToggle
+                value={viewMode}
+                onChange={(mode) => setViewMode(mode === 'list' ? 'list' : 'grid')}
+                options={[
+                  { value: 'grid', label: 'Grid view', icon: LayoutGrid },
+                  { value: 'list', label: 'List view', icon: List },
+                ]}
+              />
+            )}
+            {conflicts.length > 0 && (
               <Button
                 variant="secondary"
                 onClick={() => setIgnoreAllConfirmOpen(true)}
@@ -397,135 +453,220 @@ export default function Conflicts() {
         </div>
       )}
 
-      {/* Grid of conflict cards */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {conflicts.map((conflict, i) => {
-          const modA = getModInfo(conflict.modA, conflict.modAName);
-          const modB = getModInfo(conflict.modB, conflict.modBName);
-          const variantA = getVariantLabel(modA);
-          const variantB = getVariantLabel(modB);
+      {viewMode === 'list' ? (
+        <div className="space-y-3">
+          {conflicts.map((conflict, i) => {
+            const modA = getModInfo(conflict.modA, conflict.modAName);
+            const modB = getModInfo(conflict.modB, conflict.modBName);
+            const variantA = getVariantLabel(modA);
+            const variantB = getVariantLabel(modB);
 
-          return (
-            <div
-              key={`${conflict.modA}-${conflict.modB}-${i}`}
-              className="bg-bg-secondary border border-yellow-500/30 rounded-xl overflow-hidden"
-            >
-              {/* Header */}
-              <div className="bg-yellow-500/10 px-4 py-2 flex items-center gap-2 border-b border-yellow-500/20">
-                <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
-                <span className="text-sm text-yellow-400 min-w-0 flex-1 truncate" title={conflict.details}>
-                  {conflict.details}
-                </span>
+            const renderListSide = (mod: ModWithThumbnail, variant: string | null) => (
+              <div className="min-w-0 flex items-center gap-3">
+                <div className="h-16 w-24 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary">
+                  {mod.thumbnailUrl ? (
+                    <img src={mod.thumbnailUrl} alt={mod.name} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center text-[11px] text-text-tertiary">
+                      No Preview
+                    </div>
+                  )}
+                </div>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-medium text-text-primary" title={mod.name}>
+                    {mod.name}
+                  </p>
+                  {variant && (
+                    <p className="truncate text-xs text-accent" title={variant}>
+                      {variant}
+                    </p>
+                  )}
+                  {mod.fileName && (
+                    <p className="truncate text-xs text-text-tertiary" title={mod.fileName}>
+                      {mod.fileName}
+                    </p>
+                  )}
+                </div>
                 <button
                   type="button"
-                  onClick={() => handleIgnore(conflict)}
-                  disabled={pendingPair === getConflictIgnoreKey(conflict)}
-                  title="Stop flagging this pair as a conflict"
-                  className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  onClick={() => setDisableTarget(mod)}
+                  aria-label={`Disable ${mod.name}`}
+                  title={`Disable ${mod.name}`}
+                  className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-red-500/30 bg-red-500/10 text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-200 cursor-pointer"
                 >
-                  <EyeOff className="w-3.5 h-3.5" />
-                  Ignore
+                  <X className="h-4 w-4" />
                 </button>
               </div>
+            );
 
-              {/* Two mod cards */}
-              <div className="p-4 grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] gap-3 items-start">
-                {/* Mod A Card */}
-                <div className="min-w-0 group">
-                  <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
-                    {modA.thumbnailUrl ? (
-                      <img
-                        src={modA.thumbnailUrl}
-                        alt={modA.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-text-tertiary">
-                        No Preview
-                      </div>
-                    )}
-                    <button
-                      onClick={() => setDisableTarget(modA)}
-                      aria-label={`Disable ${modA.name}`}
-                      className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
-                    >
-                      <span className="text-white text-sm font-medium flex items-center gap-1">
-                        <X className="w-4 h-4" /> Disable
-                      </span>
-                    </button>
-                  </div>
-                  <p className="text-sm font-medium text-text-primary text-center break-words" title={modA.name}>
-                    {modA.name}
-                  </p>
-                  {variantA && (
-                    <p className="text-xs text-accent text-center break-words" title={variantA}>
-                      {variantA}
-                    </p>
-                  )}
-                  {modA.fileName && (
-                    <p className="text-xs text-text-tertiary text-center break-all" title={modA.fileName}>
-                      {modA.fileName}
-                    </p>
-                  )}
+            return (
+              <div
+                key={`${conflict.modA}-${conflict.modB}-${i}`}
+                className="overflow-hidden rounded-xl border border-yellow-500/30 bg-bg-secondary"
+              >
+                <div className="flex items-center gap-2 border-b border-yellow-500/20 bg-yellow-500/10 px-4 py-2">
+                  <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-500" />
+                  <span className="min-w-0 flex-1 truncate text-sm text-yellow-400" title={conflict.details}>
+                    {conflict.details}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleIgnore(conflict)}
+                    disabled={pendingPair === getConflictIgnoreKey(conflict)}
+                    title="Stop flagging this pair as a conflict"
+                    className="inline-flex flex-shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                  >
+                    <EyeOff className="h-3.5 w-3.5" />
+                    Ignore
+                  </button>
                 </div>
-
-                {/* VS divider */}
-                <div className="h-full flex items-center justify-center">
-                  <span className="text-text-tertiary text-sm font-bold">VS</span>
+                <div className="grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] items-center gap-3 p-4">
+                  {renderListSide(modA, variantA)}
+                  <span className="text-center text-sm font-bold text-text-tertiary">VS</span>
+                  {renderListSide(modB, variantB)}
                 </div>
-
-                {/* Mod B Card */}
-                <div className="min-w-0 group">
-                  <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
-                    {modB.thumbnailUrl ? (
-                      <img
-                        src={modB.thumbnailUrl}
-                        alt={modB.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center text-text-tertiary">
-                        No Preview
-                      </div>
-                    )}
-                    <button
-                      onClick={() => setDisableTarget(modB)}
-                      aria-label={`Disable ${modB.name}`}
-                      className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
-                    >
-                      <span className="text-white text-sm font-medium flex items-center gap-1">
-                        <X className="w-4 h-4" /> Disable
-                      </span>
-                    </button>
-                  </div>
-                  <p className="text-sm font-medium text-text-primary text-center break-words" title={modB.name}>
-                    {modB.name}
-                  </p>
-                  {variantB && (
-                    <p className="text-xs text-accent text-center break-words" title={variantB}>
-                      {variantB}
-                    </p>
-                  )}
-                  {modB.fileName && (
-                    <p className="text-xs text-text-tertiary text-center break-all" title={modB.fileName}>
-                      {modB.fileName}
-                    </p>
-                  )}
-                </div>
+                <ConflictReorderActions
+                  conflict={conflict}
+                  modA={{ id: modA.id, name: modA.name }}
+                  modB={{ id: modB.id, name: modB.name }}
+                  orderedEnabledIds={orderedEnabledIds}
+                  busy={pendingPair === getConflictIgnoreKey(conflict)}
+                  onSetWinner={(winnerId, loserId) => handleSetWinner(conflict, winnerId, loserId)}
+                />
               </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {conflicts.map((conflict, i) => {
+            const modA = getModInfo(conflict.modA, conflict.modAName);
+            const modB = getModInfo(conflict.modB, conflict.modBName);
+            const variantA = getVariantLabel(modA);
+            const variantB = getVariantLabel(modB);
 
-              <ConflictReorderActions
-                conflict={conflict}
-                modA={{ id: modA.id, name: modA.name }}
-                modB={{ id: modB.id, name: modB.name }}
-                orderedEnabledIds={orderedEnabledIds}
-                busy={pendingPair === getConflictIgnoreKey(conflict)}
-                onSetWinner={(winnerId, loserId) => handleSetWinner(conflict, winnerId, loserId)}
-              />
-            </div>
-          );
-        })}
-      </div>
+            return (
+              <div
+                key={`${conflict.modA}-${conflict.modB}-${i}`}
+                className="bg-bg-secondary border border-yellow-500/30 rounded-xl overflow-hidden"
+              >
+                {/* Header */}
+                <div className="bg-yellow-500/10 px-4 py-2 flex items-center gap-2 border-b border-yellow-500/20">
+                  <AlertTriangle className="w-4 h-4 text-yellow-500 flex-shrink-0" />
+                  <span className="text-sm text-yellow-400 min-w-0 flex-1 truncate" title={conflict.details}>
+                    {conflict.details}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleIgnore(conflict)}
+                    disabled={pendingPair === getConflictIgnoreKey(conflict)}
+                    title="Stop flagging this pair as a conflict"
+                    className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <EyeOff className="w-3.5 h-3.5" />
+                    Ignore
+                  </button>
+                </div>
+
+                {/* Two mod cards */}
+                <div className="p-4 grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] gap-3 items-start">
+                  {/* Mod A Card */}
+                  <div className="min-w-0 group">
+                    <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
+                      {modA.thumbnailUrl ? (
+                        <img
+                          src={modA.thumbnailUrl}
+                          alt={modA.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-text-tertiary">
+                          No Preview
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setDisableTarget(modA)}
+                        aria-label={`Disable ${modA.name}`}
+                        className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                      >
+                        <span className="text-white text-sm font-medium flex items-center gap-1">
+                          <X className="w-4 h-4" /> Disable
+                        </span>
+                      </button>
+                    </div>
+                    <p className="text-sm font-medium text-text-primary text-center break-words" title={modA.name}>
+                      {modA.name}
+                    </p>
+                    {variantA && (
+                      <p className="text-xs text-accent text-center break-words" title={variantA}>
+                        {variantA}
+                      </p>
+                    )}
+                    {modA.fileName && (
+                      <p className="text-xs text-text-tertiary text-center break-all" title={modA.fileName}>
+                        {modA.fileName}
+                      </p>
+                    )}
+                  </div>
+
+                  {/* VS divider */}
+                  <div className="h-full flex items-center justify-center">
+                    <span className="text-text-tertiary text-sm font-bold">VS</span>
+                  </div>
+
+                  {/* Mod B Card */}
+                  <div className="min-w-0 group">
+                    <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
+                      {modB.thumbnailUrl ? (
+                        <img
+                          src={modB.thumbnailUrl}
+                          alt={modB.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center text-text-tertiary">
+                          No Preview
+                        </div>
+                      )}
+                      <button
+                        onClick={() => setDisableTarget(modB)}
+                        aria-label={`Disable ${modB.name}`}
+                        className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                      >
+                        <span className="text-white text-sm font-medium flex items-center gap-1">
+                          <X className="w-4 h-4" /> Disable
+                        </span>
+                      </button>
+                    </div>
+                    <p className="text-sm font-medium text-text-primary text-center break-words" title={modB.name}>
+                      {modB.name}
+                    </p>
+                    {variantB && (
+                      <p className="text-xs text-accent text-center break-words" title={variantB}>
+                        {variantB}
+                      </p>
+                    )}
+                    {modB.fileName && (
+                      <p className="text-xs text-text-tertiary text-center break-all" title={modB.fileName}>
+                        {modB.fileName}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <ConflictReorderActions
+                  conflict={conflict}
+                  modA={{ id: modA.id, name: modA.name }}
+                  modB={{ id: modB.id, name: modB.name }}
+                  orderedEnabledIds={orderedEnabledIds}
+                  busy={pendingPair === getConflictIgnoreKey(conflict)}
+                  onSetWinner={(winnerId, loserId) => handleSetWinner(conflict, winnerId, loserId)}
+                />
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* Ignored conflicts panel — sits at the bottom of the page so the
           live conflict list stays the primary focus. Each row shows the two
@@ -533,10 +674,21 @@ export default function Conflicts() {
           pair shows back up if it's still actually conflicting. */}
       {ignored.size > 0 && (
         <div className="mt-10">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary mb-3 flex items-center gap-2">
-            <EyeOff className="w-4 h-4" />
-            Ignored ({ignored.size})
-          </h3>
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary flex items-center gap-2">
+              <EyeOff className="w-4 h-4" />
+              Ignored ({ignored.size})
+            </h3>
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Trash2}
+              onClick={() => setClearIgnoredConfirmOpen(true)}
+              title="Restore conflict detection for every ignored pair"
+            >
+              Clear ignored
+            </Button>
+          </div>
           <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
             {Array.from(ignored).map((key) => {
               const [idA, idB] = key.split('::');
@@ -620,6 +772,24 @@ export default function Conflicts() {
           </>
         }
         confirmLabel={ignoringAll ? 'Ignoring…' : `Ignore ${conflicts.length}`}
+      />
+
+      <ConfirmModal
+        isOpen={clearIgnoredConfirmOpen}
+        onCancel={() => !clearingIgnored && setClearIgnoredConfirmOpen(false)}
+        onConfirm={handleClearIgnored}
+        title={`Clear ${ignored.size} ignored conflict${ignored.size === 1 ? '' : 's'}?`}
+        message={
+          <>
+            <p className="mb-2">
+              Every ignored pair will be restored to normal conflict detection.
+            </p>
+            <p className="text-xs text-text-tertiary">
+              Pairs that still conflict will reappear in the active list after refresh.
+            </p>
+          </>
+        }
+        confirmLabel={clearingIgnored ? 'Clearing…' : 'Clear ignored'}
       />
     </div>
   );
