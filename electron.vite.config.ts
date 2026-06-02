@@ -54,12 +54,19 @@ export default defineConfig(({ mode }) => {
                 // .ts file shipped from source, so it must be bundled. zod is bundled
                 // alongside it because electron-builder.yml's files allowlist drops
                 // pure-JS node_modules, so any externalized prod dep would be missing
-                // from app.asar at runtime.
+                // from app.asar at runtime. @xhayper/discord-rpc (and its pure-JS
+                // dependency tree: ws, @discordjs/rest, discord-api-types,
+                // @vladfrangu/async_event_emitter) is bundled for the same reason:
+                // it's a runtime dependency of the main process but lives only under
+                // pnpm's .pnpm store, so allowlisting it in electron-builder.yml is
+                // unreliable. Externalizing it shipped a launch crash in 1.15.1
+                // (ERR_MODULE_NOT_FOUND from app.asar).
                 exclude: [
                     'electron-updater',
                     'electron-log',
                     '@grimoire/social-types',
                     'zod',
+                    '@xhayper/discord-rpc',
                 ],
             }),
         ],
