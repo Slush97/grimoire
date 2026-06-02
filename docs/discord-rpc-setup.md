@@ -30,22 +30,24 @@ Library: [`@xhayper/discord-rpc`](https://github.com/xhayper/discord-rpc) (the
 maintained TypeScript fork of the deprecated `discord-rpc`). Pure JS, so no
 `electron-rebuild` step.
 
-## One-time portal steps (required to light it up)
+## Portal steps to light it up
 
-The code ships **dormant**: `DISCORD_CLIENT_ID` in `discordRpc.ts` is an empty
-string, and every presence call no-ops until it's filled in. Two steps turn it on:
+`DISCORD_CLIENT_ID` in `discordRpc.ts` is already set to the Grimoire Application
+ID, so the feature is live once the user opts in. (Blanking that constant is the
+kill switch: an empty string makes every presence call no-op.) **One portal step
+remains** before the art renders:
 
-1. **Paste the Application ID.** We reuse the **same** Discord Application that
-   owns the `grimoire-discord-setup` bot. In the
-   [Developer Portal](https://discord.com/developers/applications), open that app
-   and copy **General Information -> Application ID**. This is a **public,
-   non-secret** value (not the bot token), safe to commit. Paste it into
-   `DISCORD_CLIENT_ID` in `electron/main/services/discordRpc.ts`.
+- **Upload the logo art.** In the [Developer Portal](https://discord.com/developers/applications),
+  open the Grimoire app (the **same** application that owns the
+  `grimoire-discord-setup` bot), go to **Rich Presence -> Art Assets**, and upload
+  a square Grimoire logo with the asset key **`grimoire_logo`** (this is the
+  `largeImageKey` the service references). The source PNG lives at
+  `resources/grimoire-logo-accent.png`. Assets can take a few minutes to propagate
+  after upload; until then the large image renders empty but everything else works.
 
-2. **Upload the logo art.** In the same app, go to **Rich Presence -> Art Assets**
-   and upload a square Grimoire logo with the asset key **`grimoire_logo`** (this
-   is the `largeImageKey` the service references). Assets can take a few minutes
-   to propagate after upload.
+For reference, the Application ID was copied from **General Information ->
+Application ID** of that shared app. It is a **public, non-secret** value (not the
+bot token), which is why it is safe to ship in client source.
 
 ## Notes and gotchas
 

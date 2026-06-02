@@ -23,10 +23,11 @@ import { Client, type SetActivity } from '@xhayper/discord-rpc';
  * The Discord Application ID that owns Rich Presence for Grimoire. This is the
  * SAME application that owns the grimoire-discord-setup bot (Developer Portal ->
  * the app -> Application ID). It is a PUBLIC, non-secret value, safe to ship in
- * client source. Empty string = feature stays dormant (every call below no-ops),
- * so this file can land and be reviewed before the portal work is done.
+ * client source. Blanking it is the kill switch: an empty string makes every
+ * call below no-op.
  *
- * See docs/discord-rpc-setup.md for how to fill this in and upload the logo art.
+ * The one portal step left before the art renders is uploading the logo as the
+ * `grimoire_logo` Rich Presence asset. See docs/discord-rpc-setup.md.
  */
 const DISCORD_CLIENT_ID = '1504228345922191380';
 
@@ -98,8 +99,9 @@ const FALLBACK_PRESENCE: SurfaceText = { details: 'In the mod manager' };
  */
 const SESSION_START = Date.now();
 
-/** Discord allows 5 activity updates / 20s. Stay comfortably under it. */
-const MIN_UPDATE_INTERVAL_MS = 3000;
+/** Discord allows 5 activity updates / 20s (one per 4s). 4.5s keeps us under
+ *  that ceiling even when the user navigates continuously. */
+const MIN_UPDATE_INTERVAL_MS = 4500;
 /** Cap how long we'll wait on a connect handshake before giving up quietly. */
 const CONNECT_TIMEOUT_MS = 5000;
 
@@ -156,7 +158,11 @@ async function ensureConnected(): Promise<boolean> {
         try {
             const c = new Client({ clientId: DISCORD_CLIENT_ID });
             c.on('disconnected', () => {
+                // Drop the dead client so the next ensureConnected() builds a
+                // fresh one instead of reusing a closed socket. Guarded in case
+                // a reconnect already replaced our reference.
                 connected = false;
+                if (client === c) client = null;
             });
             await withTimeout(c.login(), CONNECT_TIMEOUT_MS);
             client = c;
