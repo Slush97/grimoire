@@ -2533,9 +2533,9 @@ export default function Installed() {
     );
   }
 
-  // Conflicts and update-all buttons live on the section header row (next to
-  // Fix Order) rather than the top action bar — when both are active the top
-  // bar gets cramped, so move them to the line below where there's room.
+  // Conflicts, update-all, and fix-unknown buttons. Rendered once, in the top
+  // action bar's right cluster (next to Fix Order). The right cluster wraps when
+  // cramped, so there's no need to relocate them to a section header.
   const hasStatusButtons =
     conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
@@ -2935,8 +2935,6 @@ export default function Installed() {
         <div>
           <div className="flex items-baseline justify-between mb-[14px]">
             <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">Disabled</SectionHeader>
-            {/* Fall back here when there's nothing in the Enabled section to host the status buttons. */}
-            {visibleEnabled.length === 0 && statusButtons}
           </div>
           {renderSortableSection('disabled')}
         </div>
