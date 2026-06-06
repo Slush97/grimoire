@@ -44,7 +44,7 @@ import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
 
 const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
-const LABEL_TRANSITION_MS = 260;
+const LABEL_TRANSITION_MS = 180;
 const DISCOVER_LAST_SEEN_KEY = 'grimoire:discover:last-seen-created-at';
 const DISCOVER_BADGE_POLL_MS = 2 * 60 * 1000;
 const PREVIEW_VOLUME_HIDE_DELAY_MS = 60 * 1000;
@@ -676,11 +676,9 @@ export default function Sidebar() {
       className="grimoire-sidebar bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden"
     >
       <div className="relative flex h-11 flex-shrink-0 items-center overflow-hidden border-b border-border px-3">
-        {labelMounted && (
+        {labelMounted && !collapsed && (
           <div
-            className={`sidebar-title-shell pointer-events-none absolute inset-y-0 left-0 flex items-center justify-center ${
-              collapsed ? 'right-[46px]' : 'right-9'
-            }`}
+            className="sidebar-title-shell pointer-events-none absolute inset-y-0 left-0 right-9 flex items-center justify-center"
           >
             <span
               className={`flex items-center gap-1.5 text-2xl text-text-primary/85 leading-none ${titleTransitionClass}`}
@@ -845,7 +843,7 @@ export default function Sidebar() {
         )}
 
         {/* Toasts need horizontal room to read, so suppress in collapsed mode. */}
-        {toast && labelMounted && (
+        {toast && labelMounted && !collapsed && (
           <div
             className={`rounded-sm px-2.5 py-1.5 text-xs leading-snug ${
               toast.kind === 'error'

@@ -50,37 +50,42 @@ import type {
  */
 const COLOR_CODENAME_BY_HERO: Readonly<Record<string, string>> = {
     Paige: 'bookworm',
-    // Added from local disabled-mod particle scans + vpkmerge texture audits.
     Abrams: 'abrams',
     Apollo: 'fencer',
+    Bebop: 'bebop',
+    Billy: 'punkgoat',
     Calico: 'nano',
+    Celeste: 'unicorn',
+    Doorman: 'doorman',
+    Drifter: 'drifter',
+    Dynamo: 'dynamo',
+    Graves: 'necro',
+    'Grey Talon': 'archer',
+    Haze: 'haze',
+    Holliday: 'astro',
+    Infernus: 'inferno',
+    Ivy: 'tengu',
+    Kelvin: 'kelvin',
     'Lady Geist': 'ghost',
     Lash: 'lash',
     McGinnis: 'mcginnis',
-    Pocket: 'pocket',
-    Sinclair: 'magician',
-    // Particle-only heroes (no color textures / vertex colors): their recipe has no
-    // preview_texture, so the live swatch falls back to the approximate CSS chip;
-    // recolor-hero still bakes them. The patcher handles v4 + v5 particles, so each
-    // recolors at full coverage. Keep this in lockstep with `recipe_for` in
-    // vpkmerge-core/src/hero_recolor.rs.
-    Celeste: 'unicorn',
-    Holliday: 'astro',
     Mina: 'vampirebat',
+    Mirage: 'mirage',
+    'Mo & Krill': 'digger',
+    Paradox: 'chrono',
+    Pocket: 'pocket',
+    Rem: 'familiar',
     Seven: 'gigawatt',
+    Shiv: 'shiv',
+    Silver: 'werewolf',
+    Sinclair: 'magician',
+    Venator: 'priest',
+    Victor: 'frank',
+    Vindicta: 'hornet',
+    Viscous: 'viscous',
+    Vyper: 'viper',
+    Warden: 'warden',
     Wraith: 'wraith',
-    Infernus: 'inferno',
-    // Graves: PARTICLES recolor fully and cover most of her VFX (her large ability
-    // maps, e.g. necro_soul_01, are grayscale and tinted by the particle color). Two
-    // small gaps remain, tracked in `recipe_for` (vpkmerge hero_recolor.rs): the
-    // gravestone's green transmissive glow (a 4x4 chromatic texture, hue-shiftable)
-    // and the pickup-sphere/jar tint (a material g_vColorTint CONSTANT, which needs
-    // an in-place .vmat_c patch, not a texture). Neither blocks shipping her here.
-    Graves: 'necro',
-    // Yamato: particles + a handful of chromatic textures (the green blade-dash
-    // self-illum and the shadow-redemption status maps, plus the shadow-form body
-    // albedo). Her recipe also carries the prism animation targets, so she is a
-    // strong Rainbow candidate. Keep in lockstep with `recipe_for`.
     Yamato: 'yamato',
 };
 
@@ -91,8 +96,9 @@ const COLOR_CODENAME_BY_HERO: Readonly<Record<string, string>> = {
  *  g_vColorTint material tints (zombie/jar/gravestone).
  *  v4: Graves picker-hand albedo + transmissive textures + necro_hands tint.
  *  v5: Graves hand flame aura (g_vSelfIllumTint on necro_flame_effect*).
- *  v6: Infernus body self-illum accents + flame materials + arm flame ramp. */
-const RECIPE_CACHE_VERSION = 6;
+ *  v6: Infernus body self-illum accents + flame materials + arm flame ramp.
+ *  v7: bundled vpkmerge main build with full selectable-roster recipe coverage. */
+const RECIPE_CACHE_VERSION = 7;
 
 /** The recolor codename for a hero, or null when no recipe is pinned for it. */
 export function colorCodenameForHero(heroName: string): string | null {
