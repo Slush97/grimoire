@@ -8,6 +8,7 @@ import {
     fetchModFileList,
     fetchModComments,
     fetchModUpdates,
+    fetchSubmitterLinks,
     fetchCollection,
     fetchCollectionItems,
     GameBananaSection,
@@ -163,6 +164,14 @@ ipcMain.handle(
     async (_, args: GetModUpdatesArgs): Promise<GameBananaModUpdatesResponse> => {
         const { modId, section = 'Mod', page = 1 } = args;
         return fetchModUpdates(modId, section, page);
+    }
+);
+
+// get-submitter-links — artist social/contact links from their member profile
+ipcMain.handle(
+    'get-submitter-links',
+    async (_, memberId: number) => {
+        return fetchSubmitterLinks(memberId);
     }
 );
 

@@ -11,6 +11,7 @@ import type {
   GameBananaModUpdatesResponse,
   GameBananaCollection,
   GameBananaCollectionItemsResponse,
+  GameBananaArtistLink,
 } from '../types/gamebanana';
 
 // Re-export types for convenience
@@ -407,6 +408,10 @@ export async function getModComments(modId: number, section?: string, page = 1):
 
 export async function getModUpdates(modId: number, section?: string, page = 1): Promise<GameBananaModUpdatesResponse> {
   return window.electronAPI.getModUpdates({ modId, section, page });
+}
+
+export async function getSubmitterLinks(memberId: number): Promise<GameBananaArtistLink[]> {
+  return window.electronAPI.getSubmitterLinks(memberId);
 }
 
 export async function downloadMod(

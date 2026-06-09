@@ -64,6 +64,12 @@ export interface GameBananaSubmitter {
     kofiUrl?: string;
 }
 
+export interface GameBananaArtistLink {
+    label: string;
+    platform: string;
+    url: string;
+}
+
 export interface GameBananaPreviewMedia {
     images?: GameBananaImage[];
     metadata?: GameBananaPreviewMetadata;
@@ -1034,6 +1040,118 @@ function mapSubmitter(raw: ModRaw['_aSubmitter']): GameBananaSubmitter | undefin
         profileUrl: raw._sProfileUrl,
         kofiUrl: extractKofiUrl(raw._aDonationMethods),
     };
+}
+
+interface ContactInfoRaw {
+    _sTitle?: string;
+    _sValue?: string;
+    _sIconClasses?: string;
+    _sValueTemplate?: string;
+}
+
+interface ProfilePageRaw {
+    _bIsPrivate?: boolean;
+    _aContactInfo?: ContactInfoRaw[];
+}
+
+// Artist social links aren't carried on a mod's submitter payload; they live on
+// the member's profile. Cache per member id so reopening mods by the same
+// author (common while browsing) doesn't refetch.
+const submitterLinksCache = new Map<number, GameBananaArtistLink[]>();
+
+/**
+ * Fetch an artist's social/contact links (Bluesky, YouTube, Discord, website,
+ * etc.) from their GameBanana member profile. Best-effort: a private profile,
+ * a network error, or an empty contact list all resolve to an empty array so
+ * the details view simply shows no extra links.
+ */
+export async function fetchSubmitterLinks(memberId: number): Promise<GameBananaArtistLink[]> {
+    if (!Number.isFinite(memberId) || memberId <= 0) return [];
+
+    const cached = submitterLinksCache.get(memberId);
+    if (cached) return cached;
+
+    let links: GameBananaArtistLink[] = [];
+    try {
+        const raw = await fetchJson<ProfilePageRaw>(`${GAMEBANANA_API_BASE}/Member/${memberId}/ProfilePage`);
+        if (!raw._bIsPrivate) {
+            links = mapContactInfo(raw._aContactInfo);
+        }
+    } catch (err) {
+        console.warn('[gamebanana] Failed to load submitter links:', err);
+        links = [];
+    }
+
+    submitterLinksCache.set(memberId, links);
+    return links;
+}
+
+function mapContactInfo(items: ContactInfoRaw[] | undefined): GameBananaArtistLink[] {
+    const out: GameBananaArtistLink[] = [];
+    const seen = new Set<string>();
+    for (const item of items ?? []) {
+        const label = item._sTitle?.trim();
+        if (!label) continue;
+        const url = buildContactUrl(item);
+        if (!url || seen.has(url)) continue;
+        seen.add(url);
+        out.push({ label, platform: normalizeContactPlatform(item._sIconClasses, label), url });
+    }
+    return out;
+}
+
+/**
+ * Resolve a contact entry's stored value into a usable absolute URL. GameBanana
+ * stores either a bare handle (combined with a `%VALUE%` href template) or, when
+ * users paste a full path, a value that already contains the host - in which
+ * case naive template substitution double-prefixes it (e.g.
+ * `bsky.app/profile/bsky.app/...`). We detect that and use the value directly.
+ */
+function buildContactUrl(item: ContactInfoRaw): string | undefined {
+    const value = item._sValue?.trim();
+    if (!value) return undefined;
+
+    let candidate: string | undefined;
+    if (/^https?:\/\//i.test(value)) {
+        candidate = value;
+    } else {
+        const hrefMatch = item._sValueTemplate?.match(/href="([^"]*%VALUE%[^"]*)"/i);
+        const templateHref = hrefMatch?.[1];
+        if (templateHref) {
+            const prefix = templateHref.split('%VALUE%')[0];
+            let host = '';
+            try {
+                host = new URL(prefix).hostname.toLowerCase();
+            } catch {
+                host = '';
+            }
+            candidate =
+                host && value.toLowerCase().includes(host)
+                    ? `https://${value.replace(/^https?:\/\//i, '')}`
+                    : templateHref.replace('%VALUE%', value);
+        } else {
+            candidate = `https://${value.replace(/^https?:\/\//i, '')}`;
+        }
+    }
+
+    try {
+        const url = new URL(candidate);
+        if (url.protocol !== 'http:' && url.protocol !== 'https:') return undefined;
+        return url.toString();
+    } catch {
+        return undefined;
+    }
+}
+
+// GameBanana tags each contact with an icon class like
+// "ContactTypeIcon BlueskyIcon"; pull the platform token out of it (ignoring the
+// generic "ContactType" prefix), falling back to a slug of the label.
+function normalizeContactPlatform(iconClasses: string | undefined, label: string): string {
+    const tokens = [...(iconClasses ?? '').matchAll(/([A-Za-z0-9]+)Icon\b/g)]
+        .map((m) => m[1].toLowerCase())
+        .filter((token) => token !== 'contacttype');
+    if (tokens.length > 0) return tokens[0];
+    return label.toLowerCase().replace(/[^a-z0-9]+/g, '');
 }
 
 function extractKofiUrl(methods: DonationMethodRaw[] | undefined): string | undefined {
