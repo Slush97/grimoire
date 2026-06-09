@@ -26,7 +26,10 @@ import { runVpkmerge } from './modMerger';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
 export const SOUL_MODEL_SCHEME = 'grimoire-soul';
-const SOUL_CACHE_VERSION = '2';
+// v1: the original pipeline (vpkmerge export + stripGlbSkins patch). Pre-sidecar
+// GLBs are treated as v1 in getSoulModelInfo, so introducing the sidecar did not
+// invalidate existing caches.
+const SOUL_CACHE_VERSION = '1';
 
 /**
  * Canonical soul-container model entry. Present in the base pak01 and in the
@@ -144,8 +147,14 @@ export interface SoulModelInfo {
 export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
     try {
         const stat = await fs.stat(modelFile(key));
-        const version = await fs.readFile(versionFile(key), 'utf8').catch(() => '');
-        if (version.trim() !== SOUL_CACHE_VERSION) {
+        // A GLB without a sidecar predates cache versioning and counts as v1:
+        // the export pipeline is unchanged since those were written (vpkmerge
+        // v0.11.0 still emits the degenerate static skin, which stripGlbSkins
+        // already patched at write time), so they stay valid. Bump
+        // SOUL_CACHE_VERSION only when the export output actually changes.
+        const raw = await fs.readFile(versionFile(key), 'utf8').catch(() => '');
+        const version = raw.trim() || '1';
+        if (version !== SOUL_CACHE_VERSION) {
             return { hasModel: false, mtimeMs: null };
         }
         return { hasModel: true, mtimeMs: stat.mtimeMs };
@@ -186,8 +195,10 @@ export async function exportSoulModel(
         out,
     ]);
 
-    // Current vpkmerge avoids degenerate static skins, but keep this as a
-    // compatibility no-op/fallback for older local binaries or stale outputs.
+    // Drop the degenerate skin emitted on this static prop so three.js loads
+    // it as a plain mesh (see stripGlbSkins). Still required: as of vpkmerge
+    // v0.11.0 the export carries 1 skin and 0 animations (verified 2026-06-09
+    // against both the bundled and a fresh release build).
     const raw = await fs.readFile(out);
     const patched = stripGlbSkins(raw);
     if (patched !== raw) await fs.writeFile(out, patched);

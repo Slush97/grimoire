@@ -159,7 +159,12 @@ export default function HeroPoseViewer({
       cancelled = true;
       if (loaded) disposeScene(loaded);
     };
-  }, [heroName, sourceKey, fallbackSkinMetaKey, skinSources]);
+    // `skinSources` is deliberately not a dependency: `sourceKey` already
+    // encodes its contents, and the array reference changes on every parent
+    // mods refresh, which would tear down and re-fetch the GLB for an
+    // identical stack (visible viewer churn on unrelated toggles).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroName, sourceKey, fallbackSkinMetaKey]);
 
   if (failed) {
     return (
