@@ -1,5 +1,5 @@
 import { promises as fs, existsSync } from 'fs';
-import { join, dirname } from 'path';
+import { join, dirname, resolve } from 'path';
 import { tmpdir } from 'os';
 import { spawn } from 'child_process';
 import { randomUUID, createHash } from 'crypto';
@@ -33,12 +33,37 @@ const VPKMERGE_BINARY_BY_PLATFORM: Record<SupportedPlatform, string> = {
     'win32-x64':    'vpkmerge-windows-x86_64.exe',
 };
 
+function firstExistingPath(paths: string[]): string | null {
+    for (const path of paths) {
+        if (existsSync(path)) return path;
+    }
+    return null;
+}
+
+function devVpkmergeBinaryPath(): string | null {
+    const explicit = process.env['VPKMERGE_BINARY'];
+    if (explicit && existsSync(explicit)) return explicit;
+
+    const repoRoot = app.getAppPath();
+    const siblingRoot = resolve(repoRoot, '..', 'vpkmerge', 'target');
+    const exeName = process.platform === 'win32' ? 'vpkmerge.exe' : 'vpkmerge';
+    return firstExistingPath([
+        join(siblingRoot, 'release', exeName),
+        join(siblingRoot, 'debug', exeName),
+    ]);
+}
+
 /**
  * Resolve the bundled vpkmerge binary path. In dev the binary lives under
  * the repo's resources/; in a packaged build electron-builder's
  * extraResources places it at process.resourcesPath/vpkmerge/.
  */
 export function vpkmergeBinaryPath(): string {
+    if (!app.isPackaged) {
+        const local = devVpkmergeBinaryPath();
+        if (local) return local;
+    }
+
     const key = `${process.platform}-${process.arch}` as SupportedPlatform;
     const assetName = VPKMERGE_BINARY_BY_PLATFORM[key];
     if (!assetName) {

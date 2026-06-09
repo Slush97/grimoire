@@ -26,6 +26,10 @@ import { runVpkmerge } from './modMerger';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
 export const SOUL_MODEL_SCHEME = 'grimoire-soul';
+// v1: the original pipeline (vpkmerge export + stripGlbSkins patch). Pre-sidecar
+// GLBs are treated as v1 in getSoulModelInfo, so introducing the sidecar did not
+// invalidate existing caches.
+const SOUL_CACHE_VERSION = '1';
 
 /**
  * Canonical soul-container model entry. Present in the base pak01 and in the
@@ -50,6 +54,10 @@ function modelDir(key: string): string {
 
 function modelFile(key: string): string {
     return join(modelDir(key), 'model.glb');
+}
+
+function versionFile(key: string): string {
+    return join(modelDir(key), '.cache-version');
 }
 
 /**
@@ -139,6 +147,16 @@ export interface SoulModelInfo {
 export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
     try {
         const stat = await fs.stat(modelFile(key));
+        // A GLB without a sidecar predates cache versioning and counts as v1:
+        // the export pipeline is unchanged since those were written (vpkmerge
+        // v0.11.0 still emits the degenerate static skin, which stripGlbSkins
+        // already patched at write time), so they stay valid. Bump
+        // SOUL_CACHE_VERSION only when the export output actually changes.
+        const raw = await fs.readFile(versionFile(key), 'utf8').catch(() => '');
+        const version = raw.trim() || '1';
+        if (version !== SOUL_CACHE_VERSION) {
+            return { hasModel: false, mtimeMs: null };
+        }
         return { hasModel: true, mtimeMs: stat.mtimeMs };
     } catch {
         return { hasModel: false, mtimeMs: null };
@@ -177,11 +195,14 @@ export async function exportSoulModel(
         out,
     ]);
 
-    // Drop the degenerate skin morphic emits on these static props so three.js
-    // loads them as plain meshes (see stripGlbSkins).
+    // Drop the degenerate skin emitted on this static prop so three.js loads
+    // it as a plain mesh (see stripGlbSkins). Still required: as of vpkmerge
+    // v0.11.0 the export carries 1 skin and 0 animations (verified 2026-06-09
+    // against both the bundled and a fresh release build).
     const raw = await fs.readFile(out);
     const patched = stripGlbSkins(raw);
     if (patched !== raw) await fs.writeFile(out, patched);
+    await fs.writeFile(versionFile(metaKey), SOUL_CACHE_VERSION);
 
     return getSoulModelInfo(metaKey);
 }

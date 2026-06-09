@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { Loader2 } from 'lucide-react';
 import { getSoulModelInfo, exportSoulModel } from '../../lib/api';
+import { loadGltfPreview } from '../../lib/loadGltfPreview';
 
 /**
  * Live 3D preview of a soul-container mod, for the Locker's Global view.
@@ -112,9 +112,7 @@ export default function SoulContainerViewer({
           return;
         }
         const url = meshUrlFor(modKey, info.mtimeMs);
-        const gltf = await new Promise<GLTF>((resolve, reject) => {
-          new GLTFLoader().load(url, resolve, undefined, reject);
-        });
+        const gltf = await loadGltfPreview(url);
         if (cancelled) {
           disposeScene(gltf.scene);
           return;

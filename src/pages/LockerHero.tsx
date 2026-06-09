@@ -18,6 +18,7 @@ import HeroColorPicker from '../components/locker/HeroColorPicker';
 const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { Mod } from '../types/mod';
+import type { HeroPoseSkinSource } from '../types/portrait';
 import {
   FAVORITE_HEROES_KEY,
   MINA_ARCHIVE_DEFAULT,
@@ -393,15 +394,29 @@ export function LockerHeroView({
   const selectedPoseSkinKey =
     poseSkinSelection?.heroId === hero.id ? poseSkinSelection.key : null;
 
-  // The skin to pose: prefer the last skin the user enabled in this view, then
-  // fall back to the first enabled skin. Multiple enabled skin VPKs can layer,
-  // so "first enabled" alone can keep showing an older skin after a new pick.
-  const activeSkinMetaKey = useMemo(() => {
+  // Single-skin fallback: prefer the last skin the user enabled in this view,
+  // then fall back to the first enabled skin.
+  const fallbackPoseSkinMetaKey = useMemo(() => {
     const selected = selectedPoseSkinKey
       ? skinList.find((mod) => poseSkinSelectionKey(mod) === selectedPoseSkinKey && mod.enabled)
       : null;
     return (selected ?? skinList.find((mod) => mod.enabled))?.metaKey;
   }, [skinList, selectedPoseSkinKey]);
+
+  // Default 3D preview source: every currently enabled visual VPK for this hero.
+  // The main process uses priority to build a preview merge that matches game
+  // load order, and falls back to fallbackPoseSkinMetaKey if the stack cannot export.
+  const activeSkinSources = useMemo<HeroPoseSkinSource[]>(
+    () =>
+      skinList
+        .filter((mod) => mod.enabled)
+        .map((mod) => ({ metaKey: mod.metaKey, priority: mod.priority }))
+        .sort((a, b) => b.priority - a.priority || a.metaKey.localeCompare(b.metaKey)),
+    [skinList]
+  );
+  const activeSkinSourceKey =
+    activeSkinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|') ||
+    'vanilla';
   const hasSounds = soundList.length > 0;
   // If the active section runs out of mods (e.g. user deleted their last
   // sound for this hero) drop back to skins so the panel isn't stuck empty.
@@ -476,9 +491,10 @@ export function LockerHeroView({
             }
           >
             <HeroPoseViewer
-              key={`${hero.name}:${activeSkinMetaKey ?? 'vanilla'}`}
+              key={`${hero.name}:${activeSkinSourceKey}:${fallbackPoseSkinMetaKey ?? ''}`}
               heroName={hero.name}
-              skinMetaKey={activeSkinMetaKey}
+              skinSources={activeSkinSources}
+              fallbackSkinMetaKey={fallbackPoseSkinMetaKey}
             />
           </Suspense>
         ) : renderSrc ? (

@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { GLTFLoader, type GLTF } from 'three/examples/jsm/loaders/GLTFLoader.js';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Loader2 } from 'lucide-react';
 import { getHeroPoseInfo, exportHeroPose } from '../../lib/api';
+import { loadGltfPreview } from '../../lib/loadGltfPreview';
+import type { HeroPoseSkinSource } from '../../types/portrait';
 
 /**
  * Live 3D preview of a hero's menu pose for the Locker's per-hero view.
@@ -104,15 +105,19 @@ function Controls() {
 
 export default function HeroPoseViewer({
   heroName,
-  skinMetaKey,
+  skinSources = [],
+  fallbackSkinMetaKey,
 }: {
   heroName: string;
-  /** metaKey of the hero's active skin VPK; omit for a vanilla pose. */
-  skinMetaKey?: string;
+  /** Active visual VPK stack for this hero, ordered by the main process before export. */
+  skinSources?: HeroPoseSkinSource[];
+  /** Single-skin fallback when a multi-source preview stack cannot be exported. */
+  fallbackSkinMetaKey?: string;
 }) {
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
   const [generating, setGenerating] = useState(false);
   const [failed, setFailed] = useState(false);
+  const sourceKey = skinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|');
 
   useEffect(() => {
     // The caller remounts this component (via a hero+skin `key`) when the
@@ -122,11 +127,11 @@ export default function HeroPoseViewer({
 
     (async () => {
       try {
-        let info = await getHeroPoseInfo(heroName, skinMetaKey);
+        let info = await getHeroPoseInfo(heroName, skinSources);
         if (!info.hasModel) {
           if (cancelled) return;
           setGenerating(true);
-          info = await exportHeroPose(heroName, skinMetaKey);
+          info = await exportHeroPose(heroName, skinSources, fallbackSkinMetaKey);
           if (cancelled) return;
           setGenerating(false);
         }
@@ -135,9 +140,7 @@ export default function HeroPoseViewer({
           return;
         }
         const url = meshUrlFor(info.key, info.mtimeMs);
-        const gltf = await new Promise<GLTF>((resolve, reject) => {
-          new GLTFLoader().load(url, resolve, undefined, reject);
-        });
+        const gltf = await loadGltfPreview(url);
         if (cancelled) {
           disposeScene(gltf.scene);
           return;
@@ -156,7 +159,12 @@ export default function HeroPoseViewer({
       cancelled = true;
       if (loaded) disposeScene(loaded);
     };
-  }, [heroName, skinMetaKey]);
+    // `skinSources` is deliberately not a dependency: `sourceKey` already
+    // encodes its contents, and the array reference changes on every parent
+    // mods refresh, which would tear down and re-fetch the GLB for an
+    // identical stack (visible viewer churn on unrelated toggles).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroName, sourceKey, fallbackSkinMetaKey]);
 
   if (failed) {
     return (
@@ -173,7 +181,10 @@ export default function HeroPoseViewer({
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
         <Loader2 className="h-6 w-6 animate-spin text-white/80" />
         {generating && (
-          <p className="text-xs text-text-secondary">Posing {heroName}...</p>
+          <p className="text-xs text-text-secondary">
+            Posing {heroName}
+            {skinSources.length > 1 ? ` with ${skinSources.length} active mods` : ''}...
+          </p>
         )}
       </div>
     );

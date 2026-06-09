@@ -852,10 +852,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('export-soul-model', metaKey),
     clearSoulModel: (key: string) =>
         ipcRenderer.invoke('clear-soul-model', key),
-    getHeroPoseInfo: (heroName: string, skinMetaKey?: string) =>
-        ipcRenderer.invoke('get-hero-pose-info', heroName, skinMetaKey),
-    exportHeroPose: (heroName: string, skinMetaKey?: string) =>
-        ipcRenderer.invoke('export-hero-pose', heroName, skinMetaKey),
+    getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
+        ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
+    exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
+        ipcRenderer.invoke('export-hero-pose', heroName, skinSources, fallbackSkinMetaKey),
     getPreviewCacheSize: () =>
         ipcRenderer.invoke('get-preview-cache-size'),
     clearPreviewCache: () =>

@@ -24,9 +24,10 @@
  */
 import { promises as fs } from 'fs';
 import { join } from 'path';
+import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import { app, protocol, net } from 'electron';
-import { runVpkmerge } from './modMerger';
+import { runVpkmerge, verifyVpkOutput } from './modMerger';
 import { codenamesForHero } from './heroPortraits';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
@@ -68,7 +69,10 @@ const MODEL_CODENAME_OVERRIDES: Readonly<Record<string, string[]>> = {
  * a community reporter (#bugs "3D Preview pulling wrong model"): each entry
  * decodes, carries a real menu pose, and is the current model. Viscous is a
  * no-op today (`--hero viscous` already resolves here) but pinned for the same
- * skin-path robustness. Deliberately NOT pinned: Infernus (its current
+ * skin-path robustness. Rem is pinned to `familiar_wip`: the plain
+ * `familiar.vmdl_c` exports a live skeleton/clip with every rendered vertex
+ * weighted to pelvis, so the mixer advances while the mesh stays effectively
+ * bind-posed. Deliberately NOT pinned: Infernus (its current
  * `heroes_wip/inferno` ships no menu/idle pose clip, so `--require-pose` would
  * drop it to a 2D portrait; `--hero inferno` already resolves to a poseable
  * same-size model) and Billy (`punkgoat` ships the rig but no pose clip and
@@ -80,6 +84,7 @@ const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Pocket: 'models/heroes_wip/pocket/pocket.vmdl_c',
     Ivy: 'models/heroes_wip/ivy/ivy.vmdl_c',
     'Lady Geist': 'models/heroes_wip/geist/geist.vmdl_c',
+    Rem: 'models/heroes_wip/familiar/familiar_wip.vmdl_c',
     Viscous: 'models/heroes_staging/viscous/viscous.vmdl_c',
 };
 
@@ -111,8 +116,18 @@ function sanitize(value: string): string {
  *  (a skin metaKey, or `vanilla` for the base look) so each skin caches its own
  *  still. Lowercased because the skin half is a VPK name, unique case-
  *  insensitively. */
-function poseKey(heroName: string, skinMetaKey?: string): string {
-    return `${heroName}::${skinMetaKey ?? 'vanilla'}`;
+export interface HeroPoseSkinSource {
+    metaKey: string;
+    priority: number;
+}
+
+function poseKey(heroName: string, skinSources: HeroPoseSkinSource[] = []): string {
+    if (skinSources.length === 0) return `${heroName}::vanilla`;
+    if (skinSources.length === 1) return `${heroName}::${skinSources[0].metaKey}`;
+    const stack = skinSources
+        .map((source) => `${source.priority}:${source.metaKey}`)
+        .join('+');
+    return `${heroName}::stack::${stack}`;
 }
 
 function modelDir(key: string): string {
@@ -138,8 +153,11 @@ function modelFile(key: string): string {
  * v3: reworked heroes (Abrams, McGinnis, Pocket, Ivy, Lady Geist, ...) now pin
  * their exact current `heroes_wip` entry instead of `--hero` discovery, which had
  * been resolving to the stale pre-rework body. Pre-v3 GLBs cached the wrong model.
+ *
+ * v4: Rem now pins `familiar_wip.vmdl_c`; old cached Familiar GLBs targeted
+ * `familiar.vmdl_c`, whose rendered vertices are all pelvis-weighted.
  */
-const POSE_CACHE_VERSION = '3';
+const POSE_CACHE_VERSION = '4';
 
 function versionFile(key: string): string {
     return join(modelDir(key), '.cache-version');
@@ -169,6 +187,68 @@ async function resolveSkinVpk(deadlockPath: string, metaKey: string): Promise<st
         }
     }
     return null;
+}
+
+function normalizeSkinSources(skinSources: HeroPoseSkinSource[] = []): HeroPoseSkinSource[] {
+    const byKey = new Map<string, HeroPoseSkinSource>();
+    for (const source of skinSources) {
+        const metaKey = source.metaKey.trim();
+        if (!metaKey) continue;
+        byKey.set(metaKey, {
+            metaKey,
+            priority: Number.isFinite(source.priority) ? source.priority : 0,
+        });
+    }
+    return [...byKey.values()].sort(
+        (a, b) => b.priority - a.priority || a.metaKey.localeCompare(b.metaKey)
+    );
+}
+
+interface PoseSource {
+    vpk: string;
+    sources: HeroPoseSkinSource[];
+    tempDir?: string;
+}
+
+async function resolvePoseSource(
+    deadlockPath: string,
+    pak01: string,
+    skinSources: HeroPoseSkinSource[]
+): Promise<PoseSource> {
+    const resolved: Array<HeroPoseSkinSource & { path: string }> = [];
+    for (const source of skinSources) {
+        const path = await resolveSkinVpk(deadlockPath, source.metaKey);
+        if (path) resolved.push({ ...source, path });
+    }
+
+    if (resolved.length === 0) {
+        return { vpk: pak01, sources: [] };
+    }
+
+    if (resolved.length === 1) {
+        return {
+            vpk: resolved[0].path,
+            sources: [{ metaKey: resolved[0].metaKey, priority: resolved[0].priority }],
+        };
+    }
+
+    const tempDir = await fs.mkdtemp(join(tmpdir(), 'grimoire-hero-pose-'));
+    const merged = join(tempDir, 'stack_dir.vpk');
+    try {
+        await runVpkmerge([merged, ...resolved.map((source) => source.path)], 120000);
+        await verifyVpkOutput(merged);
+        return {
+            vpk: merged,
+            tempDir,
+            sources: resolved.map((source) => ({
+                metaKey: source.metaKey,
+                priority: source.priority,
+            })),
+        };
+    } catch (err) {
+        await fs.rm(tempDir, { recursive: true, force: true });
+        throw err;
+    }
 }
 
 export interface HeroPoseInfo {
@@ -201,9 +281,9 @@ async function infoForKey(key: string): Promise<HeroPoseInfo> {
  *  and storage key. */
 export async function getHeroPoseInfo(
     heroName: string,
-    skinMetaKey?: string
+    skinSources?: HeroPoseSkinSource[]
 ): Promise<HeroPoseInfo> {
-    return infoForKey(poseKey(heroName, skinMetaKey));
+    return infoForKey(poseKey(heroName, normalizeSkinSources(skinSources)));
 }
 
 /**
@@ -230,13 +310,15 @@ const inFlightExports = new Map<string, Promise<HeroPoseInfo>>();
 export async function exportHeroPose(
     deadlockPath: string,
     heroName: string,
-    skinMetaKey?: string
+    skinSources?: HeroPoseSkinSource[],
+    fallbackSkinMetaKey?: string
 ): Promise<HeroPoseInfo> {
-    const requestKey = poseKey(heroName, skinMetaKey);
+    const normalized = normalizeSkinSources(skinSources);
+    const requestKey = poseKey(heroName, normalized);
     const existing = inFlightExports.get(requestKey);
     if (existing) return existing;
 
-    const work = runHeroPoseExport(deadlockPath, heroName, skinMetaKey);
+    const work = runHeroPoseExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey);
     inFlightExports.set(requestKey, work);
     try {
         return await work;
@@ -248,7 +330,26 @@ export async function exportHeroPose(
 async function runHeroPoseExport(
     deadlockPath: string,
     heroName: string,
-    skinMetaKey?: string
+    skinSources: HeroPoseSkinSource[],
+    fallbackSkinMetaKey?: string
+): Promise<HeroPoseInfo> {
+    try {
+        return await runHeroPoseExportForSources(deadlockPath, heroName, skinSources);
+    } catch (err) {
+        if (skinSources.length <= 1 || !fallbackSkinMetaKey) throw err;
+        const fallback =
+            skinSources.find((source) => source.metaKey === fallbackSkinMetaKey) ?? {
+                metaKey: fallbackSkinMetaKey,
+                priority: 0,
+            };
+        return runHeroPoseExportForSources(deadlockPath, heroName, [fallback]);
+    }
+}
+
+async function runHeroPoseExportForSources(
+    deadlockPath: string,
+    heroName: string,
+    skinSources: HeroPoseSkinSource[]
 ): Promise<HeroPoseInfo> {
     const selectors = modelSelectorsForHero(heroName);
     if (selectors.length === 0) {
@@ -256,44 +357,46 @@ async function runHeroPoseExport(
     }
 
     const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
-    const skinVpk = skinMetaKey ? await resolveSkinVpk(deadlockPath, skinMetaKey) : null;
-    const sourceVpk = skinVpk ?? pak01;
-    // Key reflects what actually sourced the pose: the skin only when its VPK
-    // resolved, else vanilla. The renderer reads the key off the returned info.
-    const key = poseKey(heroName, skinVpk ? skinMetaKey : undefined);
+    const source = await resolvePoseSource(deadlockPath, pak01, skinSources);
+    try {
+        const key = poseKey(heroName, source.sources);
+        const dir = modelDir(key);
+        await fs.mkdir(dir, { recursive: true });
+        const out = modelFile(key);
 
-    const dir = modelDir(key);
-    await fs.mkdir(dir, { recursive: true });
-    const out = modelFile(key);
-
-    let lastError: unknown;
-    for (const selector of selectors) {
-        try {
-            await runVpkmerge([
-                'model',
-                'export',
-                '--vpk',
-                sourceVpk,
-                ...selector,
-                '--base',
-                pak01,
-                '--pose',
-                // Refuse to bake a static bind/T-pose: a clipless WIP hero
-                // (Apollo, Billy, Celeste, Mina, Paige, Rem) errors here and the
-                // Locker falls back to the 2D portrait instead of an unposed model.
-                '--require-pose',
-                '--out',
-                out,
-            ]);
-            await fs.writeFile(versionFile(key), POSE_CACHE_VERSION);
-            return infoForKey(key);
-        } catch (err) {
-            lastError = err;
+        let lastError: unknown;
+        for (const selector of selectors) {
+            try {
+                await runVpkmerge([
+                    'model',
+                    'export',
+                    '--vpk',
+                    source.vpk,
+                    ...selector,
+                    '--base',
+                    pak01,
+                    '--pose',
+                    // Refuse to bake a static bind/T-pose: a clipless WIP hero
+                    // (Apollo, Billy, Celeste, Mina, Paige, Rem) errors here and the
+                    // Locker falls back to the 2D portrait instead of an unposed model.
+                    '--require-pose',
+                    '--out',
+                    out,
+                ]);
+                await fs.writeFile(versionFile(key), POSE_CACHE_VERSION);
+                return infoForKey(key);
+            } catch (err) {
+                lastError = err;
+            }
+        }
+        throw lastError instanceof Error
+            ? lastError
+            : new Error(`Failed to export pose for "${heroName}".`);
+    } finally {
+        if (source.tempDir) {
+            await fs.rm(source.tempDir, { recursive: true, force: true });
         }
     }
-    throw lastError instanceof Error
-        ? lastError
-        : new Error(`Failed to export pose for "${heroName}".`);
 }
 
 /**
