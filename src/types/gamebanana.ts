@@ -105,9 +105,14 @@ export interface GameBananaModDetails {
   submitter?: GameBananaSubmitter;
 }
 
+export interface GameBananaModFileListEntry {
+  id: number;
+  isArchived: boolean;
+}
+
 export interface GameBananaModFileList {
   id: number;
-  files: Array<{ id: number; isArchived: boolean }>;
+  files: GameBananaModFileListEntry[];
 }
 
 export interface GameBananaComment {

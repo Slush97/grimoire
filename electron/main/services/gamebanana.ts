@@ -1,6 +1,57 @@
 import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
+// The GameBanana wire types are single-sourced in src/types/gamebanana.ts
+// (the contract the renderer compiles against). Type-only import, erased at
+// build; re-exported so the many `from './gamebanana'` importers keep working.
+// Service-internal types (GameBananaFileMetadata*, raw API row shapes) stay here.
+import type {
+    GameBananaSection,
+    GameBananaCategoryNode,
+    GameBananaMod,
+    GameBananaSubmitter,
+    GameBananaArtistLink,
+    GameBananaPreviewMedia,
+    GameBananaPreviewMetadata,
+    GameBananaImage,
+    GameBananaCategory,
+    GameBananaModsResponse,
+    GameBananaFile,
+    GameBananaComment,
+    GameBananaModUpdateChange,
+    GameBananaModUpdate,
+    GameBananaModUpdatesResponse,
+    GameBananaModDetails,
+    GameBananaCollection,
+    GameBananaCollectionItem,
+    GameBananaCollectionItemsResponse,
+    GameBananaModFileListEntry,
+    GameBananaModFileList,
+} from '../../../src/types/gamebanana';
+export type {
+    GameBananaSection,
+    GameBananaCategoryNode,
+    GameBananaMod,
+    GameBananaSubmitter,
+    GameBananaArtistLink,
+    GameBananaPreviewMedia,
+    GameBananaPreviewMetadata,
+    GameBananaImage,
+    GameBananaCategory,
+    GameBananaModsResponse,
+    GameBananaFile,
+    GameBananaComment,
+    GameBananaModUpdateChange,
+    GameBananaModUpdate,
+    GameBananaModUpdatesResponse,
+    GameBananaModDetails,
+    GameBananaCollection,
+    GameBananaCollectionItem,
+    GameBananaCollectionItemsResponse,
+    GameBananaModFileListEntry,
+    GameBananaModFileList,
+};
+
 
 // Debounce the rate-limit warning so a burst of 429s (e.g. the unknown-mod CRC
 // matcher fanning out) produces one toast, not a flood. Broadcasting via
@@ -24,94 +75,6 @@ const CORE_ITEM_DATA_MAX_URL_LENGTH = 7_500;
 const DEBUG_GAMEBANANA = process.env.GRIMOIRE_DEBUG_GAMEBANANA === '1';
 
 // Types for GameBanana API responses
-export interface GameBananaSection {
-    pluralTitle: string;
-    modelName: string;
-    categoryModelName: string;
-    itemCount: number;
-}
-
-export interface GameBananaCategoryNode {
-    id: number;
-    name: string;
-    profileUrl?: string;
-    itemCount: number;
-    iconUrl?: string;
-    parentId?: number;
-    children?: GameBananaCategoryNode[];
-}
-
-export interface GameBananaMod {
-    id: number;
-    name: string;
-    profileUrl: string;
-    dateAdded: number;
-    dateModified: number;
-    likeCount: number;
-    viewCount: number;
-    downloadCount?: number;
-    hasFiles: boolean;
-    nsfw: boolean;
-    submitter?: GameBananaSubmitter;
-    previewMedia?: GameBananaPreviewMedia;
-    rootCategory?: GameBananaCategory;
-}
-
-export interface GameBananaSubmitter {
-    id: number;
-    name: string;
-    avatarUrl?: string;
-    profileUrl?: string;
-    kofiUrl?: string;
-}
-
-export interface GameBananaArtistLink {
-    label: string;
-    platform: string;
-    url: string;
-}
-
-export interface GameBananaPreviewMedia {
-    images?: GameBananaImage[];
-    metadata?: GameBananaPreviewMetadata;
-}
-
-export interface GameBananaPreviewMetadata {
-    audioUrl?: string;
-}
-
-export interface GameBananaImage {
-    baseUrl: string;
-    file: string;
-    file220?: string;
-    file530?: string;
-}
-
-export interface GameBananaCategory {
-    id?: number;
-    name: string;
-    modelName?: string;
-    profileUrl?: string;
-    iconUrl?: string;
-}
-
-export interface GameBananaModsResponse {
-    records: GameBananaMod[];
-    totalCount: number;
-    isComplete: boolean;
-    perPage: number;
-}
-
-export interface GameBananaFile {
-    id: number;
-    fileName: string;
-    fileSize: number;
-    downloadUrl: string;
-    downloadCount: number;
-    description?: string;
-    isArchived: boolean;
-}
-
 export interface GameBananaFileMetadata extends GameBananaFile {
     md5?: string;
 }
@@ -126,86 +89,6 @@ export interface GameBananaFileMetadataResult {
     section: string;
     files: GameBananaFileMetadata[];
     error?: string;
-}
-
-export interface GameBananaComment {
-    id: number;
-    text: string;
-    dateAdded: number;
-    poster: {
-        id: number;
-        name: string;
-        avatarUrl?: string;
-    };
-}
-
-export interface GameBananaModUpdateChange {
-    /** The change description (plain text). */
-    text: string;
-    /** GameBanana label for the change: Bugfix, Feature, Addition, Adjustment, etc. */
-    category?: string;
-}
-
-export interface GameBananaModUpdate {
-    id: number;
-    version?: string;
-    title?: string;
-    /** Freeform HTML changelog body (used when the author didn't use labels). */
-    text?: string;
-    /** Structured, labeled changelog entries (GameBanana's _aChangeLog). */
-    changes?: GameBananaModUpdateChange[];
-    dateAdded: number;
-}
-
-export interface GameBananaModUpdatesResponse {
-    updates: GameBananaModUpdate[];
-    totalCount: number;
-}
-
-export interface GameBananaModDetails {
-    id: number;
-    name: string;
-    description?: string;
-    nsfw: boolean;
-    category?: GameBananaCategory;
-    files?: GameBananaFile[];
-    previewMedia?: GameBananaPreviewMedia;
-    submitter?: GameBananaSubmitter;
-}
-
-export interface GameBananaCollection {
-    id: number;
-    name: string;
-    description?: string;
-    dateAdded: number;
-    dateModified: number;
-    submitter?: GameBananaSubmitter;
-    previewMedia?: GameBananaPreviewMedia;
-}
-
-export interface GameBananaCollectionItem {
-    id: number;
-    modelName: string;
-    name: string;
-    profileUrl: string;
-    dateAdded: number;
-    dateModified: number;
-    likeCount: number;
-    viewCount: number;
-    hasFiles: boolean;
-    nsfw: boolean;
-    gameId?: number;
-    gameName?: string;
-    submitter?: GameBananaSubmitter;
-    previewMedia?: GameBananaPreviewMedia;
-    rootCategory?: GameBananaCategory;
-}
-
-export interface GameBananaCollectionItemsResponse {
-    records: GameBananaCollectionItem[];
-    totalCount: number;
-    isComplete: boolean;
-    perPage: number;
 }
 
 // Raw API response types
@@ -851,16 +734,6 @@ export async function fetchModDetails(
         : undefined,
         submitter: mapSubmitter(raw._aSubmitter),
     };
-}
-
-export interface GameBananaModFileListEntry {
-    id: number;
-    isArchived: boolean;
-}
-
-export interface GameBananaModFileList {
-    id: number;
-    files: GameBananaModFileListEntry[];
 }
 
 interface ModFileListRaw {
