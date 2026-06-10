@@ -2,7 +2,7 @@ import { ipcMain } from 'electron';
 import { loadSettings } from '../services/settings';
 import {
     fetchSections,
-    fetchCategoryTree,
+    fetchCategoryTreeCached,
     fetchSubmissions,
     fetchModDetails,
     fetchModFileList,
@@ -163,7 +163,7 @@ ipcMain.handle(
 ipcMain.handle(
     'get-gamebanana-categories',
     async (_, args: GetCategoriesArgs): Promise<GameBananaCategoryNode[]> => {
-        return fetchCategoryTree(args.categoryModelName);
+        return fetchCategoryTreeCached(args.categoryModelName);
     }
 );
 

@@ -111,6 +111,15 @@ export function initDatabase(): Database.Database {
                 pages_synced INTEGER
             );
 
+            -- GameBanana category trees (JSON), keyed by category model name
+            -- (ModCategory, SoundCategory, ...). Served offline-first so the
+            -- Locker hero grid doesn't hang on a GameBanana outage.
+            CREATE TABLE IF NOT EXISTS category_cache (
+                model TEXT PRIMARY KEY,
+                fetched_at INTEGER NOT NULL,
+                payload TEXT NOT NULL
+            );
+
             ${SEARCH_SCHEMA_SQL}
         `);
 
@@ -273,6 +282,35 @@ export function upsertMods(mods: CachedMod[]): void {
     });
 
     insertMany(mods);
+}
+
+export interface CachedCategoryTree {
+    fetchedAt: number;
+    /** JSON-serialized GameBananaCategoryNode[]. Stored opaque: the GameBanana
+     *  service owns (de)serialization and shape validation. */
+    payload: string;
+}
+
+/** Get the locally cached category tree for a category model, or null. */
+export function getCachedCategoryTree(model: string): CachedCategoryTree | null {
+    const database = initDatabase();
+    const stmt = database.prepare('SELECT fetched_at, payload FROM category_cache WHERE model = ?');
+    const row = stmt.get(model) as { fetched_at: number; payload: string } | undefined;
+    if (!row) return null;
+    return { fetchedAt: row.fetched_at, payload: row.payload };
+}
+
+/** Store (or replace) the cached category tree for a category model. */
+export function saveCachedCategoryTree(model: string, payload: string): void {
+    const database = initDatabase();
+    const stmt = database.prepare(`
+        INSERT INTO category_cache (model, fetched_at, payload)
+        VALUES (?, ?, ?)
+        ON CONFLICT(model) DO UPDATE SET
+            fetched_at = excluded.fetched_at,
+            payload = excluded.payload
+    `);
+    stmt.run(model, Date.now(), payload);
 }
 
 /**

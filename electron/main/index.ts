@@ -3,7 +3,7 @@ import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { SOUL_MODEL_SCHEME, registerSoulModelProtocol } from './services/soulContainerModels';
-import { HERO_POSE_SCHEME, registerHeroPoseProtocol } from './services/heroPoseModels';
+import { HERO_POSE_SCHEME, registerHeroPoseProtocol, sweepHeroPoseCache } from './services/heroPoseModels';
 
 // The `grimoire-soul:` and `grimoire-hero:` schemes serve GLBs (soul-container
 // models and posed hero stills) out of the user's library to the renderer's 3D
@@ -286,6 +286,10 @@ if (!gotTheLock) {
 
         // Serve per-hero posed stills from the user's library.
         registerHeroPoseProtocol();
+
+        // Reclaim disk from stale or least-recently-used pose entries; the
+        // cache is also swept after each export.
+        void sweepHeroPoseCache();
 
         // Default open or close DevTools by F12 in development
         app.on('browser-window-created', (_, window) => {

@@ -1,6 +1,7 @@
 import { BrowserWindow } from 'electron';
 import { gamebananaRateLimiter } from './rateLimiter';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
+import { getCachedCategoryTree, saveCachedCategoryTree } from './modDatabase';
 // The GameBanana wire types are single-sourced in src/types/gamebanana.ts
 // (the contract the renderer compiles against). Type-only import, erased at
 // build; re-exported so the many `from './gamebanana'` importers keep working.
@@ -571,6 +572,73 @@ export async function fetchCategoryTree(
     // Handle both array and object response formats
     const categories = Array.isArray(raw) ? raw : Object.values(raw);
     return categories.map(mapCategoryNode);
+}
+
+/** Refresh a cached tree once it's older than this. Category trees change
+ *  rarely (a new hero every few months), so a day of staleness is fine. */
+const CATEGORY_REFRESH_MS = 24 * 60 * 60 * 1000;
+
+/** Category models with a background refresh already running. */
+const categoryRefreshesInFlight = new Set<string>();
+
+/**
+ * Category tree with offline-first serving: return the locally cached tree
+ * immediately when one exists (kicking off a background refresh once it's
+ * older than CATEGORY_REFRESH_MS) and only block on the network when there's
+ * no cache at all. The Locker hero grid derives from this tree, so without
+ * the cache a GameBanana outage hangs the page for the full 30s timeout.
+ */
+export async function fetchCategoryTreeCached(
+    categoryModel: string
+): Promise<GameBananaCategoryNode[]> {
+    const cached = readCategoryCache(categoryModel);
+    if (cached) {
+        if (Date.now() - cached.fetchedAt > CATEGORY_REFRESH_MS) {
+            void refreshCategoryCache(categoryModel);
+        }
+        return cached.nodes;
+    }
+    const nodes = await fetchCategoryTree(categoryModel);
+    persistCategoryCache(categoryModel, nodes);
+    return nodes;
+}
+
+function readCategoryCache(
+    categoryModel: string
+): { fetchedAt: number; nodes: GameBananaCategoryNode[] } | null {
+    try {
+        const row = getCachedCategoryTree(categoryModel);
+        if (!row) return null;
+        const nodes = JSON.parse(row.payload) as GameBananaCategoryNode[];
+        if (!Array.isArray(nodes) || nodes.length === 0) return null;
+        return { fetchedAt: row.fetchedAt, nodes };
+    } catch {
+        return null; // unreadable cache = no cache; the live fetch repairs it
+    }
+}
+
+function persistCategoryCache(
+    categoryModel: string,
+    nodes: GameBananaCategoryNode[]
+): void {
+    try {
+        saveCachedCategoryTree(categoryModel, JSON.stringify(nodes));
+    } catch (err) {
+        console.warn('[fetchCategoryTreeCached] failed to persist cache:', err);
+    }
+}
+
+async function refreshCategoryCache(categoryModel: string): Promise<void> {
+    if (categoryRefreshesInFlight.has(categoryModel)) return;
+    categoryRefreshesInFlight.add(categoryModel);
+    try {
+        persistCategoryCache(categoryModel, await fetchCategoryTree(categoryModel));
+    } catch (err) {
+        // Offline or API down: keep serving the stale tree.
+        debugGameBanana('[fetchCategoryTreeCached] background refresh failed:', err);
+    } finally {
+        categoryRefreshesInFlight.delete(categoryModel);
+    }
 }
 
 /**

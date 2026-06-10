@@ -159,8 +159,125 @@ function modelFile(key: string): string {
  */
 const POSE_CACHE_VERSION = '4';
 
+const POSE_VERSION_FILENAME = '.cache-version';
+
 function versionFile(key: string): string {
-    return join(modelDir(key), '.cache-version');
+    return join(modelDir(key), POSE_VERSION_FILENAME);
+}
+
+/**
+ * Cap on total bytes stored under hero-poses/. Each entry is a 50-95 MB GLB
+ * and every distinct hero+stack combination gets its own entry, so without a
+ * cap the cache grows unbounded as users toggle mods (observed 1.7 GB after a
+ * single day of Locker browsing). Sweeps run at startup and after each export:
+ * stale-version entries go first, then least-recently-used entries until the
+ * total is back under the cap.
+ */
+const POSE_CACHE_MAX_BYTES = 2 * 1024 * 1024 * 1024;
+
+/**
+ * Entries touched within this window are never evicted. This protects a
+ * mid-export directory (its version sidecar lands only after the GLB is fully
+ * written, so to the sweep it looks stale) and the model a viewer just
+ * requested.
+ */
+const POSE_SWEEP_MIN_AGE_MS = 5 * 60 * 1000;
+
+interface PoseCacheEntry {
+    dir: string;
+    bytes: number;
+    /** Newest file mtime in the entry dir. Export writes bump it; the protocol
+     *  handler touches the version sidecar on every serve, so this doubles as
+     *  a last-used marker for LRU eviction. */
+    lastUsedMs: number;
+    stale: boolean;
+}
+
+let poseSweepInFlight: Promise<void> | null = null;
+
+/** Sweep the pose cache: drop stale-version entries, then evict LRU entries
+ *  until the total size is under POSE_CACHE_MAX_BYTES. Concurrent calls share
+ *  one run. Never throws: a failed sweep only delays cleanup. */
+export function sweepHeroPoseCache(): Promise<void> {
+    if (!poseSweepInFlight) {
+        poseSweepInFlight = runPoseCacheSweep()
+            .catch((err) => {
+                console.warn('[heroPoseModels] pose cache sweep failed:', err);
+            })
+            .finally(() => {
+                poseSweepInFlight = null;
+            });
+    }
+    return poseSweepInFlight;
+}
+
+async function runPoseCacheSweep(): Promise<void> {
+    const root = join(app.getPath('userData'), 'hero-poses');
+    let names: string[];
+    try {
+        names = await fs.readdir(root);
+    } catch {
+        return; // no cache yet
+    }
+
+    const now = Date.now();
+    const entries: PoseCacheEntry[] = [];
+    for (const name of names) {
+        const dir = join(root, name);
+        let bytes = 0;
+        let lastUsedMs = 0;
+        try {
+            if (!(await fs.stat(dir)).isDirectory()) continue;
+            for (const file of await fs.readdir(dir)) {
+                const stat = await fs.stat(join(dir, file));
+                bytes += stat.size;
+                lastUsedMs = Math.max(lastUsedMs, stat.mtimeMs);
+            }
+        } catch {
+            continue; // raced a concurrent delete; skip
+        }
+        const version = await fs
+            .readFile(join(dir, POSE_VERSION_FILENAME), 'utf8')
+            .catch(() => '');
+        entries.push({
+            dir,
+            bytes,
+            lastUsedMs,
+            stale: version.trim() !== POSE_CACHE_VERSION,
+        });
+    }
+
+    const protectedSince = now - POSE_SWEEP_MIN_AGE_MS;
+    const doomed: PoseCacheEntry[] = [];
+    const kept: PoseCacheEntry[] = [];
+    for (const entry of entries) {
+        if (entry.stale && entry.lastUsedMs < protectedSince) {
+            doomed.push(entry);
+        } else {
+            kept.push(entry);
+        }
+    }
+
+    let total = kept.reduce((sum, entry) => sum + entry.bytes, 0);
+    if (total > POSE_CACHE_MAX_BYTES) {
+        kept.sort((a, b) => a.lastUsedMs - b.lastUsedMs);
+        for (const entry of kept) {
+            if (total <= POSE_CACHE_MAX_BYTES) break;
+            if (entry.lastUsedMs >= protectedSince) continue;
+            doomed.push(entry);
+            total -= entry.bytes;
+        }
+    }
+
+    if (doomed.length === 0) return;
+    let freed = 0;
+    for (const entry of doomed) {
+        await fs.rm(entry.dir, { recursive: true, force: true });
+        freed += entry.bytes;
+    }
+    console.log(
+        `[heroPoseModels] pose cache sweep: removed ${doomed.length} entries, freed ${Math.round(freed / 1024 / 1024)} MB`
+    );
 }
 
 /**
@@ -321,7 +438,11 @@ export async function exportHeroPose(
     const work = runHeroPoseExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey);
     inFlightExports.set(requestKey, work);
     try {
-        return await work;
+        const info = await work;
+        // The cache only grows through exports; sweep opportunistically so it
+        // can't creep past the cap between app launches.
+        void sweepHeroPoseCache();
+        return info;
     } finally {
         inFlightExports.delete(requestKey);
     }
@@ -416,6 +537,12 @@ export function registerHeroPoseProtocol(): void {
             const key = decodeURIComponent(segment);
             const file = modelFile(key);
             await fs.access(file);
+            // LRU touch for the cache sweep, which uses the newest file mtime
+            // in the entry dir as last-used. Touch the tiny sidecar, not the
+            // GLB: the GLB mtime feeds the renderer's ?v= cache-buster and
+            // must keep meaning "export time".
+            const now = new Date();
+            void fs.utimes(versionFile(key), now, now).catch(() => {});
             return net.fetch(pathToFileURL(file).toString());
         } catch {
             return new Response(null, { status: 404 });
