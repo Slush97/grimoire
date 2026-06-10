@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync, renameSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'fs';
 import { join, extname } from 'path';
 import { getGameinfoPath, getDisabledPath, getCitadelPath, getGrimoirePath, getOverflowFolderNames, getAddonFolderPaths } from './deadlock';
 
@@ -144,13 +144,10 @@ function insertSearchPaths(content: string, block: string): string | null {
     return `${content.slice(0, insertAt)}\n\t\t${block}${content.slice(insertAt)}`;
 }
 
-export interface CleanupResult {
-    removedArchives: number;
-    renamedMinaPresets: number;
-    renamedMinaTextures: number;
-    skippedMinaPresets: number;
-    skippedMinaTextures: number;
-}
+// CleanupResult is single-sourced in src/types/electron.ts; re-exported
+// because ipc/system.ts imports it from this service.
+import type { CleanupResult } from '../../../src/types/electron';
+export type { CleanupResult };
 
 /**
  * Check if gameinfo.gi has the required SearchPaths entry
@@ -321,22 +318,18 @@ export function fixGameinfo(deadlockPath: string): GameinfoStatus {
 }
 
 /**
- * Cleanup addons folder - remove leftover archives and normalize Mina files
+ * Cleanup addons folder - remove leftover archives
  */
 export function cleanupAddons(deadlockPath: string): CleanupResult {
     const result: CleanupResult = {
         removedArchives: 0,
-        renamedMinaPresets: 0,
-        renamedMinaTextures: 0,
-        skippedMinaPresets: 0,
-        skippedMinaTextures: 0,
     };
 
     const disabledPath = getDisabledPath(deadlockPath);
 
     // Process every enabled addon folder (base citadel/addons plus any overflow
-    // addonsN) and the shared .disabled parking lot, so leftover archives and
-    // Mina files are normalized wherever a mod ended up.
+    // addonsN) and the shared .disabled parking lot, so leftover archives are
+    // removed wherever a mod ended up.
     for (const folder of [...getAddonFolderPaths(deadlockPath), disabledPath]) {
         if (!existsSync(folder)) continue;
 
@@ -353,43 +346,6 @@ export function cleanupAddons(deadlockPath: string): CleanupResult {
                     result.removedArchives++;
                 } catch {
                     // Ignore errors
-                }
-                continue;
-            }
-
-            // Handle Mina preset files (.mina_preset)
-            if (file.includes('.mina_preset')) {
-                const newName = file.replace('.mina_preset', '_mina_preset');
-                const newPath = join(folder, newName);
-
-                if (existsSync(newPath)) {
-                    result.skippedMinaPresets++;
-                } else {
-                    try {
-                        renameSync(fullPath, newPath);
-                        result.renamedMinaPresets++;
-                    } catch {
-                        result.skippedMinaPresets++;
-                    }
-                }
-                continue;
-            }
-
-            // Handle Mina texture files (.mina_texture)
-            if (file.includes('.mina_texture')) {
-                // Normalize to pak21 format
-                const newName = file.replace('.mina_texture', '_mina_texture');
-                const newPath = join(folder, newName);
-
-                if (existsSync(newPath)) {
-                    result.skippedMinaTextures++;
-                } else {
-                    try {
-                        renameSync(fullPath, newPath);
-                        result.renamedMinaTextures++;
-                    } catch {
-                        result.skippedMinaTextures++;
-                    }
                 }
             }
         }

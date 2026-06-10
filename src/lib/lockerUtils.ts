@@ -128,29 +128,6 @@ export const DEFAULT_SIDEBAR_HERO = HERO_NAMES_SORTED[0] ?? 'Abrams';
  */
 export const inferHeroFromTitle = sharedInferHeroFromTitle;
 
-export type MinaPreset = {
-  fileName: string;
-  label: string;
-  enabled: boolean;
-};
-
-export type MinaVariant = {
-  archiveEntry: string;
-  label: string;
-  futa: 'No' | 'Yes';
-  top: 'None' | 'Sleeveless' | 'Default';
-  skirt: 'None' | 'Default';
-  stockings: 'None' | 'Default';
-  beltSash: 'None' | 'Default';
-  gloves: 'None' | 'Default';
-  garter: 'None' | 'Default';
-  dress: 'None' | 'Default';
-};
-
-export type MinaSelection = Omit<MinaVariant, 'archiveEntry' | 'label'>;
-
-export const MINA_ARCHIVE_DEFAULT = '';
-
 export type LockerSkin = {
   key: string;
   primary: Mod;
@@ -217,62 +194,6 @@ export function buildHeroList(categories: GameBananaCategoryNode[]): HeroCategor
   }));
 }
 
-export function buildMinaPresets(mods: Mod[]): MinaPreset[] {
-  return mods
-    .filter((mod) => {
-      const lower = mod.fileName.toLowerCase();
-      const nameLower = mod.name?.toLowerCase() || '';
-      // Check metadata name for Midnight Mina (handles '"Midnight" Mina' format)
-      const isMetadataMina = nameLower.includes('midnight') && nameLower.includes('mina');
-      if (!lower.endsWith('.vpk')) return false;
-      // Exclude textures VPKs from presets list
-      if (lower.includes('textures') || nameLower.includes('textures')) return false;
-      return (
-        lower.startsWith('clothing_preset_') ||
-        lower.includes('sts_midnight_mina_') ||
-        isMetadataMina
-      );
-    })
-    .map((mod) => {
-      const rawName = mod.name?.trim();
-      const cleanedName = (rawName?.toLowerCase().includes('midnight') && rawName?.toLowerCase().includes('mina'))
-        ? rawName.replace(/midnight mina[^a-z]*/i, '').trim()
-        : rawName;
-      const raw =
-        cleanedName ||
-        mod.fileName
-          .replace(/^CLOTHING_PRESET_/i, '')
-          .replace(/-pak\\d+_dir\\.vpk$/i, '')
-          .replace(/_/g, ' ');
-      return {
-        fileName: mod.fileName,
-        label: raw.trim() || 'Default Preset',
-        enabled: mod.enabled,
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
-}
-
-export function detectMinaTextures(mods: Mod[]) {
-  return mods.filter((mod) => {
-    const lower = mod.fileName.toLowerCase();
-    const nameLower = mod.name?.toLowerCase() || '';
-    if (!lower.endsWith('.vpk')) return false;
-    // Check if it's a textures file via filename or has Midnight Mina in metadata
-    const hasTexturesInName = lower.includes('textures');
-    // Check for Midnight Mina in name (handles variations like '"Midnight" Mina')
-    const isMidnightMina = nameLower.includes('midnight') && nameLower.includes('mina');
-    // If it's Midnight Mina and NOT a preset (no clothing_preset), it's the textures
-    if (isMidnightMina && !lower.startsWith('clothing_preset_')) {
-      return true;
-    }
-    if (hasTexturesInName && (lower.includes('mina') || lower.includes('midnight'))) {
-      return true;
-    }
-    return lower === 'textures-pak21_dir.vpk';
-  });
-}
-
 export function isLockerManagedMod(mod: Mod): boolean {
   // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
   // (applied per-ability sounds) are managed artifacts, never hero skin cards
@@ -293,8 +214,8 @@ export function isLockerManagedMod(mod: Mod): boolean {
   if (mod.sourceSection !== 'Mod' && !mod.lockerHero) return false;
 
   const lower = mod.fileName.toLowerCase();
-  // Internal Midnight Mina preset files are managed by the custom variants UI,
-  // not counted as normal hero skins in the Locker.
+  // Leftover preset VPKs from the removed Midnight Mina variants feature
+  // (pre-rework sts_midnight_mina). Not hero skin cards.
   if (lower.startsWith('clothing_preset_')) return false;
   if (lower.includes('sts_midnight_mina_') && !lower.includes('textures')) return false;
 
@@ -429,107 +350,6 @@ export function groupLockerSkins(mods: Mod[]): LockerSkin[] {
 
 export function countLockerSkins(mods: Mod[]): number {
   return groupLockerSkins(mods).length;
-}
-
-/**
- * Check if any Midnight Mina mod is currently enabled
- */
-export function hasActiveMinaMod(mods: Mod[]): boolean {
-  return mods.some((mod) => {
-    if (!mod.enabled) return false;
-    const lower = mod.fileName.toLowerCase();
-    const nameLower = mod.name?.toLowerCase() || '';
-    return (
-      nameLower.includes('midnight mina') ||
-      lower.includes('midnight_mina') ||
-      lower.startsWith('clothing_preset_') ||
-      lower.includes('sts_midnight_mina')
-    );
-  });
-}
-
-export function parseMinaVariant(entry: string): MinaVariant | null {
-  if (!entry.toLowerCase().endsWith('.vpk')) return null;
-  const fileName = entry.split('/').pop() || entry;
-  const lowerEntry = entry.toLowerCase();
-  if (!fileName.toLowerCase().includes('sts_midnight_mina')) return null;
-
-  const futa: MinaVariant['futa'] = lowerEntry.includes('non-futa')
-    ? 'No'
-    : lowerEntry.includes('_futa_') || lowerEntry.includes('/futa_') || lowerEntry.includes('/futa/')
-      ? 'Yes'
-      : 'No';
-
-  const topMatch = lowerEntry.match(/_top_(with_sleeves|sleeveless|no)(?:_|-)/);
-  const top: MinaVariant['top'] =
-    topMatch?.[1] === 'with_sleeves'
-      ? 'Default'
-      : topMatch?.[1] === 'sleeveless'
-        ? 'Sleeveless'
-        : 'None';
-
-  const skirtMatch = lowerEntry.match(/_skirt_(yes|no)(?:_|-)/);
-  const skirt: MinaVariant['skirt'] = skirtMatch?.[1] === 'yes' ? 'Default' : 'None';
-
-  const stockings: MinaVariant['stockings'] = lowerEntry.includes('stockings_and_boots')
-    ? 'Default'
-    : 'None';
-
-  const beltMatch = lowerEntry.match(/_belt_sash_(yes|no)(?:_|-)/);
-  const beltSash: MinaVariant['beltSash'] = beltMatch?.[1] === 'yes' ? 'Default' : 'None';
-
-  const dressMatch = lowerEntry.match(/_dress_(yes|no)(?:_|-)/);
-  const dress: MinaVariant['dress'] = dressMatch?.[1] === 'yes' ? 'Default' : 'None';
-
-  const garterMatch = lowerEntry.match(/_garter_(yes|no)(?:_|-)/);
-  const garter: MinaVariant['garter'] = garterMatch?.[1] === 'yes' ? 'Default' : 'None';
-
-  const gloves: MinaVariant['gloves'] = lowerEntry.includes('hands_bare')
-    ? 'None'
-    : lowerEntry.includes('gloves')
-      ? 'Default'
-      : 'None';
-
-  const label = [
-    futa === 'Yes' ? 'Futa' : 'Non-Futa',
-    `Top: ${top}`,
-    `Skirt: ${skirt}`,
-    `Stockings: ${stockings}`,
-    `Belt: ${beltSash}`,
-    `Gloves: ${gloves}`,
-    `Garter: ${garter}`,
-    `Dress: ${dress}`,
-  ].join(' • ');
-
-  return {
-    archiveEntry: entry,
-    label,
-    futa,
-    top,
-    skirt,
-    stockings,
-    beltSash,
-    gloves,
-    garter,
-    dress,
-  };
-}
-
-export function findMinaVariant(
-  variants: MinaVariant[],
-  selection: MinaSelection
-): MinaVariant | undefined {
-  return variants.find(
-    (variant) =>
-      variant.futa === selection.futa &&
-      variant.top === selection.top &&
-      variant.skirt === selection.skirt &&
-      variant.stockings === selection.stockings &&
-      variant.beltSash === selection.beltSash &&
-      variant.gloves === selection.gloves &&
-      variant.garter === selection.garter &&
-      variant.dress === selection.dress
-  );
 }
 
 /**

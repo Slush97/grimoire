@@ -30,9 +30,6 @@ import type {
     GetModUpdatesArgs,
     DownloadModArgs,
     GetCategoriesArgs,
-    SetMinaPresetArgs,
-    ListMinaVariantsArgs,
-    ApplyMinaVariantArgs,
     OpenDialogOptions,
     ImportCustomModArgs,
     SearchLocalModsOptions,
@@ -219,12 +216,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-collection', args),
     getCollectionItems: (args: { collectionId: number; page?: number }) =>
         ipcRenderer.invoke('get-collection-items', args),
-
-    // Mina Variants
-    setMinaPreset: (args: SetMinaPresetArgs) => ipcRenderer.invoke('set-mina-preset', args),
-    listMinaVariants: (args: ListMinaVariantsArgs) => ipcRenderer.invoke('list-mina-variants', args),
-    applyMinaVariant: (args: ApplyMinaVariantArgs) => ipcRenderer.invoke('apply-mina-variant', args),
-    downloadMinaVariations: () => ipcRenderer.invoke('download-mina-variations'),
 
     // Maintenance
     copyImageToClipboard: (source: string) =>
