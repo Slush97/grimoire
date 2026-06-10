@@ -10,7 +10,7 @@ export type BrandIcon = (props: SVGProps<SVGSVGElement>) => ReactElement;
 
 function brandIcon(displayName: string, d: string): BrandIcon {
   const Icon = (props: SVGProps<SVGSVGElement>) => (
-    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
+    <svg xmlns="http://www.w3.org/2000/svg" width={24} height={24} viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>
       <path d={d} />
     </svg>
   );
