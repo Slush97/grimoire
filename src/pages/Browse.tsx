@@ -28,16 +28,33 @@ import {
   PanelRight,
   ArrowLeft,
   ExternalLink,
-  Coffee,
-  Youtube,
-  Twitter,
-  Twitch,
-  Instagram,
-  Facebook,
-  Github,
   Globe,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import type { ComponentType } from 'react';
+import {
+  BlueskyIcon,
+  CarrdIcon,
+  DeviantartIcon,
+  DiscordIcon,
+  FacebookIcon,
+  GithubIcon,
+  InstagramIcon,
+  KofiIcon,
+  LinktreeIcon,
+  MastodonIcon,
+  PatreonIcon,
+  RedditIcon,
+  SoundcloudIcon,
+  SpotifyIcon,
+  SteamIcon,
+  ThreadsIcon,
+  TiktokIcon,
+  TumblrIcon,
+  TwitchIcon,
+  XIcon,
+  YoutubeIcon,
+} from '../components/common/BrandIcons';
 import {
   browseMods,
   getModDetails,
@@ -99,17 +116,36 @@ const BROWSE_SIDEBAR_WIDTH_DEFAULT = 420;
 // is capped so a wide drag (or a small window) can't starve the browse area.
 const BROWSE_SIDEBAR_GRID_RESERVE = 360;
 
-const BROWSE_SOCIAL_ICONS: Record<string, LucideIcon> = {
-  youtube: Youtube,
-  twitter: Twitter,
-  x: Twitter,
-  twitch: Twitch,
-  instagram: Instagram,
-  facebook: Facebook,
-  github: Github,
+// Filled brand glyphs (see common/BrandIcons). Platform keys come from
+// GameBanana's contact icon classes, lowercased by normalizeContactPlatform
+// in the main process. Unknown platforms fall back to a generic globe.
+type SocialIconComponent = ComponentType<{ className?: string }>;
+const BROWSE_SOCIAL_ICONS: Record<string, SocialIconComponent> = {
+  youtube: YoutubeIcon,
+  twitter: XIcon,
+  x: XIcon,
+  twitch: TwitchIcon,
+  instagram: InstagramIcon,
+  facebook: FacebookIcon,
+  github: GithubIcon,
+  discord: DiscordIcon,
+  bluesky: BlueskyIcon,
+  tiktok: TiktokIcon,
+  patreon: PatreonIcon,
+  kofi: KofiIcon,
+  steam: SteamIcon,
+  reddit: RedditIcon,
+  spotify: SpotifyIcon,
+  soundcloud: SoundcloudIcon,
+  carrd: CarrdIcon,
+  linktree: LinktreeIcon,
+  tumblr: TumblrIcon,
+  deviantart: DeviantartIcon,
+  mastodon: MastodonIcon,
+  threads: ThreadsIcon,
 };
 
-function browseSocialIcon(platform: string): LucideIcon {
+function browseSocialIcon(platform: string): SocialIconComponent {
   return BROWSE_SOCIAL_ICONS[platform] ?? Globe;
 }
 
@@ -117,8 +153,8 @@ function browseSocialIcon(platform: string): LucideIcon {
 // contrast with a white glyph; unknown platforms fall back to the accent.
 const BROWSE_SOCIAL_COLORS: Record<string, string> = {
   youtube: '#FF0000',
-  twitter: '#1D9BF0',
-  x: '#1D9BF0',
+  twitter: '#111111',
+  x: '#111111',
   twitch: '#9146FF',
   instagram: '#E4405F',
   facebook: '#1877F2',
@@ -134,6 +170,10 @@ const BROWSE_SOCIAL_COLORS: Record<string, string> = {
   soundcloud: '#FF5500',
   carrd: '#1F2D3D',
   linktree: '#43E660',
+  tumblr: '#36465D',
+  deviantart: '#05CC47',
+  mastodon: '#6364FF',
+  threads: '#111111',
 };
 
 function browseSocialColor(platform: string): string {
@@ -2643,7 +2683,7 @@ export default function Browse() {
                   title={`Support ${submitter.name} on Ko-fi`}
                   className="inline-flex items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542]"
                 >
-                  <Coffee className="h-4 w-4" />
+                  <KofiIcon className="h-4 w-4" />
                   Ko-fi
                 </a>
               )}
