@@ -35,6 +35,7 @@ import type {
     GameBananaCategoryNode,
     GameBananaCollection,
     GameBananaCollectionItemsResponse,
+    GameBananaCommentsResponse,
     GameBananaArtistLink,
 } from './gamebanana';
 import type { HeroPortrait, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource } from './portrait';
@@ -53,6 +54,18 @@ export interface GetModDetailsArgs {
     modId: number;
     section?: string;
     includeSubmitter?: boolean;
+}
+
+export interface GetModCommentsArgs {
+    modId: number;
+    section?: string;
+    page?: number;
+}
+
+export interface GetModUpdatesArgs {
+    modId: number;
+    section?: string;
+    page?: number;
 }
 
 export interface DownloadModArgs {
@@ -249,6 +262,7 @@ export interface CachedMod {
     submitterId: number | null;
     likeCount: number;
     viewCount: number;
+    downloadCount: number | null;
     dateAdded: number;
     dateModified: number;
     hasFiles: boolean;
@@ -415,8 +429,8 @@ export interface ElectronAPI {
     browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
     getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
     getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
-    getModComments: (args: { modId: number; section?: string; page?: number }) => Promise<{ comments: Array<{ id: number; text: string; dateAdded: number; poster: { id: number; name: string; avatarUrl?: string } }>; totalCount: number }>;
-    getModUpdates: (args: { modId: number; section?: string; page?: number }) => Promise<GameBananaModUpdatesResponse>;
+    getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
+    getModUpdates: (args: GetModUpdatesArgs) => Promise<GameBananaModUpdatesResponse>;
     getSubmitterLinks: (memberId: number) => Promise<GameBananaArtistLink[]>;
     downloadMod: (args: DownloadModArgs) => Promise<void>;
     getGameBananaSections: () => Promise<GameBananaSection[]>;
@@ -502,7 +516,7 @@ export interface ElectronAPI {
         resolved: import('./portableProfile').PortableResolvedMod[];
     }) => Promise<Profile>;
 
-    // Snapshots — automatic recovery points captured before risky operations
+    // Snapshots: automatic recovery points captured before risky operations
     // (currently just mod updates). Restore re-uses the portable-import flow.
     snapshots: {
         create: (
@@ -526,6 +540,7 @@ export interface ElectronAPI {
     getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
     getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
     getModsNsfwStatus: (ids: number[]) => Promise<Record<number, boolean>>;
+    getModsDownloadCounts: (ids: number[]) => Promise<Record<number, number>>;
     updateModNsfw: (modId: number, isNsfw: boolean) => Promise<void>;
     updateModDownloadCount: (modId: number, downloadCount: number) => Promise<void>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
@@ -690,11 +705,22 @@ export interface ElectronAPI {
 }
 
 export interface ProfileMod {
+    /** Filename when the profile was saved. NOT stable across reorders or
+     *  collision-renames; use `gameBananaId` + `gameBananaFileId` as the
+     *  primary identifier when present, and fall back to `fileName` only for
+     *  pre-stable-id profiles or custom mods that lack GameBanana ids. */
     fileName: string;
     enabled: boolean;
     priority: number;
+    /** Stable identity pair. Populated from metadata at save time so apply
+     *  can find the mod even if its fileName has changed since. */
     gameBananaId?: number;
     gameBananaFileId?: number;
+    /** Content fingerprint, populated from metadata at save time. The identity
+     *  of last resort for custom/local mods that carry no GameBanana ids: it
+     *  survives a fileName change (reorder, or the free-form rename a mod gets
+     *  when disabled), so apply can still re-enable the right local mod. */
+    sha256?: string;
 }
 
 export interface ProfileCrosshairSettings {

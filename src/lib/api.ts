@@ -587,38 +587,10 @@ export function conflictPairKey(a: string, b: string): string {
 // Profiles API
 // =====================
 
-export interface ProfileMod {
-  fileName: string;
-  enabled: boolean;
-  priority: number;
-  /** Stable identity. Populated at profile-save time from metadata; used by
-   *  applyProfile to resolve mods whose fileName has changed since save. */
-  gameBananaId?: number;
-  gameBananaFileId?: number;
-}
-
-export interface ProfileCrosshairSettings {
-  pipGap: number;
-  pipHeight: number;
-  pipWidth: number;
-  pipOpacity: number;
-  pipBorder: boolean;
-  dotOpacity: number;
-  dotOutlineOpacity: number;
-  colorR: number;
-  colorG: number;
-  colorB: number;
-}
-
-export interface Profile {
-  id: string;
-  name: string;
-  mods: ProfileMod[];
-  crosshair?: ProfileCrosshairSettings;
-  autoexecCommands?: string[];
-  createdAt: string;
-  updatedAt: string;
-}
+// Profile wire types are single-sourced in types/electron.ts; re-exported
+// here to preserve this module's existing import surface.
+export type { Profile, ProfileMod, ProfileCrosshairSettings } from '../types/electron';
+import type { Profile, ProfileCrosshairSettings } from '../types/electron';
 
 export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();

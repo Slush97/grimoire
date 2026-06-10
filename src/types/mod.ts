@@ -558,18 +558,6 @@ export interface EditLocalModArgs {
   nsfw?: boolean;
 }
 
-export interface Profile {
-  id: string;
-  name: string;
-  mods: {
-    modId: string;
-    enabled: boolean;
-    priority: number;
-  }[];
-  createdAt: string;
-  updatedAt: string;
-}
-
 export interface ModConflict {
   modA: string;
   modAName: string;

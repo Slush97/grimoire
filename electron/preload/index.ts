@@ -1,866 +1,61 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import type {
     PortableProfile,
-    PortableExportResult,
-    PortableResolutionReport,
     PortableResolvedMod,
 } from '../../src/types/portableProfile';
-import type { SnapshotSummary, SnapshotTrigger } from '../../src/types/snapshot';
+import type { SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
-import type { GameBananaArtistLink } from '../../src/types/gamebanana';
 import type {
     AbilitySlot,
     AbilitySoundParams,
-    ActiveHeroColor,
-    ActiveHeroSound,
     AppSettings,
-    ApplyHeroCardResult,
-    ApplyHeroColorResult,
-    ApplyHeroPrismResult,
-    ApplyHeroSoundResult,
     ApplyUnknownCustomModArgs,
     ApplyUnknownModMatchArgs,
     AssociateUnknownModArgs,
     GlobalModType,
     EditLocalModArgs,
-    HeroAbilitySlot,
-    LockerCardThumbnail,
     LockerClearScope,
-    LockerOverview,
     MergeModsArgs,
-    Mod,
-    ModConflict,
-    ExtractMergeSourceResult,
     UnknownModDetectionProgress,
-    UnknownModFileList,
-    UnknownModFilterGuess,
-    UnmergeModResult,
 } from '../../src/types/mod';
+// The single source of truth for the renderer-facing API surface. The api
+// object below is checked against it via `satisfies ElectronAPI`; the
+// renderer's Window augmentation lives in the same file, so the bridge and
+// the renderer can no longer drift apart.
 import type {
-    HeroPortrait,
-    HeroPoseInfo,
-    HeroPoseSkinSource,
-    SoulModelInfo,
-} from '../../src/types/portrait';
+    ElectronAPI,
+    BrowseModsArgs,
+    GetModDetailsArgs,
+    GetModCommentsArgs,
+    GetModUpdatesArgs,
+    DownloadModArgs,
+    GetCategoriesArgs,
+    SetMinaPresetArgs,
+    ListMinaVariantsArgs,
+    ApplyMinaVariantArgs,
+    OpenDialogOptions,
+    ImportCustomModArgs,
+    SearchLocalModsOptions,
+    CrosshairSettings,
+    VanillaRestoreResult,
+    ProfileCrosshairSettings,
+    DownloadProgressData,
+    DownloadEventData,
+    DownloadErrorData,
+    ModsAutoDisabledData,
+    DownloadQueueData,
+    OneClickInstallData,
+    OneClickSuspiciousFilesData,
+    MultiVpkPickData,
+    SyncProgressData,
+    UpdateStatus,
+} from '../../src/types/electron';
 import type {
-    LikeResponse,
-    ListProfilesResponse,
-    MeResponse,
-    ProfileDetail,
     ProfileSort,
     PublishRequest,
-    PublishResponse,
     ReportRequest,
     UpdateProfileRequest,
-    UpdateProfileResponse,
 } from '@grimoire/social-types';
-
-// Type definitions for the exposed API
-export interface ElectronAPI {
-    // Settings
-    detectDeadlock: () => Promise<string | null>;
-    validateDeadlockPath: (path: string) => Promise<boolean>;
-    createDevDeadlockPath: () => Promise<string>;
-    getSettings: () => Promise<AppSettings>;
-    setSettings: (settings: AppSettings) => Promise<void>;
-
-    // Discord Rich Presence (opt-in; talks only to the local Discord client)
-    discord: {
-        update: (ctx: { surface: string; count?: number; hero?: string }) => Promise<void>;
-        clear: () => Promise<void>;
-    };
-
-    // Mods
-    getMods: () => Promise<Mod[]>;
-    enableMod: (modId: string) => Promise<Mod>;
-    disableMod: (modId: string) => Promise<Mod>;
-    deleteMod: (modId: string) => Promise<void>;
-    detectUnknownModFilters: (modId: string, requestId?: string) => Promise<UnknownModFilterGuess>;
-    detectUnknownModCacheBulk: (requests: Array<{ modId: string; requestId?: string }>) => Promise<UnknownModFilterGuess[]>;
-    cancelUnknownModDetection: (modId: string) => Promise<void>;
-    onUnknownModDetectionProgress: (callback: (progress: UnknownModDetectionProgress) => void) => () => void;
-    applyUnknownModMatch: (modId: string, args: ApplyUnknownModMatchArgs) => Promise<Mod>;
-    applyUnknownCustomMod: (modId: string, args: ApplyUnknownCustomModArgs) => Promise<Mod>;
-    associateUnknownMod: (modId: string, args: AssociateUnknownModArgs) => Promise<Mod>;
-    listUnknownModFiles: (modId: string) => Promise<UnknownModFileList>;
-    editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<Mod>;
-    setVariantLabel: (modId: string, label: string) => Promise<Mod>;
-    setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
-    // Locker surface. Signatures mirror src/types/electron.d.ts; this whole
-    // local interface is slated to be replaced by the canonical one there.
-    getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;
-    getHeroAbilitySlots: (heroName: string) => Promise<HeroAbilitySlot[]>;
-    applyHeroCard: (heroName: string, sourceFileName: string) => Promise<ApplyHeroCardResult>;
-    revertHeroCard: (heroName: string) => Promise<ApplyHeroCardResult>;
-    getActiveHeroCard: (
-        heroName: string
-    ) => Promise<{ sourceFileName: string; variants: string[] } | null>;
-    getLockerCardThumbnails: () => Promise<LockerCardThumbnail[]>;
-    getLockerOverview: () => Promise<LockerOverview>;
-    clearLockerOverrides: (scope: LockerClearScope) => Promise<void>;
-    getHeroPoseInfo: (
-        heroName: string,
-        skinSources?: HeroPoseSkinSource[]
-    ) => Promise<HeroPoseInfo>;
-    exportHeroPose: (
-        heroName: string,
-        skinSources?: HeroPoseSkinSource[],
-        fallbackSkinMetaKey?: string
-    ) => Promise<HeroPoseInfo>;
-    exportSoulModel: (metaKey: string) => Promise<SoulModelInfo>;
-    getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
-    clearSoulModel: (key: string) => Promise<void>;
-    applyHeroSound: (
-        heroName: string,
-        slot: AbilitySlot,
-        sourceFileName: string,
-        params?: AbilitySoundParams
-    ) => Promise<ApplyHeroSoundResult>;
-    revertHeroSound: (heroName: string, slot: AbilitySlot) => Promise<ApplyHeroSoundResult>;
-    getActiveHeroSounds: (heroName: string) => Promise<ActiveHeroSound[]>;
-    getHeroColorSupport: (heroName: string) => Promise<boolean>;
-    applyHeroColor: (
-        heroName: string,
-        hue: number,
-        saturation: number,
-        brightness: number,
-    ) => Promise<ApplyHeroColorResult>;
-    applyHeroPrism: (
-        heroName: string,
-        hue: number,
-        saturation: number,
-        brightness: number,
-        animated: boolean,
-        gradient: string | null,
-    ) => Promise<ApplyHeroPrismResult>;
-    previewHeroColor: (
-        heroName: string,
-        hue: number,
-        saturation: number,
-        brightness: number,
-    ) => Promise<string>;
-    revertHeroColor: (heroName: string) => Promise<ApplyHeroColorResult>;
-    getActiveHeroColor: (heroName: string) => Promise<ActiveHeroColor | null>;
-    getPreviewCacheSize: () => Promise<{ bytes: number }>;
-    clearPreviewCache: () => Promise<{ bytesFreed: number }>;
-    setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
-    setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
-    backfillGameBananaFileId: (
-        modId: string,
-        payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
-    ) => Promise<Mod>;
-    setModPriority: (modId: string, priority: number) => Promise<Mod>;
-    reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
-    swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
-    importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
-    readImageDataUrl: (imagePath: string) => Promise<string>;
-    mergeMods: (args: MergeModsArgs) => Promise<Mod>;
-    unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
-    extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
-
-    // Launch
-    launchModded: () => Promise<void>;
-    launchVanilla: () => Promise<void>;
-    getGameRunningStatus: () => Promise<GameRunningStatus>;
-    stopGame: () => Promise<StopGameResult>;
-    getVanillaStashStatus: () => Promise<VanillaStashStatus>;
-    restoreVanillaStash: () => Promise<VanillaRestoreResult>;
-    onVanillaRestoreComplete: (callback: (result: VanillaRestoreResult) => void) => () => void;
-    getSteamLaunchOptionsStatus: () => Promise<SteamLaunchOptionsStatus>;
-
-    // GameBanana
-    browseMods: (args: BrowseModsArgs) => Promise<GameBananaModsResponse>;
-    getModDetails: (args: GetModDetailsArgs) => Promise<GameBananaModDetails>;
-    getModFileList: (args: GetModDetailsArgs) => Promise<GameBananaModFileList>;
-    getModComments: (args: GetModCommentsArgs) => Promise<GameBananaCommentsResponse>;
-    getModUpdates: (args: GetModCommentsArgs) => Promise<GameBananaModUpdatesResponse>;
-    getSubmitterLinks: (memberId: number) => Promise<GameBananaArtistLink[]>;
-    downloadMod: (args: DownloadModArgs) => Promise<void>;
-    getGameBananaSections: () => Promise<GameBananaSection[]>;
-    getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
-    getCollection: (args: { collectionId: number }) => Promise<GameBananaCollection>;
-    getCollectionItems: (args: { collectionId: number; page?: number }) => Promise<GameBananaCollectionItemsResponse>;
-
-    // Mina Variants
-    setMinaPreset: (args: SetMinaPresetArgs) => Promise<void>;
-    listMinaVariants: (args: ListMinaVariantsArgs) => Promise<string[]>;
-    applyMinaVariant: (args: ApplyMinaVariantArgs) => Promise<void>;
-    downloadMinaVariations: () => Promise<string>;
-
-    // Maintenance
-    copyImageToClipboard: (source: string) => Promise<void>;
-    cleanupAddons: () => Promise<CleanupResult>;
-    getGameinfoStatus: () => Promise<GameinfoStatus>;
-    fixGameinfo: () => Promise<GameinfoStatus>;
-    openModsFolder: () => Promise<void>;
-    openGameFolder: () => Promise<void>;
-
-    // Window control
-    setAlwaysOnTop: (enabled: boolean) => Promise<boolean>;
-    getAlwaysOnTop: () => Promise<boolean>;
-
-    // Dialogs
-    showOpenDialog: (options: OpenDialogOptions) => Promise<string | null>;
-
-    // Drag & drop — resolves a native filesystem path for a dropped File.
-    // Needed because Electron 32+ removed `File.path` from the DataTransfer API.
-    getDroppedFilePath: (file: File) => string;
-
-    // Events
-    onGameBananaRateLimited: (callback: () => void) => () => void;
-    onDownloadProgress: (callback: (data: DownloadProgressData) => void) => () => void;
-    onDownloadExtracting: (callback: (data: DownloadEventData) => void) => () => void;
-    onDownloadComplete: (callback: (data: DownloadEventData) => void) => () => void;
-    onDownloadError: (callback: (data: DownloadErrorData) => void) => () => void;
-    onModsAutoDisabled: (callback: (data: ModsAutoDisabledData) => void) => () => void;
-
-    // Download Queue
-    getDownloadQueue: () => Promise<DownloadQueueItem[]>;
-    getCurrentDownload: () => Promise<DownloadQueueItem | null>;
-    removeFromQueue: (modId: number) => Promise<boolean>;
-    cancelActiveDownload: () => Promise<boolean>;
-    onDownloadQueueUpdated: (callback: (data: DownloadQueueData) => void) => () => void;
-
-    // GameBanana 1-Click protocol handler
-    onOneClickInstall: (callback: (data: OneClickInstallData) => void) => () => void;
-    onOneClickSuspiciousFiles: (
-        callback: (data: OneClickSuspiciousFilesData) => void
-    ) => () => void;
-    respondToOneClickSuspiciousFiles: (
-        requestId: string,
-        accepted: boolean
-    ) => Promise<void>;
-    onMultiVpkPick: (callback: (data: MultiVpkPickData) => void) => () => void;
-    respondToMultiVpkPick: (
-        requestId: string,
-        selected: string[] | null
-    ) => Promise<void>;
-
-    // Conflicts
-    getConflicts: () => Promise<ModConflict[]>;
-    getIgnoredConflicts: () => Promise<string[]>;
-    ignoreConflict: (modA: string, modB: string) => Promise<string[]>;
-    unignoreConflict: (modA: string, modB: string) => Promise<string[]>;
-
-    // Profiles
-    getProfiles: () => Promise<Profile[]>;
-    createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
-    createProfileFromGameBananaIds: (args: { name: string; gameBananaIds: number[] }) => Promise<Profile>;
-    updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
-    applyProfile: (profileId: string) => Promise<Profile>;
-    deleteProfile: (profileId: string) => Promise<void>;
-    renameProfile: (profileId: string, newName: string) => Promise<Profile>;
-    exportPortableProfile: (profileId: string) => Promise<PortableExportResult>;
-    parsePortableProfile: (input: string) => Promise<PortableProfile>;
-    resolvePortableProfile: (profile: PortableProfile) => Promise<PortableResolutionReport>;
-    finalizePortableImport: (args: { profile: PortableProfile; resolved: PortableResolvedMod[] }) => Promise<Profile>;
-
-    // Snapshots — automatic recovery points captured before risky operations
-    // (currently just mod updates). Restore re-uses the portable-import flow.
-    snapshots: {
-        create: (trigger: SnapshotTrigger) => Promise<SnapshotSummary>;
-        list: () => Promise<SnapshotSummary[]>;
-        load: (snapshotId: string) => Promise<string>;
-        delete: (snapshotId: string) => Promise<void>;
-    };
-
-    // Mod Database (Local Cache)
-    syncAllMods: () => Promise<{ success: boolean }>;
-    syncSection: (section: string) => Promise<{ success: boolean }>;
-    wipeModCache: () => Promise<{ success: boolean }>;
-    getSyncStatus: () => Promise<Record<string, { lastSync: number; count: number } | null>>;
-    needsSync: () => Promise<boolean>;
-    isSyncInProgress: () => Promise<boolean>;
-    searchLocalMods: (options: SearchLocalModsOptions) => Promise<LocalSearchResult>;
-    getCachedMod: (id: number) => Promise<CachedMod | null>;
-    getLocalModCount: (section?: string) => Promise<number>;
-    getLocalCategories: (section?: string) => Promise<Array<{ id: number; name: string; count: number }>>;
-    getSectionStats: () => Promise<Array<{ section: string; count: number }>>;
-    getModsNsfwStatus: (ids: number[]) => Promise<Record<number, boolean>>;
-    updateModNsfw: (modId: number, isNsfw: boolean) => Promise<void>;
-    getModsDownloadCounts: (ids: number[]) => Promise<Record<number, number>>;
-    updateModDownloadCount: (modId: number, downloadCount: number) => Promise<void>;
-    onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
-
-    // Crosshair Presets
-    getCrosshairPresets: () => Promise<{ presets: CrosshairPreset[]; activePresetId: string | null }>;
-    saveCrosshairPreset: (name: string, settings: CrosshairSettings, thumbnail: string) => Promise<CrosshairPreset>;
-    deleteCrosshairPreset: (id: string) => Promise<boolean>;
-    applyCrosshairPreset: (presetId: string, gamePath: string) => Promise<{ success: boolean; path: string }>;
-    clearCrosshairAutoexec: (gamePath: string) => Promise<{ success: boolean }>;
-    getAutoexecStatus: (gamePath: string) => Promise<{ exists: boolean; path: string | null; hasCrosshairSettings: boolean }>;
-    createAutoexec: (gamePath: string) => Promise<{ success: boolean; path: string }>;
-    getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
-    saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
-
-    // Updater
-    updater: {
-        getVersion: () => Promise<string>;
-        getStatus: () => Promise<UpdateStatus>;
-        getInstallSource: () => Promise<'managed' | 'appimage' | 'standard'>;
-        checkForUpdates: () => Promise<UpdateInfo | null>;
-        downloadUpdate: () => Promise<void>;
-        installUpdate: () => void;
-        onStatus: (callback: (status: UpdateStatus) => void) => () => void;
-    };
-
-    // Diagnostics (logs + bug-report bundle)
-    diagnostics: {
-        getLogPath: () => Promise<string>;
-        openLogsFolder: () => Promise<void>;
-        saveReport: () => Promise<{ path: string } | null>;
-        buildReport: (description: string, options?: { includeFullLog?: boolean }) => Promise<string>;
-    };
-
-    // Grimoire Social (publish + discover + likes). Session token lives in
-    // the main process; this surface never returns it to the renderer.
-    social: {
-        getSessionStatus: () => Promise<SocialSessionStatus>;
-        login: () => Promise<SocialSessionStatus>;
-        cancelLogin: () => Promise<void>;
-        logout: () => Promise<SocialSessionStatus>;
-        me: () => Promise<MeResponse>;
-        listProfiles: (args?: {
-            sort?: ProfileSort;
-            hero?: string;
-            hideNsfw?: boolean;
-            page?: number;
-        }) => Promise<ListProfilesResponse>;
-        getProfile: (id: string) => Promise<ProfileDetail>;
-        publish: (body: PublishRequest) => Promise<PublishResponse>;
-        updateProfile: (id: string, body: UpdateProfileRequest) => Promise<UpdateProfileResponse>;
-        like: (id: string) => Promise<LikeResponse>;
-        unlike: (id: string) => Promise<LikeResponse>;
-        report: (id: string, body: ReportRequest) => Promise<void>;
-        deleteProfile: (id: string) => Promise<void>;
-        deleteAccount: () => Promise<SocialSessionStatus>;
-        onSessionChanged: (callback: (status: SocialSessionStatus) => void) => () => void;
-    };
-
-    // Stats
-    stats: {
-        // Steam Detection
-        detectSteamUsers: () => Promise<SteamUser[]>;
-        getMostRecentSteamUser: () => Promise<SteamUser | null>;
-        parseSteamId: (input: string) => Promise<number | null>;
-
-        // Player Management
-        addTrackedPlayer: (accountId: number, isPrimary?: boolean) => Promise<unknown>;
-        removeTrackedPlayer: (accountId: number) => Promise<void>;
-        getTrackedPlayers: () => Promise<unknown[]>;
-        getPrimaryPlayer: () => Promise<unknown | null>;
-        setPrimaryPlayer: (accountId: number) => Promise<void>;
-
-        // Player Data (API)
-        getPlayerMMR: (accountIds: number[]) => Promise<unknown[]>;
-        getPlayerMMRHistory: (accountId: number) => Promise<unknown>;
-        getPlayerHeroStats: (accountId: number) => Promise<unknown>;
-        getPlayerMatchHistory: (accountId: number, limit?: number, minMatchId?: number) => Promise<unknown>;
-        getPlayerSteamProfiles: (accountIds: number[]) => Promise<unknown[]>;
-
-        // Local Database
-        getLocalMMRHistory: (accountId: number, limit?: number) => Promise<unknown[]>;
-        getLocalMatchHistory: (accountId: number, limit?: number, offset?: number) => Promise<unknown[]>;
-        getLocalMatchCount: (accountId: number) => Promise<number>;
-        getLocalHeroStats: (accountId: number, heroId?: number) => Promise<unknown[]>;
-        getAggregatedStats: (accountId: number) => Promise<unknown | null>;
-
-        // Match Data
-        getMatchMetadata: (matchId: number) => Promise<unknown>;
-        getActiveMatches: () => Promise<unknown[]>;
-
-        // Leaderboards
-        getLeaderboard: (region: LeaderboardRegion) => Promise<unknown[]>;
-        getHeroLeaderboard: (region: LeaderboardRegion, heroId: number) => Promise<unknown[]>;
-
-        // Analytics
-        getHeroAnalytics: (params?: HeroStatsParams) => Promise<unknown[]>;
-        getHeroCounters: (heroId?: number) => Promise<unknown[]>;
-        getHeroSynergies: (heroId?: number) => Promise<unknown[]>;
-        getItemAnalytics: () => Promise<unknown[]>;
-        getBadgeDistribution: () => Promise<unknown[]>;
-        getMMRDistribution: () => Promise<unknown>;
-
-        // Extended MMR
-        getHeroMMR: (accountIds: number[], heroId: number) => Promise<unknown[]>;
-        getHeroMMRHistory: (accountId: number, heroId: number) => Promise<unknown[]>;
-        getMMRDistributionGlobal: (filters?: AnalyticsFilter) => Promise<unknown[]>;
-        getHeroMMRDistribution: (heroId: number, filters?: AnalyticsFilter) => Promise<unknown[]>;
-
-        // Player Social Stats
-        getEnemyStats: (accountId: number, filters?: PlayerStatsFilter) => Promise<unknown[]>;
-        getMateStats: (accountId: number, filters?: PlayerStatsFilter & { same_party?: boolean }) => Promise<unknown[]>;
-        getPartyStats: (accountId: number, filters?: PlayerStatsFilter) => Promise<unknown[]>;
-        searchSteamProfiles: (query: string) => Promise<unknown[]>;
-
-        // Advanced Analytics
-        getAbilityOrderStats: (heroId: number, filters?: AnalyticsFilter & { min_matches?: number }) => Promise<unknown[]>;
-        getItemPermutationStats: (heroId?: number, combSize?: number, filters?: AnalyticsFilter) => Promise<unknown[]>;
-        getHeroCombStats: (combSize?: number, filters?: AnalyticsFilter) => Promise<unknown[]>;
-        getKillDeathStats: (filters?: AnalyticsFilter) => Promise<unknown[]>;
-        getHeroScoreboard: (sortBy: ScoreboardSortBy, sortDirection?: 'asc' | 'desc', filters?: AnalyticsFilter) => Promise<unknown[]>;
-        getPlayerScoreboard: (sortBy: ScoreboardSortBy, heroId?: number, sortDirection?: 'asc' | 'desc', filters?: AnalyticsFilter) => Promise<unknown[]>;
-        getPlayerStatsMetrics: (filters?: AnalyticsFilter) => Promise<unknown>;
-        getBuildItemStats: (heroId?: number, filters?: { min_last_updated_unix_timestamp?: number; max_last_updated_unix_timestamp?: number }) => Promise<unknown[]>;
-
-        // Match Replay
-        getMatchSalts: (matchId: number) => Promise<unknown>;
-        getMatchLiveUrl: (matchId: number) => Promise<unknown>;
-        getRecentlyFetchedMatches: (playerIngestedOnly?: boolean) => Promise<unknown[]>;
-
-        // Patches
-        getPatchNotes: () => Promise<unknown>;
-        getMajorPatchDates: () => Promise<unknown[]>;
-
-        // SQL Access - REMOVED FOR SECURITY
-        // executeSQLQuery, listSQLTables, getTableSchema removed
-
-        // Builds
-        searchBuilds: (params: BuildSearchParams) => Promise<unknown[]>;
-
-        // Settings
-        getSetting: (key: string) => Promise<string | null>;
-        setSetting: (key: string, value: string) => Promise<void>;
-        getAllSettings: () => Promise<Record<string, string>>;
-
-        // Sync
-        syncPlayerData: (accountId: number) => Promise<unknown>;
-
-        // Utility
-        checkApiHealth: () => Promise<unknown>;
-        getApiInfo: () => Promise<unknown>;
-    };
-}
-
-// Filter types for analytics
-interface AnalyticsFilter {
-    min_unix_timestamp?: number;
-    max_unix_timestamp?: number;
-    min_duration_s?: number;
-    max_duration_s?: number;
-    min_average_badge?: number;
-    max_average_badge?: number;
-    min_match_id?: number;
-    max_match_id?: number;
-    account_ids?: number[];
-    hero_ids?: number[];
-}
-
-interface PlayerStatsFilter {
-    min_unix_timestamp?: number;
-    max_unix_timestamp?: number;
-    min_matches_played?: number;
-    max_matches_played?: number;
-}
-
-type ScoreboardSortBy =
-    | 'matches' | 'wins' | 'losses' | 'winrate'
-    | 'max_kills_per_match' | 'avg_kills_per_match' | 'kills'
-    | 'max_deaths_per_match' | 'avg_deaths_per_match' | 'deaths'
-    | 'max_assists_per_match' | 'avg_assists_per_match' | 'assists'
-    | 'max_net_worth_per_match' | 'avg_net_worth_per_match' | 'net_worth'
-    | 'max_player_damage_per_match' | 'avg_player_damage_per_match' | 'player_damage';
-
-interface SteamLaunchOptionsStatus {
-    available: boolean;
-    configPath: string | null;
-    currentValue: string | null;
-    steamRunning: boolean;
-}
-
-interface BrowseModsArgs {
-    page: number;
-    perPage: number;
-    search?: string;
-    section?: string;
-    categoryId?: number;
-    sort?: string;
-    submitterId?: number;
-}
-
-interface GetModDetailsArgs {
-    modId: number;
-    section?: string;
-    includeSubmitter?: boolean;
-}
-
-interface GetModCommentsArgs {
-    modId: number;
-    section?: string;
-    page?: number;
-}
-
-interface GameBananaCommentsResponse {
-    comments: Array<{
-        id: number;
-        text: string;
-        dateAdded: number;
-        poster: {
-            id: number;
-            name: string;
-            avatarUrl?: string;
-        };
-    }>;
-    totalCount: number;
-}
-
-interface DownloadModArgs {
-    modId: number;
-    fileId: number;
-    fileName: string;
-    modName?: string;
-    section?: string;
-    categoryId?: number;
-}
-
-interface GetCategoriesArgs {
-    categoryModelName: string;
-}
-
-interface SetMinaPresetArgs {
-    presetFileName: string;
-}
-
-interface ListMinaVariantsArgs {
-    archivePath: string;
-}
-
-interface ApplyMinaVariantArgs {
-    archivePath: string;
-    archiveEntry: string;
-    presetLabel: string;
-    heroCategoryId?: number;
-}
-
-interface CleanupResult {
-    removedArchives: number;
-    renamedMinaPresets: number;
-    renamedMinaTextures: number;
-    skippedMinaPresets: number;
-    skippedMinaTextures: number;
-}
-
-interface GameinfoStatus {
-    configured: boolean;
-    message: string;
-    missing: boolean;
-    candidates: string[];
-}
-
-interface OpenDialogOptions {
-    directory?: boolean;
-    title?: string;
-    defaultPath?: string;
-    filters?: Array<{ name: string; extensions: string[] }>;
-}
-
-interface ImportCustomModArgs {
-    vpkPath: string;
-    name: string;
-    thumbnailDataUrl?: string;
-    nsfw?: boolean;
-}
-
-interface VanillaStashStatus {
-    active: boolean;
-    startedAt?: string;
-    modCount?: number;
-}
-
-interface VanillaRestoreResult {
-    restored: number;
-    skipped: number;
-    failed: string[];
-}
-
-interface GameRunningStatus {
-    running: boolean;
-}
-
-interface StopGameResult {
-    wasRunning: boolean;
-    stopped: boolean;
-    restoreResult?: VanillaRestoreResult;
-}
-
-interface DownloadProgressData {
-    modId: number;
-    fileId: number;
-    downloaded: number;
-    total: number;
-}
-
-interface DownloadEventData {
-    modId: number;
-    fileId: number;
-}
-
-interface DownloadErrorData {
-    modId: number;
-    fileId: number;
-    errorCode: 'MISSING_7ZIP' | 'EXTRACTION_FAILED' | 'CANCELLED_BY_USER' | 'UNKNOWN';
-    message: string;
-    helpUrl?: string;
-}
-
-interface ModsAutoDisabledData {
-    reason: 'sibling-variant';
-    modId: number;
-    fileId: number;
-    disabled: Array<{ id: string; name: string; fileName: string }>;
-}
-
-interface DownloadQueueItem {
-    modId: number;
-    fileId: number;
-    fileName: string;
-    modName?: string;
-}
-
-interface DownloadQueueData {
-    queue: DownloadQueueItem[];
-    count: number;
-    currentDownload: DownloadQueueItem | null;
-}
-
-interface OneClickInstallData {
-    archiveUrl: string;
-    modId?: number;
-    modType?: string;
-    modName?: string;
-    error?: string;
-}
-
-interface OneClickSuspiciousFilesData {
-    requestId: string;
-    modName: string;
-    files: string[];
-}
-
-interface MultiVpkPickData {
-    requestId: string;
-    modName: string;
-    vpkFileNames: string[];
-    vpkLabels?: Record<string, string>;
-    vpkFileSizes?: Record<string, number>;
-}
-
-interface GameBananaModsResponse {
-    records: unknown[];
-    totalCount: number;
-    isComplete: boolean;
-    perPage: number;
-}
-
-interface GameBananaModDetails {
-    id: number;
-    name: string;
-    description?: string;
-    nsfw?: boolean;
-    category?: unknown;
-    files?: unknown[];
-    previewMedia?: unknown;
-    submitter?: unknown;
-}
-
-interface GameBananaModFileList {
-    id: number;
-    files: Array<{ id: number; isArchived: boolean }>;
-}
-
-interface GameBananaModUpdatesResponse {
-    updates: Array<{
-        id: number;
-        version?: string;
-        title?: string;
-        text?: string;
-        dateAdded: number;
-    }>;
-    totalCount: number;
-}
-
-interface GameBananaSection {
-    pluralTitle: string;
-    modelName: string;
-    categoryModelName: string;
-    itemCount: number;
-}
-
-interface GameBananaCategoryNode {
-    id: number;
-    name: string;
-    profileUrl?: string;
-    itemCount: number;
-    iconUrl?: string;
-    parentId?: number;
-    children?: GameBananaCategoryNode[];
-}
-
-interface GameBananaCollection {
-    id: number;
-    name: string;
-    description?: string;
-    dateAdded: number;
-    dateModified: number;
-    submitter?: unknown;
-    previewMedia?: unknown;
-}
-
-interface GameBananaCollectionItemsResponse {
-    records: unknown[];
-    totalCount: number;
-    isComplete: boolean;
-    perPage: number;
-}
-
-interface ProfileCrosshairSettings {
-    pipGap: number;
-    pipHeight: number;
-    pipWidth: number;
-    pipOpacity: number;
-    pipBorder: boolean;
-    dotOpacity: number;
-    dotOutlineOpacity: number;
-    colorR: number;
-    colorG: number;
-    colorB: number;
-}
-
-interface Profile {
-    id: string;
-    name: string;
-    mods: ProfileMod[];
-    crosshair?: ProfileCrosshairSettings;
-    autoexecCommands?: string[];
-    createdAt: string;
-    updatedAt: string;
-}
-
-interface ProfileMod {
-    fileName: string;
-    enabled: boolean;
-    priority: number;
-}
-
-interface SearchLocalModsOptions {
-    query?: string;
-    section?: string;
-    categoryId?: number;
-    // Enhanced hero search
-    heroName?: string;
-    skinsCategoryId?: number;
-    sortBy?: 'relevance' | 'likes' | 'date' | 'date_added' | 'views' | 'name';
-    limit?: number;
-    offset?: number;
-}
-
-interface LocalSearchResult {
-    mods: CachedMod[];
-    totalCount: number;
-    offset: number;
-    limit: number;
-}
-
-interface CachedMod {
-    id: number;
-    name: string;
-    section: string;
-    categoryId: number | null;
-    categoryName: string | null;
-    submitterName: string | null;
-    submitterId: number | null;
-    likeCount: number;
-    viewCount: number;
-    dateAdded: number;
-    dateModified: number;
-    hasFiles: boolean;
-    isNsfw: boolean;
-    thumbnailUrl: string | null;
-    profileUrl: string;
-    cachedAt: number;
-}
-
-interface CrosshairSettings {
-    pipGap: number;
-    pipHeight: number;
-    pipWidth: number;
-    pipOpacity: number;
-    pipBorder: boolean;
-    dotOpacity: number;
-    dotOutlineOpacity: number;
-    colorR: number;
-    colorG: number;
-    colorB: number;
-}
-
-interface CrosshairPreset {
-    id: string;
-    name: string;
-    settings: CrosshairSettings;
-    thumbnail: string;
-    createdAt: string;
-}
-
-interface UpdateStatus {
-    checking: boolean;
-    available: boolean;
-    downloading: boolean;
-    downloaded: boolean;
-    error: string | null;
-    progress: number;
-    updateInfo: UpdateInfo | null;
-}
-
-interface UpdateInfo {
-    version: string;
-    releaseDate?: string;
-    releaseNotes?: string | ReleaseNoteInfo[] | null;
-}
-
-interface ReleaseNoteInfo {
-    version: string;
-    note: string | null;
-}
-
-interface SyncProgressData {
-    section: string;
-    currentPage: number;
-    totalPages: number;
-    modsProcessed: number;
-    totalMods: number;
-    phase: 'fetching' | 'complete' | 'error';
-    error?: string;
-}
-
-// Stats types
-interface SteamUser {
-    steamId64: string;
-    accountId: number;
-    personaName: string;
-    mostRecent: boolean;
-}
-
-type LeaderboardRegion = 'Europe' | 'NAmerica' | 'SAmerica' | 'Asia' | 'Oceania';
-
-interface HeroStatsParams {
-    min_badge?: number;
-    max_badge?: number;
-    match_mode?: string;
-    min_unix_timestamp?: number;
-    max_unix_timestamp?: number;
-}
-
-interface BuildSearchParams {
-    hero_id?: number;
-    search?: string;
-    author_id?: number;
-    tags?: string[];
-    language?: string;
-    sort_by?: 'favorites' | 'updated' | 'published' | 'version';
-    sort_direction?: 'asc' | 'desc';
-    limit?: number;
-    offset?: number;
-}
 
 // Expose the API to the renderer process
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -1014,7 +209,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getModDetails: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-details', args),
     getModFileList: (args: GetModDetailsArgs) => ipcRenderer.invoke('get-mod-file-list', args),
     getModComments: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-comments', args),
-    getModUpdates: (args: GetModCommentsArgs) => ipcRenderer.invoke('get-mod-updates', args),
+    getModUpdates: (args: GetModUpdatesArgs) => ipcRenderer.invoke('get-mod-updates', args),
     getSubmitterLinks: (memberId: number) => ipcRenderer.invoke('get-submitter-links', memberId),
     downloadMod: (args: DownloadModArgs) => ipcRenderer.invoke('download-mod', args),
     getGameBananaSections: () => ipcRenderer.invoke('get-gamebanana-sections'),
@@ -1286,13 +481,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         getActiveMatches: () => ipcRenderer.invoke('stats:getActiveMatches'),
 
         // Leaderboards
-        getLeaderboard: (region: LeaderboardRegion) =>
+        getLeaderboard: (region: string) =>
             ipcRenderer.invoke('stats:getLeaderboard', region),
-        getHeroLeaderboard: (region: LeaderboardRegion, heroId: number) =>
+        getHeroLeaderboard: (region: string, heroId: number) =>
             ipcRenderer.invoke('stats:getHeroLeaderboard', region, heroId),
 
         // Analytics
-        getHeroAnalytics: (params?: HeroStatsParams) =>
+        getHeroAnalytics: (params?: unknown) =>
             ipcRenderer.invoke('stats:getHeroAnalytics', params),
         getHeroCounters: (heroId?: number) =>
             ipcRenderer.invoke('stats:getHeroCounters', heroId),
@@ -1307,37 +502,37 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('stats:getHeroMMR', accountIds, heroId),
         getHeroMMRHistory: (accountId: number, heroId: number) =>
             ipcRenderer.invoke('stats:getHeroMMRHistory', accountId, heroId),
-        getMMRDistributionGlobal: (filters?: AnalyticsFilter) =>
+        getMMRDistributionGlobal: (filters?: unknown) =>
             ipcRenderer.invoke('stats:getMMRDistributionGlobal', filters),
-        getHeroMMRDistribution: (heroId: number, filters?: AnalyticsFilter) =>
+        getHeroMMRDistribution: (heroId: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getHeroMMRDistribution', heroId, filters),
 
         // Player Social Stats
-        getEnemyStats: (accountId: number, filters?: PlayerStatsFilter) =>
+        getEnemyStats: (accountId: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getEnemyStats', accountId, filters),
-        getMateStats: (accountId: number, filters?: PlayerStatsFilter & { same_party?: boolean }) =>
+        getMateStats: (accountId: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getMateStats', accountId, filters),
-        getPartyStats: (accountId: number, filters?: PlayerStatsFilter) =>
+        getPartyStats: (accountId: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getPartyStats', accountId, filters),
         searchSteamProfiles: (query: string) =>
             ipcRenderer.invoke('stats:searchSteamProfiles', query),
 
         // Advanced Analytics
-        getAbilityOrderStats: (heroId: number, filters?: AnalyticsFilter & { min_matches?: number }) =>
+        getAbilityOrderStats: (heroId: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getAbilityOrderStats', heroId, filters),
-        getItemPermutationStats: (heroId?: number, combSize?: number, filters?: AnalyticsFilter) =>
+        getItemPermutationStats: (heroId?: number, combSize?: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getItemPermutationStats', heroId, combSize, filters),
-        getHeroCombStats: (combSize?: number, filters?: AnalyticsFilter) =>
+        getHeroCombStats: (combSize?: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getHeroCombStats', combSize, filters),
-        getKillDeathStats: (filters?: AnalyticsFilter) =>
+        getKillDeathStats: (filters?: unknown) =>
             ipcRenderer.invoke('stats:getKillDeathStats', filters),
-        getHeroScoreboard: (sortBy: ScoreboardSortBy, sortDirection?: 'asc' | 'desc', filters?: AnalyticsFilter) =>
+        getHeroScoreboard: (sortBy: string, sortDirection?: string, filters?: unknown) =>
             ipcRenderer.invoke('stats:getHeroScoreboard', sortBy, sortDirection, filters),
-        getPlayerScoreboard: (sortBy: ScoreboardSortBy, heroId?: number, sortDirection?: 'asc' | 'desc', filters?: AnalyticsFilter) =>
+        getPlayerScoreboard: (sortBy: string, heroId?: number, sortDirection?: string, filters?: unknown) =>
             ipcRenderer.invoke('stats:getPlayerScoreboard', sortBy, heroId, sortDirection, filters),
-        getPlayerStatsMetrics: (filters?: AnalyticsFilter) =>
+        getPlayerStatsMetrics: (filters?: unknown) =>
             ipcRenderer.invoke('stats:getPlayerStatsMetrics', filters),
-        getBuildItemStats: (heroId?: number, filters?: { min_last_updated_unix_timestamp?: number; max_last_updated_unix_timestamp?: number }) =>
+        getBuildItemStats: (heroId?: number, filters?: unknown) =>
             ipcRenderer.invoke('stats:getBuildItemStats', heroId, filters),
 
         // Match Replay
@@ -1356,7 +551,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         // executeSQLQuery, listSQLTables, getTableSchema removed
 
         // Builds
-        searchBuilds: (params: BuildSearchParams) =>
+        searchBuilds: (params: unknown) =>
             ipcRenderer.invoke('stats:searchBuilds', params),
 
         // Settings
