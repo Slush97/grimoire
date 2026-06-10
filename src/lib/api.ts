@@ -453,34 +453,8 @@ export async function getCollectionItems(
   return window.electronAPI.getCollectionItems({ collectionId, page });
 }
 
-export async function setMinaPreset(presetFileName: string): Promise<void> {
-  return window.electronAPI.setMinaPreset({ presetFileName });
-}
-
-export async function listMinaVariants(archivePath: string): Promise<string[]> {
-  return window.electronAPI.listMinaVariants({ archivePath });
-}
-
-export async function applyMinaVariant(
-  archivePath: string,
-  archiveEntry: string,
-  presetLabel: string,
-  heroCategoryId?: number
-): Promise<void> {
-  return window.electronAPI.applyMinaVariant({
-    archivePath,
-    archiveEntry,
-    presetLabel,
-    heroCategoryId,
-  });
-}
-
 export async function cleanupAddons(): Promise<{
   removedArchives: number;
-  renamedMinaPresets: number;
-  renamedMinaTextures: number;
-  skippedMinaPresets: number;
-  skippedMinaTextures: number;
 }> {
   return window.electronAPI.cleanupAddons();
 }

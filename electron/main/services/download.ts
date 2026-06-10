@@ -740,12 +740,6 @@ async function executeDownload(
 
     let installedVpks: string[] = [];
 
-    // Detect if this is a Midnight Mina mod that needs special handling
-    const isMidnightMina =
-        fileName.toLowerCase().includes('midnight_mina') ||
-        fileName.toLowerCase().includes('midnight mina') ||
-        details.name?.toLowerCase().includes('midnight mina');
-
     // Extract if archive
     if (isArchive(downloadPath)) {
         console.log(`[downloadMod] Extracting archive...`);
@@ -788,101 +782,65 @@ async function executeDownload(
         // Rename VPKs to avoid conflicts
         installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, details.name);
 
-        if (isMidnightMina && installedVpks.length > 1) {
-            // Special handling for Midnight Mina:
-            // - Keep the textures VPK (required for all variants)
-            // - Keep ONE preset VPK (so it works out of the box)
-            // - User can select other presets via the Custom Variants UI
-            console.log(`[downloadMod] Midnight Mina detected, filtering VPKs...`);
-
-            const textureVpks = installedVpks.filter(vpk =>
-                vpk.toLowerCase().includes('textures')
+        // Multi-VPK archive (Warden Remodel et al). Previously kept only
+        // the alphabetically-first VPK and silently unlinked the rest —
+        // user feedback flagged that as data-loss-feeling. Now we prompt
+        // when there's more than one and let the user pick which to keep.
+        installedVpks.sort((a, b) => a.localeCompare(b));
+        if (installedVpks.length > 1) {
+            const pickRequestId = randomUUID();
+            const vpkLabels = getVpkLabels(
+                installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
             );
-            const presetVpks = installedVpks.filter(vpk =>
-                !vpk.toLowerCase().includes('textures')
+            const vpkFileSizes = Object.fromEntries(
+                await Promise.all(
+                    installedVpks.map(async (vpk) => {
+                        const absPath = join(targetPath, vpk);
+                        const stat = await fs.stat(absPath);
+                        return [vpk, stat.size] as const;
+                    })
+                )
             );
-
-            // Sort presets and keep only the first one
-            presetVpks.sort((a, b) => a.localeCompare(b));
-            const [primaryPreset, ...extraPresets] = presetVpks;
-
-            // Keep textures + one preset
-            installedVpks = [...textureVpks];
-            if (primaryPreset) {
-                installedVpks.push(primaryPreset);
-            }
-
-            console.log(`[downloadMod] Keeping: ${installedVpks.join(', ')}`);
-
-            // Delete extra presets
-            for (const extraVpk of extraPresets) {
-                const extraPath = join(targetPath, extraVpk);
-                if (existsSync(extraPath)) {
-                    console.log(`[downloadMod] Removing extra preset: ${extraVpk}`);
-                    await fs.unlink(extraPath);
-                }
-            }
-        } else if (!isMidnightMina) {
-            // Multi-VPK archive (Warden Remodel et al). Previously kept only
-            // the alphabetically-first VPK and silently unlinked the rest —
-            // user feedback flagged that as data-loss-feeling. Now we prompt
-            // when there's more than one and let the user pick which to keep.
-            installedVpks.sort((a, b) => a.localeCompare(b));
-            if (installedVpks.length > 1) {
-                const pickRequestId = randomUUID();
-                const vpkLabels = getVpkLabels(
-                    installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
-                );
-                const vpkFileSizes = Object.fromEntries(
-                    await Promise.all(
-                        installedVpks.map(async (vpk) => {
-                            const absPath = join(targetPath, vpk);
-                            const stat = await fs.stat(absPath);
-                            return [vpk, stat.size] as const;
-                        })
-                    )
-                );
-                const pick = await awaitMultiVpkPick(
-                    pickRequestId,
-                    details.name ?? fileName,
-                    installedVpks,
-                    vpkLabels,
-                    vpkFileSizes,
-                    mainWindow
-                );
-                if (!pick || pick.selected.length === 0) {
-                    // Cancelled — wipe everything we extracted plus the archive.
-                    for (const vpk of installedVpks) {
-                        const extraPath = join(targetPath, vpk);
-                        if (existsSync(extraPath)) {
-                            await fs.unlink(extraPath).catch(() => { });
-                        }
-                    }
-                    if (existsSync(downloadPath)) {
-                        await fs.unlink(downloadPath).catch(() => { });
-                    }
-                    installedVpks = [];
-                    mainWindow?.webContents.send('download-error', {
-                        modId,
-                        fileId,
-                        errorCode: 'CANCELLED_BY_USER',
-                        message: 'Install cancelled.',
-                    });
-                    throw new Error('User cancelled multi-VPK pick');
-                }
-                const selectedSet = new Set(pick.selected);
+            const pick = await awaitMultiVpkPick(
+                pickRequestId,
+                details.name ?? fileName,
+                installedVpks,
+                vpkLabels,
+                vpkFileSizes,
+                mainWindow
+            );
+            if (!pick || pick.selected.length === 0) {
+                // Cancelled — wipe everything we extracted plus the archive.
                 for (const vpk of installedVpks) {
-                    if (!selectedSet.has(vpk)) {
-                        const extraPath = join(targetPath, vpk);
-                        if (existsSync(extraPath)) {
-                            await fs.unlink(extraPath);
-                        }
+                    const extraPath = join(targetPath, vpk);
+                    if (existsSync(extraPath)) {
+                        await fs.unlink(extraPath).catch(() => { });
                     }
                 }
-                installedVpks = installedVpks.filter((vpk) => selectedSet.has(vpk));
+                if (existsSync(downloadPath)) {
+                    await fs.unlink(downloadPath).catch(() => { });
+                }
+                installedVpks = [];
+                mainWindow?.webContents.send('download-error', {
+                    modId,
+                    fileId,
+                    errorCode: 'CANCELLED_BY_USER',
+                    message: 'Install cancelled.',
+                });
+                throw new Error('User cancelled multi-VPK pick');
             }
-            // Single-VPK case: nothing to do — keep as-is.
+            const selectedSet = new Set(pick.selected);
+            for (const vpk of installedVpks) {
+                if (!selectedSet.has(vpk)) {
+                    const extraPath = join(targetPath, vpk);
+                    if (existsSync(extraPath)) {
+                        await fs.unlink(extraPath);
+                    }
+                }
+            }
+            installedVpks = installedVpks.filter((vpk) => selectedSet.has(vpk));
         }
+        // Single-VPK case: nothing to do, keep as-is.
 
         // Clean up archive
         if (existsSync(downloadPath)) {

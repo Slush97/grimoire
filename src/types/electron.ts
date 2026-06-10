@@ -81,27 +81,8 @@ export interface GetCategoriesArgs {
     categoryModelName: string;
 }
 
-export interface SetMinaPresetArgs {
-    presetFileName: string;
-}
-
-export interface ListMinaVariantsArgs {
-    archivePath: string;
-}
-
-export interface ApplyMinaVariantArgs {
-    archivePath: string;
-    archiveEntry: string;
-    presetLabel: string;
-    heroCategoryId?: number;
-}
-
 export interface CleanupResult {
     removedArchives: number;
-    renamedMinaPresets: number;
-    renamedMinaTextures: number;
-    skippedMinaPresets: number;
-    skippedMinaTextures: number;
 }
 
 export interface GameinfoStatus {
@@ -438,12 +419,6 @@ export interface ElectronAPI {
     getGameBananaCategories: (args: GetCategoriesArgs) => Promise<GameBananaCategoryNode[]>;
     getCollection: (args: { collectionId: number }) => Promise<GameBananaCollection>;
     getCollectionItems: (args: { collectionId: number; page?: number }) => Promise<GameBananaCollectionItemsResponse>;
-
-    // Mina Variants
-    setMinaPreset: (args: SetMinaPresetArgs) => Promise<void>;
-    listMinaVariants: (args: ListMinaVariantsArgs) => Promise<string[]>;
-    applyMinaVariant: (args: ApplyMinaVariantArgs) => Promise<void>;
-    downloadMinaVariations: () => Promise<string>;
 
     // Maintenance
     copyImageToClipboard: (source: string) => Promise<void>;
