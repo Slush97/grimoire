@@ -111,11 +111,19 @@ export function LockerHeroView({
   // the gallery/list cards and the grouped rows rendered below.
   const soundCount = countLockerSkins(soundList);
 
-  const sections: Array<{ id: SectionId; label: string; icon: LucideIcon; show: boolean }> = [
-    { id: 'skins', label: 'Skins', icon: Shirt, show: true },
-    { id: 'sounds', label: 'Sounds', icon: Music, show: hasSounds },
-    { id: 'cards', label: 'Cards', icon: Images, show: true },
-    { id: 'effects', label: 'Effects', icon: Sparkles, show: true },
+  // Section rows, formatted like the Global view's type selector: label +
+  // count, with empty sections disabled rather than hidden.
+  const sections: Array<{
+    id: SectionId;
+    label: string;
+    icon: LucideIcon;
+    count: number | null;
+    disabled?: boolean;
+  }> = [
+    { id: 'skins', label: 'Skins', icon: Shirt, count: skinCount },
+    { id: 'sounds', label: 'Sounds', icon: Music, count: soundCount, disabled: !hasSounds },
+    { id: 'cards', label: 'Cards', icon: Images, count: null },
+    { id: 'effects', label: 'Effects', icon: Sparkles, count: null },
   ];
 
   const renderSrc =
@@ -163,18 +171,21 @@ export function LockerHeroView({
     await onToggleVariant(modId);
   };
 
-  const sectionSubtitle =
-    activeSection === 'cards'
-      ? 'Card art'
-      : activeSection === 'effects'
-        ? 'Effects'
-        : activeSection === 'sounds'
-          ? soundCount > 0
-            ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}`
-            : 'No sounds'
-          : skinCount > 0
-            ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}`
-            : 'No skins';
+  // Content-pane heading, Global-view style (section title + count). The Cards
+  // and Effects panels render their own headers, so they skip it.
+  const contentHeading =
+    activeSection === 'skins'
+      ? {
+          title: 'Skins',
+          count: skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins',
+        }
+      : activeSection === 'sounds'
+        ? {
+            title: 'Sounds',
+            count:
+              soundCount > 0 ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}` : 'No sounds',
+          }
+        : null;
 
   const selectionPanel =
     activeSection === 'cards' ? (
@@ -269,7 +280,7 @@ export function LockerHeroView({
           to clear. */}
       <div
         aria-hidden
-        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1000px] xl:w-[1100px]"
+        className="pointer-events-none absolute inset-y-0 left-0 z-[5] hidden lg:block lg:w-[1040px] xl:w-[1160px]"
       >
         <div
           className="absolute inset-0"
@@ -307,104 +318,88 @@ export function LockerHeroView({
         />
       </div>
 
-      {/* Section rail (lg+): the armory nav, floating on the frosted glass.
-          Vertical so it scales to however many cosmetic surfaces the locker
-          grows without crowding. */}
-      <nav
-        aria-label="Locker sections"
-        className="relative z-10 hidden lg:flex w-44 xl:w-48 flex-shrink-0 flex-col gap-1 border-r border-white/5 p-4 pt-6 animate-slide-in-left"
-      >
-        {sections
-          .filter((s) => s.show)
-          .map(({ id, label, icon: Icon }) => (
-            <button
-              key={id}
-              type="button"
-              aria-current={activeSection === id ? 'page' : undefined}
-              onClick={() => setSection(id)}
-              className={`flex items-center gap-2.5 rounded-md px-3 py-2 text-sm font-medium transition-colors cursor-pointer ${
-                activeSection === id
-                  ? 'bg-accent/15 text-text-primary border border-accent/40'
-                  : 'text-text-secondary hover:text-text-primary hover:bg-white/5 border border-transparent'
-              }`}
-            >
-              <Icon className="w-4 h-4" />
-              {label}
-            </button>
-          ))}
-      </nav>
-
-      {/* Selection panel: wider than the old single sidebar (the rail freed
-          the horizontal space the pill strip used to need), still frosted. */}
-      <div className="relative z-10 w-full lg:w-[460px] xl:w-[520px] flex-shrink-0 overflow-y-auto scrollbar-glass bg-bg-secondary lg:bg-transparent animate-slide-in-left">
-        <div className="p-6 space-y-6">
-          {/* Header */}
-          <div className="flex items-center justify-between gap-3">
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors"
-            >
-              <ArrowLeft className="w-4 h-4" />
-              Back
-            </button>
-            <button
-              type="button"
-              onClick={onToggleFavorite}
-              className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
-                isFavorite
-                  ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
-                  : 'border-border/70 text-text-secondary hover:text-text-primary'
-              }`}
-            >
-              <Star className="w-4 h-4" />
-              {isFavorite ? 'Favorite' : 'Save'}
-            </button>
-          </div>
-
-          {/* Hero Name */}
-          <div className="flex items-center gap-3">
-            {nameFailed ? (
-              <h1 className="text-2xl font-bold text-text-primary">{hero.name}</h1>
-            ) : (
-              <img
-                src={getHeroNamePath(hero.name)}
-                alt={hero.name}
-                className="h-8 w-auto object-contain"
-                onError={() => setNameFailed(true)}
-              />
-            )}
-            <span className="text-sm text-text-secondary">{sectionSubtitle}</span>
-          </div>
-
-          {/* Section pills (below lg, where the rail is hidden). */}
-          <div
-            role="tablist"
-            aria-label="Section"
-            className="inline-flex lg:hidden items-center rounded-full border border-border bg-bg-tertiary p-0.5 text-xs"
+      {/* Left sidebar: hero identity + section nav, formatted like the Global
+          view's type selector (Back, title + count, full-width rows). Solid bg
+          below lg; transparent on lg so the feathered glass shows through. */}
+      <div className="relative z-10 flex w-[260px] flex-shrink-0 flex-col gap-6 overflow-y-auto scrollbar-glass bg-bg-secondary p-6 animate-slide-in-left lg:w-[300px] lg:bg-transparent xl:w-[340px]">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
           >
-            {sections
-              .filter((s) => s.show)
-              .map(({ id, label, icon: Icon }) => (
-                <button
-                  key={id}
-                  type="button"
-                  role="tab"
-                  aria-selected={activeSection === id}
-                  onClick={() => setSection(id)}
-                  className={`flex items-center gap-1.5 rounded-full px-3 py-1 transition-colors cursor-pointer ${
-                    activeSection === id
-                      ? 'bg-accent/15 text-text-primary border border-accent/40'
-                      : 'text-text-secondary hover:text-text-primary border border-transparent'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {label}
-                </button>
-              ))}
-          </div>
+            <ArrowLeft className="w-4 h-4" />
+            Back
+          </button>
+          <button
+            type="button"
+            onClick={onToggleFavorite}
+            className={`flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-semibold uppercase tracking-wide transition-colors ${
+              isFavorite
+                ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300'
+                : 'border-border/70 text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            <Star className="w-4 h-4" />
+            {isFavorite ? 'Favorite' : 'Save'}
+          </button>
+        </div>
 
-          <div className="space-y-4">{selectionPanel}</div>
+        {/* Hero Name */}
+        {nameFailed ? (
+          <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+            {hero.name}
+          </h2>
+        ) : (
+          <img
+            src={getHeroNamePath(hero.name)}
+            alt={hero.name}
+            className="h-8 w-auto self-start object-contain"
+            onError={() => setNameFailed(true)}
+          />
+        )}
+
+        <nav aria-label="Locker sections" className="flex flex-col gap-1.5">
+          {sections.map(({ id, label, icon: Icon, count, disabled }) => {
+            const isActive = activeSection === id;
+            return (
+              <button
+                key={id}
+                type="button"
+                disabled={disabled}
+                aria-current={isActive ? 'page' : undefined}
+                onClick={() => setSection(id)}
+                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
+                  disabled
+                    ? 'cursor-default border-transparent opacity-40'
+                    : isActive
+                      ? 'border-accent/60 bg-accent/15 cursor-pointer'
+                      : 'border-transparent hover:bg-white/10 cursor-pointer'
+                }`}
+              >
+                <Icon className="h-4 w-4 flex-shrink-0 text-white/80" />
+                <span className="flex-1 truncate text-sm font-medium text-white">{label}</span>
+                {count !== null && <span className="text-xs text-white/50">{count}</span>}
+              </button>
+            );
+          })}
+        </nav>
+      </div>
+
+      {/* Right pane: the active section's content. Width-capped on lg+ so the
+          hero stays visible to its right (unlike the Global view, the backdrop
+          here IS the subject, not scenery to overlay). */}
+      <div className="relative z-10 min-w-0 flex-1 overflow-y-auto scrollbar-glass bg-bg-primary lg:flex-none lg:w-[480px] lg:bg-transparent xl:w-[540px]">
+        <div className="space-y-4 p-6">
+          {contentHeading && (
+            <div className="flex items-baseline gap-2">
+              <h3 className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
+                {contentHeading.title}
+              </h3>
+              <span className="text-xs text-white/60">{contentHeading.count}</span>
+            </div>
+          )}
+          {selectionPanel}
         </div>
       </div>
     </div>
