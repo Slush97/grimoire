@@ -1,5 +1,5 @@
 import { scanMods, type Mod } from './mods';
-import { parseVpkDirectoryCached, type VpkParseStats } from './vpk';
+import { parseVpkDirectoriesAsync, type VpkParseStats } from './vpk';
 import { loadSettings } from './settings';
 import { getModMetadata } from './metadata';
 
@@ -198,10 +198,16 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
         }
     }
 
-    // Parse VPK file lists
+    // Parse VPK file lists. Cache misses are parsed concurrently across the
+    // worker pool instead of sequentially on the main process, which is what
+    // used to pin the event loop for hundreds of ms on a cold cache.
+    const parsedVpks = await parseVpkDirectoriesAsync(
+        enabledMods.map((mod) => mod.path),
+        { stats: vpkStats }
+    );
     const modFileLists = new Map<string, Set<string>>();
     for (const mod of enabledMods) {
-        const files = parseVpkDirectoryCached(mod.path, vpkStats);
+        const files = parsedVpks.get(mod.path);
         if (files && files.length > 0) {
             modFileLists.set(mod.id, new Set(files));
         }
@@ -241,7 +247,7 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
 
     // Strip out any pairs the user has explicitly dismissed. We do this at
     // the end rather than inside the loops so the ignored list stays a clean
-    // post-filter — easy to reason about and easy to disable later.
+    // post-filter: easy to reason about and easy to disable later.
     const settings = loadSettings();
     if (settings.ignoreConflictsByDefault) {
         return [];

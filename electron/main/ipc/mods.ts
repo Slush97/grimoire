@@ -16,7 +16,7 @@ import {
 import { metaKeyFor } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
-import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory } from '../services/vpk';
+import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { isLockerManaged } from '../services/lockerVpk';
@@ -221,6 +221,29 @@ function enrichMod(mod: Mod): WireMod {
     return { ...mod, isUnknown, globalType: globalType ?? undefined, lockerHero, lockerHeroSource };
 }
 
+/**
+ * Will enrichMod crack open this mod's VPK? Mirrors (conservatively
+ * over-approximates) the lazy-classification predicates above: globalType not
+ * yet classified at the current version, abilitySounds never checked, a Sound
+ * mod with no hero tag yet (the parse only happens when title inference fails,
+ * which we don't pre-compute; a wasted warm parse is harmless), or an unknown
+ * mod whose tree hasn't been hero-checked. Every positive persists to
+ * metadata, so this is a first-scan-only cost per mod.
+ */
+function needsVpkParseForEnrich(mod: Mod): boolean {
+    const metadata = getModMetadata(mod.metaKey);
+    const globalTypeStamped = metadata?.globalTypeClassifierVersion ?? 0;
+    if (metadata?.globalType === undefined) return true;
+    if (metadata.globalType === null && globalTypeStamped < GLOBAL_CLASSIFIER_VERSION) return true;
+    if (metadata.abilitySounds === undefined) return true;
+    if (!metadata.lockerHero && metadata.sourceSection === 'Sound') return true;
+    const isUnknown =
+        !metadata.gameBananaId &&
+        !(typeof metadata.modName === 'string' && metadata.modName.trim().length > 0);
+    if (isUnknown && !metadata.lockerHero && !metadata.lockerHeroVpkChecked) return true;
+    return false;
+}
+
 function sameKeys(a: string[], b: string[]): boolean {
     return a.length === b.length && a.every((key, index) => key === b[index]);
 }
@@ -258,7 +281,17 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     // the front of the load order (services/lockerVpk.ts), so surfacing them in
     // the Installed list would only let the user disable or reorder them and
     // silently break their applied cosmetics.
-    return mods.filter((m) => !isLockerManaged(m.metaKey)).map(enrichMod);
+    const visible = mods.filter((m) => !isLockerManaged(m.metaKey));
+    // Pre-warm the VPK parse cache across the worker pool for mods whose lazy
+    // classifications will parse inside enrichMod below. enrichMod stays sync;
+    // its parseVpkDirectoryCached calls hit the warmed cache instead of
+    // sequentially pinning the main process (worst case: first scan after
+    // importing a large collection).
+    const warmPaths = visible.filter(needsVpkParseForEnrich).map((m) => m.path);
+    if (warmPaths.length > 0) {
+        await parseVpkDirectoriesAsync(warmPaths);
+    }
+    return visible.map(enrichMod);
 });
 
 // enable-mod

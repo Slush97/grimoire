@@ -1,5 +1,6 @@
 import { openSync, readSync, closeSync, existsSync, statSync } from 'fs';
 import { heroForSoundCodename } from './heroSoundCodenames';
+import { parseVpksInWorkers } from './workers';
 import type { GlobalModType } from '../../../src/types/mod';
 
 /**
@@ -42,11 +43,28 @@ interface VpkCacheEntry {
 }
 const vpkParseCache = new Map<string, VpkCacheEntry>();
 
+// Invalidation epochs guard the async (worker) parse path against a stale
+// write-back: a VPK rewritten while a worker parse is in flight, to the same
+// size within the same mtime tick, would otherwise land in the cache as if
+// current (the Locker card/color/sound writers rewrite VPKs in place and then
+// call invalidateVpkParseCache, which is exactly that shape). A worker result
+// is only cached when both the per-path epoch and the global epoch still match
+// their values at dispatch time. The sync path needs no guard: it parses
+// current disk content by definition.
+const cacheEpochs = new Map<string, number>();
+let globalEpoch = 0;
+
+// Dedupes concurrent async parses of the same path (e.g. a conflict scan and a
+// get-mods pre-warm racing): the second caller awaits the first's result.
+const inflightParses = new Map<string, Promise<string[] | null>>();
+
 export function invalidateVpkParseCache(vpkPath?: string): void {
     if (vpkPath) {
         vpkParseCache.delete(vpkPath);
+        cacheEpochs.set(vpkPath, (cacheEpochs.get(vpkPath) ?? 0) + 1);
     } else {
         vpkParseCache.clear();
+        globalEpoch++;
     }
 }
 
@@ -82,6 +100,113 @@ export function parseVpkDirectoryCached(vpkPath: string, stats?: VpkParseStats):
     const paths = parseVpkDirectory(vpkPath);
     vpkParseCache.set(vpkPath, { mtimeMs: stat.mtimeMs, size: stat.size, paths });
     return paths;
+}
+
+/**
+ * Parse a batch of VPKs without blocking the main process: cache hits resolve
+ * immediately, misses are parsed concurrently across the worker pool, and
+ * results are written back into the shared cache so subsequent sync
+ * parseVpkDirectoryCached calls hit for free.
+ *
+ * Failure handling degrades to exactly the pre-worker behavior: a per-file
+ * worker error (e.g. file deleted mid-scan) and a wholesale pool failure
+ * (including abort) both fall back to the sync parser on the main thread, so
+ * callers always get the same results they would have gotten before this
+ * function existed.
+ */
+export async function parseVpkDirectoriesAsync(
+    vpkPaths: string[],
+    options: { signal?: AbortSignal; stats?: VpkParseStats } = {}
+): Promise<Map<string, string[] | null>> {
+    const { signal, stats } = options;
+    const results = new Map<string, string[] | null>();
+    const pending: Array<Promise<void>> = [];
+    const misses: string[] = [];
+
+    for (const vpkPath of vpkPaths) {
+        if (results.has(vpkPath) || misses.includes(vpkPath)) continue;
+
+        let stat;
+        try {
+            stat = statSync(vpkPath);
+        } catch {
+            vpkParseCache.delete(vpkPath);
+            results.set(vpkPath, null);
+            continue;
+        }
+
+        const cached = vpkParseCache.get(vpkPath);
+        if (cached && cached.mtimeMs === stat.mtimeMs && cached.size === stat.size) {
+            if (stats) stats.hits++;
+            results.set(vpkPath, cached.paths);
+            continue;
+        }
+        if (stats) stats.misses++;
+
+        const inflight = inflightParses.get(vpkPath);
+        if (inflight) {
+            pending.push(inflight.then((paths) => { results.set(vpkPath, paths); }));
+            continue;
+        }
+        misses.push(vpkPath);
+    }
+
+    if (misses.length > 0) {
+        const globalEpochAtDispatch = globalEpoch;
+        const epochsAtDispatch = new Map<string, number>();
+        const resolvers = new Map<string, (paths: string[] | null) => void>();
+        for (const vpkPath of misses) {
+            epochsAtDispatch.set(vpkPath, cacheEpochs.get(vpkPath) ?? 0);
+            const promise = new Promise<string[] | null>((resolve) => {
+                resolvers.set(vpkPath, resolve);
+            });
+            inflightParses.set(vpkPath, promise);
+            pending.push(promise.then((paths) => { results.set(vpkPath, paths); }));
+        }
+
+        // Settle one path: optionally cache (worker results only, and only when
+        // no invalidation happened since dispatch), then release waiters.
+        const finish = (
+            vpkPath: string,
+            paths: string[] | null,
+            workerStat?: { mtimeMs: number; size: number }
+        ): void => {
+            if (
+                workerStat &&
+                globalEpoch === globalEpochAtDispatch &&
+                (cacheEpochs.get(vpkPath) ?? 0) === epochsAtDispatch.get(vpkPath)
+            ) {
+                vpkParseCache.set(vpkPath, { mtimeMs: workerStat.mtimeMs, size: workerStat.size, paths });
+            }
+            inflightParses.delete(vpkPath);
+            resolvers.get(vpkPath)?.(paths);
+            resolvers.delete(vpkPath);
+        };
+
+        try {
+            const workerResults = await parseVpksInWorkers(
+                misses.map((vpkPath) => ({ id: vpkPath, vpkPath })),
+                { signal }
+            );
+            for (const result of workerResults) {
+                if (result.error) {
+                    // Same cost as before this function existed, for this one file.
+                    finish(result.vpkPath, parseVpkDirectoryCached(result.vpkPath));
+                } else {
+                    finish(result.vpkPath, result.paths, { mtimeMs: result.mtimeMs, size: result.size });
+                }
+            }
+        } catch (error) {
+            console.warn('[parseVpkDirectoriesAsync] worker pool failed, falling back to sync parse:', error);
+            for (const vpkPath of misses) {
+                if (!resolvers.has(vpkPath)) continue;
+                finish(vpkPath, parseVpkDirectoryCached(vpkPath));
+            }
+        }
+    }
+
+    await Promise.all(pending);
+    return results;
 }
 
 /**

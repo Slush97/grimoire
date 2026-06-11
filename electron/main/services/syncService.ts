@@ -55,6 +55,20 @@ function emitProgress(progress: SyncProgress): void {
     }
 }
 
+// Instrumentation for the "move sync writes to a DB worker" decision: each
+// page is one synchronous better-sqlite3 transaction (50 upserts + FTS
+// triggers) on the main process. If these routinely exceed ~30ms in the wild
+// (or [event-loop] warnings correlate with sync), the worker is justified;
+// if they stay in single digits, it is not worth the complexity.
+function timedUpsert(section: string, page: number, mods: CachedMod[]): void {
+    const start = Date.now();
+    upsertMods(mods);
+    const tookMs = Date.now() - start;
+    if (tookMs >= 20) {
+        console.log(`[SyncService] ${section} page ${page}: upsert of ${mods.length} rows took ${tookMs}ms`);
+    }
+}
+
 /**
  * Convert GameBananaMod to CachedMod
  */
@@ -106,7 +120,7 @@ async function syncSection(section: SectionType): Promise<void> {
 
         // Process first page
         const cachedMods = first.records.map(mod => mapToCache(mod, section));
-        upsertMods(cachedMods);
+        timedUpsert(section, 1, cachedMods);
         modsProcessed += cachedMods.length;
 
         emitProgress({
@@ -122,7 +136,7 @@ async function syncSection(section: SectionType): Promise<void> {
         for (page = 2; page <= totalPages; page++) {
             const response = await fetchSubmissions(section, page, SYNC_PER_PAGE);
             const mods = response.records.map(mod => mapToCache(mod, section));
-            upsertMods(mods);
+            timedUpsert(section, page, mods);
             modsProcessed += mods.length;
 
             emitProgress({
