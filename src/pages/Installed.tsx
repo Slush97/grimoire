@@ -485,7 +485,9 @@ export default function Installed() {
   const refreshLockerOverrideCount = useCallback(async () => {
     try {
       const ov = await getLockerOverview();
-      setLockerOverrideCount(ov.cards.length + ov.sounds.length + ov.colors.length);
+      setLockerOverrideCount(
+        ov.cards.length + ov.sounds.length + ov.colors.length + ov.trippySkins.length,
+      );
     } catch {
       setLockerOverrideCount(0);
     }
