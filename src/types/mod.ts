@@ -311,6 +311,12 @@ export const TRIPPY_STYLES = [
   'glitch',
   'thermal',
   'gradient',
+  'camo',
+  'carbon',
+  'galaxy',
+  'halftone',
+  'lava',
+  'vaporwave',
 ] as const;
 export type TrippyStyleName = (typeof TRIPPY_STYLES)[number];
 

@@ -10,6 +10,12 @@ export const TRIPPY_STYLE_LABELS: Record<TrippyStyleName, string> = {
   glitch: 'Glitch',
   thermal: 'Thermal',
   gradient: 'Gradient',
+  camo: 'Camo',
+  carbon: 'Carbon Fiber',
+  galaxy: 'Galaxy',
+  halftone: 'Halftone',
+  lava: 'Lava',
+  vaporwave: 'Vaporwave',
 };
 
 /** Display names for the trippy VFX particle animation styles. */
