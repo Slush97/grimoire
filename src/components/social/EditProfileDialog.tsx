@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { X, AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
 import { Button } from '../common/ui';
+import { Modal } from '../common/Modal';
 import { socialUpdateProfile, type SocialUpdateProfileResponse } from '../../lib/api';
 
 interface EditProfileDialogProps {
@@ -23,14 +24,6 @@ export default function EditProfileDialog({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
 
   const trimmedTitle = title.trim();
   const trimmedDescription = description.trim();
@@ -67,19 +60,13 @@ export default function EditProfileDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="edit-profile-title"
-      onClick={() => {
-        if (!submitting) onClose();
-      }}
+    <Modal
+      onClose={onClose}
+      labelledBy="edit-profile-title"
+      size="md"
+      dismissable={!submitting}
+      panelClassName="flex flex-col overflow-hidden"
     >
-      <div
-        className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-lg flex flex-col overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-start justify-between p-6 border-b border-white/10">
           <div className="min-w-0">
             <h2
@@ -194,7 +181,6 @@ export default function EditProfileDialog({
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

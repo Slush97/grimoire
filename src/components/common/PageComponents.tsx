@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react';
 import { type LucideIcon } from 'lucide-react';
+import { Modal } from './Modal';
 
 // ============================================================================
 // SectionHeader - Consistent section header styling
@@ -151,42 +152,35 @@ export function ConfirmModal({
     onConfirm,
     onCancel,
 }: ConfirmModalProps) {
-    if (!isOpen) return null;
-
     const confirmClass = variant === 'danger'
         ? 'border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/60 text-red-400 focus-visible:ring-red-400'
         : 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus-visible:ring-accent';
 
     return (
-        <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="confirm-modal-title"
-            onClick={onCancel}
+        <Modal
+            open={isOpen}
+            onClose={onCancel}
+            labelledBy="confirm-modal-title"
+            size="sm"
+            panelClassName="relative overflow-hidden p-6"
         >
-            <div
-                className="bg-bg-secondary border border-border rounded-sm p-6 max-w-md w-full relative overflow-hidden"
-                onClick={(e) => e.stopPropagation()}
-            >
-                <span aria-hidden className={`absolute left-0 top-0 bottom-0 w-[2px] ${variant === 'danger' ? 'bg-red-500/60' : 'bg-accent/60'}`} />
-                <h3 id="confirm-modal-title" className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
-                <div className="text-text-secondary mb-4">{message}</div>
-                <div className="flex justify-end gap-3">
-                    <button
-                        onClick={onCancel}
-                        className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
-                    >
-                        {cancelLabel}
-                    </button>
-                    <button
-                        onClick={onConfirm}
-                        className={`px-4 py-2 rounded-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${confirmClass}`}
-                    >
-                        {confirmLabel}
-                    </button>
-                </div>
+            <span aria-hidden className={`absolute left-0 top-0 bottom-0 w-[2px] ${variant === 'danger' ? 'bg-red-500/60' : 'bg-accent/60'}`} />
+            <h3 id="confirm-modal-title" className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
+            <div className="text-text-secondary mb-4">{message}</div>
+            <div className="flex justify-end gap-3">
+                <button
+                    onClick={onCancel}
+                    className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
+                >
+                    {cancelLabel}
+                </button>
+                <button
+                    onClick={onConfirm}
+                    className={`px-4 py-2 rounded-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${confirmClass}`}
+                >
+                    {confirmLabel}
+                </button>
             </div>
-        </div>
+        </Modal>
     );
 }

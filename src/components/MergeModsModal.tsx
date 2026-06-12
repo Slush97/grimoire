@@ -3,6 +3,7 @@ import { Layers, X, AlertTriangle, Info } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import ModThumbnail from './ModThumbnail';
 import { Button } from './common/ui';
+import { Modal } from './common/Modal';
 
 interface Props {
   sources: Mod[];
@@ -14,7 +15,7 @@ interface Props {
 /**
  * Confirmation modal for combining multiple installed mods into a single
  * merged VPK. Sources that share a GameBanana submission (color variants,
- * preset versions, etc.) collapse into a variant picker — exactly one
+ * preset versions, etc.) collapse into a variant picker: exactly one
  * variant per group enters the merge, because variants of the same mod
  * occupy the same in-game file paths and would just override each other.
  *
@@ -80,17 +81,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="merge-mods-title"
-      onClick={onCancel}
-    >
-      <div
-        className="bg-bg-secondary border border-border rounded-xl w-full max-w-xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onCancel} labelledBy="merge-mods-title" size="none" panelClassName="max-w-xl">
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3 id="merge-mods-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
             <Layers className="w-5 h-5" />
@@ -162,7 +153,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                     {!group.mod.gameBananaId && (
                       <span
                         className="ml-auto text-[10px] uppercase tracking-wide text-text-secondary/80 px-1.5 py-0.5 rounded border border-border"
-                        title="Local mod — not in the unroll share code"
+                        title="Local mod: not in the unroll share code"
                       >
                         local
                       </span>
@@ -265,8 +256,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
             {submitting ? 'Merging…' : 'Merge'}
           </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -283,7 +273,7 @@ type SourceGroup =
 /**
  * Group sources by GameBanana submission id so variants of the same mod
  * collapse into one pick. Local mods (no gameBananaId) and singleton GB mods
- * stay as `single` entries — there's nothing to pick.
+ * stay as `single` entries: there's nothing to pick.
  */
 function buildSourceGroups(sources: Mod[]): SourceGroup[] {
   const byGb = new Map<number, Mod[]>();
@@ -313,7 +303,7 @@ function buildSourceGroups(sources: Mod[]): SourceGroup[] {
     groups.push({
       kind: 'variants',
       gameBananaId,
-      // Use the first variant's display name — they all came from the same
+      // Use the first variant's display name: they all came from the same
       // GameBanana submission so the mod name is identical.
       modName: variants[0].name,
       variants,

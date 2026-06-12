@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { X, Loader2, AlertTriangle, Boxes, Globe, FolderOpen } from 'lucide-react';
 import { Button } from '../common/ui';
+import { Modal } from '../common/Modal';
 import { EmptyState } from '../common/PageComponents';
 import { getProfiles, type Profile } from '../../lib/api';
 import { formatRelativeDate } from '../../lib/dates';
@@ -26,12 +27,6 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
     return () => { cancelled = true; };
   }, []);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   // Most recently updated first so the profile the user just finished
   // tweaking is at the top.
   const sorted = useMemo(() => {
@@ -44,17 +39,12 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
   }, [profiles]);
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="publish-pick-title"
-      onClick={onClose}
+    <Modal
+      onClose={onClose}
+      labelledBy="publish-pick-title"
+      size="md"
+      panelClassName="max-h-[80vh] flex flex-col overflow-hidden"
     >
-      <div
-        className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-start justify-between p-6 border-b border-white/10">
           <div className="min-w-0">
             <h2 id="publish-pick-title" className="text-xl font-bold text-text-primary flex items-center gap-2">
@@ -147,7 +137,6 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
             Cancel
           </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -19,6 +19,7 @@ import {
   createProfileFromGameBananaIds,
 } from '../lib/api';
 import { Button } from './common/ui';
+import { Modal } from './common/Modal';
 import ModThumbnail from './ModThumbnail';
 import type {
   GameBananaCollection,
@@ -347,16 +348,6 @@ export default function ImportCollectionModal({
       });
     }
   }, [collection, installedBatchIds]);
-
-  // Escape closes — but only when we're not mid-submission (don't yank the
-  // modal out from under a running batch).
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !submitting) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
 
   // ───────── Fetching collection + items ─────────
 
@@ -787,17 +778,15 @@ export default function ImportCollectionModal({
   const batchInFlight = counts.queued + counts.downloading > 0;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="import-collection-title"
-      onClick={submitting ? undefined : onClose}
+    <Modal
+      onClose={onClose}
+      labelledBy="import-collection-title"
+      size="xl"
+      // Escape/backdrop close: but only when we're not mid-submission (don't
+      // yank the modal out from under a running batch).
+      dismissable={!submitting}
+      panelClassName="max-h-[85vh] flex flex-col overflow-hidden"
     >
-      <div
-        className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-4xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
         {/* Header */}
         <div className="flex items-start justify-between p-6 border-b border-white/10">
           <div className="min-w-0 flex items-start gap-3">
@@ -1275,7 +1264,6 @@ export default function ImportCollectionModal({
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

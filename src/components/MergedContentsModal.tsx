@@ -3,6 +3,7 @@ import { Layers, X, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle
 import type { Mod, MergedModSource } from '../types/mod';
 import ModThumbnail from './ModThumbnail';
 import { Button, Tag } from './common/ui';
+import { Modal } from './common/Modal';
 import { formatRelativeDate } from '../lib/dates';
 
 interface Props {
@@ -64,17 +65,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
   const createdLabel = formatRelativeDate(merged.createdAt) || merged.createdAt;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="merged-contents-title"
-      onClick={onClose}
-    >
-      <div
-        className="bg-bg-secondary border border-border rounded-xl w-full max-w-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal onClose={onClose} labelledBy="merged-contents-title" size="lg">
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3
             id="merged-contents-title"
@@ -230,7 +221,6 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
             Close
           </Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

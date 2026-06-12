@@ -45,6 +45,29 @@ import {
   type HeroCategory,
 } from '../lib/lockerUtils';
 
+// Route changes flip the overlay state instantly, which unmounts the hero or
+// global panel on the next frame with no exit transition. Retain the last
+// value for the fade-out duration so the panel can animate away first.
+const OVERLAY_EXIT_MS = 200;
+
+function useOverlayExit<T>(value: T | null): { item: T | null; closing: boolean } {
+  const [retained, setRetained] = useState<T | null>(null);
+  // Render-time adjustment (not an effect) so the retained value tracks the
+  // live one without an extra commit.
+  if (value !== null && value !== retained) {
+    setRetained(value);
+  }
+  useEffect(() => {
+    if (value !== null) return;
+    const timer = window.setTimeout(() => setRetained(null), OVERLAY_EXIT_MS);
+    return () => window.clearTimeout(timer);
+  }, [value]);
+  return {
+    item: value ?? retained,
+    closing: value === null && retained !== null,
+  };
+}
+
 let lockerPageScrollTop = 0;
 let lockerCategoriesCache: GameBananaCategoryNode[] | null = null;
 const lockerLoadedImageUrls = new Set<string>();
@@ -112,7 +135,6 @@ export default function Locker() {
     return stored === 'list' ? 'list' : 'gallery';
   });
   const [abilityRecolorSupport, setAbilityRecolorSupport] = useState<Record<string, boolean>>({});
-  const [showAbilityRecolorOnly, setShowAbilityRecolorOnly] = useState(false);
   // List-view accordion state. The Settings preference decides the initial
   // state; after that, manual expand/collapse stays under the user's control.
   const [expandedHeroes, setExpandedHeroes] = useState<Set<number>>(() => new Set());
@@ -328,25 +350,6 @@ export default function Locker() {
       return a.name.localeCompare(b.name);
     });
   }, [baseHeroList, favoriteHeroes, heroMods, heroSounds]);
-  const abilityRecolorSupportLoaded = useMemo(
-    () =>
-      heroNamesForColorSupport.length === 0 ||
-      heroNamesForColorSupport.every((name) =>
-        Object.prototype.hasOwnProperty.call(abilityRecolorSupport, name)
-      ),
-    [abilityRecolorSupport, heroNamesForColorSupport]
-  );
-  const abilityRecolorCount = useMemo(
-    () => heroList.filter((hero) => abilityRecolorSupport[hero.name]).length,
-    [abilityRecolorSupport, heroList]
-  );
-  const visibleHeroList = useMemo(
-    () =>
-      showAbilityRecolorOnly
-        ? heroList.filter((hero) => abilityRecolorSupport[hero.name])
-        : heroList,
-    [abilityRecolorSupport, heroList, showAbilityRecolorOnly]
-  );
   const lockerCardsExpandedByDefault = settings?.lockerCardsExpandedByDefault ?? false;
 
   useEffect(() => {
@@ -362,18 +365,22 @@ export default function Locker() {
   }, [heroList, lockerCardsExpandedByDefault]);
 
   const allExpanded =
-    visibleHeroList.length > 0 && visibleHeroList.every((hero) => expandedHeroes.has(hero.id));
+    heroList.length > 0 && heroList.every((hero) => expandedHeroes.has(hero.id));
   const toggleExpandAll = useCallback(() => {
     setExpandedHeroes((prev) => {
       const everyOpen =
-        visibleHeroList.length > 0 && visibleHeroList.every((hero) => prev.has(hero.id));
-      return everyOpen ? new Set() : new Set(visibleHeroList.map((hero) => hero.id));
+        heroList.length > 0 && heroList.every((hero) => prev.has(hero.id));
+      return everyOpen ? new Set() : new Set(heroList.map((hero) => hero.id));
     });
-  }, [visibleHeroList]);
+  }, [heroList]);
   const selectedHero = selectedHeroId === null
     ? null
     : heroList.find((hero) => hero.id === selectedHeroId) ?? null;
   const selectedHeroMissing = selectedHeroRouteParam !== null && !selectedHero;
+  const heroOverlay = useOverlayExit(selectedHero);
+  const overlayHero = heroOverlay.item;
+  const missingOverlay = useOverlayExit(selectedHeroMissing ? true : null);
+  const globalOverlay = useOverlayExit(globalSelected ? true : null);
 
   // Publish the open hero's name for Discord Rich Presence (read by
   // DiscordPresence). Clear it on unmount so leaving the Locker drops the hero.
@@ -381,13 +388,15 @@ export default function Locker() {
     setLockerHeroName(selectedHero?.name ?? null);
     return () => setLockerHeroName(null);
   }, [selectedHero, setLockerHeroName]);
+  // Keyed off the retained overlay hero (not the live route value) so the
+  // panel keeps its content while it fades out.
   const selectedHeroMods = useMemo(
-    () => (selectedHero ? heroMods.map.get(selectedHero.id) ?? [] : []),
-    [heroMods, selectedHero]
+    () => (overlayHero ? heroMods.map.get(overlayHero.id) ?? [] : []),
+    [heroMods, overlayHero]
   );
   const selectedHeroSoundList = useMemo(
-    () => (selectedHero ? heroSounds.map.get(selectedHero.id) ?? [] : []),
-    [heroSounds, selectedHero]
+    () => (overlayHero ? heroSounds.map.get(overlayHero.id) ?? [] : []),
+    [heroSounds, overlayHero]
   );
   const selectedHeroSkinCount = useMemo(
     () => countLockerSkins(selectedHeroMods),
@@ -527,9 +536,7 @@ export default function Locker() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-text-secondary">
           {[
-            showAbilityRecolorOnly
-              ? `${visibleHeroList.length}/${heroList.length} heroes`
-              : `${heroList.length} heroes`,
+            `${heroList.length} heroes`,
             `${installedSkinCount} skin${installedSkinCount !== 1 ? 's' : ''}`,
             installedSoundCount > 0
               ? `${installedSoundCount} sound${installedSoundCount !== 1 ? 's' : ''}`
@@ -550,27 +557,7 @@ export default function Locker() {
                 {unassignedSkins.length + unassignedSounds.length} unassigned
               </button>
             )}
-          {abilityRecolorCount > 0 && (
-            <button
-              type="button"
-              onClick={() => setShowAbilityRecolorOnly((show) => !show)}
-              disabled={!abilityRecolorSupportLoaded}
-              aria-pressed={showAbilityRecolorOnly}
-              className={`flex items-center gap-1.5 self-stretch rounded-sm border px-3 text-sm transition-colors ${
-                showAbilityRecolorOnly
-                  ? 'border-accent/50 bg-accent/15 text-text-primary'
-                  : 'border-border bg-bg-secondary text-text-secondary hover:bg-bg-tertiary hover:text-text-primary'
-              } ${abilityRecolorSupportLoaded ? 'cursor-pointer' : 'cursor-wait opacity-60'}`}
-              title="Show only heroes with ability color recoloring"
-            >
-              <RainbowPaletteIcon className="h-4 w-4" />
-              Recolorable
-              <span className="ml-0.5 rounded-sm bg-black/20 px-1.5 py-0.5 text-[11px] leading-none text-current">
-                {abilityRecolorCount}
-              </span>
-            </button>
-          )}
-          {viewMode === 'list' && visibleHeroList.length > 0 && (
+          {viewMode === 'list' && heroList.length > 0 && (
             <button
               onClick={toggleExpandAll}
               className="flex items-center gap-1.5 self-stretch rounded-sm border border-border bg-bg-secondary px-3 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
@@ -600,21 +587,16 @@ export default function Locker() {
           <Layers className="w-12 h-12 mb-3 opacity-50" />
           <p>No hero categories found.</p>
         </div>
-      ) : visibleHeroList.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
-          <RainbowPaletteIcon className="w-12 h-12 mb-3 opacity-80" />
-          <p>No heroes with ability recoloring available.</p>
-        </div>
       ) : viewMode === 'gallery' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-          {globalCount > 0 && !showAbilityRecolorOnly && (
+          {globalCount > 0 && (
             <GlobalGalleryCard
               count={globalCount}
               typeCount={globalTypeCount}
               onNavigate={() => navigate('/locker/global')}
             />
           )}
-          {visibleHeroList.map((hero) => (
+          {heroList.map((hero) => (
             <HeroGalleryCard
               key={hero.id}
               hero={hero}
@@ -636,7 +618,7 @@ export default function Locker() {
         </div>
       ) : (
         <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {globalCount > 0 && !showAbilityRecolorOnly && (
+          {globalCount > 0 && (
             <button
               type="button"
               onClick={() => navigate('/locker/global')}
@@ -667,7 +649,7 @@ export default function Locker() {
               <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
             </button>
           )}
-          {visibleHeroList.map((hero) => (
+          {heroList.map((hero) => (
             <HeroCard
               key={hero.id}
               hero={hero}
@@ -693,7 +675,7 @@ export default function Locker() {
         </div>
       )}
 
-      {viewMode === 'list' && !showAbilityRecolorOnly && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
+      {viewMode === 'list' && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
         <div className="space-y-3">
           <SectionHeader>Unassigned</SectionHeader>
           <p className="text-xs text-text-secondary -mt-1">
@@ -759,36 +741,40 @@ export default function Locker() {
       )}
     </div>
 
-      {selectedHero && (
+      {overlayHero && (
         <div
-          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in sidebar-offset-transition"
+          className={`fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
+            heroOverlay.closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
+          }`}
           style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
         >
           <LockerHeroView
-            key={selectedHero.id}
-            hero={selectedHero}
+            key={overlayHero.id}
+            hero={overlayHero}
             skinList={selectedHeroMods}
             soundList={selectedHeroSoundList}
             skinCount={selectedHeroSkinCount}
-            isFavorite={favoriteHeroes.includes(selectedHero.id)}
+            isFavorite={favoriteHeroes.includes(overlayHero.id)}
             onBack={() => navigate('/locker')}
             onToggleFavorite={() =>
               setFavoriteHeroes((prev) =>
-                prev.includes(selectedHero.id)
-                  ? prev.filter((id) => id !== selectedHero.id)
-                  : [...prev, selectedHero.id]
+                prev.includes(overlayHero.id)
+                  ? prev.filter((id) => id !== overlayHero.id)
+                  : [...prev, overlayHero.id]
               )
             }
-            onSelect={(modId) => setActiveSkin(selectedHero.id, modId)}
-            onToggleVariant={(modId) => toggleHeroVariant(selectedHero.id, modId)}
+            onSelect={(modId) => setActiveSkin(overlayHero.id, modId)}
+            onToggleVariant={(modId) => toggleHeroVariant(overlayHero.id, modId)}
             hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           />
         </div>
       )}
 
-      {selectedHeroMissing && (
+      {missingOverlay.item && (
         <div
-          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in sidebar-offset-transition"
+          className={`fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
+            missingOverlay.closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
+          }`}
           style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
         >
           <div className="flex h-full flex-col items-center justify-center p-6 text-text-secondary">
@@ -804,9 +790,11 @@ export default function Locker() {
           </div>
         </div>
       )}
-      {globalSelected && (
+      {globalOverlay.item && (
         <div
-          className="fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary animate-fade-in sidebar-offset-transition"
+          className={`fixed bottom-0 right-0 top-0 z-30 overflow-hidden bg-bg-primary sidebar-offset-transition ${
+            globalOverlay.closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
+          }`}
           style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
         >
           <LockerGlobalView
@@ -1239,14 +1227,14 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
       {retagMenu && (
         <>
           <div
-            className="fixed inset-0 z-[59]"
+            className="fixed inset-0 z-[79]"
             aria-hidden
             onClick={() => setRetagMenu(null)}
           />
           <div
             role="menu"
             aria-label="Change global category"
-            className="fixed z-[60] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
+            className="fixed z-[80] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
             style={{ top: retagMenu.y, left: retagMenu.x }}
           >
             <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">

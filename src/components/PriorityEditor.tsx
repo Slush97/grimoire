@@ -132,7 +132,7 @@ export default function PriorityEditor({
       )}
       {editing && popoverPos && createPortal(
         <div
-          className="fixed z-[9999] w-40 rounded-lg border border-border bg-bg-secondary p-2.5 text-left shadow-xl"
+          className="fixed z-[80] w-40 rounded-lg border border-border bg-bg-secondary p-2.5 text-left shadow-xl"
           style={{ top: popoverPos.top, left: popoverPos.left }}
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}

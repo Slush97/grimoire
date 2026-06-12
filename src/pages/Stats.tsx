@@ -117,7 +117,7 @@ export default function Stats() {
     }
 
     return (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col h-full animate-fade-in">
             <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                     <BarChart3 className="w-6 h-6 text-accent shrink-0" />

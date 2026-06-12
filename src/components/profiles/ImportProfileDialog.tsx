@@ -12,6 +12,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Button, CheckboxMark } from '../common/ui';
+import { Modal } from '../common/Modal';
 import ModThumbnail from '../ModThumbnail';
 import SocialProfileHeader, { type SocialProfileSeed } from '../social/SocialProfileHeader';
 import {
@@ -213,14 +214,6 @@ export default function ImportProfileDialog({
   }, [rows]);
   const trackedKeysRef = useRef(trackedKeys);
   useEffect(() => { trackedKeysRef.current = trackedKeys; }, [trackedKeys]);
-
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !importing) onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, importing]);
 
   // Listen for download events to drive row status during import.
   useEffect(() => {
@@ -679,17 +672,13 @@ export default function ImportProfileDialog({
   const showInputForm = !socialProfileId && !showResolved && !showSkeleton;
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-2 sm:p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="import-profile-title"
-      onClick={importing ? undefined : onClose}
+    <Modal
+      onClose={onClose}
+      labelledBy="import-profile-title"
+      size="none"
+      dismissable={!importing}
+      panelClassName={`${socialProfileId ? 'max-w-5xl' : 'max-w-4xl'} max-h-[92vh] flex flex-col overflow-hidden`}
     >
-      <div
-        className={`bg-bg-secondary border border-white/10 rounded-2xl w-full ${socialProfileId ? 'max-w-5xl' : 'max-w-4xl'} max-h-[92vh] flex flex-col overflow-hidden shadow-2xl`}
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className={`flex items-start justify-between ${parsed || socialProfileId ? 'px-4 sm:px-6 py-3' : 'p-4 sm:p-6'} border-b border-white/10`}>
           <div className="min-w-0">
             <h2 id="import-profile-title" className="text-base sm:text-lg font-bold text-text-primary">
@@ -1266,7 +1255,6 @@ export default function ImportProfileDialog({
             </div>
           );
         })()}
-      </div>
-    </div>
+    </Modal>
   );
 }

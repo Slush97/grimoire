@@ -33,6 +33,7 @@ import {
 } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import { ArchivedTag, Button, CheckboxMark, Tag } from './common/ui';
+import { Modal } from './common/Modal';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { formatBytes } from '../lib/formatBytes';
 
@@ -543,17 +544,12 @@ export default function VariantPickerModal({
     };
 
     return (
-        <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="variant-picker-title"
-            onClick={onClose}
+        <Modal
+            onClose={onClose}
+            labelledBy="variant-picker-title"
+            size="none"
+            panelClassName="max-w-xl"
         >
-            <div
-                className="bg-bg-secondary border border-border rounded-xl w-full max-w-xl"
-                onClick={(e) => e.stopPropagation()}
-            >
                 <div className="flex items-center justify-between p-5 border-b border-border gap-3">
                     <div className="min-w-0">
                         <h3 id="variant-picker-title" className="text-lg font-semibold text-text-primary truncate">
@@ -629,7 +625,6 @@ export default function VariantPickerModal({
                         Done
                     </Button>
                 </div>
-            </div>
-        </div>
+        </Modal>
     );
 }

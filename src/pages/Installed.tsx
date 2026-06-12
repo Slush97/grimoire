@@ -60,8 +60,9 @@ import {
   FileText,
   Banana,
 } from 'lucide-react';
-import * as ContextMenu from '@radix-ui/react-context-menu';
 import { useNavigate } from 'react-router-dom';
+import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
+import { showToast } from '../stores/toastStore';
 import { useAppStore } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder } from '../lib/api';
@@ -577,7 +578,6 @@ export default function Installed() {
   const [unmergeResult, setUnmergeResult] = useState<{ mod: Mod; result: UnmergeModResult; copied: boolean } | null>(null);
   // Brief inline confirmation when the share code is copied. Cleared on a
   // timer; null when no recent copy.
-  const [copyToast, setCopyToast] = useState<string | null>(null);
 
   // Multi-select state. `selectedIds` always stores mod ids (variants of a
   // selected group expand to every variant id) so bulk handlers can iterate
@@ -957,7 +957,7 @@ export default function Installed() {
   // sidesteps the rate-limit pain of the CRC auto-matcher.
   const associateUnknownMatch = async (mod: Mod, args: AssociateUnknownModArgs) => {
     await associateUnknownMod(mod.id, args);
-    setCopyToast(`Linked to ${args.modName}`);
+    showToast(`Linked to ${args.modName}`, { tone: 'success', duration: 2200 });
     await finishUnknownFix(mod);
   };
 
@@ -1769,7 +1769,7 @@ export default function Installed() {
       }
     } catch (err) {
       console.error('[Installed] unmerge failed:', err);
-      setCopyToast(`Unmerge failed: ${err instanceof Error ? err.message : String(err)}`);
+      showToast(`Unmerge failed: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' });
     }
   };
 
@@ -1777,10 +1777,10 @@ export default function Installed() {
     if (!mod.merged?.shareCode) return;
     try {
       await navigator.clipboard.writeText(mod.merged.shareCode);
-      setCopyToast('Share code copied');
+      showToast('Share code copied', { tone: 'success', duration: 2200 });
     } catch (err) {
       console.error('[Installed] clipboard write failed:', err);
-      setCopyToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`);
+      showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' });
     }
   };
 
@@ -1794,25 +1794,19 @@ export default function Installed() {
     await loadMods({ silent: true });
     if (result.collapsed) {
       setMergedContentsMod(null);
-      setCopyToast(`Merge dissolved (extracted ${source.modName})`);
+      showToast(`Merge dissolved (extracted ${source.modName})`, { tone: 'success', duration: 2200 });
       return;
     }
     setMergedContentsMod(result.merged);
-    setCopyToast(`Extracted ${source.modName}`);
+    showToast(`Extracted ${source.modName}`, { tone: 'success', duration: 2200 });
   };
 
-  // Auto-dismiss the copy toast after a short read time.
-  useEffect(() => {
-    if (!copyToast) return;
-    const id = window.setTimeout(() => setCopyToast(null), 2200);
-    return () => window.clearTimeout(id);
-  }, [copyToast]);
 
   // Surface a non-fatal store notice (e.g. the 99-enabled cap) through the same
   // transient toast, then clear it from the store so it doesn't re-fire.
   useEffect(() => {
     if (!modsNotice) return;
-    setCopyToast(modsNotice);
+    showToast(modsNotice, { tone: 'warning' });
     clearModsNotice();
   }, [modsNotice, clearModsNotice]);
 
@@ -2683,8 +2677,11 @@ export default function Installed() {
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 bg-bg-primary/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80 sm:-mx-6 sm:px-6">
-        <div className="flex flex-wrap items-center gap-2 lg:gap-3">
-          <div className="relative min-w-[14rem] flex-1 basis-[20rem] sm:max-w-md">
+        {/* Row 1: search + view controls. The search shrinks (min-w) instead of
+            pushing the controls onto a right-aligned orphan row, which used to
+            leave a dead gap at common window widths. */}
+        <div className="flex items-center gap-2 lg:gap-3">
+          <div className="relative min-w-[11rem] max-w-md flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
             <input
               type="text"
@@ -2704,7 +2701,6 @@ export default function Installed() {
               </button>
             )}
           </div>
-          {topStatusActions}
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {/* Sort + filter: load order / recent / name, GameBanana vs local
                 import, and mod-type buckets. The badge counts active
@@ -2940,9 +2936,10 @@ export default function Installed() {
 
             {/* Card-size slider: only meaningful in grid layout, so it's
                 disabled (and dimmed) while List is active rather than hidden,
-                keeping the toolbar from reflowing as you switch. */}
+                keeping the toolbar from reflowing as you switch. Dropped below
+                lg so the toolbar keeps to one row in narrow windows. */}
             <div
-              className={`order-last flex items-center gap-2 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 transition-opacity ${
+              className={`order-last hidden items-center gap-2 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 transition-opacity lg:flex ${
                 layout === 'list' ? 'opacity-40' : ''
               }`}
               title="Card size (drag to the small end for compact cards)"
@@ -2974,6 +2971,9 @@ export default function Installed() {
             />
           </div>
         </div>
+        {/* Row 2 (contextual): status actions get their own strip instead of
+            jostling with the search for row-1 space. */}
+        {topStatusActions && <div className="mt-2">{topStatusActions}</div>}
       </div>
 
       {lockerOverridesOpen && (
@@ -3459,16 +3459,6 @@ export default function Installed() {
         />
       )}
 
-      {copyToast && (
-        <div
-          role="status"
-          aria-live="polite"
-          className="fixed bottom-20 left-1/2 -translate-x-1/2 z-[60] bg-bg-secondary border border-border rounded-lg shadow-lg shadow-black/40 px-4 py-2 text-sm text-text-primary animate-fade-in"
-        >
-          {copyToast}
-        </div>
-      )}
-
       {selectMode && (
         // z-40 keeps this floating bar above the page + sticky header (z-30)
         // but below modal overlays (z-50), so an open modal's backdrop dims it
@@ -3822,8 +3812,10 @@ function BulkUnknownFixModal({
   const retryableCount = unknownMods.filter(
     (mod) => !pendingIds.has(mod.id) && cache[mod.id]?.crcMatch.status === 'not-found'
   ).length;
+  const [confirmFindAll, setConfirmFindAll] = useState(false);
 
   return createPortal(
+    <>
     <div
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
       role="dialog"
@@ -3863,13 +3855,7 @@ function BulkUnknownFixModal({
                   size="sm"
                   icon={Search}
                   disabled={findableCount === 0}
-                  onClick={() => {
-                    const ok = window.confirm(
-                      `Auto-detect scans GameBanana for ${findableCount} mod${findableCount === 1 ? '' : 's'}. ` +
-                        'This can hit GameBanana rate limits. Searching manually (per mod) is faster and lighter. Continue?'
-                    );
-                    if (ok) onFindAll(unknownMods);
-                  }}
+                  onClick={() => setConfirmFindAll(true)}
                   title="Auto-detect every unknown mod that has not already been checked (heavy, may hit rate limits)"
                 >
                   Search all
@@ -3951,7 +3937,22 @@ function BulkUnknownFixModal({
           />
         </div>
       </div>
-    </div>,
+    </div>
+    {/* Sibling of the backdrop: portal events bubble through the React tree,
+        so nesting this inside the backdrop would close the whole dialog on
+        any click in the confirm. */}
+    <ConfirmModal
+      isOpen={confirmFindAll}
+      title="Search all unknown mods?"
+      message={`Auto-detect scans GameBanana for ${findableCount} mod${findableCount === 1 ? '' : 's'}. This can hit GameBanana rate limits. Searching manually (per mod) is faster and lighter.`}
+      confirmLabel="Search all"
+      onConfirm={() => {
+        setConfirmFindAll(false);
+        onFindAll(unknownMods);
+      }}
+      onCancel={() => setConfirmFindAll(false)}
+    />
+    </>,
     document.body
   );
 }
@@ -5649,7 +5650,7 @@ function ModCard({
             ref={menuPanelRef}
             role="menu"
             data-card-menu-open
-            className="z-[100] w-56 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
+            className="z-[80] w-56 max-h-[70vh] overflow-y-auto rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
             style={{
               position: 'fixed',
               right: Math.max(8, window.innerWidth - menuRect.right),
@@ -5872,11 +5873,11 @@ function ModCard({
     </div>
   );
   return (
-    <ContextMenu.Root>
+    <MenuRoot>
       {/* Disabled in select mode so right-click doesn't fight the full-card
           select overlay. Thumbnail right-clicks never reach here: the image
           context menu's trigger stops propagation. */}
-      <ContextMenu.Trigger asChild disabled={selectMode}>
+      <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
       className={`group/card relative rounded-[10px] border transform-gpu transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ${isList ? stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
@@ -6100,22 +6101,13 @@ function ModCard({
       </div>
 
     </div>
-      </ContextMenu.Trigger>
-      <ContextMenu.Portal>
-        <ContextMenu.Content
-          collisionPadding={12}
-          className="z-[80] min-w-52 rounded-lg border border-white/10 bg-bg-secondary/95 p-1.5 text-sm text-text-primary shadow-2xl shadow-black/50 backdrop-blur-md animate-fade-in"
-        >
-          <ContextMenu.Item
-            onSelect={handleRevealInFolder}
-            className="flex h-8 select-none items-center gap-2 rounded-md px-2 outline-none transition-colors cursor-pointer text-text-primary focus:bg-white/10 data-[highlighted]:bg-white/10"
-          >
-            <FolderOpen className="h-4 w-4 flex-shrink-0" />
-            <span className="min-w-0 flex-1 truncate">Reveal in folder</span>
-          </ContextMenu.Item>
-        </ContextMenu.Content>
-      </ContextMenu.Portal>
-    </ContextMenu.Root>
+      </MenuTrigger>
+      <MenuContent>
+        <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
+          Reveal in folder
+        </MenuItem>
+      </MenuContent>
+    </MenuRoot>
   );
 }
 

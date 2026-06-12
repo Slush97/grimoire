@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, X, Download, CheckCircle2, AlertTriangle, Play } from 'lucide-react';
 import { Button } from '../common/ui';
+import { Modal } from '../common/Modal';
 import {
   deadworksConnect,
   deadworksOnDownloadProgress,
@@ -71,13 +72,15 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
   const indeterminate = progress?.status === 'decompressing';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4" onClick={phase !== 'working' ? onClose : undefined}>
-      <div
-        className="w-full max-w-md rounded-md border border-border bg-bg-secondary shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal
+      onClose={onClose}
+      labelledBy="connect-server-title"
+      size="sm"
+      dismissable={phase !== 'working'}
+      backdropClassName="backdrop-blur-sm"
+    >
         <div className="flex items-center justify-between border-b border-border px-5 py-3">
-          <h2 className="font-reaver text-lg tracking-wide text-text-primary truncate">{server.name}</h2>
+          <h2 id="connect-server-title" className="font-reaver text-lg tracking-wide text-text-primary truncate">{server.name}</h2>
           <button
             onClick={onClose}
             disabled={phase === 'working'}
@@ -156,7 +159,6 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
             </div>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

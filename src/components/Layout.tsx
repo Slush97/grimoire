@@ -7,6 +7,8 @@ import SyncIndicator from './SyncIndicator';
 import DownloadQueueIndicator from './DownloadQueueIndicator';
 import { Button } from './common/ui';
 import { ConfirmModal } from './common/PageComponents';
+import { ToastStack } from './common/ToastStack';
+import { showToast } from '../stores/toastStore';
 import { getSettings, setSettings, getGameinfoStatus, fixGameinfo } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { applyAccentColor } from '../lib/accentColor';
@@ -26,12 +28,10 @@ export default function Layout() {
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
   // Normal one-click download progress is handled by DownloadQueueIndicator.
   // This only catches failures before a download can be queued.
-  const [oneClickError, setOneClickError] = useState<{ label: string; message: string } | null>(null);
   const [suspiciousPrompt, setSuspiciousPrompt] = useState<OneClickSuspiciousFilesData | null>(null);
   const [multiVpkPrompt, setMultiVpkPrompt] = useState<MultiVpkPickData | null>(null);
   // Shown when GameBanana starts returning 429s (the main process debounces the
   // event so a burst of rejected requests surfaces one warning, not a flood).
-  const [rateLimited, setRateLimited] = useState(false);
 
   // Re-theme the app whenever the stored accent color changes. We pull
   // settings into the global store on mount so the value is available before
@@ -104,20 +104,13 @@ export default function Layout() {
   useEffect(() => {
     const unsubscribe = window.electronAPI.onOneClickInstall((data) => {
       if (data.error) {
-        setOneClickError({ label: data.modName ?? 'mod', message: data.error });
+        showToast(`${data.modName ?? 'mod'}: ${data.error}`, { tone: 'error', duration: 8000 });
         return;
       }
-      setOneClickError(null);
       navigate('/');
     });
     return unsubscribe;
   }, [navigate]);
-
-  useEffect(() => {
-    if (!oneClickError) return;
-    const t = setTimeout(() => setOneClickError(null), 8000);
-    return () => clearTimeout(t);
-  }, [oneClickError]);
 
   useEffect(() => {
     const unsubscribe = window.electronAPI.onOneClickSuspiciousFiles((data) => {
@@ -138,16 +131,14 @@ export default function Layout() {
   // lives here rather than inside one page.
   useEffect(() => {
     const unsubscribe = window.electronAPI.onGameBananaRateLimited(() => {
-      setRateLimited(true);
+      showToast('GameBanana is rate-limiting Grimoire. Pause a moment before retrying.', {
+        tone: 'warning',
+        duration: 8000,
+        dismissable: true,
+      });
     });
     return unsubscribe;
   }, []);
-
-  useEffect(() => {
-    if (!rateLimited) return;
-    const t = setTimeout(() => setRateLimited(false), 8000);
-    return () => clearTimeout(t);
-  }, [rateLimited]);
 
   const respondToSuspicious = async (accepted: boolean) => {
     if (!suspiciousPrompt) return;
@@ -238,14 +229,7 @@ export default function Layout() {
         <DownloadQueueIndicator />
         <SyncIndicator />
       </div>
-      {oneClickError && (
-        <div className="fixed left-1/2 top-4 z-50 -translate-x-1/2">
-          <div className="flex w-[min(420px,calc(100vw-2rem))] items-center justify-center gap-2 px-2 py-1 text-sm font-semibold text-red-300 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]">
-            <AlertTriangle className="h-4 w-4 flex-shrink-0" />
-            <span className="truncate">{oneClickError.label}: {oneClickError.message}</span>
-          </div>
-        </div>
-      )}
+      <ToastStack />
       <ConfirmModal
         isOpen={!!suspiciousPrompt}
         title="Suspicious files detected"
@@ -272,32 +256,14 @@ export default function Layout() {
                 )}
               </ul>
               <p className="text-xs">
-                Grimoire only extracts <code className="rounded bg-bg-tertiary px-1">.vpk</code> files
-                — these won&apos;t be installed even if you continue. Review the mod&apos;s GameBanana
+                Grimoire only extracts <code className="rounded bg-bg-tertiary px-1">.vpk</code> files:
+                these won&apos;t be installed even if you continue. Review the mod&apos;s GameBanana
                 page if anything looks off.
               </p>
             </div>
           ) : null
         }
       />
-      {rateLimited && (
-        <div className="fixed bottom-6 left-1/2 z-[60] -translate-x-1/2">
-          <div className="flex items-center gap-2 rounded-sm border border-yellow-500/40 bg-yellow-500/15 px-4 py-2 text-sm text-yellow-200 shadow-lg backdrop-blur-sm max-w-[460px]">
-            <AlertTriangle className="h-4 w-4 flex-shrink-0 text-yellow-400" />
-            <span className="flex-1">
-              GameBanana is rate-limiting Grimoire. Pause a moment before retrying.
-            </span>
-            <button
-              type="button"
-              onClick={() => setRateLimited(false)}
-              className="flex-shrink-0 text-yellow-300/70 hover:text-yellow-100"
-              aria-label="Dismiss"
-            >
-              Dismiss
-            </button>
-          </div>
-        </div>
-      )}
       {multiVpkPrompt && (
         <MultiVpkPickerModal
           key={multiVpkPrompt.requestId}

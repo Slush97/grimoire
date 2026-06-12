@@ -1,5 +1,13 @@
 @import "tailwindcss";
 
+/* Z-index scale. New surfaces pick from this ladder instead of inventing
+   values (no more z-[9999]):
+     z-30  page-level overlays inside the content area (Locker hero/global panels)
+     z-40  sticky chrome (sidebar, titlebar)
+     z-50  modals (Modal component) and full-screen dialogs
+     z-60  surfaces that stack above a modal: toasts, ModDetailsModal
+     z-80  context menus and popovers (always top) */
+
 /* Gothic Font for Grimoire branding - loaded via Google Fonts in index.html */
 /* Grenze Gotisch: https://fonts.google.com/specimen/Grenze+Gotisch */
 
@@ -95,6 +103,9 @@
   --color-state-warning: #facc15;
   --color-state-danger:  #f87171;
   --color-state-info:    #60a5fa;
+
+  /* Third-party brand colors (buttons/links that represent the brand itself). */
+  --color-brand-discord: #5865F2;
 
   --font-radiance: 'Radiance', system-ui, sans-serif;
   --font-reaver: 'Reaver', serif;
@@ -718,6 +729,28 @@ body {
   }
 }
 
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+  }
+
+  to {
+    opacity: 0;
+  }
+}
+
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
 @keyframes modDetailsContentOutLeft {
   from {
     opacity: 1;
@@ -776,6 +809,14 @@ body {
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-fade-out {
+  animation: fadeOut 0.2s ease-out forwards;
+}
+
+.animate-scale-in {
+  animation: scaleIn 0.25s ease-out forwards;
 }
 
 .mod-details-body-content,
@@ -1155,6 +1196,8 @@ body {
   .animate-slide-in-left,
   .animate-hero-zoom-in,
   .animate-fade-in,
+  .animate-fade-out,
+  .animate-scale-in,
   .mod-details-body--loading-next .mod-details-body-content,
   .mod-details-body--loading-previous .mod-details-body-content,
   .mod-details-body--loading-next .mod-details-navigation-skeleton,

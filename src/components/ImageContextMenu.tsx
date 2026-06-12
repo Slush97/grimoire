@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo, useState } from 'react';
-import * as ContextMenu from '@radix-ui/react-context-menu';
-import { Check, ExternalLink, FolderOpen, ImageDown, Link, Loader2, type LucideIcon } from 'lucide-react';
+import { Check, ExternalLink, FolderOpen, ImageDown, Link, Loader2 } from 'lucide-react';
+import { MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuTrigger } from './common/menu';
 
 interface ImageContextMenuProps {
   src: string;
@@ -83,28 +83,25 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
       : Link;
 
   return (
-    <ContextMenu.Root onOpenChange={(next) => {
+    <MenuRoot onOpenChange={(next) => {
       if (!next) resetTransientState();
     }}>
-      <ContextMenu.Trigger asChild>
+      <MenuTrigger asChild>
         <span
           className="contents"
           onContextMenu={(event) => event.stopPropagation()}
         >
           {children}
         </span>
-      </ContextMenu.Trigger>
-      <ContextMenu.Portal>
-        <ContextMenu.Content
-          collisionPadding={12}
-          onClick={(event) => event.stopPropagation()}
-          onPointerDown={(event) => event.stopPropagation()}
-          onContextMenu={(event) => event.stopPropagation()}
-          className="z-[80] min-w-52 rounded-lg border border-white/10 bg-bg-secondary/95 p-1.5 text-sm text-text-primary shadow-2xl shadow-black/50 backdrop-blur-md animate-fade-in"
-        >
-          <ContextMenu.Label className="max-w-64 truncate px-2 py-1 text-[11px] uppercase tracking-wide text-text-tertiary">
+      </MenuTrigger>
+      <MenuContent
+        onClick={(event) => event.stopPropagation()}
+        onPointerDown={(event) => event.stopPropagation()}
+        onContextMenu={(event) => event.stopPropagation()}
+      >
+          <MenuLabel>
             {alt || 'Image'}
-          </ContextMenu.Label>
+          </MenuLabel>
           <MenuItem
             icon={imageCopyIcon}
             spinning={imageCopyState === 'copying'}
@@ -141,7 +138,7 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
           </MenuItem>
           {canOpenImage && (
             <>
-              <ContextMenu.Separator className="my-1 h-px bg-white/10" />
+              <MenuSeparator />
               <MenuItem icon={ExternalLink} onSelect={openImage}>
                 Open image
               </MenuItem>
@@ -149,44 +146,14 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
           )}
           {onRevealInFolder && (
             <>
-              <ContextMenu.Separator className="my-1 h-px bg-white/10" />
+              <MenuSeparator />
               <MenuItem icon={FolderOpen} onSelect={onRevealInFolder}>
                 Reveal mod in folder
               </MenuItem>
             </>
           )}
-        </ContextMenu.Content>
-      </ContextMenu.Portal>
-    </ContextMenu.Root>
-  );
-}
-
-interface MenuItemProps {
-  children: ReactNode;
-  icon: LucideIcon;
-  spinning?: boolean;
-  tone?: 'default' | 'success' | 'danger';
-  onSelect: (event: Event) => void;
-}
-
-function MenuItem({ children, icon: Icon, spinning, tone = 'default', onSelect }: MenuItemProps) {
-  const toneClass = tone === 'success'
-    ? 'text-state-success focus:bg-state-success/10 data-[highlighted]:bg-state-success/10'
-    : tone === 'danger'
-      ? 'text-state-danger focus:bg-state-danger/10 data-[highlighted]:bg-state-danger/10'
-      : 'text-text-primary focus:bg-white/10 data-[highlighted]:bg-white/10';
-
-  return (
-    <ContextMenu.Item
-      onSelect={(event) => {
-        event.stopPropagation();
-        onSelect(event);
-      }}
-      className={`flex h-8 select-none items-center gap-2 rounded-md px-2 outline-none transition-colors cursor-pointer ${toneClass}`}
-    >
-      <Icon className={`h-4 w-4 flex-shrink-0 text-current ${spinning ? 'animate-spin' : ''}`} />
-      <span className="min-w-0 flex-1 truncate">{children}</span>
-    </ContextMenu.Item>
+      </MenuContent>
+    </MenuRoot>
   );
 }
 

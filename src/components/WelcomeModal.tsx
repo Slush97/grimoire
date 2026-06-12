@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { FolderOpen, Wrench, Check, X, ArrowRight, Loader2, Terminal } from 'lucide-react';
 import { Button, Badge } from './common/ui';
+import { Modal } from './common/Modal';
 import {
     validateDeadlockPath,
     showOpenDialog,
@@ -136,11 +137,18 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
     const canProceed = isValidPath && gameinfoConfigured;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
-            <div className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl animate-scale-in">
+        <Modal
+            onClose={() => {}}
+            dismissable={false}
+            labelledBy="welcome-modal-title"
+            size="none"
+            panelClassName="max-w-xl overflow-hidden animate-scale-in"
+            backdropClassName="backdrop-blur-sm"
+        >
                 {/* Header */}
                 <div className="p-6 pb-4 text-center">
                     <h1
+                        id="welcome-modal-title"
                         className="text-3xl text-accent mb-1"
                         style={{ fontFamily: "'IM Fell English', serif" }}
                     >
@@ -300,7 +308,6 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         </button>
                     </div>
                 </div>
-            </div>
-        </div>
+        </Modal>
     );
 }

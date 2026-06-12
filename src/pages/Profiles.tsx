@@ -380,7 +380,7 @@ export default function Profiles() {
   }
 
   return (
-    <div className="p-6 h-full max-w-5xl mx-auto w-full flex flex-col overflow-hidden">
+    <div className="p-6 h-full max-w-5xl mx-auto w-full flex flex-col overflow-hidden animate-fade-in">
       <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
         <div className="space-y-6 pr-1">
           {error && (

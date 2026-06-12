@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { X, Download, ArrowDownCircle, RefreshCw, Sparkles, AlertTriangle, Package } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import { Button } from './common/ui';
+import { Modal } from './common/Modal';
 
 type InstallSource = 'managed' | 'appimage' | 'standard';
 
@@ -42,14 +43,6 @@ export default function UpdateModal({ onClose }: Props) {
         return unsub;
     }, []);
 
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') onClose();
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [onClose]);
-
     const handleCheck = async () => {
         setCheckedOnce(false);
         try {
@@ -75,30 +68,25 @@ export default function UpdateModal({ onClose }: Props) {
     const hasNotes = Array.isArray(releaseNotes) ? releaseNotes.length > 0 : Boolean(releaseNotes);
 
     return (
-        <div
-            className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="update-modal-title"
-            onClick={onClose}
+        <Modal
+            onClose={onClose}
+            labelledBy="update-modal-title"
+            size="lg"
+            panelClassName="max-h-[85vh] flex flex-col overflow-hidden"
         >
-            <div
-                className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
-                onClick={(e) => e.stopPropagation()}
-            >
                 <div className="flex items-start justify-between p-6 border-b border-white/10">
                     <div className="min-w-0">
                         <h2 id="update-modal-title" className="text-xl font-bold text-text-primary">
                             {status?.downloaded
                                 ? `v${status.updateInfo?.version} ready to install`
                                 : status?.available
-                                    ? `Update available — v${status.updateInfo?.version}`
+                                    ? `Update available: v${status.updateInfo?.version}`
                                     : 'App Updates'}
                         </h2>
                         <p className="text-sm text-text-secondary mt-1">
                             You're on <span className="font-mono text-text-primary">v{appVersion || '...'}</span>
                             {status?.updateInfo?.releaseDate && status.available && (
-                                <> — released {new Date(status.updateInfo.releaseDate).toLocaleDateString()}</>
+                                <> (released {new Date(status.updateInfo.releaseDate).toLocaleDateString()})</>
                             )}
                         </p>
                     </div>
@@ -222,7 +210,6 @@ export default function UpdateModal({ onClose }: Props) {
                         </Button>
                     )}
                 </div>
-            </div>
-        </div>
+        </Modal>
     );
 }

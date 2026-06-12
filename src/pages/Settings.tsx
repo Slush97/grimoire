@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github, Globe, FileText, Bug, Copy, ChevronDown } from 'lucide-react';
+import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Ban, Palette, Pipette, LifeBuoy, Github, Globe, FileText, Bug, Copy, ChevronDown } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
@@ -628,7 +628,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8">
+    <div className="p-8 max-w-5xl mx-auto space-y-8 animate-fade-in">
       <PageHeader
         title="Settings"
         description="Configure game paths, preferences, and maintenance tasks"
@@ -922,7 +922,7 @@ export default function Settings() {
                           className="h-7 w-7 object-contain"
                         />
                       ) : (
-                        <Palette className="h-4 w-4 text-accent" aria-hidden />
+                        <Ban className="h-4 w-4 text-text-secondary" aria-hidden />
                       )}
                       <ChevronDown className="absolute bottom-0.5 right-0.5 h-2.5 w-2.5 text-text-primary/80 drop-shadow-[0_1px_2px_rgba(0,0,0,0.85)]" aria-hidden />
                     </button>
@@ -1036,7 +1036,7 @@ export default function Settings() {
                                   : 'border-white/10 bg-bg-tertiary hover:border-accent/50 hover:bg-accent/10'
                               }`}
                             >
-                              <Palette className="h-5 w-5 text-accent" aria-hidden />
+                              <Ban className="h-5 w-5 text-text-secondary" aria-hidden />
                               {selectedSidebarHero === null && (
                                 <span className="absolute right-0.5 top-0.5 rounded-sm bg-accent p-0.5 text-accent-foreground">
                                   <Check className="h-2.5 w-2.5" aria-hidden />
@@ -1345,7 +1345,7 @@ export default function Settings() {
                   href="https://discord.gg/KgYGHEMq2P"
                   target="_blank"
                   rel="noreferrer noopener"
-                  className="inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-medium border border-[#5865F2]/40 bg-[#5865F2]/10 text-text-primary hover:bg-[#5865F2]/20 hover:border-[#5865F2]/60 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]/60 whitespace-nowrap"
+                  className="inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-medium border border-brand-discord/40 bg-brand-discord/10 text-text-primary hover:bg-brand-discord/20 hover:border-brand-discord/60 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-discord/60 whitespace-nowrap"
                 >
                   <svg
                     aria-hidden="true"
@@ -1433,7 +1433,7 @@ export default function Settings() {
                       href="https://discord.gg/KgYGHEMq2P"
                       target="_blank"
                       rel="noreferrer noopener"
-                      className="inline-flex items-center justify-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium border border-[#5865F2]/40 bg-[#5865F2]/10 text-text-primary hover:bg-[#5865F2]/20 hover:border-[#5865F2]/60 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#5865F2]/60"
+                      className="inline-flex items-center justify-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium border border-brand-discord/40 bg-brand-discord/10 text-text-primary hover:bg-brand-discord/20 hover:border-brand-discord/60 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-discord/60"
                     >
                       <svg aria-hidden="true" viewBox="0 0 24 24" className="w-4 h-4 fill-current">
                         <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />

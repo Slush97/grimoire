@@ -27,7 +27,7 @@ import {
   Image,
   ImageOff,
 } from 'lucide-react';
-import * as ContextMenu from '@radix-ui/react-context-menu';
+import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
 import {
   getConflicts,
   getGameRunningStatus,
@@ -902,7 +902,13 @@ export default function Sidebar() {
           </div>
         )}
 
-        <div className="space-y-1">
+        {/* flex+gap rather than space-y: the launch context-menu trigger is a
+            display:contents span around both launch buttons, so space-y's
+            direct-child margin selector skips them while flex gap still
+            applies (they participate in the parent's layout individually).
+            gap-2 matches the footer rail's space-y-2 rhythm (launch buttons,
+            update flag, and Settings all sit 8px apart). */}
+        <div className="flex flex-col gap-2">
           {showPreviewVolume && (collapsed ? (
             <button
               type="button"
@@ -970,8 +976,8 @@ export default function Sidebar() {
               )}
             </button>
           ) : (
-            <ContextMenu.Root>
-              <ContextMenu.Trigger asChild>
+            <MenuRoot>
+              <MenuTrigger asChild>
                 <span className="contents">
           <button
             onClick={handleLaunchModded}
@@ -1029,28 +1035,13 @@ export default function Sidebar() {
             )}
           </button>
                 </span>
-              </ContextMenu.Trigger>
-              <ContextMenu.Portal>
-                <ContextMenu.Content
-                  collisionPadding={12}
-                  className="z-[80] min-w-52 rounded-lg border border-white/10 bg-bg-secondary/95 p-1.5 text-sm text-text-primary shadow-2xl shadow-black/50 backdrop-blur-md animate-fade-in"
-                >
-                  <ContextMenu.Item
-                    onSelect={toggleLaunchBg}
-                    className="flex h-8 select-none items-center gap-2 rounded-md px-2 outline-none transition-colors cursor-pointer text-text-primary focus:bg-white/10 data-[highlighted]:bg-white/10"
-                  >
-                    {launchBgHidden ? (
-                      <Image className="h-4 w-4 flex-shrink-0" />
-                    ) : (
-                      <ImageOff className="h-4 w-4 flex-shrink-0" />
-                    )}
-                    <span className="min-w-0 flex-1 truncate">
-                      {launchBgHidden ? t('sidebar.launch.showArt') : t('sidebar.launch.hideArt')}
-                    </span>
-                  </ContextMenu.Item>
-                </ContextMenu.Content>
-              </ContextMenu.Portal>
-            </ContextMenu.Root>
+              </MenuTrigger>
+              <MenuContent>
+                <MenuItem icon={launchBgHidden ? Image : ImageOff} onSelect={toggleLaunchBg}>
+                  {launchBgHidden ? t('sidebar.launch.showArt') : t('sidebar.launch.hideArt')}
+                </MenuItem>
+              </MenuContent>
+            </MenuRoot>
           )}
         </div>
 

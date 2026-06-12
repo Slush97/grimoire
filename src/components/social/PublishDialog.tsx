@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, AlertTriangle, Loader2, CheckCircle2, Globe } from 'lucide-react';
 import { Button } from '../common/ui';
+import { Modal } from '../common/Modal';
 import {
   exportPortableProfile,
   socialPublish,
@@ -58,12 +59,6 @@ export default function PublishDialog({
     return () => { cancelled = true; };
   }, [profileId]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape' && !submitting) onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose, submitting]);
-
   const trimmedTitle = title.trim();
   const trimmedDescription = description.trim();
   const titleTooLong = trimmedTitle.length > 80;
@@ -99,17 +94,13 @@ export default function PublishDialog({
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="publish-profile-title"
-      onClick={() => { if (!submitting) onClose(); }}
+    <Modal
+      onClose={onClose}
+      labelledBy="publish-profile-title"
+      size="md"
+      dismissable={!submitting}
+      panelClassName="flex flex-col overflow-hidden"
     >
-      <div
-        className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-lg flex flex-col overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-start justify-between p-6 border-b border-white/10">
           <div className="min-w-0">
             <h2 id="publish-profile-title" className="text-xl font-bold text-text-primary flex items-center gap-2">
@@ -271,7 +262,6 @@ export default function PublishDialog({
             </>
           )}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

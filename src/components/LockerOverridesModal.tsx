@@ -14,6 +14,7 @@ import {
     Loader2,
 } from 'lucide-react';
 import { Button } from './common/ui';
+import { Modal } from './common/Modal';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import {
     getLockerOverview,
@@ -280,15 +281,6 @@ export function LockerOverridesModal({
 
     const busy = removing !== null || clearing !== null || savingKey !== null;
 
-    // Escape closes, but not mid-operation (don't abandon a rebuild visually).
-    useEffect(() => {
-        const onKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape' && !busy) onClose();
-        };
-        window.addEventListener('keydown', onKey);
-        return () => window.removeEventListener('keydown', onKey);
-    }, [busy, onClose]);
-
     useEffect(() => {
         const timers = commitTimers.current;
         return () => {
@@ -420,22 +412,19 @@ export function LockerOverridesModal({
     const trippySkins = overview?.trippySkins ?? [];
 
     return (
-        <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 animate-fade-in"
-            role="dialog"
-            aria-modal="true"
-            aria-label="Locker overrides"
-            onMouseDown={(e) => {
-                if (e.target === e.currentTarget && !busy) onClose();
-            }}
+        <Modal
+            onClose={onClose}
+            labelledBy="locker-overrides-title"
+            size="lg"
+            dismissable={!busy}
+            panelClassName="flex max-h-[85vh] flex-col overflow-hidden"
         >
-            <div className="flex max-h-[85vh] w-full max-w-2xl flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary shadow-2xl">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
                     <div className="flex items-center gap-2.5">
                         <Wand2 className="h-5 w-5 text-accent" />
                         <div>
-                            <h2 className="text-base font-semibold text-text-primary">Locker Overrides</h2>
+                            <h2 id="locker-overrides-title" className="text-base font-semibold text-text-primary">Locker Overrides</h2>
                             <p className="text-xs text-text-secondary">
                                 Always-on cosmetics, separate from your mod load order and the 99-slot cap.
                             </p>
@@ -841,8 +830,7 @@ export function LockerOverridesModal({
                         </Button>
                     )}
                 </div>
-            </div>
-        </div>
+        </Modal>
     );
 }
 

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { X, Download, ClipboardCopy, CheckCircle2, AlertTriangle, Loader2 } from 'lucide-react';
 import { Button } from '../common/ui';
+import { Modal } from '../common/Modal';
 import { exportPortableProfile } from '../../lib/api';
 import { PORTABLE_PROFILE_FILE_EXTENSION } from '../../types/portableProfile';
 import type { PortableExportResult } from '../../types/portableProfile';
@@ -33,12 +34,6 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
     return () => { cancelled = true; };
   }, [profileId]);
 
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-
   const handleSaveFile = () => {
     if (!result) return;
     const blob = new Blob([result.json], { type: 'application/json' });
@@ -62,17 +57,12 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
   };
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="export-profile-title"
-      onClick={onClose}
+    <Modal
+      onClose={onClose}
+      labelledBy="export-profile-title"
+      size="md"
+      panelClassName="flex flex-col overflow-hidden"
     >
-      <div
-        className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-lg flex flex-col overflow-hidden shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
         <div className="flex items-start justify-between p-6 border-b border-white/10">
           <div className="min-w-0">
             <h2 id="export-profile-title" className="text-xl font-bold text-text-primary">
@@ -162,7 +152,6 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
         <div className="p-4 border-t border-white/10 flex justify-end">
           <Button variant="secondary" onClick={onClose}>Close</Button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
