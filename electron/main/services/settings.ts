@@ -33,6 +33,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     language: null,
     zoomFactor: 1,
     discordRpcEnabled: false,
+    contributeMatchSalts: false,
 };
 
 /**

@@ -24,6 +24,7 @@ import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/a
 import { DEFAULT_SIDEBAR_HERO, HERO_NAMES_SORTED, getHeroChipIconPath } from '../lib/lockerUtils';
 import SocialAccountSection from '../components/social/SocialAccountSection';
 import PerformanceConfigCard from '../components/performance/PerformanceConfigCard';
+import type { SaltIngestStatus } from '../types/electron';
 
 // GitHub Releases is the source of truth for changelogs. When we have local
 // release notes (an update is pending) we show them in-app; otherwise we link
@@ -83,6 +84,7 @@ export default function Settings() {
   const [previewConfirmOpen, setPreviewConfirmOpen] = useState(false);
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetResult, setResetResult] = useState<string | null>(null);
+  const [saltIngestStatus, setSaltIngestStatus] = useState<SaltIngestStatus | null>(null);
   const [heroPickerOpen, setHeroPickerOpen] = useState(false);
 
   // Updater state
@@ -327,6 +329,31 @@ export default function Settings() {
   const handleDiscordRpcChange = async (checked: boolean) => {
     if (settings) {
       await saveSettings({ ...settings, discordRpcEnabled: checked });
+    }
+  };
+
+  const refreshSaltIngestStatus = useCallback(async () => {
+    try {
+      setSaltIngestStatus(await window.electronAPI.saltIngest.getStatus());
+    } catch {
+      // The status line is cosmetic; the toggle stays usable without it.
+    }
+  }, []);
+
+  useEffect(() => {
+    if (settings?.contributeMatchSalts) {
+      void refreshSaltIngestStatus();
+    }
+  }, [settings?.contributeMatchSalts, refreshSaltIngestStatus]);
+
+  const handleContributeMatchSaltsChange = async (checked: boolean) => {
+    if (!settings) return;
+    await saveSettings({ ...settings, contributeMatchSalts: checked });
+    await window.electronAPI.saltIngest.setEnabled(checked);
+    if (checked) {
+      // The first scan usually finishes within a couple seconds; pick up its
+      // counters once it has.
+      setTimeout(() => void refreshSaltIngestStatus(), 3000);
     }
   };
 
@@ -1138,6 +1165,25 @@ export default function Settings() {
               label="Discord Rich Presence"
               description="Show what you are doing in Grimoire on your Discord profile (browsing mods, in the Locker, and so on). Talks only to your local Discord app and sends nothing to Grimoire. Off by default."
             />
+
+            <div className="h-px bg-white/5" />
+
+            <div>
+              <Toggle
+                checked={settings?.contributeMatchSalts ?? false}
+                onChange={handleContributeMatchSaltsChange}
+                label="Contribute match data to deadlock-api.com"
+                description="Help the community stats project by submitting the replay keys (salts) Steam already caches for matches whose details you view in-game. Sends only the match id, server cluster, and two download keys: no account id, no username, nothing about you or your mods. Off by default."
+              />
+              {settings?.contributeMatchSalts && saltIngestStatus && (
+                <div className="mt-2 text-xs text-text-secondary">
+                  {saltIngestStatus.totalSubmitted > 0
+                    ? `${saltIngestStatus.totalSubmitted} match salt${saltIngestStatus.totalSubmitted === 1 ? '' : 's'} contributed so far.`
+                    : 'Nothing to contribute yet. Salts appear after you view match details in-game.'}
+                  {saltIngestStatus.lastError ? ` Last attempt failed: ${saltIngestStatus.lastError}.` : ''}
+                </div>
+              )}
+            </div>
 
             <div className="h-px bg-white/5" />
 
