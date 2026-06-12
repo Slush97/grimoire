@@ -2666,7 +2666,7 @@ export default function Installed() {
               )}
               {filterOpen && (
                 <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm shadow-xl shadow-black/40">
-                  <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                  <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-sans font-semibold uppercase tracking-wider text-text-secondary">
                     <ArrowDownUp className="h-3.5 w-3.5" /> Sort
                   </div>
                   <div className="space-y-1">
@@ -2692,7 +2692,7 @@ export default function Installed() {
                   </div>
 
                   <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                    <div className="mb-1.5 text-[11px] font-sans font-semibold uppercase tracking-wider text-text-secondary">
                       Source
                     </div>
                     <div className="flex gap-1">
@@ -2726,7 +2726,7 @@ export default function Installed() {
                   </div>
 
                   <div className="mt-3 border-t border-border pt-3">
-                    <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                    <div className="mb-1.5 text-[11px] font-sans font-semibold uppercase tracking-wider text-text-secondary">
                       Status
                     </div>
                     <div className="flex gap-1">
@@ -2762,7 +2762,7 @@ export default function Installed() {
                   {typeOptions.length > 1 && (
                     <div className="mt-3 border-t border-border pt-3">
                       <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                        <span className="text-[11px] font-sans font-semibold uppercase tracking-wider text-text-secondary">
                           Mod type
                         </span>
                         {typeFilter.length > 0 && (
