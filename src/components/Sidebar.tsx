@@ -533,14 +533,26 @@ export default function Sidebar() {
     });
   }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, conflictCount, discoverNotificationCount, installedCount]);
 
+  // Optimistic nav highlight. The router wraps navigation in startTransition,
+  // so location.pathname (and any highlight derived from it) only updates
+  // once the destination page finishes rendering: on heavy pages like
+  // Installed that's 100ms+ after the click, which reads as the sidebar
+  // lagging. Track the clicked target locally and treat it as active right
+  // away; cleared as soon as the location catches up.
+  const [pendingNavPath, setPendingNavPath] = useState<string | null>(null);
+  useEffect(() => {
+    setPendingNavPath(null);
+  }, [location.pathname]);
+  const effectiveNavPath = pendingNavPath ?? location.pathname;
+
   const activeNavIndex = useMemo(
     () =>
       navItems.findIndex(({ to }) =>
         to === '/'
-          ? location.pathname === '/'
-          : location.pathname === to || location.pathname.startsWith(`${to}/`)
+          ? effectiveNavPath === '/'
+          : effectiveNavPath === to || effectiveNavPath.startsWith(`${to}/`)
       ),
-    [location.pathname, navItems]
+    [effectiveNavPath, navItems]
   );
   const activeNavTone = activeNavIndex >= 0 ? navItems[activeNavIndex]?.tone : undefined;
 
@@ -748,7 +760,12 @@ export default function Sidebar() {
             </div>
           )}
           <ul ref={navListRef} className="relative z-10 space-y-0.5">
-            {navItems.map(({ to, icon: Icon, label, tooltip, tone, badge, badgeTone }, index) => (
+            {navItems.map(({ to, icon: Icon, label, tooltip, tone, badge, badgeTone }, index) => {
+              // Style from the optimistic index, not the router's isActive:
+              // isActive trails the click by the destination page's render
+              // time (see pendingNavPath above).
+              const active = index === activeNavIndex;
+              return (
               <li
                 key={to}
                 ref={(node) => {
@@ -758,15 +775,15 @@ export default function Sidebar() {
                 <NavLink
                   to={to}
                   title={collapsed ? `${label}: ${tooltip}` : tooltip}
-                  className={({ isActive }) =>
-                    `group relative flex items-center h-10 overflow-hidden leading-5 rounded-sm text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
+                  onClick={() => setPendingNavPath(to)}
+                  className={`group relative flex items-center h-10 overflow-hidden leading-5 rounded-sm text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
                       collapsed ? '' : 'pr-3'
                     } ${
                       tone === 'test'
-                        ? isActive
+                        ? active
                           ? 'border-red-400/80 bg-red-500/25 text-red-100 font-bold hover:bg-red-500/30'
                           : 'border-red-500/45 bg-red-500/10 text-red-200 font-bold hover:border-red-400/75 hover:bg-red-500/20 hover:text-red-100'
-                        : isActive
+                        : active
                         ? sidebarHeroHighlightSrc
                           ? 'border-white/15 text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
                           : 'border-accent/40 text-text-primary font-medium hover:border-accent/60'
@@ -774,14 +791,13 @@ export default function Sidebar() {
                     }`
                   }
                 >
-                  {({ isActive }) => (
-                    <>
+                  <>
                       <span className="relative z-10 flex h-full w-[46px] flex-shrink-0 items-center justify-center">
                         <Icon
                           className={`w-5 h-5 flex-shrink-0 ${
                             tone === 'test' ? 'text-red-200 group-hover:text-red-100' : 'text-text-primary/70 group-hover:text-text-primary'
                           }`}
-                          strokeWidth={isActive ? 2 : 1.75}
+                          strokeWidth={active ? 2 : 1.75}
                         />
                       </span>
                       {labelMounted && (
@@ -818,11 +834,11 @@ export default function Sidebar() {
                           </span>
                         )
                       )}
-                    </>
-                  )}
+                  </>
                 </NavLink>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </div>
       </nav>
