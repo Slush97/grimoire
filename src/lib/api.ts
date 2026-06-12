@@ -510,6 +510,14 @@ export async function removePerformanceConfig(): Promise<PerformanceConfigStatus
   return window.electronAPI.removePerformanceConfig();
 }
 
+export async function openPerformanceConfigFile(): Promise<void> {
+  return window.electronAPI.openPerformanceConfigFile();
+}
+
+export async function listEditorCandidates(): Promise<EditorCandidate[]> {
+  return window.electronAPI.listEditorCandidates();
+}
+
 export async function openModsFolder(): Promise<void> {
   return window.electronAPI.openModsFolder();
 }
@@ -595,7 +603,7 @@ export function conflictPairKey(a: string, b: string): string {
 // Profile wire types are single-sourced in types/electron.ts; re-exported
 // here to preserve this module's existing import surface.
 export type { Profile, ProfileMod, ProfileCrosshairSettings } from '../types/electron';
-import type { Profile, ProfileCrosshairSettings, PerformanceConfigStatus } from '../types/electron';
+import type { Profile, ProfileCrosshairSettings, PerformanceConfigStatus, EditorCandidate } from '../types/electron';
 
 export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();

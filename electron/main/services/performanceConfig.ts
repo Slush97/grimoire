@@ -9,6 +9,7 @@
 // is restored on write: line-based regexes silently fail on CR-terminated
 // lines otherwise (JS `.` does not match \r), which would inject duplicate
 // convars with ambiguous engine precedence on Windows CRLF files.
+import { createHash } from 'crypto';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { getGameinfoPath } from './deadlock';
@@ -244,8 +245,9 @@ export function applyPerformanceConfig(deadlockPath: string | null): Performance
             return status('error', 'Patch produced an unbalanced gameinfo.gi; no changes were written.');
         }
 
-        writeFileSync(gameinfoPath, crlf ? content.split('\n').join('\r\n') : content, 'utf-8');
-        writeAppliedState(gameinfoPath, true);
+        const finalText = crlf ? content.split('\n').join('\r\n') : content;
+        writeFileSync(gameinfoPath, finalText, 'utf-8');
+        writeAppliedState(gameinfoPath, true, sha256(finalText));
 
         const note = skipped.length
             ? ` (${skipped.length} setting${skipped.length === 1 ? '' : 's'} skipped: section not found, likely changed by a game update)`
@@ -339,14 +341,24 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
         const content = readFileSync(gameinfoPath, 'utf-8');
         const begin = BEGIN_RE.exec(content);
         if (begin) {
+            // The sidecar records a hash of the exact bytes Grimoire wrote, so
+            // a mismatch while the markers are intact means hand edits. Old
+            // sidecars without a hash just never set the flag.
+            const sidecar = readAppliedState(gameinfoPath);
+            const handEdited =
+                typeof sidecar?.contentHash === 'string' && sidecar.contentHash !== sha256(content);
+            const base =
+                begin[2] === PRESET_VERSION
+                    ? `Performance config v${begin[2]} is applied.`
+                    : `Performance config v${begin[2]} is applied; v${PRESET_VERSION} is available (reapply to update).`;
             return {
                 state: 'applied',
                 appliedVersion: begin[2],
                 bundledVersion: PRESET_VERSION,
-                message:
-                    begin[2] === PRESET_VERSION
-                        ? `Performance config v${begin[2]} is applied.`
-                        : `Performance config v${begin[2]} is applied; v${PRESET_VERSION} is available (reapply to update).`,
+                handEdited,
+                message: handEdited
+                    ? `${base} The file has manual edits: Reapply overwrites values on preset-managed lines.`
+                    : base,
             };
         }
         // Applied before, but the markers are gone: a game update replaced
@@ -372,7 +384,13 @@ function status(
     };
 }
 
-function readAppliedState(gameinfoPath: string): { presetId: string; version: string } | null {
+function sha256(text: string): string {
+    return createHash('sha256').update(text, 'utf-8').digest('hex');
+}
+
+function readAppliedState(
+    gameinfoPath: string
+): { presetId: string; version: string; contentHash?: string } | null {
     try {
         const raw = readFileSync(statePath(gameinfoPath), 'utf-8');
         const parsed = JSON.parse(raw);
@@ -382,11 +400,15 @@ function readAppliedState(gameinfoPath: string): { presetId: string; version: st
     }
 }
 
-function writeAppliedState(gameinfoPath: string, applied: boolean): void {
+function writeAppliedState(gameinfoPath: string, applied: boolean, contentHash?: string): void {
     const file = statePath(gameinfoPath);
     try {
         if (applied) {
-            writeFileSync(file, JSON.stringify({ presetId: PRESET_ID, version: PRESET_VERSION }), 'utf-8');
+            writeFileSync(
+                file,
+                JSON.stringify({ presetId: PRESET_ID, version: PRESET_VERSION, contentHash }),
+                'utf-8'
+            );
         } else if (existsSync(file)) {
             unlinkSync(file);
         }

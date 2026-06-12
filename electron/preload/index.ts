@@ -247,6 +247,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getPerformanceConfigStatus: () => ipcRenderer.invoke('get-performance-config-status'),
     applyPerformanceConfig: () => ipcRenderer.invoke('apply-performance-config'),
     removePerformanceConfig: () => ipcRenderer.invoke('remove-performance-config'),
+    openPerformanceConfigFile: () => ipcRenderer.invoke('open-performance-config-file'),
+    listEditorCandidates: () => ipcRenderer.invoke('list-editor-candidates'),
     openModsFolder: () => ipcRenderer.invoke('open-mods-folder'),
     openGameFolder: () => ipcRenderer.invoke('open-game-folder'),
 

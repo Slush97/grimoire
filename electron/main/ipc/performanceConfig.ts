@@ -1,11 +1,14 @@
 import { ipcMain } from 'electron';
-import { getActiveDeadlockPath } from '../services/settings';
+import { existsSync } from 'fs';
+import { getActiveDeadlockPath, loadSettings } from '../services/settings';
+import { getGameinfoPath } from '../services/deadlock';
+import { listEditorCandidates, openInEditor } from '../services/externalEditor';
 import {
     applyPerformanceConfig,
     getPerformanceConfigStatus,
     removePerformanceConfig,
 } from '../services/performanceConfig';
-import type { PerformanceConfigStatus } from '../../../src/types/electron';
+import type { EditorCandidate, PerformanceConfigStatus } from '../../../src/types/electron';
 
 // get-performance-config-status
 ipcMain.handle('get-performance-config-status', (): PerformanceConfigStatus => {
@@ -20,4 +23,24 @@ ipcMain.handle('apply-performance-config', (): PerformanceConfigStatus => {
 // remove-performance-config
 ipcMain.handle('remove-performance-config', (): PerformanceConfigStatus => {
     return removePerformanceConfig(getActiveDeadlockPath());
+});
+
+// open-performance-config-file (power users hand-tune the applied preset in
+// the editor they picked; the editor path is read from settings here, never
+// passed in from the renderer)
+ipcMain.handle('open-performance-config-file', async (): Promise<void> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const gameinfoPath = getGameinfoPath(deadlockPath);
+    if (!existsSync(gameinfoPath)) {
+        throw new Error('gameinfo.gi not found');
+    }
+    await openInEditor(gameinfoPath, loadSettings().externalEditorPath);
+});
+
+// list-editor-candidates
+ipcMain.handle('list-editor-candidates', (): EditorCandidate[] => {
+    return listEditorCandidates();
 });

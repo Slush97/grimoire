@@ -782,4 +782,9 @@ export interface AppSettings {
    *  file next to gameinfo.gi (main-process owned), not in settings, so a
    *  renderer settings save can never clobber it. */
   experimentalPerformanceConfig?: boolean;
+  /** Editor binary used to open gameinfo.gi for hand edits. null = the OS
+   *  default app; undefined = never chosen, so the picker is shown first.
+   *  (.gi maps to text/plain, which often resolves to a word processor, so
+   *  "default" alone makes a bad Edit File experience.) */
+  externalEditorPath?: string | null;
 }
