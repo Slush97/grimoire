@@ -510,6 +510,10 @@ export async function removePerformanceConfig(): Promise<PerformanceConfigStatus
   return window.electronAPI.removePerformanceConfig();
 }
 
+export async function resetPerformanceConfigOverrides(): Promise<PerformanceConfigStatus> {
+  return window.electronAPI.resetPerformanceConfigOverrides();
+}
+
 export async function openPerformanceConfigFile(): Promise<void> {
   return window.electronAPI.openPerformanceConfigFile();
 }

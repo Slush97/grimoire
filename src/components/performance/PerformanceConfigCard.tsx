@@ -8,6 +8,7 @@ import {
   getPerformanceConfigStatus,
   openPerformanceConfigFile,
   removePerformanceConfig,
+  resetPerformanceConfigOverrides,
 } from '../../lib/api';
 import type { PerformanceConfigStatus } from '../../types/electron';
 
@@ -138,8 +139,9 @@ export default function PerformanceConfigCard() {
               >
                 change editor
               </button>
-              ). Leave the grimoire-perf comment markers alone so Remove can restore your file
-              cleanly.
+              ). Your edits to preset lines are kept as overrides across Reapply and game
+              updates. Leave the grimoire-perf comment markers alone so Remove can restore your
+              file cleanly.
             </p>
           )}
           {openError && <p className="text-xs text-red-400">{openError}</p>}
@@ -161,6 +163,16 @@ export default function PerformanceConfigCard() {
           {applied && (
             <Button onClick={onEditFile} disabled={busy} variant="ghost" size="sm" icon={SquarePen}>
               Edit File
+            </Button>
+          )}
+          {applied && (status?.overrideCount ?? 0) > 0 && (
+            <Button
+              onClick={() => run(resetPerformanceConfigOverrides)}
+              disabled={busy}
+              variant="ghost"
+              size="sm"
+            >
+              Reset Overrides
             </Button>
           )}
         </div>

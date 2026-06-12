@@ -31,7 +31,18 @@ const GAMEINFO_BACKUP_SUFFIX = '.grimoire-bak';
 // in-file BEGIN marker is how we detect "a game update wiped the config".
 // Deliberately NOT named gameinfo.*: system.ts's findGameinfoCandidates
 // surfaces gameinfo.* files as restore candidates and this is not one.
+// Besides wiped-detection it carries the user's overrides: hand edits to
+// preset-managed lines, harvested on reapply and layered onto every apply,
+// so power-user tweaks survive reapplies, preset updates, and game-update
+// wipes. Markers always record stock values (never override values), so
+// Remove restores the original file regardless of overrides.
 const STATE_FILENAME = 'grimoire-performance.json';
+
+/** A user deviation from the preset for one managed key: a different value,
+ *  or omit (the user deleted / commented out the preset line). Keys are
+ *  `<section path>/<key>`, e.g. `ConVars/citadel_unit_status_use_new`. */
+type OverrideEntry = { value?: string; omit?: boolean };
+type Overrides = Record<string, OverrideEntry>;
 
 function statePath(gameinfoPath: string): string {
     return join(dirname(gameinfoPath), STATE_FILENAME);
@@ -128,6 +139,94 @@ function entryKey(line: string): string | null {
 }
 
 const quote = (v: string) => `"${v.replace(/^"|"$/g, '')}"`;
+const unquote = (v: string) => v.replace(/^"|"$/g, '');
+
+// ---------------------------------------------------------------------------
+// Overrides: harvest hand edits so they survive reapply and wipes
+// ---------------------------------------------------------------------------
+
+// Bare key -> preset value + override key. null marks a bare key that appears
+// more than once in the preset (ambiguous: harvesting it could attribute a
+// value to the wrong section, so we skip it). Remove-type ops carry no value
+// and are not overridable.
+function presetKeyIndex(): Map<string, { okey: string; value: string } | null> {
+    const idx = new Map<string, { okey: string; value: string } | null>();
+    const put = (bare: string, okey: string, value: string) => {
+        idx.set(bare, idx.has(bare) ? null : { okey, value });
+    };
+    for (const [key, value] of CONVARS) put(key, `ConVars/${key}`, value);
+    for (const op of SECTION_OPS) {
+        if (!op.remove) put(op.key, `${op.path.join('/')}/${op.key}`, op.value!);
+    }
+    return idx;
+}
+
+// Read the user's deviations out of an applied file (LF-normalized): edits to
+// marker-tagged lines, commented-out or deleted preset convars, and the
+// user's own convars added inside the marked block. Runs on every reapply, so
+// the result is a complete snapshot (reverting a line back to the preset
+// value drops its override). Deletions are only detected for ConVars block
+// keys: a missing section-op key usually means a game update restructured
+// the section, not user intent.
+function harvestOverrides(content: string): Overrides {
+    const idx = presetKeyIndex();
+    const overrides: Overrides = {};
+    const addedToken = `// ${MARKER} added`;
+    const wasRe = new RegExp(`^(.*?) // ${MARKER} was ("[^"]*"|\\S+)\\s*$`);
+
+    for (const line of content.split('\n')) {
+        const addedAt = line.indexOf(addedToken);
+        if (addedAt >= 0) {
+            const body = line.slice(0, addedAt);
+            const isCommented = /^[ \t]*\/\//.test(body);
+            const active = isCommented ? body.replace(/^[ \t]*\/\/[ \t]*/, '') : body;
+            const key = entryKey(active);
+            if (!key) continue;
+            const entry = matchEntryLine(active, key);
+            const preset = idx.get(key);
+            if (preset === null) continue; // ambiguous bare key
+            if (!preset) {
+                // Not in the preset: the user's own convar inside our block.
+                if (!isCommented && entry) {
+                    overrides[`ConVars/${key}`] = { value: unquote(entry.value) };
+                }
+                continue;
+            }
+            if (isCommented) overrides[preset.okey] = { omit: true };
+            else if (entry && unquote(entry.value) !== preset.value) {
+                overrides[preset.okey] = { value: unquote(entry.value) };
+            }
+            continue;
+        }
+        const was = wasRe.exec(line);
+        if (was) {
+            const key = entryKey(was[1]);
+            const entry = key ? matchEntryLine(was[1], key) : null;
+            const preset = key ? idx.get(key) : null;
+            if (preset && entry && unquote(entry.value) !== preset.value) {
+                overrides[preset.okey] = { value: unquote(entry.value) };
+            }
+        }
+    }
+
+    // Deleted preset convars: every CONVARS key is present after an apply
+    // (edited in place or injected), so one with no active entry left in the
+    // ConVars section was removed by the user.
+    const convarRange = findSectionByPath(content, ['ConVars']);
+    if (convarRange) {
+        const activeKeys = new Set(
+            content
+                .slice(convarRange.bodyStart, convarRange.bodyEnd)
+                .split('\n')
+                .map(entryKey)
+                .filter(Boolean)
+        );
+        for (const [key] of CONVARS) {
+            if (!activeKeys.has(key)) overrides[`ConVars/${key}`] = { omit: true };
+        }
+    }
+    return overrides;
+}
 
 // ---------------------------------------------------------------------------
 // Apply
@@ -170,7 +269,10 @@ function applyOp(content: string, op: SectionOp): string | null {
     return content.slice(0, range.bodyStart) + added + content.slice(range.bodyStart);
 }
 
-export function applyPerformanceConfig(deadlockPath: string | null): PerformanceConfigStatus {
+export function applyPerformanceConfig(
+    deadlockPath: string | null,
+    opts?: { resetOverrides?: boolean }
+): PerformanceConfigStatus {
     if (!deadlockPath) return status('error', 'Deadlock path not configured.');
     const gameinfoPath = getGameinfoPath(deadlockPath);
     if (!existsSync(gameinfoPath)) {
@@ -183,6 +285,15 @@ export function applyPerformanceConfig(deadlockPath: string | null): Performance
 
         // Work in LF-space (see header comment), restore the EOL style on write.
         let content = crlf ? original.split('\r\n').join('\n') : original;
+        // User overrides: harvested fresh from the file when a config is
+        // present (so hand edits made since the last apply are captured), or
+        // carried over from the sidecar when a game update wiped the file.
+        let overrides: Overrides = {};
+        if (!opts?.resetOverrides) {
+            overrides = BEGIN_RE.test(content)
+                ? harvestOverrides(content)
+                : (readAppliedState(gameinfoPath)?.overrides ?? {});
+        }
         // Reapplying (e.g. after a preset data update) starts from a clean base.
         if (BEGIN_RE.test(content)) content = removeMarkers(content);
 
@@ -199,8 +310,15 @@ export function applyPerformanceConfig(deadlockPath: string | null): Performance
 
         const skipped: string[] = [];
         for (const op of SECTION_OPS) {
-            const next = applyOp(content, op);
-            if (next === null) skipped.push(`${op.path.join('/')}/${op.key}`);
+            const okey = `${op.path.join('/')}/${op.key}`;
+            const override = overrides[okey];
+            if (override?.omit) continue;
+            const effective =
+                override?.value !== undefined && !op.remove
+                    ? { ...op, value: override.value }
+                    : op;
+            const next = applyOp(content, effective);
+            if (next === null) skipped.push(okey);
             else content = next;
         }
 
@@ -221,10 +339,26 @@ export function applyPerformanceConfig(deadlockPath: string | null): Performance
         );
         const toInject: Array<readonly [string, string]> = [];
         for (const [key, value] of CONVARS) {
+            const override = overrides[`ConVars/${key}`];
+            if (override?.omit) continue;
+            const effective = override?.value ?? value;
             if (existingKeys.has(key)) {
-                content = applyOp(content, { path: ['ConVars'], key, value })!;
+                content = applyOp(content, { path: ['ConVars'], key, value: effective })!;
             } else {
-                toInject.push([key, value]);
+                toInject.push([key, effective]);
+            }
+        }
+        // The user's own convars (added inside the marked block by hand and
+        // harvested as overrides) ride along in the injected block.
+        const presetConvarKeys = new Set(CONVARS.map(([key]) => key));
+        for (const [okey, override] of Object.entries(overrides)) {
+            if (!okey.startsWith('ConVars/') || override.value === undefined) continue;
+            const key = okey.slice('ConVars/'.length);
+            if (presetConvarKeys.has(key)) continue;
+            if (existingKeys.has(key)) {
+                content = applyOp(content, { path: ['ConVars'], key, value: override.value })!;
+            } else {
+                toInject.push([key, override.value]);
             }
         }
         convarRange = findSectionByPath(content, ['ConVars'])!;
@@ -247,15 +381,26 @@ export function applyPerformanceConfig(deadlockPath: string | null): Performance
 
         const finalText = crlf ? content.split('\n').join('\r\n') : content;
         writeFileSync(gameinfoPath, finalText, 'utf-8');
-        writeAppliedState(gameinfoPath, true, sha256(finalText));
+        writeAppliedState(gameinfoPath, true, sha256(finalText), overrides);
 
+        const kept = Object.keys(overrides).length;
+        const keptNote = kept
+            ? ` Kept ${kept} of your override${kept === 1 ? '' : 's'}.`
+            : '';
         const note = skipped.length
             ? ` (${skipped.length} setting${skipped.length === 1 ? '' : 's'} skipped: section not found, likely changed by a game update)`
             : '';
-        return status('applied', `Performance config v${PRESET_VERSION} applied${note}.`);
+        return status('applied', `Performance config v${PRESET_VERSION} applied${note}.${keptNote}`, kept);
     } catch (err) {
         return status('error', `Failed to apply performance config: ${err}`);
     }
+}
+
+/** Reapply the pure preset, discarding the user's saved overrides. */
+export function resetPerformanceConfigOverrides(
+    deadlockPath: string | null
+): PerformanceConfigStatus {
+    return applyPerformanceConfig(deadlockPath, { resetOverrides: true });
 }
 
 function braceCount(content: string): number {
@@ -347,24 +492,38 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             const sidecar = readAppliedState(gameinfoPath);
             const handEdited =
                 typeof sidecar?.contentHash === 'string' && sidecar.contentHash !== sha256(content);
+            const overrideCount = Object.keys(sidecar?.overrides ?? {}).length;
             const base =
                 begin[2] === PRESET_VERSION
                     ? `Performance config v${begin[2]} is applied.`
                     : `Performance config v${begin[2]} is applied; v${PRESET_VERSION} is available (reapply to update).`;
+            const overrideNote = overrideCount
+                ? ` Keeping ${overrideCount} of your override${overrideCount === 1 ? '' : 's'}.`
+                : '';
             return {
                 state: 'applied',
                 appliedVersion: begin[2],
                 bundledVersion: PRESET_VERSION,
                 handEdited,
+                overrideCount,
                 message: handEdited
-                    ? `${base} The file has manual edits: Reapply overwrites values on preset-managed lines.`
-                    : base,
+                    ? `${base}${overrideNote} The file has manual edits: Reapply folds them into your overrides.`
+                    : `${base}${overrideNote}`,
             };
         }
         // Applied before, but the markers are gone: a game update replaced
         // gameinfo.gi (Valve resets it on major patches).
-        if (readAppliedState(gameinfoPath)) {
-            return status('wiped', 'A game update reset gameinfo.gi and removed the performance config. Reapply to restore it.');
+        const wipedSidecar = readAppliedState(gameinfoPath);
+        if (wipedSidecar) {
+            const savedOverrides = Object.keys(wipedSidecar.overrides ?? {}).length;
+            const restoreNote = savedOverrides
+                ? ` Your ${savedOverrides} saved override${savedOverrides === 1 ? '' : 's'} will be restored too.`
+                : '';
+            return status(
+                'wiped',
+                `A game update reset gameinfo.gi and removed the performance config. Reapply to restore it.${restoreNote}`,
+                savedOverrides
+            );
         }
         return status('not-applied', 'Performance config is not applied.');
     } catch (err) {
@@ -374,12 +533,14 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
 
 function status(
     state: PerformanceConfigStatus['state'],
-    message: string
+    message: string,
+    overrideCount = 0
 ): PerformanceConfigStatus {
     return {
         state,
         appliedVersion: state === 'applied' ? PRESET_VERSION : null,
         bundledVersion: PRESET_VERSION,
+        overrideCount,
         message,
     };
 }
@@ -388,9 +549,14 @@ function sha256(text: string): string {
     return createHash('sha256').update(text, 'utf-8').digest('hex');
 }
 
-function readAppliedState(
-    gameinfoPath: string
-): { presetId: string; version: string; contentHash?: string } | null {
+interface AppliedState {
+    presetId: string;
+    version: string;
+    contentHash?: string;
+    overrides?: Overrides;
+}
+
+function readAppliedState(gameinfoPath: string): AppliedState | null {
     try {
         const raw = readFileSync(statePath(gameinfoPath), 'utf-8');
         const parsed = JSON.parse(raw);
@@ -400,15 +566,18 @@ function readAppliedState(
     }
 }
 
-function writeAppliedState(gameinfoPath: string, applied: boolean, contentHash?: string): void {
+function writeAppliedState(
+    gameinfoPath: string,
+    applied: boolean,
+    contentHash?: string,
+    overrides?: Overrides
+): void {
     const file = statePath(gameinfoPath);
     try {
         if (applied) {
-            writeFileSync(
-                file,
-                JSON.stringify({ presetId: PRESET_ID, version: PRESET_VERSION, contentHash }),
-                'utf-8'
-            );
+            const state: AppliedState = { presetId: PRESET_ID, version: PRESET_VERSION, contentHash };
+            if (overrides && Object.keys(overrides).length) state.overrides = overrides;
+            writeFileSync(file, JSON.stringify(state), 'utf-8');
         } else if (existsSync(file)) {
             unlinkSync(file);
         }

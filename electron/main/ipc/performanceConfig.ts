@@ -7,6 +7,7 @@ import {
     applyPerformanceConfig,
     getPerformanceConfigStatus,
     removePerformanceConfig,
+    resetPerformanceConfigOverrides,
 } from '../services/performanceConfig';
 import type { EditorCandidate, PerformanceConfigStatus } from '../../../src/types/electron';
 
@@ -23,6 +24,12 @@ ipcMain.handle('apply-performance-config', (): PerformanceConfigStatus => {
 // remove-performance-config
 ipcMain.handle('remove-performance-config', (): PerformanceConfigStatus => {
     return removePerformanceConfig(getActiveDeadlockPath());
+});
+
+// reset-performance-config-overrides (reapply the pure preset, dropping the
+// user's saved hand-edit overrides)
+ipcMain.handle('reset-performance-config-overrides', (): PerformanceConfigStatus => {
+    return resetPerformanceConfigOverrides(getActiveDeadlockPath());
 });
 
 // open-performance-config-file (power users hand-tune the applied preset in

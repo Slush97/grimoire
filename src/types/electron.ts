@@ -119,6 +119,9 @@ export interface PerformanceConfigStatus {
     bundledVersion: string;
     /** Applied, but the file no longer matches what Grimoire wrote (hand edits). */
     handEdited?: boolean;
+    /** Saved user deviations from the preset (hand edits harvested on reapply,
+     *  layered onto every apply, surviving game-update wipes). */
+    overrideCount?: number;
     message: string;
 }
 
@@ -514,6 +517,7 @@ export interface ElectronAPI {
     getPerformanceConfigStatus: () => Promise<PerformanceConfigStatus>;
     applyPerformanceConfig: () => Promise<PerformanceConfigStatus>;
     removePerformanceConfig: () => Promise<PerformanceConfigStatus>;
+    resetPerformanceConfigOverrides: () => Promise<PerformanceConfigStatus>;
     openPerformanceConfigFile: () => Promise<void>;
     listEditorCandidates: () => Promise<EditorCandidate[]>;
     openModsFolder: () => Promise<void>;
