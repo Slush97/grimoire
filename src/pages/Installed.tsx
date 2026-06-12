@@ -2559,7 +2559,7 @@ export default function Installed() {
   const hasStatusButtons =
     conflictCount > 0 || updatesAvailable.size > 0 || !!updateAllProgress || unknownMods.length > 0;
   const statusButtons = hasStatusButtons ? (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {conflictCount > 0 && (
         <Button
           variant="warning"
@@ -2602,12 +2602,28 @@ export default function Installed() {
       )}
     </div>
   ) : null;
+  const topStatusActions = hasStatusButtons || viewIsReorderable ? (
+    <div className="flex flex-wrap items-center gap-2">
+      {statusButtons}
+      {viewIsReorderable && (
+        <Button
+          variant="secondary"
+          onClick={fixOrder}
+          icon={Wrench}
+          className="!px-3 !text-xs"
+          title="Renumber enabled mods 1, 2, 3, ... to tidy priority slots"
+        >
+          Fix Order
+        </Button>
+      )}
+    </div>
+  ) : null;
 
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 bg-bg-primary/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80 sm:-mx-6 sm:px-6">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="relative flex-1 min-w-[12rem] max-w-md">
+        <div className="flex flex-wrap items-center gap-2 lg:gap-3">
+          <div className="relative min-w-[14rem] flex-1 basis-[20rem] sm:max-w-md">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
             <input
               type="text"
@@ -2627,13 +2643,13 @@ export default function Installed() {
               </button>
             )}
           </div>
-          <div className="flex flex-wrap items-center justify-end gap-3">
+          {topStatusActions}
+          <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {/* Sort + filter: load order / recent / name, GameBanana vs local
                 import, and mod-type buckets. The badge counts active
                 adjustments; while any are on, the list is read-only (no drag
-                reorder) so it can't be mistaken for load order. order-last groups
-                it with the other view controls (size slider + layout toggle),
-                leaving the action buttons as their own cluster. */}
+                reorder) so it can't be mistaken for load order. order-last keeps
+                it grouped with card size and layout controls at the row end. */}
             <div className="relative order-last" ref={filterRef}>
               <Button
                 variant={activeAdjustmentCount > 0 ? 'primary' : 'secondary'}
@@ -2816,18 +2832,6 @@ export default function Installed() {
                 </div>
               )}
             </div>
-            {statusButtons}
-            {viewIsReorderable && (
-              <Button
-                variant="secondary"
-                onClick={fixOrder}
-                icon={Wrench}
-                className="!px-3 !text-xs"
-                title="Renumber enabled mods 1, 2, 3, ... to tidy priority slots"
-              >
-                Fix Order
-              </Button>
-            )}
             <Button
               variant="secondary"
               onClick={() => setImportOpen(true)}
