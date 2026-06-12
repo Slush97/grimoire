@@ -22,6 +22,27 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // (the "added a custom mod but can't act on it until I refresh" bug).
 let modsGeneration = 0;
 
+// Reuse existing Mod object (and array) identities when a rescan returns
+// unchanged data. Silent refreshes fire on every Installed mount and on
+// window focus; without this each one replaced the whole list, and every
+// downstream effect keyed on `mods` re-fired, re-rendering the full card
+// grid several times per navigation. Items are compared by JSON since both
+// sides come through the same IPC serializer (stable shape and key order).
+function reconcileMods(prev: Mod[], next: Mod[]): Mod[] {
+  const prevById = new Map(prev.map((m) => [m.id, m]));
+  let unchanged = prev.length === next.length;
+  const merged = next.map((m, i) => {
+    const old = prevById.get(m.id);
+    if (old && JSON.stringify(old) === JSON.stringify(m)) {
+      if (unchanged && prev[i] !== old) unchanged = false;
+      return old;
+    }
+    unchanged = false;
+    return m;
+  });
+  return unchanged ? prev : merged;
+}
+
 // Browse-page UI state. Kept in the store (not local component state) so it
 // survives navigation away from /browse and back — user complaint: search
 // query, view mode, and filters all reset when switching pages.
@@ -295,8 +316,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     const gen = ++modsGeneration;
     if (!silent) set({ modsLoading: true, modsError: null });
     try {
-      const mods = await api.getMods();
+      const scanned = await api.getMods();
       if (gen === modsGeneration) {
+        const mods = reconcileMods(get().mods, scanned);
         set(silent ? { mods, modsLoaded: true, modsError: null } : { mods, modsLoaded: true, modsLoading: false });
       } else if (!silent) {
         // Superseded by a newer load/mutation: drop the stale list, but still

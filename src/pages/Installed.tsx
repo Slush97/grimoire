@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import {
   DndContext,
@@ -81,6 +81,7 @@ import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
+import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { Button, Tag } from '../components/common/ui';
@@ -125,6 +126,11 @@ type DragDraftOrder = {
 } | null;
 
 const DROP_STATE_RESET_DELAY_MS = 160;
+
+// Cards mounted synchronously during the navigation commit; covers a tall
+// viewport's worth in the densest grid. The rest of the library mounts in a
+// deferred render one frame later (see gridWarm).
+const INITIAL_MOUNT_COUNT = 40;
 
 /**
  * Rows on the Installed page are either standalone mods or grouped files
@@ -296,15 +302,18 @@ function entryRepresentativeId(entry: ModEntry): string {
   return entry.kind === 'single' ? entry.mod.id : entry.primary.id;
 }
 
-function SortableModEntry({
-  id,
-  disabled,
-  children,
-}: {
-  id: string;
-  disabled: boolean;
-  children: ReactNode;
-}) {
+/**
+ * Sortable grid item: useSortable wrapper + the memoized card, merged into a
+ * single memo boundary. Keeping useSortable inside the memo matters: with the
+ * hook in an unmemoized wrapper, every page-level re-render re-ran it for
+ * every entry (~70-80ms across a full library) even when all the cards
+ * skipped. Drag updates still get through because dnd-kit delivers them via
+ * context, which bypasses memo.
+ */
+const SortableEntryCard = memo(function SortableEntryCard({
+  sortableDisabled,
+  ...cardProps
+}: { sortableDisabled: boolean } & InstalledEntryCardProps) {
   const {
     attributes,
     listeners,
@@ -312,7 +321,7 @@ function SortableModEntry({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id, disabled });
+  } = useSortable({ id: cardProps.entry.key, disabled: sortableDisabled });
 
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -320,6 +329,13 @@ function SortableModEntry({
     opacity: isDragging ? 0.32 : undefined,
     position: 'relative',
     zIndex: isDragging ? 1 : undefined,
+    // Skip layout + paint for offscreen cards. This is most of the cost of
+    // mounting a large library: only the ~15 visible cards pay full price up
+    // front. The `auto` keyword keeps the real size once a card has been
+    // rendered; the estimate only stands in before first view. dnd-kit drag
+    // measurement is unaffected: offscreen items still have placeholder boxes.
+    contentVisibility: 'auto',
+    containIntrinsicSize: cardProps.viewMode === 'list' ? 'auto 72px' : 'auto 280px',
   };
 
   return (
@@ -329,15 +345,166 @@ function SortableModEntry({
       // open action menu can only paint within that card. When the menu opens
       // downward it would land behind the next card; lift this wrapper above its
       // siblings whenever it contains an open menu so the dropdown stays on top.
-      className={`flex flex-col has-[[data-card-menu-open]]:z-20 ${disabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+      className={`flex flex-col has-[[data-card-menu-open]]:z-20 ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
       {...attributes}
       {...listeners}
     >
-      {children}
+      <InstalledEntryCard {...cardProps} />
     </div>
   );
+});
+
+// Stable fallback for cards with no conflicts; a fresh [] per render would
+// defeat InstalledEntryCard's memo on every page-level state change.
+const EMPTY_CONFLICTS: ModConflict[] = [];
+
+interface InstalledEntryCardProps {
+  entry: ModEntry;
+  viewMode: ViewMode;
+  hideNsfwPreviews: boolean;
+  soundVolume: number;
+  conflicts: ModConflict[];
+  updateAvailable: boolean;
+  fixingUnknown: boolean;
+  loadPosition: number | undefined;
+  loadCount: number;
+  selectMode: boolean;
+  selected: boolean;
+  onOpenDetails: (mod: Mod) => void;
+  onOpenPicker: (gameBananaId: number) => void;
+  onToggle: (entry: ModEntry) => void;
+  onDelete: (entry: ModEntry) => void;
+  onEditLocal: (mod: Mod) => void;
+  onTagLocker: (entry: ModEntry, heroName: string | null) => Promise<void>;
+  onTagGlobal: (entry: ModEntry, globalType: GlobalModType | null) => Promise<void>;
+  onFixUnknown: (mod: Mod) => void;
+  onCommitPriority: (modId: string, newPosition: number) => Promise<void>;
+  onUnmerge: (mod: Mod) => void;
+  onCopyShareCode: (mod: Mod) => void;
+  onSelectToggle: (entry: ModEntry) => void;
 }
+
+/**
+ * Memoized per-entry bridge between the page and ModCard. The page passes
+ * entry-level handlers with stable identities (useStableCallback) plus
+ * primitive or stable-reference data props, so page-level state changes
+ * (conflict refresh, update flags, select mode, locker override count) only
+ * re-render the cards whose props actually changed instead of all of them.
+ * The thin per-card closures ModCard wants are rebuilt here, inside the memo
+ * boundary, where they are cheap.
+ */
+const InstalledEntryCard = memo(function InstalledEntryCard({
+  entry,
+  viewMode,
+  hideNsfwPreviews,
+  soundVolume,
+  conflicts,
+  updateAvailable,
+  fixingUnknown,
+  loadPosition,
+  loadCount,
+  selectMode,
+  selected,
+  onOpenDetails,
+  onOpenPicker,
+  onToggle,
+  onDelete,
+  onEditLocal,
+  onTagLocker,
+  onTagGlobal,
+  onFixUnknown,
+  onCommitPriority,
+  onUnmerge,
+  onCopyShareCode,
+  onSelectToggle,
+}: InstalledEntryCardProps) {
+  if (entry.kind === 'single') {
+    const mod = entry.mod;
+    return (
+      <ModCard
+        mod={mod}
+        viewMode={viewMode}
+        hideNsfwPreviews={hideNsfwPreviews}
+        conflicts={conflicts}
+        soundVolume={soundVolume}
+        updateAvailable={updateAvailable}
+        entryKey={entry.key}
+        onOpenDetails={
+          mod.merged || mod.gameBananaId ? () => onOpenDetails(mod) : undefined
+        }
+        onToggle={() => onToggle(entry)}
+        onDelete={() => onDelete(entry)}
+        onEditLocal={!mod.gameBananaId ? () => onEditLocal(mod) : undefined}
+        onTagLocker={(heroName) => onTagLocker(entry, heroName)}
+        onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
+        onFixUnknown={
+          // Any local (unlinked, non-merged) mod can search GameBanana and
+          // link, not just ones flagged "unknown": naming a local mod via
+          // Edit Local clears isUnknown but it still has no GameBanana source.
+          entryIsLocal(entry) && !mod.merged ? () => onFixUnknown(mod) : undefined
+        }
+        fixingUnknown={fixingUnknown}
+        loadPosition={loadPosition}
+        loadCount={loadCount}
+        onCommitPriority={(p) => onCommitPriority(mod.id, p)}
+        onUnmerge={mod.merged ? () => onUnmerge(mod) : undefined}
+        onCopyShareCode={mod.merged ? () => onCopyShareCode(mod) : undefined}
+        selectMode={selectMode}
+        selected={selected}
+        onSelectToggle={() => onSelectToggle(entry)}
+      />
+    );
+  }
+  // Group entry. Stand-in `mod` is the primary so the card visuals look
+  // right; the `group` prop tells ModCard to swap filename for file
+  // selection metadata and route clicks to the picker.
+  return (
+    <ModCard
+      mod={{
+        ...entry.primary,
+        // Group's overall enable state is "one or more files enabled", not
+        // the primary's individual flag (matches sort + section choice).
+        enabled: entry.enabledVariants.length > 0,
+        // Card meta shows total size across the grouped files.
+        size: entry.totalSize,
+        installedAt: entry.variants.reduce(
+          (latest, v) => (v.installedAt > latest ? v.installedAt : latest),
+          entry.primary.installedAt
+        ),
+      }}
+      viewMode={viewMode}
+      hideNsfwPreviews={hideNsfwPreviews}
+      conflicts={conflicts}
+      soundVolume={soundVolume}
+      updateAvailable={updateAvailable}
+      entryKey={entry.key}
+      onOpenDetails={() => onOpenPicker(entry.gameBananaId)}
+      onToggle={() => onToggle(entry)}
+      onDelete={() => onDelete(entry)}
+      onTagLocker={(heroName) => onTagLocker(entry, heroName)}
+      onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
+      loadPosition={loadPosition}
+      loadCount={loadCount}
+      onCommitPriority={(p) => onCommitPriority(entry.primary.id, p)}
+      selectMode={selectMode}
+      selected={selected}
+      onSelectToggle={() => onSelectToggle(entry)}
+      group={{
+        variantCount: entry.variants.length,
+        // Display friendly names for enabled files when possible.
+        enabledCount: entry.enabledVariants.length,
+        enabledLabels: entry.enabledVariants.map((variant) =>
+          variant.variantLabel ??
+          variant.fileDescription ??
+          variant.sourceFileName ??
+          variant.fileName
+        ),
+        onOpenPicker: () => onOpenPicker(entry.gameBananaId),
+      }}
+    />
+  );
+});
 
 function entryFilesByEnabledState(entry: ModEntry, enabled: boolean): Mod[] {
   if (entry.kind === 'single') {
@@ -440,19 +607,23 @@ export default function Installed() {
   // cards: the merged mod is now the source of truth. Build the absorbed
   // fileName set once and derive a filtered view; downstream rendering,
   // reorder, and update checks all run off `visibleMods`.
-  const absorbedFileNames = new Set<string>();
-  for (const m of mods) {
-    if (m.merged?.sources) {
-      for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
-    }
-  }
   // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
   // (applied per-ability sounds) are Locker-managed artifacts, not user-
   // installed mods, so they never show as cards here. They're managed entirely
   // from the Locker's Hero Card / Sounds pickers.
-  const visibleMods = mods.filter(
-    (m) => !m.lockerCosmetics && !m.lockerSounds && !absorbedFileNames.has(m.fileName)
-  );
+  // Memoized so the array identity (and the entry identities derived from it)
+  // only changes when `mods` does; the memoized card grid depends on that.
+  const visibleMods = useMemo(() => {
+    const absorbedFileNames = new Set<string>();
+    for (const m of mods) {
+      if (m.merged?.sources) {
+        for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
+      }
+    }
+    return mods.filter(
+      (m) => !m.lockerCosmetics && !m.lockerSounds && !absorbedFileNames.has(m.fileName)
+    );
+  }, [mods]);
   // Layout = the user's structural choice (cards grid vs horizontal list).
   const [layout, setLayout] = useState<'grid' | 'list'>(() => {
     const stored = localStorage.getItem('installedLayout');
@@ -748,6 +919,20 @@ export default function Installed() {
     installedPageScrollTop || useAppStore.getState().installedScrollTop
   );
 
+  // Two-phase grid mount. The route transition's commit used to create all
+  // card subtrees at once: content-visibility skips their layout/paint, but
+  // DOM creation alone for a 200+ mod library blocked ~100ms inside the
+  // navigation commit, which also holds back the sidebar highlight and the
+  // page swap. Mount one viewport's worth synchronously; the rest lands in a
+  // low-priority render one frame after first paint.
+  const [gridWarm, setGridWarm] = useState(false);
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      startTransition(() => setGridWarm(true));
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
   useLayoutEffect(() => {
     const restoreScroll = () => {
       const container = installedScrollRef.current;
@@ -759,7 +944,9 @@ export default function Installed() {
     restoreScroll();
     const frame = window.requestAnimationFrame(restoreScroll);
     return () => window.cancelAnimationFrame(frame);
-  }, [modsLoading, mods.length]);
+    // gridWarm: the saved offset may exceed phase 1's scrollHeight, so restore
+    // again once the full list is mounted.
+  }, [modsLoading, mods.length, gridWarm]);
 
   useEffect(() => {
     const container = installedScrollRef.current;
@@ -2067,6 +2254,107 @@ export default function Installed() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mods]);
 
+  // Group variants sharing a GB mod id under a single card. Singletons and
+  // custom imports (no GB id) keep their old card behavior. Absorbed merge
+  // sources are excluded: they're represented by the merged mod card.
+  // Memoized (and placed above the early returns, where hooks must live) so
+  // entry object identities survive unrelated state changes (conflict map,
+  // update flags, select mode). The memoized card wrapper depends on this:
+  // rebuilding entries every render would re-render every card on each
+  // page-level setState.
+  const allEntries = useMemo(() => buildModEntries(visibleMods), [visibleMods]);
+  const enabledEntries = useMemo(
+    () =>
+      allEntries
+        .filter(isEntryEnabled)
+        .sort((a, b) => entrySortPriority(a) - entrySortPriority(b)),
+    [allEntries]
+  );
+  const disabledEntries = useMemo(
+    () =>
+      allEntries
+        .filter((e) => !isEntryEnabled(e))
+        .sort((a, b) => entrySortPriority(a) - entrySortPriority(b)),
+    [allEntries]
+  );
+
+  // Conflict arrays per entry key, with identities that persist across
+  // renders (plus the module-level EMPTY_CONFLICTS fallback) so memoized
+  // cards only re-render when their own conflicts change.
+  const entryConflicts = useMemo(() => {
+    const byKey = new Map<string, ModConflict[]>();
+    for (const entry of allEntries) {
+      if (entry.kind === 'single') {
+        const conflicts = conflictMap.get(entry.mod.id);
+        if (conflicts?.length) byKey.set(entry.key, conflicts);
+      } else {
+        const aggregate: ModConflict[] = [];
+        for (const variant of entry.variants) {
+          if (!variant.enabled) continue;
+          const conflicts = conflictMap.get(variant.id);
+          if (conflicts) aggregate.push(...conflicts);
+        }
+        if (aggregate.length) byKey.set(entry.key, aggregate);
+      }
+    }
+    return byKey;
+  }, [allEntries, conflictMap]);
+
+  // Entry-level handlers for the memoized cards. useStableCallback keeps
+  // their identities fixed while the bodies see fresh state; the per-card
+  // closures over these live inside InstalledEntryCard, behind its memo
+  // boundary, so none of this re-renders the grid.
+  const openEntryDetails = useStableCallback((mod: Mod) => {
+    if (mod.merged) setMergedContentsMod(mod);
+    else if (mod.gameBananaId) void openModDetails(mod);
+  });
+  const openEntryPicker = useStableCallback((gameBananaId: number) => {
+    setPickerGroupId(gameBananaId);
+  });
+  const toggleEntry = useStableCallback((entry: ModEntry) => {
+    if (entry.kind === 'group') void handleGroupToggle(entry);
+    else void toggleMod(entry.mod.id);
+  });
+  const deleteEntry = useStableCallback((entry: ModEntry) => {
+    if (entry.kind === 'group') {
+      setModToDelete({
+        ids: entry.variants.map((v) => v.id),
+        name: entry.primary.name,
+        isGroup: true,
+      });
+    } else {
+      setModToDelete({ ids: [entry.mod.id], name: entry.mod.name, isGroup: false });
+    }
+  });
+  const editLocalEntry = useStableCallback((mod: Mod) => setLocalEditMod(mod));
+  const tagEntryLocker = useStableCallback(async (entry: ModEntry, heroName: string | null) => {
+    if (entry.kind === 'group') {
+      for (const variant of entry.variants) await setModLockerHero(variant.id, heroName);
+    } else {
+      await setModLockerHero(entry.mod.id, heroName);
+    }
+  });
+  const tagEntryGlobal = useStableCallback(async (entry: ModEntry, globalType: GlobalModType | null) => {
+    if (entry.kind === 'group') {
+      for (const variant of entry.variants) await setModGlobalType(variant.id, globalType);
+    } else {
+      await setModGlobalType(entry.mod.id, globalType);
+    }
+  });
+  const fixUnknownEntry = useStableCallback((mod: Mod) => openUnknownModFix(mod, 'single'));
+  // commitLoadPosition is declared after the early returns (it reads the
+  // compact order built there); bridge it through the same synchronous-ref
+  // pattern as selectAllVisibleRef so a stable callback can live up here.
+  const commitLoadPositionRef = useRef<(modId: string, newPosition: number) => Promise<void>>(
+    () => Promise.resolve()
+  );
+  const commitEntryPriority = useStableCallback((modId: string, newPosition: number) =>
+    commitLoadPositionRef.current(modId, newPosition)
+  );
+  const unmergeEntry = useStableCallback((mod: Mod) => setUnmergeTarget(mod));
+  const copyEntryShareCode = useStableCallback((mod: Mod) => void handleCopyShareCode(mod));
+  const selectToggleEntry = useStableCallback((entry: ModEntry) => toggleEntrySelection(entry));
+
   if (!activeDeadlockPath) {
     return (
       <EmptyState
@@ -2098,16 +2386,6 @@ export default function Installed() {
     );
   }
 
-  // Group variants sharing a GB mod id under a single card. Singletons and
-  // custom imports (no GB id) keep their old card behavior. Absorbed merge
-  // sources are excluded — they're represented by the merged mod card.
-  const allEntries = buildModEntries(visibleMods);
-  const enabledEntries = allEntries
-    .filter(isEntryEnabled)
-    .sort((a, b) => entrySortPriority(a) - entrySortPriority(b));
-  const disabledEntries = allEntries
-    .filter((e) => !isEntryEnabled(e))
-    .sort((a, b) => entrySortPriority(a) - entrySortPriority(b));
   const compactOrder = buildCompactPriorityOrder(allEntries);
   const conflictCount = conflictPairCount;
   const unknownMods = mods
@@ -2393,144 +2671,51 @@ export default function Installed() {
     await apiReorderMods(ordered.map((m) => m.id));
     await loadMods();
   };
+  // Keep the stable commitEntryPriority callback (declared above the early
+  // returns) pointed at the latest closure. Synchronous assignment, same
+  // pattern as selectAllVisibleRef.
+  commitLoadPositionRef.current = commitLoadPosition;
 
   /**
-   * Render a single entry as a ModCard. Centralizes both the "single mod"
-   * and "grouped variants" paths so the enabled/disabled sections don't
-   * each carry a 40-line inline JSX block.
+   * Render a single entry as a memoized InstalledEntryCard (which builds the
+   * actual ModCard). Centralizes both the "single mod" and "grouped variants"
+   * paths so the enabled/disabled sections don't each carry a 40-line inline
+   * JSX block. Group cards: see InstalledEntryCard's group branch.
    *
-   * Group cards:
-   *   - Drag-reorder moves every variant as a contiguous block, preserving
-   *     their internal order (applyReorder + buildModEntries handle the
-   *     block math). Disabled during search since the visible order doesn't
-   *     match the full priority order.
-   *   - Toggle disables every enabled file, or opens the picker when none
-   *     are enabled yet.
-   *   - Delete asks the user to confirm removing every variant.
-   *   - Card body click opens the variant picker modal.
-   *   - Conflicts shown are the union of conflicts on every currently-enabled
-   *     variant.
+   * Everything passed here is a primitive, a stable reference (memoized
+   * entries/conflicts, useStableCallback handlers), or derived per card, so
+   * unrelated page state changes leave the card subtrees untouched.
    */
-  const renderEntryCard = (entry: ModEntry) => {
-    const entrySelected = isEntrySelected(entry);
-    if (entry.kind === 'single') {
-      const mod = entry.mod;
-      const sourceEntryKey = entry.key;
-      return (
-        <ModCard
-          key={entry.key}
-          mod={mod}
-          viewMode={viewMode}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
-          conflicts={conflictMap.get(mod.id) || []}
-          soundVolume={soundVolume}
-          updateAvailable={updatesAvailable.has(mod.id)}
-          entryKey={sourceEntryKey}
-          onOpenDetails={
-            mod.merged
-              ? () => setMergedContentsMod(mod)
-              : mod.gameBananaId
-                ? () => openModDetails(mod)
-                : undefined
-          }
-          onToggle={() => toggleMod(mod.id)}
-          onDelete={() => setModToDelete({ ids: [mod.id], name: mod.name, isGroup: false })}
-          onEditLocal={!mod.gameBananaId ? () => setLocalEditMod(mod) : undefined}
-          onTagLocker={(heroName) => setModLockerHero(mod.id, heroName)}
-          onTagGlobal={async (globalType) => {
-            await setModGlobalType(mod.id, globalType);
-          }}
-          onFixUnknown={
-            // Any local (unlinked, non-merged) mod can search GameBanana and
-            // link, not just ones flagged "unknown": naming a local mod via
-            // Edit Local clears isUnknown but it still has no GameBanana source.
-            entryIsLocal(entry) && !mod.merged ? () => openUnknownModFix(mod, 'single') : undefined
-          }
-          fixingUnknown={unknownFilterPendingIds.has(mod.id)}
-          loadPosition={loadPositionById.get(mod.id)}
-          loadCount={enabledModCount}
-          onCommitPriority={(p) => commitLoadPosition(mod.id, p)}
-          onUnmerge={mod.merged ? () => setUnmergeTarget(mod) : undefined}
-          onCopyShareCode={mod.merged ? () => void handleCopyShareCode(mod) : undefined}
-          selectMode={selectMode}
-          selected={entrySelected}
-          onSelectToggle={() => toggleEntrySelection(entry)}
-        />
-      );
-    }
-    // Group entry. Stand-in `mod` is the primary so the card visuals look
-    // right; the `group` prop tells ModCard to swap filename for file
-    // selection metadata and route clicks to the picker.
-    const aggregateConflicts: ModConflict[] = [];
-    for (const v of entry.variants) {
-      if (v.enabled) {
-        const c = conflictMap.get(v.id);
-        if (c) aggregateConflicts.push(...c);
-      }
-    }
-    const anyUpdateAvailable = entry.variants.some((v) => updatesAvailable.has(v.id));
-    const sourceEntryKey = entry.key;
-    return (
-      <ModCard
-        key={entry.key}
-        mod={{
-          ...entry.primary,
-          // Group's overall enable state is "one or more files enabled", not
-          // the primary's individual flag (matches sort + section choice).
-          enabled: entry.enabledVariants.length > 0,
-          // Card meta shows total size across the grouped files.
-          size: entry.totalSize,
-          installedAt: entry.variants.reduce(
-            (latest, v) => (v.installedAt > latest ? v.installedAt : latest),
-            entry.primary.installedAt
-          ),
-        }}
-        viewMode={viewMode}
-        hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
-        conflicts={aggregateConflicts}
-        soundVolume={soundVolume}
-        updateAvailable={anyUpdateAvailable}
-        entryKey={sourceEntryKey}
-        onOpenDetails={() => setPickerGroupId(entry.gameBananaId)}
-        onToggle={() => handleGroupToggle(entry)}
-        onDelete={() =>
-          setModToDelete({
-            ids: entry.variants.map((v) => v.id),
-            name: entry.primary.name,
-            isGroup: true,
-          })
-        }
-        onTagLocker={async (heroName) => {
-          for (const variant of entry.variants) {
-            await setModLockerHero(variant.id, heroName);
-          }
-        }}
-        onTagGlobal={async (globalType) => {
-          for (const variant of entry.variants) {
-            await setModGlobalType(variant.id, globalType);
-          }
-        }}
-        loadPosition={loadPositionById.get(entry.primary.id)}
-        loadCount={enabledModCount}
-        onCommitPriority={(p) => commitLoadPosition(entry.primary.id, p)}
-        selectMode={selectMode}
-        selected={entrySelected}
-        onSelectToggle={() => toggleEntrySelection(entry)}
-        group={{
-          variantCount: entry.variants.length,
-          // Display friendly names for enabled files when possible.
-          enabledCount: entry.enabledVariants.length,
-          enabledLabels: entry.enabledVariants.map((variant) =>
-            variant.variantLabel ??
-            variant.fileDescription ??
-            variant.sourceFileName ??
-            variant.fileName
-          ),
-          onOpenPicker: () => setPickerGroupId(entry.gameBananaId),
-        }}
-      />
-    );
-  };
+  const cardPropsFor = (entry: ModEntry): InstalledEntryCardProps => ({
+    entry,
+    viewMode,
+    hideNsfwPreviews: settings?.hideNsfwPreviews ?? true,
+    soundVolume,
+    conflicts: entryConflicts.get(entry.key) ?? EMPTY_CONFLICTS,
+    updateAvailable:
+      entry.kind === 'single'
+        ? updatesAvailable.has(entry.mod.id)
+        : entry.variants.some((v) => updatesAvailable.has(v.id)),
+    fixingUnknown: entry.kind === 'single' && unknownFilterPendingIds.has(entry.mod.id),
+    loadPosition: loadPositionById.get(entryRepresentativeId(entry)),
+    loadCount: enabledModCount,
+    selectMode,
+    selected: isEntrySelected(entry),
+    onOpenDetails: openEntryDetails,
+    onOpenPicker: openEntryPicker,
+    onToggle: toggleEntry,
+    onDelete: deleteEntry,
+    onEditLocal: editLocalEntry,
+    onTagLocker: tagEntryLocker,
+    onTagGlobal: tagEntryGlobal,
+    onFixUnknown: fixUnknownEntry,
+    onCommitPriority: commitEntryPriority,
+    onUnmerge: unmergeEntry,
+    onCopyShareCode: copyEntryShareCode,
+    onSelectToggle: selectToggleEntry,
+  });
+
+  const renderEntryCard = (entry: ModEntry) => <InstalledEntryCard {...cardPropsFor(entry)} />;
 
   const renderSortableSection = (section: DragSection) => {
     const entries = previewEntriesForSection(section);
@@ -2559,10 +2744,12 @@ export default function Installed() {
           strategy={layout === 'list' ? verticalListSortingStrategy : rectSortingStrategy}
         >
           <div className={gridClasses} style={gridStyle}>
-            {entries.map((entry) => (
-              <SortableModEntry key={entry.key} id={entry.key} disabled={!sortableEnabled}>
-                {renderEntryCard(entry)}
-              </SortableModEntry>
+            {(gridWarm ? entries : entries.slice(0, INITIAL_MOUNT_COUNT)).map((entry) => (
+              <SortableEntryCard
+                key={entry.key}
+                sortableDisabled={!sortableEnabled}
+                {...cardPropsFor(entry)}
+              />
             ))}
           </div>
         </SortableContext>
