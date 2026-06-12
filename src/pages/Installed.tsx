@@ -81,6 +81,7 @@ import PriorityEditor from '../components/PriorityEditor';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { formatBytes } from '../lib/formatBytes';
+import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { Button, Tag } from '../components/common/ui';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
@@ -737,6 +738,11 @@ export default function Installed() {
   const [updateAllConfirmOpen, setUpdateAllConfirmOpen] = useState(false);
   const [updateAllProgress, setUpdateAllProgress] = useState<{ done: number; total: number } | null>(null);
   const [updateAllError, setUpdateAllError] = useState<string | null>(null);
+  // Mods whose replacement file couldn't be auto-matched during an update run
+  // (author replaced their files and several current files could be the
+  // successor). The installs are kept untouched; a toast offers a manual pick
+  // via the details modal, which already handles the delete + re-enable flow.
+  const [updatePickQueue, setUpdatePickQueue] = useState<{ id: string; name: string }[]>([]);
   const installedScrollRef = useRef<HTMLDivElement | null>(null);
   const latestInstalledScrollTopRef = useRef(
     installedPageScrollTop || useAppStore.getState().installedScrollTop
@@ -1291,16 +1297,20 @@ export default function Installed() {
    * Update-all button reflects per-group updates too.
    */
   const runUpdate = async (targets: typeof mods) => {
+    setUpdatePickQueue([]);
     const snapshots = targets
       .filter((m) => m.gameBananaId && typeof m.gameBananaFileId === 'number')
       .map((m) => ({
         oldId: m.id,
+        modName: m.name,
         gameBananaId: m.gameBananaId!,
         gameBananaFileId: m.gameBananaFileId!,
         fileName: m.fileName,
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
+        fileDescription: m.fileDescription,
+        sourceFileName: m.sourceFileName,
       }));
     if (snapshots.length === 0) return;
 
@@ -1317,6 +1327,9 @@ export default function Installed() {
 
     setUpdateAllProgress({ done: 0, total: snapshots.length });
     const failures: string[] = [];
+    // Rows needing a manual file pick. Their installs are left untouched, so
+    // they stay flagged and the details modal's update path can finish the job.
+    const needsPick: { id: string; name: string }[] = [];
     // Track the (gameBananaId, fileId) actually downloaded so re-enable can
     // still find the new install even when we redirected a stale snapshot.
     const completed: { gameBananaId: number; gameBananaFileId: number; wasEnabled: boolean; fileName: string }[] = [];
@@ -1353,14 +1366,27 @@ export default function Installed() {
       //
       // Pass 1: rows whose stored fileId is still a current file on GameBanana
       // (genuine multi-file mods stay 1:1).
-      // Pass 2: rows whose fileId is gone or archived. Fall back to a
-      // single-file consolidation only when the mod now ships exactly one
-      // current file and no other row already claimed it.
+      // Pass 2: rows whose fileId is gone or archived. First try to identify
+      // the replacement by the author's per-file description and filename
+      // token overlap (resolveUpdateTarget); then fall back to a single-file
+      // consolidation when the mod now ships exactly one current file. Rows
+      // with no confident match go to the manual-pick queue instead of being
+      // guessed at.
       type Resolution =
         | { ok: true; snapshot: (typeof snapshots)[number]; fileId: number; fileName: string }
         | { ok: false; snapshot: (typeof snapshots)[number]; reason: string };
       const resolutions: Resolution[] = [];
+      // Seed claims with live files already installed as siblings outside this
+      // run, so neither the fuzzy match nor the single-file fallback
+      // re-downloads a variant the user already has.
+      const groupOldIds = new Set(group.map((s) => s.oldId));
       const claimedIds = new Set<number>();
+      for (const m of mods) {
+        if (m.gameBananaId !== group[0].gameBananaId || groupOldIds.has(m.id)) continue;
+        if (typeof m.gameBananaFileId === 'number' && liveFileIds.has(m.gameBananaFileId)) {
+          claimedIds.add(m.gameBananaFileId);
+        }
+      }
       for (const s of group) {
         if (liveFileIds.has(s.gameBananaFileId)) {
           resolutions.push({ ok: true, snapshot: s, fileId: s.gameBananaFileId, fileName: s.fileName });
@@ -1369,14 +1395,26 @@ export default function Installed() {
       }
       for (const s of group) {
         if (liveFileIds.has(s.gameBananaFileId)) continue;
-        if (liveFiles.length === 1 && !claimedIds.has(liveFiles[0].id)) {
+        const match = resolveUpdateTarget(
+          {
+            installedFileId: s.gameBananaFileId,
+            fileDescription: s.fileDescription,
+            sourceFileName: s.sourceFileName,
+          },
+          details.files ?? [],
+          claimedIds,
+        );
+        if (match) {
+          resolutions.push({ ok: true, snapshot: s, fileId: match.id, fileName: match.fileName });
+          claimedIds.add(match.id);
+        } else if (liveFiles.length === 1 && !claimedIds.has(liveFiles[0].id)) {
           resolutions.push({ ok: true, snapshot: s, fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
           claimedIds.add(liveFiles[0].id);
         } else {
           resolutions.push({
             ok: false,
             snapshot: s,
-            reason: 'file no longer on GameBanana; mod files changed. Reinstall from Browse.',
+            reason: 'stored file is no longer current on GameBanana and no clear replacement match exists',
           });
         }
       }
@@ -1397,7 +1435,8 @@ export default function Installed() {
 
       for (const r of resolutions) {
         if (!r.ok) {
-          failures.push(`${r.snapshot.fileName}: ${r.reason}`);
+          needsPick.push({ id: r.snapshot.oldId, name: r.snapshot.modName });
+          console.warn(`[Update] ${r.snapshot.fileName}: ${r.reason}`);
         } else {
           try {
             await deleteMod(r.snapshot.oldId);
@@ -1452,10 +1491,32 @@ export default function Installed() {
       }
     }
     setUpdateAllProgress(null);
+    if (needsPick.length > 0) {
+      setUpdatePickQueue(needsPick);
+    }
     if (failures.length > 0) {
       setUpdateAllError(`${failures.length} mod${failures.length === 1 ? '' : 's'} failed to update. See console for details.`);
       console.warn('[Update] failures:', failures);
     }
+  };
+
+  /**
+   * Walk the manual-pick queue: open the details modal for the next mod that
+   * still exists so the user can choose the replacement file. The modal's
+   * update path (handleDetailsDownload) handles delete + re-enable.
+   */
+  const openNextUpdatePick = () => {
+    const queue = [...updatePickQueue];
+    while (queue.length > 0) {
+      const next = queue.shift()!;
+      const mod = mods.find((m) => m.id === next.id);
+      if (mod) {
+        setUpdatePickQueue(queue);
+        void openModDetails(mod);
+        return;
+      }
+    }
+    setUpdatePickQueue([]);
   };
 
   const handleUpdateAll = async () => {
@@ -3002,22 +3063,53 @@ export default function Installed() {
         onCancel={() => setUpdateAllConfirmOpen(false)}
       />
 
-      {updateAllError && (
-        <div
-          role="alert"
-          aria-live="polite"
-          className="fixed bottom-4 right-4 z-50 max-w-md bg-state-danger/10 border border-state-danger/40 text-state-danger rounded-sm px-4 py-3 shadow-lg flex items-start gap-3 animate-fade-in"
-        >
-          <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
-          <div className="flex-1 text-sm text-text-primary">{updateAllError}</div>
-          <button
-            type="button"
-            onClick={() => setUpdateAllError(null)}
-            className="text-state-danger hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-state-danger"
-            aria-label="Dismiss update error"
-          >
-            <X className="w-4 h-4" />
-          </button>
+      {(updateAllError || updatePickQueue.length > 0) && (
+        <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">
+          {updateAllError && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="max-w-md bg-state-danger/10 border border-state-danger/40 text-state-danger rounded-sm px-4 py-3 shadow-lg flex items-start gap-3 animate-fade-in"
+            >
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+              <div className="flex-1 text-sm text-text-primary">{updateAllError}</div>
+              <button
+                type="button"
+                onClick={() => setUpdateAllError(null)}
+                className="text-state-danger hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-state-danger"
+                aria-label="Dismiss update error"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
+          {updatePickQueue.length > 0 && (
+            <div
+              role="alert"
+              aria-live="polite"
+              className="max-w-md bg-bg-secondary border border-accent/40 rounded-sm px-4 py-3 shadow-lg flex items-start gap-3 animate-fade-in"
+            >
+              <AlertTriangle className="w-4 h-4 mt-0.5 flex-shrink-0 text-accent" />
+              <div className="flex-1 text-sm text-text-primary">
+                <p>
+                  {updatePickQueue.length === 1
+                    ? `${updatePickQueue[0].name} needs a manual file pick: the author replaced their files and no clear match exists. The installed version was kept.`
+                    : `${updatePickQueue.length} mods need a manual file pick: the authors replaced their files and no clear match exists. The installed versions were kept.`}
+                </p>
+                <Button size="sm" variant="primary" className="mt-2" onClick={openNextUpdatePick}>
+                  {updatePickQueue.length === 1 ? 'Pick replacement' : `Pick replacements (${updatePickQueue.length})`}
+                </Button>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUpdatePickQueue([])}
+                className="text-text-muted hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                aria-label="Dismiss manual pick notice"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
