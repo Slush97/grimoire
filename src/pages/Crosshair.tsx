@@ -222,7 +222,12 @@ export default function Crosshair() {
                 nothing. Below lg the page scrolls as one. */}
             <div className="flex flex-col lg:flex-row gap-6 lg:gap-0 lg:h-full">
                 {/* Left Panel - Settings */}
-                <div className="w-full lg:w-1/3 flex flex-col gap-6 lg:min-h-0 lg:overflow-y-auto lg:p-6">
+                {/* Both columns stack cards with space-y (block layout), not
+                    flex-col: Card has overflow-hidden, and a height-bounded
+                    flex column shrink-squeezes such children to fit instead
+                    of overflowing, which clips the controls and leaves
+                    nothing for overflow-y-auto to scroll. */}
+                <div className="w-full lg:w-1/3 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:p-6">
                     <Card title="Crosshair Shape">
                         <div className="space-y-6">
                             <Slider editable label="Gap" value={pipGap} min={-10} max={50} onChange={setPipGap} />
@@ -314,12 +319,14 @@ export default function Crosshair() {
                 </div>
 
                 {/* Right Panel - Preview & Actions */}
-                <div className="flex-1 flex flex-col gap-6 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:p-6 lg:pl-0">
-                    {/* Top Actions Bar */}
-                    <div className="flex flex-col sm:flex-row gap-4">
+                <div className="flex-1 space-y-6 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:p-6 lg:pl-0">
+                    {/* Top Actions Bar. The two cards share roughly half the
+                        page, so they only sit side by side on wide windows;
+                        contents wrap rather than clip when space runs out. */}
+                    <div className="flex flex-col 2xl:flex-row gap-4">
                         <Card className="flex-1" contentClassName="p-3">
-                            <div className="flex items-center justify-between gap-3 h-full">
-                                <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-between gap-3">
+                                <div className="flex flex-wrap items-center gap-2">
                                     <Button variant="secondary" onClick={reset} icon={RotateCcw} size="sm">Reset</Button>
                                     <Button
                                         variant={imported ? 'success' : 'secondary'}
@@ -339,7 +346,7 @@ export default function Crosshair() {
                                         {copied ? 'Copied' : 'Copy Code'}
                                     </Button>
                                 </div>
-                                <div className="hidden sm:block text-xs text-text-secondary">
+                                <div className="hidden sm:block text-xs text-text-secondary whitespace-nowrap">
                                     Press F7 in-game
                                 </div>
                             </div>
