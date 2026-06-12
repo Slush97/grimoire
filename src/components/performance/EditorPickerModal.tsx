@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AppWindow, FolderOpen, MonitorCog, X } from 'lucide-react';
 import { listEditorCandidates, showOpenDialog } from '../../lib/api';
+import { Modal } from '../common/Modal';
 import type { EditorCandidate } from '../../types/electron';
 
 interface Props {
@@ -28,14 +29,6 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
   const browse = async () => {
     const path = await showOpenDialog({
       title: 'Choose an editor application',
@@ -50,17 +43,7 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
     'w-full flex items-center gap-3 text-left px-3 py-2 rounded-lg border border-white/10 bg-bg-tertiary hover:border-accent transition-colors cursor-pointer';
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="editor-picker-title"
-      onClick={onClose}
-    >
-      <div
-        className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <Modal onClose={onClose} labelledBy="editor-picker-title" size="sm" panelClassName="p-5 space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="editor-picker-title" className="text-base font-semibold text-text-primary">
@@ -109,7 +92,6 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
             <span className="block text-sm text-text-primary">Browse for an application...</span>
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
