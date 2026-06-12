@@ -343,6 +343,16 @@ export interface ReleaseNoteInfo {
     note: string | null;
 }
 
+export interface SaltIngestStatus {
+    running: boolean;
+    lastScanAt: number | null;
+    /** Salts found in the cache on the last scan (before dedupe). */
+    lastScanFound: number;
+    /** Total salts successfully submitted since the feature was enabled. */
+    totalSubmitted: number;
+    lastError: string | null;
+}
+
 export interface ElectronAPI {
     // Host platform ('win32', 'linux', ...), captured in the preload. The
     // renderer uses it to decide whether to draw the custom Windows title
@@ -360,6 +370,12 @@ export interface ElectronAPI {
     discord: {
         update: (ctx: { surface: string; count?: number; hero?: string }) => Promise<void>;
         clear: () => Promise<void>;
+    };
+
+    // Match-salt contribution to deadlock-api.com (opt-in)
+    saltIngest: {
+        setEnabled: (enabled: boolean) => Promise<void>;
+        getStatus: () => Promise<SaltIngestStatus>;
     };
 
     // Mods

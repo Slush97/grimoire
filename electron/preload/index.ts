@@ -76,6 +76,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         clear: () => ipcRenderer.invoke('discord:clear'),
     },
 
+    // Match-salt contribution to deadlock-api.com (opt-in)
+    saltIngest: {
+        setEnabled: (enabled: boolean) => ipcRenderer.invoke('salt-ingest:set-enabled', enabled),
+        getStatus: () => ipcRenderer.invoke('salt-ingest:get-status'),
+    },
+
     // Mods
     getMods: () => ipcRenderer.invoke('get-mods'),
     enableMod: (modId: string) => ipcRenderer.invoke('enable-mod', modId),

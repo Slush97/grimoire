@@ -765,6 +765,12 @@ export interface AppSettings {
    *  activity outward (through Discord), so it stays a deliberate choice and
    *  never sends anything to a Grimoire server. */
   discordRpcEnabled: boolean;
+  /** Contribute match salts to the community-run deadlock-api.com. Reads
+   *  replay-server URLs from Steam's local HTTP cache and submits only the
+   *  match id, cluster id, and download salts: no account id, no username,
+   *  nothing identifying. Off by default (it sends data outward, so it stays
+   *  a deliberate choice). */
+  contributeMatchSalts: boolean;
   /** Deadworks custom-server browser: list + join community dedicated servers. */
   experimentalDeadworksServers?: boolean;
   /** Advanced override for the relay the server browser queries. No UI: defaults

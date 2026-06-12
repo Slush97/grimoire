@@ -82,6 +82,7 @@ import './ipc/trippyEffects';
 import './ipc/locker';
 import './ipc/previewCache';
 import './ipc/discord';
+import './ipc/saltIngest';
 import './ipc/servers';
 import './ipc/performanceConfig';
 
@@ -90,6 +91,7 @@ import { runStartupRecovery } from './ipc/launch';
 import { loadSettings, saveSettings } from './services/settings';
 import { backfillMissingMetadataHashes } from './services/metadata';
 import { destroyDiscordRpc } from './services/discordRpc';
+import { startSaltIngest } from './services/saltIngest';
 
 let mainWindow: BrowserWindow | null = null;
 
@@ -377,6 +379,11 @@ if (!gotTheLock) {
         // Restore a previously-persisted social session (no-op if none, or if
         // we're on Linux without a real secret store — ADR-011).
         void hydrateSocialSession();
+
+        // Resume the opt-in match-salt contributor across restarts.
+        if (loadSettings().contributeMatchSalts) {
+            startSaltIngest();
+        }
 
         // Recover from any half-finished vanilla launch (app was closed mid-session,
         // or grimoire crashed while the user was playing vanilla), then fill in
