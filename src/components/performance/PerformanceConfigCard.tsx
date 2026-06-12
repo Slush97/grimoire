@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useState } from 'react';
-import { Gauge, ExternalLink, RefreshCw, SquarePen } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Gauge, ExternalLink, RefreshCw, Settings2, SquarePen } from 'lucide-react';
 import { Card, Badge, Button } from '../common/ui';
 import EditorPickerModal from './EditorPickerModal';
-import { useAppStore } from '../../stores/appStore';
+import { useAppStore, type BrowseArtistRef } from '../../stores/appStore';
 import {
   applyPerformanceConfig,
   getPerformanceConfigStatus,
@@ -15,6 +16,16 @@ import type { PerformanceConfigStatus } from '../../types/electron';
 const OPTIMIZATIONLOCK_URL = 'https://github.com/Sqooky/OptimizationLock';
 const SQOOKY_KOFI_URL = 'https://ko-fi.com/sqooky';
 
+// Sqooky's GameBanana identity, so the credit opens the in-app artist view
+// (Browse scoped to their submissions) like any other artist link.
+const SQOOKY_ARTIST: BrowseArtistRef = {
+  id: 3826762,
+  name: 'Sqooky!',
+  avatarUrl: 'https://images.gamebanana.com/img/av/69f9ec7828119.png',
+  profileUrl: 'https://gamebanana.com/members/3826762',
+  kofiUrl: SQOOKY_KOFI_URL,
+};
+
 // Settings card for the OptimizationLock performance preset (experimental).
 // Applies Sqooky's community fps config onto gameinfo.gi in place, shows
 // whether a game update wiped it, and credits the upstream project.
@@ -23,7 +34,13 @@ export default function PerformanceConfigCard() {
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
-  const { settings, saveSettings } = useAppStore();
+  const { settings, saveSettings, setBrowseUi } = useAppStore();
+  const navigate = useNavigate();
+
+  const viewSqookyInBrowse = () => {
+    setBrowseUi({ submitter: SQOOKY_ARTIST });
+    navigate('/browse');
+  };
 
   const refresh = useCallback(async () => {
     try {
@@ -109,13 +126,21 @@ export default function PerformanceConfigCard() {
           <p className="text-xs text-text-secondary">
             Map looks dark? Set in-game shadows to Medium or Low. Game updates wipe the config; Grimoire
             spots that here so you can reapply. By{' '}
+            <button
+              type="button"
+              onClick={viewSqookyInBrowse}
+              className="text-accent hover:underline"
+            >
+              Sqooky
+            </button>{' '}
+            and{' '}
             <a
               href={OPTIMIZATIONLOCK_URL}
               target="_blank"
               rel="noreferrer noopener"
               className="text-accent hover:underline inline-flex items-center gap-0.5"
             >
-              Sqooky and contributors
+              contributors
               <ExternalLink className="w-3 h-3" aria-hidden="true" />
             </a>
             . If it helps,{' '}
@@ -129,21 +154,6 @@ export default function PerformanceConfigCard() {
             </a>
             .
           </p>
-          {applied && (
-            <p className="text-xs text-text-secondary">
-              Power users: Edit File opens gameinfo.gi to tweak values (
-              <button
-                type="button"
-                className="text-accent hover:underline"
-                onClick={() => setPickerOpen(true)}
-              >
-                change editor
-              </button>
-              ). Your edits to preset lines are kept as overrides across Reapply and game
-              updates. Leave the grimoire-perf comment markers alone so Remove can restore your
-              file cleanly.
-            </p>
-          )}
           {openError && <p className="text-xs text-red-400">{openError}</p>}
         </div>
         <div className="flex items-center gap-2 shrink-0">
@@ -164,6 +174,18 @@ export default function PerformanceConfigCard() {
             <Button onClick={onEditFile} disabled={busy} variant="ghost" size="sm" icon={SquarePen}>
               Edit File
             </Button>
+          )}
+          {applied && settings?.externalEditorPath !== undefined && (
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              disabled={busy}
+              title="Change editor"
+              aria-label="Change editor"
+              className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary"
+            >
+              <Settings2 className="w-4 h-4" aria-hidden="true" />
+            </button>
           )}
           {applied && (status?.overrideCount ?? 0) > 0 && (
             <Button

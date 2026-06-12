@@ -67,8 +67,8 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
               Open gameinfo.gi with
             </h2>
             <p className="text-xs text-text-secondary mt-1">
-              Pick the editor for config tweaks. Grimoire remembers this; use the change editor
-              link on the Performance Config card to switch later.
+              Pick the editor for config tweaks. Grimoire remembers this; the gear button next to
+              Edit File switches it later.
             </p>
           </div>
           <button
