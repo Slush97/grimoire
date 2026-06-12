@@ -99,7 +99,9 @@ export default function Crosshair() {
     };
 
     const handleCopy = async () => {
-        const commands = generateCommands();
+        // One line, ';'-separated, so a single paste into the in-game console
+        // (which only takes the first line) applies every command.
+        const commands = generateCommands().split('\n').join('; ');
         await navigator.clipboard.writeText(commands);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);

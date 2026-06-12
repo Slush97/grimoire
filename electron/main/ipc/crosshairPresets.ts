@@ -136,7 +136,7 @@ ipcMain.handle('crosshair:clearAutoexec', async (_event, gamePath: string) => {
 // Check if autoexec.cfg exists and get its contents
 ipcMain.handle('crosshair:getAutoexecStatus', async (_event, gamePath: string) => {
     if (!gamePath) {
-        return { exists: false, path: null, hasLaunchOption: false };
+        return { exists: false, path: null, hasCrosshairSettings: false };
     }
 
     const autoexecPath = getAutoexecPath(gamePath);
