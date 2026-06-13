@@ -3,9 +3,11 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { Loader2 } from 'lucide-react';
-import { getHeroPoseInfo, exportHeroPose } from '../../lib/api';
+import { getHeroPoseInfo, exportHeroPose, previewTrippySprite } from '../../lib/api';
 import { loadGltfPreview } from '../../lib/loadGltfPreview';
 import type { HeroPoseSkinSource } from '../../types/portrait';
+import type { TrippySpriteResult } from '../../types/mod';
+import type { TrippyPreview } from '../../stores/trippyPreviewStore';
 
 /**
  * Live 3D preview of a hero's menu pose for the Locker's per-hero view.
@@ -103,21 +105,167 @@ function Controls() {
   return null;
 }
 
+/** Live trippy-skin preview: paints the body meshes with the trippy pattern and
+ *  animates it. The sprite from `previewTrippySprite` is a horizontal frame
+ *  strip (the same asset the 2D swatch flipbooks); we draw the current frame
+ *  onto an offscreen canvas and feed it as a tiling CanvasTexture, so the paint
+ *  flows on the model. This is an approximation of the engine's UV-scroll shader
+ *  (body only; the GLB carries no weapon mesh), not the exact bake.
+ *
+ *  Originals are captured per material and restored on unmount, so toggling the
+ *  preview off (or closing the panel) returns the model to its real skin. */
+function TrippyPaint({
+  scene,
+  sprite,
+  fps = 12,
+  repeat = 2,
+}: {
+  scene: THREE.Object3D;
+  sprite: TrippySpriteResult;
+  fps?: number;
+  repeat?: number;
+}) {
+  const texRef = useRef<THREE.CanvasTexture | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const imgRef = useRef<HTMLImageElement | null>(null);
+  const startRef = useRef<number | null>(null);
+  const lastFrameRef = useRef(-1);
+
+  useEffect(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = sprite.size;
+    canvas.height = sprite.size;
+    canvasRef.current = canvas;
+
+    const tex = new THREE.CanvasTexture(canvas);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.wrapT = THREE.RepeatWrapping;
+    tex.repeat.set(repeat, repeat);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    texRef.current = tex;
+
+    const img = new Image();
+    img.src = sprite.dataUrl;
+    imgRef.current = img;
+
+    // Unique materials so meshes sharing one material are touched once.
+    const originals = new Map<THREE.MeshStandardMaterial, { map: THREE.Texture | null; color: number }>();
+    scene.traverse((obj) => {
+      const mesh = obj as THREE.Mesh;
+      if (!mesh.isMesh) return;
+      const mats = Array.isArray(mesh.material) ? mesh.material : [mesh.material];
+      for (const m of mats) {
+        const sm = m as THREE.MeshStandardMaterial;
+        if (!sm || originals.has(sm)) continue;
+        originals.set(sm, { map: sm.map ?? null, color: sm.color?.getHex() ?? 0xffffff });
+        sm.map = tex;
+        sm.color?.setHex(0xffffff);
+        sm.needsUpdate = true;
+      }
+    });
+
+    return () => {
+      for (const [sm, original] of originals) {
+        sm.map = original.map;
+        sm.color?.setHex(original.color);
+        sm.needsUpdate = true;
+      }
+      originals.clear();
+      tex.dispose();
+      startRef.current = null;
+      lastFrameRef.current = -1;
+    };
+  }, [scene, sprite, repeat]);
+
+  useFrame((state) => {
+    const tex = texRef.current;
+    const canvas = canvasRef.current;
+    const img = imgRef.current;
+    if (!tex || !canvas || !img || !img.complete || img.naturalWidth === 0) return;
+    const now = state.clock.elapsedTime;
+    if (startRef.current === null) startRef.current = now;
+    const frame = Math.floor((now - startRef.current) * fps) % sprite.frames;
+    if (frame === lastFrameRef.current) return;
+    lastFrameRef.current = frame;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    ctx.drawImage(
+      img,
+      frame * sprite.size,
+      0,
+      sprite.size,
+      sprite.size,
+      0,
+      0,
+      sprite.size,
+      sprite.size
+    );
+    tex.needsUpdate = true;
+  });
+
+  return null;
+}
+
+const q = (x: number): number => Math.round(x * 100) / 100;
+
 export default function HeroPoseViewer({
   heroName,
   skinSources = [],
   fallbackSkinMetaKey,
+  trippyPreview,
 }: {
   heroName: string;
   /** Active visual VPK stack for this hero, ordered by the main process before export. */
   skinSources?: HeroPoseSkinSource[];
   /** Single-skin fallback when a multi-source preview stack cannot be exported. */
   fallbackSkinMetaKey?: string;
+  /** Live Body + Gun trippy params to paint on the body in real time, or
+   *  undefined for the plain skin. */
+  trippyPreview?: TrippyPreview;
 }) {
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
   const [generating, setGenerating] = useState(false);
   const [failed, setFailed] = useState(false);
   const sourceKey = skinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|');
+
+  // The pose GLB has no weapon mesh, so a weapons-only paint has nothing to show
+  // here, and intensity 0 is "no paint". Otherwise fetch the pattern as an
+  // animated sprite strip (debounced) and flipbook it onto the body materials.
+  const showTrippy =
+    !!trippyPreview && trippyPreview.targets !== 'weapons' && trippyPreview.intensity > 0;
+  const trippyKey = showTrippy
+    ? `${trippyPreview.style}:${q(trippyPreview.intensity)}:${q(trippyPreview.phase)}:${q(trippyPreview.scroll)}`
+    : null;
+  const [trippySprite, setTrippySprite] = useState<TrippySpriteResult | null>(null);
+  useEffect(() => {
+    if (!showTrippy || !trippyPreview) {
+      setTrippySprite(null);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      previewTrippySprite({
+        style: trippyPreview.style,
+        phase: q(trippyPreview.phase),
+        scroll: q(trippyPreview.scroll),
+        intensity: q(trippyPreview.intensity),
+        frames: 24,
+        size: 128,
+      })
+        .then((sprite) => {
+          if (!cancelled) setTrippySprite(sprite);
+        })
+        .catch(() => {
+          if (!cancelled) setTrippySprite(null);
+        });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+    // trippyKey encodes the params that change the sprite.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trippyKey]);
 
   useEffect(() => {
     // The caller remounts this component (via a hero+skin `key`) when the
@@ -197,6 +345,7 @@ export default function HeroPoseViewer({
         <directionalLight position={[3, 5, 4]} intensity={1.4} />
         <directionalLight position={[-4, 2, -3]} intensity={0.6} />
         <PosedModel scene={scene} />
+        {trippySprite && <TrippyPaint scene={scene} sprite={trippySprite} />}
         <Controls />
       </Canvas>
     </div>

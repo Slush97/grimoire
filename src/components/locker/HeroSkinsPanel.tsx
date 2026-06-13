@@ -35,11 +35,20 @@ function groupVariants(mods: Mod[]): SkinGroup[] {
     if (!byKey.has(key)) byKey.set(key, []);
     byKey.get(key)!.push(mod);
   }
-  return Array.from(byKey.entries()).map(([key, variants]) => {
+  const built = Array.from(byKey.entries()).map(([key, variants]) => {
     variants.sort((a, b) => a.priority - b.priority);
     const primary = variants.find((v) => v.enabled) ?? variants[0];
     return { key, variants, primary };
   });
+  // Pin active groups (any enabled variant) to the top so the selected skin is
+  // always the first card/row in the panel. Array.sort is stable in V8, so the
+  // active and inactive partitions each keep their original relative order.
+  built.sort((a, b) => {
+    const aActive = a.variants.some((v) => v.enabled) ? 0 : 1;
+    const bActive = b.variants.some((v) => v.enabled) ? 0 : 1;
+    return aActive - bActive;
+  });
+  return built;
 }
 
 interface HeroSkinsPanelProps {
@@ -115,7 +124,7 @@ function SkinGroupCard({
     <div
       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
         groupActive
-          ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)] hover:bg-accent/[0.12]'
+          ? 'border-accent bg-white/[0.02] hover:bg-white/[0.04]'
           : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
       }`}
     >

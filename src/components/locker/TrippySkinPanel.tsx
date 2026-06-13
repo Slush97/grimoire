@@ -8,10 +8,15 @@ import {
 } from '../../lib/api';
 import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
 import TrippyPatternPicker from './TrippyPatternPicker';
+import { useTrippyPreviewStore } from '../../stores/trippyPreviewStore';
 import type { ActiveTrippySkin, TrippySkinTargets, TrippyStyleName } from '../../types/mod';
 
 interface TrippySkinPanelProps {
   heroName: string;
+  /** Whether the Body + Gun surface is the one on screen. The panel stays
+   *  mounted while hidden (to keep in-flight slider state), so this gates the
+   *  live 3D preview push: only the visible surface should paint the model. */
+  active?: boolean;
   /** Lets the parent surface toggle show an applied dot for this surface. */
   onAppliedChange?: (applied: boolean) => void;
 }
@@ -37,7 +42,11 @@ const segBtn = (selected: boolean) =>
  * surface has applied (color, gradient, prism, or trippy VFX).
  * Rendered only when the parent has confirmed hero support.
  */
-export default function TrippySkinPanel({ heroName, onAppliedChange }: TrippySkinPanelProps) {
+export default function TrippySkinPanel({
+  heroName,
+  active = true,
+  onAppliedChange,
+}: TrippySkinPanelProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -91,6 +100,31 @@ export default function TrippySkinPanel({ heroName, onAppliedChange }: TrippySki
   useEffect(() => {
     onAppliedChange?.(applied);
   }, [applied, onAppliedChange]);
+
+  // Feed the live slider state to the floating 3D viewer so it can preview the
+  // paint animated on the body in real time. Cleared when the panel unmounts
+  // (user leaves the Body + Gun trippy surface) so the model snaps back.
+  const setTrippyPreview = useTrippyPreviewStore((s) => s.setPreview);
+  const clearTrippyPreview = useTrippyPreviewStore((s) => s.clearPreview);
+  useEffect(() => {
+    if (loading || !active) {
+      clearTrippyPreview();
+      return;
+    }
+    setTrippyPreview({ heroName, style, intensity, phase, scroll, targets });
+  }, [
+    active,
+    loading,
+    heroName,
+    style,
+    intensity,
+    phase,
+    scroll,
+    targets,
+    setTrippyPreview,
+    clearTrippyPreview,
+  ]);
+  useEffect(() => clearTrippyPreview, [clearTrippyPreview]);
 
   const refreshGameRunning = async () => {
     try {
