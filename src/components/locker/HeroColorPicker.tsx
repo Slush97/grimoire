@@ -781,6 +781,13 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
               ))}
             </div>
           </div>
+          {trippyAnimStyle !== 'off' && (
+            <p className="text-[11px] text-text-secondary/70">
+              The swatch above previews the pattern and its scroll speed (set by Animation strength).
+              Sweep, Loop, and Cycle differ in how particles animate their color in game, which a
+              texture swatch can&apos;t show.
+            </p>
+          )}
 
           {/* Animation strength (how strongly the motion reads); off when static. */}
           {trippyAnimStyle !== 'off' && (
