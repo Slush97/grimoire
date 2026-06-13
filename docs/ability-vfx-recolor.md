@@ -160,6 +160,31 @@ Core API (also for the Grimoire UI): `recolor_model_vertex_colors(bytes, hue) ->
 
 Full diagnosis + workflow: `vpkmerge/docs/handoff-vertex-color-recolor.md`.
 
+## Trippy VFX (procedural paint, built: `vpkmerge trippy-vfx`)
+
+A fourth look over the **same one-per-hero ability slot** as single color / rainbow / gradient: instead of recoloring the existing art, it paints a flowing procedural pattern (confetti, liquid, moire, galaxy, ...) and optionally scrolls it. Exposed in `HeroColorPicker.tsx` as the **Trippy** mode (alongside Single Color / Rainbow / Gradient); it shares the slot, so applying it replaces any recolor and vice versa. Backend: `applyHeroTrippyVfx` -> `ensureHeroTrippyVfxBake` (`heroColors.ts`) -> `vpkmerge trippy-vfx`, cached like the recolor bakes.
+
+### Same recipe entries, different writes (not different materials)
+
+A recurring question: does trippy touch *different* `.vmat_c` / textures than the color recolor? **No.** `trippy-vfx` (`vpkmerge-core/src/trippy.rs`) drives off the **same `HeroRecolorRecipe`** as `recolor-hero` / `prism` (`hero_recolor.rs`): the same `particle_prefixes`, `texture_entries`, `material_entries`, `model_entries`. It is the same write-set, scoped to the hero's ability-VFX namespace (no bleed into the body/weapon model skin). What differs is *how* each file is written:
+
+| File type | Color recolor (`recolor-hero` / `prism`) | Trippy (`trippy-vfx`) |
+|---|---|---|
+| `.vpcf_c` particles | patch color scalars in place | patch color scalars **+ animation timing fields** (when animated) |
+| `.vmat_c` materials | patch `g_vColorTint` in place | patch `g_vColorTint` **+ UV-scroll multipliers** (when animated) |
+| `.vtex_c` textures | hue-shift the **existing** pixels | **discard the pixels, generate a procedural pattern** into the same entry |
+| `.vmdl_c` models | recolor vertex `COLOR` | recolor vertex `COLOR` (identical) |
+
+So on materials specifically: both edit the exact same `material_entries` and both patch `g_vColorTint`; trippy just *additionally* writes UV-scroll multipliers onto those same materials so the paint flows. The one genuinely divergent behavior is on **textures**, where trippy replaces the artwork rather than hue-shifting it (which is why it reads as a wholly different look despite writing the same files).
+
+### Targets
+
+`--targets all | abilities | weapons` filters those same recipe entries by namespace: `abilities` = `particles/abilities/<codename>/` (+ its textures/materials), `weapons` = `particles/weapon_fx/<codename>/`. In the UI the weapons target is labeled **Gun FX** to disambiguate it from the Body + Gun tab's "Gun" (which paints the weapon model's **material skin**, a different file set in a different VPK; trippy Gun FX paints the weapon's **effect particles**). The sibling color/rainbow/gradient modes have no targets toggle (they always do the whole layer); trippy is the only ability mode that sub-selects.
+
+### Live-preview limitation: animation style is not previewable
+
+The picker's live swatch is `vpkmerge trippy-preview` (`previewTrippySprite`), whose only inputs are `style / phase / scroll / intensity` - it has **no animation-style input**. So **Sweep / Loop / Cycle look identical in the swatch**: they share the texture-scroll component (which is what the swatch shows), and diverge only in particle *color* animation (loop loops color gradients; cycle inserts runtime color-cycle operators), which exists only on live in-engine particles and has no texture-swatch representation. The swatch-visible knobs are **Animation strength** (feeds `scroll`, so the loop speeds up/slows) and **Off** (scroll 0 = static). A one-line note in the UI says this so the unchanged preview reads as expected, not broken; faking a difference would break the picker's "what loops here is what bakes" contract.
+
 ## Supported heroes (recipes)
 
 Per-hero recipes are pinned in vpkmerge `recipe_for` (`vpkmerge-core/src/hero_recolor.rs`) and gated in Grimoire by `COLOR_CODENAME_BY_HERO` (`heroColors.ts`). Add a hero in lockstep: a recipe in vpkmerge + a `DisplayName: 'codename'` line in Grimoire.
