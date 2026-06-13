@@ -108,7 +108,11 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
             <HeroColorPicker heroName={heroName} onAppliedChange={setAbilitiesApplied} />
           </div>
           <div className={surface === 'skin' ? 'space-y-3' : 'hidden'}>
-            <TrippySkinPanel heroName={heroName} onAppliedChange={setSkinApplied} />
+            <TrippySkinPanel
+              heroName={heroName}
+              active={surface === 'skin'}
+              onAppliedChange={setSkinApplied}
+            />
           </div>
         </>
       )}

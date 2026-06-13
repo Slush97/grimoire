@@ -14,8 +14,10 @@ import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
 import HeroEffectsPanel from '../components/locker/HeroEffectsPanel';
+import FloatingModelPanel from '../components/locker/FloatingModelPanel';
 // three.js viewer is heavy; only pull the chunk when the user flips to 3D.
 const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
+import { useTrippyPreviewStore } from '../stores/trippyPreviewStore';
 import type { Mod } from '../types/mod';
 import type { HeroPoseSkinSource } from '../types/portrait';
 import {
@@ -103,6 +105,13 @@ export function LockerHeroView({
   const activeSkinSourceKey =
     activeSkinSources.map((source) => `${source.priority}:${source.metaKey}`).join('|') ||
     'vanilla';
+
+  // Live Body + Gun trippy params, pushed by TrippySkinPanel. Only feed the
+  // viewer when it targets the hero currently shown so a stale entry from
+  // another hero never paints the wrong model.
+  const trippyPreview = useTrippyPreviewStore((s) => s.preview);
+  const matchedTrippyPreview =
+    trippyPreview && trippyPreview.heroName === hero.name ? trippyPreview : undefined;
   const hasSounds = soundList.length > 0;
   // If the active section runs out of mods (e.g. user deleted their last
   // sound for this hero) drop back to skins so the panel isn't stuck empty.
@@ -219,30 +228,7 @@ export function LockerHeroView({
           bg-primary, which the frosted overlay reads as a dark frosted panel:
           same look as if the portrait extended that far. */}
       <div className="hidden lg:block absolute inset-0 bg-bg-primary animate-hero-zoom-in overflow-hidden">
-        {view3d ? (
-          /* Confine the viewer (model, spinner, and failure text alike) to the
-             strip right of the rail + selection column (300+480 at lg,
-             340+540 at xl). The viewer centers its content, so giving it the
-             full backdrop puts the model at the overlay's center: behind the
-             selection column and heavy glass on anything narrower than an
-             ultrawide, which reads as "3D shows nothing". */
-          <div className="absolute inset-y-0 right-0 left-[780px] xl:left-[880px]">
-            <Suspense
-              fallback={
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <Loader2 className="h-6 w-6 animate-spin text-white/80" />
-                </div>
-              }
-            >
-              <HeroPoseViewer
-                key={`${hero.name}:${activeSkinSourceKey}:${fallbackPoseSkinMetaKey ?? ''}`}
-                heroName={hero.name}
-                skinSources={activeSkinSources}
-                fallbackSkinMetaKey={fallbackPoseSkinMetaKey}
-              />
-            </Suspense>
-          </div>
-        ) : renderSrc ? (
+        {renderSrc ? (
           <img
             src={renderSrc}
             alt={hero.name}
@@ -254,27 +240,27 @@ export function LockerHeroView({
             {hero.name}
           </div>
         )}
-        {/* Bottom gradient for depth (2D only; the 3D viewer owns its frame) */}
-        {!view3d && (
-          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
-        )}
+        {/* Bottom gradient for depth. */}
+        <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
 
-      {/* 2D portrait <-> live 3D pose toggle. lg+ only, matching the backdrop;
-          sits above the frosted panels so it's always clickable. */}
+      {/* Live 3D model toggle. Opens/closes the floating model panel rather than
+          swapping the backdrop, so the 2D portrait stays put and the model can
+          float over it at any window size. Shown at every width (the floating
+          panel works without the lg+ backdrop too). */}
       <button
         type="button"
         onClick={() => setView3d((v) => !v)}
         aria-pressed={view3d}
-        title={view3d ? 'Show 2D portrait' : 'Show live 3D pose'}
-        className={`hidden lg:flex absolute top-4 right-4 z-20 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+        title={view3d ? 'Hide 3D model' : 'Show live 3D model'}
+        className={`absolute top-4 right-4 z-20 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
           view3d
             ? 'border-accent/60 bg-accent/20 text-text-primary'
             : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
         }`}
       >
         <Box className="h-3.5 w-3.5" />
-        {view3d ? '2D' : '3D'}
+        3D
       </button>
 
       {/* Progressive frosted-glass background — every layer (including the
@@ -411,6 +397,28 @@ export function LockerHeroView({
           {selectionPanel}
         </div>
       </div>
+
+      {/* Live 3D model: a floating, draggable panel over the portrait backdrop.
+          Mounted only while open so the heavy three.js chunk loads on demand. */}
+      {view3d && (
+        <FloatingModelPanel title={`${hero.name} 3D model`} onClose={() => setView3d(false)}>
+          <Suspense
+            fallback={
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Loader2 className="h-6 w-6 animate-spin text-white/80" />
+              </div>
+            }
+          >
+            <HeroPoseViewer
+              key={`${hero.name}:${activeSkinSourceKey}:${fallbackPoseSkinMetaKey ?? ''}`}
+              heroName={hero.name}
+              skinSources={activeSkinSources}
+              fallbackSkinMetaKey={fallbackPoseSkinMetaKey}
+              trippyPreview={matchedTrippyPreview}
+            />
+          </Suspense>
+        </FloatingModelPanel>
+      )}
     </div>
   );
 }
