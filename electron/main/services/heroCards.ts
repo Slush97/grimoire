@@ -14,9 +14,15 @@
  */
 import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHash } from 'crypto';
 import { app } from 'electron';
-import { getAddonFolderPaths, getDisabledPath, getGrimoirePath, metaKeyFor } from './deadlock';
+import {
+    getAddonFolderPaths,
+    getCitadelPath,
+    getDisabledPath,
+    getGrimoirePath,
+    metaKeyFor,
+} from './deadlock';
 import { parseVpkDirectoryCached, invalidateVpkParseCache } from './vpk';
 import {
     runVpkmerge,
@@ -48,6 +54,25 @@ const PANORAMA_HERO_PREFIX = 'panorama/images/heroes/';
  *  conventions. */
 function cardPrefix(codename: string): string {
     return `${PANORAMA_HERO_PREFIX}${codename}_`;
+}
+
+/** Base game pak that ships every hero's default card art, used as the template
+ *  source for custom uploads (each variant's `.vtex_c` lends its format/dims). */
+export function baseCardPakPath(deadlockPath: string): string {
+    return join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+}
+
+/**
+ * Persistent on-disk home for a custom-uploaded card's staging VPK, keyed by
+ * hero codename and namespaced per install. It lives under userData (NOT a
+ * mounted search path), so it never loads on its own: the rebuild splits it into
+ * the single consolidated cosmetics VPK exactly like an installed-mod source.
+ * Survives rebuilds so reverting another hero doesn't drop this hero's upload.
+ */
+export function customCardVpkPath(deadlockPath: string, codename: string): string {
+    const installKey = createHash('sha1').update(deadlockPath).digest('hex').slice(0, 12);
+    // `_dir.vpk` so vpkmerge split + the VPK parser treat it as a directory VPK.
+    return join(app.getPath('userData'), 'custom-hero-cards', installKey, `${codename}_dir.vpk`);
 }
 
 interface VpkRef {
@@ -98,7 +123,7 @@ function findCosmeticsVpk(
 /** The current card selection set, read from the synthetic key (post-migration)
  *  or, as a fallback during the pre-migration window, from an in-addons managed
  *  VPK. */
-async function currentCardSelections(deadlockPath: string): Promise<LockerCardSelection[]> {
+export async function currentCardSelections(deadlockPath: string): Promise<LockerCardSelection[]> {
     const synth = getModMetadata(LOCKER_CARDS_KEY)?.lockerCosmetics?.cards;
     if (synth) return synth;
     const vpks = await listAddonVpks(deadlockPath);
@@ -176,7 +201,7 @@ interface RebuildResult {
  * its hero's card prefix, combine the disjoint chunks into one VPK, swap it in,
  * and slot it below any enabled competitor for the same card path.
  */
-async function rebuildLockerCosmetics(
+export async function rebuildLockerCosmetics(
     deadlockPath: string,
     desired: LockerCardSelection[]
 ): Promise<RebuildResult> {
@@ -184,11 +209,27 @@ async function rebuildLockerCosmetics(
     const destPath = lockerCardsVpkPath(deadlockPath);
     const vpks = await listAddonVpks(deadlockPath);
 
+    // The resolved source path each valid selection splits from, parallel to
+    // `valid` (custom sources resolve to their staging VPK, not an addon).
+    const srcPathFor = new Map<LockerCardSelection, string>();
+
     // Resolve each selection's source (relocating by hash if renamed) and
     // confirm it still ships this hero's cards. Anything unresolved is dropped.
     const valid: LockerCardSelection[] = [];
     const missing: string[] = [];
     for (const sel of desired) {
+        // Custom uploads resolve to a persistent staging VPK keyed by codename,
+        // not an installed addon. Keep the selection's synthetic fileName as-is.
+        if (sel.source.kind === 'custom') {
+            const path = customCardVpkPath(deadlockPath, sel.heroCodename);
+            if (!existsSync(path) || heroCardPaths(path, sel.heroName).length === 0) {
+                missing.push(sel.source.fileName);
+                continue;
+            }
+            srcPathFor.set(sel, path);
+            valid.push(sel);
+            continue;
+        }
         const src = await locateSource(vpks, sel.source.fileName, sel.source.sha256AtApplyTime);
         if (!src || heroCardPaths(src.path, sel.heroName).length === 0) {
             missing.push(sel.source.fileName);
@@ -196,7 +237,9 @@ async function rebuildLockerCosmetics(
         }
         // Re-key to the located file's current metaKey so a source that moved
         // folders (overflow) or was renamed (reconcile) stays addressable.
-        valid.push({ ...sel, source: { ...sel.source, fileName: src.metaKey } });
+        const rekeyed = { ...sel, source: { ...sel.source, fileName: src.metaKey } };
+        srcPathFor.set(rekeyed, src.path);
+        valid.push(rekeyed);
     }
 
     // Empty set: tear down the cosmetics VPK entirely.
@@ -218,14 +261,14 @@ async function rebuildLockerCosmetics(
         await fs.mkdir(planDir, { recursive: true });
         for (let i = 0; i < valid.length; i++) {
             const sel = valid[i];
-            const src = vpks.find((v) => v.metaKey === sel.source.fileName)!;
+            const srcPath = srcPathFor.get(sel)!;
             const chunkPath = join(grimoireDir, `${tag}.chunk${i}.vpk`);
             const planPath = join(planDir, `plan${i}.json`);
             await fs.writeFile(
                 planPath,
                 JSON.stringify({ outputs: [{ path: chunkPath, prefixes: heroCardPrefixes(sel.heroName) }] })
             );
-            await runVpkmerge(['split', '--plan', planPath, src.path], 120000);
+            await runVpkmerge(['split', '--plan', planPath, srcPath], 120000);
             await verifyVpkOutput(chunkPath);
             chunkPaths.push(chunkPath);
         }
@@ -306,6 +349,11 @@ export async function applyHeroCard(
     const current = await currentCardSelections(deadlockPath);
     const next = [...current.filter((c) => c.heroCodename !== primaryCodename), selection];
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
+    // A mod card replacing a prior custom upload for this hero leaves the custom
+    // staging VPK orphaned; drop it (it's unmounted, just unused).
+    if (current.some((c) => c.heroCodename === primaryCodename && c.source.kind === 'custom')) {
+        await fs.unlink(customCardVpkPath(deadlockPath, primaryCodename)).catch(() => {});
+    }
     return {
         // missing[] carries metaKeys (a selection's source key), so compare and
         // report the metaKey, which the picker round-trips as the tile identity.
@@ -328,8 +376,16 @@ export async function revertHeroCard(
     const current = await currentCardSelections(deadlockPath);
     if (current.length === 0) return { activeSourceFileName: null, missingSourceFileNames: [] };
 
+    const removed = current.filter((c) => c.heroCodename === primaryCodename);
     const next = current.filter((c) => c.heroCodename !== primaryCodename);
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
+    // Drop the staging VPK behind any custom upload we just reverted, so a stale
+    // PNG set doesn't linger in userData (it's not mounted, just unused).
+    for (const sel of removed) {
+        if (sel.source.kind === 'custom') {
+            await fs.unlink(customCardVpkPath(deadlockPath, sel.heroCodename)).catch(() => {});
+        }
+    }
     return { activeSourceFileName: null, missingSourceFileNames: missing };
 }
 

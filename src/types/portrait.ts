@@ -23,6 +23,26 @@ export interface HeroPortrait {
 }
 
 /**
+ * One uploadable hero-card variant slot, derived from the base game's own card
+ * art (`vpkmerge portrait` on `pak01_dir.vpk`). The custom-card uploader shows
+ * one slot per variant the base ships, so a user-supplied PNG is resized to the
+ * exact dimensions the game expects for that variant.
+ */
+export interface CustomCardSlot {
+  /** card | vertical | minimap | small | card_critical | card_gloat | other */
+  variant: string;
+  /** VPK entry path of the base template `.vtex_c` this slot replaces, fed
+   *  straight back into applyCustomHeroCard as the `--set ENTRY=PNG` target. */
+  entry: string;
+  /** Dimensions the uploaded PNG will be resized to (the template's own size). */
+  width: number;
+  height: number;
+  /** The base game's art for this variant, decoded to a data URL, shown dimmed
+   *  behind an empty slot so the user sees what they are replacing. */
+  baseDataUrl: string;
+}
+
+/**
  * Whether a soul-container mod has an exported 3D model in the user's library,
  * and its mtime (used to cache-bust the `grimoire-soul:` URL after a re-export).
  * Keyed per-mod by the VPK file name. The GLB itself never reaches the renderer

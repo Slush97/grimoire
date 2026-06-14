@@ -44,7 +44,7 @@ import type {
     GameBananaCommentsResponse,
     GameBananaArtistLink,
 } from './gamebanana';
-import type { HeroPortrait, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource } from './portrait';
+import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource } from './portrait';
 import type {
     DeadworksServer,
     DeadworksContentItem,
@@ -132,6 +132,13 @@ export interface PerformanceConfigStatus {
 export interface OpenDialogOptions {
     directory?: boolean;
     title?: string;
+    defaultPath?: string;
+    filters?: Array<{ name: string; extensions: string[] }>;
+}
+
+export interface SaveDialogOptions {
+    title?: string;
+    /** Pre-filled path/filename (e.g. a suggested VPK name). */
     defaultPath?: string;
     filters?: Array<{ name: string; extensions: string[] }>;
 }
@@ -417,6 +424,19 @@ export interface ElectronAPI {
     getActiveHeroCard: (
         heroName: string
     ) => Promise<{ sourceFileName: string; variants: string[] } | null>;
+    getCustomCardSlots: (heroName: string) => Promise<CustomCardSlot[]>;
+    applyCustomHeroCard: (
+        heroName: string,
+        uploads: { variant: string; dataUrl: string }[]
+    ) => Promise<ApplyHeroCardResult>;
+    exportCustomHeroCard: (
+        heroName: string,
+        uploads: { variant: string; dataUrl: string }[],
+        destPath: string
+    ) => Promise<string>;
+    getAppliedCustomCard: (
+        heroName: string
+    ) => Promise<{ variant: string; dataUrl: string }[]>;
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
     exportSoulModel: (metaKey: string) => Promise<SoulModelInfo>;
     getHeroPoseInfo: (
@@ -534,6 +554,8 @@ export interface ElectronAPI {
 
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => Promise<string | null>;
+    showSaveDialog: (options: SaveDialogOptions) => Promise<string | null>;
+    revealPath: (targetPath: string) => Promise<void>;
 
     // Drag & drop
     getDroppedFilePath: (file: File) => string;

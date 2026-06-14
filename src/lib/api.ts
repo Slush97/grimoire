@@ -1,6 +1,7 @@
 import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
 import type {
   HeroPortrait,
+  CustomCardSlot,
   HeroPoseInfo,
   HeroPoseSkinSource,
   SoulModelInfo,
@@ -148,6 +149,36 @@ export async function getActiveHeroCard(
   heroName: string
 ): Promise<{ sourceFileName: string; variants: string[] } | null> {
   return window.electronAPI.getActiveHeroCard(heroName);
+}
+
+/** Uploadable card-variant slots for a hero, derived from the base game art. */
+export async function getCustomCardSlots(heroName: string): Promise<CustomCardSlot[]> {
+  return window.electronAPI.getCustomCardSlots(heroName);
+}
+
+/** Build + apply a custom card from one cropped PNG (data URL) per variant. */
+export async function applyCustomHeroCard(
+  heroName: string,
+  uploads: { variant: string; dataUrl: string }[]
+): Promise<ApplyHeroCardResult> {
+  return window.electronAPI.applyCustomHeroCard(heroName, uploads);
+}
+
+/** Export the custom card as a standalone .vpk to a chosen path; returns it. */
+export async function exportCustomHeroCard(
+  heroName: string,
+  uploads: { variant: string; dataUrl: string }[],
+  destPath: string
+): Promise<string> {
+  return window.electronAPI.exportCustomHeroCard(heroName, uploads, destPath);
+}
+
+/** Cropped images of the currently-applied custom card (empty if none), so the
+ *  picker can restore the user's uploads after an app restart. */
+export async function getAppliedCustomCard(
+  heroName: string
+): Promise<{ variant: string; dataUrl: string }[]> {
+  return window.electronAPI.getAppliedCustomCard(heroName);
 }
 
 /** Whether a soul-container mod has an exported model in the user's library (+ mtime). */
@@ -550,6 +581,18 @@ export async function showOpenDialog(options: {
   filters?: Array<{ name: string; extensions: string[] }>;
 }): Promise<string | null> {
   return window.electronAPI.showOpenDialog(options);
+}
+
+export async function showSaveDialog(options: {
+  title?: string;
+  defaultPath?: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
+}): Promise<string | null> {
+  return window.electronAPI.showSaveDialog(options);
+}
+
+export async function revealPath(targetPath: string): Promise<void> {
+  return window.electronAPI.revealPath(targetPath);
 }
 
 // =====================

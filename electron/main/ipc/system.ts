@@ -12,7 +12,7 @@ import { healLockerVpks } from '../services/lockerVpk';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { getAddonsPath, getCitadelPath } from '../services/deadlock';
-import type { OpenDialogOptions } from '../../../src/types/electron';
+import type { OpenDialogOptions, SaveDialogOptions } from '../../../src/types/electron';
 
 async function loadClipboardImage(source: string): Promise<Electron.NativeImage> {
     if (!source) {
@@ -52,6 +52,24 @@ ipcMain.handle(
         return result.canceled ? null : result.filePaths[0] || null;
     }
 );
+
+// show-save-dialog
+ipcMain.handle(
+    'show-save-dialog',
+    async (_, options: SaveDialogOptions): Promise<string | null> => {
+        const result = await dialog.showSaveDialog({
+            title: options.title,
+            defaultPath: options.defaultPath,
+            filters: options.filters,
+        });
+        return result.canceled ? null : result.filePath || null;
+    }
+);
+
+// reveal-path: open the OS file browser with the given file selected.
+ipcMain.handle('reveal-path', async (_, targetPath: string): Promise<void> => {
+    if (targetPath) shell.showItemInFolder(targetPath);
+});
 
 // copy-image-to-clipboard
 // Writes actual image pixels to the system clipboard, not just the image URL.

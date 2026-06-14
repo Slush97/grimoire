@@ -34,6 +34,7 @@ import type {
     DownloadModArgs,
     GetCategoriesArgs,
     OpenDialogOptions,
+    SaveDialogOptions,
     ImportCustomModArgs,
     SearchLocalModsOptions,
     CrosshairSettings,
@@ -123,6 +124,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('revert-hero-card', heroName),
     getActiveHeroCard: (heroName: string) =>
         ipcRenderer.invoke('get-active-hero-card', heroName),
+    getCustomCardSlots: (heroName: string) =>
+        ipcRenderer.invoke('get-custom-card-slots', heroName),
+    applyCustomHeroCard: (heroName: string, uploads: { variant: string; dataUrl: string }[]) =>
+        ipcRenderer.invoke('apply-custom-hero-card', heroName, uploads),
+    exportCustomHeroCard: (
+        heroName: string,
+        uploads: { variant: string; dataUrl: string }[],
+        destPath: string
+    ) => ipcRenderer.invoke('export-custom-hero-card', heroName, uploads, destPath),
+    getAppliedCustomCard: (heroName: string) =>
+        ipcRenderer.invoke('get-applied-custom-card', heroName),
     getSoulModelInfo: (key: string) =>
         ipcRenderer.invoke('get-soul-model-info', key),
     exportSoulModel: (metaKey: string) =>
@@ -260,6 +272,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => ipcRenderer.invoke('show-open-dialog', options),
+    showSaveDialog: (options: SaveDialogOptions) => ipcRenderer.invoke('show-save-dialog', options),
+    revealPath: (targetPath: string) => ipcRenderer.invoke('reveal-path', targetPath),
 
     // Drag & drop
     getDroppedFilePath: (file: File) => webUtils.getPathForFile(file),

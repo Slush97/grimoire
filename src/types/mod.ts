@@ -49,12 +49,18 @@ export interface LockerCardSelection {
    *  Informational: the split takes the whole per-hero panorama prefix. */
   variants: string[];
   source: {
+    /** Where this card came from. Absent or `"mod"` = an installed mod VPK
+     *  (the original behavior). `"custom"` = a user-uploaded PNG set, built into
+     *  a persistent staging VPK the rebuild resolves by `heroCodename` rather
+     *  than by addon lookup. */
+    kind?: 'mod' | 'custom';
     /** Folder-relative metaKey of the source VPK (bare filename for a base
      *  citadel/addons mod, "addonsN/<file>" for an overflow mod). Named
      *  `fileName` for back-compat: pre-overflow selections stored the bare
      *  filename, which IS the base mod's metaKey, so they still resolve. May
      *  drift if reconcile renames or overflow moves it; `sha256AtApplyTime` is
-     *  the content-identity fallback for relocation. */
+     *  the content-identity fallback for relocation. For a custom source this is
+     *  the synthetic id `custom:<heroCodename>`. */
     fileName: string;
     modName?: string;
     gameBananaId?: number;
