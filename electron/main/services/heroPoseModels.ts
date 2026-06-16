@@ -178,8 +178,15 @@ function riggedModelFile(key: string): string {
  * v7: vpkmerge fixed draw-call index offsets for resourcecompiler/global-index
  * meshes. Pre-v7 cached GLBs can contain out-of-range primitive indices, which
  * renders shredded in three.js even after the bundled binary is fixed.
+ *
+ * v8: vpkmerge static pose baking keeps Source 2 secondary-motion cloth/fabric
+ * chains bind-relative instead of freezing their authored sim tracks mid-pose.
+ * Pre-v8 GLBs can show detached coat tails, skirts, and cloth panels.
+ *
+ * v9: same static-pose fabric fix, with old dev preview caches force-expired
+ * after confirming one-frame menu poses can carry unsolved cloth state.
  */
-const POSE_CACHE_VERSION = '7';
+const POSE_CACHE_VERSION = '9';
 
 const POSE_VERSION_FILENAME = '.cache-version';
 
