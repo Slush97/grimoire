@@ -16,6 +16,7 @@ import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useSocialStore } from './stores/socialStore';
 import { useAppStore } from './stores/appStore';
 import { getAssetPath } from './lib/assetPath';
+import { rollMemeAppTitle } from './lib/easterEggs';
 
 const GASSY_SOUND = getAssetPath('/sounds/gassy.mp3');
 
@@ -48,6 +49,12 @@ export default function App() {
     };
     window.addEventListener('keydown', onKeyDown);
     return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
+
+  // Easter egg: rarely boot under his "DeadGame" alias.
+  useEffect(() => {
+    const memeTitle = rollMemeAppTitle();
+    if (memeTitle) document.title = memeTitle;
   }, []);
 
   // Pull the persisted social-session state into the renderer once at boot.

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import Tx from '../translation/Tx';
+import { MEME_ERROR_NOTE, MEME_ERROR_BUTTON, rollErrorBoundaryEgg } from '../../lib/easterEggs';
 
 interface ErrorBoundaryProps {
     children: ReactNode;
@@ -11,6 +12,7 @@ interface ErrorBoundaryState {
     hasError: boolean;
     error: Error | null;
     errorInfo: ErrorInfo | null;
+    egg: boolean;
 }
 
 /**
@@ -24,11 +26,12 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             hasError: false,
             error: null,
             errorInfo: null,
+            egg: false,
         };
     }
 
     static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
-        return { hasError: true, error };
+        return { hasError: true, error, egg: rollErrorBoundaryEgg() };
     }
 
     componentDidCatch(error: Error, errorInfo: ErrorInfo): void {
@@ -39,7 +42,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
     }
 
     handleReset = (): void => {
-        this.setState({ hasError: false, error: null, errorInfo: null });
+        this.setState({ hasError: false, error: null, errorInfo: null, egg: false });
     };
 
     render(): ReactNode {
@@ -69,12 +72,19 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                             {this.state.error.message}
                         </pre>
                     )}
+                    {this.state.egg && (
+                        <p className="text-sm text-text-secondary/70 mb-4">{MEME_ERROR_NOTE}</p>
+                    )}
                     <button
                         onClick={this.handleReset}
                         className="flex items-center gap-2 px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer"
                     >
                         <RefreshCw className="w-4 h-4" />
-                        <Tx k="common.errorBoundary.tryAgain" fallback="Try Again" />
+                        {this.state.egg ? (
+                            MEME_ERROR_BUTTON
+                        ) : (
+                            <Tx k="common.errorBoundary.tryAgain" fallback="Try Again" />
+                        )}
                     </button>
                 </div>
             );

@@ -7,6 +7,7 @@ import { ConfirmModal } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import type { AppSettings } from '../types/mod';
 import type { SteamLaunchOptionsStatus } from '../types/electron';
+import { memeToastSuffix } from '../lib/easterEggs';
 
 // Popular Deadlock autoexec command presets
 const COMMAND_PRESETS = [
@@ -208,7 +209,7 @@ export default function Autoexec() {
         setSaveMessageTone(null);
         try {
             await window.electronAPI.saveAutoexecCommands(gamePath, commands);
-            setSaveMessage(t('autoexec.status.savedToAutoexec'));
+            setSaveMessage(t('autoexec.status.savedToAutoexec') + memeToastSuffix('success'));
             setSaveMessageTone('success');
             setHasUnsaved(false);
             // Refresh status
@@ -216,7 +217,7 @@ export default function Autoexec() {
             setStatus(s);
             setTimeout(() => setSaveMessage(null), 3000);
         } catch (err) {
-            setSaveMessage(t('autoexec.status.error', { error: String(err) }));
+            setSaveMessage(t('autoexec.status.error', { error: String(err) }) + memeToastSuffix('error'));
             setSaveMessageTone('error');
         } finally {
             setIsSaving(false);
