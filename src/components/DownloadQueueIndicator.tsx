@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import type { DownloadQueueItem, DownloadProgressData } from '../types/electron';
 import { formatBytes } from '../lib/formatBytes';
+import { rollPreparingSuffix } from '../lib/easterEggs';
 import Tx from './translation/Tx';
 
 interface DownloadQueueIndicatorProps {
@@ -51,6 +52,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
     // bleeding speed from the previous one.
     const sampleRef = useRef<SpeedSample | null>(null);
     const [speed, setSpeed] = useState(0);
+    const [preparingSuffix] = useState(rollPreparingSuffix);
 
     useEffect(() => {
         Promise.all([
@@ -134,7 +136,8 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
 
     if (totalItems === 0) return null;
 
-    const currentFileName = queueState.currentDownload?.fileName ?? t('downloadQueue.preparing');
+    const currentFileName =
+        queueState.currentDownload?.fileName ?? t('downloadQueue.preparing') + preparingSuffix;
     const currentTooltip = queueState.currentDownload?.modName ?? currentFileName;
 
     return (

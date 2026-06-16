@@ -43,6 +43,7 @@ import {
 } from '../lib/api';
 
 import { getAssetPath } from '../lib/assetPath';
+import { rollMemeTooltip } from '../lib/easterEggs';
 import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath } from '../lib/lockerUtils';
 import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
@@ -214,6 +215,7 @@ export default function Sidebar() {
   // Persisted via localStorage so it survives reloads without round-tripping
   // through the main-process settings file. This is pure UI state.
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsedPreference);
+  const [memeTooltip, setMemeTooltip] = useState<{ to: string; text: string } | null>(null);
   const [launchBgHidden, setLaunchBgHidden] = useState<boolean>(readLaunchBgHiddenPreference);
   const [labelsVisible, setLabelsVisible] = useState<boolean>(() => !readCollapsedPreference());
   const [labelMounted, setLabelMounted] = useState<boolean>(() => !readCollapsedPreference());
@@ -777,7 +779,18 @@ export default function Sidebar() {
               >
                 <NavLink
                   to={to}
-                  title={collapsed ? `${label}: ${tooltip}` : tooltip}
+                  title={
+                    memeTooltip?.to === to
+                      ? memeTooltip.text
+                      : collapsed
+                        ? `${label}: ${tooltip}`
+                        : tooltip
+                  }
+                  onMouseEnter={() => {
+                    const meme = rollMemeTooltip(to);
+                    setMemeTooltip(meme ? { to, text: meme } : null);
+                  }}
+                  onMouseLeave={() => setMemeTooltip((cur) => (cur?.to === to ? null : cur))}
                   onClick={() => setPendingNavPath(to)}
                   className={`group relative flex items-center h-10 overflow-hidden leading-5 rounded-sm text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 border ${
                       collapsed ? '' : 'pr-3'
@@ -1103,7 +1116,12 @@ export default function Sidebar() {
         <button
           type="button"
           onClick={() => navigate('/settings')}
-          title={t('sidebar.openSettings')}
+          title={memeTooltip?.to === '/settings' ? memeTooltip.text : t('sidebar.openSettings')}
+          onMouseEnter={() => {
+            const meme = rollMemeTooltip('/settings');
+            setMemeTooltip(meme ? { to: '/settings', text: meme } : null);
+          }}
+          onMouseLeave={() => setMemeTooltip((cur) => (cur?.to === '/settings' ? null : cur))}
           aria-current={settingsActive ? 'page' : undefined}
           className={`group relative flex w-full h-10 items-center overflow-hidden rounded-sm border text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
             settingsActive
