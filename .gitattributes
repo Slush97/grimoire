@@ -1,0 +1,4 @@
+# Radiance HDR environment probes are binary (RGBE data). Git misdetects them as
+# text because there's no NUL byte early in the file, so with core.autocrlf it
+# would insert CR bytes on checkout and corrupt the probe. Force binary handling.
+*.hdr binary
