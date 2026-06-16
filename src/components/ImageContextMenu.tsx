@@ -1,4 +1,5 @@
 import { type ReactNode, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Check, ExternalLink, FolderOpen, ImageDown, Link, Loader2 } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuTrigger } from './common/menu';
 
@@ -16,6 +17,7 @@ interface ImageContextMenuProps {
 type CopyState = 'idle' | 'copying' | 'copied' | 'failed';
 
 export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, children }: ImageContextMenuProps) {
+  const { t } = useTranslation();
   const [imageCopyState, setImageCopyState] = useState<CopyState>('idle');
   const [urlCopyState, setUrlCopyState] = useState<CopyState>('idle');
   const source = useMemo(() => resolveImageSource(copySrc ?? src), [copySrc, src]);
@@ -100,7 +102,7 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
         onContextMenu={(event) => event.stopPropagation()}
       >
           <MenuLabel>
-            {alt || 'Image'}
+            {alt || t('imageContextMenu.image')}
           </MenuLabel>
           <MenuItem
             icon={imageCopyIcon}
@@ -112,12 +114,12 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
             }}
           >
             {imageCopyState === 'copying'
-              ? 'Copying image'
+              ? t('imageContextMenu.copyingImage')
               : imageCopyState === 'copied'
-                ? 'Image copied'
+                ? t('imageContextMenu.imageCopied')
                 : imageCopyState === 'failed'
-                  ? 'Copy image failed'
-                  : 'Copy image'}
+                  ? t('imageContextMenu.copyImageFailed')
+                  : t('imageContextMenu.copyImage')}
           </MenuItem>
           <MenuItem
             icon={urlCopyIcon}
@@ -129,18 +131,18 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
             }}
           >
             {urlCopyState === 'copying'
-              ? 'Copying address'
+              ? t('imageContextMenu.copyingAddress')
               : urlCopyState === 'copied'
-                ? 'Address copied'
+                ? t('imageContextMenu.addressCopied')
                 : urlCopyState === 'failed'
-                  ? 'Copy address failed'
-                  : 'Copy image address'}
+                  ? t('imageContextMenu.copyAddressFailed')
+                  : t('imageContextMenu.copyImageAddress')}
           </MenuItem>
           {canOpenImage && (
             <>
               <MenuSeparator />
               <MenuItem icon={ExternalLink} onSelect={openImage}>
-                Open image
+                {t('imageContextMenu.openImage')}
               </MenuItem>
             </>
           )}
@@ -148,7 +150,7 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
             <>
               <MenuSeparator />
               <MenuItem icon={FolderOpen} onSelect={onRevealInFolder}>
-                Reveal mod in folder
+                {t('imageContextMenu.revealModInFolder')}
               </MenuItem>
             </>
           )}

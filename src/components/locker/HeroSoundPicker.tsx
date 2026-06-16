@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Music, Loader2, AlertCircle, Check, Volume2, RefreshCw } from 'lucide-react';
 import {
   applyHeroSound,
@@ -76,6 +77,7 @@ function ParamSliders({
   disabled: boolean;
   onChange: (next: AbilitySoundParams) => void;
 }) {
+  const { t } = useTranslation();
   const volumeDb = params.volumeDb ?? 0;
   const pitch = params.pitch ?? 1;
   const dirty = volumeDb !== 0 || pitch !== 1;
@@ -86,7 +88,7 @@ function ParamSliders({
       onMouseDown={(e) => e.stopPropagation()}
     >
       <div className="flex items-center gap-2">
-        <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">Volume</span>
+        <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">{t('locker.sounds.volume')}</span>
         <input
           type="range"
           min={VOLUME_MIN}
@@ -98,11 +100,11 @@ function ParamSliders({
           className="h-1 flex-1 cursor-pointer accent-accent disabled:cursor-not-allowed"
         />
         <span className="w-12 text-right text-[10px] tabular-nums text-text-secondary">
-          {volumeDb > 0 ? `+${volumeDb}` : volumeDb} dB
+          {volumeDb > 0 ? `+${volumeDb}` : volumeDb} {t('locker.sounds.db')}
         </span>
       </div>
       <div className="flex items-center gap-2">
-        <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">Pitch</span>
+        <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">{t('locker.sounds.pitch')}</span>
         <input
           type="range"
           min={PITCH_MIN}
@@ -119,7 +121,7 @@ function ParamSliders({
       </div>
       <div className="flex items-center justify-between">
         <span className="text-[9px] text-text-secondary/70">
-          {saving ? 'Saving...' : 'Applies on release'}
+          {saving ? t('locker.sounds.saving') : t('locker.sounds.appliesOnRelease')}
         </span>
         {dirty && !disabled && (
           <button
@@ -127,7 +129,7 @@ function ParamSliders({
             onClick={() => onChange({ volumeDb: 0, pitch: 1 })}
             className="text-[9px] font-semibold uppercase tracking-wide text-accent hover:underline"
           >
-            Reset
+            {t('common.actions.reset')}
           </button>
         )}
       </div>
@@ -165,6 +167,7 @@ function SoundSourceRow({
   onPick: () => void;
   onParamChange: (next: AbilitySoundParams) => void;
 }) {
+  const { t } = useTranslation();
   const otherSlots = slotsForMod(mod, heroName).filter((s) => s !== slot);
   return (
     <div
@@ -188,7 +191,7 @@ function SoundSourceRow({
           <span className="truncate">{modLabel(mod)}</span>
           {otherSlots.length > 0 && (
             <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-secondary">
-              also a{otherSlots.join(', a')}
+              {t('locker.sounds.alsoAbilities', { slots: `a${otherSlots.join(', a')}` })}
             </span>
           )}
         </span>
@@ -196,10 +199,10 @@ function SoundSourceRow({
           <Loader2 className="h-3 w-3 flex-shrink-0 animate-spin text-accent" />
         ) : isActive ? (
           <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
-            <Check className="h-2.5 w-2.5" /> Applied
+            <Check className="h-2.5 w-2.5" /> {t('locker.sounds.applied')}
           </span>
         ) : (
-          <span className="flex-shrink-0 text-[9px] uppercase tracking-wide text-text-secondary">Use</span>
+          <span className="flex-shrink-0 text-[9px] uppercase tracking-wide text-text-secondary">{t('locker.sounds.use')}</span>
         )}
       </button>
       {/* GameBanana preview clip. Sibling of the pick button (not nested) so its
@@ -233,6 +236,7 @@ function SoundToggleRow({
   soundVolume: number;
   onSelect: (modId: string) => void;
 }) {
+  const { t } = useTranslation();
   const otherSlots = slotsForMod(mod, heroName);
   return (
     <div
@@ -255,16 +259,16 @@ function SoundToggleRow({
           <span className="truncate">{modLabel(mod)}</span>
           {otherSlots.length > 0 && (
             <span className="flex-shrink-0 rounded-full bg-bg-tertiary px-1.5 py-0.5 text-[9px] uppercase tracking-wide text-text-secondary">
-              a{otherSlots.join(', a')}
+              {`a${otherSlots.join(', a')}`}
             </span>
           )}
         </span>
         {mod.enabled ? (
           <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
-            <Check className="h-2.5 w-2.5" /> On
+            <Check className="h-2.5 w-2.5" /> {t('locker.sounds.on')}
           </span>
         ) : (
-          <span className="flex-shrink-0 text-[9px] uppercase tracking-wide text-text-secondary">Off</span>
+          <span className="flex-shrink-0 text-[9px] uppercase tracking-wide text-text-secondary">{t('locker.sounds.off')}</span>
         )}
       </button>
       {mod.audioUrl && (
@@ -291,6 +295,7 @@ function SoundToggleRow({
  * toggles.
  */
 export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroSoundPickerProps) {
+  const { t } = useTranslation();
   const loadMods = useAppStore((s) => s.loadMods);
   const soundVolume = useAppStore((s) => s.soundVolume);
   // The parent LockerHeroView is keyed by hero.id, so this component remounts
@@ -473,16 +478,13 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
     <section className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-center gap-2">
         <Music className="h-4 w-4 text-accent" />
-        <h3 className="text-sm font-semibold text-text-primary">Sounds by Ability</h3>
+        <h3 className="text-sm font-semibold text-text-primary">{t('locker.sounds.soundsByAbility')}</h3>
         <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-          Experimental
+          {t('locker.sounds.experimental')}
         </span>
       </div>
       <p className="text-xs text-text-secondary">
-        Your tagged sound mods for {heroName}, grouped by the ability each one changes. Pick one
-        source per ability and it's isolated into a single Locker-managed sound that wins over your
-        other mods; pick the applied source again to revert. Tune the applied source's volume and
-        pitch with the sliders.
+        {t('locker.sounds.intro', { hero: heroName })}
       </p>
 
       {changed && (
@@ -496,15 +498,15 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
           <RefreshCw className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
           <span>
             {gameRunning
-              ? 'Restart Deadlock for these sound changes to take effect (addons mount at game start).'
-              : 'Saved. These sound changes mount the next time you Launch Modded.'}
+              ? t('locker.sounds.restartHint')
+              : t('locker.sounds.savedHint')}
           </span>
         </div>
       )}
 
       {loading && (
         <div className="flex items-center gap-2 py-4 text-xs text-text-secondary">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading abilities...
+          <Loader2 className="h-4 w-4 animate-spin" /> {t('locker.sounds.loadingAbilities')}
         </div>
       )}
 
@@ -537,16 +539,16 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5">
                       <span className="truncate text-xs font-semibold text-text-primary">
-                        {slot.display || `Ability ${slot.slot}`}
+                        {slot.display || t('locker.sounds.abilityN', { slot: slot.slot })}
                       </span>
                       {slot.slot === 4 && (
                         <span className="rounded-full bg-bg-tertiary px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-text-secondary">
-                          Ult
+                          {t('locker.sounds.ult')}
                         </span>
                       )}
                     </div>
                     <span className="text-[10px] uppercase tracking-wide text-text-secondary">
-                      Ability {slot.slot}
+                      {t('locker.sounds.abilityN', { slot: slot.slot })}
                     </span>
                   </div>
                 </div>
@@ -570,7 +572,7 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
                     ))}
                   </div>
                 ) : (
-                  <p className="text-[11px] text-text-secondary/70">No sound mod for this ability.</p>
+                  <p className="text-[11px] text-text-secondary/70">{t('locker.sounds.noSoundModForAbility')}</p>
                 )}
               </div>
             );
@@ -578,10 +580,9 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
 
           {other.length > 0 && (
             <div className="rounded-md border border-border bg-bg-secondary/70 p-3 backdrop-blur-sm">
-              <div className="mb-2 text-xs font-semibold text-text-primary">Other sounds</div>
+              <div className="mb-2 text-xs font-semibold text-text-primary">{t('locker.sounds.otherSounds')}</div>
               <p className="mb-2 text-[11px] text-text-secondary/70">
-                Voice lines and sounds not tied to a single ability. These toggle the whole mod
-                on or off.
+                {t('locker.sounds.otherSoundsDescription')}
               </p>
               <div className="space-y-1.5">
                 {other.map((mod) => (
@@ -599,7 +600,7 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
 
           {slots.length === 0 && other.length === 0 && (
             <p className="py-2 text-xs text-text-secondary">
-              No sound mods tagged for this hero yet. Tag one from Installed (multi-select then Tag).
+              {t('locker.sounds.noSoundModsTagged')}
             </p>
           )}
         </div>

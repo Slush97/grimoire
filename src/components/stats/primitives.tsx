@@ -1,4 +1,5 @@
 import { useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import { ExternalLink, RefreshCw, AlertCircle, type LucideIcon } from 'lucide-react'
 import { Button } from '../common/ui'
 import { Skeleton } from '../common/Skeleton'
@@ -96,6 +97,7 @@ export function AsyncSection<T>({
     skeletonRows = 6,
     children,
 }: AsyncSectionProps<T>) {
+    const { t } = useTranslation()
     if (state.status === 'idle' || state.status === 'loading') {
         return (
             <div className="space-y-2" aria-busy>
@@ -111,7 +113,7 @@ export function AsyncSection<T>({
                 <AlertCircle className="w-8 h-8 text-red-400" />
                 <p className="text-sm text-red-400 max-w-md">{state.error}</p>
                 <Button variant="secondary" size="sm" icon={RefreshCw} onClick={onRetry}>
-                    Retry
+                    {t('common.actions.retry')}
                 </Button>
             </div>
         )
@@ -160,6 +162,7 @@ export function MatchRow({
     damage,
     compact = false,
 }: MatchRowProps) {
+    const { t } = useTranslation()
     const heroName = useHeroName()
     const won = outcome === 'Win'
     const kda = (kills + assists) / Math.max(deaths, 1)
@@ -175,7 +178,7 @@ export function MatchRow({
                 <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{heroName(heroId)}</span>
                     <span className={`text-xs font-semibold ${won ? 'text-green-400' : 'text-red-400'}`}>
-                        {won ? 'Win' : 'Loss'}
+                        {won ? t('stats.primitives.win') : t('stats.primitives.loss')}
                     </span>
                 </div>
                 <div className="text-xs text-text-secondary">
@@ -198,20 +201,20 @@ export function MatchRow({
             {!compact && netWorth != null && (
                 <div className="text-right shrink-0 w-24 hidden md:block">
                     <div className="text-sm tabular-nums">{netWorth.toLocaleString()}</div>
-                    <div className="text-xs text-text-secondary">souls</div>
+                    <div className="text-xs text-text-secondary">{t('stats.primitives.souls')}</div>
                 </div>
             )}
             {!compact && damage != null && (
                 <div className="text-right shrink-0 w-24 hidden lg:block">
                     <div className="text-sm tabular-nums">{damage.toLocaleString()}</div>
-                    <div className="text-xs text-text-secondary">damage</div>
+                    <div className="text-xs text-text-secondary">{t('stats.primitives.damage')}</div>
                 </div>
             )}
             <a
                 href={statlockerMatchUrl(matchId)}
                 target="_blank"
                 rel="noopener noreferrer"
-                title="View match on Statlocker"
+                title={t('stats.primitives.viewMatchOnStatlocker')}
                 className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent transition-all shrink-0"
             >
                 <ExternalLink className="w-4 h-4" />

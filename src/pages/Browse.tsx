@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
 import { useVirtualizer } from '@tanstack/react-virtual';
+import { useTranslation } from 'react-i18next';
 import {
   Check,
   Search,
@@ -793,6 +794,7 @@ function BrowseReadableAction({
   onQuickDownload: () => void;
   onEnable?: () => void;
 }) {
+  const { t } = useTranslation();
   const actionableEnable = installed && installedDisabled && !!onEnable;
   const action = actionableEnable
     ? 'enable'
@@ -805,14 +807,14 @@ function BrowseReadableAction({
           : 'install';
   const label =
     action === 'enable'
-      ? 'Enable'
+      ? t('browse.card.enable')
       : action === 'installed'
-        ? 'Installed'
+        ? t('nav.installed')
         : action === 'downloading'
           ? 'Loading'
           : action === 'queued'
             ? `Queued ${queuePosition}`
-            : 'Install';
+            : t('browse.card.install');
   const iconOnly = iconOnlyOverride ?? density === 'micro';
   const className = iconOnly
     ? `browse-action-button browse-action-button--icon browse-action-button--${action}`
@@ -924,8 +926,8 @@ function BrowseReadableAction({
         type="button"
         onClick={(event) => { event.stopPropagation(); onEnable(); }}
         className={`${motionClassName} cursor-pointer`}
-        title="Enable this mod (currently in your disabled folder)"
-        aria-label={`Enable ${modName}`}
+        title={t('browse.actions.enableDisabledTitle')}
+        aria-label={t('browse.card.enableNamed', { name: modName })}
       >
         {content}
       </button>
@@ -969,6 +971,7 @@ function renderErrorWithLinks(text: string): React.ReactNode {
 }
 
 export default function Browse() {
+  const { t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
   const loadSettings = useAppStore((s) => s.loadSettings);
   const loadMods = useAppStore((s) => s.loadMods);
@@ -2240,7 +2243,7 @@ export default function Browse() {
       // the artist card) without a second round-trip against the rate limiter.
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       if (!details.files || details.files.length === 0) {
-        setError('No downloadable files found');
+        setError(t('browse.errors.noDownloadableFiles'));
         return;
       }
 
@@ -2598,9 +2601,9 @@ export default function Browse() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
         <Search className="w-16 h-16 mb-4 opacity-50" />
-        <h2 className="text-xl font-semibold text-text-primary mb-2">Configure Game Path</h2>
+        <h2 className="text-xl font-semibold text-text-primary mb-2">{t('browse.empty.configureGamePathTitle')}</h2>
         <p className="text-center max-w-md">
-          Set your Deadlock installation path in Settings (or enable dev mode) before downloading mods.
+          {t('browse.empty.configureGamePathBody')}
         </p>
       </div>
     );
@@ -2654,8 +2657,8 @@ export default function Browse() {
             <button
               type="button"
               onClick={clearArtist}
-              aria-label="Back to browse"
-              title="Back to browse"
+              aria-label={t('browse.artist.backToBrowse')}
+              title={t('browse.artist.backToBrowse')}
               className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:text-text-primary cursor-pointer"
             >
               <ArrowLeft className="h-5 w-5" />
@@ -2727,7 +2730,7 @@ export default function Browse() {
                   className="inline-flex items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542]"
                 >
                   <KofiIcon className="h-4 w-4" />
-                  Ko-fi
+                  {t('browse.artist.kofi')}
                 </a>
               )}
             </div>
@@ -2741,7 +2744,7 @@ export default function Browse() {
                     section === s ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  {s === 'Mod' ? 'Mods' : 'Sounds'}
+                  {s === 'Mod' ? t('profiles.mods.label') : t('browse.section.sounds')}
                 </button>
               ))}
             </div>
@@ -2755,7 +2758,7 @@ export default function Browse() {
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search mods..."
+                placeholder={t('browse.search.placeholder')}
                 className="w-full h-10 bg-bg-secondary border border-border rounded-lg pl-3 pr-16 text-sm text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent"
               />
               <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-0.5">
@@ -2764,7 +2767,7 @@ export default function Browse() {
                 {(search !== debouncedSearch || (loadingMore && page === 1)) && (
                   <Loader2
                     className="w-4 h-4 mx-1 animate-spin text-text-secondary"
-                    aria-label="Searching"
+                    aria-label={t('browse.search.searching')}
                   />
                 )}
                 {search && (
@@ -2772,7 +2775,7 @@ export default function Browse() {
                     type="button"
                     onClick={() => { setSearch(''); handleSearch(new Event('submit') as unknown as React.FormEvent); }}
                     className="p-1.5 text-text-secondary hover:text-text-primary transition-colors rounded-md hover:bg-bg-tertiary cursor-pointer"
-                    title="Clear search"
+                    title={t('browse.search.clear')}
                   >
                     <X className="w-4 h-4" />
                   </button>
@@ -2780,7 +2783,7 @@ export default function Browse() {
                 <button
                   type="submit"
                   className="p-1.5 text-text-secondary hover:text-accent transition-colors rounded-md hover:bg-bg-tertiary cursor-pointer"
-                  title="Search"
+                  title={t('browse.search.submit')}
                 >
                   <Search className="w-4 h-4" />
                 </button>
@@ -2795,7 +2798,7 @@ export default function Browse() {
                 aria-haspopup="menu"
                 aria-expanded={importMenuOpen}
                 className="h-10 flex items-center justify-center gap-1 pl-2.5 pr-1.5 bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                title="Import"
+                title={t('profiles.actions.import')}
               >
                 <Library className="w-5 h-5" />
                 <ChevronDown className="w-3.5 h-3.5 opacity-70" />
@@ -2805,7 +2808,7 @@ export default function Browse() {
                 <div
                   className="absolute right-0 top-full mt-2 z-20 w-64 bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
                   role="menu"
-                  aria-label="Import"
+                  aria-label={t('profiles.actions.import')}
                 >
                   <button
                     type="button"
@@ -2818,8 +2821,8 @@ export default function Browse() {
                   >
                     <Library className="w-4 h-4 text-text-secondary shrink-0" />
                     <div className="flex flex-col min-w-0">
-                      <span>GameBanana Collection</span>
-                      <span className="text-[11px] text-text-secondary truncate">Import items from a collection URL</span>
+                      <span>{t('browse.import.gamebananaCollection')}</span>
+                      <span className="text-[11px] text-text-secondary truncate">{t('browse.import.gamebananaCollectionHint')}</span>
                     </div>
                   </button>
                   <button
@@ -2833,8 +2836,8 @@ export default function Browse() {
                   >
                     <Upload className="w-4 h-4 text-text-secondary shrink-0" />
                     <div className="flex flex-col min-w-0">
-                      <span>Grimoire Profile</span>
-                      <span className="text-[11px] text-text-secondary truncate">Share code or .modprofile.json from the Profiles tab</span>
+                      <span>{t('browse.import.grimoireProfile')}</span>
+                      <span className="text-[11px] text-text-secondary truncate">{t('browse.import.grimoireProfileHint')}</span>
                     </div>
                   </button>
                 </div>
@@ -2847,7 +2850,7 @@ export default function Browse() {
               onClick={handleRefresh}
               disabled={syncing}
               className="h-10 w-10 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
-              title="Refresh from GameBanana"
+              title={t('browse.refreshFromGameBanana')}
             >
               {syncing ? (
                 <Loader2 className="w-5 h-5 animate-spin" />
@@ -2863,10 +2866,10 @@ export default function Browse() {
                 aria-haspopup="dialog"
                 aria-expanded={viewMenuOpen}
                 className="flex h-10 items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                title="View options"
+                title={t('browse.viewOptions.title')}
               >
                 <LayoutGrid className="h-4 w-4 text-text-secondary" />
-                <span>View</span>
+                <span>{t('common.view')}</span>
                 <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
               </button>
 
@@ -2874,11 +2877,11 @@ export default function Browse() {
                 <div
                   className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-border bg-bg-secondary p-3 shadow-xl animate-fade-in"
                   role="dialog"
-                  aria-label="View options"
+                  aria-label={t('browse.viewOptions.title')}
                 >
                   <div className="space-y-4">
                     <div>
-                      <div className="mb-2 text-xs font-medium text-text-secondary">Layout</div>
+                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
                       <div className="grid grid-cols-2 gap-2">
                         <button
                           type="button"
@@ -2890,7 +2893,7 @@ export default function Browse() {
                           }`}
                         >
                           <LayoutGrid className="h-4 w-4" />
-                          Grid
+                          {t('browse.viewOptions.grid')}
                         </button>
                         <button
                           type="button"
@@ -2902,17 +2905,17 @@ export default function Browse() {
                           }`}
                         >
                           <List className="h-4 w-4" />
-                          List
+                          {t('browse.viewOptions.list')}
                         </button>
                       </div>
                     </div>
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
                       <div className="mb-2 flex items-center justify-between gap-3">
-                        <span className="text-xs font-medium text-text-secondary">Card size</span>
+                        <span className="text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</span>
                         <span className="inline-flex items-center gap-1 text-[11px] text-text-tertiary">
                           <Grid3x3 className="h-3.5 w-3.5" />
-                          Grid only
+                          {t('browse.viewOptions.gridOnly')}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
@@ -2925,7 +2928,7 @@ export default function Browse() {
                           value={browseCardSizeMultiplier}
                           disabled={layout === 'list'}
                           onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
-                          aria-label="Card size"
+                          aria-label={t('browse.viewOptions.cardSize')}
                           aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
                           className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                         />
@@ -2934,8 +2937,8 @@ export default function Browse() {
                     </div>
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
-                      <div className="mb-2 text-xs font-medium text-text-secondary">Card style</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Browse card design">
+                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
+                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.cardDesign')}>
                         {(['readable', 'classic'] as const).map((design) => {
                           const active = browseCardDesign === design;
                           return (
@@ -2952,7 +2955,7 @@ export default function Browse() {
                                   : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
                               }`}
                             >
-                              {design === 'readable' ? 'Default' : 'Classic'}
+                              {design === 'readable' ? t('browse.cardStyle.default') : t('browse.cardStyle.classic')}
                             </button>
                           );
                         })}
@@ -2960,8 +2963,8 @@ export default function Browse() {
                     </div>
 
                     <div>
-                      <div className="mb-2 text-xs font-medium text-text-secondary">Details view</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label="Mod details view">
+                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
+                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.modDetailsView')}>
                         {(['modal', 'sidebar'] as const).map((view) => {
                           const active = browseDetailsView === view;
                           return (
@@ -2978,7 +2981,7 @@ export default function Browse() {
                               }`}
                             >
                               {view === 'modal' ? <Maximize2 className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
-                              {view === 'modal' ? 'Window' : 'Sidebar'}
+                              {view === 'modal' ? t('browse.detailsView.window') : t('browse.detailsView.sidebar')}
                             </button>
                           );
                         })}
@@ -2992,7 +2995,7 @@ export default function Browse() {
 
             {/* Section toggle — Mods vs Sounds as icon buttons */}
             {sections.length > 1 && (
-              <div className="flex items-center h-10 rounded-lg border border-border bg-bg-secondary p-1" role="tablist" aria-label="Section">
+              <div className="flex items-center h-10 rounded-lg border border-border bg-bg-secondary p-1" role="tablist" aria-label={t('browse.section.label')}>
                 {sections.map((entry) => {
                   const Icon = entry.modelName === 'Sound' ? Music : Package;
                   const active = section === entry.modelName;
@@ -3022,12 +3025,12 @@ export default function Browse() {
               value={sort}
               onChange={(val) => setSort(val as SortOption)}
               options={[
-                { value: 'default', label: 'Default' },
-                { value: 'popular', label: 'Popularity' },
-                { value: 'recent', label: 'Recently Added' },
-                { value: 'updated', label: 'Recently Updated' },
-                { value: 'views', label: 'Most Viewed' },
-                { value: 'name', label: 'Name (A–Z)' },
+                { value: 'default', label: t('browse.sort.default') },
+                { value: 'popular', label: t('browse.sort.popularity') },
+                { value: 'recent', label: t('browse.sort.recentlyAdded') },
+                { value: 'updated', label: t('browse.sort.recentlyUpdated') },
+                { value: 'views', label: t('browse.sort.mostViewed') },
+                { value: 'name', label: t('browse.sort.nameAZ') },
               ]}
             />
 
@@ -3053,7 +3056,7 @@ export default function Browse() {
                     }`}
                   >
                     <SlidersHorizontal className="w-4 h-4" />
-                    <span>Filters</span>
+                    <span>{t('browse.filters.title')}</span>
                     {filterCount > 0 && (
                       <span className="min-w-[18px] h-[18px] px-1 rounded-full bg-accent text-black text-[11px] font-semibold flex items-center justify-center">
                         {filterCount}
@@ -3065,10 +3068,10 @@ export default function Browse() {
                     <div
                       className="absolute right-0 top-full mt-2 z-50 w-72 bg-bg-secondary border border-border rounded-lg shadow-xl p-4 animate-fade-in"
                       role="dialog"
-                      aria-label="Filters"
+                      aria-label={t('browse.filters.title')}
                     >
                       <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-semibold text-text-primary">Filters</h4>
+                        <h4 className="text-sm font-semibold text-text-primary">{t('browse.filters.title')}</h4>
                         {filterCount > 0 && (
                           <button
                             type="button"
@@ -3082,7 +3085,7 @@ export default function Browse() {
                             }}
                             className="text-xs text-text-secondary hover:text-accent cursor-pointer"
                           >
-                            Clear all
+                            {t('browse.filters.clearAll')}
                           </button>
                         )}
                       </div>
@@ -3090,7 +3093,7 @@ export default function Browse() {
                       <div className="space-y-3">
                         {heroOptions.length > 0 && (
                           <div className="block">
-                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Hero</span>
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.hero')}</span>
                             <HeroSelect
                               ariaLabel="Filter by hero"
                               value={String(heroCategoryId)}
@@ -3100,9 +3103,9 @@ export default function Browse() {
                                 else setHeroCategoryId(Number(v));
                               }}
                               options={[
-                                { value: 'all', label: 'All Heroes', muted: true },
+                                { value: 'all', label: t('browse.filters.allHeroes'), muted: true },
                                 ...(section === 'Sound'
-                                  ? [{ value: 'none', label: 'No hero (item / UI / music)', muted: true }]
+                                  ? [{ value: 'none', label: t('browse.filters.noHero'), muted: true }]
                                   : []),
                                 ...heroOptions.map((hero) => ({
                                   value: String(hero.id),
@@ -3116,21 +3119,21 @@ export default function Browse() {
 
                         {categoryOptions.length > 0 && (
                           <div className="block">
-                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Category</span>
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.category')}</span>
                             <select
-                              aria-label="Filter by category"
+                              aria-label={t('browse.filters.filterByCategory')}
                               value={String(categoryId)}
                               onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                               disabled={heroCategoryId !== 'all'}
                               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
-                              <option value="all">All Categories</option>
+                              <option value="all">{t('browse.filters.allCategories')}</option>
                               {categoryOptions.map((cat) => (
                                 <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
                               ))}
                             </select>
                             {heroCategoryId !== 'all' && (
-                              <span className="block text-[11px] text-text-tertiary mt-1">Hero filter overrides categories.</span>
+                              <span className="block text-[11px] text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
                             )}
                           </div>
                         )}
@@ -3139,39 +3142,39 @@ export default function Browse() {
                             mirror, so they only show once it's available. */}
                         {hasLocalCache && (
                           <div className="block">
-                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Content</span>
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
                             <select
-                              aria-label="Filter by content rating"
+                              aria-label={t('browse.filters.filterByContentRating')}
                               value={nsfw}
                               onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
                               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
-                              <option value="all">All</option>
-                              <option value="sfw">SFW only</option>
-                              <option value="nsfw">NSFW only</option>
+                              <option value="all">{t('browse.filters.contentAll')}</option>
+                              <option value="sfw">{t('browse.filters.sfwOnly')}</option>
+                              <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
                             </select>
                           </div>
                         )}
 
                         {hasLocalCache && (
                           <div className="block">
-                            <span className="block text-xs font-medium text-text-secondary mb-1.5">Added</span>
+                            <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
                             <select
-                              aria-label="Filter by date added"
+                              aria-label={t('browse.filters.filterByDateAdded')}
                               value={addedWithin}
                               onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
                               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
-                              <option value="all">Any time</option>
-                              <option value="today">Today</option>
-                              <option value="week">This week</option>
-                              <option value="month">This month</option>
-                              <option value="custom">Custom range</option>
+                              <option value="all">{t('browse.filters.anyTime')}</option>
+                              <option value="today">{t('browse.filters.today')}</option>
+                              <option value="week">{t('browse.filters.thisWeek')}</option>
+                              <option value="month">{t('browse.filters.thisMonth')}</option>
+                              <option value="custom">{t('browse.filters.customRange')}</option>
                             </select>
                             {addedWithin === 'custom' && (
                               <div className="mt-2 grid grid-cols-2 gap-2">
                                 <label className="block">
-                                  <span className="block text-[11px] text-text-tertiary mb-1">From</span>
+                                  <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.from')}</span>
                                   <input
                                     type="date"
                                     value={addedFrom}
@@ -3181,7 +3184,7 @@ export default function Browse() {
                                   />
                                 </label>
                                 <label className="block">
-                                  <span className="block text-[11px] text-text-tertiary mb-1">To</span>
+                                  <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.to')}</span>
                                   <input
                                     type="date"
                                     value={addedTo}
@@ -3206,7 +3209,7 @@ export default function Browse() {
             <div className="mt-3 inline-flex max-w-full items-center gap-3 rounded-lg border border-border bg-bg-secondary/70 px-3 py-2">
               <div className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-text-primary">
                 <Volume2 className="h-4 w-4 flex-shrink-0 text-text-secondary" />
-                <span>Preview volume</span>
+                <span>{t('browse.previewVolume')}</span>
               </div>
               <input
                 type="range"
@@ -3216,7 +3219,7 @@ export default function Browse() {
                 onChange={(e) => setSoundVolume(parseInt(e.target.value, 10) / 100)}
                 className="h-1.5 w-40 cursor-pointer accent-accent sm:w-48"
                 title={`Volume: ${Math.round(soundVolume * 100)}%`}
-                aria-label="Preview volume"
+                aria-label={t('browse.previewVolume')}
               />
               <span className="w-9 text-right text-xs tabular-nums text-text-secondary">
                 {Math.round(soundVolume * 100)}%
@@ -3275,10 +3278,10 @@ export default function Browse() {
               return (
                 <EmptyState
                   icon={AlertTriangle}
-                  title="Couldn't load mods"
+                  title={t('browse.empty.couldntLoadMods')}
                   description={renderErrorWithLinks(error)}
                   variant="error"
-                  action={<Button onClick={handleRetryFetch}>Retry</Button>}
+                  action={<Button onClick={handleRetryFetch}>{t('common.actions.retry')}</Button>}
                 />
               );
             }
@@ -3301,7 +3304,7 @@ export default function Browse() {
                         setAddedTo('');
                       }}
                     >
-                      Clear filters
+                      {t('browse.filters.clearFilters')}
                     </Button>
                   ) : undefined
                 }
@@ -3388,20 +3391,20 @@ export default function Browse() {
           {loadingMore && (
             <div className="flex items-center gap-2 text-text-secondary">
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span className="text-sm">Loading more...</span>
+              <span className="text-sm">{t('browse.loadMore.loadingMore')}</span>
             </div>
           )}
           {loadMoreError && !loadingMore && (
             <div className="flex flex-col items-center gap-2 text-center max-w-md">
               <div className="flex items-center gap-2 text-text-secondary">
                 <AlertTriangle className="w-4 h-4 text-yellow-400 shrink-0" />
-                <span className="text-sm">Couldn't load more. {renderErrorWithLinks(loadMoreError)}</span>
+                <span className="text-sm">{t('browse.loadMore.couldntLoadMore')} {renderErrorWithLinks(loadMoreError)}</span>
               </div>
-              <Button onClick={handleRetryFetch} variant="secondary" size="sm">Retry</Button>
+              <Button onClick={handleRetryFetch} variant="secondary" size="sm">{t('common.actions.retry')}</Button>
             </div>
           )}
           {!hasMore && !loadMoreError && mods.length > 0 && !loadingMore && (
-            <span className="text-sm text-text-secondary">No more mods to load</span>
+            <span className="text-sm text-text-secondary">{t('browse.loadMore.noMore')}</span>
           )}
         </div>
       </div>
@@ -3446,7 +3449,7 @@ export default function Browse() {
             <div
               role="separator"
               aria-orientation="vertical"
-              aria-label="Resize details sidebar"
+              aria-label={t('browse.resizeDetailsSidebar')}
               onPointerDown={startSidebarResize}
               className="group absolute inset-y-0 left-0 z-30 w-2 -ml-1 cursor-col-resize"
             >
@@ -3480,6 +3483,7 @@ function ReadableBrowseModCard({
   onQuickDownload,
   onEnable,
 }: ModCardProps) {
+  const { t } = useTranslation();
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   const isSoundSection = section === 'Sound';
@@ -3570,7 +3574,7 @@ function ReadableBrowseModCard({
       {shouldHideNsfw && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/55 text-state-danger">
           <AlertTriangle className="h-5 w-5" />
-          <span className="mt-1 text-[11px] font-semibold">NSFW hidden</span>
+          <span className="mt-1 text-[11px] font-semibold">{t('browse.card.nsfwHidden')}</span>
         </div>
       )}
     </div>
@@ -3645,7 +3649,7 @@ function ReadableBrowseModCard({
           </h3>
           {showAuthor && (
             <p className="mt-0 truncate text-[clamp(10px,4.2857cqw,13px)] font-normal leading-[1.12] text-text-secondary/85">
-              by {mod.submitter?.name ?? 'Unknown author'}
+              by {mod.submitter?.name ?? t('browse.card.unknownAuthor')}
             </p>
           )}
           {updatedOwnLine && <BrowseReadableUpdatedLine timestamp={mod.dateModified} variant="block" />}
@@ -3694,7 +3698,7 @@ function ReadableBrowseModCard({
                         onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
                         className="w-24 h-1 accent-accent cursor-pointer"
                         title={`Volume: ${Math.round(volume * 100)}%`}
-                        aria-label="Volume"
+                        aria-label={t('browse.card.volume')}
                       />
                     </div>
                   )}
@@ -3799,6 +3803,7 @@ function ModCardSkeleton({ viewMode }: { viewMode: ViewMode }) {
 }
 
 function ModCard({ mod, installed, installedDisabled, downloading, queuePosition, viewMode, cardDesign, cardSize, cardWidth, cardHeight, section, volume, onVolumeChange, hideNsfwPreviews, isPlaying, suppressHoverIntentRef, onPlayingChange, onClick, onQuickDownload, onEnable }: ModCardProps) {
+  const { t } = useTranslation();
   const thumbnail = getModThumbnail(mod);
   const audioPreview = section === 'Sound' ? getSoundPreviewUrl(mod) : undefined;
   // Compact chrome (4:3 aspect, smaller text/padding) kicks in for small cards;
@@ -3867,7 +3872,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               <div className="w-full h-full bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary flex items-center justify-center">
                 <div className="flex items-center gap-1 px-2 py-1 rounded-full border border-accent/40 bg-accent/10 text-text-primary text-[10px] font-semibold">
                   <Volume2 className="w-3 h-3" />
-                  SOUND
+                  {t('browse.card.sound')}
                 </div>
               </div>
             )
@@ -3882,15 +3887,15 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               <button
                 onClick={(e) => { e.stopPropagation(); onEnable(); }}
                 className="flex-shrink-0 flex items-center gap-1.5 px-2.5 h-7 bg-state-warning/15 hover:bg-state-warning/25 border border-state-warning/40 text-state-warning rounded-full text-xs font-semibold transition-colors cursor-pointer"
-                title="Enable this mod (currently in your disabled folder)"
+                title={t('browse.actions.enableDisabledTitle')}
               >
                 <Power className="w-3 h-3" />
                 Enable
               </button>
             ) : installed ? (
-              <Tag tone="success" variant="overlay" title="Installed" className="flex-shrink-0">
+              <Tag tone="success" variant="overlay" title={t('nav.installed')} className="flex-shrink-0">
                 <span aria-hidden>✓</span>
-                Installed
+                {t('nav.installed')}
               </Tag>
             ) : downloading ? (
               <span className="flex-shrink-0 flex items-center justify-center w-7 h-7 bg-bg-primary/80 rounded-full">
@@ -3900,7 +3905,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               <button
                 onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
                 className="flex-shrink-0 flex items-center justify-center w-7 h-7 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-full shadow-lg transition-colors cursor-pointer"
-                title="Install"
+                title={t('browse.card.install')}
               >
                 <Download className="w-3.5 h-3.5" />
               </button>
@@ -3918,7 +3923,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               className={`mt-1 max-w-full text-xs ${isModOutdated(mod.dateModified) ? 'text-state-warning' : 'text-text-secondary'}`}
               iconClassName="browse-meta-icon"
             >
-              <span className="truncate">{isModOutdated(mod.dateModified) ? 'Outdated · ' : ''}{formatDate(mod.dateModified)}</span>
+              <span className="truncate">{isModOutdated(mod.dateModified) ? t('browse.card.outdatedPrefix') : ''}{formatDate(mod.dateModified)}</span>
             </IconText>
           )}
         </div>
@@ -3953,7 +3958,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 value={Math.round(volume * 100)}
                 onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
                 className="w-14 h-1 accent-accent cursor-pointer"
-                aria-label="Volume"
+                aria-label={t('browse.card.volume')}
               />
             </div>
           </div>
@@ -4047,7 +4052,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border border-accent/40 bg-accent/10 text-text-primary font-medium shadow-lg backdrop-blur-sm ${isCompact ? 'text-xs px-2 py-1' : 'text-sm'}`}>
                   <Volume2 className={isCompact ? 'w-3 h-3' : 'w-4 h-4'} />
-                  <span>SOUND</span>
+                  <span>{t('browse.card.sound')}</span>
                 </div>
               </div>
             )}
@@ -4123,7 +4128,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                   icon={AlertTriangle}
                   title={`Last updated ${formatDate(mod.dateModified)}`}
                 >
-                  Outdated
+                  {t('browse.card.outdated')}
                 </Tag>
               )}
             </div>
@@ -4158,7 +4163,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 className={`mt-1 max-w-full text-state-warning ${isCompact ? 'text-xs' : 'text-sm'}`}
                 iconClassName="browse-meta-icon"
               >
-                <span className="truncate">Outdated · {formatDate(mod.dateModified)}</span>
+                <span className="truncate">{t('browse.card.outdatedPrefix')}{formatDate(mod.dateModified)}</span>
               </IconText>
             )}
           </div>
@@ -4186,7 +4191,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               icon={AlertTriangle}
               title={`Last updated ${formatDate(mod.dateModified)}`}
             >
-              Outdated
+              {t('browse.card.outdated')}
             </Tag>
           )}
         </div>
@@ -4243,7 +4248,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
                 onChange={(e) => onVolumeChange(parseInt(e.target.value, 10) / 100)}
                 className="w-16 h-1 accent-accent cursor-pointer"
                 title={`Volume: ${Math.round(volume * 100)}%`}
-                aria-label="Volume"
+                aria-label={t('browse.card.volume')}
               />
             </div>
           </div>
@@ -4259,7 +4264,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           <button
             onClick={(e) => { e.stopPropagation(); onEnable(); }}
             className={`flex items-center gap-1.5 rounded-full bg-state-warning/90 hover:bg-state-warning text-bg-primary backdrop-blur-sm ring-1 ring-border shadow-md font-semibold transition-colors cursor-pointer ${isCompact ? 'h-7 px-2 text-[11px]' : 'h-8 px-2.5 text-xs'}`}
-            title="Enable this mod (currently in your disabled folder)"
+            title={t('browse.actions.enableDisabledTitle')}
           >
             <Power className={isCompact ? 'w-3 h-3' : 'w-3.5 h-3.5'} />
             Enable
@@ -4267,12 +4272,12 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         ) : installed ? (
           <span
             className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-state-success ${isCompact ? 'w-7 h-7 text-sm' : 'w-8 h-8 text-base'}`}
-            title="Installed and enabled"
+            title={t('browse.card.installedAndEnabled')}
           >
             ✓
           </span>
         ) : downloading ? (
-          <div className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title="Downloading...">
+          <div className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`} title={t('browse.card.downloading')}>
             <Loader2 className={`animate-spin text-accent ${isCompact ? 'w-4 h-4' : 'w-5 h-5'}`} />
           </div>
         ) : queuePosition ? (
@@ -4286,7 +4291,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           <button
             onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
             className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-accent hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
-            title="Install"
+            title={t('browse.card.install')}
           >
             <Download className={isCompact ? 'w-4 h-4' : 'w-5 h-5'} />
           </button>

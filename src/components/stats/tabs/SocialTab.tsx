@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Users2, UserCheck, UserX, ExternalLink, RefreshCw, AlertCircle } from 'lucide-react'
 import { Card, Button } from '../../common/ui'
 import { Skeleton } from '../../common/Skeleton'
@@ -34,6 +35,7 @@ function PlayerStatRow({
     wins,
     matches,
 }: PlayerStatRowProps) {
+    const { t } = useTranslation()
     return (
         <div className="group flex items-center justify-between gap-3 p-3 bg-bg-tertiary rounded-sm">
             <div className="flex items-center gap-3 min-w-0">
@@ -46,12 +48,12 @@ function PlayerStatRow({
                 )}
                 <div className="min-w-0">
                     <div className="font-medium truncate flex items-center gap-1.5">
-                        {name || `Player ${accountId}`}
+                        {name || t('stats.social.playerFallback', { accountId })}
                         <a
                             href={statlockerProfileUrl(accountId)}
                             target="_blank"
                             rel="noopener noreferrer"
-                            title="Open on Statlocker"
+                            title={t('stats.social.openOnStatlocker')}
                             className="opacity-0 group-hover:opacity-100 text-text-secondary hover:text-accent transition-all"
                         >
                             <ExternalLink className="w-3.5 h-3.5" />
@@ -61,9 +63,11 @@ function PlayerStatRow({
                 </div>
             </div>
             <div className="text-right shrink-0">
-                <div className={`font-semibold ${winRateClass(winRate)}`}>{winRate.toFixed(1)}% WR</div>
+                <div className={`font-semibold ${winRateClass(winRate)}`}>
+                    {t('stats.social.winRatePercent', { rate: winRate.toFixed(1) })}
+                </div>
                 <div className="text-xs text-text-secondary">
-                    {wins}W - {matches - wins}L
+                    {t('stats.social.winLoss', { wins, losses: matches - wins })}
                 </div>
             </div>
         </div>
@@ -71,6 +75,7 @@ function PlayerStatRow({
 }
 
 export function SocialTab({ accountId }: SocialTabProps) {
+    const { t } = useTranslation()
     const social = useSocialStore((s) => s.social)
     const loadSocialStats = useSocialStore((s) => s.loadSocialStats)
 
@@ -87,7 +92,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
                 <AlertCircle className="w-8 h-8 text-red-400" />
                 <p className="text-sm text-red-400 max-w-md">{social.error}</p>
                 <Button variant="secondary" size="sm" icon={RefreshCw} onClick={() => loadSocialStats(accountId)}>
-                    Retry
+                    {t('common.actions.retry')}
                 </Button>
             </div>
         )
@@ -109,7 +114,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
         return (
             <div className="text-center py-12 text-text-secondary">
                 <Users2 className="w-10 h-10 mx-auto mb-3 opacity-50" />
-                <p className="text-sm">No social data for this player yet</p>
+                <p className="text-sm">{t('stats.social.noSocialData')}</p>
             </div>
         )
     }
@@ -118,7 +123,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
         <div className="space-y-4">
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
             {mates.length > 0 && (
-                <Card title="Best Teammates" icon={UserCheck} description="Min 3 shared matches">
+                <Card title={t('stats.social.bestTeammates')} icon={UserCheck} description={t('stats.social.minSharedMatches')}>
                     <div className="space-y-2">
                         {mates.slice(0, 15).map((mate: MateStats) => (
                             <PlayerStatRow
@@ -128,7 +133,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
                                 avatarUrl={mate.avatar_url}
                                 fallbackIcon={UserCheck}
                                 fallbackTone="bg-green-500/20 text-green-400"
-                                subtitle={`${mate.matches_played} games together`}
+                                subtitle={t('stats.social.gamesTogether', { count: mate.matches_played })}
                                 winRate={mate.win_rate || 0}
                                 wins={mate.wins}
                                 matches={mate.matches_played}
@@ -139,7 +144,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
             )}
 
             {enemies.length > 0 && (
-                <Card title="Frequent Opponents" icon={UserX} description="Min 3 shared matches">
+                <Card title={t('stats.social.frequentOpponents')} icon={UserX} description={t('stats.social.minSharedMatches')}>
                     <div className="space-y-2">
                         {enemies.slice(0, 15).map((enemy: EnemyStats) => (
                             <PlayerStatRow
@@ -149,7 +154,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
                                 avatarUrl={enemy.avatar_url}
                                 fallbackIcon={UserX}
                                 fallbackTone="bg-red-500/20 text-red-400"
-                                subtitle={`${enemy.matches_played} games against`}
+                                subtitle={t('stats.social.gamesAgainst', { count: enemy.matches_played })}
                                 winRate={enemy.win_rate || 0}
                                 wins={enemy.wins}
                                 matches={enemy.matches_played}

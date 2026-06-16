@@ -107,7 +107,7 @@ export default function PublishDialog({
           <div className="min-w-0">
             <h2 id="publish-profile-title" className="text-xl font-bold text-text-primary flex items-center gap-2">
               <Globe className="w-5 h-5 text-accent" />
-              Publish to Discover
+              {t('profiles.actions.publishToDiscover')}
             </h2>
             <p className="text-sm text-text-secondary mt-1 truncate" title={profileName}>
               {profileName}
@@ -117,7 +117,7 @@ export default function PublishDialog({
             onClick={() => { if (!submitting) onClose(); }}
             disabled={submitting}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -129,14 +129,14 @@ export default function PublishDialog({
               <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3 text-sm text-green-300 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <div className="font-medium">Published.</div>
+                  <div className="font-medium">{t('social.publish.published')}</div>
                   <div className="text-xs text-text-secondary mt-1">
-                    Your profile is live on Discover.
+                    {t('social.publish.liveOnDiscover')}
                   </div>
                 </div>
               </div>
               <div className="flex justify-end">
-                <Button onClick={onClose}>Done</Button>
+                <Button onClick={onClose}>{t('common.actions.done')}</Button>
               </div>
             </div>
           ) : (
@@ -144,14 +144,14 @@ export default function PublishDialog({
               {exportError && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>Could not build share code: {exportError}</span>
+                  <span>{t('social.publish.couldNotBuildShareCode', { error: exportError })}</span>
                 </div>
               )}
 
               {!exportResult && !exportError && (
                 <div className="text-text-secondary text-sm inline-flex items-center gap-2">
                   <Loader2 className="w-4 h-4 animate-spin" />
-                  Building portable profile...
+                  {t('social.publish.buildingPortableProfile')}
                 </div>
               )}
 
@@ -160,7 +160,7 @@ export default function PublishDialog({
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <div className="min-w-0">
                     <div className="font-medium">
-                      {exportResult.warnings.length} mod{exportResult.warnings.length === 1 ? '' : 's'} won't be shared
+                      {t('social.publish.modsWontBeShared', { count: exportResult.warnings.length })}
                     </div>
                     <div className="text-xs text-text-secondary mt-1 space-y-0.5 max-h-20 overflow-y-auto">
                       {exportResult.warnings.map((w, i) => <div key={i}>{w}</div>)}
@@ -175,13 +175,13 @@ export default function PublishDialog({
               {noShareableMods && (
                 <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
-                  <span>This profile has no GameBanana-backed mods to share.</span>
+                  <span>{t('social.publish.noGamebananaMods')}</span>
                 </div>
               )}
 
               <div>
                 <label htmlFor="publish-title" className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5">
-                  Title
+                  {t('social.publish.title')}
                 </label>
                 <input
                   id="publish-title"
@@ -189,18 +189,18 @@ export default function PublishDialog({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={80}
-                  placeholder="Short, memorable title"
+                  placeholder={t('social.publish.titlePlaceholder')}
                   className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <div className="text-[11px] text-text-secondary mt-1 flex justify-between">
-                  <span>{titleTooLong ? 'Max 80 characters' : ' '}</span>
+                  <span>{titleTooLong ? t('social.publish.max80Characters') : ' '}</span>
                   <span className={titleTooLong ? 'text-red-400' : ''}>{trimmedTitle.length}/80</span>
                 </div>
               </div>
 
               <div>
                 <label htmlFor="publish-description" className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5">
-                  Description (optional)
+                  {t('social.publish.descriptionOptional')}
                 </label>
                 <textarea
                   id="publish-description"
@@ -208,11 +208,11 @@ export default function PublishDialog({
                   onChange={(e) => setDescription(e.target.value)}
                   maxLength={1000}
                   rows={4}
-                  placeholder="What's the vibe? Who's it for?"
+                  placeholder={t('social.publish.descriptionPlaceholder')}
                   className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                 />
                 <div className="text-[11px] text-text-secondary mt-1 flex justify-between">
-                  <span>{descriptionTooLong ? 'Max 1000 characters' : ' '}</span>
+                  <span>{descriptionTooLong ? t('social.publish.max1000Characters') : ' '}</span>
                   <span className={descriptionTooLong ? 'text-red-400' : ''}>{trimmedDescription.length}/1000</span>
                 </div>
               </div>
@@ -220,10 +220,7 @@ export default function PublishDialog({
               {!tosAccepted && (
                 <div className="bg-bg-tertiary border border-white/10 rounded-md p-3 text-xs text-text-secondary space-y-2">
                   <p className="leading-relaxed">
-                    Publishing makes this profile's title, description, and the list of GameBanana mods it
-                    references public on Discover. By continuing, you confirm the referenced mods comply
-                    with GameBanana's terms, you grant Grimoire permission to host this metadata, and you
-                    accept that profiles may be removed for community-guideline violations.
+                    {t('social.publish.tosBody')}
                   </p>
                   <label className="flex items-center gap-2 text-text-primary cursor-pointer">
                     <input
@@ -236,7 +233,7 @@ export default function PublishDialog({
                       }}
                       className="accent-accent"
                     />
-                    <span>I understand and want to publish.</span>
+                    <span>{t('social.publish.tosAccept')}</span>
                   </label>
                 </div>
               )}
@@ -250,7 +247,7 @@ export default function PublishDialog({
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="ghost" onClick={onClose} disabled={submitting}>
-                  Cancel
+                  {t('common.actions.cancel')}
                 </Button>
                 <Button
                   onClick={handlePublish}
@@ -258,7 +255,7 @@ export default function PublishDialog({
                   isLoading={submitting}
                   icon={Globe}
                 >
-                  Publish
+                  {t('social.publish.publish')}
                 </Button>
               </div>
             </>

@@ -925,7 +925,17 @@ export default function Profiles() {
                                       className="w-3 h-3 rounded-sm border border-white/20"
                                       style={{ backgroundColor: `rgb(${profile.crosshair.colorR}, ${profile.crosshair.colorG}, ${profile.crosshair.colorB})` }}
                                     />
-                                    <span>RGB({profile.crosshair.colorR}, {profile.crosshair.colorG}, {profile.crosshair.colorB})</span>
+                                    <span>
+                                      <Tx
+                                        k="profiles.crosshair.rgb"
+                                        values={{
+                                          r: profile.crosshair.colorR,
+                                          g: profile.crosshair.colorG,
+                                          b: profile.crosshair.colorB,
+                                        }}
+                                        fallback={`RGB(${profile.crosshair.colorR}, ${profile.crosshair.colorG}, ${profile.crosshair.colorB})`}
+                                      />
+                                    </span>
                                   </div>
                                 </div>
                               </div>

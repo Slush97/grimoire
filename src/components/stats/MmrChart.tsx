@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { TrendingUp } from 'lucide-react'
 import type { MMRSnapshot, PlayerMMRHistoryEntry } from '../../types/deadlock-stats'
 import { useHeroStore } from '../../stores/stats/heroStore'
@@ -108,6 +109,7 @@ function smoothPath(pts: { x: number; y: number }[]): string {
 }
 
 export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
+    const { t } = useTranslation()
     const svgRef = useRef<SVGSVGElement>(null)
     const [hovered, setHovered] = useState<number | null>(null)
     const ranks = useHeroStore((s) => s.ranks)
@@ -251,7 +253,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                             : 'text-text-secondary border border-transparent hover:text-white hover:bg-white/5'
                     }`}
                 >
-                    {r.label}
+                    {r.key === 'all' ? t('stats.mmrChart.all') : r.label}
                 </button>
             ))}
         </div>
@@ -265,8 +267,8 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                     <TrendingUp className="w-8 h-8 opacity-50" />
                     <p className="text-sm">
                         {allPoints.length >= 2
-                            ? 'No ranked matches in this range. Try a wider one.'
-                            : 'No ranked score history for this player yet.'}
+                            ? t('stats.mmrChart.noMatchesInRange')
+                            : t('stats.mmrChart.noScoreHistory')}
                     </p>
                 </div>
             </div>
@@ -314,7 +316,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                     </span>
                     <span className="ml-1.5">
                         {formatDay(first.t)} to {formatDay(last.t)}
-                        {fromSnapshots ? ' (local daily snapshots)' : ''}
+                        {fromSnapshots ? ` ${t('stats.mmrChart.localDailySnapshots')}` : ''}
                     </span>
                 </div>
                 {rangeButtons}

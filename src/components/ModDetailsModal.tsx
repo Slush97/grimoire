@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
   Volume2,
@@ -124,6 +125,7 @@ function ModDetailsModal({
   onChangeView,
   onViewArtist,
 }: ModDetailsModalProps) {
+  const { t } = useTranslation();
   const isSidebar = variant === 'sidebar';
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
@@ -344,9 +346,9 @@ function ModDetailsModal({
     // "Update". Archived files are never update targets (they're the old ones).
     // Browse never sets updateAvailable, so its non-installed files stay
     // "Install" (Browse adds files, it doesn't replace).
-    if (installedFileIds.has(fileId)) return 'Reinstall';
-    if (updateAvailable && !archived) return 'Update';
-    return 'Install';
+    if (installedFileIds.has(fileId)) return t('modDetails.actions.reinstall');
+    if (updateAvailable && !archived) return t('profiles.actions.update');
+    return t('modDetails.actions.install');
   };
 
   const files = mod.files ?? [];
@@ -492,7 +494,7 @@ function ModDetailsModal({
             {archived && <ArchivedTag />}
             {isActive && (
               <span className="flex-shrink-0 text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5">
-                Active
+                {t('common.status.active')}
               </span>
             )}
           </div>
@@ -533,11 +535,11 @@ function ModDetailsModal({
               type="button"
               onClick={() => onEnableFile!(installedFileState.modId)}
               disabled={isBusyThis}
-              title="Enable this mod"
+              title={t('modDetails.actions.enableThisModTitle')}
               className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-yellow-500/40 bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-300 transition-colors hover:bg-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
               <Power className="w-3.5 h-3.5" />
-              Enable
+              {t('modDetails.actions.enable')}
             </button>
           )}
           {showDeleteButton && installedFileState && (
@@ -565,12 +567,12 @@ function ModDetailsModal({
             {isDownloadingThis ? (
               <>
                 <Loader2 className="w-4 h-4 animate-spin" />
-                {extracting ? 'Extracting...' : pct !== null ? `${pct}%` : 'Starting'}
+                {extracting ? t('modDetails.status.extracting') : pct !== null ? `${pct}%` : t('modDetails.status.starting')}
               </>
             ) : isQueuedThis ? (
               <>
                 <Clock className="w-4 h-4" />
-                Queued
+                {t('modDetails.status.queued')}
               </>
             ) : (
               <>
@@ -693,7 +695,7 @@ function ModDetailsModal({
       // focus trap / inert background to screen readers).
       role={isSidebar ? 'region' : 'dialog'}
       aria-modal={isSidebar ? undefined : true}
-      aria-label={isNavigating ? navigationLabel ?? 'Loading mod details' : mod.name}
+      aria-label={isNavigating ? navigationLabel ?? t('modDetails.aria.loadingDetails') : mod.name}
       aria-busy={isNavigating}
     >
       <div
@@ -789,7 +791,7 @@ function ModDetailsModal({
             {installed && !updateAvailable && (
               <span className="inline-flex items-center gap-1 rounded-full bg-green-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400 border border-green-500/40">
                 <CheckCircle2 className="w-2.5 h-2.5" />
-                Installed
+                {t('modDetails.status.installed')}
               </span>
             )}
             {/* Only surface the ignore-updates pill in the installed-mod
@@ -814,12 +816,12 @@ function ModDetailsModal({
                 {ignoreUpdates ? (
                   <>
                     <BellOff className="w-2.5 h-2.5" />
-                    Updates ignored
+                    {t('modDetails.status.updatesIgnored')}
                   </>
                 ) : (
                   <>
                     <Bell className="w-2.5 h-2.5" />
-                    Ignore updates
+                    {t('modDetails.actions.ignoreUpdates')}
                   </>
                 )}
               </button>
@@ -827,7 +829,7 @@ function ModDetailsModal({
             {outdated && (
               <span className="inline-flex items-center gap-1 rounded-full bg-yellow-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-yellow-400 border border-yellow-500/40">
                 <AlertTriangle className="w-2.5 h-2.5" />
-                Outdated
+                {t('modDetails.status.outdated')}
               </span>
             )}
             {mod.category?.name && (
@@ -846,7 +848,7 @@ function ModDetailsModal({
               {isNavigating ? (
                 <span className="inline-flex w-full max-w-sm items-center gap-2">
                   <Skeleton className="h-5 w-full max-w-[20rem]" />
-                  <span className="sr-only">Loading {navigationLabel ?? 'mod details'}</span>
+                  <span className="sr-only">{t('modDetails.aria.loadingNamed', { label: navigationLabel ?? t('modDetails.meta.modDetails') })}</span>
                 </span>
               ) : (
                 <a
@@ -879,7 +881,7 @@ function ModDetailsModal({
                 {addedStr && (
                   <span className="flex items-center gap-1" title={`Uploaded ${addedStr}`}>
                     <Clock className="w-3 h-3" />
-                    <span className="text-text-tertiary">Added</span>
+                    <span className="text-text-tertiary">{t('modDetails.meta.added')}</span>
                     <span className="text-text-primary">{addedStr}</span>
                   </span>
                 )}
@@ -891,7 +893,7 @@ function ModDetailsModal({
                       : `Last updated ${modifiedStr}`}
                   >
                     <RefreshCw className="w-3 h-3" />
-                    <span className={outdated ? 'text-yellow-300/80' : 'text-text-tertiary'}>Updated</span>
+                    <span className={outdated ? 'text-yellow-300/80' : 'text-text-tertiary'}>{t('profiles.updated')}</span>
                     <span className={outdated ? 'text-yellow-300' : 'text-text-primary'}>{modifiedStr}</span>
                   </span>
                 )}
@@ -916,7 +918,7 @@ function ModDetailsModal({
           )}
           <button
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
             className="flex-shrink-0 p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
           >
             <X className="w-5 h-5" />
@@ -939,11 +941,14 @@ function ModDetailsModal({
               onClick={(e) => e.stopPropagation()}
             >
               <h3 id="delete-file-title" className="text-lg font-semibold text-text-primary">
-                Delete installed file?
+                {t('modDetails.deleteFile.title')}
               </h3>
               <p className="mt-2 text-sm leading-relaxed text-text-secondary">
-                Delete <span className="font-medium text-text-primary">{deleteCandidate.fileName}</span> from your installed mods?
-                This action cannot be undone.
+                <Trans
+                  i18nKey="modDetails.deleteFile.body"
+                  values={{ fileName: deleteCandidate.fileName }}
+                  components={{ name: <span className="font-medium text-text-primary" /> }}
+                />
               </p>
               <div className="mt-5 flex justify-end gap-3">
                 <button
@@ -952,7 +957,7 @@ function ModDetailsModal({
                   disabled={deleteInProgress}
                   className="rounded-md border border-border bg-bg-tertiary px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                 >
-                  Cancel
+                  {t('common.actions.cancel')}
                 </button>
                 <button
                   type="button"
@@ -970,7 +975,7 @@ function ModDetailsModal({
                   className="inline-flex items-center gap-2 rounded-md border border-state-danger/35 bg-state-danger/10 px-4 py-2 text-sm font-medium text-state-danger transition-colors hover:border-state-danger/55 hover:bg-state-danger/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                 >
                   {deleteInProgress && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Delete
+                  {t('common.actions.delete')}
                 </button>
               </div>
             </div>
@@ -1032,7 +1037,7 @@ function ModDetailsModal({
                           />
                           {imageHidden && (
                             <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-white/80 bg-black/40">
-                              NSFW preview hidden
+                              {t('modDetails.nsfw.previewHidden')}
                             </div>
                           )}
                           <span className="absolute top-2 right-2 p-1.5 rounded-md bg-black/55 backdrop-blur-sm text-white/80 border border-white/10 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -1044,7 +1049,7 @@ function ModDetailsModal({
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
-                              aria-label="Previous image"
+                              aria-label={t('modDetails.aria.previousImage')}
                               className="absolute left-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer"
                             >
                               <ChevronLeft className="w-5 h-5" />
@@ -1052,7 +1057,7 @@ function ModDetailsModal({
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); goToNext(); }}
-                              aria-label="Next image"
+                              aria-label={t('modDetails.aria.nextImage')}
                               className="absolute right-2 top-1/2 z-10 -translate-y-1/2 p-1.5 rounded-full bg-black/55 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer"
                             >
                               <ChevronRight className="w-5 h-5" />
@@ -1065,7 +1070,7 @@ function ModDetailsModal({
                       </div>
                     );
                     return (
-                      <div className="space-y-2" aria-label="Image previews">
+                      <div className="space-y-2" aria-label={t('modDetails.aria.imagePreviews')}>
                         {imageHidden ? (
                           slot
                         ) : (
@@ -1098,7 +1103,7 @@ function ModDetailsModal({
                    to open the lightbox at that image's index. We use the
                    530px preview here (fast load + sharp on the inline slot)
                    and the original asset in the lightbox. */
-                <div className="space-y-3" aria-label="Image previews">
+                <div className="space-y-3" aria-label={t('modDetails.aria.imagePreviews')}>
                   {images.map((img, index) => {
                     const previewSrc = `${img.baseUrl}/${img.file530 || img.file}`;
                     const fullSrc = `${img.baseUrl}/${img.file}`;
@@ -1136,7 +1141,7 @@ function ModDetailsModal({
                         />
                         {imageHidden && (
                           <div className="absolute inset-0 flex items-center justify-center text-[11px] uppercase tracking-wide text-white/80 bg-black/40">
-                            NSFW preview hidden
+                            {t('modDetails.nsfw.previewHidden')}
                           </div>
                         )}
                         {images.length > 1 && (
@@ -1167,8 +1172,8 @@ function ModDetailsModal({
                 <div className="flex items-center justify-center p-8 rounded-lg border border-border bg-bg-tertiary">
                   <div className="flex flex-col items-center gap-2 text-text-secondary">
                     <Volume2 className="w-12 h-12 text-accent/60" />
-                    <span className="text-sm">Sound Mod</span>
-                    <span className="text-xs opacity-60">No audio preview available</span>
+                    <span className="text-sm">{t('modDetails.audio.soundMod')}</span>
+                    <span className="text-xs opacity-60">{t('modDetails.audio.noPreview')}</span>
                   </div>
                 </div>
               ) : null}
@@ -1177,7 +1182,7 @@ function ModDetailsModal({
                 <div className="relative rounded-lg overflow-hidden border border-border bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary p-3">
                   <div className="flex items-center gap-2 mb-2">
                     <Volume2 className="w-4 h-4 text-accent" />
-                    <h3 className="font-medium text-sm text-text-primary">Audio Preview</h3>
+                    <h3 className="font-medium text-sm text-text-primary">{t('modDetails.audio.preview')}</h3>
                   </div>
                   <div className="backdrop-blur-md bg-bg-primary/50 rounded-lg border border-white/10 p-1">
                     <AudioPreviewPlayer
@@ -1192,7 +1197,7 @@ function ModDetailsModal({
               {outdated && (
                 <div className="flex items-start gap-2 rounded-lg border border-yellow-500/30 bg-yellow-500/10 px-3 py-2.5 text-yellow-200 text-xs">
                   <AlertTriangle className="w-4 h-4 text-yellow-400 flex-shrink-0 mt-0.5" />
-                  <span>This mod was last updated on {formatDate(dateModified!)} and may not be compatible with the current Deadlock version.</span>
+                  <span>{t('modDetails.outdatedWarning', { date: formatDate(dateModified!) })}</span>
                 </div>
               )}
             </div>
@@ -1271,7 +1276,7 @@ function ModDetailsModal({
                       avatarVisual
                     )}
                     <div className="min-w-0 flex-1">
-                      <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">Artist</div>
+                      <div className="text-[10px] font-semibold uppercase tracking-wide text-text-tertiary">{t('modDetails.meta.artist')}</div>
                       {openArtist ? (
                         <button
                           type="button"
@@ -1306,7 +1311,7 @@ function ModDetailsModal({
                         className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5E5B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
                       >
                         <Coffee className="h-4 w-4" />
-                        Ko-fi
+                        {t('modDetails.meta.koFi')}
                       </a>
                     )}
                   </div>
@@ -1316,7 +1321,7 @@ function ModDetailsModal({
               {mod.description && (
                 <section>
                   <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
-                    About
+                    {t('modDetails.sections.about')}
                   </h3>
                   <div className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full">
                     <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mod.description) }} />
@@ -1338,7 +1343,7 @@ function ModDetailsModal({
                   )}
                   <RefreshCw className="h-3.5 w-3.5 flex-shrink-0 text-text-secondary" />
                   <span className="text-xs font-semibold uppercase tracking-wide text-text-secondary transition-colors group-hover:text-text-primary">
-                    Changelog {updatesTotalCount > 0 && <span className="normal-case tracking-normal text-text-secondary/70">({updatesTotalCount})</span>}
+                    {t('modDetails.sections.changelog')} {updatesTotalCount > 0 && <span className="normal-case tracking-normal text-text-secondary/70">({updatesTotalCount})</span>}
                   </span>
                 </button>
                 {changelogOpen && (
@@ -1357,10 +1362,10 @@ function ModDetailsModal({
                   </div>
                 ) : updatesError ? (
                   <p className="rounded-lg border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-secondary">
-                    Changelog unavailable.
+                    {t('modDetails.changelog.unavailable')}
                   </p>
                 ) : updates.length === 0 ? (
-                  <p className="text-sm text-text-secondary py-1">No changelog entries found</p>
+                  <p className="text-sm text-text-secondary py-1">{t('modDetails.changelog.empty')}</p>
                 ) : (
                   <div className="space-y-2">
                     {updates.map((update) => {
@@ -1445,7 +1450,7 @@ function ModDetailsModal({
               {files.length > 0 && (
                 <section>
                   <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
-                    Files {files.length > 1 && <span className="text-text-secondary/70 normal-case tracking-normal">({files.length})</span>}
+                    {t('modDetails.sections.files')} {files.length > 1 && <span className="text-text-secondary/70 normal-case tracking-normal">({files.length})</span>}
                   </h3>
                   <div className="space-y-2">
                     {currentFiles.map((file) => renderFileRow(file))}
@@ -1463,10 +1468,10 @@ function ModDetailsModal({
                             ) : (
                               <ChevronRight className="w-4 h-4 flex-shrink-0" />
                             )}
-                            <span className="font-medium truncate">Archived files</span>
+                            <span className="font-medium truncate">{t('modDetails.files.archived')}</span>
                             {installedFileIsArchived && (
                               <span className="flex-shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
-                                Your version
+                                {t('modDetails.files.yourVersion')}
                               </span>
                             )}
                           </span>
@@ -1489,12 +1494,12 @@ function ModDetailsModal({
                   <h3 className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
                     <MessageSquare className="h-3.5 w-3.5 flex-shrink-0" />
                     <span className="truncate">
-                      Comments {commentsTotalCount > 0 && <span className="normal-case tracking-normal text-text-secondary/70">({commentsTotalCount})</span>}
+                      {t('modDetails.sections.comments')} {commentsTotalCount > 0 && <span className="normal-case tracking-normal text-text-secondary/70">({commentsTotalCount})</span>}
                     </span>
                   </h3>
                   {!commentsLoading && commentsTotalCount > comments.length && comments.length > 0 && (
                     <span className="flex-shrink-0 text-[11px] text-text-tertiary">
-                      Showing {comments.length.toLocaleString()} of {commentsTotalCount.toLocaleString()}
+                      {t('modDetails.comments.showing', { shown: comments.length.toLocaleString(), total: commentsTotalCount.toLocaleString() })}
                     </span>
                   )}
                 </div>
@@ -1517,7 +1522,7 @@ function ModDetailsModal({
                 ) : comments.length === 0 ? (
                   <div className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-bg-tertiary/30 px-3 py-4 text-sm text-text-secondary">
                     <MessageSquare className="h-4 w-4 flex-shrink-0 text-text-tertiary" />
-                    <span>No comments yet</span>
+                    <span>{t('modDetails.comments.empty')}</span>
                   </div>
                 ) : (
                   /* Flat threaded layout - no per-comment card. Files stay
@@ -1575,7 +1580,7 @@ function ModDetailsModal({
                 className="inline-flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
               >
                 <ExternalLink className="w-4 h-4" />
-                View on GameBanana
+                {t('modDetails.viewOnGamebanana')}
               </a>
             </div>
           </div>
@@ -1600,7 +1605,7 @@ function ModDetailsModal({
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setLightboxOpen(false); }}
-            aria-label="Close full size view"
+            aria-label={t('modDetails.aria.closeFullSizeView')}
             className="absolute top-4 right-4 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
           >
             <X className="w-5 h-5" />
@@ -1610,7 +1615,7 @@ function ModDetailsModal({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); goToPrevious(); }}
-                aria-label="Previous image"
+                aria-label={t('modDetails.aria.previousImage')}
                 className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
               >
                 <ChevronLeft className="w-6 h-6" />
@@ -1618,7 +1623,7 @@ function ModDetailsModal({
               <button
                 type="button"
                 onClick={(e) => { e.stopPropagation(); goToNext(); }}
-                aria-label="Next image"
+                aria-label={t('modDetails.aria.nextImage')}
                 className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full bg-black/60 backdrop-blur-sm text-white/90 hover:bg-black/80 hover:text-white border border-white/15 transition-colors cursor-pointer z-10"
               >
                 <ChevronRight className="w-6 h-6" />

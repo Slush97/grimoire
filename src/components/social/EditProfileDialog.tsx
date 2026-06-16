@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
 import { Button } from '../common/ui';
 import { Modal } from '../common/Modal';
@@ -19,6 +20,7 @@ export default function EditProfileDialog({
   onClose,
   onSaved,
 }: EditProfileDialogProps) {
+  const { t } = useTranslation();
   const [title, setTitle] = useState(initialTitle);
   const [description, setDescription] = useState(initialDescription ?? '');
   const [submitting, setSubmitting] = useState(false);
@@ -74,10 +76,10 @@ export default function EditProfileDialog({
               className="text-xl font-bold text-text-primary flex items-center gap-2"
             >
               <Pencil className="w-5 h-5 text-accent" />
-              Edit your post
+              {t('social.editProfile.editYourPost')}
             </h2>
             <p className="text-sm text-text-secondary mt-1">
-              Update the title or description. The mod list stays as published.
+              {t('social.editProfile.modListStays')}
             </p>
           </div>
           <button
@@ -86,7 +88,7 @@ export default function EditProfileDialog({
             }}
             disabled={submitting}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0 disabled:opacity-50"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -98,14 +100,14 @@ export default function EditProfileDialog({
               <div className="bg-green-500/10 border border-green-500/30 rounded-md p-3 text-sm text-green-300 flex items-start gap-2">
                 <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5" />
                 <div className="min-w-0">
-                  <div className="font-medium">Saved.</div>
+                  <div className="font-medium">{t('social.editProfile.saved')}</div>
                   <div className="text-xs text-text-secondary mt-1">
-                    Your changes are live on Discover.
+                    {t('social.editProfile.changesLiveOnDiscover')}
                   </div>
                 </div>
               </div>
               <div className="flex justify-end">
-                <Button onClick={onClose}>Done</Button>
+                <Button onClick={onClose}>{t('common.actions.done')}</Button>
               </div>
             </div>
           ) : (
@@ -115,7 +117,7 @@ export default function EditProfileDialog({
                   htmlFor="edit-profile-title-input"
                   className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5"
                 >
-                  Title
+                  {t('social.editProfile.title')}
                 </label>
                 <input
                   id="edit-profile-title-input"
@@ -123,11 +125,11 @@ export default function EditProfileDialog({
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   maxLength={80}
-                  placeholder="Short, memorable title"
+                  placeholder={t('social.editProfile.titlePlaceholder')}
                   className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
                 />
                 <div className="text-[11px] text-text-secondary mt-1 flex justify-between">
-                  <span>{titleTooLong ? 'Max 80 characters' : ' '}</span>
+                  <span>{titleTooLong ? t('social.editProfile.max80Characters') : ' '}</span>
                   <span className={titleTooLong ? 'text-red-400' : ''}>
                     {trimmedTitle.length}/80
                   </span>
@@ -139,7 +141,7 @@ export default function EditProfileDialog({
                   htmlFor="edit-profile-description"
                   className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5"
                 >
-                  Description (optional)
+                  {t('social.editProfile.descriptionOptional')}
                 </label>
                 <textarea
                   id="edit-profile-description"
@@ -147,11 +149,11 @@ export default function EditProfileDialog({
                   onChange={(e) => setDescription(e.target.value)}
                   maxLength={1000}
                   rows={4}
-                  placeholder="What's the vibe? Who's it for?"
+                  placeholder={t('social.editProfile.descriptionPlaceholder')}
                   className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                 />
                 <div className="text-[11px] text-text-secondary mt-1 flex justify-between">
-                  <span>{descriptionTooLong ? 'Max 1000 characters' : ' '}</span>
+                  <span>{descriptionTooLong ? t('social.editProfile.max1000Characters') : ' '}</span>
                   <span className={descriptionTooLong ? 'text-red-400' : ''}>
                     {trimmedDescription.length}/1000
                   </span>
@@ -167,7 +169,7 @@ export default function EditProfileDialog({
 
               <div className="flex justify-end gap-2 pt-2">
                 <Button variant="ghost" onClick={onClose} disabled={submitting}>
-                  Cancel
+                  {t('common.actions.cancel')}
                 </Button>
                 <Button
                   onClick={handleSave}
@@ -175,7 +177,7 @@ export default function EditProfileDialog({
                   isLoading={submitting}
                   icon={Pencil}
                 >
-                  Save changes
+                  {t('social.editProfile.saveChanges')}
                 </Button>
               </div>
             </>

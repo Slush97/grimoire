@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { GripHorizontal, X } from 'lucide-react';
 
 /**
@@ -66,6 +67,7 @@ export default function FloatingModelPanel({
   onClose: () => void;
   children: ReactNode;
 }) {
+  const { t } = useTranslation();
   const ref = useRef<HTMLDivElement>(null);
   const [geom, setGeom] = useState<Geom | null>(() => readStored());
 
@@ -169,8 +171,8 @@ export default function FloatingModelPanel({
         <button
           type="button"
           onClick={onClose}
-          title="Close 3D model"
-          aria-label="Close 3D model"
+          title={t('locker.model.close3d')}
+          aria-label={t('locker.model.close3d')}
           className="-mr-1 flex-shrink-0 cursor-pointer rounded p-0.5 text-text-secondary transition-colors hover:text-text-primary"
         >
           <X className="h-4 w-4" />
@@ -183,7 +185,7 @@ export default function FloatingModelPanel({
       {/* Bottom-right resize handle. */}
       <div
         onPointerDown={startResize}
-        title="Resize"
+        title={t('locker.model.resize')}
         className="absolute bottom-0 right-0 flex h-4 w-4 cursor-nwse-resize items-end justify-end p-0.5"
       >
         <svg viewBox="0 0 10 10" aria-hidden className="h-2.5 w-2.5 text-text-secondary/60">

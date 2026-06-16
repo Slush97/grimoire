@@ -79,7 +79,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
           <button
             onClick={onClose}
             className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer flex-shrink-0"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -100,17 +100,15 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
             <div className="flex-1 min-w-0 space-y-1 text-sm">
               <div className="flex flex-wrap items-center gap-2">
                 <Tag className="border-white/20 text-white/90" icon={Layers}>
-                  Merged · {merged.sources.length}
+                  {t('mergedContents.merged', { count: merged.sources.length })}
                 </Tag>
-                <span className="text-text-secondary text-xs">Created {createdLabel}</span>
+                <span className="text-text-secondary text-xs">{t('mergedContents.created', { date: createdLabel })}</span>
               </div>
               <div className="text-text-secondary text-xs font-mono truncate" title={mod.fileName}>
                 {mod.fileName}
               </div>
               <p className="text-text-secondary text-xs leading-relaxed pt-1">
-                Sources stay on disk in the disabled folder. Unmerge restores them; the
-                share code captures the list for re-downloading from GameBanana on another
-                machine.
+                {t('mergedContents.sourcesStayOnDisk')}
               </p>
             </div>
           </div>
@@ -118,11 +116,11 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <div className="text-xs uppercase tracking-wide text-text-secondary">
-                Sources ({merged.sources.length})
+                {t('mergedContents.sources', { count: merged.sources.length })}
               </div>
               {canExtract && merged.sources.length === 2 && (
                 <div className="text-[11px] text-amber-400/90">
-                  Extracting one dissolves the merge
+                  {t('mergedContents.extractingDissolves')}
                 </div>
               )}
             </div>
@@ -155,7 +153,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
                     <div className="flex items-center gap-2 flex-shrink-0">
                       <span
                         className="text-[10px] uppercase tracking-wide text-text-secondary tabular-nums"
-                        title="Priority captured at merge time"
+                        title={t('mergedContents.priorityCaptured')}
                       >
                         #{src.priorityAtMergeTime}
                       </span>
@@ -172,7 +170,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
                           onClick={() => void handleExtract(src)}
                           disabled={rowLocked}
                           className="p-1 ml-0.5 text-text-secondary hover:text-accent transition-colors rounded cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
-                          title="Extract: pull this out as its own mod"
+                          title={t('mergedContents.extractTitle')}
                           aria-label={`Extract ${src.modName}`}
                         >
                           {busy ? (
@@ -204,7 +202,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
             icon={copied ? Check : Share2}
             onClick={() => void handleCopy()}
           >
-            {copied ? 'Copied' : 'Copy share code'}
+            {copied ? t('common.status.copied') : t('mergedContents.copyShareCode')}
           </Button>
           {onUnmerge && (
             <Button
@@ -216,11 +214,11 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
                 onUnmerge();
               }}
             >
-              Unmerge
+              {t('mergedContents.unmerge')}
             </Button>
           )}
           <Button variant="primary" size="sm" onClick={onClose}>
-            Close
+            {t('common.actions.close')}
           </Button>
         </div>
     </Modal>

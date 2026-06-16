@@ -90,7 +90,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
     const handleBrowse = async () => {
         const selected = await showOpenDialog({
             directory: true,
-            title: 'Select Deadlock Installation Folder',
+            title: t('welcome.selectFolderTitle'),
         });
 
         if (selected) {
@@ -154,10 +154,10 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         className="text-3xl text-accent mb-1"
                         style={{ fontFamily: "'IM Fell English', serif" }}
                     >
-                        Welcome to Grimoire
+                        {t('welcome.title')}
                     </h1>
                     <p className="text-sm text-text-secondary">
-                        Let's set up your mod manager
+                        {t('welcome.subtitle')}
                     </p>
                 </div>
 
@@ -168,16 +168,16 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         <div className="flex items-center justify-between">
                             <h3 className="font-medium flex items-center gap-2">
                                 <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-bold">1</span>
-                                Deadlock Location
+                                {t('welcome.steps.location')}
                             </h3>
                             {isDetecting && (
-                                <Badge variant="neutral"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Detecting...</Badge>
+                                <Badge variant="neutral"><Loader2 className="w-3 h-3 mr-1 animate-spin" />{t('welcome.status.detecting')}</Badge>
                             )}
                             {!isDetecting && isValidPath === true && (
-                                <Badge variant="success"><Check className="w-3 h-3 mr-1" />Detected</Badge>
+                                <Badge variant="success"><Check className="w-3 h-3 mr-1" />{t('welcome.status.detected')}</Badge>
                             )}
                             {!isDetecting && isValidPath === false && (
-                                <Badge variant="error"><X className="w-3 h-3 mr-1" />Not Found</Badge>
+                                <Badge variant="error"><X className="w-3 h-3 mr-1" />{t('welcome.status.notFound')}</Badge>
                             )}
                         </div>
 
@@ -194,7 +194,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                                     {t('welcome.autoDetectFailed')}
                                 </p>
                                 <code className="block text-xs text-text-secondary font-mono mb-2">
-                                    steamapps/common/Deadlock
+                                    {t('welcome.steamPathExample')}
                                 </code>
                                 <Button
                                     onClick={handleBrowse}
@@ -202,7 +202,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                                     size="sm"
                                     icon={FolderOpen}
                                 >
-                                    Browse
+                                    {t('common.actions.browse')}
                                 </Button>
                             </div>
                         )}
@@ -213,23 +213,23 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         <div className="flex items-center justify-between">
                             <h3 className="font-medium flex items-center gap-2">
                                 <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-bold">2</span>
-                                Game Files
+                                {t('welcome.steps.gameFiles')}
                             </h3>
                             {gameinfoConfigured === true && (
-                                <Badge variant="success"><Check className="w-3 h-3 mr-1" />Ready</Badge>
+                                <Badge variant="success"><Check className="w-3 h-3 mr-1" />{t('servers.connect.status.ready')}</Badge>
                             )}
                             {gameinfoConfigured === false && (
-                                <Badge variant="warning">Needs Setup</Badge>
+                                <Badge variant="warning">{t('welcome.status.needsSetup')}</Badge>
                             )}
                             {gameinfoConfigured === null && isValidPath && (
-                                <Badge variant="neutral"><Loader2 className="w-3 h-3 mr-1 animate-spin" />Checking...</Badge>
+                                <Badge variant="neutral"><Loader2 className="w-3 h-3 mr-1 animate-spin" />{t('common.status.checking')}</Badge>
                             )}
                         </div>
 
                         {gameinfoConfigured === false && (
                             <div className="ml-7 flex items-center gap-3">
                                 <p className="text-xs text-text-secondary flex-1">
-                                    gameinfo.gi needs to be configured for mods to load.
+                                    {t('welcome.gameinfoNeedsConfig')}
                                 </p>
                                 <Button
                                     onClick={handleFixGameinfo}
@@ -238,7 +238,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                                     size="sm"
                                     icon={Wrench}
                                 >
-                                    Fix
+                                    {t('welcome.actions.fix')}
                                 </Button>
                             </div>
                         )}
@@ -255,13 +255,13 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         <div className="flex items-center justify-between">
                             <h3 className="font-medium flex items-center gap-2">
                                 <span className="w-5 h-5 rounded-full bg-accent/20 text-accent text-xs flex items-center justify-center font-bold">3</span>
-                                Autoexec
+                                {t('nav.autoexec')}
                             </h3>
                             {autoexecStatus?.exists && (
-                                <Badge variant="success"><Check className="w-3 h-3 mr-1" />Found</Badge>
+                                <Badge variant="success"><Check className="w-3 h-3 mr-1" />{t('welcome.status.found')}</Badge>
                             )}
                             {autoexecStatus && !autoexecStatus.exists && (
-                                <Badge variant="neutral">Optional</Badge>
+                                <Badge variant="neutral">{t('welcome.status.optional')}</Badge>
                             )}
                         </div>
 
@@ -273,7 +273,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                             ) : autoexecStatus ? (
                                 <div className="flex items-center gap-3">
                                     <p className="text-xs text-text-secondary flex-1">
-                                        Create autoexec.cfg for crosshairs and console commands.
+                                        {t('welcome.createAutoexecHint')}
                                     </p>
                                     <Button
                                         onClick={handleCreateAutoexec}
@@ -283,7 +283,7 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                                         size="sm"
                                         icon={Terminal}
                                     >
-                                        Create
+                                        {t('welcome.actions.create')}
                                     </Button>
                                 </div>
                             ) : null}
@@ -299,14 +299,14 @@ export default function WelcomeModal({ onComplete }: WelcomeModalProps) {
                         icon={ArrowRight}
                         className="w-full justify-center"
                     >
-                        Get Started
+                        {t('welcome.actions.getStarted')}
                     </Button>
                     <div className="flex justify-center mt-3">
                         <button
                             onClick={onComplete}
                             className="text-xs text-text-secondary hover:text-text-primary transition-colors"
                         >
-                            Skip for now
+                            {t('welcome.actions.skipForNow')}
                         </button>
                     </div>
                 </div>

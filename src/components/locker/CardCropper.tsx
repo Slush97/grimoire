@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2, AlertCircle, Crop, ZoomIn, RotateCcw } from 'lucide-react';
 import { Modal } from '../common/Modal';
 
@@ -38,6 +39,7 @@ export default function CardCropper({
   onCancel,
   onCrop,
 }: CardCropperProps) {
+  const { t } = useTranslation();
   const aspect = targetWidth / targetHeight;
   const viewW = aspect >= 1 ? BOX : Math.round(BOX * aspect);
   const viewH = aspect >= 1 ? Math.round(BOX / aspect) : BOX;
@@ -75,13 +77,13 @@ export default function CardCropper({
       setError(null);
     };
     el.onerror = () => {
-      if (active) setError('That image could not be loaded. Try a different PNG or JPG.');
+      if (active) setError(t('locker.crop.imageLoadFailed'));
     };
     el.src = imageDataUrl;
     return () => {
       active = false;
     };
-  }, [imageDataUrl, viewW, viewH]);
+  }, [imageDataUrl, viewW, viewH, t]);
 
   // Zoom around the viewport center so the framed subject stays put.
   const applyZoom = useCallback(
@@ -140,7 +142,7 @@ export default function CardCropper({
     canvas.height = targetHeight;
     const ctx = canvas.getContext('2d');
     if (!ctx) {
-      setError('Could not render the crop (no 2D canvas context).');
+      setError(t('locker.crop.noCanvasContext'));
       return;
     }
     ctx.imageSmoothingQuality = 'high';
@@ -154,7 +156,7 @@ export default function CardCropper({
         <div className="flex items-center gap-2">
           <Crop className="h-4 w-4 text-accent" />
           <h2 id="card-cropper-title" className="text-sm font-semibold text-text-primary">
-            Crop {variantLabel} card
+            {t('locker.crop.title', { variant: variantLabel })}
           </h2>
           <span className="ml-auto text-[11px] tabular-nums text-text-secondary">
             output {targetWidth} x {targetHeight}
@@ -213,7 +215,7 @@ export default function CardCropper({
                 type="button"
                 disabled={!img}
                 onClick={() => applyZoom(1)}
-                title="Reset zoom"
+                title={t('locker.crop.resetZoom')}
                 className="cursor-pointer rounded-md border border-border/60 p-1 text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
                 <RotateCcw className="h-3.5 w-3.5" />
@@ -222,13 +224,16 @@ export default function CardCropper({
 
             {img && (img.naturalWidth < targetWidth || img.naturalHeight < targetHeight) && (
               <p className="text-[11px] leading-snug text-amber-400/90">
-                Source is {img.naturalWidth} x {img.naturalHeight}, smaller than the {targetWidth} x{' '}
-                {targetHeight} target, so it will be upscaled and may look soft.
+                {t('locker.crop.upscaleWarning', {
+                  sourceWidth: img.naturalWidth,
+                  sourceHeight: img.naturalHeight,
+                  targetWidth,
+                  targetHeight,
+                })}
               </p>
             )}
             <p className="text-[11px] leading-snug text-text-secondary">
-              Drag to reposition, scroll or use the slider to zoom. The frame is locked to the card's
-              aspect so the result is not stretched.
+              {t('locker.crop.instructions')}
             </p>
           </>
         )}
@@ -239,7 +244,7 @@ export default function CardCropper({
             onClick={onCancel}
             className="cursor-pointer rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary"
           >
-            Cancel
+            {t('common.actions.cancel')}
           </button>
           <button
             type="button"
@@ -247,7 +252,7 @@ export default function CardCropper({
             onClick={handleApply}
             className="inline-flex cursor-pointer items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
-            <Crop className="h-3.5 w-3.5" /> Use crop
+            <Crop className="h-3.5 w-3.5" /> {t('locker.crop.useCrop')}
           </button>
         </div>
       </div>

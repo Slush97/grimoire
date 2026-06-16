@@ -83,41 +83,101 @@
     "presets": {
       "performance": {
         "category": "Performance",
-        "uncapFps": { "name": "Uncap FPS", "description": "Remove framerate limit" },
-        "capFps144": { "name": "Cap FPS 144", "description": "Cap to 144 FPS" },
-        "capFps240": { "name": "Cap FPS 240", "description": "Cap to 240 FPS" },
-        "lowLatencyNvidia": { "name": "Low Latency (Nvidia)", "description": "Enable Nvidia Reflex low latency" },
-        "engineLowLatency": { "name": "Engine Low Latency", "description": "Reduce input lag" }
+        "uncapFps": {
+          "name": "Uncap FPS",
+          "description": "Remove framerate limit"
+        },
+        "capFps144": {
+          "name": "Cap FPS 144",
+          "description": "Cap to 144 FPS"
+        },
+        "capFps240": {
+          "name": "Cap FPS 240",
+          "description": "Cap to 240 FPS"
+        },
+        "lowLatencyNvidia": {
+          "name": "Low Latency (Nvidia)",
+          "description": "Enable Nvidia Reflex low latency"
+        },
+        "engineLowLatency": {
+          "name": "Engine Low Latency",
+          "description": "Reduce input lag"
+        }
       },
       "network": {
         "category": "Network",
-        "maxNetworkRate": { "name": "Max Network Rate", "description": "Maximum network update rate" }
+        "maxNetworkRate": {
+          "name": "Max Network Rate",
+          "description": "Maximum network update rate"
+        }
       },
       "hud": {
         "category": "HUD & UI",
-        "newHealthBars": { "name": "New Health Bars", "description": "Enable new-style health bars" },
-        "hideHud": { "name": "Hide HUD", "description": "Hide the entire HUD" },
-        "showHud": { "name": "Show HUD", "description": "Show the HUD" },
-        "disablePostMatchSurvey": { "name": "Disable Post-Match Survey", "description": "Skip the survey after matches" }
+        "newHealthBars": {
+          "name": "New Health Bars",
+          "description": "Enable new-style health bars"
+        },
+        "hideHud": {
+          "name": "Hide HUD",
+          "description": "Hide the entire HUD"
+        },
+        "showHud": {
+          "name": "Show HUD",
+          "description": "Show the HUD"
+        },
+        "disablePostMatchSurvey": {
+          "name": "Disable Post-Match Survey",
+          "description": "Skip the survey after matches"
+        }
       },
       "minimap": {
         "category": "Minimap",
-        "fasterMinimap": { "name": "Faster Minimap", "description": "Update minimap at 60Hz" },
-        "largerClickRadius": { "name": "Larger Click Radius", "description": "Easier to click units on minimap" },
-        "largerPlayerIcons": { "name": "Larger Player Icons", "description": "Bigger player icons on minimap" },
-        "thickerZiplines": { "name": "Thicker Ziplines", "description": "More visible ziplines" }
+        "fasterMinimap": {
+          "name": "Faster Minimap",
+          "description": "Update minimap at 60Hz"
+        },
+        "largerClickRadius": {
+          "name": "Larger Click Radius",
+          "description": "Easier to click units on minimap"
+        },
+        "largerPlayerIcons": {
+          "name": "Larger Player Icons",
+          "description": "Bigger player icons on minimap"
+        },
+        "thickerZiplines": {
+          "name": "Thicker Ziplines",
+          "description": "More visible ziplines"
+        }
       },
       "matchmaking": {
         "category": "Matchmaking",
-        "soloQueueOnly": { "name": "Solo Queue Only", "description": "Prefer matches with solo players" },
-        "naRegion": { "name": "NA Region", "description": "Force North America servers" },
-        "euRegion": { "name": "EU Region", "description": "Force Europe servers" },
-        "asiaRegion": { "name": "Asia Region", "description": "Force Asia servers" },
-        "autoRegion": { "name": "Auto Region", "description": "Automatic region selection" }
+        "soloQueueOnly": {
+          "name": "Solo Queue Only",
+          "description": "Prefer matches with solo players"
+        },
+        "naRegion": {
+          "name": "NA Region",
+          "description": "Force North America servers"
+        },
+        "euRegion": {
+          "name": "EU Region",
+          "description": "Force Europe servers"
+        },
+        "asiaRegion": {
+          "name": "Asia Region",
+          "description": "Force Asia servers"
+        },
+        "autoRegion": {
+          "name": "Auto Region",
+          "description": "Automatic region selection"
+        }
       },
       "mouse": {
         "category": "Mouse & Sensitivity",
-        "adsSensitivity": { "name": "1:1 ADS Sensitivity", "description": "Match ADS to hip-fire sensitivity" }
+        "adsSensitivity": {
+          "name": "1:1 ADS Sensitivity",
+          "description": "Match ADS to hip-fire sensitivity"
+        }
       }
     },
     "search": {
@@ -167,6 +227,78 @@
     },
     "error": {
       "playerDataTitle": "Failed to load player data"
+    },
+    "overview": {
+      "rankedScore": "Ranked Score",
+      "winLoss": "{{wins}}W / {{losses}}L",
+      "winRate": "Win Rate",
+      "bestStreak": "Best streak: {{count}}",
+      "rankedTrajectory": "Ranked Trajectory",
+      "rankedTrajectoryDescription": "Score per ranked match, from the full account history",
+      "recentMatches": "Recent Matches",
+      "lastMatches": "Last {{count}} matches",
+      "noRecentMatches": "No recent matches",
+      "heroPerformance": "Hero Performance",
+      "heroesPlayed": "{{count}} heroes played",
+      "games": "Games",
+      "winPercent": "Win %",
+      "noHeroStatsAvailable": "No hero stats available"
+    },
+    "playerSelect": {
+      "addAPlayer": "Add a player",
+      "addPlayer": "Add player",
+      "invalidId": "Invalid Steam ID or Account ID",
+      "addFailed": "Failed to add player",
+      "primaryPlayer": "Primary player",
+      "setAsPrimary": "Set as primary",
+      "openOnStatlocker": "Open on Statlocker",
+      "removePlayer": "Remove player",
+      "steamIdOrAccountId": "Steam ID or Account ID...",
+      "detectedSteamUsers": "Detected Steam users",
+      "recent": "Recent"
+    },
+    "social": {
+      "playerFallback": "Player {{accountId}}",
+      "openOnStatlocker": "Open on Statlocker",
+      "winRatePercent": "{{rate}}% WR",
+      "winLoss": "{{wins}}W - {{losses}}L",
+      "noSocialData": "No social data for this player yet",
+      "bestTeammates": "Best Teammates",
+      "frequentOpponents": "Frequent Opponents",
+      "minSharedMatches": "Min 3 shared matches",
+      "gamesTogether": "{{count}} games together",
+      "gamesAgainst": "{{count}} games against"
+    },
+    "mmrChart": {
+      "all": "All",
+      "localDailySnapshots": "(local daily snapshots)",
+      "noMatchesInRange": "No ranked matches in this range. Try a wider one.",
+      "noScoreHistory": "No ranked score history for this player yet."
+    },
+    "matches": {
+      "matchHistory": "Match History",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "recordedSummary": "Last {{count}} recorded matches · {{wins}}W {{losses}}L",
+      "recordedOnSync": "Matches recorded locally on each sync",
+      "winRatePercent": "{{rate}}% WR",
+      "noMatchesRecordedYet": "No matches recorded yet",
+      "useRefreshToSync": "Use Refresh to sync this player's recent matches"
+    },
+    "primitives": {
+      "win": "Win",
+      "loss": "Loss",
+      "souls": "souls",
+      "damage": "damage",
+      "viewMatchOnStatlocker": "View match on Statlocker"
+    },
+    "leaderboard": {
+      "asia": "Asia",
+      "topPlayers": "Top Players",
+      "valveLeaderboardUpdatedHourly": "Valve leaderboard, updated hourly",
+      "noDataForRegion": "No leaderboard data for this region",
+      "winsCount": "{{count}} wins",
+      "matchesCount": "{{count}} matches"
     }
   },
   "servers": {
@@ -337,7 +469,8 @@
       "autoDetect": "Auto-detect",
       "devModeActive": "Dev mode is active. Deadlock path selection is disabled.",
       "selectHint": "Select your Deadlock game folder (contains the 'game' directory)",
-      "openGameFolder": "Open Game Folder"
+      "openGameFolder": "Open Game Folder",
+      "pathPlaceholder": "/path/to/Deadlock"
     },
     "gameinfo": {
       "checkingStatus": "Checking gameinfo.gi status...",
@@ -418,6 +551,7 @@
       "description": "Found a bug or have a feature request? File an issue on GitHub or drop into our Discord.",
       "githubIssues": "GitHub Issues",
       "joinDiscord": "Join Discord",
+      "kofi": "Buy me a coffee",
       "shareBugReport": "Share a bug report",
       "bugReportDescription": "Describe what went wrong, generate a sanitized report, then paste it into Discord or a GitHub issue. The report bundles app and OS info plus the tail of your log; home paths, Steam IDs, bearer tokens, and emails are stripped before it leaves the app.",
       "regenerateReport": "Regenerate report",
@@ -427,7 +561,8 @@
       "copyFailed": "Copy failed: select and Ctrl+C",
       "copyReport": "Copy report",
       "openDiscord": "Open Discord",
-      "openGithubIssue": "Open GitHub issue"
+      "openGithubIssue": "Open GitHub issue",
+      "kofiTitle": "Support Grimoire on Ko-fi"
     },
     "maintenance": {
       "archivesRemoved_one": "Removed {{count}} archive.",
@@ -555,7 +690,260 @@
   "installed": {
     "empty": {
       "noGamePath": "Set your Deadlock path or enable dev mode.",
-      "noMods": "Download mods from Browse or import a custom VPK to get started."
+      "noMods": "Download mods from Browse or import a custom VPK to get started.",
+      "noModsTitle": "No Mods Found",
+      "noGamePathTitle": "No Game Path Set",
+      "errorTitle": "Error Loading Mods",
+      "noSearchMatch": "No installed mods match “{{query}}”",
+      "noFilterMatch": "No installed mods match the active filters"
+    },
+    "actions": {
+      "browseMods": "Browse Mods",
+      "importCustomMod": "Import Custom Mod",
+      "fixOrder": "Fix order",
+      "fixOrderHint": "Fix order: renumber enabled mods 1, 2, 3, ... to tidy priority slots",
+      "addCustomMod": "Add custom mod",
+      "addCustomModHint": "Add custom mod: import a VPK from disk with a custom name and thumbnail",
+      "openModsFolder": "Open mods folder",
+      "exitSelectionMode": "Exit selection mode",
+      "selectMultiple": "Select multiple mods",
+      "selectMultipleHint": "Select multiple mods for bulk delete, enable, or disable",
+      "lockerOverrides": "Locker overrides",
+      "lockerOverridesHint": "Locker overrides: review and remove applied hero cards, ability sounds, and ability colors",
+      "authorPageNotFound": "Couldn't find this mod's author page"
+    },
+    "filters": {
+      "searchPlaceholder": "Search installed...",
+      "clearSearch": "Clear search",
+      "clearFilters": "Clear filters",
+      "sortAndFilter": "Sort and filter",
+      "sortAndFilterHint": "Sort and filter installed mods",
+      "sort": "Sort",
+      "loadOrder": "Load order",
+      "recentlyAdded": "Recently added",
+      "source": "Source",
+      "gamebanana": "GameBanana",
+      "local": "Local",
+      "status": "Status",
+      "enabled": "Enabled",
+      "modType": "Mod type"
+    },
+    "view": {
+      "viewOptions": "View options",
+      "styleAndCardSize": "Style and card size",
+      "style": "Style",
+      "cardSize": "Card size",
+      "cardSizeHint": "Card size (drag to the small end for compact cards)",
+      "cardSizeGridOnly": "Card size applies to grid view."
+    },
+    "status": {
+      "conflictCount_one": "{{count}} conflict",
+      "conflictCount_other": "{{count}} conflicts"
+    },
+    "unknown": {
+      "fixHiddenHint": "Fix unknown is hidden. Right-click to bring it back.",
+      "fixButtonHint": "Find GameBanana matches or add custom metadata for unknown local mods. Right-click to hide this button.",
+      "fixButton": "Fix unknown ({{count}})",
+      "checkingCrcCache": "Checking local CRC cache...",
+      "noCachedMatch": "No cached match found. Queued for online search.",
+      "missingMetadata": "Matched mod is missing GameBanana metadata",
+      "fixModTitle": "Fix Unknown Mod",
+      "linkToGamebanana": "Link to GameBanana",
+      "unknownModCount_one": "{{count}} unknown mod",
+      "unknownModCount_other": "{{count}} unknown mods",
+      "retryAll": "Retry all",
+      "retryAllHint": "Retry every unknown mod that previously had no match",
+      "searchAll": "Search all",
+      "searchAllHint": "Auto-detect every unknown mod that has not already been checked (heavy, may hit rate limits)",
+      "statusFound": "Found",
+      "statusSearching": "Searching",
+      "statusError": "Error",
+      "statusNoMatch": "No match",
+      "statusUnknown": "Unknown",
+      "searchAllConfirmTitle": "Search all unknown mods?",
+      "searchAllConfirmMessage_one": "Auto-detect scans GameBanana for {{count}} mod. This can hit GameBanana rate limits. Searching manually (per mod) is faster and lighter.",
+      "searchAllConfirmMessage_other": "Auto-detect scans GameBanana for {{count}} mods. This can hit GameBanana rate limits. Searching manually (per mod) is faster and lighter.",
+      "findingMatch": "Finding a matching mod...",
+      "progressFiles": "{{checked}}/{{total}} files",
+      "progressEntries": ", {{count}} VPK entries",
+      "progressFetched": ", {{bytes}} fetched",
+      "cantFindHint": "Can't find it on GameBanana? Save it with a custom name instead.",
+      "autoDetectSummary": "Auto-detect from GameBanana (advanced)",
+      "autoDetectWarning": "Auto-detect downloads candidate archives from GameBanana and compares them byte-for-byte. It is slow and can hit GameBanana rate limits, especially when fixing many mods at once. The manual search above is faster and lighter.",
+      "matchCheckFailed": "Match Check Failed",
+      "noMatchFound": "No Match Found",
+      "noArchiveMatched": "No GameBanana archive matched this local VPK by CRC-32.",
+      "modsChecked_one": "{{count}} mod checked",
+      "modsChecked_other": "{{count}} mods checked",
+      "filesChecked_one": "{{count}} file checked",
+      "filesChecked_other": "{{count}} files checked",
+      "bytesFetched": "{{bytes}} bytes fetched",
+      "autoDetectCancelled": "Auto-detect cancelled.",
+      "autoDetectPrompt": "Run a byte-for-byte search against GameBanana.",
+      "autoDetectOff": "Auto-detect is off. Enable it under Settings (Experimental Features) if you want to try it, but the manual search above is the recommended path.",
+      "manualSearchIntro": "<lead>Find it on GameBanana and link it.</lead> Results update as you type, or open GameBanana (or the Browse tab) side by side to find the mod, then search for it here. Linking tags this exact file: nothing is re-downloaded. Use the <banana></banana> button on any result to open it on GameBanana and download there directly.",
+      "fromFileTree": "From the file tree:",
+      "sectionMods": "Mods",
+      "sectionSounds": "Sounds",
+      "searchPlaceholder": "Search GameBanana by name...",
+      "noResults": "No results. Try a different name or section.",
+      "pinExactFile": "Pin exact file (optional)",
+      "dontPinFile": "Don't pin a file",
+      "linkThisMod": "Link this mod",
+      "viewFiles": "View files",
+      "readingVpk": "Reading VPK...",
+      "showingSample": "Showing a sample. The full tree loads when expanded.",
+      "noFilePaths": "No file paths found in this VPK.",
+      "gamebananaMod": "GameBanana mod",
+      "match": "Match",
+      "crcMatch": "CRC Match",
+      "modIdTag": "Mod #{{id}}",
+      "fileIdTag": "File #{{id}}",
+      "viewMod": "View Mod"
+    },
+    "updateAll": {
+      "description": "Re-download every mod flagged with an available update. Each one's enabled state will be restored after the install finishes. Downloads run one at a time and may take a while.",
+      "receivingUpdates": "Mods receiving updates ({{count}})",
+      "dismissError": "Dismiss update error",
+      "pickReplacement_one": "Pick replacement",
+      "pickReplacement_other": "Pick replacements ({{count}})",
+      "dismissPickNotice": "Dismiss manual pick notice"
+    },
+    "delete": {
+      "title": "Delete Mod?",
+      "bulkTitle": "Delete {{name}}?",
+      "groupTitle_one": "Delete {{count}} file?",
+      "groupTitle_other": "Delete {{count}} files?",
+      "bulkMessage": "Delete <name>{{name}}</name>? This removes every VPK in the selection and cannot be undone.",
+      "groupMessage_one": "Delete all {{count}} file from <name>{{name}}</name>? This removes every VPK in the group. To keep some, cancel and use the file picker instead.",
+      "groupMessage_other": "Delete all {{count}} files from <name>{{name}}</name>? This removes every VPK in the group. To keep some, cancel and use the file picker instead.",
+      "confirmMessage": "Are you sure you want to delete <name>{{name}}</name>? This action cannot be undone.",
+      "bulkConfirm": "Delete {{name}}",
+      "groupConfirm_one": "Delete {{count}}",
+      "groupConfirm_other": "Delete {{count}}"
+    },
+    "details": {
+      "loading": "Loading mod details...",
+      "loadFailed": "Couldn't load mod details"
+    },
+    "import": {
+      "makeCustomTitle": "Make Custom Mod",
+      "saveCustom": "Save Custom Mod",
+      "alreadyInstalledHint": "This VPK is already installed. Saving will only add custom metadata to it.",
+      "title": "Import Custom Mod",
+      "vpkHelp": "The file will be copied into your addons folder and renamed with the next available pak## priority.",
+      "selectVpk": "Select VPK file",
+      "expectedVpk": "Expected a .vpk file - got \"{{name}}\".",
+      "vpkFile": "VPK file",
+      "vpkSelected": "VPK selected: {{path}}. Press Enter to change.",
+      "vpkSelectedLocked": "VPK selected: {{path}}",
+      "vpkAriaBrowse": "Drop a VPK file here or press Enter to browse",
+      "dropVpkHere": "Drop a <code>.vpk</code> here",
+      "orClickToBrowse": "or click to browse",
+      "modName": "Mod name",
+      "modNamePlaceholder": "My awesome skin",
+      "thumbnailImage": "Thumbnail image",
+      "thumbnailSelected": "Thumbnail selected: {{path}}. Press Enter to change."
+    },
+    "merge": {
+      "unmergeTitle": "Unmerge mod?",
+      "unmergeMessage_one": "<name>{{name}}</name> will be deleted and its {{count}} source mod will be restored.",
+      "unmergeMessage_other": "<name>{{name}}</name> will be deleted and its {{count}} source mods will be restored.",
+      "unmerge": "Unmerge",
+      "missingSourcesTitle": "Some sources were missing",
+      "missingSourcesBody_one": "{{recovered}} source mod was restored, but {{missing}} could not be found on disk.",
+      "missingSourcesBody_other": "{{recovered}} source mods were restored, but {{missing}} could not be found on disk.",
+      "shareCodeCopied": "The share code captured at merge time is on your clipboard now. Paste it into the portable-profile import flow to re-download the missing sources from GameBanana.",
+      "shareCodeCopyFailed": "Copying the share code to your clipboard failed. Click \"Copy share code\" below, then paste it into the portable-profile import flow to re-download the missing sources.",
+      "ok": "OK",
+      "copyShareCode": "Copy share code",
+      "shareCodeCopiedToast": "Share code copied"
+    },
+    "select": {
+      "noneSelected": "No mods selected",
+      "countSelected_one": "{{count}} mod selected",
+      "countSelected_other": "{{count}} mods selected",
+      "selectAll": "Select all",
+      "enable": "Enable",
+      "noDisabledSelected": "No disabled mods selected",
+      "enableCount_one": "Enable {{count}} mod",
+      "enableCount_other": "Enable {{count}} mods",
+      "noEnabledSelected": "No enabled mods selected",
+      "disableCount_one": "Disable {{count}} mod",
+      "disableCount_other": "Disable {{count}} mods",
+      "merge": "Merge",
+      "mergeMinHint": "Select 2+ mods to merge",
+      "mergeAlreadyMergedHint": "Cannot merge an already-merged mod. Unmerge it first.",
+      "mergeCombineHint_one": "Combine {{count}} mod into one VPK",
+      "mergeCombineHint_other": "Combine {{count}} mods into one VPK",
+      "tag": "Tag",
+      "tagEmptyHint": "Select mods to tag for the Locker",
+      "tagCountHint_one": "Tag {{count}} mod for a hero or Global category in the Locker",
+      "tagCountHint_other": "Tag {{count}} mods for a hero or Global category in the Locker",
+      "tagDialogLabel": "Tag selected mods for the Locker"
+    },
+    "tag": {
+      "clearLockerTag": "Clear Locker tag",
+      "setLockerTag": "Set Locker tag",
+      "global": "Global",
+      "hero": "Hero"
+    },
+    "card": {
+      "soundPreview": "Sound Preview",
+      "chooseFilesFor": "Choose files for {{name}}",
+      "viewDetailsFor": "View details for {{name}}",
+      "off": "Off",
+      "deleteNamed": "Delete {{name}}",
+      "moreActions": "More actions",
+      "moreActionsFor": "More actions for {{name}}",
+      "edit": "Edit",
+      "viewDetails": "View details",
+      "viewAuthorPage": "View author's page",
+      "fixUnknownMatch": "Fix unknown match",
+      "disableMod": "Disable mod",
+      "enableMod": "Enable mod",
+      "deselectNamed": "Deselect {{name}}",
+      "selectNamed": "Select {{name}}",
+      "conflict": "Conflict",
+      "unknown": "Unknown",
+      "unknownTitle": "This local mod has no saved GameBanana or custom metadata",
+      "updateAvailableTitle": "A newer version is available on GameBanana",
+      "mergedTitle_one": "Merged from {{count}} mod. Open details to unmerge.",
+      "mergedTitle_other": "Merged from {{count}} mods. Open details to unmerge.",
+      "mergedBadge": "Merged · {{count}}",
+      "noFilesEnabled": "No files enabled",
+      "variantStatusTitle": "{{labels}} - click card to choose files",
+      "revealInFolder": "Reveal in folder"
+    },
+    "edit": {
+      "title": "Edit mod",
+      "description": "Change the name, image, or NSFW mark.",
+      "modNamePlaceholder": "Mod name",
+      "fileLabel": "File: {{fileName}}"
+    },
+    "imageField": {
+      "image": "Image",
+      "selectImage": "Select thumbnail image",
+      "readFailed": "Couldn't read image: {{error}}",
+      "expectedImage": "Expected an image ({{exts}}) - got \"{{name}}\".",
+      "dropUnresolved": "Could not resolve the dropped image path.",
+      "ariaSelected": "Image selected. Press Enter to change.",
+      "ariaBrowse": "Drop an image here or press Enter to browse",
+      "thumbnailPreview": "Thumbnail preview",
+      "clickToReplaceAnother": "Click or drop another to replace",
+      "currentImage": "Current image",
+      "clickToReplace": "Click or drop to replace",
+      "dropImageHere": "Drop an image here",
+      "orClickToBrowse": "or click to browse - {{exts}}",
+      "removeImage": "Remove image",
+      "nsfw": "NSFW"
+    },
+    "priorityEditor": {
+      "loadOrder": "Load order",
+      "lowerNumbersLoadFirst": "Lower numbers load first.",
+      "rangeError": "Use 1-{{max}}",
+      "chipAriaLabel": "Load order {{value}}. Click to change.",
+      "inputAriaLabel": "Set load order for {{modName}}"
     }
   },
   "locker": {
@@ -587,6 +975,9 @@
         "statsLabel_other": "{{count}} meshes · {{verts}} verts · span {{span}}",
         "orientationLabel": "Orientation:",
         "vanillaShell": "Vanilla shell",
+        "heroScale": "Hero scale",
+        "heroScaleLoading": "Loading hero...",
+        "heroScaleHint": "Show a hero with the orb floating at their back hip, where it sits in-game, to judge its size and facing.",
         "shuffleBackdrop": "Shuffle background",
         "pause": "Pause rotation",
         "play": "Resume rotation",
@@ -619,6 +1010,12 @@
         "turnLeft": "Turn left",
         "turnRight": "Turn right"
       },
+      "facing": {
+        "label": "Facing yaw",
+        "upright": "Keep upright (no tumble)",
+        "uprightHint": "Orb stands still and faces one way. Use the slider or arrows to aim it.",
+        "tumbleHint": "Orb spins freely like the default gold orb. Turn this on to aim a fixed facing."
+      },
       "glow": {
         "label": "Soul glow",
         "recolor": "Recolor",
@@ -644,6 +1041,260 @@
         "title": "Select a GLB model",
         "filterName": "glTF binary"
       }
+    },
+    "colors": {
+      "loading": "Loading...",
+      "intro": "Repaint {{hero}}'s ability effects (particles, projectiles, and the ult body). Pick a single color, a rainbow, a gradient, or a trippy pattern: one pick is active at a time.",
+      "modes": {
+        "singleColor": "Single Color",
+        "rainbow": "Rainbow",
+        "gradient": "Gradient",
+        "trippy": "Trippy"
+      },
+      "custom": "Custom",
+      "customGradient": "Custom gradient",
+      "hue": "Hue",
+      "rotation": "Rotation",
+      "saturation": "Saturation",
+      "brightness": "Brightness",
+      "animation": "Animation",
+      "animationStrength": "Animation strength",
+      "animated": "Animated",
+      "animatedWord": "animated",
+      "animatedSuffix": "(animated)",
+      "paint": "Paint",
+      "stop": "Stop {{n}}",
+      "abilityColorPreview": "Ability color preview",
+      "noRecolorApplied": "No recolor applied",
+      "appliedStatus": "Applied",
+      "applyColor": "Apply Color",
+      "applyRainbow": "Apply Rainbow",
+      "applyGradient": "Apply Gradient",
+      "applyTrippy": "Apply Trippy",
+      "presets": {
+        "red": "Red",
+        "orange": "Orange",
+        "gold": "Gold",
+        "green": "Green",
+        "cyan": "Cyan",
+        "lightBlue": "Light Blue",
+        "blue": "Blue",
+        "purple": "Purple",
+        "pink": "Pink"
+      },
+      "presetTitle": "{{name}} ({{hue}}°, S {{sat}}%, B {{bright}}%)",
+      "swatchAria": {
+        "prism": "Rainbow prism{{animated}}",
+        "gradient": "{{label}} gradient{{animated}}",
+        "single": "Hue {{hue}}, saturation {{sat}}%, brightness {{bright}}%"
+      },
+      "target": {
+        "rainbow": "Rainbow{{animated}} · rot {{rot}}° · S {{sat}}% · B {{bright}}%",
+        "gradient": "{{label}}{{animated}} · rot {{rot}}° · S {{sat}}% · B {{bright}}%",
+        "single": "{{hue}}° · S {{sat}}% · B {{bright}}%"
+      },
+      "applied": {
+        "rainbow": "Applied: Rainbow{{animated}} · rot {{rot}}°",
+        "gradient": "Applied: {{label}} gradient{{animated}}",
+        "trippy": "Applied: Trippy {{style}} · {{animation}} · {{targets}}",
+        "single": "Applied: {{hue}}° / S {{sat}}% / B {{bright}}%"
+      },
+      "sweepSpectrum": "sweep the spectrum over each effect's lifetime",
+      "sweepGradient": "sweep the gradient over each effect's lifetime",
+      "prismDescription": "Prism spreads {{hero}}'s existing ability colors across a rainbow instead of one hue. Use the sliders above to rotate the spectrum and tune its saturation / brightness. Animated adds a moving sweep on the showy effects (glow, beams, trails).",
+      "gradientDescription": "Gradient spreads {{hero}}'s ability colors over a chosen ramp instead of the full rainbow. Pick a preset or Custom (a hue per stop); the sliders above rotate and tune it.",
+      "trippyDescription": "Trippy paints {{hero}}'s ability particles with a flowing procedural pattern. The pattern strength and phase are above; Animation sets how the particles move in game (Off bakes a still paint). Gun FX targets the weapon's effect particles (muzzle, tracers, impacts), not its skin (that's the Body + Gun tab). This shares the one-per-hero slot, so it replaces any color, rainbow, or gradient.",
+      "swatchAnimationHint": "The swatch above previews the pattern and its scroll speed (set by Animation strength). Sweep, Loop, and Cycle differ in how particles animate their color in game, which a texture swatch can't show.",
+      "targets": {
+        "all": "All VFX",
+        "abilities": "Abilities",
+        "weapons": "Gun FX"
+      },
+      "bakingHint": "Baking the recolor. The first time for a given pick can take up to a minute (it re-encodes every effect texture); the same pick is instant after that.",
+      "restartHint": "Restart Deadlock for this change to take effect (addons mount at game start).",
+      "savedHint": "Saved. This pick mounts the next time you Launch Modded."
+    },
+    "sounds": {
+      "soundsByAbility": "Sounds by Ability",
+      "experimental": "Experimental",
+      "intro": "Your tagged sound mods for {{hero}}, grouped by the ability each one changes. Pick one source per ability and it's isolated into a single Locker-managed sound that wins over your other mods; pick the applied source again to revert. Tune the applied source's volume and pitch with the sliders.",
+      "restartHint": "Restart Deadlock for these sound changes to take effect (addons mount at game start).",
+      "savedHint": "Saved. These sound changes mount the next time you Launch Modded.",
+      "loadingAbilities": "Loading abilities...",
+      "abilityN": "Ability {{slot}}",
+      "ult": "Ult",
+      "noSoundModForAbility": "No sound mod for this ability.",
+      "otherSounds": "Other sounds",
+      "otherSoundsDescription": "Voice lines and sounds not tied to a single ability. These toggle the whole mod on or off.",
+      "noSoundModsTagged": "No sound mods tagged for this hero yet. Tag one from Installed (multi-select then Tag).",
+      "volume": "Volume",
+      "pitch": "Pitch",
+      "db": "dB",
+      "saving": "Saving...",
+      "appliesOnRelease": "Applies on release",
+      "alsoAbilities": "also {{slots}}",
+      "applied": "Applied",
+      "use": "Use",
+      "on": "On",
+      "off": "Off"
+    },
+    "cards": {
+      "heroCard": "Hero Card",
+      "experimental": "Experimental",
+      "intro": "Card art found in your installed mods. Each mod may ship several portrait variants; click a card to apply that mod's full set for {{hero}}, and click the applied card again to revert to default.",
+      "decodingPortraits": "Decoding portraits...",
+      "noCardArt": "No card art found in your installed mods for {{hero}}.",
+      "applied": "Applied",
+      "portraitCount_one": "{{count}} portrait",
+      "portraitCount_other": "{{count}} portraits",
+      "fileGroupTitle_one": "{{file}} · {{count}} portrait",
+      "fileGroupTitle_other": "{{file}} · {{count}} portraits",
+      "uploadYourOwn": "Upload your own",
+      "slotCount_one": "{{count}} slot",
+      "slotCount_other": "{{count}} slots",
+      "uploadInstructions": "Click a slot to choose an image and crop it to that variant's exact size. Fill only the variants you want to change, then apply. Unfilled variants stay default.",
+      "clearImage": "Clear image",
+      "clearVariantImage": "Clear {{variant}} image",
+      "applying": "Applying...",
+      "updateCustomCard": "Update custom card",
+      "applyCustomCard": "Apply custom card",
+      "exportVpk": "Export VPK",
+      "exportVpkTitle": "Save this custom card as a standalone .vpk file",
+      "revert": "Revert",
+      "chooseImageForCard": "Choose an image for the {{variant}} card",
+      "exportDialogTitle": "Export {{hero}} custom card",
+      "exportedToast": "Exported to {{path}}"
+    },
+    "trippy": {
+      "loading": "Loading...",
+      "description": "Paint {{hero}}'s body and gun textures with a flowing procedural pattern: the paint scrolls in game. This composes with anything applied on the Abilities surface.",
+      "summarySuffix": "· {{intensity}}% · scroll {{scroll}}%",
+      "statusNone": "No trippy skin applied",
+      "applied": "Applied",
+      "statusApplied": "Applied: {{style}} · {{intensity}}% · {{targets}}",
+      "scrollSpeed": "Scroll speed",
+      "paint": "Paint",
+      "bodyGun": "Body + Gun",
+      "body": "Body",
+      "gun": "Gun",
+      "applyPaint": "Apply Paint",
+      "baking": "Baking the paint. The first time for a given combination can take a while (it re-encodes the affected textures); the same combination is instant after that.",
+      "restartRequired": "Restart Deadlock for this change to take effect (addons mount at game start).",
+      "saved": "Saved. This paint mounts the next time you Launch Modded."
+    },
+    "trippyPattern": {
+      "intensity": "Intensity",
+      "phase": "Phase",
+      "swatchUnavailable": "Live swatch unavailable (vpkmerge binary missing or too old)."
+    },
+    "effects": {
+      "effects": "Effects",
+      "experimental": "Experimental",
+      "loading": "Loading...",
+      "unavailable": "Effects aren't available for {{hero}} yet (no pinned recipe in the bundled vpkmerge). More heroes are coming.",
+      "abilities": "Abilities",
+      "bodyGun": "Body + Gun"
+    },
+    "skins": {
+      "noPreview": "No preview",
+      "pickAVariant": "Pick a variant",
+      "variantToggles": "Variant toggles"
+    },
+    "crop": {
+      "imageLoadFailed": "That image could not be loaded. Try a different PNG or JPG.",
+      "noCanvasContext": "Could not render the crop (no 2D canvas context).",
+      "title": "Crop {{variant}} card",
+      "resetZoom": "Reset zoom",
+      "upscaleWarning": "Source is {{sourceWidth}} x {{sourceHeight}}, smaller than the {{targetWidth}} x {{targetHeight}} target, so it will be upscaled and may look soft.",
+      "instructions": "Drag to reposition, scroll or use the slider to zoom. The frame is locked to the card's aspect so the result is not stretched.",
+      "useCrop": "Use crop"
+    },
+    "model": {
+      "close3d": "Close 3D model",
+      "resize": "Resize"
+    },
+    "pose": {
+      "posing": "Posing {{hero}}...",
+      "posingWithMods": "Posing {{hero}} with {{count}} active mods...",
+      "cannotPose": "This hero can't be posed in 3D yet."
+    },
+    "downloadSkins": {
+      "browseMore": "Browse more skins"
+    },
+    "page": {
+      "noGamePathSet": "No Game Path Set",
+      "errorLoadingLocker": "Error Loading Locker",
+      "heroCount_one": "{{count}} hero",
+      "heroCount_other": "{{count}} heroes",
+      "skinCount_one": "{{count}} skin",
+      "skinCount_other": "{{count}} skins",
+      "soundCount_one": "{{count}} sound",
+      "soundCount_other": "{{count}} sounds",
+      "modCount_one": "{{count}} mod",
+      "modCount_other": "{{count}} mods",
+      "categoryCount_one": "{{count}} category",
+      "categoryCount_other": "{{count}} categories",
+      "fileCount_one": "{{count}} file",
+      "fileCount_other": "{{count}} files",
+      "unassignedCount_one": "{{count}} unassigned",
+      "unassignedCount_other": "{{count}} unassigned",
+      "switchToListViewToSeeUnassigned": "Switch to List view to see unassigned mods",
+      "collapseAll": "Collapse all",
+      "expandAll": "Expand all",
+      "collapseAllHeroes": "Collapse all heroes",
+      "expandAllHeroes": "Expand all heroes",
+      "gallery": "Gallery",
+      "list": "List",
+      "noHeroCategoriesFound": "No hero categories found.",
+      "global": "Global",
+      "unassigned": "Unassigned",
+      "unassignedDescription": "These mods couldn't be matched to a hero automatically. Tag one to move it into that hero's locker pile.",
+      "noPreview": "No preview",
+      "sound": "Sound · ",
+      "tagAsHero": "Tag as hero...",
+      "tagAsHeroNamed": "Tag {{name}} as a hero",
+      "heroNotFound": "Hero Not Found",
+      "backToLocker": "Back to Locker",
+      "back": "Back",
+      "changeCategory": "Change category",
+      "changeCategoryForNamed": "Change category for {{name}}",
+      "changeGlobalCategory": "Change global category",
+      "moveToCategory": "Move to category",
+      "removeFromGlobal": "Remove from Global",
+      "noGlobalNonHeroCosmeticsInstalledYet": "No global (non-hero) cosmetics installed yet.",
+      "disableNamed": "Disable {{name}}",
+      "enableNamed": "Enable {{name}}",
+      "clickToDisable": "Click to disable",
+      "clickToEnable": "Click to enable",
+      "browseHeroSkins": "Browse {{hero}} skins",
+      "favorite": "Favorite",
+      "unfavorite": "Unfavorite",
+      "abilityColorRecoloringAvailable": "Ability color recoloring available",
+      "noSkinsInstalled": "No skins installed",
+      "section": "Section",
+      "skins": "Skins",
+      "sounds": "Sounds",
+      "noSoundModsTagged": "No sound mods tagged for this hero yet. Tag one from Installed (multi-select → Tag).",
+      "downloadASkinForThisHero": "Download a skin for this hero to manage it here."
+    },
+    "hero": {
+      "skins": "Skins",
+      "sounds": "Sounds",
+      "cards": "Cards",
+      "effects": "Effects",
+      "skinCount_one": "{{count}} skin",
+      "skinCount_other": "{{count}} skins",
+      "soundCount_one": "{{count}} sound",
+      "soundCount_other": "{{count}} sounds",
+      "noSkins": "No skins",
+      "noSounds": "No sounds",
+      "downloadASkinForThisHero": "Download a skin for this hero to manage it here.",
+      "hide3dModel": "Hide 3D model",
+      "showLive3dModel": "Show live 3D model",
+      "back": "Back",
+      "favorite": "Favorite",
+      "lockerSections": "Locker sections",
+      "hero3dModel": "{{hero}} 3D model"
     }
   },
   "profiles": {
@@ -745,7 +1396,8 @@
       "commandsCount_other": "Autoexec ({{count}} commands)"
     },
     "crosshair": {
-      "summary": "Gap: {{gap}} | Height: {{height}} | Width: {{width}}"
+      "summary": "Gap: {{gap}} | Height: {{height}} | Width: {{width}}",
+      "rgb": "RGB({{r}}, {{g}}, {{b}})"
     },
     "confirm": {
       "updateTitle": "Update Profile",
@@ -761,41 +1413,280 @@
   },
   "social": {
     "account": {
-      "deleteMessage": "Permanently deletes your account, your likes, and your published profiles from Discover. People who already imported them keep their copy."
+      "deleteMessage": "Permanently deletes your account, your likes, and your published profiles from Discover. People who already imported them keep their copy.",
+      "signInPrompt": "Sign in with Steam to publish profiles and like ones you find. Importing works without an account.",
+      "safeStorageUnencrypted": "Electron safeStorage is not reporting an encrypted OS keychain backend to Grimoire.",
+      "sessionOnlyPunctuated": "Session only.",
+      "keyringUnavailable": "Keyring unavailable to Grimoire.",
+      "signedIn": "Signed in",
+      "sessionOnly": "Session only",
+      "signOut": "Sign out",
+      "deleteAccount": "Delete account",
+      "signInWithSteam": "Sign in with Steam",
+      "opensSteamInBrowser": "Opens Steam in your browser. Grimoire never sees your password.",
+      "finishSigningIn": "Finish signing in with Steam in your browser. This page will update automatically when you're done.",
+      "deleteAccountTitle": "Delete Grimoire Social account"
     },
     "publish": {
-      "localBlocked": "Local mods can't be published."
+      "localBlocked": "Local mods can't be published.",
+      "published": "Published.",
+      "liveOnDiscover": "Your profile is live on Discover.",
+      "couldNotBuildShareCode": "Could not build share code: {{error}}",
+      "buildingPortableProfile": "Building portable profile...",
+      "modsWontBeShared_one": "{{count}} mod won't be shared",
+      "modsWontBeShared_other": "{{count}} mods won't be shared",
+      "noGamebananaMods": "This profile has no GameBanana-backed mods to share.",
+      "title": "Title",
+      "titlePlaceholder": "Short, memorable title",
+      "max80Characters": "Max 80 characters",
+      "descriptionOptional": "Description (optional)",
+      "descriptionPlaceholder": "What's the vibe? Who's it for?",
+      "max1000Characters": "Max 1000 characters",
+      "tosBody": "Publishing makes this profile's title, description, and the list of GameBanana mods it references public on Discover. By continuing, you confirm the referenced mods comply with GameBanana's terms, you grant Grimoire permission to host this metadata, and you accept that profiles may be removed for community-guideline violations.",
+      "tosAccept": "I understand and want to publish.",
+      "publish": "Publish"
+    },
+    "editProfile": {
+      "editYourPost": "Edit your post",
+      "modListStays": "Update the title or description. The mod list stays as published.",
+      "saved": "Saved.",
+      "changesLiveOnDiscover": "Your changes are live on Discover.",
+      "title": "Title",
+      "titlePlaceholder": "Short, memorable title",
+      "max80Characters": "Max 80 characters",
+      "descriptionOptional": "Description (optional)",
+      "descriptionPlaceholder": "What's the vibe? Who's it for?",
+      "max1000Characters": "Max 1000 characters",
+      "saveChanges": "Save changes"
+    },
+    "published": {
+      "loadingYourProfiles": "Loading your profiles...",
+      "nothingPublishedYet": "You haven't published anything yet",
+      "pickLocalProfile": "Pick one of your local profiles and post it to Discover.",
+      "publishAProfile": "Publish a profile",
+      "publishAnother": "Publish another",
+      "featured": "Featured",
+      "unpublishConfirm": "Unpublish?",
+      "viewDetails": "View details",
+      "editTitleAndDescription": "Edit title and description",
+      "edit": "Edit",
+      "unpublishThisProfile": "Unpublish this profile"
+    },
+    "header": {
+      "loadingProfile": "Loading profile...",
+      "noDescription": "No description.",
+      "featured": "Featured",
+      "reportThisProfile": "Report this profile",
+      "reportIssuePlaceholder": "What's the issue? (optional)",
+      "submit": "Submit",
+      "reportSubmitted": "Report submitted.",
+      "report": "Report"
+    },
+    "picker": {
+      "publishAProfile": "Publish a profile",
+      "pickLocalProfile": "Pick which local profile to share on Discover.",
+      "loadingYourProfiles": "Loading your profiles...",
+      "noLocalProfilesYet": "No local profiles yet",
+      "createAProfileHint": "Create a profile under Profiles, add some mods, then come back to publish.",
+      "updatedRelative": "updated {{date}}",
+      "empty": "empty",
+      "publishArrow": "Publish →"
     }
   },
   "exportProfile": {
-    "localBlocked": "Local mods can't be shared."
+    "localBlocked": "Local mods can't be shared.",
+    "building": "Building portable profile...",
+    "modsSkipped_one": "{{count}} mod skipped",
+    "modsSkipped_other": "{{count}} mods skipped",
+    "modsIncluded_one": "{{count}} mod included",
+    "modsIncluded_other": "{{count}} mods included",
+    "crosshairSuffix": " · crosshair",
+    "autoexecSuffix_one": " · {{count}} autoexec command",
+    "autoexecSuffix_other": " · {{count}} autoexec commands",
+    "saveFile": "Save .modprofile.json file",
+    "copied": "Copied to clipboard",
+    "copyShareCode": "Copy share code",
+    "shareCodePreview": "Share code preview"
   },
   "importCollection": {
     "invalidId": "Paste a collection URL or numeric id.",
     "pasteHint": "Paste a GameBanana collection URL or id. Items queue like any Browse download.",
     "scanTitle": "Fetch file lists and expand mods with variants",
     "noFiles": "No downloadable files. This mod may have been removed.",
-    "variantHint": "Check a variant, or leave unchecked to use the most popular file."
+    "variantHint": "Check a variant, or leave unchecked to use the most popular file.",
+    "title": "Import Collection",
+    "actions": {
+      "fetch": "Fetch",
+      "useMostPopular": "Use most popular",
+      "saveAsProfile": "Save as profile",
+      "cancelRemaining": "Cancel remaining",
+      "queue": "Queue",
+      "queueCount": "Queue {{count}}"
+    },
+    "noCollectionLoaded": "No collection loaded yet.",
+    "viewOnGameBanana": "View on GameBanana",
+    "itemsTotal_one": "{{count}} item total",
+    "itemsTotal_other": "{{count}} items total",
+    "readyToQueue_one": "{{count}} ready to queue",
+    "readyToQueue_other": "{{count}} ready to queue",
+    "skippedCount_one": "{{count}} skipped",
+    "skippedCount_other": "{{count}} skipped",
+    "deselectAll": "Deselect all",
+    "selectAll": "Select all ({{count}})",
+    "skipNsfw": "Skip NSFW",
+    "loadingVariants": "Loading variants {{done}}/{{total}}",
+    "hideAllVariants": "Hide all variants",
+    "showAllVariants": "Show all variants",
+    "pickVariantPrompt_one": "Pick a variant for {{count}} mod before queueing.",
+    "pickVariantPrompt_other": "Pick a variant for {{count}} mods before queueing.",
+    "chooseAVariant": "Choose a variant",
+    "variantCount_one": "{{count}} variant",
+    "variantCount_other": "{{count}} variants",
+    "oneFile": "1 file",
+    "files": "Files",
+    "skippedNsfw": "Skipped: NSFW",
+    "status": {
+      "resolving": "Resolving",
+      "queued": "Queued",
+      "downloading": "Downloading",
+      "cancelled": "Cancelled",
+      "failed": "Failed",
+      "creatingProfile": "Creating profile...",
+      "profileSaved": "Profile saved",
+      "profileFailed": "Profile failed",
+      "submitting": "Submitting..."
+    },
+    "loadingFiles": "Loading files...",
+    "loadingItems": "Loading items...",
+    "loadingItemsProgress": "Loading items ({{loaded}}/{{total}})...",
+    "saveAsProfilePrompt_one": "Save this {{count}} mod as a profile?",
+    "saveAsProfilePrompt_other": "Save these {{count}} mods as a profile?",
+    "summary": {
+      "downloading": "{{count}} downloading",
+      "queued": "{{count}} queued",
+      "installed": "{{count}} installed",
+      "failed": "{{count}} failed",
+      "selected": "{{count}} selected"
+    },
+    "selectItemsToQueue": "Select items to queue"
   },
   "importProfile": {
     "alreadyInstalled": "Already installed: reused without re-downloading",
     "noFiles": "No downloadable files. This mod may have been removed.",
-    "variantHint": "Check a variant, or leave unchecked to use the profile's pinned file."
+    "variantHint": "Check a variant, or leave unchecked to use the profile's pinned file.",
+    "title": "Import Profile",
+    "description": "Paste a share code or load a .modprofile.json file exported from Grimoire's Profiles tab. This format is Grimoire-only and not compatible with other mod managers.",
+    "parseEmptyError": "Paste a share code or JSON profile first.",
+    "pastePlaceholder": "Paste share code (mp1:...) or full JSON here",
+    "orLoadFromFile": "Or load from file",
+    "parseAndResolve": "Parse & resolve",
+    "resolvingContents": "Resolving profile contents...",
+    "saveAs": "Save as",
+    "originallyBy": "· originally by {{author}}",
+    "includeAutoexecAria": "Include autoexec commands from this profile",
+    "includeAutoexecCount_one": "Include {{count}} autoexec command",
+    "includeAutoexecCount_other": "Include {{count}} autoexec commands",
+    "autoexecWritten": "Written to autoexec.cfg when you apply the imported profile.",
+    "autoexecDiscarded": "Discarded. Your autoexec.cfg will not be modified by this profile.",
+    "deselectAll": "Deselect all",
+    "selectAll": "Select all ({{count}})",
+    "skipNsfw": "Skip NSFW",
+    "fetchVariantsTitle": "Fetch every mod's file list so you can swap to a different variant than the one pinned in the profile",
+    "loadingVariants": "Loading variants {{done}}/{{total}}",
+    "hideAllVariants": "Hide all variants",
+    "showAllVariants": "Show all variants",
+    "modsAlreadyInstalledLocally": "Mods already installed locally",
+    "onDiskCount": "{{count}} on disk",
+    "priorityBadge": "· p{{priority}}",
+    "disabledBadge": "· disabled",
+    "nsfwSkippedBadge": "· NSFW skipped",
+    "chooseDifferentVariant": "Choose a different variant from this mod",
+    "variantCount_one": "{{count}} variant",
+    "variantCount_other": "{{count}} variants",
+    "oneFile": "1 file",
+    "variants": "Variants",
+    "upgradedNotice": "Original file no longer available, will use newest version",
+    "notAvailableOnGameBanana": "Not available on GameBanana",
+    "onDisk": "On disk",
+    "status": {
+      "queued": "Queued",
+      "downloading": "Downloading",
+      "installed": "Installed",
+      "failed": "Failed",
+      "skipped": "Skipped"
+    },
+    "loadingFiles": "Loading files...",
+    "importedAs": "Imported as \"{{name}}\"",
+    "progressSummary": "{{downloading}}↓ · {{queued}} queued · {{installed}} done",
+    "progressFailedSuffix": " · {{failed}} failed",
+    "selectedSummary": "{{selected}} of {{total}} selected"
   },
   "mergeMods": {
     "oneVariant": "One variant per mod",
     "strictDescription": "Stop if two mods touch the same file. Off lets the higher-priority mod win.",
-    "localNote": "Local mods merge fine but aren't in the share code. Delete the disabled originals and they can't be recovered on unmerge."
+    "localNote": "Local mods merge fine but aren't in the share code. Delete the disabled originals and they can't be recovered on unmerge.",
+    "title": "Merge {{count}} mods",
+    "thumbnailPreview": "Merged mod thumbnail preview",
+    "mergedModName": "Merged mod name",
+    "namePlaceholder": "My combined pack",
+    "originalsStay": "The originals stay on disk in the disabled folder so you can unmerge later.",
+    "sources": "Sources ({{count}})",
+    "localModTitle": "Local mod: not in the unroll share code",
+    "local": "local",
+    "strictMode": "Strict mode",
+    "merging": "Merging...",
+    "merge": "Merge",
+    "localModsIncluded_one": "{{count}} local mod included",
+    "localModsIncluded_other": "{{count}} local mods included"
   },
   "mergedContents": {
-    "disabledAtMerge": "Disabled at merge time"
+    "disabledAtMerge": "Disabled at merge time",
+    "merged": "Merged · {{count}}",
+    "created": "Created {{date}}",
+    "sourcesStayOnDisk": "Sources stay on disk in the disabled folder. Unmerge restores them; the share code captures the list for re-downloading from GameBanana on another machine.",
+    "sources": "Sources ({{count}})",
+    "extractingDissolves": "Extracting one dissolves the merge",
+    "priorityCaptured": "Priority captured at merge time",
+    "extractTitle": "Extract: pull this out as its own mod",
+    "copyShareCode": "Copy share code",
+    "unmerge": "Unmerge"
   },
   "multiVpk": {
-    "uncheckHint": "Uncheck any you don't want to install."
+    "uncheckHint": "Uncheck any you don't want to install.",
+    "title": "Multiple VPKs in archive",
+    "deselectAll": "Deselect all",
+    "selectAll": "Select all",
+    "cancelInstall": "Cancel install",
+    "install": "Install",
+    "installCount": "Install {{count}}"
   },
   "welcome": {
     "autoexecExists": "Existing autoexec.cfg found. Your settings stay intact.",
-    "autoDetectFailed": "Auto-detect failed. Browse to your Steam library:"
+    "autoDetectFailed": "Auto-detect failed. Browse to your Steam library:",
+    "title": "Welcome to Grimoire",
+    "subtitle": "Let's set up your mod manager",
+    "selectFolderTitle": "Select Deadlock Installation Folder",
+    "steamPathExample": "steamapps/common/Deadlock",
+    "gameinfoNeedsConfig": "gameinfo.gi needs to be configured for mods to load.",
+    "createAutoexecHint": "Create autoexec.cfg for crosshairs and console commands.",
+    "steps": {
+      "location": "Deadlock Location",
+      "gameFiles": "Game Files"
+    },
+    "status": {
+      "detecting": "Detecting...",
+      "detected": "Detected",
+      "notFound": "Not Found",
+      "needsSetup": "Needs Setup",
+      "found": "Found",
+      "optional": "Optional"
+    },
+    "actions": {
+      "fix": "Fix",
+      "create": "Create",
+      "getStarted": "Get Started",
+      "skipForNow": "Skip for now"
+    }
   },
   "sidebar": {
     "expandSidebar": "Expand sidebar",
@@ -855,6 +1746,366 @@
       "stoppedRestoreFailed_other": "Stopped Deadlock, but couldn't restore {{count}} mods.",
       "restoredStashed_one": "Restored {{count}} stashed mod.",
       "restoredStashed_other": "Restored {{count}} stashed mods."
+    },
+    "brand": "Grimoire",
+    "previewVolume": {
+      "label": "Preview volume",
+      "levelLabel": "Preview volume: {{percent}}%",
+      "mute": "Mute preview volume",
+      "unmute": "Unmute preview volume"
     }
+  },
+  "browse": {
+    "actions": {
+      "enableDisabledTitle": "Enable this mod (currently in your disabled folder)"
+    },
+    "empty": {
+      "configureGamePathTitle": "Configure Game Path",
+      "configureGamePathBody": "Set your Deadlock installation path in Settings (or enable dev mode) before downloading mods.",
+      "couldntLoadMods": "Couldn't load mods"
+    },
+    "artist": {
+      "backToBrowse": "Back to browse",
+      "kofi": "Ko-fi"
+    },
+    "section": {
+      "sounds": "Sounds",
+      "label": "Section"
+    },
+    "search": {
+      "placeholder": "Search mods...",
+      "searching": "Searching",
+      "clear": "Clear search",
+      "submit": "Search"
+    },
+    "import": {
+      "gamebananaCollection": "GameBanana Collection",
+      "gamebananaCollectionHint": "Import items from a collection URL",
+      "grimoireProfile": "Grimoire Profile",
+      "grimoireProfileHint": "Share code or .modprofile.json from the Profiles tab"
+    },
+    "refreshFromGameBanana": "Refresh from GameBanana",
+    "viewOptions": {
+      "title": "View options",
+      "layout": "Layout",
+      "grid": "Grid",
+      "list": "List",
+      "cardSize": "Card size",
+      "gridOnly": "Grid only",
+      "cardStyle": "Card style",
+      "cardDesign": "Browse card design",
+      "detailsView": "Details view",
+      "modDetailsView": "Mod details view"
+    },
+    "cardStyle": {
+      "default": "Default",
+      "classic": "Classic"
+    },
+    "detailsView": {
+      "window": "Window",
+      "sidebar": "Sidebar"
+    },
+    "sort": {
+      "default": "Default",
+      "popularity": "Popularity",
+      "recentlyAdded": "Recently Added",
+      "recentlyUpdated": "Recently Updated",
+      "mostViewed": "Most Viewed",
+      "nameAZ": "Name (A-Z)"
+    },
+    "filters": {
+      "title": "Filters",
+      "clearAll": "Clear all",
+      "clearFilters": "Clear filters",
+      "hero": "Hero",
+      "allHeroes": "All Heroes",
+      "noHero": "No hero (item / UI / music)",
+      "category": "Category",
+      "filterByCategory": "Filter by category",
+      "allCategories": "All Categories",
+      "heroOverridesCategories": "Hero filter overrides categories.",
+      "content": "Content",
+      "filterByContentRating": "Filter by content rating",
+      "contentAll": "All",
+      "sfwOnly": "SFW only",
+      "nsfwOnly": "NSFW only",
+      "added": "Added",
+      "filterByDateAdded": "Filter by date added",
+      "anyTime": "Any time",
+      "today": "Today",
+      "thisWeek": "This week",
+      "thisMonth": "This month",
+      "customRange": "Custom range",
+      "from": "From",
+      "to": "To"
+    },
+    "previewVolume": "Preview volume",
+    "loadMore": {
+      "loadingMore": "Loading more...",
+      "couldntLoadMore": "Couldn't load more.",
+      "noMore": "No more mods to load"
+    },
+    "resizeDetailsSidebar": "Resize details sidebar",
+    "card": {
+      "nsfwHidden": "NSFW hidden",
+      "unknownAuthor": "Unknown author",
+      "volume": "Volume",
+      "install": "Install",
+      "enable": "Enable",
+      "enableNamed": "Enable {{name}}",
+      "installedAndEnabled": "Installed and enabled",
+      "downloading": "Downloading...",
+      "sound": "SOUND",
+      "outdated": "Outdated",
+      "outdatedPrefix": "Outdated · "
+    },
+    "errors": {
+      "noDownloadableFiles": "No downloadable files found"
+    }
+  },
+  "modDetails": {
+    "sections": {
+      "about": "About",
+      "changelog": "Changelog",
+      "files": "Files",
+      "comments": "Comments"
+    },
+    "status": {
+      "installed": "Installed",
+      "outdated": "Outdated",
+      "queued": "Queued",
+      "starting": "Starting",
+      "extracting": "Extracting...",
+      "updatesIgnored": "Updates ignored"
+    },
+    "actions": {
+      "enable": "Enable",
+      "enableThisModTitle": "Enable this mod",
+      "ignoreUpdates": "Ignore updates",
+      "reinstall": "Reinstall",
+      "install": "Install"
+    },
+    "meta": {
+      "added": "Added",
+      "artist": "Artist",
+      "koFi": "Ko-fi",
+      "modDetails": "mod details"
+    },
+    "files": {
+      "archived": "Archived files",
+      "yourVersion": "Your version"
+    },
+    "changelog": {
+      "unavailable": "Changelog unavailable.",
+      "empty": "No changelog entries found"
+    },
+    "comments": {
+      "empty": "No comments yet",
+      "showing": "Showing {{shown}} of {{total}}"
+    },
+    "audio": {
+      "preview": "Audio Preview",
+      "soundMod": "Sound Mod",
+      "noPreview": "No audio preview available"
+    },
+    "nsfw": {
+      "previewHidden": "NSFW preview hidden"
+    },
+    "viewOnGamebanana": "View on GameBanana",
+    "outdatedWarning": "This mod was last updated on {{date}} and may not be compatible with the current Deadlock version.",
+    "deleteFile": {
+      "title": "Delete installed file?",
+      "body": "Delete <name>{{fileName}}</name> from your installed mods? This action cannot be undone."
+    },
+    "aria": {
+      "loadingDetails": "Loading mod details",
+      "loadingNamed": "Loading {{label}}",
+      "imagePreviews": "Image previews",
+      "previousImage": "Previous image",
+      "nextImage": "Next image",
+      "closeFullSizeView": "Close full size view"
+    }
+  },
+  "updateModal": {
+    "appUpdates": "App Updates",
+    "titleReady": "v{{version}} ready to install",
+    "titleAvailable": "Update available: v{{version}}",
+    "youReOn": "You're on <ver>v{{version}}</ver>",
+    "releasedOn": "(released {{date}})",
+    "managedByPackageManager": "Managed by your package manager.",
+    "managedDistroTools": "Update with your distro's tools: <arch>yay -Syu grimoire-bin</arch> on Arch, or <apt>sudo apt update && sudo apt upgrade</apt> on Debian/Ubuntu.",
+    "managedAptRepo": "Installed the <deb>.deb</deb> manually? Add the apt repository for auto-updates: <url>grimoiremods.com/download</url>.",
+    "downloadingUpdate": "Downloading update...",
+    "downloadComplete": "Download complete. Click Install & Restart to apply.",
+    "latestVersion": "You're on the latest version.",
+    "whatsNew": "What's new",
+    "releasesCount": "({{count}} releases)",
+    "noReleaseNotesForThisVersion": "No release notes for this version.",
+    "deliveredViaGithub": "Updates are delivered automatically through GitHub Releases. Click Check for Updates to look now."
+  },
+  "appUpdateBanner": {
+    "readyToInstallVersion": "Grimoire {{version}} is ready to install",
+    "readyToInstall": "Grimoire is ready to install",
+    "updateAvailableVersion": "Grimoire update available ({{version}})",
+    "updateAvailable": "Grimoire update available",
+    "restartToFinish": "Restart to finish updating. Your mods and settings stay untouched.",
+    "newerVersionReady": "A newer version is ready. View the release notes and download it.",
+    "install": "Install",
+    "viewUpdate": "View update",
+    "hideBannerUntilNextLaunch": "Hide update banner until next launch",
+    "hideUntilNextLaunch": "Hide until next launch"
+  },
+  "layout": {
+    "rateLimited": "GameBanana is rate-limiting Grimoire. Pause a moment before retrying.",
+    "gameinfoIssue": "gameinfo.gi issue:",
+    "fixNow": "Fix now",
+    "openSettings": "Open settings",
+    "suspicious": {
+      "title": "Suspicious files detected",
+      "installAnyway": "Install anyway",
+      "body": "<name>{{modName}}</name> contains files that aren't typical for a Deadlock mod:",
+      "andMore": "...and {{count}} more",
+      "extractsNote": "Grimoire only extracts <code>.vpk</code> files: these won't be installed even if you continue. Review the mod's GameBanana page if anything looks off."
+    }
+  },
+  "variantPicker": {
+    "renamePlaceholder": "e.g. Red preset",
+    "updateAvailable": "A newer version is available on GameBanana",
+    "conflict": "Conflict",
+    "slot": "Slot #{{priority}}",
+    "saveFileName": "Save file name",
+    "moveFileUp": "Move file up in load order",
+    "moveFileDown": "Move file down in load order",
+    "renameFile": "Rename file",
+    "saving": "Saving...",
+    "filesEnabled": "{{enabled}} of {{total}} files enabled",
+    "openModPage": "Open the GameBanana mod page",
+    "modPage": "Mod page",
+    "disableAll": "Disable all",
+    "noFilesEnabled": "No files enabled"
+  },
+  "imageContextMenu": {
+    "image": "Image",
+    "copyImage": "Copy image",
+    "copyingImage": "Copying image",
+    "imageCopied": "Image copied",
+    "copyImageFailed": "Copy image failed",
+    "copyImageAddress": "Copy image address",
+    "copyingAddress": "Copying address",
+    "addressCopied": "Address copied",
+    "copyAddressFailed": "Copy address failed",
+    "openImage": "Open image",
+    "revealModInFolder": "Reveal mod in folder"
+  },
+  "audioPreview": {
+    "audioUnavailable": "Audio unavailable",
+    "play": "Play",
+    "pause": "Pause",
+    "mute": "Mute",
+    "unmute": "Unmute"
+  },
+  "modThumbnail": {
+    "noPreview": "No preview",
+    "nsfw": "NSFW"
+  },
+  "discover": {
+    "header": {
+      "description": "Mod profiles published by other Grimoire users.",
+      "signInHint": "Sign in to like and publish; importing works without an account."
+    },
+    "tabs": {
+      "top": "Top",
+      "new": "New",
+      "yourProfile": "Your profile"
+    },
+    "signIn": {
+      "withSteam": "Sign in with Steam",
+      "opensSteamHint": "Opens Steam in your browser. Grimoire never sees your password.",
+      "finishInBrowser": "Finish signing in with Steam in your browser. The header will update when you're done."
+    },
+    "publish": {
+      "publishProfile": "Publish profile",
+      "pickAndPublishTitle": "Pick a local profile and publish it to Discover"
+    },
+    "error": {
+      "title": "Couldn't reach Grimoire Social",
+      "retryHint": "Check your connection, then switch sort tabs to retry."
+    },
+    "empty": {
+      "title": "No profiles here yet",
+      "description": "Be the first to publish: open Profiles, pick one, and click Publish to Discover."
+    },
+    "card": {
+      "featured": "Featured"
+    },
+    "pagination": {
+      "loadingMore": "Loading more...",
+      "showing": "Showing {{shown}} of {{total}}"
+    }
+  },
+  "performance": {
+    "statusReadError": "Could not read gameinfo.gi status. Check your Deadlock path in Settings.",
+    "cardDescription": "Sqooky's community fps preset (OptimizationLock), applied without touching your mods.",
+    "checkingGameinfo": "Checking gameinfo.gi...",
+    "badge": {
+      "applied": "Applied v{{version}}",
+      "appliedEdited": "Applied v{{version}} (edited)",
+      "wiped": "Wiped by game update",
+      "error": "Error",
+      "notApplied": "Not applied"
+    },
+    "credit": "Map looks dark? Set in-game shadows to Medium or Low. Game updates wipe the config; Grimoire spots that here so you can reapply. By <sqooky>Sqooky</sqooky> and <contributors>contributors<extlink></extlink></contributors>. If it helps, <kofi>buy them a coffee</kofi>.",
+    "restoreBackup": "Restore Backup",
+    "reapply": "Reapply",
+    "reapplyConfig": "Reapply Config",
+    "applyConfig": "Apply Config",
+    "editFile": "Edit File",
+    "changeEditor": "Change editor",
+    "resetOverrides": "Reset Overrides",
+    "editor": {
+      "chooseTitle": "Choose an editor application",
+      "title": "Open gameinfo.gi with",
+      "description": "Pick the editor for config tweaks. Grimoire remembers this; the gear button next to Edit File switches it later.",
+      "systemDefaultHint": "Whatever your OS opens text files with",
+      "browse": "Browse for an application..."
+    }
+  },
+  "lockerOverrides": {
+    "volume": "Volume",
+    "pitch": "Pitch",
+    "db": "{{value}} dB",
+    "saving": "Saving...",
+    "appliesOnRelease": "Applies on release",
+    "title": "Locker Overrides",
+    "subtitle": "Always-on cosmetics, separate from your mod load order and the 99-slot cap.",
+    "tabs": {
+      "cards": "Hero Cards",
+      "sounds": "Ability Sounds",
+      "colors": "Ability Colors",
+      "effects": "Trippy Skins"
+    },
+    "restartForSound": "Restart Deadlock for sound changes to take effect (addons mount at game start).",
+    "tuned": "volume/pitch tuned",
+    "targets": {
+      "bodyGun": "body + gun",
+      "body": "body",
+      "gun": "gun"
+    },
+    "addOrChange": "Add or change in the Locker",
+    "removeAll": "Remove all {{scope}}",
+    "scope": {
+      "cards": "cards",
+      "sounds": "sounds",
+      "colors": "colors",
+      "trippySkins": "trippy skins"
+    },
+    "noun": {
+      "heroCard": "hero card",
+      "abilitySound": "ability sound",
+      "trippySkin": "trippy skin",
+      "abilityColor": "ability color"
+    },
+    "emptyApplied": "No {{noun}} overrides applied yet.",
+    "openLocker": "Open the Locker"
   }
 }

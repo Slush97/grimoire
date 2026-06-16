@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
 
 interface Props {
   modName: string;
@@ -32,6 +33,7 @@ export default function PriorityEditor({
   variant = 'inline',
   onCommit,
 }: Props) {
+  const { t } = useTranslation();
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +72,7 @@ export default function PriorityEditor({
     if (trimmed === '') return cancel();
     const n = parseInt(trimmed, 10);
     if (!Number.isFinite(n) || n < 1 || n > max) {
-      setError(`Use 1-${max}`);
+      setError(t('installed.priorityEditor.rangeError', { max }));
       return;
     }
     if (n === value) return cancel();
@@ -108,7 +110,7 @@ export default function PriorityEditor({
         }
       }}
       className="group/order-chip relative inline-flex min-h-7 min-w-7 cursor-pointer items-center justify-center rounded-md focus:outline-none"
-      aria-label={`Load order ${value}. Click to change.`}
+      aria-label={t('installed.priorityEditor.chipAriaLabel', { value })}
     >
       <span
         // White number on a neutral dark scrim (overlay) or the standard input
@@ -127,7 +129,7 @@ export default function PriorityEditor({
       </span>
       {!editing && (
         <span className="pointer-events-none absolute left-full top-1/2 z-50 ml-1.5 -translate-y-1/2 whitespace-nowrap rounded-md border border-white/10 bg-bg-primary/95 px-2 py-1 text-[11px] font-medium text-text-secondary opacity-0 shadow-lg transition-opacity duration-150 group-hover/order-chip:opacity-100 group-focus-visible/order-chip:opacity-100">
-          Load order
+          {t('installed.priorityEditor.loadOrder')}
         </span>
       )}
       {editing && popoverPos && createPortal(
@@ -137,7 +139,7 @@ export default function PriorityEditor({
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
-          <span className="mb-2 block text-xs font-semibold text-text-primary">Load order</span>
+          <span className="mb-2 block text-xs font-semibold text-text-primary">{t('installed.priorityEditor.loadOrder')}</span>
           <span className="inline-flex h-9 w-full items-center rounded-md border border-border bg-bg-tertiary px-2.5 text-sm text-text-primary transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30">
             <span className="mr-1 text-text-secondary">#</span>
             <input
@@ -160,12 +162,12 @@ export default function PriorityEditor({
                 if (!busy) void commit();
               }}
               className="min-w-0 flex-1 bg-transparent text-sm tabular-nums text-text-primary focus:outline-none"
-              aria-label={`Set load order for ${modName}`}
+              aria-label={t('installed.priorityEditor.inputAriaLabel', { modName })}
               aria-invalid={!!error}
             />
           </span>
           <span className="mt-2 block text-[11px] leading-4 text-text-secondary">
-            Lower numbers load first.
+            {t('installed.priorityEditor.lowerNumbersLoadFirst')}
           </span>
           {error && (
             <span className="mt-1 block max-w-full truncate text-[10px] text-red-300" role="alert">

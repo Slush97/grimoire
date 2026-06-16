@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Play, Pause, Volume2, VolumeX } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 
@@ -29,6 +30,7 @@ export default function AudioPreviewPlayer({
     onPlay,
     onPlayingChange,
 }: AudioPreviewPlayerProps) {
+    const { t } = useTranslation();
     const audioRef = useRef<HTMLAudioElement>(null);
     const onPlayingChangeRef = useRef(onPlayingChange);
     const setPreviewAudioPlaying = useAppStore((state) => state.setPreviewAudioPlaying);
@@ -183,7 +185,7 @@ export default function AudioPreviewPlayer({
     if (error) {
         return (
             <div className={`flex items-center justify-center text-text-secondary text-xs ${className}`}>
-                Audio unavailable
+                {t('audioPreview.audioUnavailable')}
             </div>
         );
     }
@@ -210,7 +212,7 @@ export default function AudioPreviewPlayer({
             <button
                 onClick={togglePlay}
                 className={`flex-shrink-0 flex items-center justify-center rounded-full border border-accent/50 bg-accent/25 hover:bg-accent/35 hover:border-accent/70 active:scale-95 text-text-primary shadow-sm transition-all cursor-pointer ${compact ? 'w-8 h-8' : 'w-10 h-10'}`}
-                title={isPlaying ? 'Pause' : 'Play'}
+                title={isPlaying ? t('audioPreview.pause') : t('audioPreview.play')}
             >
                 {isLoading ? (
                     <div className={`animate-spin rounded-full border-2 border-white border-t-transparent ${compact ? 'w-3.5 h-3.5' : 'w-4 h-4'}`} />
@@ -243,9 +245,9 @@ export default function AudioPreviewPlayer({
             {!compact && (
                 <button
                     onClick={toggleMute}
-                    aria-label={isMuted ? 'Unmute' : 'Mute'}
+                    aria-label={isMuted ? t('audioPreview.unmute') : t('audioPreview.mute')}
                     className="flex-shrink-0 text-text-secondary hover:text-text-primary transition-colors"
-                    title={isMuted ? 'Unmute' : 'Mute'}
+                    title={isMuted ? t('audioPreview.unmute') : t('audioPreview.mute')}
                 >
                     {isMuted ? (
                         <VolumeX className="w-4 h-4" />

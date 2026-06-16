@@ -1,4 +1,5 @@
 import { lazy, Suspense, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
   Star,
@@ -71,6 +72,7 @@ export function LockerHeroView({
   onToggleVariant,
   hideNsfwPreviews = false,
 }: LockerHeroViewProps) {
+  const { t } = useTranslation();
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [view3d, setView3d] = useState(false);
@@ -129,10 +131,10 @@ export function LockerHeroView({
     count: number | null;
     disabled?: boolean;
   }> = [
-    { id: 'skins', label: 'Skins', icon: Shirt, count: skinCount },
-    { id: 'sounds', label: 'Sounds', icon: Music, count: soundCount, disabled: !hasSounds },
-    { id: 'cards', label: 'Cards', icon: Images, count: null },
-    { id: 'effects', label: 'Effects', icon: Sparkles, count: null },
+    { id: 'skins', label: t('locker.hero.skins'), icon: Shirt, count: skinCount },
+    { id: 'sounds', label: t('locker.hero.sounds'), icon: Music, count: soundCount, disabled: !hasSounds },
+    { id: 'cards', label: t('locker.hero.cards'), icon: Images, count: null },
+    { id: 'effects', label: t('locker.hero.effects'), icon: Sparkles, count: null },
   ];
 
   const renderSrc =
@@ -185,14 +187,14 @@ export function LockerHeroView({
   const contentHeading =
     activeSection === 'skins'
       ? {
-          title: 'Skins',
-          count: skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : 'No skins',
+          title: t('locker.hero.skins'),
+          count: skinCount > 0 ? t('locker.hero.skinCount', { count: skinCount }) : t('locker.hero.noSkins'),
         }
       : activeSection === 'sounds'
         ? {
-            title: 'Sounds',
+            title: t('locker.hero.sounds'),
             count:
-              soundCount > 0 ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}` : 'No sounds',
+              soundCount > 0 ? t('locker.hero.soundCount', { count: soundCount }) : t('locker.hero.noSounds'),
           }
         : null;
 
@@ -212,7 +214,7 @@ export function LockerHeroView({
         categoryId={hero.id}
         showDownloadable
         heroName={hero.name}
-        emptyMessage="Download a skin for this hero to manage it here."
+        emptyMessage={t('locker.hero.downloadASkinForThisHero')}
         layout="cards"
       />
     );
@@ -252,7 +254,7 @@ export function LockerHeroView({
         type="button"
         onClick={() => setView3d((v) => !v)}
         aria-pressed={view3d}
-        title={view3d ? 'Hide 3D model' : 'Show live 3D model'}
+        title={view3d ? t('locker.hero.hide3dModel') : t('locker.hero.showLive3dModel')}
         className={`absolute top-4 right-4 z-20 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
           view3d
             ? 'border-accent/60 bg-accent/20 text-text-primary'
@@ -324,7 +326,7 @@ export function LockerHeroView({
             className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
           >
             <ArrowLeft className="w-4 h-4" />
-            Back
+            {t('locker.hero.back')}
           </button>
           <button
             type="button"
@@ -336,7 +338,7 @@ export function LockerHeroView({
             }`}
           >
             <Star className="w-4 h-4" />
-            {isFavorite ? 'Favorite' : 'Save'}
+            {isFavorite ? t('locker.hero.favorite') : t('common.actions.save')}
           </button>
         </div>
 
@@ -354,7 +356,7 @@ export function LockerHeroView({
           />
         )}
 
-        <nav aria-label="Locker sections" className="flex flex-col gap-1.5">
+        <nav aria-label={t('locker.hero.lockerSections')} className="flex flex-col gap-1.5">
           {sections.map(({ id, label, icon: Icon, count, disabled }) => {
             const isActive = activeSection === id;
             return (
@@ -401,7 +403,7 @@ export function LockerHeroView({
       {/* Live 3D model: a floating, draggable panel over the portrait backdrop.
           Mounted only while open so the heavy three.js chunk loads on demand. */}
       {view3d && (
-        <FloatingModelPanel title={`${hero.name} 3D model`} onClose={() => setView3d(false)}>
+        <FloatingModelPanel title={t('locker.hero.hero3dModel', { hero: hero.name })} onClose={() => setView3d(false)}>
           <Suspense
             fallback={
               <div className="absolute inset-0 flex items-center justify-center">

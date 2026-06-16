@@ -795,7 +795,7 @@ export default function ImportCollectionModal({
             <Library className="w-6 h-6 text-accent flex-shrink-0 mt-0.5" />
             <div className="min-w-0">
               <h2 id="import-collection-title" className="text-xl font-bold text-text-primary">
-                Import Collection
+                {t('importCollection.title')}
               </h2>
               <p className="text-sm text-text-secondary mt-1">
                 {t('importCollection.pasteHint')}
@@ -805,7 +805,7 @@ export default function ImportCollectionModal({
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -829,7 +829,7 @@ export default function ImportCollectionModal({
               className="flex-1 px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
             />
             <Button type="submit" disabled={loadingItems || !input.trim()}>
-              {loadingItems ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Fetch'}
+              {loadingItems ? <Loader2 className="w-4 h-4 animate-spin" /> : t('importCollection.actions.fetch')}
             </Button>
           </form>
           {resolveError && (
@@ -844,7 +844,7 @@ export default function ImportCollectionModal({
         <div className="flex-1 min-h-0 overflow-y-auto">
           {!collection && !loadingItems && (
             <div className="p-10 text-center text-text-secondary text-sm">
-              No collection loaded yet.
+              {t('importCollection.noCollectionLoaded')}
             </div>
           )}
 
@@ -865,14 +865,14 @@ export default function ImportCollectionModal({
                   rel="noreferrer noopener"
                   className="text-xs text-text-secondary hover:text-accent flex items-center gap-1 flex-shrink-0"
                 >
-                  View on GameBanana
+                  {t('importCollection.viewOnGameBanana')}
                   <ExternalLink className="w-3 h-3" />
                 </a>
               </div>
               <div className="mt-3 text-xs text-text-secondary flex flex-wrap items-center gap-x-4 gap-y-1">
-                <span>{totalCount} item{totalCount === 1 ? '' : 's'} total</span>
-                <span>{eligibleRows.length} ready to queue</span>
-                {skippedCount > 0 && <span>{skippedCount} skipped</span>}
+                <span>{t('importCollection.itemsTotal', { count: totalCount })}</span>
+                <span>{t('importCollection.readyToQueue', { count: eligibleRows.length })}</span>
+                {skippedCount > 0 && <span>{t('importCollection.skippedCount', { count: skippedCount })}</span>}
               </div>
             </div>
           )}
@@ -890,7 +890,7 @@ export default function ImportCollectionModal({
                       className="accent-accent cursor-pointer"
                     />
                     <span>
-                      {allEligibleSelected ? 'Deselect all' : `Select all (${eligibleRows.length})`}
+                      {allEligibleSelected ? t('importCollection.deselectAll') : t('importCollection.selectAll', { count: eligibleRows.length })}
                     </span>
                   </label>
                   <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
@@ -900,7 +900,7 @@ export default function ImportCollectionModal({
                       onChange={(e) => setSkipNsfw(e.target.checked)}
                       className="accent-accent cursor-pointer"
                     />
-                    <span>Skip NSFW</span>
+                    <span>{t('importCollection.skipNsfw')}</span>
                   </label>
                 </div>
                 <button
@@ -914,18 +914,18 @@ export default function ImportCollectionModal({
                     <>
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       <span>
-                        Loading variants {variantScanProgress.done}/{variantScanProgress.total}
+                        {t('importCollection.loadingVariants', { done: variantScanProgress.done, total: variantScanProgress.total })}
                       </span>
                     </>
                   ) : showAllVariants ? (
                     <>
                       <ChevronDown className="w-3.5 h-3.5" />
-                      <span>Hide all variants</span>
+                      <span>{t('importCollection.hideAllVariants')}</span>
                     </>
                   ) : (
                     <>
                       <ChevronRight className="w-3.5 h-3.5" />
-                      <span>Show all variants</span>
+                      <span>{t('importCollection.showAllVariants')}</span>
                     </>
                   )}
                 </button>
@@ -935,12 +935,11 @@ export default function ImportCollectionModal({
                   <div className="text-sm text-amber-200 flex items-center gap-2 min-w-0">
                     <AlertTriangle className="w-4 h-4 flex-shrink-0" />
                     <span>
-                      Pick a variant for {needsVariantPicks.size} mod
-                      {needsVariantPicks.size === 1 ? '' : 's'} before queueing.
+                      {t('importCollection.pickVariantPrompt', { count: needsVariantPicks.size })}
                     </span>
                   </div>
                   <Button size="sm" variant="secondary" onClick={acceptDefaults}>
-                    Use most popular
+                    {t('importCollection.actions.useMostPopular')}
                   </Button>
                 </div>
               )}
@@ -1016,7 +1015,7 @@ export default function ImportCollectionModal({
                             type="button"
                             onClick={() => toggleVariants(row)}
                             className="inline-flex items-center gap-1 px-2 py-0.5 rounded-sm text-text-secondary hover:text-text-primary hover:bg-white/5 cursor-pointer"
-                            title="Choose a variant"
+                            title={t('importCollection.chooseAVariant')}
                           >
                             {row.variantsOpen ? (
                               <ChevronDown className="w-3.5 h-3.5" />
@@ -1026,11 +1025,11 @@ export default function ImportCollectionModal({
                             {row.detailsLoading ? (
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
                             ) : fileCount > 1 ? (
-                              <span>{fileCount} variants</span>
+                              <span>{t('importCollection.variantCount', { count: fileCount })}</span>
                             ) : fileCount === 1 ? (
-                              <span>1 file</span>
+                              <span>{t('importCollection.oneFile')}</span>
                             ) : (
-                              <span>Files</span>
+                              <span>{t('importCollection.files')}</span>
                             )}
                           </button>
                         )}
@@ -1051,38 +1050,38 @@ export default function ImportCollectionModal({
                       {row.skip ? (
                         <span className="text-text-tertiary">{skipReasonLabel(row.skip)}</span>
                       ) : nsfwSkipped ? (
-                        <span className="text-text-tertiary">Skipped: NSFW</span>
+                        <span className="text-text-tertiary">{t('importCollection.skippedNsfw')}</span>
                       ) : row.status === 'installed' ? (
                         <span className="text-green-400 inline-flex items-center gap-1.5 justify-end">
-                          <CheckCircle2 className="w-4 h-4" /> Installed
+                          <CheckCircle2 className="w-4 h-4" /> {t('nav.installed')}
                         </span>
                       ) : row.status === 'resolving' ? (
                         <span className="text-text-secondary inline-flex items-center gap-1.5 justify-end">
-                          <Loader2 className="w-4 h-4 animate-spin" /> Resolving
+                          <Loader2 className="w-4 h-4 animate-spin" /> {t('importCollection.status.resolving')}
                         </span>
                       ) : row.status === 'queued' ? (
                         <button
                           type="button"
                           onClick={() => cancelRow(row)}
                           className="text-accent inline-flex items-center gap-1.5 justify-end hover:text-red-400 cursor-pointer"
-                          title="Remove from queue"
+                          title={t('downloadQueue.removeFromQueue')}
                         >
-                          <Ban className="w-4 h-4" /> Queued
+                          <Ban className="w-4 h-4" /> {t('importCollection.status.queued')}
                         </button>
                       ) : row.status === 'downloading' ? (
                         <span className="text-accent inline-flex items-center gap-1.5 justify-end">
-                          <Loader2 className="w-4 h-4 animate-spin" /> Downloading
+                          <Loader2 className="w-4 h-4 animate-spin" /> {t('importCollection.status.downloading')}
                         </span>
                       ) : row.status === 'cancelled' ? (
                         <span className="text-text-tertiary inline-flex items-center gap-1.5 justify-end">
-                          Cancelled
+                          {t('importCollection.status.cancelled')}
                         </span>
                       ) : row.status === 'failed' ? (
                         <span
                           className="text-red-400 inline-flex items-center gap-1.5 justify-end"
                           title={row.statusMessage}
                         >
-                          <AlertTriangle className="w-4 h-4" /> Failed
+                          <AlertTriangle className="w-4 h-4" /> {t('importCollection.status.failed')}
                         </span>
                       ) : null}
                     </div>
@@ -1094,7 +1093,7 @@ export default function ImportCollectionModal({
                       {row.detailsLoading && (
                         <div className="text-xs text-text-secondary flex items-center gap-1.5">
                           <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                          Loading files…
+                          {t('importCollection.loadingFiles')}
                         </div>
                       )}
                       {row.detailsError && (
@@ -1170,7 +1169,9 @@ export default function ImportCollectionModal({
           {loadingItems && (
             <div className="px-6 py-4 text-xs text-text-secondary flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Loading items{totalCount > 0 ? ` (${rows.length}/${totalCount})` : ''}…
+              {totalCount > 0
+                ? t('importCollection.loadingItemsProgress', { loaded: rows.length, total: totalCount })
+                : t('importCollection.loadingItems')}
             </div>
           )}
         </div>
@@ -1185,7 +1186,7 @@ export default function ImportCollectionModal({
             <div className="px-4 pt-3 pb-1 flex items-center justify-between gap-3 text-sm">
               <div className="text-text-secondary min-w-0 flex items-center gap-2">
                 <span className="text-text-primary font-medium">
-                  Save these {installedBatchIds.length} mod{installedBatchIds.length === 1 ? '' : 's'} as a profile?
+                  {t('importCollection.saveAsProfilePrompt', { count: installedBatchIds.length })}
                 </span>
                 {collection && (
                   <span className="text-text-tertiary truncate" title={collection.name}>
@@ -1196,19 +1197,19 @@ export default function ImportCollectionModal({
               <div className="flex items-center gap-2 flex-shrink-0">
                 {profileStatus.kind === 'idle' && (
                   <Button size="sm" onClick={handleSaveProfile}>
-                    Save as profile
+                    {t('importCollection.actions.saveAsProfile')}
                   </Button>
                 )}
                 {profileStatus.kind === 'creating' && (
                   <span className="text-text-secondary inline-flex items-center gap-1.5 text-xs">
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                    Creating profile…
+                    {t('importCollection.status.creatingProfile')}
                   </span>
                 )}
                 {profileStatus.kind === 'created' && (
                   <span className="text-green-400 inline-flex items-center gap-1.5 text-xs">
                     <CheckCircle2 className="w-3.5 h-3.5" />
-                    Profile saved
+                    {t('importCollection.status.profileSaved')}
                   </span>
                 )}
                 {profileStatus.kind === 'failed' && (
@@ -1217,7 +1218,7 @@ export default function ImportCollectionModal({
                     title={profileStatus.message}
                   >
                     <AlertTriangle className="w-3.5 h-3.5" />
-                    Profile failed
+                    {t('importCollection.status.profileFailed')}
                   </span>
                 )}
               </div>
@@ -1227,23 +1228,23 @@ export default function ImportCollectionModal({
           <div className="p-4 flex items-center justify-between gap-3">
             <div className="text-xs text-text-secondary">
               {submitting && counts.queued + counts.downloading === 0
-                ? 'Submitting…'
+                ? t('importCollection.status.submitting')
                 : batchInFlight
-                  ? `${counts.downloading} downloading · ${counts.queued} queued · ${counts.installed} installed${counts.failed > 0 ? ` · ${counts.failed} failed` : ''}`
+                  ? `${t('importCollection.summary.downloading', { count: counts.downloading })} · ${t('importCollection.summary.queued', { count: counts.queued })} · ${t('importCollection.summary.installed', { count: counts.installed })}${counts.failed > 0 ? ` · ${t('importCollection.summary.failed', { count: counts.failed })}` : ''}`
                   : counts.installed + counts.failed > 0
-                    ? `${counts.installed} installed${counts.failed > 0 ? ` · ${counts.failed} failed` : ''}`
+                    ? `${t('importCollection.summary.installed', { count: counts.installed })}${counts.failed > 0 ? ` · ${t('importCollection.summary.failed', { count: counts.failed })}` : ''}`
                     : selected.size > 0
-                      ? `${selected.size} selected`
-                      : 'Select items to queue'}
+                      ? t('importCollection.summary.selected', { count: selected.size })
+                      : t('importCollection.selectItemsToQueue')}
             </div>
             <div className="flex items-center gap-2">
               {batchInFlight ? (
                 <Button variant="danger" onClick={cancelAll}>
-                  Cancel remaining
+                  {t('importCollection.actions.cancelRemaining')}
                 </Button>
               ) : (
                 <Button variant="secondary" onClick={onClose}>
-                  {counts.installed > 0 || counts.failed > 0 ? 'Done' : 'Cancel'}
+                  {counts.installed > 0 || counts.failed > 0 ? t('common.actions.done') : t('common.actions.cancel')}
                 </Button>
               )}
               <Button
@@ -1260,7 +1261,9 @@ export default function ImportCollectionModal({
                 }
                 isLoading={submitting && counts.queued + counts.downloading === 0}
               >
-                Queue {selected.size > 0 ? selected.size : ''}
+                {selected.size > 0
+                  ? t('importCollection.actions.queueCount', { count: selected.size })
+                  : t('importCollection.actions.queue')}
               </Button>
             </div>
           </div>

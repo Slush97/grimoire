@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Download } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 
@@ -13,6 +14,7 @@ interface DownloadableSkinsSectionProps {
  * experience instead of a duplicate in-locker grid.
  */
 export default function DownloadableSkinsSection({ categoryId }: DownloadableSkinsSectionProps) {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const setBrowseUi = useAppStore((s) => s.setBrowseUi);
 
@@ -37,7 +39,7 @@ export default function DownloadableSkinsSection({ categoryId }: DownloadableSki
         className="flex items-center justify-center gap-2 w-full px-4 py-2.5 rounded-lg border border-accent/50 bg-bg-secondary/85 hover:bg-bg-tertiary hover:border-accent/70 text-text-primary text-sm font-semibold transition-colors cursor-pointer shadow-sm"
       >
         <Download className="w-4 h-4" />
-        Browse more skins
+        {t('locker.downloadSkins.browseMore')}
       </button>
     </div>
   );

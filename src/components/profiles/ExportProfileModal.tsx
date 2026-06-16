@@ -68,7 +68,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
         <div className="flex items-start justify-between p-6 border-b border-white/10">
           <div className="min-w-0">
             <h2 id="export-profile-title" className="text-xl font-bold text-text-primary">
-              Export Profile
+              {t('profiles.actions.exportProfile')}
             </h2>
             <p className="text-sm text-text-secondary mt-1 truncate" title={profileName}>
               {profileName}
@@ -77,7 +77,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -87,7 +87,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
           {!result && !error && (
             <div className="text-text-secondary text-sm inline-flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Building portable profile...
+              {t('exportProfile.building')}
             </div>
           )}
 
@@ -105,7 +105,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <div className="min-w-0">
                     <div className="font-medium">
-                      {result.warnings.length} mod{result.warnings.length === 1 ? '' : 's'} skipped
+                      {t('exportProfile.modsSkipped', { count: result.warnings.length })}
                     </div>
                     <div className="text-xs text-text-secondary mt-1 space-y-0.5 max-h-20 overflow-y-auto">
                       {result.warnings.map((w, i) => <div key={i}>{w}</div>)}
@@ -118,16 +118,16 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
               )}
 
               <div className="text-xs text-text-secondary">
-                {result.profile.mods.length} mod{result.profile.mods.length === 1 ? '' : 's'} included
-                {result.profile.extensions?.grimoire?.crosshair && ' · crosshair'}
+                {t('exportProfile.modsIncluded', { count: result.profile.mods.length })}
+                {result.profile.extensions?.grimoire?.crosshair && t('exportProfile.crosshairSuffix')}
                 {result.profile.extensions?.grimoire?.autoexecCommands?.length
-                  ? ` · ${result.profile.extensions.grimoire.autoexecCommands.length} autoexec commands`
+                  ? t('exportProfile.autoexecSuffix', { count: result.profile.extensions.grimoire.autoexecCommands.length })
                   : ''}
               </div>
 
               <div className="flex flex-col gap-2">
                 <Button onClick={handleSaveFile} icon={Download} className="w-full justify-center">
-                  Save .modprofile.json file
+                  {t('exportProfile.saveFile')}
                 </Button>
                 <Button
                   onClick={handleCopy}
@@ -135,13 +135,13 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
                   icon={copied ? CheckCircle2 : ClipboardCopy}
                   className="w-full justify-center"
                 >
-                  {copied ? 'Copied to clipboard' : 'Copy share code'}
+                  {copied ? t('exportProfile.copied') : t('exportProfile.copyShareCode')}
                 </Button>
               </div>
 
               {result.shareCode && (
                 <div className="mt-2">
-                  <div className="text-xs text-text-secondary mb-1">Share code preview</div>
+                  <div className="text-xs text-text-secondary mb-1">{t('exportProfile.shareCodePreview')}</div>
                   <code className="block text-[11px] font-mono bg-bg-tertiary border border-white/5 rounded-md px-2 py-1.5 break-all text-text-secondary max-h-24 overflow-y-auto">
                     {result.shareCode}
                   </code>
@@ -152,7 +152,7 @@ export default function ExportProfileModal({ profileId, profileName, onClose }: 
         </div>
 
         <div className="p-4 border-t border-white/10 flex justify-end">
-          <Button variant="secondary" onClick={onClose}>Close</Button>
+          <Button variant="secondary" onClick={onClose}>{t('common.actions.close')}</Button>
         </div>
     </Modal>
   );

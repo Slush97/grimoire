@@ -1,5 +1,5 @@
 import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
   DndContext,
@@ -1171,7 +1171,7 @@ export default function Installed() {
 
   const applyUnknownMatch = async (mod: Mod, match: FoundUnknownMatch) => {
     if (!match.modId || !match.modName) {
-      throw new Error('Matched mod is missing GameBanana metadata');
+      throw new Error(t('installed.unknown.missingMetadata'));
     }
     delete unknownRequestIdsRef.current[mod.id];
     await cancelUnknownModDetection(mod.id).catch(() => undefined);
@@ -1347,7 +1347,7 @@ export default function Installed() {
           modId: mod.id,
           requestId: requestIds[mod.id],
           phase: 'fingerprinting',
-          message: 'Checking local CRC cache...',
+          message: t('installed.unknown.checkingCrcCache'),
         };
       }
       return next;
@@ -1403,7 +1403,7 @@ export default function Installed() {
             modId: mod.id,
             requestId: requestIds[mod.id],
             phase: 'complete',
-            message: 'No cached match found. Queued for online search.',
+            message: t('installed.unknown.noCachedMatch'),
           },
         }));
       }
@@ -2019,7 +2019,7 @@ export default function Installed() {
     if (!mod.merged?.shareCode) return;
     try {
       await navigator.clipboard.writeText(mod.merged.shareCode);
-      showToast('Share code copied', { tone: 'success', duration: 2200 });
+      showToast(t('installed.merge.shareCodeCopiedToast'), { tone: 'success', duration: 2200 });
     } catch (err) {
       console.error('[Installed] clipboard write failed:', err);
       showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' });
@@ -2396,7 +2396,7 @@ export default function Installed() {
         }
       }
       if (!artist) {
-        showToast("Couldn't find this mod's author page", { tone: 'error' });
+        showToast(t('installed.actions.authorPageNotFound'), { tone: 'error' });
         return;
       }
       openArtistPage(artist);
@@ -2464,11 +2464,11 @@ export default function Installed() {
     return (
       <EmptyState
         icon={Package}
-        title="No Game Path Set"
+        title={t('installed.empty.noGamePathTitle')}
         description={t('installed.empty.noGamePath')}
         action={
           <Button onClick={() => navigate('/settings')} icon={Settings}>
-            Open Settings
+            {t('sidebar.openSettings')}
           </Button>
         }
       />
@@ -2483,10 +2483,10 @@ export default function Installed() {
     return (
       <EmptyState
         icon={Package}
-        title="Error Loading Mods"
+        title={t('installed.empty.errorTitle')}
         description={modsError ?? undefined}
         variant="error"
-        action={<Button onClick={() => loadMods()}>Retry</Button>}
+        action={<Button onClick={() => loadMods()}>{t('common.actions.retry')}</Button>}
       />
     );
   }
@@ -2877,15 +2877,15 @@ export default function Installed() {
       <>
         <EmptyState
           icon={Package}
-          title="No Mods Found"
+          title={t('installed.empty.noModsTitle')}
           description={t('installed.empty.noMods')}
           action={
             <div className="flex items-center gap-3">
               <Button onClick={() => navigate('/browse')} icon={Search}>
-                Browse Mods
+                {t('installed.actions.browseMods')}
               </Button>
               <Button variant="secondary" onClick={() => setImportOpen(true)} icon={FilePlus}>
-                Import Custom Mod
+                {t('installed.actions.importCustomMod')}
               </Button>
             </div>
           }
@@ -2916,7 +2916,7 @@ export default function Installed() {
           onClick={() => navigate('/conflicts')}
           icon={AlertTriangle}
         >
-          {conflictPairCount} conflict{conflictPairCount === 1 ? '' : 's'}
+          {t('installed.status.conflictCount', { count: conflictPairCount })}
         </Button>
       )}
       {(updatesAvailable.size > 0 || updateAllProgress) && (
@@ -2947,7 +2947,7 @@ export default function Installed() {
               setFixUnknownHidden(false);
             }}
             aria-label={`Restore the Fix unknown button (${unknownMods.length} unknown)`}
-            title="Fix unknown is hidden. Right-click to bring it back."
+            title={t('installed.unknown.fixHiddenHint')}
             className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-text-secondary/40 transition-colors hover:text-text-secondary cursor-pointer"
           >
             <HelpCircle className="h-3.5 w-3.5" />
@@ -2962,9 +2962,9 @@ export default function Installed() {
               setFixUnknownHidden(true);
             }}
             icon={HelpCircle}
-            title="Find GameBanana matches or add custom metadata for unknown local mods. Right-click to hide this button."
+            title={t('installed.unknown.fixButtonHint')}
           >
-            Fix unknown ({unknownMods.length})
+            {t('installed.unknown.fixButton', { count: unknownMods.length })}
           </Button>
         ))}
     </div>
@@ -2978,8 +2978,8 @@ export default function Installed() {
           onClick={fixOrder}
           icon={Wrench}
           className="!px-2.5"
-          aria-label="Fix order"
-          title="Fix order: renumber enabled mods 1, 2, 3, ... to tidy priority slots"
+          aria-label={t('installed.actions.fixOrder')}
+          title={t('installed.actions.fixOrderHint')}
         />
       )}
     </div>
@@ -2998,14 +2998,14 @@ export default function Installed() {
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search installed..."
+              placeholder={t('installed.filters.searchPlaceholder')}
               className={`bg-bg-secondary border border-border rounded-lg pl-8 ${search ? 'pr-8' : 'pr-3'} py-2 text-sm text-text-primary placeholder:text-text-primary/55 focus:outline-none focus:ring-2 focus:ring-accent w-full`}
             />
             {search && (
               <button
                 type="button"
                 onClick={() => setSearch('')}
-                title="Clear search"
+                title={t('installed.filters.clearSearch')}
                 className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 text-text-secondary hover:text-text-primary rounded-md hover:bg-bg-tertiary cursor-pointer"
               >
                 <X className="w-3.5 h-3.5" />
@@ -3028,8 +3028,8 @@ export default function Installed() {
                 onClick={() => setFilterOpen((v) => !v)}
                 icon={SlidersHorizontal}
                 className="!px-2.5"
-                aria-label="Sort and filter"
-                title="Sort and filter installed mods"
+                aria-label={t('installed.filters.sortAndFilter')}
+                title={t('installed.filters.sortAndFilterHint')}
               />
               {activeAdjustmentCount > 0 && (
                 <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground ring-2 ring-bg-primary">
@@ -3039,13 +3039,13 @@ export default function Installed() {
               {filterOpen && (
                 <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm shadow-xl shadow-black/40">
                   <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                    <ArrowDownUp className="h-3.5 w-3.5" /> Sort
+                    <ArrowDownUp className="h-3.5 w-3.5" /> {t('installed.filters.sort')}
                   </div>
                   <div className="space-y-1">
                     {([
-                      ['priority', 'Load order'],
-                      ['recent', 'Recently added'],
-                      ['name', 'Name (A-Z)'],
+                      ['priority', t('installed.filters.loadOrder')],
+                      ['recent', t('installed.filters.recentlyAdded')],
+                      ['name', t('browse.sort.nameAZ')],
                     ] as const).map(([value, label]) => (
                       <button
                         key={value}
@@ -3065,12 +3065,12 @@ export default function Installed() {
 
                   <div className="mt-3 border-t border-border pt-3">
                     <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                      Source
+                      {t('installed.filters.source')}
                     </div>
                     <div className="flex gap-1">
                       {([
-                        ['gamebanana', 'GameBanana', gbCount],
-                        ['local', 'Local', localCount],
+                        ['gamebanana', t('installed.filters.gamebanana'), gbCount],
+                        ['local', t('installed.filters.local'), localCount],
                       ] as const).map(([value, label, count]) => {
                         const on = sourceSel.includes(value);
                         return (
@@ -3099,12 +3099,12 @@ export default function Installed() {
 
                   <div className="mt-3 border-t border-border pt-3">
                     <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                      Status
+                      {t('installed.filters.status')}
                     </div>
                     <div className="flex gap-1">
                       {([
-                        ['enabled', 'Enabled', enabledCount],
-                        ['disabled', 'Disabled', disabledCount],
+                        ['enabled', t('installed.filters.enabled'), enabledCount],
+                        ['disabled', t('locker.global.disabledBadge'), disabledCount],
                       ] as const).map(([value, label, count]) => {
                         const on = statusSel.includes(value);
                         return (
@@ -3135,7 +3135,7 @@ export default function Installed() {
                     <div className="mt-3 border-t border-border pt-3">
                       <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                          Mod type
+                          {t('installed.filters.modType')}
                         </span>
                         {typeFilter.length > 0 && (
                           <button
@@ -3143,7 +3143,7 @@ export default function Installed() {
                             onClick={() => setTypeFilter([])}
                             className="text-[11px] text-accent hover:underline cursor-pointer"
                           >
-                            Clear
+                            {t('common.actions.clear')}
                           </button>
                         )}
                       </div>
@@ -3198,7 +3198,7 @@ export default function Installed() {
                       }}
                       className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
                     >
-                      Reset
+                      {t('common.actions.reset')}
                     </button>
                   )}
                 </div>
@@ -3209,16 +3209,16 @@ export default function Installed() {
               onClick={() => setImportOpen(true)}
               icon={FilePlus}
               className="!px-2.5"
-              aria-label="Add custom mod"
-              title="Add custom mod: import a VPK from disk with a custom name and thumbnail"
+              aria-label={t('installed.actions.addCustomMod')}
+              title={t('installed.actions.addCustomModHint')}
             />
             <Button
               variant="secondary"
               onClick={() => openModsFolder().catch(() => {})}
               icon={FolderOpen}
               className="!px-2.5"
-              aria-label="Open mods folder"
-              title="Open mods folder"
+              aria-label={t('installed.actions.openModsFolder')}
+              title={t('installed.actions.openModsFolder')}
             />
             <Button
               variant={selectMode ? 'primary' : 'secondary'}
@@ -3226,8 +3226,8 @@ export default function Installed() {
               icon={CheckSquare}
               disabled={!!bulkProgress}
               className="!px-2.5"
-              aria-label={selectMode ? 'Exit selection mode' : 'Select multiple mods'}
-              title={selectMode ? 'Exit selection mode' : 'Select multiple mods for bulk delete, enable, or disable'}
+              aria-label={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultiple')}
+              title={selectMode ? t('installed.actions.exitSelectionMode') : t('installed.actions.selectMultipleHint')}
             />
 
             {/* Locker overrides: hero cards + ability sounds + ability colors
@@ -3239,8 +3239,8 @@ export default function Installed() {
                 onClick={() => setLockerOverridesOpen(true)}
                 icon={Wand2}
                 className="!px-2.5"
-                aria-label="Locker overrides"
-                title="Locker overrides: review and remove applied hero cards, ability sounds, and ability colors"
+                aria-label={t('installed.actions.lockerOverrides')}
+                title={t('installed.actions.lockerOverridesHint')}
               />
               {lockerOverrideCount > 0 && (
                 <span className="pointer-events-none absolute -right-1 -top-1 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-accent px-1 text-[10px] font-semibold leading-none text-accent-foreground ring-2 ring-bg-primary">
@@ -3259,34 +3259,34 @@ export default function Installed() {
                 onClick={() => setViewMenuOpen((v) => !v)}
                 icon={layout === 'list' ? List : LayoutGrid}
                 className="!px-2.5"
-                aria-label="View options"
+                aria-label={t('installed.view.viewOptions')}
                 aria-expanded={viewMenuOpen}
-                title="Style and card size"
+                title={t('installed.view.styleAndCardSize')}
               />
               {viewMenuOpen && (
                 <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm shadow-xl shadow-black/40">
                   <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                    Style
+                    {t('installed.view.style')}
                   </div>
                   <ViewModeToggle
                     className="w-full"
                     value={layout}
                     options={[
-                      { value: 'grid', label: 'Grid view', icon: LayoutGrid },
-                      { value: 'list', label: 'List view', icon: List },
+                      { value: 'grid', label: t('conflicts.view.grid'), icon: LayoutGrid },
+                      { value: 'list', label: t('conflicts.view.list'), icon: List },
                     ]}
                     onChange={(mode) => setLayout(mode === 'list' ? 'list' : 'grid')}
                   />
 
                   <div className="mt-3 border-t border-border pt-3">
                     <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                      Card size
+                      {t('installed.view.cardSize')}
                     </div>
                     <div
                       className={`flex items-center gap-2 transition-opacity ${
                         layout === 'list' ? 'opacity-40' : ''
                       }`}
-                      title="Card size (drag to the small end for compact cards)"
+                      title={t('installed.view.cardSizeHint')}
                     >
                       <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                       <input
@@ -3297,7 +3297,7 @@ export default function Installed() {
                         value={cardSizeMultiplier}
                         disabled={layout === 'list'}
                         onChange={(e) => setCardSizeMultiplier(Number(e.currentTarget.value))}
-                        aria-label="Card size"
+                        aria-label={t('installed.view.cardSize')}
                         aria-valuetext={`${cardSizeMultiplier.toFixed(2)}x card size`}
                         className="h-1.5 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                       />
@@ -3305,7 +3305,7 @@ export default function Installed() {
                     </div>
                     {layout === 'list' && (
                       <p className="mt-1.5 text-[11px] text-text-secondary">
-                        Card size applies to grid view.
+                        {t('installed.view.cardSizeGridOnly')}
                       </p>
                     )}
                   </div>
@@ -3331,8 +3331,8 @@ export default function Installed() {
           <Search className="w-12 h-12 mb-3 opacity-50" />
           <p className="mb-2">
             {searchNeedle
-              ? <>No installed mods match &ldquo;{search}&rdquo;</>
-              : 'No installed mods match the active filters'}
+              ? t('installed.empty.noSearchMatch', { query: search })
+              : t('installed.empty.noFilterMatch')}
           </p>
           <button
             onClick={() => {
@@ -3343,7 +3343,7 @@ export default function Installed() {
             }}
             className="mt-1 px-3 py-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer text-sm"
           >
-            {searchNeedle ? 'Clear search' : 'Clear filters'}
+            {searchNeedle ? t('installed.filters.clearSearch') : t('installed.filters.clearFilters')}
           </button>
         </div>
       )}
@@ -3351,7 +3351,7 @@ export default function Installed() {
       {visibleEnabled.length > 0 && (
         <div className="mb-6">
           <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">Enabled</SectionHeader>
+            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.filters.enabled')}</SectionHeader>
           </div>
           {renderSortableSection('enabled')}
         </div>
@@ -3360,7 +3360,7 @@ export default function Installed() {
       {visibleDisabled.length > 0 && (
         <div>
           <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">Disabled</SectionHeader>
+            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('locker.global.disabledBadge')}</SectionHeader>
           </div>
           {renderSortableSection('disabled')}
         </div>
@@ -3372,9 +3372,7 @@ export default function Installed() {
         message={
           <>
             <p className="mb-3">
-              Re-download every mod flagged with an available update. Each one's enabled state
-              will be restored after the install finishes. Downloads run one at a time and may
-              take a while.
+              {t('installed.updateAll.description')}
             </p>
             {(() => {
               const pending = mods.filter((m) => updatesAvailable.has(m.id));
@@ -3382,7 +3380,7 @@ export default function Installed() {
               return (
                 <div className="update-stripes border border-accent/20 bg-bg-tertiary/40 rounded-md px-3 py-2 max-h-48 overflow-y-auto">
                   <div className="text-[10px] uppercase tracking-wider text-accent mb-1.5 font-semibold">
-                    Mods receiving updates ({pending.length})
+                    {t('installed.updateAll.receivingUpdates', { count: pending.length })}
                   </div>
                   <ul className="space-y-1 text-sm text-text-primary">
                     {pending.map((m) => (
@@ -3417,7 +3415,7 @@ export default function Installed() {
                 type="button"
                 onClick={() => setUpdateAllError(null)}
                 className="text-state-danger hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-state-danger"
-                aria-label="Dismiss update error"
+                aria-label={t('installed.updateAll.dismissError')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3437,14 +3435,16 @@ export default function Installed() {
                     : `${updatePickQueue.length} mods need a manual file pick: the authors replaced their files and no clear match exists. The installed versions were kept.`}
                 </p>
                 <Button size="sm" variant="primary" className="mt-2" onClick={openNextUpdatePick}>
-                  {updatePickQueue.length === 1 ? 'Pick replacement' : `Pick replacements (${updatePickQueue.length})`}
+                  {updatePickQueue.length === 1
+                    ? t('installed.updateAll.pickReplacement', { count: 1 })
+                    : t('installed.updateAll.pickReplacement', { count: updatePickQueue.length })}
                 </Button>
               </div>
               <button
                 type="button"
                 onClick={() => setUpdatePickQueue([])}
                 className="text-text-muted hover:text-text-primary p-1 -m-1 cursor-pointer rounded-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                aria-label="Dismiss manual pick notice"
+                aria-label={t('installed.updateAll.dismissPickNotice')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -3457,39 +3457,38 @@ export default function Installed() {
         isOpen={!!modToDelete}
         title={
           modToDelete?.isBulk
-            ? `Delete ${modToDelete.name}?`
+            ? t('installed.delete.bulkTitle', { name: modToDelete.name })
             : modToDelete?.isGroup
-              ? `Delete ${modToDelete.ids.length} files?`
-              : 'Delete Mod?'
+              ? t('installed.delete.groupTitle', { count: modToDelete.ids.length })
+              : t('installed.delete.title')
         }
         message={
           modToDelete?.isBulk ? (
-            <>
-              Delete{' '}
-              <span className="font-medium text-text-primary">{modToDelete.name}</span>?
-              This removes every VPK in the selection and cannot be undone.
-            </>
+            <Trans
+              i18nKey="installed.delete.bulkMessage"
+              values={{ name: modToDelete.name }}
+              components={{ name: <span className="font-medium text-text-primary" /> }}
+            />
           ) : modToDelete?.isGroup ? (
-            <>
-              Delete all {modToDelete.ids.length} files from{' '}
-              <span className="font-medium text-text-primary">{modToDelete.name}</span>? This
-              removes every VPK in the group. To keep some, cancel and use the file picker
-              instead.
-            </>
+            <Trans
+              i18nKey="installed.delete.groupMessage"
+              values={{ count: modToDelete.ids.length, name: modToDelete.name }}
+              components={{ name: <span className="font-medium text-text-primary" /> }}
+            />
           ) : (
-            <>
-              Are you sure you want to delete{' '}
-              <span className="font-medium text-text-primary">{modToDelete?.name}</span>? This
-              action cannot be undone.
-            </>
+            <Trans
+              i18nKey="installed.delete.confirmMessage"
+              values={{ name: modToDelete?.name ?? '' }}
+              components={{ name: <span className="font-medium text-text-primary" /> }}
+            />
           )
         }
         confirmLabel={
           modToDelete?.isBulk
-            ? `Delete ${modToDelete.name}`
+            ? t('installed.delete.bulkConfirm', { name: modToDelete.name })
             : modToDelete?.isGroup
-              ? `Delete ${modToDelete.ids.length}`
-              : 'Delete'
+              ? t('installed.delete.groupConfirm', { count: modToDelete.ids.length })
+              : t('common.actions.delete')
         }
         variant="danger"
         onConfirm={handleDeleteConfirm}
@@ -3594,7 +3593,7 @@ export default function Installed() {
             onClick={(e) => e.stopPropagation()}
           >
             <Loader2 className="w-5 h-5 animate-spin text-accent" />
-            <span className="text-sm text-text-secondary">Loading mod details...</span>
+            <span className="text-sm text-text-secondary">{t('installed.details.loading')}</span>
           </div>
         </div>,
         document.body
@@ -3609,10 +3608,10 @@ export default function Installed() {
             className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-red-400 mb-2">Couldn't load mod details</h3>
+            <h3 className="text-lg font-semibold text-red-400 mb-2">{t('installed.details.loadFailed')}</h3>
             <p className="text-sm text-text-secondary mb-4">{detailsError}</p>
             <div className="flex justify-end">
-              <Button onClick={closeModDetails}>Close</Button>
+              <Button onClick={closeModDetails}>{t('common.actions.close')}</Button>
             </div>
           </div>
         </div>,
@@ -3690,12 +3689,12 @@ export default function Installed() {
 
       {customUnknownMod && (
         <ImportCustomModModal
-          title="Make Custom Mod"
-          submitLabel="Save Custom Mod"
+          title={t('installed.import.makeCustomTitle')}
+          submitLabel={t('installed.import.saveCustom')}
           initialVpkPath={customUnknownMod.path}
           initialName={deriveModNameFromPath(customUnknownMod.fileName)}
           lockVpk
-          vpkHelpText="This VPK is already installed. Saving will only add custom metadata to it."
+          vpkHelpText={t('installed.import.alreadyInstalledHint')}
           onClose={() => setCustomUnknownMod(null)}
           onImport={async ({ name, thumbnailDataUrl, nsfw }) => {
             await applyUnknownCustomMod(customUnknownMod.id, { name, thumbnailDataUrl, nsfw });
@@ -3743,14 +3742,17 @@ export default function Installed() {
 
       <ConfirmModal
         isOpen={!!unmergeTarget}
-        title="Unmerge mod?"
+        title={t('installed.merge.unmergeTitle')}
         message={
           unmergeTarget ? (
             <div className="space-y-2">
               <p>
-                <span className="text-text-primary font-medium">{unmergeTarget.name}</span> will be deleted and
-                its {unmergeTarget.merged?.sources.length ?? 0} source mod
-                {(unmergeTarget.merged?.sources.length ?? 0) === 1 ? '' : 's'} will be restored.
+                <Trans
+                  i18nKey="installed.merge.unmergeMessage"
+                  count={unmergeTarget.merged?.sources.length ?? 0}
+                  values={{ name: unmergeTarget.name, count: unmergeTarget.merged?.sources.length ?? 0 }}
+                  components={{ name: <span className="text-text-primary font-medium" /> }}
+                />
               </p>
               <ul className="text-xs text-text-secondary list-disc pl-5">
                 {unmergeTarget.merged?.sources.map((s) => (
@@ -3761,7 +3763,7 @@ export default function Installed() {
           ) : null
         }
         variant="danger"
-        confirmLabel="Unmerge"
+        confirmLabel={t('installed.merge.unmerge')}
         onConfirm={() => void handleUnmergeConfirm()}
         onCancel={() => setUnmergeTarget(null)}
       />
@@ -3769,18 +3771,20 @@ export default function Installed() {
       {unmergeResult && (
         <ConfirmModal
           isOpen
-          title="Some sources were missing"
+          title={t('installed.merge.missingSourcesTitle')}
           message={
             <div className="space-y-2 text-sm">
               <p>
-                {unmergeResult.result.recovered.length} source mod
-                {unmergeResult.result.recovered.length === 1 ? ' was' : 's were'} restored, but{' '}
-                {unmergeResult.result.missingSourceFileNames.length} could not be found on disk.
+                {t('installed.merge.missingSourcesBody', {
+                  count: unmergeResult.result.recovered.length,
+                  recovered: unmergeResult.result.recovered.length,
+                  missing: unmergeResult.result.missingSourceFileNames.length,
+                })}
               </p>
               <p className="text-text-secondary">
                 {unmergeResult.copied
-                  ? 'The share code captured at merge time is on your clipboard now. Paste it into the portable-profile import flow to re-download the missing sources from GameBanana.'
-                  : 'Copying the share code to your clipboard failed. Click "Copy share code" below, then paste it into the portable-profile import flow to re-download the missing sources.'}
+                  ? t('installed.merge.shareCodeCopied')
+                  : t('installed.merge.shareCodeCopyFailed')}
               </p>
               <ul className="text-xs text-text-secondary list-disc pl-5 max-h-24 overflow-y-auto">
                 {unmergeResult.result.missingSourceFileNames.map((fn) => (
@@ -3789,8 +3793,8 @@ export default function Installed() {
               </ul>
             </div>
           }
-          confirmLabel={unmergeResult.copied ? 'OK' : 'Copy share code'}
-          cancelLabel="Close"
+          confirmLabel={unmergeResult.copied ? t('installed.merge.ok') : t('installed.merge.copyShareCode')}
+          cancelLabel={t('common.actions.close')}
           onConfirm={() => {
             if (!unmergeResult.copied) {
               void navigator.clipboard.writeText(unmergeResult.result.shareCode);
@@ -3816,8 +3820,8 @@ export default function Installed() {
             <>
               <span className="text-sm text-text-primary tabular-nums px-2">
                 {selectedMods.length === 0
-                  ? 'No mods selected'
-                  : `${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'} selected`}
+                  ? t('installed.select.noneSelected')
+                  : t('installed.select.countSelected', { count: selectedMods.length })}
               </span>
               <span className="h-5 w-px bg-border" />
               <button
@@ -3825,7 +3829,7 @@ export default function Installed() {
                 onClick={selectAllVisible}
                 className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
               >
-                Select all
+                {t('installed.select.selectAll')}
               </button>
               {selectedMods.length > 0 && (
                 <button
@@ -3833,7 +3837,7 @@ export default function Installed() {
                   onClick={() => setSelectedIds(new Set())}
                   className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
                 >
-                  Clear
+                  {t('common.actions.clear')}
                 </button>
               )}
               <span className="h-5 w-px bg-border" />
@@ -3842,18 +3846,18 @@ export default function Installed() {
                 size="sm"
                 disabled={selectedDisabledCount === 0}
                 onClick={handleBulkEnable}
-                title={selectedDisabledCount === 0 ? 'No disabled mods selected' : `Enable ${selectedDisabledCount} mod${selectedDisabledCount === 1 ? '' : 's'}`}
+                title={selectedDisabledCount === 0 ? t('installed.select.noDisabledSelected') : t('installed.select.enableCount', { count: selectedDisabledCount })}
               >
-                Enable{selectedDisabledCount > 0 ? ` (${selectedDisabledCount})` : ''}
+                {t('installed.select.enable')}{selectedDisabledCount > 0 ? ` (${selectedDisabledCount})` : ''}
               </Button>
               <Button
                 variant="secondary"
                 size="sm"
                 disabled={selectedEnabledCount === 0}
                 onClick={handleBulkDisable}
-                title={selectedEnabledCount === 0 ? 'No enabled mods selected' : `Disable ${selectedEnabledCount} mod${selectedEnabledCount === 1 ? '' : 's'}`}
+                title={selectedEnabledCount === 0 ? t('installed.select.noEnabledSelected') : t('installed.select.disableCount', { count: selectedEnabledCount })}
               >
-                Disable{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
+                {t('conflicts.actions.disable')}{selectedEnabledCount > 0 ? ` (${selectedEnabledCount})` : ''}
               </Button>
               <Button
                 variant="secondary"
@@ -3866,13 +3870,13 @@ export default function Installed() {
                 onClick={openBulkMerge}
                 title={
                   selectedMods.length < 2
-                    ? 'Select 2+ mods to merge'
+                    ? t('installed.select.mergeMinHint')
                     : selectedMods.some((m) => !!m.merged)
-                      ? 'Cannot merge an already-merged mod. Unmerge it first.'
-                      : `Combine ${selectedMods.length} mods into one VPK`
+                      ? t('installed.select.mergeAlreadyMergedHint')
+                      : t('installed.select.mergeCombineHint', { count: selectedMods.length })
                 }
               >
-                Merge{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
+                {t('installed.select.merge')}{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
               </Button>
               <div className="relative" ref={tagMenuRef}>
                 <Button
@@ -3883,16 +3887,16 @@ export default function Installed() {
                   onClick={() => setTagMenuOpen((v) => !v)}
                   title={
                     selectedMods.length === 0
-                      ? 'Select mods to tag for the Locker'
-                      : `Tag ${selectedMods.length} mod${selectedMods.length === 1 ? '' : 's'} for a hero or Global category in the Locker`
+                      ? t('installed.select.tagEmptyHint')
+                      : t('installed.select.tagCountHint', { count: selectedMods.length })
                   }
                 >
-                  Tag{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
+                  {t('installed.select.tag')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
                 </Button>
                 {tagMenuOpen && selectedMods.length > 0 && (
                   <div
                     role="dialog"
-                    aria-label="Tag selected mods for the Locker"
+                    aria-label={t('installed.select.tagDialogLabel')}
                     className="absolute bottom-full mb-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
                   >
                     <button
@@ -3900,11 +3904,11 @@ export default function Installed() {
                       onClick={() => handleBulkClearTag()}
                       className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-bg-tertiary text-text-secondary hover:text-text-primary cursor-pointer"
                     >
-                      Clear Locker tag
+                      {t('installed.tag.clearLockerTag')}
                     </button>
                     <div className="my-1 h-px bg-border" />
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                      Global
+                      {t('installed.tag.global')}
                     </div>
                     {GLOBAL_MOD_TYPE_ORDER.map((type) => (
                       <button
@@ -3918,7 +3922,7 @@ export default function Installed() {
                     ))}
                     <div className="my-1 h-px bg-border" />
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                      Hero
+                      {t('installed.tag.hero')}
                     </div>
                     {HERO_NAMES_SORTED.map((name) => (
                       <button
@@ -3940,15 +3944,15 @@ export default function Installed() {
                 icon={Trash2}
                 onClick={openBulkDeleteConfirm}
               >
-                Delete{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
+                {t('common.actions.delete')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
               </Button>
               <span className="h-5 w-px bg-border" />
               <button
                 type="button"
                 onClick={exitSelectMode}
                 className="p-1.5 text-text-secondary hover:text-text-primary rounded hover:bg-bg-tertiary cursor-pointer"
-                aria-label="Exit selection mode"
-                title="Exit selection mode"
+                aria-label={t('installed.actions.exitSelectionMode')}
+                title={t('installed.actions.exitSelectionMode')}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -4046,6 +4050,7 @@ function UnknownFilterGuessModal({
   onCancel: (mod: Mod) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const { mod } = state;
 
   return createPortal(
@@ -4068,7 +4073,7 @@ function UnknownFilterGuessModal({
               ) : (
                 <Link2 className="w-4 h-4 text-accent" />
               )}
-              {mod.isUnknown ? 'Fix Unknown Mod' : 'Link to GameBanana'}
+              {mod.isUnknown ? t('installed.unknown.fixModTitle') : t('installed.unknown.linkToGamebanana')}
             </h2>
             <p className="text-xs text-text-secondary mt-1 truncate" title={mod.fileName}>
               {mod.fileName}
@@ -4078,7 +4083,7 @@ function UnknownFilterGuessModal({
             type="button"
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -4150,6 +4155,7 @@ function BulkUnknownFixModal({
   onCancel: (mod: Mod) => void;
   onClose: () => void;
 }) {
+  const { t } = useTranslation();
   const findableCount = unknownMods.filter((mod) => !pendingIds.has(mod.id) && !cache[mod.id]).length;
   const retryableCount = unknownMods.filter(
     (mod) => !pendingIds.has(mod.id) && cache[mod.id]?.crcMatch.status === 'not-found'
@@ -4173,10 +4179,10 @@ function BulkUnknownFixModal({
           <div className="min-w-0">
             <h2 id="bulk-unknown-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
               <Wrench className="w-4 h-4 text-orange-400" />
-              Fix Unknown Mods
+              {t('settings.experimental.fixUnknownMods')}
             </h2>
             <p className="text-xs text-text-secondary mt-1">
-              {unknownMods.length} unknown mod{unknownMods.length === 1 ? '' : 's'}
+              {t('installed.unknown.unknownModCount', { count: unknownMods.length })}
             </p>
           </div>
           <div className="flex items-center gap-2 flex-shrink-0">
@@ -4188,9 +4194,9 @@ function BulkUnknownFixModal({
                   icon={RotateCcw}
                   disabled={retryableCount === 0}
                   onClick={() => onRetryAll(unknownMods)}
-                  title="Retry every unknown mod that previously had no match"
+                  title={t('installed.unknown.retryAllHint')}
                 >
-                  Retry all
+                  {t('installed.unknown.retryAll')}
                 </Button>
                 <Button
                   variant="secondary"
@@ -4198,9 +4204,9 @@ function BulkUnknownFixModal({
                   icon={Search}
                   disabled={findableCount === 0}
                   onClick={() => setConfirmFindAll(true)}
-                  title="Auto-detect every unknown mod that has not already been checked (heavy, may hit rate limits)"
+                  title={t('installed.unknown.searchAllHint')}
                 >
-                  Search all
+                  {t('installed.unknown.searchAll')}
                 </Button>
               </>
             )}
@@ -4208,7 +4214,7 @@ function BulkUnknownFixModal({
               type="button"
               onClick={onClose}
               className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-              aria-label="Close"
+              aria-label={t('common.actions.close')}
             >
               <X className="w-5 h-5" />
             </button>
@@ -4224,14 +4230,14 @@ function BulkUnknownFixModal({
               const isLoading = pendingIds.has(mod.id);
               const hasError = !!errors[mod.id];
               const statusLabel = cachedMatch?.status === 'found'
-                  ? 'Found'
+                  ? t('installed.unknown.statusFound')
                 : isLoading
-                  ? 'Searching'
+                  ? t('installed.unknown.statusSearching')
                   : hasError
-                    ? 'Error'
+                    ? t('installed.unknown.statusError')
                   : cachedMatch?.status === 'not-found'
-                    ? 'No match'
-                    : 'Unknown';
+                    ? t('installed.unknown.statusNoMatch')
+                    : t('installed.unknown.statusUnknown');
               const statusTone = cachedMatch?.status === 'found'
                 ? 'text-state-success'
                 : hasError
@@ -4285,9 +4291,9 @@ function BulkUnknownFixModal({
         any click in the confirm. */}
     <ConfirmModal
       isOpen={confirmFindAll}
-      title="Search all unknown mods?"
-      message={`Auto-detect scans GameBanana for ${findableCount} mod${findableCount === 1 ? '' : 's'}. This can hit GameBanana rate limits. Searching manually (per mod) is faster and lighter.`}
-      confirmLabel="Search all"
+      title={t('installed.unknown.searchAllConfirmTitle')}
+      message={t('installed.unknown.searchAllConfirmMessage', { count: findableCount })}
+      confirmLabel={t('installed.unknown.searchAll')}
       onConfirm={() => {
         setConfirmFindAll(false);
         onFindAll(unknownMods);
@@ -4329,6 +4335,7 @@ function UnknownMatchPanel({
   onRetry: (mod: Mod) => void;
   onCancel: (mod: Mod) => void;
 }) {
+  const { t } = useTranslation();
   const { mod, loading, result, error, cancelled, progress } = state;
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
@@ -4395,10 +4402,10 @@ function UnknownMatchPanel({
       {/* Fallback: keep the file but give it a custom name/thumbnail. */}
       <div className="rounded-md bg-bg-tertiary/40 border border-white/5 px-4 py-3 flex flex-wrap items-center justify-between gap-3">
         <span className="text-sm text-text-secondary">
-          Can&apos;t find it on GameBanana? Save it with a custom name instead.
+          {t('installed.unknown.cantFindHint')}
         </span>
         <Button variant="secondary" size="sm" icon={FilePlus} onClick={() => onMakeCustom(mod)}>
-          Make Custom Mod
+          {t('installed.import.makeCustomTitle')}
         </Button>
       </div>
 
@@ -4407,15 +4414,13 @@ function UnknownMatchPanel({
       <details className="rounded-md bg-bg-tertiary/40 border border-white/5 overflow-hidden">
         <summary className="cursor-pointer select-none px-4 py-3 text-sm font-medium text-text-secondary hover:text-text-primary flex items-center gap-2">
           <Beaker className="w-4 h-4 text-accent flex-shrink-0" />
-          Auto-detect from GameBanana (advanced)
+          {t('installed.unknown.autoDetectSummary')}
         </summary>
         <div className="px-4 pb-4 space-y-3 border-t border-white/5 pt-3">
           <div className="flex items-start gap-2 text-xs text-yellow-200/90 bg-yellow-500/10 border border-yellow-500/25 rounded-md p-2.5">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5 text-yellow-400" />
             <span>
-              Auto-detect downloads candidate archives from GameBanana and compares them
-              byte-for-byte. It is slow and can hit GameBanana rate limits, especially when
-              fixing many mods at once. The manual search above is faster and lighter.
+              {t('installed.unknown.autoDetectWarning')}
             </span>
           </div>
 
@@ -4424,18 +4429,18 @@ function UnknownMatchPanel({
               <div className="flex items-center gap-3 min-w-0">
                 <Loader2 className="w-4 h-4 animate-spin text-accent flex-shrink-0" />
                 <div className="min-w-0">
-                  <div className="truncate">{progress?.message ?? 'Finding a matching mod...'}</div>
+                  <div className="truncate">{progress?.message ?? t('installed.unknown.findingMatch')}</div>
                   {typeof progress?.checkedFiles === 'number' && typeof progress.totalFiles === 'number' && (
                     <div className="text-xs text-text-tertiary mt-0.5">
-                      {progress.checkedFiles}/{progress.totalFiles} files
-                      {typeof progress.indexedEntries === 'number' ? `, ${progress.indexedEntries} VPK entries` : ''}
-                      {typeof progress.bytesFetched === 'number' ? `, ${formatBytes(progress.bytesFetched)} fetched` : ''}
+                      {t('installed.unknown.progressFiles', { checked: progress.checkedFiles, total: progress.totalFiles })}
+                      {typeof progress.indexedEntries === 'number' ? t('installed.unknown.progressEntries', { count: progress.indexedEntries }) : ''}
+                      {typeof progress.bytesFetched === 'number' ? t('installed.unknown.progressFetched', { bytes: formatBytes(progress.bytesFetched) }) : ''}
                     </div>
                   )}
                 </div>
               </div>
               <Button variant="secondary" size="sm" icon={X} onClick={handleCancel}>
-                Cancel
+                {t('common.actions.cancel')}
               </Button>
             </div>
           )}
@@ -4465,15 +4470,15 @@ function UnknownMatchPanel({
                   <AlertTriangle className="w-5 h-5 text-text-tertiary flex-shrink-0 mt-0.5" />
                   <div className="min-w-0">
                     <div className="text-xs font-semibold uppercase tracking-wider text-text-tertiary">
-                      {match.status === 'error' ? 'Match Check Failed' : 'No Match Found'}
+                      {match.status === 'error' ? t('installed.unknown.matchCheckFailed') : t('installed.unknown.noMatchFound')}
                     </div>
                     <p className="text-sm text-text-secondary mt-1">
-                      {match.reason ?? 'No GameBanana archive matched this local VPK by CRC-32.'}
+                      {match.reason ?? t('installed.unknown.noArchiveMatched')}
                     </p>
                     <div className="flex flex-wrap gap-2 mt-3 text-[11px] text-text-tertiary">
-                      <span>{match.checkedMods} mods checked</span>
-                      <span>{match.checkedFiles} files checked</span>
-                      <span>{match.bytesFetched.toLocaleString()} bytes fetched</span>
+                      <span>{t('installed.unknown.modsChecked', { count: match.checkedMods })}</span>
+                      <span>{t('installed.unknown.filesChecked', { count: match.checkedFiles })}</span>
+                      <span>{t('installed.unknown.bytesFetched', { bytes: match.bytesFetched.toLocaleString() })}</span>
                     </div>
                   </div>
                 </div>
@@ -4481,7 +4486,7 @@ function UnknownMatchPanel({
               {autoMatchEnabled && (
                 <div className="border-t border-white/5 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
                   <Button variant="secondary" size="sm" icon={RotateCcw} onClick={handleRetry}>
-                    Retry
+                    {t('common.actions.retry')}
                   </Button>
                 </div>
               )}
@@ -4490,17 +4495,16 @@ function UnknownMatchPanel({
 
           {!loading && !error && !result && autoMatchEnabled && (
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-text-secondary">
-              <span>{cancelled ? 'Auto-detect cancelled.' : 'Run a byte-for-byte search against GameBanana.'}</span>
+              <span>{cancelled ? t('installed.unknown.autoDetectCancelled') : t('installed.unknown.autoDetectPrompt')}</span>
               <Button variant="secondary" size="sm" icon={Search} onClick={handleFind}>
-                {cancelled ? 'Try again' : 'Auto-detect'}
+                {cancelled ? t('common.actions.tryAgain') : t('settings.gamePath.autoDetect')}
               </Button>
             </div>
           )}
 
           {!loading && !error && !result && !autoMatchEnabled && (
             <p className="text-sm text-text-secondary">
-              Auto-detect is off. Enable it under Settings (Experimental Features) if you want
-              to try it, but the manual search above is the recommended path.
+              {t('installed.unknown.autoDetectOff')}
             </p>
           )}
         </div>
@@ -4554,6 +4558,7 @@ function UnknownManualSearch({
   disabled: boolean;
   onAssociate: (mod: Mod, args: AssociateUnknownModArgs) => Promise<void>;
 }) {
+  const { t } = useTranslation();
   // Seed the box with the hero inferred from the VPK tree (when confident), so
   // a skin search is one keystroke away. enrichMod tags Sound mods as 'Sound',
   // everything else defaults to 'Mod'.
@@ -4647,8 +4652,8 @@ function UnknownManualSearch({
   // Also fires once on mount when the box was prefilled from the inferred hero.
   // 250ms matches the Browse tab's search feel.
   useEffect(() => {
-    const t = setTimeout(() => void search(query, section), 250);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => void search(query, section), 250);
+    return () => clearTimeout(timer);
   }, [query, section, search]);
 
   // Lazy-load the candidate's files so the user can optionally pin the exact
@@ -4694,18 +4699,19 @@ function UnknownManualSearch({
       <div className="flex items-start gap-3">
         <Link2 className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
         <div className="text-sm text-text-secondary">
-          <span className="font-medium text-text-primary">Find it on GameBanana and link it.</span>{' '}
-          Results update as you type, or open GameBanana (or the Browse tab) side by side to
-          find the mod, then search for it here. Linking tags this exact file: nothing is
-          re-downloaded. Use the{' '}
-          <Banana className="inline-block w-3.5 h-3.5 -mt-0.5 text-yellow-400" /> button on any
-          result to open it on GameBanana and download there directly.
+          <Trans
+            i18nKey="installed.unknown.manualSearchIntro"
+            components={{
+              lead: <span className="font-medium text-text-primary" />,
+              banana: <Banana className="inline-block w-3.5 h-3.5 -mt-0.5 text-yellow-400" />,
+            }}
+          />
         </div>
       </div>
 
       {(mod.lockerHero || mod.globalType) && (
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
-          <span className="text-text-tertiary">From the file tree:</span>
+          <span className="text-text-tertiary">{t('installed.unknown.fromFileTree')}</span>
           {mod.lockerHero && (
             <span className="inline-flex items-center rounded-full bg-bg-primary/60 border border-white/10 px-2 py-0.5">
               <HeroTagLabel heroName={mod.lockerHero} iconClassName="h-4 w-4" />
@@ -4730,7 +4736,7 @@ function UnknownManualSearch({
                 section === s ? 'bg-accent text-accent-foreground' : 'text-text-secondary hover:bg-white/5'
               }`}
             >
-              {s === 'Mod' ? 'Mods' : 'Sounds'}
+              {s === 'Mod' ? t('installed.unknown.sectionMods') : t('installed.unknown.sectionSounds')}
             </button>
           ))}
         </div>
@@ -4740,7 +4746,7 @@ function UnknownManualSearch({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search GameBanana by name..."
+            placeholder={t('installed.unknown.searchPlaceholder')}
             className="w-full bg-bg-primary border border-white/10 rounded-md pl-9 pr-9 py-2 text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus:border-accent/50"
           />
           {searching && (
@@ -4757,7 +4763,7 @@ function UnknownManualSearch({
       )}
 
       {hasSearched && !searching && results.length === 0 && !searchError && (
-        <p className="text-sm text-text-tertiary">No results. Try a different name or section.</p>
+        <p className="text-sm text-text-tertiary">{t('installed.unknown.noResults')}</p>
       )}
 
       {results.length > 0 && (
@@ -4795,7 +4801,7 @@ function UnknownManualSearch({
                         {gbMod.name}
                       </div>
                       <div className="text-[11px] text-text-tertiary truncate">
-                        {gbMod.rootCategory?.name ?? (section === 'Mod' ? 'Mods' : 'Sounds')} · #{gbMod.id}
+                        {gbMod.rootCategory?.name ?? (section === 'Mod' ? t('installed.unknown.sectionMods') : t('installed.unknown.sectionSounds'))} · #{gbMod.id}
                       </div>
                     </div>
                     {isSel && <Check className="w-4 h-4 text-accent flex-shrink-0" />}
@@ -4817,13 +4823,13 @@ function UnknownManualSearch({
                   <div className="border-t border-white/5 px-2.5 py-2.5 space-y-2">
                     {files && files.length > 0 && (
                       <label className="block text-xs text-text-secondary">
-                        Pin exact file (optional)
+                        {t('installed.unknown.pinExactFile')}
                         <select
                           value={fileId ?? ''}
                           onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
                           className="mt-1 w-full bg-bg-primary border border-white/10 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent/50"
                         >
-                          <option value="">Don&apos;t pin a file</option>
+                          <option value="">{t('installed.unknown.dontPinFile')}</option>
                           {files.map((f) => (
                             <option key={f.id} value={f.id}>
                               {f.fileName}
@@ -4841,7 +4847,7 @@ function UnknownManualSearch({
                         disabled={disabled}
                         onClick={() => void handleLink()}
                       >
-                        Link this mod
+                        {t('installed.unknown.linkThisMod')}
                       </Button>
                     </div>
                   </div>
@@ -4978,6 +4984,7 @@ function UnknownFileList({
   initialPaths?: string[];
   initialCount?: number;
 }) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [paths, setPaths] = useState<string[] | null>(initialPaths && initialPaths.length ? initialPaths : null);
   const [count, setCount] = useState<number | undefined>(initialCount);
@@ -5037,7 +5044,7 @@ function UnknownFileList({
       >
         {open ? <ChevronDown className="w-4 h-4 flex-shrink-0" /> : <ChevronRight className="w-4 h-4 flex-shrink-0" />}
         <Files className="w-4 h-4 text-text-tertiary flex-shrink-0" />
-        <span className="font-medium">View files</span>
+        <span className="font-medium">{t('installed.unknown.viewFiles')}</span>
         {typeof count === 'number' && <span className="text-text-tertiary">({count})</span>}
       </button>
 
@@ -5045,7 +5052,7 @@ function UnknownFileList({
         <div className="border-t border-white/5 px-4 py-3 space-y-3">
           {loading && (
             <div className="flex items-center gap-2 text-sm text-text-tertiary">
-              <Loader2 className="w-4 h-4 animate-spin text-accent" /> Reading VPK...
+              <Loader2 className="w-4 h-4 animate-spin text-accent" /> {t('installed.unknown.readingVpk')}
             </div>
           )}
           {error && (
@@ -5060,12 +5067,12 @@ function UnknownFileList({
                 <FileTreeBranch nodes={tree.children} depth={0} expanded={expanded} onToggle={toggleNode} />
               </div>
               {!full && (
-                <p className="text-[11px] text-text-tertiary">Showing a sample. The full tree loads when expanded.</p>
+                <p className="text-[11px] text-text-tertiary">{t('installed.unknown.showingSample')}</p>
               )}
             </>
           )}
           {tree && tree.children.size === 0 && !loading && (
-            <p className="text-sm text-text-tertiary">No file paths found in this VPK.</p>
+            <p className="text-sm text-text-tertiary">{t('installed.unknown.noFilePaths')}</p>
           )}
         </div>
       )}
@@ -5096,23 +5103,24 @@ function UnknownMatchCard({
    *  against), so the card hides the Retry button entirely. */
   onRetry?: () => void;
 }) {
+  const { t } = useTranslation();
   return (
     <div className="rounded-md border border-state-success/35 bg-state-success/10 overflow-hidden">
       <div className="p-4">
         <div className="flex items-start gap-4">
           <ModThumbnail
             src={match.thumbnailUrl}
-            alt={match.modName ?? 'GameBanana mod'}
+            alt={match.modName ?? t('installed.unknown.gamebananaMod')}
             nsfw={match.nsfw}
             hideNsfw={hideNsfwPreviews}
             className="w-24 h-16 rounded-md bg-bg-primary border border-white/10 flex-shrink-0"
           />
           <div className="min-w-0 flex-1">
             <div className="text-xs font-semibold uppercase tracking-wider text-state-success">
-              Match
+              {t('installed.unknown.match')}
             </div>
             <h3 className="text-base font-semibold text-text-primary mt-1 truncate" title={match.modName}>
-              {match.modName ?? 'GameBanana mod'}
+              {match.modName ?? t('installed.unknown.gamebananaMod')}
             </h3>
             {match.fileName && (
               <p className="text-sm text-text-secondary mt-1 truncate" title={match.fileName}>
@@ -5120,18 +5128,18 @@ function UnknownMatchCard({
               </p>
             )}
           </div>
-          <Tag tone="success">CRC Match</Tag>
+          <Tag tone="success">{t('installed.unknown.crcMatch')}</Tag>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 mt-3">
           {match.section && (
             <Tag tone="neutral">
-              {match.section === 'Mod' ? 'Mods' : match.section === 'Sound' ? 'Sounds' : match.section}
+              {match.section === 'Mod' ? t('installed.unknown.sectionMods') : match.section === 'Sound' ? t('installed.unknown.sectionSounds') : match.section}
             </Tag>
           )}
           {match.categoryName && <Tag tone="neutral">{match.categoryName}</Tag>}
-          {typeof match.modId === 'number' && <Tag tone="neutral">Mod #{match.modId}</Tag>}
-          {typeof match.fileId === 'number' && <Tag tone="neutral">File #{match.fileId}</Tag>}
+          {typeof match.modId === 'number' && <Tag tone="neutral">{t('installed.unknown.modIdTag', { id: match.modId })}</Tag>}
+          {typeof match.fileId === 'number' && <Tag tone="neutral">{t('installed.unknown.fileIdTag', { id: match.fileId })}</Tag>}
         </div>
 
         {match.reason && (
@@ -5148,7 +5156,7 @@ function UnknownMatchCard({
           disabled={applying}
           onClick={onView}
         >
-          View Mod
+          {t('installed.unknown.viewMod')}
         </Button>
         {onRetry && (
           <Button
@@ -5158,7 +5166,7 @@ function UnknownMatchCard({
             disabled={applying}
             onClick={onRetry}
           >
-            Retry
+            {t('common.actions.retry')}
           </Button>
         )}
         <Button
@@ -5168,7 +5176,7 @@ function UnknownMatchCard({
           isLoading={applying}
           onClick={onApply}
         >
-          Apply
+          {t('common.actions.apply')}
         </Button>
       </div>
     </div>
@@ -5260,6 +5268,7 @@ interface ModMediaPreviewProps {
 }
 
 function SoundPlaceholder() {
+  const { t } = useTranslation();
   const bars = [6, 10, 15, 21, 27, 19, 13, 23, 29, 18, 11, 16, 24];
   return (
     <div className="flex h-full w-full flex-col items-center justify-center gap-2 bg-gradient-to-br from-bg-tertiary via-bg-secondary to-bg-tertiary text-text-secondary">
@@ -5273,7 +5282,7 @@ function SoundPlaceholder() {
         ))}
       </div>
       <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-text-secondary/80">
-        Sound Preview
+        {t('installed.card.soundPreview')}
       </span>
     </div>
   );
@@ -5297,6 +5306,7 @@ function ModMediaPreview({
   isGroupCard,
   onRevealInFolder,
 }: ModMediaPreviewProps) {
+  const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
   const canOpen = !!onOpenDetails;
   // Desaturate + dim the cover art for disabled mods so an "off" card reads
@@ -5305,7 +5315,7 @@ function ModMediaPreview({
   const mediaDisabledClass = mod.enabled
     ? ''
     : 'grayscale-[0.6] opacity-[0.7] transition-[filter,opacity] duration-200';
-  const detailsLabel = canOpen ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined;
+  const detailsLabel = canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined;
   // Prefer an explicit mod thumbnail. For sound-only mods without one, fall
   // back to the inferred hero render before using the waveform placeholder.
   // `lockerHero` is persisted from VPK path inference and catches titles that
@@ -5675,6 +5685,7 @@ function ModListRowContent({
   actions,
   onRevealInFolder,
 }: ModListRowContentProps) {
+  const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
   const canOpen = !!onOpenDetails;
   const listHeroName = isSound && !mod.thumbnailUrl
@@ -5698,7 +5709,7 @@ function ModListRowContent({
           </span>
         ) : (
           <span className="inline-flex h-5 items-center rounded border border-white/[0.06] bg-bg-tertiary/60 px-1.5 text-[11px] font-semibold text-text-secondary/70">
-            Off
+            {t('installed.card.off')}
           </span>
         )}
       </div>
@@ -5713,7 +5724,7 @@ function ModListRowContent({
         className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
-        aria-label={canOpen ? (isGroupCard ? `Choose files for ${mod.name}` : `View details for ${mod.name}`) : undefined}
+        aria-label={canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
         data-card-action="true"
         draggable={false}
         onDragStart={stopMediaDrag}
@@ -5842,6 +5853,7 @@ function ModCard({
   entryKey,
   group,
 }: ModCardProps) {
+  const { t } = useTranslation();
   const hasConflicts = conflicts.length > 0;
   const isGroupCard = !!group;
   // Shared by the card's own context menu and the image context menus on the
@@ -5855,7 +5867,7 @@ function ModCard({
   const variantStatusLabel = group ? `${group.enabledCount}/${group.variantCount}` : null;
   const enabledTitle = group?.enabledLabels.join(', ') ?? '';
   const variantStatusTitle = group
-    ? `${enabledTitle || 'No files enabled'} - click card to choose files`
+    ? t('installed.card.variantStatusTitle', { labels: enabledTitle || t('installed.card.noFilesEnabled') })
     : '';
   const [menuOpen, setMenuOpen] = useState(false);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
@@ -6064,8 +6076,8 @@ function ModCard({
             onDelete();
           }}
           className={`${utilityActionClasses} ${hoverActionVisibilityClasses} text-state-danger hover:bg-state-danger/10 hover:text-state-danger focus-visible:ring-state-danger/60`}
-          title={`Delete ${mod.name}`}
-          aria-label={`Delete ${mod.name}`}
+          title={t('installed.card.deleteNamed', { name: mod.name })}
+          aria-label={t('installed.card.deleteNamed', { name: mod.name })}
           data-card-action="true"
         >
           <Trash2 className="w-4 h-4" />
@@ -6093,8 +6105,8 @@ function ModCard({
             setMenuError(null);
           }}
           className={`${utilityActionClasses} ${selectMode ? 'hidden' : `${isList ? '' : 'opacity-0 group-hover/card:opacity-90 focus:opacity-100'} aria-expanded:opacity-100`}`}
-          title="More actions"
-          aria-label={`More actions for ${mod.name}`}
+          title={t('installed.card.moreActions')}
+          aria-label={t('installed.card.moreActionsFor', { name: mod.name })}
           aria-expanded={menuOpen}
           data-card-action="true"
         >
@@ -6131,7 +6143,7 @@ function ModCard({
                 className={menuItemClasses}
               >
                 <Pencil className="w-3.5 h-3.5" />
-                Edit
+                {t('installed.card.edit')}
               </button>
             )}
             {onOpenDetails && (
@@ -6146,7 +6158,7 @@ function ModCard({
                 className={menuItemClasses}
               >
                 <Info className="w-3.5 h-3.5" />
-                View details
+                {t('installed.card.viewDetails')}
               </button>
             )}
             {onViewAuthor && (
@@ -6161,7 +6173,7 @@ function ModCard({
                 className={menuItemClasses}
               >
                 <Banana className="w-3.5 h-3.5" />
-                View author's page
+                {t('installed.card.viewAuthorPage')}
               </button>
             )}
             {(onTagLocker || onTagGlobal) && (
@@ -6176,7 +6188,7 @@ function ModCard({
                   className={menuItemClasses}
                 >
                   <TagIcon className="w-3.5 h-3.5" />
-                  Set Locker tag
+                  {t('installed.tag.setLockerTag')}
                 </button>
                 {tagPickerOpen && (
                   <div className="my-1 max-h-64 overflow-y-auto rounded-md border border-border bg-bg-primary/40 p-1">
@@ -6189,13 +6201,13 @@ function ModCard({
                       disabled={menuBusy || (!mod.lockerHero && !mod.globalType)}
                       className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
                     >
-                      Clear Locker tag
+                      {t('installed.tag.clearLockerTag')}
                     </button>
                     <div className="my-1 h-px bg-border" />
                     {onTagGlobal && (
                       <>
                         <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                          Global
+                          {t('installed.tag.global')}
                         </div>
                         {GLOBAL_MOD_TYPE_ORDER.map((type) => (
                           <button
@@ -6218,7 +6230,7 @@ function ModCard({
                       </>
                     )}
                     <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-                      Hero
+                      {t('installed.tag.hero')}
                     </div>
                     {HERO_NAMES_SORTED.map((heroName) => {
                       const tagged = canonicalHeroName(mod.lockerHero) === heroName;
@@ -6266,7 +6278,7 @@ function ModCard({
                 ) : (
                   <Link2 className="w-3.5 h-3.5" />
                 )}
-                {mod.isUnknown ? 'Fix unknown match' : 'Link to GameBanana'}
+                {mod.isUnknown ? t('installed.card.fixUnknownMatch') : t('installed.unknown.linkToGamebanana')}
               </button>
             )}
             {mod.merged && onCopyShareCode && (
@@ -6281,7 +6293,7 @@ function ModCard({
                 className={menuItemClasses}
               >
                 <Share2 className="w-3.5 h-3.5" />
-                Copy share code
+                {t('installed.merge.copyShareCode')}
               </button>
             )}
             {mod.merged && onUnmerge && (
@@ -6296,7 +6308,7 @@ function ModCard({
                 className={menuItemClasses}
               >
                 <Scissors className="w-3.5 h-3.5" />
-                Unmerge
+                {t('installed.merge.unmerge')}
               </button>
             )}
             {/* A merged mod is removed via Unmerge (which deletes the merged VPK
@@ -6316,7 +6328,7 @@ function ModCard({
                   className={dangerMenuItemClasses}
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  Delete
+                  {t('common.actions.delete')}
                 </button>
               </>
             )}
@@ -6327,8 +6339,8 @@ function ModCard({
         <button
           onClick={onToggle}
           aria-pressed={mod.enabled}
-          aria-label={mod.enabled ? 'Disable mod' : 'Enable mod'}
-          title={mod.enabled ? 'Disable mod' : 'Enable mod'}
+          aria-label={mod.enabled ? t('installed.card.disableMod') : t('installed.card.enableMod')}
+          title={mod.enabled ? t('installed.card.disableMod') : t('installed.card.enableMod')}
           className={`${toggleHitboxClasses} group/toggle`}
           data-card-action="true"
         >
@@ -6362,7 +6374,7 @@ function ModCard({
             type="button"
             onClick={onSelectToggle}
             className="absolute inset-0 z-30 rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
-            aria-label={selected ? `Deselect ${mod.name}` : `Select ${mod.name}`}
+            aria-label={selected ? t('installed.card.deselectNamed', { name: mod.name }) : t('installed.card.selectNamed', { name: mod.name })}
             aria-pressed={!!selected}
           />
           {/* Visible checkbox indicator. pointer-events-none so the overlay
@@ -6432,8 +6444,8 @@ function ModCard({
             )}
             {!mod.enabled && !selectMode && (
               <div className="absolute top-2 left-2 z-10 flex h-5 items-start">
-                <Tag tone="neutral" variant="overlay" icon={PowerOff} title="This mod is disabled and not loaded in-game">
-                  Disabled
+                <Tag tone="neutral" variant="overlay" icon={PowerOff} title={t('locker.global.disabledBadgeTitle')}>
+                  {t('locker.global.disabledBadge')}
                 </Tag>
               </div>
             )}
@@ -6445,17 +6457,17 @@ function ModCard({
                   icon={AlertTriangle}
                   title={conflicts.map((c) => c.details).join(', ')}
                 >
-                  Conflict
+                  {t('installed.card.conflict')}
                 </Tag>
               )}
               {mod.isUnknown && (
                 <Tag
                   variant="overlay"
                   icon={Wrench}
-                  title="This local mod has no saved GameBanana or custom metadata"
+                  title={t('installed.card.unknownTitle')}
                   className="border-cyan-300/70 text-cyan-200"
                 >
-                  Unknown
+                  {t('installed.card.unknown')}
                 </Tag>
               )}
               {updateAvailable && (
@@ -6463,20 +6475,20 @@ function ModCard({
                   tone="accent"
                   variant="overlay"
                   icon={Download}
-                  title="A newer version is available on GameBanana"
+                  title={t('installed.card.updateAvailableTitle')}
                   className="uppercase tracking-wide"
                 >
-                  Update
+                  {t('profiles.actions.update')}
                 </Tag>
               )}
               {mod.merged && (
                 <Tag
                   variant="overlay"
                   icon={Layers}
-                  title={`Merged from ${mod.merged.sources.length} mod${mod.merged.sources.length === 1 ? '' : 's'}. Open details to unmerge.`}
+                  title={t('installed.card.mergedTitle', { count: mod.merged.sources.length })}
                   className="border-white/20 text-white/90"
                 >
-                  Merged · {mod.merged.sources.length}
+                  {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
                 </Tag>
               )}
             </div>
@@ -6574,7 +6586,7 @@ function ModCard({
       </MenuTrigger>
       <MenuContent>
         <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
-          Reveal in folder
+          {t('installed.card.revealInFolder')}
         </MenuItem>
       </MenuContent>
     </MenuRoot>
@@ -6588,6 +6600,7 @@ interface EditLocalModModalProps {
 }
 
 function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState(mod.name);
   const [imagePath, setImagePath] = useState('');
   const [thumbnailDataUrl, setThumbnailDataUrl] = useState(mod.thumbnailUrl ?? '');
@@ -6605,13 +6618,13 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
       setThumbnailDataUrl(dataUrl);
     } catch (err) {
       setThumbnailDataUrl(mod.thumbnailUrl ?? '');
-      setError(`Couldn't read image: ${String(err)}`);
+      setError(t('installed.imageField.readFailed', { error: String(err) }));
     }
   };
 
   const pickImage = async () => {
     const picked = await showOpenDialog({
-      title: 'Select thumbnail image',
+      title: t('installed.imageField.selectImage'),
       filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
     });
     if (picked) await acceptImagePath(picked);
@@ -6625,12 +6638,12 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
     if (!file) return;
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
     if (!IMAGE_EXTS.includes(ext)) {
-      setError(`Expected an image (${IMAGE_EXTS.join(', ')}) - got "${file.name}".`);
+      setError(t('installed.imageField.expectedImage', { exts: IMAGE_EXTS.join(', '), name: file.name }));
       return;
     }
     const path = window.electronAPI.getDroppedFilePath(file);
     if (!path) {
-      setError('Could not resolve the dropped image path.');
+      setError(t('installed.imageField.dropUnresolved'));
       return;
     }
     await acceptImagePath(path);
@@ -6674,15 +6687,15 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
             <Pencil className="h-4 w-4" />
           </div>
           <div className="min-w-0">
-            <h3 className="text-lg font-semibold text-text-primary">Edit mod</h3>
+            <h3 className="text-lg font-semibold text-text-primary">{t('installed.edit.title')}</h3>
             <p className="mt-1 text-sm text-text-secondary">
-              Change the name, image, or NSFW mark.
+              {t('installed.edit.description')}
             </p>
           </div>
         </div>
 
         <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="local-mod-name">
-          Name
+          {t('locker.soulImport.fields.name')}
         </label>
         <input
           id="local-mod-name"
@@ -6694,20 +6707,20 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
           }}
           autoFocus
           className="mt-2 w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/60 focus:border-accent focus:ring-2 focus:ring-accent/25"
-          placeholder="Mod name"
+          placeholder={t('installed.edit.modNamePlaceholder')}
         />
         <p className="mt-2 truncate text-xs text-text-secondary" title={mod.fileName}>
-          File: {mod.fileName}
+          {t('installed.edit.fileLabel', { fileName: mod.fileName })}
         </p>
 
         <div className="mt-5">
           <label className="block text-sm font-medium text-text-primary mb-1.5">
-            Image
+            {t('installed.imageField.image')}
           </label>
           <div
             role="button"
             tabIndex={0}
-            aria-label={thumbnailDataUrl ? 'Image selected. Press Enter to change.' : 'Drop an image here or press Enter to browse'}
+            aria-label={thumbnailDataUrl ? t('installed.imageField.ariaSelected') : t('installed.imageField.ariaBrowse')}
             onClick={pickImage}
             onKeyDown={(e) => onZoneKeyDown(e, pickImage)}
             onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(true); }}
@@ -6724,7 +6737,7 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
           >
             <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
               {thumbnailDataUrl ? (
-                <img src={thumbnailDataUrl} alt="Thumbnail preview" className="w-full h-full object-cover" />
+                <img src={thumbnailDataUrl} alt={t('installed.imageField.thumbnailPreview')} className="w-full h-full object-cover" />
               ) : (
                 <ImagePlus className="w-5 h-5" aria-hidden />
               )}
@@ -6734,17 +6747,17 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
                 <>
                   <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
                   <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
-                  <div className="text-xs text-accent mt-0.5">Click or drop another to replace</div>
+                  <div className="text-xs text-accent mt-0.5">{t('installed.imageField.clickToReplaceAnother')}</div>
                 </>
               ) : thumbnailDataUrl ? (
                 <>
-                  <div className="text-sm text-text-primary font-medium">Current image</div>
-                  <div className="text-xs text-text-secondary">Click or drop to replace</div>
+                  <div className="text-sm text-text-primary font-medium">{t('installed.imageField.currentImage')}</div>
+                  <div className="text-xs text-text-secondary">{t('installed.imageField.clickToReplace')}</div>
                 </>
               ) : (
                 <>
-                  <div className="text-sm text-text-primary font-medium">Drop an image here</div>
-                  <div className="text-xs text-text-secondary">or click to browse - {IMAGE_EXTS.join(', ')}</div>
+                  <div className="text-sm text-text-primary font-medium">{t('installed.imageField.dropImageHere')}</div>
+                  <div className="text-xs text-text-secondary">{t('installed.imageField.orClickToBrowse', { exts: IMAGE_EXTS.join(', ') })}</div>
                 </>
               )}
             </div>
@@ -6758,7 +6771,7 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
               }}
               className="mt-2 text-xs text-text-secondary hover:text-text-primary cursor-pointer"
             >
-              Remove image
+              {t('installed.imageField.removeImage')}
             </button>
           )}
         </div>
@@ -6770,7 +6783,7 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
             onChange={(e) => setNsfw(e.target.checked)}
             className="w-4 h-4 accent-accent cursor-pointer"
           />
-          NSFW
+          {t('installed.imageField.nsfw')}
         </label>
 
         {error && (
@@ -6781,10 +6794,10 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
 
         <div className="mt-5 flex justify-end gap-2">
           <Button variant="secondary" onClick={onClose} disabled={saving}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
           <Button onClick={submit} isLoading={saving} disabled={!trimmed}>
-            Save
+            {t('common.actions.save')}
           </Button>
         </div>
       </div>
@@ -6819,13 +6832,17 @@ function deriveModNameFromPath(p: string): string {
 function ImportCustomModModal({
   onClose,
   onImport,
-  title = 'Import Custom Mod',
-  submitLabel = 'Import',
+  title: titleProp,
+  submitLabel: submitLabelProp,
   initialVpkPath = '',
   initialName = '',
   lockVpk = false,
-  vpkHelpText = 'The file will be copied into your addons folder and renamed with the next available pak## priority.',
+  vpkHelpText: vpkHelpTextProp,
 }: ImportCustomModModalProps) {
+  const { t } = useTranslation();
+  const title = titleProp ?? t('installed.import.title');
+  const submitLabel = submitLabelProp ?? t('profiles.actions.import');
+  const vpkHelpText = vpkHelpTextProp ?? t('installed.import.vpkHelp');
   const [vpkPath, setVpkPath] = useState<string>(initialVpkPath);
   const [name, setName] = useState<string>(initialName || (initialVpkPath ? deriveModNameFromPath(initialVpkPath) : ''));
   const [imagePath, setImagePath] = useState<string>('');
@@ -6850,14 +6867,14 @@ function ImportCustomModModal({
       setThumbnailDataUrl(dataUrl);
     } catch (err) {
       setThumbnailDataUrl('');
-      setError(`Couldn't read image: ${String(err)}`);
+      setError(t('installed.imageField.readFailed', { error: String(err) }));
     }
   };
 
   const pickVpk = async () => {
     if (lockVpk) return;
     const picked = await showOpenDialog({
-      title: 'Select VPK file',
+      title: t('installed.import.selectVpk'),
       filters: [{ name: 'VPK files', extensions: ['vpk'] }],
     });
     if (picked) acceptVpkPath(picked);
@@ -6865,7 +6882,7 @@ function ImportCustomModModal({
 
   const pickImage = async () => {
     const picked = await showOpenDialog({
-      title: 'Select thumbnail image',
+      title: t('installed.imageField.selectImage'),
       filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
     });
     if (picked) await acceptImagePath(picked);
@@ -6879,12 +6896,12 @@ function ImportCustomModModal({
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
     if (!/\.vpk$/i.test(file.name)) {
-      setError(`Expected a .vpk file — got "${file.name}".`);
+      setError(t('installed.import.expectedVpk', { name: file.name }));
       return;
     }
     const path = window.electronAPI.getDroppedFilePath(file);
     if (!path) {
-      setError('Could not resolve the dropped file path.');
+      setError(t('locker.soulImport.errors.dropPathUnresolved'));
       return;
     }
     acceptVpkPath(path);
@@ -6898,12 +6915,12 @@ function ImportCustomModModal({
     if (!file) return;
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
     if (!IMAGE_EXTS.includes(ext)) {
-      setError(`Expected an image (${IMAGE_EXTS.join(', ')}) — got "${file.name}".`);
+      setError(t('installed.imageField.expectedImage', { exts: IMAGE_EXTS.join(', '), name: file.name }));
       return;
     }
     const path = window.electronAPI.getDroppedFilePath(file);
     if (!path) {
-      setError('Could not resolve the dropped image path.');
+      setError(t('installed.imageField.dropUnresolved'));
       return;
     }
     await acceptImagePath(path);
@@ -6947,7 +6964,7 @@ function ImportCustomModModal({
           <button
             onClick={onClose}
             className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -6956,12 +6973,12 @@ function ImportCustomModModal({
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              VPK file <span className="text-red-400">*</span>
+              {t('installed.import.vpkFile')} <span className="text-red-400">*</span>
             </label>
             <div
               role="button"
               tabIndex={0}
-              aria-label={vpkPath ? `VPK selected: ${vpkPath}${lockVpk ? '' : '. Press Enter to change.'}` : 'Drop a VPK file here or press Enter to browse'}
+              aria-label={vpkPath ? (lockVpk ? t('installed.import.vpkSelectedLocked', { path: vpkPath }) : t('installed.import.vpkSelected', { path: vpkPath })) : t('installed.import.vpkAriaBrowse')}
               onClick={pickVpk}
               onKeyDown={(e) => onZoneKeyDown(e, pickVpk)}
               onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (!lockVpk) setVpkDragActive(true); }}
@@ -6983,15 +7000,18 @@ function ImportCustomModModal({
                     {vpkPath.split(/[\\/]/).pop()}
                   </span>
                   <span className="text-xs text-text-secondary font-mono truncate max-w-full">{vpkPath}</span>
-                  {!lockVpk && <span className="text-xs text-accent">Click or drop another to replace</span>}
+                  {!lockVpk && <span className="text-xs text-accent">{t('installed.imageField.clickToReplaceAnother')}</span>}
                 </>
               ) : (
                 <>
                   <UploadCloud className="w-6 h-6 text-text-secondary" aria-hidden />
                   <span className="text-sm text-text-primary font-medium">
-                    Drop a <code className="font-mono text-accent">.vpk</code> here
+                    <Trans
+                      i18nKey="installed.import.dropVpkHere"
+                      components={{ code: <code className="font-mono text-accent" /> }}
+                    />
                   </span>
-                  <span className="text-xs text-text-secondary">or click to browse</span>
+                  <span className="text-xs text-text-secondary">{t('installed.import.orClickToBrowse')}</span>
                 </>
               )}
             </div>
@@ -7002,25 +7022,25 @@ function ImportCustomModModal({
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              Mod name <span className="text-red-400">*</span>
+              {t('installed.import.modName')} <span className="text-red-400">*</span>
             </label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="My awesome skin"
+              placeholder={t('installed.import.modNamePlaceholder')}
               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
             />
           </div>
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              Thumbnail image <span className="text-text-secondary font-normal">(optional)</span>
+              {t('installed.import.thumbnailImage')} <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
             </label>
             <div
               role="button"
               tabIndex={0}
-              aria-label={imagePath ? `Thumbnail selected: ${imagePath}. Press Enter to change.` : 'Drop an image here or press Enter to browse'}
+              aria-label={imagePath ? t('installed.import.thumbnailSelected', { path: imagePath }) : t('installed.imageField.ariaBrowse')}
               onClick={pickImage}
               onKeyDown={(e) => onZoneKeyDown(e, pickImage)}
               onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(true); }}
@@ -7037,7 +7057,7 @@ function ImportCustomModModal({
             >
               <div className="w-24 aspect-video bg-bg-tertiary rounded-md overflow-hidden flex items-center justify-center text-text-secondary flex-shrink-0">
                 {thumbnailDataUrl ? (
-                  <img src={thumbnailDataUrl} alt="Thumbnail preview" className="w-full h-full object-cover" />
+                  <img src={thumbnailDataUrl} alt={t('installed.imageField.thumbnailPreview')} className="w-full h-full object-cover" />
                 ) : (
                   <ImagePlus className="w-5 h-5" aria-hidden />
                 )}
@@ -7047,12 +7067,12 @@ function ImportCustomModModal({
                   <>
                     <div className="text-sm text-text-primary font-medium truncate">{imagePath.split(/[\\/]/).pop()}</div>
                     <div className="text-xs text-text-secondary font-mono truncate">{imagePath}</div>
-                    <div className="text-xs text-accent mt-0.5">Click or drop another to replace</div>
+                    <div className="text-xs text-accent mt-0.5">{t('installed.imageField.clickToReplaceAnother')}</div>
                   </>
                 ) : (
                   <>
-                    <div className="text-sm text-text-primary font-medium">Drop an image here</div>
-                    <div className="text-xs text-text-secondary">or click to browse — {IMAGE_EXTS.join(', ')}</div>
+                    <div className="text-sm text-text-primary font-medium">{t('installed.imageField.dropImageHere')}</div>
+                    <div className="text-xs text-text-secondary">{t('installed.imageField.orClickToBrowse', { exts: IMAGE_EXTS.join(', ') })}</div>
                   </>
                 )}
               </div>
@@ -7066,7 +7086,7 @@ function ImportCustomModModal({
               onChange={(e) => setNsfw(e.target.checked)}
               className="w-4 h-4 accent-accent cursor-pointer"
             />
-            Mark as NSFW
+            {t('locker.soulImport.fields.nsfw')}
           </label>
 
           {error && (
@@ -7082,7 +7102,7 @@ function ImportCustomModModal({
             disabled={submitting}
             className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
           >
-            Cancel
+            {t('common.actions.cancel')}
           </button>
           <button
             onClick={handleSubmit}

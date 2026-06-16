@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ArrowUpCircle, Download, X } from 'lucide-react';
 import { Button } from './common/ui';
 import UpdateModal from './UpdateModal';
@@ -16,6 +17,7 @@ let appUpdateBannerDismissed = false;
  * download / release-notes / install-and-restart flow.
  */
 export default function AppUpdateBanner() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<UpdateStatus | null>(null);
   const [managed, setManaged] = useState(false);
   const [dismissed, setDismissed] = useState(appUpdateBannerDismissed);
@@ -53,13 +55,17 @@ export default function AppUpdateBanner() {
             <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-text-primary">
                 {downloaded
-                  ? `Grimoire ${version ? `${version} ` : ''}is ready to install`
-                  : `Grimoire update available${version ? ` (${version})` : ''}`}
+                  ? version
+                    ? t('appUpdateBanner.readyToInstallVersion', { version })
+                    : t('appUpdateBanner.readyToInstall')
+                  : version
+                    ? t('appUpdateBanner.updateAvailableVersion', { version })
+                    : t('appUpdateBanner.updateAvailable')}
               </div>
               <div className="text-xs text-text-secondary">
                 {downloaded
-                  ? 'Restart to finish updating. Your mods and settings stay untouched.'
-                  : 'A newer version is ready. View the release notes and download it.'}
+                  ? t('appUpdateBanner.restartToFinish')
+                  : t('appUpdateBanner.newerVersionReady')}
               </div>
             </div>
             <Button
@@ -69,7 +75,7 @@ export default function AppUpdateBanner() {
               icon={Download}
               className="flex-shrink-0"
             >
-              {downloaded ? 'Install' : 'View update'}
+              {downloaded ? t('appUpdateBanner.install') : t('appUpdateBanner.viewUpdate')}
             </Button>
             <button
               type="button"
@@ -77,8 +83,8 @@ export default function AppUpdateBanner() {
                 appUpdateBannerDismissed = true;
                 setDismissed(true);
               }}
-              aria-label="Hide update banner until next launch"
-              title="Hide until next launch"
+              aria-label={t('appUpdateBanner.hideBannerUntilNextLaunch')}
+              title={t('appUpdateBanner.hideUntilNextLaunch')}
               className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-md text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
             >
               <X className="h-4 w-4" />

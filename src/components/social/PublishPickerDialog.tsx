@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Loader2, AlertTriangle, Boxes, Globe, FolderOpen } from 'lucide-react';
 import { Button } from '../common/ui';
 import { Modal } from '../common/Modal';
@@ -12,6 +13,7 @@ interface PublishPickerDialogProps {
 }
 
 export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDialogProps) {
+  const { t } = useTranslation();
   const [profiles, setProfiles] = useState<Profile[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,16 +51,16 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
           <div className="min-w-0">
             <h2 id="publish-pick-title" className="text-xl font-bold text-text-primary flex items-center gap-2">
               <Globe className="w-5 h-5 text-accent" />
-              Publish a profile
+              {t('social.picker.publishAProfile')}
             </h2>
             <p className="text-sm text-text-secondary mt-1">
-              Pick which local profile to share on Discover.
+              {t('social.picker.pickLocalProfile')}
             </p>
           </div>
           <button
             onClick={onClose}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -68,7 +70,7 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
           {loading && (
             <div className="text-sm text-text-secondary inline-flex items-center gap-2 p-3">
               <Loader2 className="w-4 h-4 animate-spin" />
-              Loading your profiles...
+              {t('social.picker.loadingYourProfiles')}
             </div>
           )}
 
@@ -82,8 +84,8 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
           {!loading && !error && sorted && sorted.length === 0 && (
             <EmptyState
               icon={FolderOpen}
-              title="No local profiles yet"
-              description="Create a profile under Profiles, add some mods, then come back to publish."
+              title={t('social.picker.noLocalProfilesYet')}
+              description={t('social.picker.createAProfileHint')}
             />
           )}
 
@@ -111,18 +113,18 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
                         <div className="text-xs text-text-secondary flex items-center gap-x-3 mt-0.5 flex-wrap">
                           <span className="inline-flex items-center gap-1">
                             <Boxes className="w-3 h-3" />
-                            {modCount} {modCount === 1 ? 'mod' : 'mods'}
+                            {t('profiles.mods.count', { count: modCount })}
                           </span>
                           <span className="text-text-tertiary">
-                            updated {formatRelativeDate(p.updatedAt)}
+                            {t('social.picker.updatedRelative', { date: formatRelativeDate(p.updatedAt) })}
                           </span>
                           {noMods && (
-                            <span className="text-text-tertiary italic">empty</span>
+                            <span className="text-text-tertiary italic">{t('social.picker.empty')}</span>
                           )}
                         </div>
                       </div>
                       <span className="text-xs text-accent shrink-0">
-                        {noMods ? '' : 'Publish →'}
+                        {noMods ? '' : t('social.picker.publishArrow')}
                       </span>
                     </button>
                   </li>
@@ -134,7 +136,7 @@ export default function PublishPickerDialog({ onClose, onPick }: PublishPickerDi
 
         <div className="px-6 py-3 border-t border-white/10 flex justify-end">
           <Button variant="ghost" onClick={onClose}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
         </div>
     </Modal>

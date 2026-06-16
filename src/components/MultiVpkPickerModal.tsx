@@ -53,12 +53,12 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                 <div className="flex items-center justify-between p-5 border-b border-border">
                     <h3 id="multi-vpk-pick-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
                         <FileArchive className="w-5 h-5" />
-                        Multiple VPKs in archive
+                        {t('multiVpk.title')}
                     </h3>
                     <button
                         onClick={onCancel}
                         className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-                        aria-label="Close"
+                        aria-label={t('common.actions.close')}
                     >
                         <X className="w-5 h-5" />
                     </button>
@@ -80,7 +80,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                             onClick={toggleAll}
                             className="text-xs text-accent hover:text-accent-hover transition-colors cursor-pointer"
                         >
-                            {allSelected ? 'Deselect all' : 'Select all'}
+                            {allSelected ? t('multiVpk.deselectAll') : t('multiVpk.selectAll')}
                         </button>
                     </div>
 
@@ -132,7 +132,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                         onClick={onCancel}
                         className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-white/10 transition-colors cursor-pointer"
                     >
-                        Cancel install
+                        {t('multiVpk.cancelInstall')}
                     </button>
                     <button
                         onClick={() => onConfirm(Array.from(selected))}
@@ -140,7 +140,7 @@ export default function MultiVpkPickerModal({ data, onConfirm, onCancel }: Props
                         className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg font-medium transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
                     >
                         <Check className="w-4 h-4" />
-                        Install {selected.size > 0 ? `${selected.size}` : ''}
+                        {selected.size > 0 ? t('multiVpk.installCount', { count: selected.size }) : t('multiVpk.install')}
                     </button>
                 </div>
         </Modal>

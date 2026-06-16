@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Palette,
   Loader2,
@@ -61,8 +62,22 @@ interface Preset {
   hue: number;
   saturation: number;
   brightness: number;
+  /** Stable identifier used as the React key and the i18n lookup key. */
   label: string;
 }
+
+/** i18n key for a preset's displayed name (the `label` is a stable identifier). */
+const PRESET_LABEL_KEYS: Record<string, string> = {
+  Red: 'locker.colors.presets.red',
+  Orange: 'locker.colors.presets.orange',
+  Gold: 'locker.colors.presets.gold',
+  Green: 'locker.colors.presets.green',
+  Cyan: 'locker.colors.presets.cyan',
+  'Light Blue': 'locker.colors.presets.lightBlue',
+  Blue: 'locker.colors.presets.blue',
+  Purple: 'locker.colors.presets.purple',
+  Pink: 'locker.colors.presets.pink',
+};
 
 /** Quick-pick colors. Hue alone can't make a "light blue": the pale presets dial
  *  saturation down and brightness up. Each sets all three knobs at once. */
@@ -126,6 +141,7 @@ const q = (x: number): number => Math.round(x * 100) / 100;
  * Rendered only when the parent has confirmed hero support (pinned recipe).
  */
 export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColorPickerProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // The target currently applied in-game (null when none), and the live picks.
@@ -380,7 +396,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
   const gradientStops = selectedGradientStops(gradientPreset, customStops);
   const gradientLabel =
     gradientPreset === 'custom'
-      ? 'Custom'
+      ? t('locker.colors.custom')
       : (GRADIENT_PRESETS.find((g) => g.name === gradientPreset)?.label ?? gradientPreset);
   const spectrumDirty =
     activeAnimated !== animated ||
@@ -408,15 +424,34 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             activeSaturation !== saturation ||
             activeBrightness !== brightness;
 
+  const animatedSuffix = (on: boolean) => (on ? ` ${t('locker.colors.animatedSuffix')}` : '');
   const appliedLabel = !applied
     ? null
     : activeMode === 'prism'
-      ? `Applied: Rainbow${activeAnimated ? ' (animated)' : ''} · rot ${activeHue ?? 0}°`
+      ? t('locker.colors.applied.rainbow', {
+          animated: animatedSuffix(activeAnimated),
+          rot: activeHue ?? 0,
+        })
       : activeMode === 'gradient'
-        ? `Applied: ${activeGradient && GRADIENT_PRESETS.some((g) => g.name === activeGradient) ? (GRADIENT_PRESETS.find((g) => g.name === activeGradient)?.label ?? 'Gradient') : 'Custom'} gradient${activeAnimated ? ' (animated)' : ''}`
+        ? t('locker.colors.applied.gradient', {
+            label:
+              activeGradient && GRADIENT_PRESETS.some((g) => g.name === activeGradient)
+                ? (GRADIENT_PRESETS.find((g) => g.name === activeGradient)?.label ??
+                  t('locker.colors.modes.gradient'))
+                : t('locker.colors.custom'),
+            animated: animatedSuffix(activeAnimated),
+          })
         : activeMode === 'trippy'
-          ? `Applied: Trippy ${activeTrippy ? TRIPPY_STYLE_LABELS[activeTrippy.style] : ''} · ${activeTrippy ? ANIMATION_LABELS[activeTrippy.animationStyle] : ''} · ${activeTrippy?.targets ?? ''}`
-          : `Applied: ${activeHue}° / S ${pct(activeSaturation ?? 1)}% / B ${pct(activeBrightness ?? 1)}%`;
+          ? t('locker.colors.applied.trippy', {
+              style: activeTrippy ? TRIPPY_STYLE_LABELS[activeTrippy.style] : '',
+              animation: activeTrippy ? ANIMATION_LABELS[activeTrippy.animationStyle] : '',
+              targets: activeTrippy?.targets ?? '',
+            })
+          : t('locker.colors.applied.single', {
+              hue: activeHue,
+              sat: pct(activeSaturation ?? 1),
+              bright: pct(activeBrightness ?? 1),
+            });
 
   const swatchCss = approxSwatch(hue, saturation, brightness);
 
@@ -437,7 +472,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4 text-xs text-text-secondary">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+        <Loader2 className="h-4 w-4 animate-spin" /> {t('locker.colors.loading')}
       </div>
     );
   }
@@ -454,8 +489,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
   return (
     <div className="space-y-3">
       <p className="text-xs text-text-secondary">
-        Repaint {heroName}&apos;s ability effects (particles, projectiles, and the ult body). Pick
-        a single color, a rainbow, a gradient, or a trippy pattern: one pick is active at a time.
+        {t('locker.colors.intro', { hero: heroName })}
       </p>
 
       {/* Mode toggle: three looks over the same one-per-hero slot. */}
@@ -466,7 +500,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           onClick={() => setMode('hue')}
           className={modeBtn(mode === 'hue')}
         >
-          <Palette className="h-3.5 w-3.5" /> Single Color
+          <Palette className="h-3.5 w-3.5" /> {t('locker.colors.modes.singleColor')}
         </button>
         <button
           type="button"
@@ -474,7 +508,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           onClick={() => setMode('prism')}
           className={modeBtn(mode === 'prism')}
         >
-          <Sparkles className="h-3.5 w-3.5" /> Rainbow
+          <Sparkles className="h-3.5 w-3.5" /> {t('locker.colors.modes.rainbow')}
         </button>
         <button
           type="button"
@@ -482,7 +516,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           onClick={() => setMode('gradient')}
           className={modeBtn(mode === 'gradient')}
         >
-          <Blend className="h-3.5 w-3.5" /> Gradient
+          <Blend className="h-3.5 w-3.5" /> {t('locker.colors.modes.gradient')}
         </button>
         <button
           type="button"
@@ -490,7 +524,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           onClick={() => setMode('trippy')}
           className={modeBtn(mode === 'trippy')}
         >
-          <Waves className="h-3.5 w-3.5" /> Trippy
+          <Waves className="h-3.5 w-3.5" /> {t('locker.colors.modes.trippy')}
         </button>
       </div>
 
@@ -509,16 +543,25 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
               }
               aria-label={
                 mode === 'prism'
-                  ? `Rainbow prism${animated ? ', animated' : ''}`
+                  ? t('locker.colors.swatchAria.prism', {
+                      animated: animated ? `, ${t('locker.colors.animatedWord')}` : '',
+                    })
                   : mode === 'gradient'
-                    ? `${gradientLabel} gradient${animated ? ', animated' : ''}`
-                    : `Hue ${hue}, saturation ${pct(saturation)}%, brightness ${pct(brightness)}%`
+                    ? t('locker.colors.swatchAria.gradient', {
+                        label: gradientLabel,
+                        animated: animated ? `, ${t('locker.colors.animatedWord')}` : '',
+                      })
+                    : t('locker.colors.swatchAria.single', {
+                        hue,
+                        sat: pct(saturation),
+                        bright: pct(brightness),
+                      })
               }
             >
               {mode === 'hue' && previewUrl && !previewFailed && (
                 <img
                   src={previewUrl}
-                  alt="Ability color preview"
+                  alt={t('locker.colors.abilityColorPreview')}
                   className="h-full w-full object-cover"
                   style={{ imageRendering: 'auto' }}
                 />
@@ -532,13 +575,32 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             <div className="min-w-0">
               <div className="text-sm font-semibold text-text-primary tabular-nums">
                 {mode === 'prism'
-                  ? `Rainbow${animated ? ' (animated)' : ''} · rot ${hue}° · S ${pct(saturation)}% · B ${pct(brightness)}%`
+                  ? t('locker.colors.target.rainbow', {
+                      animated: animatedSuffix(animated),
+                      rot: hue,
+                      sat: pct(saturation),
+                      bright: pct(brightness),
+                    })
                   : mode === 'gradient'
-                    ? `${gradientLabel}${animated ? ' (animated)' : ''} · rot ${hue}° · S ${pct(saturation)}% · B ${pct(brightness)}%`
-                    : `${hue}° · S ${pct(saturation)}% · B ${pct(brightness)}%`}
+                    ? t('locker.colors.target.gradient', {
+                        label: gradientLabel,
+                        animated: animatedSuffix(animated),
+                        rot: hue,
+                        sat: pct(saturation),
+                        bright: pct(brightness),
+                      })
+                    : t('locker.colors.target.single', {
+                        hue,
+                        sat: pct(saturation),
+                        bright: pct(brightness),
+                      })}
               </div>
               <div className="text-[11px] text-text-secondary">
-                {!applied ? 'No recolor applied' : !dirty ? 'Applied' : appliedLabel}
+                {!applied
+                  ? t('locker.colors.noRecolorApplied')
+                  : !dirty
+                    ? t('locker.colors.appliedStatus')
+                    : appliedLabel}
               </div>
             </div>
           </div>
@@ -547,7 +609,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
               spectrum starts rather than picking one color. */}
           <label className="block space-y-1">
             <span className="text-[11px] font-medium text-text-secondary">
-              {mode === 'hue' ? 'Hue' : 'Rotation'}
+              {mode === 'hue' ? t('locker.colors.hue') : t('locker.colors.rotation')}
             </span>
             <input
               type="range"
@@ -568,7 +630,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           {/* Saturation slider: gray -> full chroma at the current hue */}
           <label className="block space-y-1">
             <span className="text-[11px] font-medium text-text-secondary">
-              Saturation{' '}
+              {t('locker.colors.saturation')}{' '}
               <span className="tabular-nums text-text-secondary/70">{pct(saturation)}%</span>
             </span>
             <input
@@ -589,7 +651,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           {/* Brightness slider: dark -> light at the current hue */}
           <label className="block space-y-1">
             <span className="text-[11px] font-medium text-text-secondary">
-              Brightness{' '}
+              {t('locker.colors.brightness')}{' '}
               <span className="tabular-nums text-text-secondary/70">{pct(brightness)}%</span>
             </span>
             <input
@@ -613,18 +675,24 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
               {PRESETS.map((p) => {
                 const selected =
                   hue === p.hue && saturation === p.saturation && brightness === p.brightness;
+                const presetName = t(PRESET_LABEL_KEYS[p.label] ?? p.label);
                 return (
                   <button
                     key={p.label}
                     type="button"
                     disabled={busy}
                     onClick={() => applyPreset(p)}
-                    title={`${p.label} (${p.hue}°, S ${pct(p.saturation)}%, B ${pct(p.brightness)}%)`}
+                    title={t('locker.colors.presetTitle', {
+                      name: presetName,
+                      hue: p.hue,
+                      sat: pct(p.saturation),
+                      bright: pct(p.brightness),
+                    })}
                     className={`h-6 w-6 rounded-full border transition-transform hover:scale-110 disabled:cursor-not-allowed ${
                       selected ? 'border-text-primary ring-2 ring-accent/60' : 'border-border'
                     }`}
                     style={{ backgroundColor: approxSwatch(p.hue, p.saturation, p.brightness) }}
-                    aria-label={p.label}
+                    aria-label={presetName}
                   />
                 );
               })}
@@ -641,13 +709,13 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                   onChange={(e) => setAnimated(e.target.checked)}
                   className="h-3.5 w-3.5 accent-accent disabled:cursor-not-allowed"
                 />
-                <span className="font-medium text-text-primary">Animated</span>
-                <span>sweep the spectrum over each effect&apos;s lifetime</span>
+                <span className="font-medium text-text-primary">
+                  {t('locker.colors.animated')}
+                </span>
+                <span>{t('locker.colors.sweepSpectrum')}</span>
               </label>
               <p className="text-[11px] text-text-secondary/80">
-                Prism spreads {heroName}&apos;s existing ability colors across a rainbow instead of
-                one hue. Use the sliders above to rotate the spectrum and tune its saturation /
-                brightness. Animated adds a moving sweep on the showy effects (glow, beams, trails).
+                {t('locker.colors.prismDescription', { hero: heroName })}
               </p>
             </div>
           )}
@@ -675,14 +743,14 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                   type="button"
                   disabled={busy}
                   onClick={() => setGradientPreset('custom')}
-                  title="Custom gradient"
+                  title={t('locker.colors.customGradient')}
                   className={`flex h-7 items-center rounded border px-2 text-[11px] font-medium transition-colors disabled:cursor-not-allowed ${
                     gradientPreset === 'custom'
                       ? 'border-text-primary text-text-primary ring-2 ring-accent/60'
                       : 'border-border text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  Custom
+                  {t('locker.colors.custom')}
                 </button>
               </div>
 
@@ -691,7 +759,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                   {customStops.map((st, i) => (
                     <label key={i} className="block space-y-0.5">
                       <span className="text-[10px] font-medium text-text-secondary">
-                        Stop {i + 1}{' '}
+                        {t('locker.colors.stop', { n: i + 1 })}{' '}
                         <span className="tabular-nums text-text-secondary/70">
                           {Math.round(st.hue)}&deg;
                         </span>
@@ -728,13 +796,13 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                   onChange={(e) => setAnimated(e.target.checked)}
                   className="h-3.5 w-3.5 accent-accent disabled:cursor-not-allowed"
                 />
-                <span className="font-medium text-text-primary">Animated</span>
-                <span>sweep the gradient over each effect&apos;s lifetime</span>
+                <span className="font-medium text-text-primary">
+                  {t('locker.colors.animated')}
+                </span>
+                <span>{t('locker.colors.sweepGradient')}</span>
               </label>
               <p className="text-[11px] text-text-secondary/80">
-                Gradient spreads {heroName}&apos;s ability colors over a chosen ramp instead of the
-                full rainbow. Pick a preset or Custom (a hue per stop); the sliders above rotate and
-                tune it.
+                {t('locker.colors.gradientDescription', { hero: heroName })}
               </p>
             </div>
           )}
@@ -758,7 +826,13 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                 </span>
               </>
             }
-            status={!applied ? 'No recolor applied' : !dirty ? 'Applied' : appliedLabel}
+            status={
+              !applied
+                ? t('locker.colors.noRecolorApplied')
+                : !dirty
+                  ? t('locker.colors.appliedStatus')
+                  : appliedLabel
+            }
             onStyle={setTrippyStyle}
             onIntensity={setTrippyIntensity}
             onPhase={setTrippyPhase}
@@ -766,7 +840,9 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
 
           {/* How the particles move at runtime. 'off' bakes a still paint. */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-text-secondary">Animation</span>
+            <span className="text-[11px] font-medium text-text-secondary">
+              {t('locker.colors.animation')}
+            </span>
             <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
               {TRIPPY_ANIMATION_STYLES.map((a) => (
                 <button
@@ -783,9 +859,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           </div>
           {trippyAnimStyle !== 'off' && (
             <p className="text-[11px] text-text-secondary/70">
-              The swatch above previews the pattern and its scroll speed (set by Animation strength).
-              Sweep, Loop, and Cycle differ in how particles animate their color in game, which a
-              texture swatch can&apos;t show.
+              {t('locker.colors.swatchAnimationHint')}
             </p>
           )}
 
@@ -793,7 +867,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           {trippyAnimStyle !== 'off' && (
             <label className="block space-y-1">
               <span className="text-[11px] font-medium text-text-secondary">
-                Animation strength{' '}
+                {t('locker.colors.animationStrength')}{' '}
                 <span className="tabular-nums text-text-secondary/70">{pct(trippyAnimIntensity)}%</span>
               </span>
               <input
@@ -811,28 +885,30 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
 
           {/* Which effect sets the paint touches. */}
           <div className="flex items-center gap-2">
-            <span className="text-[11px] font-medium text-text-secondary">Paint</span>
+            <span className="text-[11px] font-medium text-text-secondary">
+              {t('locker.colors.paint')}
+            </span>
             <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-              {(['all', 'abilities', 'weapons'] as const).map((t) => (
+              {(['all', 'abilities', 'weapons'] as const).map((tgt) => (
                 <button
-                  key={t}
+                  key={tgt}
                   type="button"
                   disabled={busy}
-                  onClick={() => setTrippyTargets(t)}
-                  className={segBtn(trippyTargets === t)}
+                  onClick={() => setTrippyTargets(tgt)}
+                  className={segBtn(trippyTargets === tgt)}
                 >
-                  {t === 'all' ? 'All VFX' : t === 'abilities' ? 'Abilities' : 'Gun FX'}
+                  {tgt === 'all'
+                    ? t('locker.colors.targets.all')
+                    : tgt === 'abilities'
+                      ? t('locker.colors.targets.abilities')
+                      : t('locker.colors.targets.weapons')}
                 </button>
               ))}
             </div>
           </div>
 
           <p className="text-[11px] text-text-secondary/80">
-            Trippy paints {heroName}&apos;s ability particles with a flowing procedural pattern. The
-            pattern strength and phase are above; Animation sets how the particles move in game
-            (Off bakes a still paint). Gun FX targets the weapon&apos;s effect particles (muzzle,
-            tracers, impacts), not its skin (that&apos;s the Body + Gun tab). This shares the
-            one-per-hero slot, so it replaces any color, rainbow, or gradient.
+            {t('locker.colors.trippyDescription', { hero: heroName })}
           </p>
         </div>
       )}
@@ -847,14 +923,14 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
         >
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
           {applied && !dirty
-            ? 'Applied'
+            ? t('locker.colors.appliedStatus')
             : mode === 'prism'
-              ? 'Apply Rainbow'
+              ? t('locker.colors.applyRainbow')
               : mode === 'gradient'
-                ? 'Apply Gradient'
+                ? t('locker.colors.applyGradient')
                 : mode === 'trippy'
-                  ? 'Apply Trippy'
-                  : 'Apply Color'}
+                  ? t('locker.colors.applyTrippy')
+                  : t('locker.colors.applyColor')}
         </button>
         {applied && (
           <button
@@ -864,16 +940,14 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
             className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Remove
+            {t('common.actions.remove')}
           </button>
         )}
       </div>
 
       {busy && (
         <p className="text-[11px] text-text-secondary/80">
-          Baking the recolor. The first time for a given pick can
-          take up to a minute (it re-encodes every effect texture); the same pick is instant after
-          that.
+          {t('locker.colors.bakingHint')}
         </p>
       )}
 
@@ -895,8 +969,8 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
           <RefreshCw className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
           <span>
             {gameRunning
-              ? 'Restart Deadlock for this change to take effect (addons mount at game start).'
-              : 'Saved. This pick mounts the next time you Launch Modded.'}
+              ? t('locker.colors.restartHint')
+              : t('locker.colors.savedHint')}
           </span>
         </div>
       )}

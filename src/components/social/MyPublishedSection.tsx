@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Loader2,
   AlertTriangle,
@@ -56,6 +57,7 @@ export default function MyPublishedSection({
   onUnpublished,
   onUpdated,
 }: MyPublishedSectionProps) {
+  const { t } = useTranslation();
   const [data, setData] = useState<SocialMeResponse | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -128,7 +130,7 @@ export default function MyPublishedSection({
       {loading && !data && (
         <div className="text-sm text-text-secondary inline-flex items-center gap-2">
           <Loader2 className="w-4 h-4 animate-spin" />
-          Loading your profiles...
+          {t('social.published.loadingYourProfiles')}
         </div>
       )}
 
@@ -141,7 +143,7 @@ export default function MyPublishedSection({
             onClick={() => void load()}
             className="ml-auto underline text-red-300 hover:text-red-200 cursor-pointer"
           >
-            Retry
+            {t('common.actions.retry')}
           </button>
         </div>
       )}
@@ -149,12 +151,12 @@ export default function MyPublishedSection({
       {data && data.profiles.length === 0 && !loading && (
         <EmptyState
           icon={Globe2}
-          title="You haven't published anything yet"
-          description="Pick one of your local profiles and post it to Discover."
+          title={t('social.published.nothingPublishedYet')}
+          description={t('social.published.pickLocalProfile')}
           action={
             onPublishNew ? (
               <Button icon={Upload} onClick={onPublishNew}>
-                Publish a profile
+                {t('social.published.publishAProfile')}
               </Button>
             ) : undefined
           }
@@ -164,7 +166,7 @@ export default function MyPublishedSection({
       {data && data.profiles.length > 0 && onPublishNew && (
         <div className="flex justify-end">
           <Button size="sm" variant="secondary" icon={Upload} onClick={onPublishNew}>
-            Publish another
+            {t('social.published.publishAnother')}
           </Button>
         </div>
       )}
@@ -194,7 +196,7 @@ export default function MyPublishedSection({
                   <div className="text-xs text-text-secondary flex items-center gap-x-3 gap-y-0.5 mt-1 flex-wrap">
                     <span className="inline-flex items-center gap-1">
                       <Boxes className="w-3 h-3" />
-                      {p.mod_count} {p.mod_count === 1 ? 'mod' : 'mods'}
+                      {t('profiles.mods.count', { count: p.mod_count })}
                     </span>
                     <span className="inline-flex items-center gap-1">
                       <Heart className="w-3 h-3" />
@@ -206,7 +208,7 @@ export default function MyPublishedSection({
                     {p.is_featured && (
                       <Badge variant="success">
                         <Sparkles className="w-3 h-3 mr-1 inline" />
-                        Featured
+                        {t('social.published.featured')}
                       </Badge>
                     )}
                     {p.has_nsfw && <Badge variant="warning">NSFW</Badge>}
@@ -218,7 +220,7 @@ export default function MyPublishedSection({
 
                 {confirming ? (
                   <div className="flex items-center gap-2">
-                    <span className="text-xs text-text-secondary">Unpublish?</span>
+                    <span className="text-xs text-text-secondary">{t('social.published.unpublishConfirm')}</span>
                     <Button
                       size="sm"
                       variant="danger"
@@ -226,7 +228,7 @@ export default function MyPublishedSection({
                       isLoading={busy}
                       disabled={busy}
                     >
-                      Confirm
+                      {t('common.actions.confirm')}
                     </Button>
                     <Button
                       size="sm"
@@ -234,7 +236,7 @@ export default function MyPublishedSection({
                       onClick={() => setConfirmingId(null)}
                       disabled={busy}
                     >
-                      Cancel
+                      {t('common.actions.cancel')}
                     </Button>
                   </div>
                 ) : (
@@ -245,9 +247,9 @@ export default function MyPublishedSection({
                         variant="ghost"
                         icon={ExternalLink}
                         onClick={() => onOpenProfile(p.id)}
-                        title="View details"
+                        title={t('social.published.viewDetails')}
                       >
-                        View
+                        {t('common.view')}
                       </Button>
                     )}
                     <Button
@@ -261,18 +263,18 @@ export default function MyPublishedSection({
                           description: p.description,
                         })
                       }
-                      title="Edit title and description"
+                      title={t('social.published.editTitleAndDescription')}
                     >
-                      Edit
+                      {t('social.published.edit')}
                     </Button>
                     <Button
                       size="sm"
                       variant="ghost"
                       icon={Trash2}
                       onClick={() => setConfirmingId(p.id)}
-                      title="Unpublish this profile"
+                      title={t('social.published.unpublishThisProfile')}
                     >
-                      Remove
+                      {t('common.actions.remove')}
                     </Button>
                   </div>
                 )}

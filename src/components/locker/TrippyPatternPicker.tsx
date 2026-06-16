@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { previewTrippySprite } from '../../lib/api';
 import { TRIPPY_STYLE_LABELS } from '../../lib/trippy';
 import TrippySpriteSwatch from './TrippySpriteSwatch';
@@ -53,6 +54,7 @@ export default function TrippyPatternPicker({
   onIntensity,
   onPhase,
 }: TrippyPatternPickerProps) {
+  const { t } = useTranslation();
   // One small sprite per style for the picker strip (fixed params, fetched
   // once; the main process caches them on disk), plus the big swatch that
   // tracks the sliders (debounced).
@@ -133,7 +135,7 @@ export default function TrippyPatternPicker({
           {status && <div className="text-[11px] text-text-secondary">{status}</div>}
           {spriteFailed && (
             <div className="text-[11px] text-amber-400/90">
-              Live swatch unavailable (vpkmerge binary missing or too old).
+              {t('locker.trippyPattern.swatchUnavailable')}
             </div>
           )}
         </div>
@@ -161,7 +163,8 @@ export default function TrippyPatternPicker({
       {/* Pattern strength: 0 keeps the original texture, 1 is full paint. */}
       <label className="block space-y-1">
         <span className="text-[11px] font-medium text-text-secondary">
-          Intensity <span className="tabular-nums text-text-secondary/70">{pct(intensity)}%</span>
+          {t('locker.trippyPattern.intensity')}{' '}
+          <span className="tabular-nums text-text-secondary/70">{pct(intensity)}%</span>
         </span>
         <input
           type="range"
@@ -178,7 +181,8 @@ export default function TrippyPatternPicker({
       {/* Phase: shifts the pattern/hue starting point. */}
       <label className="block space-y-1">
         <span className="text-[11px] font-medium text-text-secondary">
-          Phase <span className="tabular-nums text-text-secondary/70">{pct(phase)}%</span>
+          {t('locker.trippyPattern.phase')}{' '}
+          <span className="tabular-nums text-text-secondary/70">{pct(phase)}%</span>
         </span>
         <input
           type="range"

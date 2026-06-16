@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Gamepad2, Target, TrendingUp } from 'lucide-react'
 import { Card } from '../../common/ui'
 import { usePlayerStore } from '../../../stores/stats/playerStore'
@@ -8,6 +9,7 @@ import { rankLabel, winRateClass } from '../format'
 import { MmrChart } from '../MmrChart'
 
 export function OverviewTab() {
+    const { t } = useTranslation()
     const playerData = usePlayerStore((s) => s.playerData)
     const accountId = usePlayerStore((s) => s.selectedAccountId)
     const byId = useHeroStore((s) => s.byId)
@@ -43,7 +45,7 @@ export function OverviewTab() {
         <div className="space-y-4">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <StatCard
-                    label="Ranked Score"
+                    label={t('stats.overview.rankedScore')}
                     tone="accent"
                     value={
                         <span className="inline-flex items-center justify-center gap-2">
@@ -60,21 +62,24 @@ export function OverviewTab() {
                     sub={mmr ? rankLabel(mmr.division, mmr.division_tier) : undefined}
                 />
                 <StatCard
-                    label="Matches"
+                    label={t('stats.tabs.matches')}
                     value={aggregated?.total_matches ?? '--'}
                     sub={
                         aggregated
-                            ? `${aggregated.total_wins}W / ${aggregated.total_losses}L`
+                            ? t('stats.overview.winLoss', {
+                                  wins: aggregated.total_wins,
+                                  losses: aggregated.total_losses,
+                              })
                             : undefined
                     }
                 />
                 <StatCard
-                    label="Win Rate"
+                    label={t('stats.overview.winRate')}
                     tone="success"
                     value={winRate !== null ? `${winRate.toFixed(1)}%` : '--'}
                     sub={
                         aggregated && aggregated.best_win_streak > 0
-                            ? `Best streak: ${aggregated.best_win_streak}`
+                            ? t('stats.overview.bestStreak', { count: aggregated.best_win_streak })
                             : undefined
                     }
                 />
@@ -82,20 +87,22 @@ export function OverviewTab() {
             </div>
 
             <Card
-                title="Ranked Trajectory"
+                title={t('stats.overview.rankedTrajectory')}
                 icon={TrendingUp}
-                description="Score per ranked match, from the full account history"
+                description={t('stats.overview.rankedTrajectoryDescription')}
             >
                 <MmrChart key={accountId} history={mmrHistory} snapshots={localMMRHistory} />
             </Card>
 
             <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 <Card
-                    title="Recent Matches"
+                    title={t('stats.overview.recentMatches')}
                     icon={Gamepad2}
                     description={
                         matchHistory && matchHistory.matches.length > 0
-                            ? `Last ${Math.min(matchHistory.matches.length, 8)} matches`
+                            ? t('stats.overview.lastMatches', {
+                                  count: Math.min(matchHistory.matches.length, 8),
+                              })
                             : undefined
                     }
                 >
@@ -119,7 +126,7 @@ export function OverviewTab() {
                     ) : (
                         <div className="text-center py-8 text-text-secondary">
                             <Gamepad2 className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">No recent matches</p>
+                            <p className="text-sm">{t('stats.overview.noRecentMatches')}</p>
                         </div>
                     )}
                 </Card>
@@ -131,9 +138,13 @@ export function OverviewTab() {
                     column) there is no row to inherit, so the region gets a fixed
                     height instead. */}
                 <Card
-                    title="Hero Performance"
+                    title={t('stats.overview.heroPerformance')}
                     icon={Target}
-                    description={heroes.length > 0 ? `${heroes.length} heroes played` : undefined}
+                    description={
+                        heroes.length > 0
+                            ? t('stats.overview.heroesPlayed', { count: heroes.length })
+                            : undefined
+                    }
                     className="flex flex-col"
                     contentClassName="flex-1 min-h-0"
                     action={
@@ -142,8 +153,8 @@ export function OverviewTab() {
                             // is inset 24px further than the header (scroll pr-1 +
                             // 10px scrollbar gutter + 10px row padding).
                             <div className="flex items-center gap-4 pr-6 text-[11px] uppercase tracking-wider text-text-secondary">
-                                <span className="w-14 text-right">Games</span>
-                                <span className="w-14 text-right">Win %</span>
+                                <span className="w-14 text-right">{t('stats.overview.games')}</span>
+                                <span className="w-14 text-right">{t('stats.overview.winPercent')}</span>
                                 <span className="w-14 text-right hidden sm:block">KDA</span>
                             </div>
                         ) : undefined
@@ -189,7 +200,7 @@ export function OverviewTab() {
                     ) : (
                         <div className="text-center py-8 text-text-secondary">
                             <Target className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                            <p className="text-sm">No hero stats available</p>
+                            <p className="text-sm">{t('stats.overview.noHeroStatsAvailable')}</p>
                         </div>
                     )}
                 </Card>

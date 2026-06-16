@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Globe2,
   Heart,
@@ -36,9 +37,9 @@ import { formatRelativeDate } from '../lib/dates';
 // hitting /v1/profiles and render the user's own published profiles instead.
 type TabKey = Extract<SocialProfileSort, 'top' | 'new'> | 'mine';
 
-const BROWSE_TABS: { key: Extract<TabKey, 'top' | 'new'>; label: string; icon: typeof Flame }[] = [
-  { key: 'top', label: 'Top', icon: Flame },
-  { key: 'new', label: 'New', icon: Clock },
+const BROWSE_TABS: { key: Extract<TabKey, 'top' | 'new'>; labelKey: string; icon: typeof Flame }[] = [
+  { key: 'top', labelKey: 'discover.tabs.top', icon: Flame },
+  { key: 'new', labelKey: 'discover.tabs.new', icon: Clock },
 ];
 
 type CardProfile = SocialListProfilesResponse['profiles'][number];
@@ -48,6 +49,7 @@ function isoFromUnix(unixSec: number): string {
 }
 
 export default function Discover() {
+  const { t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
   const hideNsfw = settings?.hideNsfwPreviews ?? true;
   const signedIn = useSocialStore((s) => s.status.signedIn);
@@ -241,9 +243,9 @@ export default function Discover() {
         size="sm"
         icon={Upload}
         onClick={() => setShowPicker(true)}
-        title="Pick a local profile and publish it to Discover"
+        title={t('discover.publish.pickAndPublishTitle')}
       >
-        Publish profile
+        {t('discover.publish.publishProfile')}
       </Button>
       <div
         className="flex items-center gap-2 px-2.5 py-1.5 rounded-md bg-bg-secondary border border-white/10"
@@ -274,13 +276,13 @@ export default function Discover() {
         onClick={handleSignIn}
         isLoading={signInBusy}
         disabled={signInBusy}
-        title="Opens Steam in your browser. Grimoire never sees your password."
+        title={t('discover.signIn.opensSteamHint')}
       >
-        Sign in with Steam
+        {t('discover.signIn.withSteam')}
       </Button>
       {signInBusy && (
         <Button size="sm" variant="secondary" icon={X} onClick={cancelLogin}>
-          Cancel
+          {t('common.actions.cancel')}
         </Button>
       )}
     </div>
@@ -288,10 +290,10 @@ export default function Discover() {
 
   const headerDescription = (
     <>
-      Mod profiles published by other Grimoire users.
+      {t('discover.header.description')}
       {!signedIn && (
         <span className="text-text-tertiary">
-          {' '}Sign in to like and publish; importing works without an account.
+          {' '}{t('discover.header.signInHint')}
         </span>
       )}
     </>
@@ -302,13 +304,13 @@ export default function Discover() {
       <div className="p-6 space-y-6 max-w-7xl mx-auto">
       <div>
         <PageHeader
-          title="Discover"
+          title={t('nav.discover')}
           description={headerDescription}
           action={headerAction}
         />
         <div className="flex items-center justify-between gap-3 border-b border-border">
           <div className="flex items-center gap-1">
-            {BROWSE_TABS.map(({ key, label, icon: Icon }) => {
+            {BROWSE_TABS.map(({ key, labelKey, icon: Icon }) => {
               const active = tab === key;
               return (
                 <button
@@ -322,7 +324,7 @@ export default function Discover() {
                   }`}
                 >
                   <Icon className="w-4 h-4" />
-                  {label}
+                  {t(labelKey)}
                 </button>
               );
             })}
@@ -337,7 +339,7 @@ export default function Discover() {
                 }`}
               >
                 <UserIcon className="w-4 h-4" />
-                Your profile
+                {t('discover.tabs.yourProfile')}
               </button>
             )}
           </div>
@@ -353,7 +355,7 @@ export default function Discover() {
         <div className="text-xs text-text-secondary flex items-start gap-1.5">
           <ExternalLink className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
           <span>
-            Finish signing in with Steam in your browser. The header will update when you're done.
+            {t('discover.signIn.finishInBrowser')}
           </span>
         </div>
       )}
@@ -367,7 +369,7 @@ export default function Discover() {
             onClick={clearSignInError}
             className="text-red-300 hover:text-red-200 underline shrink-0 cursor-pointer"
           >
-            Dismiss
+            {t('common.actions.dismiss')}
           </button>
         </div>
       )}
@@ -428,12 +430,12 @@ export default function Discover() {
         <EmptyState
           icon={CloudOff}
           variant="error"
-          title="Couldn't reach Grimoire Social"
+          title={t('discover.error.title')}
           description={
             <div className="space-y-2">
               <p>{error}</p>
               <p className="text-xs text-text-secondary">
-                Check your connection, then switch sort tabs to retry.
+                {t('discover.error.retryHint')}
               </p>
             </div>
           }
@@ -443,8 +445,8 @@ export default function Discover() {
       {tab !== 'mine' && !loading && !error && data && data.profiles.length === 0 && (
         <EmptyState
           icon={Globe2}
-          title="No profiles here yet"
-          description="Be the first to publish: open Profiles, pick one, and click Publish to Discover."
+          title={t('discover.empty.title')}
+          description={t('discover.empty.description')}
         />
       )}
 
@@ -525,7 +527,7 @@ export default function Discover() {
                         {p.is_featured && (
                           <span className="inline-flex items-center gap-1 text-[11px] font-medium px-1.5 py-0.5 rounded-sm bg-black/60 backdrop-blur-sm text-amber-300 border border-amber-300/30">
                             <Sparkles className="w-3 h-3" />
-                            Featured
+                            {t('discover.card.featured')}
                           </span>
                         )}
                         {p.has_nsfw && (
@@ -614,11 +616,11 @@ export default function Discover() {
           {loadingMore ? (
             <>
               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              Loading more...
+              {t('discover.pagination.loadingMore')}
             </>
           ) : (
             <span className="opacity-60">
-              Showing {data!.profiles.length} of {data!.total}
+              {t('discover.pagination.showing', { shown: data!.profiles.length, total: data!.total })}
             </span>
           )}
         </div>

@@ -724,7 +724,7 @@ export default function Sidebar() {
               aria-hidden={!labelsVisible}
             >
               <GrimoireTitleIcon />
-              Grimoire
+              {t('sidebar.brand')}
             </span>
           </div>
         )}
@@ -930,8 +930,8 @@ export default function Sidebar() {
             <button
               type="button"
               onClick={() => setSoundVolume(soundVolume > 0 ? 0 : 0.7)}
-              title={`Preview volume: ${Math.round(soundVolume * 100)}%`}
-              aria-label={`Preview volume: ${Math.round(soundVolume * 100)}%`}
+              title={t('sidebar.previewVolume.levelLabel', { percent: Math.round(soundVolume * 100) })}
+              aria-label={t('sidebar.previewVolume.levelLabel', { percent: Math.round(soundVolume * 100) })}
               className="group relative flex h-8 w-full items-center justify-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-accent/35 hover:text-text-primary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 animate-fade-in"
             >
               <LaunchButtonBackdrop src={PREVIEW_VOLUME_BG} position="center 43%" />
@@ -947,8 +947,8 @@ export default function Sidebar() {
               <button
                 type="button"
                 onClick={() => setSoundVolume(soundVolume > 0 ? 0 : 0.7)}
-                title={soundVolume > 0 ? 'Mute preview volume' : 'Unmute preview volume'}
-                aria-label={soundVolume > 0 ? 'Mute preview volume' : 'Unmute preview volume'}
+                title={soundVolume > 0 ? t('sidebar.previewVolume.mute') : t('sidebar.previewVolume.unmute')}
+                aria-label={soundVolume > 0 ? t('sidebar.previewVolume.mute') : t('sidebar.previewVolume.unmute')}
                 className="relative z-10 flex h-full w-10 flex-shrink-0 items-center justify-center text-text-primary/85 transition-colors hover:text-text-primary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
               >
                 {soundVolume > 0 ? (
@@ -963,8 +963,8 @@ export default function Sidebar() {
                 max="100"
                 value={Math.round(soundVolume * 100)}
                 onChange={(e) => setSoundVolume(parseInt(e.target.value, 10) / 100)}
-                title={`Preview volume: ${Math.round(soundVolume * 100)}%`}
-                aria-label="Preview volume"
+                title={t('sidebar.previewVolume.levelLabel', { percent: Math.round(soundVolume * 100) })}
+                aria-label={t('sidebar.previewVolume.label')}
                 className="relative z-10 mr-3 h-1.5 min-w-0 flex-1 cursor-pointer accent-accent"
               />
             </div>

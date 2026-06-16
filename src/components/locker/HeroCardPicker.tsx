@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Images, Loader2, AlertCircle, Check, Upload, X, Download } from 'lucide-react';
 import {
   applyCustomHeroCard,
@@ -66,6 +67,7 @@ interface PortraitFileGroup {
  * wins by load order. Clicking the active card again reverts to default.
  */
 export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
+  const { t } = useTranslation();
   const loadMods = useAppStore((s) => s.loadMods);
   // This component is remounted per hero (the parent LockerHeroView is keyed
   // by hero.id), so initial state stands in for the per-hero reset.
@@ -162,7 +164,9 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
     if (customBusy) return;
     try {
       const path = await showOpenDialog({
-        title: `Choose an image for the ${VARIANT_LABEL[slot.variant] ?? slot.variant} card`,
+        title: t('locker.cards.chooseImageForCard', {
+          variant: VARIANT_LABEL[slot.variant] ?? slot.variant,
+        }),
         filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'webp'] }],
       });
       if (!path) return;
@@ -233,14 +237,14 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
     try {
       const safeName = heroName.toLowerCase().replace(/[^a-z0-9]+/g, '_');
       const destPath = await showSaveDialog({
-        title: `Export ${heroName} custom card`,
+        title: t('locker.cards.exportDialogTitle', { hero: heroName }),
         defaultPath: `${safeName}_custom_card_dir.vpk`,
         filters: [{ name: 'VPK addon', extensions: ['vpk'] }],
       });
       if (!destPath) return;
       setExporting(true);
       const written = await exportCustomHeroCard(heroName, uploads, destPath);
-      showToast(`Exported to ${written}`, { tone: 'success', duration: 6000 });
+      showToast(t('locker.cards.exportedToast', { path: written }), { tone: 'success', duration: 6000 });
       // Open the OS file browser at the exported file so they can find it.
       void revealPath(written);
     } catch (err) {
@@ -271,20 +275,18 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
     <section className="space-y-3 border-t border-border/60 pt-5">
       <div className="flex items-center gap-2">
         <Images className="w-4 h-4 text-accent" />
-        <h3 className="text-sm font-semibold text-text-primary">Hero Card</h3>
+        <h3 className="text-sm font-semibold text-text-primary">{t('locker.cards.heroCard')}</h3>
         <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-          Experimental
+          {t('locker.cards.experimental')}
         </span>
       </div>
       <p className="text-xs text-text-secondary">
-        Card art found in your installed mods. Each mod may ship several portrait
-        variants; click a card to apply that mod's full set for {heroName}, and click
-        the applied card again to revert to default.
+        {t('locker.cards.intro', { hero: heroName })}
       </p>
 
       {loading && (
         <div className="flex items-center gap-2 py-4 text-xs text-text-secondary">
-          <Loader2 className="w-4 h-4 animate-spin" /> Decoding portraits...
+          <Loader2 className="w-4 h-4 animate-spin" /> {t('locker.cards.decodingPortraits')}
         </div>
       )}
 
@@ -304,7 +306,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
 
       {!loading && !error && fileGroups.length === 0 && (
         <p className="py-2 text-xs text-text-secondary">
-          No card art found in your installed mods for {heroName}.
+          {t('locker.cards.noCardArt', { hero: heroName })}
         </p>
       )}
 
@@ -319,7 +321,10 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 key={group.modFileName}
                 disabled={busySource !== null}
                 onClick={() => handlePick(group.modFileName)}
-                title={`${group.modFileName} · ${group.variants.length} portrait(s)`}
+                title={t('locker.cards.fileGroupTitle', {
+                  file: group.modFileName,
+                  count: group.variants.length,
+                })}
                 // Card tokens shared with the Skins grid / Global view so the
                 // Cards tab reads as a sibling of Skins: accent border + glow
                 // when applied, dim glass at rest. backdrop-blur on the resting
@@ -336,11 +341,11 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                   </span>
                   {isApplied ? (
                     <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
-                      <Check className="h-2.5 w-2.5" /> Applied
+                      <Check className="h-2.5 w-2.5" /> {t('locker.cards.applied')}
                     </span>
                   ) : (
                     <span className="flex-shrink-0 text-[10px] uppercase tracking-wide text-text-secondary">
-                      {group.variants.length} portrait{group.variants.length !== 1 ? 's' : ''}
+                      {t('locker.cards.portraitCount', { count: group.variants.length })}
                     </span>
                   )}
                 </div>
@@ -387,21 +392,20 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <Upload className="h-3.5 w-3.5 text-accent" />
-              <span className="text-xs font-semibold text-text-primary">Upload your own</span>
+              <span className="text-xs font-semibold text-text-primary">{t('locker.cards.uploadYourOwn')}</span>
             </div>
             {customApplied ? (
               <span className="flex flex-shrink-0 items-center gap-1 rounded-full bg-accent px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
-                <Check className="h-2.5 w-2.5" /> Applied
+                <Check className="h-2.5 w-2.5" /> {t('locker.cards.applied')}
               </span>
             ) : (
               <span className="flex-shrink-0 text-[10px] uppercase tracking-wide text-text-secondary">
-                {slots.length} slot{slots.length !== 1 ? 's' : ''}
+                {t('locker.cards.slotCount', { count: slots.length })}
               </span>
             )}
           </div>
           <p className="text-[11px] leading-snug text-text-secondary">
-            Click a slot to choose an image and crop it to that variant's exact size. Fill only the
-            variants you want to change, then apply. Unfilled variants stay default.
+            {t('locker.cards.uploadInstructions')}
           </p>
 
           {/* One tile per variant the base game ships. An empty slot shows the
@@ -438,8 +442,10 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                         e.stopPropagation();
                         handleClearVariant(slot.variant);
                       }}
-                      title="Clear image"
-                      aria-label={`Clear ${VARIANT_LABEL[slot.variant] ?? slot.variant} image`}
+                      title={t('locker.cards.clearImage')}
+                      aria-label={t('locker.cards.clearVariantImage', {
+                        variant: VARIANT_LABEL[slot.variant] ?? slot.variant,
+                      })}
                       className="absolute right-1 top-1 z-10 cursor-pointer rounded-full bg-black/75 p-1 text-white/90 shadow-sm ring-1 ring-white/10 transition-colors hover:bg-black/90 hover:text-white disabled:cursor-not-allowed"
                     >
                       <X className="h-3.5 w-3.5" />
@@ -477,18 +483,18 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 <Check className="h-3.5 w-3.5" />
               )}
               {customBusy
-                ? 'Applying...'
+                ? t('locker.cards.applying')
                 : customApplied && !dirty
-                  ? 'Applied'
+                  ? t('locker.cards.applied')
                   : customApplied
-                    ? 'Update custom card'
-                    : 'Apply custom card'}
+                    ? t('locker.cards.updateCustomCard')
+                    : t('locker.cards.applyCustomCard')}
             </button>
             <button
               type="button"
               disabled={exporting || customBusy || !hasPicks}
               onClick={handleExportCustom}
-              title="Save this custom card as a standalone .vpk file"
+              title={t('locker.cards.exportVpkTitle')}
               className="inline-flex cursor-pointer items-center gap-1.5 rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
             >
               {exporting ? (
@@ -496,7 +502,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
               ) : (
                 <Download className="h-3.5 w-3.5" />
               )}
-              Export VPK
+              {t('locker.cards.exportVpk')}
             </button>
             {customApplied && (
               <button
@@ -505,7 +511,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 onClick={handleRevertCustom}
                 className="inline-flex cursor-pointer items-center rounded-md border border-border/60 px-3 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
               >
-                Revert
+                {t('locker.cards.revert')}
               </button>
             )}
           </div>

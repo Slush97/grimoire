@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, ExternalLink } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey } from '../../lib/lockerUtils';
@@ -107,6 +108,7 @@ function SkinGroupCard({
   heroName?: string;
   soundVolume: number;
 }) {
+  const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
@@ -163,7 +165,7 @@ function SkinGroupCard({
             imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-hover/card:scale-[1.03]"
             fallback={
               <div className="flex h-full w-full items-center justify-center text-xs text-text-secondary">
-                No preview
+                {t('locker.skins.noPreview')}
               </div>
             }
           />
@@ -171,7 +173,7 @@ function SkinGroupCard({
         <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover/card:bg-bg-primary/20" />
         {groupActive && (
           <span className="pointer-events-none absolute left-2 top-2 z-10 rounded-full bg-accent px-2 py-0.5 text-[9px] font-semibold uppercase tracking-wide text-accent-foreground">
-            Active
+            {t('common.status.active')}
           </span>
         )}
       </div>
@@ -241,7 +243,7 @@ function SkinGroupCard({
           >
             <span>
               {enabledCount === 0
-                ? 'Pick a variant'
+                ? t('locker.skins.pickAVariant')
                 : `${enabledCount}/${group.variants.length} active`}
             </span>
             <ChevronDown
@@ -256,7 +258,7 @@ function SkinGroupCard({
                 enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-white/[0.08]'
               }`}
               role="group"
-              aria-label="Variant toggles"
+              aria-label={t('locker.skins.variantToggles')}
             >
               {group.variants.map((variant) => {
                 const label = variantPillLabel(variant);
@@ -305,6 +307,7 @@ function SkinGroupRow({
   heroName?: string;
   soundVolume: number;
 }) {
+  const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
@@ -344,7 +347,7 @@ function SkinGroupRow({
             className="w-full h-full"
             fallback={
               <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
-                No preview
+                {t('locker.skins.noPreview')}
               </div>
             }
           />
@@ -358,7 +361,7 @@ function SkinGroupRow({
               // "0/2 active" and have no idea what to do. The
               // chevron points at the pill row directly below.
               <div className="flex items-center gap-1 text-xs text-accent">
-                <span>Pick a variant</span>
+                <span>{t('locker.skins.pickAVariant')}</span>
                 <ChevronDown className="w-3 h-3" />
               </div>
             ) : (
@@ -373,7 +376,7 @@ function SkinGroupRow({
           )}
         </div>
         {!isMulti && groupActive && (
-          <span className="text-xs text-accent font-semibold">Active</span>
+          <span className="text-xs text-accent font-semibold">{t('common.status.active')}</span>
         )}
       </button>
       {/* Sound preview. All variants of one GameBanana submission share
@@ -396,7 +399,7 @@ function SkinGroupRow({
             enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-border/60'
           }`}
           role="group"
-          aria-label="Variant toggles"
+          aria-label={t('locker.skins.variantToggles')}
         >
           {group.variants.map((variant) => {
             const label = variantPillLabel(variant);

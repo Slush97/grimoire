@@ -681,7 +681,7 @@ export default function Settings() {
                     type="text"
                     value={displayPath}
                     onChange={(e) => handlePathChange(e.target.value)}
-                    placeholder="/path/to/Deadlock"
+                    placeholder={t('settings.gamePath.pathPlaceholder')}
                     disabled={isDevMode}
                     className="w-full bg-bg-tertiary border border-white/5 rounded-sm px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed font-mono text-sm"
                   />

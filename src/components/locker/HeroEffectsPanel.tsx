@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Sparkles, Loader2, AlertCircle, Zap, Shirt } from 'lucide-react';
 import { getHeroColorSupport } from '../../lib/api';
 import HeroColorPicker from './HeroColorPicker';
@@ -19,6 +20,7 @@ interface HeroEffectsPanelProps {
  * checked once here so the children can assume support.
  */
 export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
+  const { t } = useTranslation();
   const [supported, setSupported] = useState<boolean | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [surface, setSurface] = useState<'abilities' | 'skin'>('abilities');
@@ -53,9 +55,9 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
     <section className="space-y-3">
       <div className="flex items-center gap-2">
         <Sparkles className="h-4 w-4 text-accent" />
-        <h3 className="text-sm font-semibold text-text-primary">Effects</h3>
+        <h3 className="text-sm font-semibold text-text-primary">{t('locker.effects.effects')}</h3>
         <span className="rounded-full border border-accent/40 bg-accent/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-          Experimental
+          {t('locker.effects.experimental')}
         </span>
       </div>
 
@@ -68,14 +70,13 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
 
       {!error && supported === null && (
         <div className="flex items-center gap-2 py-4 text-xs text-text-secondary">
-          <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+          <Loader2 className="h-4 w-4 animate-spin" /> {t('locker.effects.loading')}
         </div>
       )}
 
       {!error && supported === false && (
         <p className="text-xs text-text-secondary">
-          Effects aren&apos;t available for {heroName} yet (no pinned recipe in the bundled
-          vpkmerge). More heroes are coming.
+          {t('locker.effects.unavailable', { hero: heroName })}
         </p>
       )}
 
@@ -89,7 +90,7 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
               onClick={() => setSurface('abilities')}
               className={surfaceBtn(surface === 'abilities')}
             >
-              <Zap className="h-3.5 w-3.5" /> Abilities
+              <Zap className="h-3.5 w-3.5" /> {t('locker.effects.abilities')}
               {abilitiesApplied && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
             </button>
             <button
@@ -97,7 +98,7 @@ export default function HeroEffectsPanel({ heroName }: HeroEffectsPanelProps) {
               onClick={() => setSurface('skin')}
               className={surfaceBtn(surface === 'skin')}
             >
-              <Shirt className="h-3.5 w-3.5" /> Body + Gun
+              <Shirt className="h-3.5 w-3.5" /> {t('locker.effects.bodyGun')}
               {skinApplied && <span className="h-1.5 w-1.5 rounded-full bg-accent" />}
             </button>
           </div>

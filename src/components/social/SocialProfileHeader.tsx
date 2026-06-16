@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Loader2,
   AlertTriangle,
@@ -55,6 +56,7 @@ export default function SocialProfileHeader({
   onLikeChange,
   onLikeWithoutSignIn,
 }: SocialProfileHeaderProps) {
+  const { t } = useTranslation();
   const signedIn = useSocialStore((s) => s.status.signedIn);
 
   const [detail, setDetail] = useState<SocialProfileDetail | null>(null);
@@ -237,7 +239,7 @@ export default function SocialProfileHeader({
         {loading && !view && (
           <div className="text-text-secondary text-xs inline-flex items-center gap-2">
             <Loader2 className="w-3.5 h-3.5 animate-spin" />
-            Loading profile...
+            {t('social.header.loadingProfile')}
           </div>
         )}
 
@@ -269,13 +271,13 @@ export default function SocialProfileHeader({
                 {view.description}
               </p>
             ) : (
-              <p className="text-xs text-text-tertiary italic">No description.</p>
+              <p className="text-xs text-text-tertiary italic">{t('social.header.noDescription')}</p>
             )}
 
             <div className="flex items-center gap-1.5 flex-wrap">
               <Badge variant="neutral">
                 <Boxes className="w-3 h-3 mr-1 inline" />
-                {view.mod_count} {view.mod_count === 1 ? 'mod' : 'mods'}
+                {t('profiles.mods.count', { count: view.mod_count })}
               </Badge>
               {allHeroes.map((hero) => (
                 <Badge key={hero} variant="neutral">{hero}</Badge>
@@ -283,14 +285,14 @@ export default function SocialProfileHeader({
               {view.is_featured && (
                 <Badge variant="success">
                   <Sparkles className="w-3 h-3 mr-1 inline" />
-                  Featured
+                  {t('social.header.featured')}
                 </Badge>
               )}
               {view.has_nsfw && <Badge variant="warning">NSFW</Badge>}
               {hasCrosshair && (
                 <Badge variant="info">
                   <Crosshair className="w-3 h-3 mr-1 inline" />
-                  Crosshair
+                  {t('nav.crosshair')}
                 </Badge>
               )}
               {autoexecCount > 0 && (
@@ -310,13 +312,13 @@ export default function SocialProfileHeader({
 
             {reportOpen && !reported && (
               <div className="bg-bg-secondary border border-white/10 rounded-md p-2.5 space-y-2">
-                <div className="text-xs font-medium text-text-primary">Report this profile</div>
+                <div className="text-xs font-medium text-text-primary">{t('social.header.reportThisProfile')}</div>
                 <textarea
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
                   maxLength={500}
                   rows={2}
-                  placeholder="What's the issue? (optional)"
+                  placeholder={t('social.header.reportIssuePlaceholder')}
                   className="w-full px-2.5 py-1.5 bg-bg-tertiary border border-white/10 rounded-md text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent resize-none"
                 />
                 {reportError && (
@@ -332,7 +334,7 @@ export default function SocialProfileHeader({
                     onClick={() => { setReportOpen(false); setReportReason(''); setReportError(null); }}
                     disabled={reportSubmitting}
                   >
-                    Cancel
+                    {t('common.actions.cancel')}
                   </Button>
                   <Button
                     size="sm"
@@ -342,7 +344,7 @@ export default function SocialProfileHeader({
                     isLoading={reportSubmitting}
                     disabled={reportSubmitting}
                   >
-                    Submit
+                    {t('social.header.submit')}
                   </Button>
                 </div>
               </div>
@@ -351,7 +353,7 @@ export default function SocialProfileHeader({
             {reported && (
               <div className="bg-green-500/10 border border-green-500/30 rounded-md p-2 text-xs text-green-300 flex items-start gap-2">
                 <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                <span>Report submitted.</span>
+                <span>{t('social.header.reportSubmitted')}</span>
               </div>
             )}
 
@@ -373,9 +375,9 @@ export default function SocialProfileHeader({
                   size="sm"
                   icon={Flag}
                   onClick={() => setReportOpen(true)}
-                  title="Report this profile"
+                  title={t('social.header.reportThisProfile')}
                 >
-                  Report
+                  {t('social.header.report')}
                 </Button>
               )}
             </div>

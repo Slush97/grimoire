@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
     DndContext,
     DragOverlay,
@@ -140,6 +141,7 @@ export default function VariantPickerModal({
     updateProgress = null,
     onClose,
 }: Props) {
+    const { t } = useTranslation();
     const [pending, setPending] = useState<string | null>(null);
     const [editing, setEditing] = useState<{ id: string; draft: string } | null>(null);
     const editInputRef = useRef<HTMLInputElement | null>(null);
@@ -342,7 +344,7 @@ export default function VariantPickerModal({
                                             cancelRename();
                                         }
                                     }}
-                                    placeholder="e.g. Red preset"
+                                    placeholder={t('variantPicker.renamePlaceholder')}
                                     maxLength={80}
                                     className="w-full bg-bg-secondary border border-accent/50 rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                                 />
@@ -359,10 +361,10 @@ export default function VariantPickerModal({
                                         <Tag
                                             tone="accent"
                                             icon={Download}
-                                            title="A newer version is available on GameBanana"
+                                            title={t('variantPicker.updateAvailable')}
                                             className="flex-shrink-0 uppercase tracking-wide"
                                         >
-                                            Update
+                                            {t('profiles.actions.update')}
                                         </Tag>
                                     )}
                                     {conflictDetails.length > 0 && (
@@ -372,7 +374,7 @@ export default function VariantPickerModal({
                                             title={conflictDetails.join(', ')}
                                             className="flex-shrink-0"
                                         >
-                                            Conflict
+                                            {t('variantPicker.conflict')}
                                         </Tag>
                                     )}
                                 </div>
@@ -380,7 +382,7 @@ export default function VariantPickerModal({
                             <div className="flex items-center gap-2 text-xs text-text-secondary mt-0.5 min-w-0">
                                 <span className="flex-shrink-0">{formatBytes(v.size)}</span>
                                 <span className="opacity-50 flex-shrink-0">-</span>
-                                <span className="flex-shrink-0">Slot #{v.priority}</span>
+                                <span className="flex-shrink-0">{t('variantPicker.slot', { priority: v.priority })}</span>
                                 <span className="opacity-50 flex-shrink-0">-</span>
                                 <span
                                     className="flex-shrink-0 tabular-nums"
@@ -407,8 +409,8 @@ export default function VariantPickerModal({
                             onClick={() => commitRename(v)}
                             disabled={!!pending}
                             className="p-1.5 text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:opacity-50"
-                            title="Save"
-                            aria-label="Save file name"
+                            title={t('common.actions.save')}
+                            aria-label={t('variantPicker.saveFileName')}
                         >
                             {isRenamePending ? (
                                 <span className="inline-block w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -421,8 +423,8 @@ export default function VariantPickerModal({
                             onClick={cancelRename}
                             disabled={!!pending}
                             className="p-1.5 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors cursor-pointer disabled:opacity-50"
-                            title="Cancel"
-                            aria-label="Cancel rename"
+                            title={t('common.actions.cancel')}
+                            aria-label={t('profiles.actions.cancelRename')}
                         >
                             <X className="w-4 h-4" />
                         </button>
@@ -437,7 +439,7 @@ export default function VariantPickerModal({
                                     disabled={overlay || !!pending || !canMoveUp}
                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
                                     title={canMoveUp ? 'Move up' : 'Already first in load order'}
-                                    aria-label="Move file up in load order"
+                                    aria-label={t('variantPicker.moveFileUp')}
                                 >
                                     {isMoveUpPending ? (
                                         <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -451,7 +453,7 @@ export default function VariantPickerModal({
                                     disabled={overlay || !!pending || !canMoveDown}
                                     className="p-0.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent disabled:hover:text-text-secondary"
                                     title={canMoveDown ? 'Move down' : 'Already last in load order'}
-                                    aria-label="Move file down in load order"
+                                    aria-label={t('variantPicker.moveFileDown')}
                                 >
                                     {isMoveDownPending ? (
                                         <span className="inline-block w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
@@ -467,7 +469,7 @@ export default function VariantPickerModal({
                             disabled={overlay || !!pending}
                             className="flex-shrink-0 p-1.5 text-text-secondary hover:text-accent hover:bg-accent/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
                             title={v.variantLabel ? 'Rename file' : 'Give this file a name'}
-                            aria-label="Rename file"
+                            aria-label={t('variantPicker.renameFile')}
                         >
                             <Pencil className="w-4 h-4" />
                         </button>
@@ -488,7 +490,7 @@ export default function VariantPickerModal({
                     </>
                 )}
                 {isPending && (
-                    <span className="text-xs text-accent">Saving...</span>
+                    <span className="text-xs text-accent">{t('variantPicker.saving')}</span>
                 )}
             </div>
         );
@@ -556,7 +558,7 @@ export default function VariantPickerModal({
                             {modName}
                         </h3>
                         <p className="text-xs text-text-secondary mt-0.5">
-                            {enabledCount} of {variants.length} files enabled
+                            {t('variantPicker.filesEnabled', { enabled: enabledCount, total: variants.length })}
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
@@ -583,16 +585,16 @@ export default function VariantPickerModal({
                                 onClick={onOpenModDetails}
                                 disabled={isUpdating}
                                 className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary border border-border hover:border-accent/40 rounded cursor-pointer transition-colors disabled:cursor-default disabled:opacity-50"
-                                title="Open the GameBanana mod page"
+                                title={t('variantPicker.openModPage')}
                             >
                                 <Info className="w-3.5 h-3.5" />
-                                Mod page
+                                {t('variantPicker.modPage')}
                             </button>
                         )}
                         <button
                             onClick={onClose}
                             className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-                            aria-label="Close"
+                            aria-label={t('common.actions.close')}
                         >
                             <X className="w-5 h-5" />
                         </button>
@@ -613,16 +615,16 @@ export default function VariantPickerModal({
                             disabled={!!pending || !!editing}
                             isLoading={pending === '__disable__'}
                         >
-                            Disable all
+                            {t('variantPicker.disableAll')}
                         </Button>
                     ) : (
                         <span className="text-xs text-text-secondary inline-flex items-center gap-1.5">
                             <Power className="w-3 h-3" />
-                            No files enabled
+                            {t('variantPicker.noFilesEnabled')}
                         </span>
                     )}
                     <Button variant="secondary" size="sm" onClick={onClose}>
-                        Done
+                        {t('common.actions.done')}
                     </Button>
                 </div>
         </Modal>

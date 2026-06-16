@@ -87,12 +87,12 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3 id="merge-mods-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
             <Layers className="w-5 h-5" />
-            Merge {effectiveSources.length} mods
+            {t('mergeMods.title', { count: effectiveSources.length })}
           </h3>
           <button
             onClick={onCancel}
             className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -102,7 +102,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
           <div className="flex gap-4">
             <div className="w-32 aspect-square flex-shrink-0 rounded-lg overflow-hidden border border-border bg-bg-tertiary">
               <ModThumbnail
-                alt="Merged mod thumbnail preview"
+                alt={t('mergeMods.thumbnailPreview')}
                 mergedSources={collageSources}
                 hideNsfw={hideNsfw}
                 className="w-full h-full"
@@ -110,7 +110,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
             </div>
             <div className="flex-1 min-w-0">
               <label htmlFor="merge-name" className="block text-sm font-medium text-text-primary mb-1.5">
-                Merged mod name <span className="text-red-400">*</span>
+                {t('mergeMods.mergedModName')} <span className="text-red-400">*</span>
               </label>
               <input
                 id="merge-name"
@@ -120,12 +120,12 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                   setNameTouched(true);
                   setName(e.target.value);
                 }}
-                placeholder="My combined pack"
+                placeholder={t('mergeMods.namePlaceholder')}
                 className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
                 autoFocus
               />
               <p className="mt-2 text-xs text-text-secondary">
-                The originals stay on disk in the disabled folder so you can unmerge later.
+                {t('mergeMods.originalsStay')}
               </p>
             </div>
           </div>
@@ -133,7 +133,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
           <div>
             <div className="flex items-center justify-between mb-1.5">
               <div className="text-xs uppercase tracking-wide text-text-secondary">
-                Sources ({effectiveSources.length})
+                {t('mergeMods.sources', { count: effectiveSources.length })}
               </div>
               {groups.some((g) => g.kind === 'variants') && (
                 <div className="text-xs text-text-secondary">
@@ -155,9 +155,9 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                     {!group.mod.gameBananaId && (
                       <span
                         className="ml-auto text-[10px] uppercase tracking-wide text-text-secondary/80 px-1.5 py-0.5 rounded border border-border"
-                        title="Local mod: not in the unroll share code"
+                        title={t('mergeMods.localModTitle')}
                       >
-                        local
+                        {t('mergeMods.local')}
                       </span>
                     )}
                   </li>
@@ -214,7 +214,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
               <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
               <div>
                 <div className="text-text-primary font-medium">
-                  {localSourceCount} local mod{localSourceCount === 1 ? '' : 's'} included
+                  {t('mergeMods.localModsIncluded', { count: localSourceCount })}
                 </div>
                 {t('mergeMods.localNote')}
               </div>
@@ -229,7 +229,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
               className="w-4 h-4 mt-0.5 accent-accent cursor-pointer flex-shrink-0"
             />
             <span>
-              Strict mode
+              {t('mergeMods.strictMode')}
               <span className="block text-xs text-text-secondary mt-0.5">
                 {t('mergeMods.strictDescription')}
               </span>
@@ -246,7 +246,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
 
         <div className="flex justify-end gap-3 p-5 border-t border-border">
           <Button variant="secondary" onClick={onCancel} disabled={submitting}>
-            Cancel
+            {t('common.actions.cancel')}
           </Button>
           <Button
             variant="primary"
@@ -254,7 +254,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
             disabled={!canSubmit}
             icon={Layers}
           >
-            {submitting ? 'Merging…' : 'Merge'}
+            {submitting ? t('mergeMods.merging') : t('mergeMods.merge')}
           </Button>
         </div>
     </Modal>

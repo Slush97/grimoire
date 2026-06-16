@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
     AlertCircle,
     ChevronDown,
@@ -28,6 +29,7 @@ function Avatar({ url, size = 'md' }: { url: string | null; size?: 'sm' | 'md' }
 }
 
 export function PlayerSelect() {
+    const { t } = useTranslation()
     const [open, setOpen] = useState(false)
     const [searchInput, setSearchInput] = useState('')
     const [searchError, setSearchError] = useState<string | null>(null)
@@ -72,13 +74,13 @@ export function PlayerSelect() {
             const parsed = await window.electronAPI.stats.parseSteamId(searchInput)
             const accountId = parsed ?? parseInt(searchInput, 10)
             if (!accountId || isNaN(accountId)) {
-                setSearchError('Invalid Steam ID or Account ID')
+                setSearchError(t('stats.playerSelect.invalidId'))
                 return
             }
             await addTrackedPlayer(accountId)
             setSearchInput('')
         } catch (error) {
-            setSearchError(error instanceof Error ? error.message : 'Failed to add player')
+            setSearchError(error instanceof Error ? error.message : t('stats.playerSelect.addFailed'))
         } finally {
             setIsAdding(false)
         }
@@ -90,7 +92,7 @@ export function PlayerSelect() {
         try {
             await addTrackedPlayer(accountId, trackedPlayers.data.length === 0)
         } catch (error) {
-            setSearchError(error instanceof Error ? error.message : 'Failed to add player')
+            setSearchError(error instanceof Error ? error.message : t('stats.playerSelect.addFailed'))
         } finally {
             setIsAdding(false)
         }
@@ -123,7 +125,7 @@ export function PlayerSelect() {
                 ) : (
                     <>
                         <UserPlus className="w-4 h-4 text-text-secondary" />
-                        <span className="text-sm text-text-secondary">Add a player</span>
+                        <span className="text-sm text-text-secondary">{t('stats.playerSelect.addAPlayer')}</span>
                     </>
                 )}
                 <ChevronDown
@@ -164,8 +166,8 @@ export function PlayerSelect() {
                                                     }}
                                                     title={
                                                         player.is_primary === 1
-                                                            ? 'Primary player'
-                                                            : 'Set as primary'
+                                                            ? t('stats.playerSelect.primaryPlayer')
+                                                            : t('stats.playerSelect.setAsPrimary')
                                                     }
                                                     className={`shrink-0 cursor-pointer transition-opacity ${
                                                         player.is_primary === 1
@@ -186,7 +188,7 @@ export function PlayerSelect() {
                                             target="_blank"
                                             rel="noopener noreferrer"
                                             onClick={(e) => e.stopPropagation()}
-                                            title="Open on Statlocker"
+                                            title={t('stats.playerSelect.openOnStatlocker')}
                                             className="opacity-0 group-hover:opacity-100 p-1 text-text-secondary hover:text-accent rounded transition-all"
                                         >
                                             <ExternalLink className="w-4 h-4" />
@@ -196,7 +198,7 @@ export function PlayerSelect() {
                                                 e.stopPropagation()
                                                 removeTrackedPlayer(player.account_id)
                                             }}
-                                            title="Remove player"
+                                            title={t('stats.playerSelect.removePlayer')}
                                             className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all cursor-pointer"
                                         >
                                             <Trash2 className="w-4 h-4 text-red-400" />
@@ -213,13 +215,13 @@ export function PlayerSelect() {
                         <div className="flex gap-2">
                             <input
                                 type="text"
-                                placeholder="Steam ID or Account ID..."
+                                placeholder={t('stats.playerSelect.steamIdOrAccountId')}
                                 value={searchInput}
                                 onChange={(e) => setSearchInput(e.target.value)}
                                 onKeyDown={(e) => e.key === 'Enter' && handleAddPlayer()}
                                 className="flex-1 min-w-0 px-3 py-2 bg-bg-tertiary rounded-sm border border-white/5 focus:outline-none focus:border-accent text-sm"
                             />
-                            <Button onClick={handleAddPlayer} isLoading={isAdding} size="sm" aria-label="Add player">
+                            <Button onClick={handleAddPlayer} isLoading={isAdding} size="sm" aria-label={t('stats.playerSelect.addPlayer')}>
                                 {!isAdding && <Plus className="w-4 h-4" />}
                             </Button>
                         </div>
@@ -233,7 +235,7 @@ export function PlayerSelect() {
                         {untrackedDetected.length > 0 && (
                             <div className="mt-3">
                                 <p className="text-xs text-text-secondary uppercase tracking-wider mb-1.5">
-                                    Detected Steam users
+                                    {t('stats.playerSelect.detectedSteamUsers')}
                                 </p>
                                 <div className="space-y-1">
                                     {untrackedDetected.map((user) => (
@@ -243,7 +245,7 @@ export function PlayerSelect() {
                                             className="w-full text-left px-3 py-2 bg-bg-tertiary rounded-sm hover:bg-white/10 transition-colors text-sm flex items-center justify-between cursor-pointer"
                                         >
                                             <span className="truncate">{user.personaName}</span>
-                                            {user.mostRecent && <Badge variant="success">Recent</Badge>}
+                                            {user.mostRecent && <Badge variant="success">{t('stats.playerSelect.recent')}</Badge>}
                                         </button>
                                     ))}
                                 </div>

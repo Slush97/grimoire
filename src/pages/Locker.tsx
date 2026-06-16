@@ -536,7 +536,7 @@ export default function Locker() {
     return (
       <EmptyState
         icon={Shield}
-        title="No Game Path Set"
+        title={t('locker.page.noGamePathSet')}
         description={t('locker.empty.noGamePath')}
       />
     );
@@ -562,7 +562,7 @@ export default function Locker() {
     return (
       <EmptyState
         icon={Shield}
-        title="Error Loading Locker"
+        title={t('locker.page.errorLoadingLocker')}
         description={(modsError || categoriesError) ?? undefined}
         variant="error"
       />
@@ -575,10 +575,10 @@ export default function Locker() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-text-secondary">
           {[
-            `${heroList.length} heroes`,
-            `${installedSkinCount} skin${installedSkinCount !== 1 ? 's' : ''}`,
+            t('locker.page.heroCount', { count: heroList.length }),
+            t('locker.page.skinCount', { count: installedSkinCount }),
             installedSoundCount > 0
-              ? `${installedSoundCount} sound${installedSoundCount !== 1 ? 's' : ''}`
+              ? t('locker.page.soundCount', { count: installedSoundCount })
               : null,
           ]
             .filter(Boolean)
@@ -590,31 +590,33 @@ export default function Locker() {
               <button
                 onClick={() => setViewMode('list')}
                 className="flex items-center gap-1.5 px-2 py-1 text-xs rounded-md bg-yellow-500/10 border border-yellow-500/50 text-yellow-400 hover:bg-yellow-500/20 transition-colors"
-                title="Switch to List view to see unassigned mods"
+                title={t('locker.page.switchToListViewToSeeUnassigned')}
               >
                 <Layers className="w-3 h-3" />
-                {unassignedSkins.length + unassignedSounds.length} unassigned
+                {t('locker.page.unassignedCount', {
+                  count: unassignedSkins.length + unassignedSounds.length,
+                })}
               </button>
             )}
           {viewMode === 'list' && heroList.length > 0 && (
             <button
               onClick={toggleExpandAll}
               className="flex items-center gap-1.5 self-stretch rounded-sm border border-border bg-bg-secondary px-3 text-sm text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
-              title={allExpanded ? 'Collapse all heroes' : 'Expand all heroes'}
+              title={allExpanded ? t('locker.page.collapseAllHeroes') : t('locker.page.expandAllHeroes')}
             >
               {allExpanded ? (
                 <ChevronsDownUp className="w-4 h-4" />
               ) : (
                 <ChevronsUpDown className="w-4 h-4" />
               )}
-              {allExpanded ? 'Collapse all' : 'Expand all'}
+              {allExpanded ? t('locker.page.collapseAll') : t('locker.page.expandAll')}
             </button>
           )}
           <ViewModeToggle
             value={viewMode}
             options={[
-              { value: 'gallery', label: 'Gallery' },
-              { value: 'list', label: 'List' },
+              { value: 'gallery', label: t('locker.page.gallery') },
+              { value: 'list', label: t('locker.page.list') },
             ]}
             onChange={(mode) => setViewMode(mode as 'gallery' | 'list')}
           />
@@ -624,7 +626,7 @@ export default function Locker() {
       {heroList.length === 0 ? (
         <div className="flex flex-col items-center justify-center h-64 text-text-secondary">
           <Layers className="w-12 h-12 mb-3 opacity-50" />
-          <p>No hero categories found.</p>
+          <p>{t('locker.page.noHeroCategoriesFound')}</p>
         </div>
       ) : viewMode === 'gallery' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
@@ -678,11 +680,11 @@ export default function Locker() {
               />
               <div className="relative z-10 min-w-0 flex-1">
                 <div className="font-semibold text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
-                  Global
+                  {t('locker.page.global')}
                 </div>
                 <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
-                  {globalCount} mod{globalCount !== 1 ? 's' : ''} · {globalTypeCount} categor
-                  {globalTypeCount !== 1 ? 'ies' : 'y'}
+                  {t('locker.page.modCount', { count: globalCount })} ·{' '}
+                  {t('locker.page.categoryCount', { count: globalTypeCount })}
                 </div>
               </div>
               <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
@@ -716,16 +718,17 @@ export default function Locker() {
 
       {viewMode === 'list' && (unassignedSkins.length > 0 || unassignedSounds.length > 0) && (
         <div className="space-y-3">
-          <SectionHeader>Unassigned</SectionHeader>
+          <SectionHeader>{t('locker.page.unassigned')}</SectionHeader>
           <p className="text-xs text-text-secondary -mt-1">
-            These mods couldn't be matched to a hero automatically. Tag one to
-            move it into that hero's locker pile.
+            {t('locker.page.unassignedDescription')}
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {[...unassignedSkins, ...unassignedSounds].map((skin) => {
               const mod = skin.primary;
               const subtitle =
-                skin.variants.length > 1 ? `${skin.variants.length} files` : mod.fileName;
+                skin.variants.length > 1
+                  ? t('locker.page.fileCount', { count: skin.variants.length })
+                  : mod.fileName;
               const isSound = mod.sourceSection === 'Sound';
 
               return (
@@ -742,7 +745,7 @@ export default function Locker() {
                       className="w-full h-full"
                       fallback={
                         <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
-                          No preview
+                          {t('locker.page.noPreview')}
                         </div>
                       }
                     />
@@ -752,18 +755,18 @@ export default function Locker() {
                       {mod.name}
                     </div>
                     <div className="text-xs text-text-secondary truncate" title={subtitle}>
-                      {isSound ? 'Sound · ' : ''}
+                      {isSound ? t('locker.page.sound') : ''}
                       {subtitle}
                     </div>
                     <HeroSelect
-                      ariaLabel={`Tag ${mod.name} as a hero`}
+                      ariaLabel={t('locker.page.tagAsHeroNamed', { name: mod.name })}
                       value={mod.lockerHero ?? ''}
                       onChange={(next) => {
                         void tagModHero(mod.id, next.length > 0 ? next : null);
                       }}
                       size="sm"
                       options={[
-                        { value: '', label: 'Tag as hero...', muted: true },
+                        { value: '', label: t('locker.page.tagAsHero'), muted: true },
                         ...tagHeroOptions.map((hero) => ({
                           value: hero.name,
                           label: hero.name,
@@ -818,13 +821,13 @@ export default function Locker() {
         >
           <div className="flex h-full flex-col items-center justify-center p-6 text-text-secondary">
             <Layers className="w-16 h-16 mb-4 opacity-50" />
-            <h2 className="text-xl font-semibold text-text-primary mb-2">Hero Not Found</h2>
+            <h2 className="text-xl font-semibold text-text-primary mb-2">{t('locker.page.heroNotFound')}</h2>
             <button
               type="button"
               onClick={() => navigate('/locker')}
               className="mt-3 px-4 py-2 rounded-lg border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary transition-colors cursor-pointer"
             >
-              Back to Locker
+              {t('locker.page.backToLocker')}
             </button>
           </div>
         </div>
@@ -903,6 +906,7 @@ interface GlobalGalleryCardProps {
  * an icon for its own identity. Clicking drills into LockerGlobalView.
  */
 function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardProps) {
+  const { t } = useTranslation();
   return (
     <div
       onClick={onNavigate}
@@ -918,15 +922,15 @@ function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardPr
         {/* Subtle top highlight for depth, matching the hero cards. */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
         <div className="absolute left-2 top-2 z-20 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
-          {count} mod{count !== 1 ? 's' : ''}
+          {t('locker.page.modCount', { count })}
         </div>
       </div>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-end bg-gradient-to-t from-black/70 to-transparent p-2 text-right sm:p-3">
         <div className="font-reaver text-lg leading-tight tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-          Global
+          {t('locker.page.global')}
         </div>
         <div className="text-[11px] text-white/70 drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-          {typeCount} categor{typeCount !== 1 ? 'ies' : 'y'}
+          {t('locker.page.categoryCount', { count: typeCount })}
         </div>
       </div>
     </div>
@@ -1056,15 +1060,15 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           className="flex w-fit items-center gap-2 text-sm text-text-secondary transition-colors hover:text-text-primary"
         >
           <ArrowLeft className="h-4 w-4" />
-          Back
+          {t('locker.page.back')}
         </button>
 
         <div className="flex items-baseline gap-2">
           <h2 className="text-lg font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-            Global
+            {t('locker.page.global')}
           </h2>
           <span className="text-xs text-white/60">
-            {total} mod{total !== 1 ? 's' : ''}
+            {t('locker.page.modCount', { count: total })}
           </span>
         </div>
 
@@ -1107,7 +1111,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   {GLOBAL_MOD_TYPE_LABELS[activeType]}
                 </h3>
                 <span className="text-xs text-white/60">
-                  {activeMods.length} mod{activeMods.length !== 1 ? 's' : ''}
+                  {t('locker.page.modCount', { count: activeMods.length })}
                 </span>
                 {activeType === 'soul-container' && (
                   <button
@@ -1203,7 +1207,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                               imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-hover/card:scale-[1.03]"
                               fallback={
                                 <div className="flex h-full w-full items-center justify-center text-xs text-text-secondary">
-                                  No preview
+                                  {t('locker.page.noPreview')}
                                 </div>
                               }
                             />
@@ -1265,8 +1269,8 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                                   : r.bottom + 4;
                               setRetagMenu({ id: mod.id, x, y });
                             }}
-                            aria-label={`Change category for ${mod.name}`}
-                            title="Change category"
+                            aria-label={t('locker.page.changeCategoryForNamed', { name: mod.name })}
+                            title={t('locker.page.changeCategory')}
                             className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
                           >
                             <MoreVertical className="h-4 w-4" />
@@ -1305,8 +1309,12 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                         type="button"
                         onClick={() => onToggle(mod.id)}
                         aria-pressed={mod.enabled}
-                        aria-label={mod.enabled ? `Disable ${mod.name}` : `Enable ${mod.name}`}
-                        title={mod.enabled ? 'Click to disable' : 'Click to enable'}
+                        aria-label={
+                          mod.enabled
+                            ? t('locker.page.disableNamed', { name: mod.name })
+                            : t('locker.page.enableNamed', { name: mod.name })
+                        }
+                        title={mod.enabled ? t('locker.page.clickToDisable') : t('locker.page.clickToEnable')}
                         className="absolute inset-0 z-10 cursor-pointer rounded-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
                       />
                     </div>
@@ -1315,7 +1323,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               </div>
             </>
           ) : (
-            <p className="text-sm text-white/70">No global (non-hero) cosmetics installed yet.</p>
+            <p className="text-sm text-white/70">{t('locker.page.noGlobalNonHeroCosmeticsInstalledYet')}</p>
           )}
         </div>
       </div>
@@ -1331,12 +1339,12 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           />
           <div
             role="menu"
-            aria-label="Change global category"
+            aria-label={t('locker.page.changeGlobalCategory')}
             className="fixed z-[80] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
             style={{ top: retagMenu.y, left: retagMenu.x }}
           >
             <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
-              Move to category
+              {t('locker.page.moveToCategory')}
             </div>
             {/* Killstreak Music is derived from the GameBanana category, not a
                 manual destination, so it's not offered as a move target. */}
@@ -1370,7 +1378,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               }}
               className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
             >
-              Remove from Global
+              {t('locker.page.removeFromGlobal')}
             </button>
           </div>
         </>
@@ -1413,6 +1421,7 @@ function HeroGalleryCard({
   onBrowse,
   onToggleFavorite,
 }: HeroGalleryCardProps) {
+  const { t } = useTranslation();
   const renderLocal = getHeroRenderPath(hero.name);
   const wikiUrl = getHeroWikiUrl(hero.name);
   const namePath = getHeroNamePath(hero.name);
@@ -1507,8 +1516,8 @@ function HeroGalleryCard({
           event.stopPropagation();
           onBrowse();
         }}
-        aria-label={`Browse ${hero.name} skins`}
-        title={`Browse ${hero.name} skins`}
+        aria-label={t('locker.page.browseHeroSkins', { hero: hero.name })}
+        title={t('locker.page.browseHeroSkins', { hero: hero.name })}
         className="absolute right-9 top-2 z-20 flex items-center justify-center rounded-full border border-white/30 bg-black/40 p-1 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/60 focus-visible:opacity-100 group-hover:opacity-100"
       >
         <ExternalLink className="h-3 w-3" />
@@ -1520,8 +1529,8 @@ function HeroGalleryCard({
           event.stopPropagation();
           onToggleFavorite();
         }}
-        aria-label={isFavorite ? 'Unfavorite' : 'Favorite'}
-        title={isFavorite ? 'Unfavorite' : 'Favorite'}
+        aria-label={isFavorite ? t('locker.page.unfavorite') : t('locker.page.favorite')}
+        title={isFavorite ? t('locker.page.unfavorite') : t('locker.page.favorite')}
         className={`absolute right-2 top-2 z-20 flex items-center justify-center rounded-full border p-1 transition-opacity ${
           isFavorite
             ? 'border-yellow-400/60 bg-yellow-400/20 text-yellow-300 opacity-100'
@@ -1535,8 +1544,8 @@ function HeroGalleryCard({
           {hasAbilityRecolor && (
             <span
               className="flex items-center gap-1"
-              title="Ability color recoloring available"
-              aria-label="Ability color recoloring available"
+              title={t('locker.page.abilityColorRecoloringAvailable')}
+              aria-label={t('locker.page.abilityColorRecoloringAvailable')}
             >
               <RainbowPaletteIcon className="h-3 w-3" />
             </span>
@@ -1544,8 +1553,8 @@ function HeroGalleryCard({
           {skinCount > 0 && (
             <span
               className="flex items-center gap-1"
-              title={`${skinCount} skin${skinCount !== 1 ? 's' : ''}`}
-              aria-label={`${skinCount} skin${skinCount !== 1 ? 's' : ''}`}
+              title={t('locker.page.skinCount', { count: skinCount })}
+              aria-label={t('locker.page.skinCount', { count: skinCount })}
             >
               <Shirt className="w-3 h-3" />
               {skinCount}
@@ -1554,8 +1563,8 @@ function HeroGalleryCard({
           {soundCount > 0 && (
             <span
               className="flex items-center gap-1"
-              title={`${soundCount} sound${soundCount !== 1 ? 's' : ''}`}
-              aria-label={`${soundCount} sound${soundCount !== 1 ? 's' : ''}`}
+              title={t('locker.page.soundCount', { count: soundCount })}
+              aria-label={t('locker.page.soundCount', { count: soundCount })}
             >
               <Music className="w-3 h-3" />
               {soundCount}
@@ -1599,6 +1608,7 @@ function HeroCard({
   onToggleFavorite,
   hideNsfwPreviews,
 }: HeroCardProps) {
+  const { t } = useTranslation();
   const localUrl = getHeroRenderPath(hero.name);
   const wikiUrl = getHeroWikiUrl(hero.name);
   const facePositionX = getHeroFacePosition(hero.name).x;
@@ -1637,10 +1647,10 @@ function HeroCard({
 
   const countLabel =
     skinCount === 0 && soundCount === 0
-      ? 'No skins installed'
+      ? t('locker.page.noSkinsInstalled')
       : [
-          skinCount > 0 ? `${skinCount} skin${skinCount !== 1 ? 's' : ''}` : null,
-          soundCount > 0 ? `${soundCount} sound${soundCount !== 1 ? 's' : ''}` : null,
+          skinCount > 0 ? t('locker.page.skinCount', { count: skinCount }) : null,
+          soundCount > 0 ? t('locker.page.soundCount', { count: soundCount }) : null,
         ]
           .filter(Boolean)
           .join(' · ');
@@ -1684,7 +1694,7 @@ function HeroCard({
               {hasAbilityRecolor && (
                 <RainbowPaletteIcon
                   className="h-3.5 w-3.5 flex-shrink-0 text-accent drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]"
-                  title="Ability color recoloring available"
+                  title={t('locker.page.abilityColorRecoloringAvailable')}
                 />
               )}
             </div>
@@ -1704,7 +1714,7 @@ function HeroCard({
           className={`px-3 flex items-center transition-colors cursor-pointer ${
             isFavorite ? 'text-yellow-400' : 'text-text-secondary hover:text-text-primary'
           }`}
-          title={isFavorite ? 'Unfavorite' : 'Favorite'}
+          title={isFavorite ? t('locker.page.unfavorite') : t('locker.page.favorite')}
         >
           <Star className={`w-4 h-4 ${isFavorite ? 'fill-current' : ''}`} />
         </button>
@@ -1718,7 +1728,7 @@ function HeroCard({
         {hasSounds && (
           <div
             role="tablist"
-            aria-label="Section"
+            aria-label={t('locker.page.section')}
             className="inline-flex items-center rounded-full border border-border bg-bg-tertiary p-0.5 text-xs"
           >
             <button
@@ -1733,7 +1743,7 @@ function HeroCard({
               }`}
             >
               <Shirt className="w-3.5 h-3.5" />
-              Skins
+              {t('locker.page.skins')}
             </button>
             <button
               type="button"
@@ -1747,7 +1757,7 @@ function HeroCard({
               }`}
             >
               <Music className="w-3.5 h-3.5" />
-              Sounds
+              {t('locker.page.sounds')}
             </button>
           </div>
         )}
@@ -1759,15 +1769,15 @@ function HeroCard({
           showDownloadable={activeSection === 'skins'}
           browseAction={
             activeSection === 'skins'
-              ? { label: 'Browse', onClick: onBrowseSkins }
+              ? { label: t('common.actions.browse'), onClick: onBrowseSkins }
               : undefined
           }
           useHeroPortraitThumbnails={activeSection === 'sounds'}
           heroName={hero.name}
           emptyMessage={
             activeSection === 'sounds'
-              ? 'No sound mods tagged for this hero yet. Tag one from Installed (multi-select → Tag).'
-              : 'Download a skin for this hero to manage it here.'
+              ? t('locker.page.noSoundModsTagged')
+              : t('locker.page.downloadASkinForThisHero')
           }
         />
       </div>

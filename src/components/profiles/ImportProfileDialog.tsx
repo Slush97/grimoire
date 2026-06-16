@@ -310,7 +310,7 @@ export default function ImportProfileDialog({
     setRows([]);
     setParsed(null);
     if (!input.trim()) {
-      setParseError('Paste a share code or JSON profile first.');
+      setParseError(t('importProfile.parseEmptyError'));
       return;
     }
     setResolving(true);
@@ -334,7 +334,7 @@ export default function ImportProfileDialog({
     } finally {
       setResolving(false);
     }
-  }, [input, skipNsfw]);
+  }, [input, skipNsfw, t]);
 
   const handleFile = useCallback(async (file: File) => {
     const text = await file.text();
@@ -684,18 +684,18 @@ export default function ImportProfileDialog({
         <div className={`flex items-start justify-between ${parsed || socialProfileId ? 'px-4 sm:px-6 py-3' : 'p-4 sm:p-6'} border-b border-white/10`}>
           <div className="min-w-0">
             <h2 id="import-profile-title" className="text-base sm:text-lg font-bold text-text-primary">
-              Import Profile
+              {t('importProfile.title')}
             </h2>
             {!parsed && !socialProfileId && (
               <p className="hidden sm:block text-sm text-text-secondary mt-1">
-                Paste a share code or load a .modprofile.json file exported from Grimoire's Profiles tab. This format is Grimoire-only and not compatible with other mod managers.
+                {t('importProfile.description')}
               </p>
             )}
           </div>
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -741,10 +741,10 @@ export default function ImportProfileDialog({
             <div className="border-t border-white/10 px-4 sm:px-6 py-2.5 flex items-center justify-between gap-3">
               <div className="text-xs text-text-secondary inline-flex items-center gap-2">
                 <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                Resolving profile contents...
+                {t('importProfile.resolvingContents')}
               </div>
               <Button variant="secondary" onClick={onClose}>
-                Cancel
+                {t('common.actions.cancel')}
               </Button>
             </div>
           </>
@@ -755,14 +755,14 @@ export default function ImportProfileDialog({
             <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Paste share code (mp1:...) or full JSON here"
+              placeholder={t('importProfile.pastePlaceholder')}
               rows={4}
               className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent font-mono"
             />
             <div className="flex items-center justify-between gap-3">
               <label className="text-xs text-text-secondary inline-flex items-center gap-2 cursor-pointer hover:text-text-primary">
                 <FileText className="w-4 h-4" />
-                <span>Or load from file</span>
+                <span>{t('importProfile.orLoadFromFile')}</span>
                 <input
                   type="file"
                   accept=".json,.modprofile.json"
@@ -774,7 +774,7 @@ export default function ImportProfileDialog({
                 />
               </label>
               <Button onClick={handleParse} disabled={resolving || !input.trim()} isLoading={resolving}>
-                Parse & resolve
+                {t('importProfile.parseAndResolve')}
               </Button>
             </div>
             {parseError && (
@@ -791,10 +791,10 @@ export default function ImportProfileDialog({
             <div className="px-4 sm:px-6 py-2.5 border-b border-white/10">
               <div className="flex items-baseline gap-2 mb-1">
                 <label className="text-[11px] uppercase tracking-wider text-text-secondary flex-shrink-0">
-                  Save as
+                  {t('importProfile.saveAs')}
                 </label>
                 {parsed.profile.author && (
-                  <span className="text-xs text-text-tertiary truncate min-w-0">· originally by {parsed.profile.author}</span>
+                  <span className="text-xs text-text-tertiary truncate min-w-0">{t('importProfile.originallyBy', { author: parsed.profile.author })}</span>
                 )}
               </div>
               <input
@@ -803,7 +803,7 @@ export default function ImportProfileDialog({
                 onChange={(e) => setProfileName(e.target.value)}
                 disabled={importing || !!importedProfileName}
                 placeholder={parsed.profile.name}
-                aria-label="Profile name"
+                aria-label={t('profiles.create.profileName')}
                 className="w-full px-3 py-1.5 bg-bg-tertiary border border-white/10 rounded-md text-sm font-semibold text-text-primary focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
               />
             </div>
@@ -822,11 +822,11 @@ export default function ImportProfileDialog({
                           onChange={(e) => setIncludeAutoexec(e.target.checked)}
                           disabled={importing || !!importedProfileName}
                           className="peer sr-only"
-                          aria-label="Include autoexec commands from this profile"
+                          aria-label={t('importProfile.includeAutoexecAria')}
                         />
                         <CheckboxMark checked={includeAutoexec} disabled={importing || !!importedProfileName} />
                         <span className="font-medium">
-                          Include {cmds.length} autoexec {cmds.length === 1 ? 'command' : 'commands'}
+                          {t('importProfile.includeAutoexecCount', { count: cmds.length })}
                         </span>
                       </label>
                       <span
@@ -854,8 +854,8 @@ export default function ImportProfileDialog({
                         </div>
                         <div className="text-[11px] text-text-secondary mt-1">
                           {includeAutoexec
-                            ? 'Written to autoexec.cfg when you apply the imported profile.'
-                            : 'Discarded. Your autoexec.cfg will not be modified by this profile.'}
+                            ? t('importProfile.autoexecWritten')
+                            : t('importProfile.autoexecDiscarded')}
                         </div>
                       </div>
                     )}
@@ -877,8 +877,8 @@ export default function ImportProfileDialog({
                   <CheckboxMark checked={selectableCount > 0 && selectedCount === selectableCount} disabled={selectableCount === 0 || importing} />
                   <span className="truncate">
                     {selectedCount === selectableCount && selectableCount > 0
-                      ? 'Deselect all'
-                      : `Select all (${selectableCount})`}
+                      ? t('importProfile.deselectAll')
+                      : t('importProfile.selectAll', { count: selectableCount })}
                   </span>
                 </label>
                 <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer w-fit">
@@ -890,7 +890,7 @@ export default function ImportProfileDialog({
                     className="peer sr-only"
                   />
                   <CheckboxMark checked={skipNsfw} disabled={importing} />
-                  <span>Skip NSFW</span>
+                  <span>{t('importProfile.skipNsfw')}</span>
                 </label>
               </div>
               <button
@@ -898,24 +898,24 @@ export default function ImportProfileDialog({
                 onClick={() => void handleToggleShowAllVariants()}
                 disabled={importing || variantScanProgress !== null || selectableCount === 0}
                 className="text-xs inline-flex items-center gap-1.5 px-2 py-1 rounded-sm border border-white/10 text-text-secondary hover:text-text-primary hover:border-white/20 disabled:opacity-60 disabled:cursor-default cursor-pointer"
-                title="Fetch every mod's file list so you can swap to a different variant than the one pinned in the profile"
+                title={t('importProfile.fetchVariantsTitle')}
               >
                 {variantScanProgress ? (
                   <>
                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>
-                      Loading variants {variantScanProgress.done}/{variantScanProgress.total}
+                      {t('importProfile.loadingVariants', { done: variantScanProgress.done, total: variantScanProgress.total })}
                     </span>
                   </>
                 ) : showAllVariants ? (
                   <>
                     <ChevronDown className="w-3.5 h-3.5" />
-                    <span>Hide all variants</span>
+                    <span>{t('importProfile.hideAllVariants')}</span>
                   </>
                 ) : (
                   <>
                     <ChevronRight className="w-3.5 h-3.5" />
-                    <span>Show all variants</span>
+                    <span>{t('importProfile.showAllVariants')}</span>
                   </>
                 )}
               </button>
@@ -924,8 +924,8 @@ export default function ImportProfileDialog({
                   {report.exactCount} exact
                 </span>
                 {report.alreadyInstalledCount > 0 && (
-                  <span className="px-1.5 py-0.5 rounded-sm bg-white/5 text-text-secondary border border-white/10" title="Mods already installed locally">
-                    {report.alreadyInstalledCount} on disk
+                  <span className="px-1.5 py-0.5 rounded-sm bg-white/5 text-text-secondary border border-white/10" title={t('importProfile.modsAlreadyInstalledLocally')}>
+                    {t('importProfile.onDiskCount', { count: report.alreadyInstalledCount })}
                   </span>
                 )}
                 {report.upgradedCount > 0 && (
@@ -1013,16 +1013,16 @@ export default function ImportProfileDialog({
                           <div className="text-xs text-text-secondary flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                             {hint?.category && <span className="truncate max-w-[12rem]">{hint.category}</span>}
                             {hint?.fileLabel && <span className="hidden sm:inline">· {hint.fileLabel}</span>}
-                            <span>· p{mod.entry.priority}</span>
-                            {!mod.entry.enabled && <span className="text-text-tertiary">· disabled</span>}
-                            {nsfwBlocked && <span className="text-text-tertiary">· NSFW skipped</span>}
+                            <span>{t('importProfile.priorityBadge', { priority: mod.entry.priority })}</span>
+                            {!mod.entry.enabled && <span className="text-text-tertiary">{t('importProfile.disabledBadge')}</span>}
+                            {nsfwBlocked && <span className="text-text-tertiary">{t('importProfile.nsfwSkippedBadge')}</span>}
                             {canPickVariants && (
                               <button
                                 type="button"
                                 onClick={() => void toggleVariants(idx)}
                                 disabled={importing}
                                 className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-sm hover:text-text-primary hover:bg-white/5 disabled:opacity-50 disabled:cursor-default cursor-pointer"
-                                title="Choose a different variant from this mod"
+                                title={t('importProfile.chooseDifferentVariant')}
                               >
                                 {r.variantsOpen ? (
                                   <ChevronDown className="w-3 h-3" />
@@ -1032,11 +1032,11 @@ export default function ImportProfileDialog({
                                 {r.detailsLoading ? (
                                   <Loader2 className="w-3 h-3 animate-spin" />
                                 ) : fileCount > 1 ? (
-                                  <span>{fileCount} variants</span>
+                                  <span>{t('importProfile.variantCount', { count: fileCount })}</span>
                                 ) : fileCount === 1 ? (
-                                  <span>1 file</span>
+                                  <span>{t('importProfile.oneFile')}</span>
                                 ) : (
-                                  <span>Variants</span>
+                                  <span>{t('importProfile.variants')}</span>
                                 )}
                               </button>
                             )}
@@ -1052,13 +1052,13 @@ export default function ImportProfileDialog({
                           {mod.status === 'upgraded' && (
                             <div className="text-xs text-blue-300 mt-1 inline-flex items-center gap-1">
                               <ArrowUpCircle className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">Original file no longer available, will use newest version</span>
+                              <span className="truncate">{t('importProfile.upgradedNotice')}</span>
                             </div>
                           )}
                           {mod.status === 'unresolvable' && (
                             <div className="text-xs text-red-400 mt-1 inline-flex items-center gap-1">
                               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="truncate">{mod.reason ?? 'Not available on GameBanana'}</span>
+                              <span className="truncate">{mod.reason ?? t('importProfile.notAvailableOnGameBanana')}</span>
                             </div>
                           )}
                           {r.status === 'downloading' && progressPct !== null && (
@@ -1069,7 +1069,7 @@ export default function ImportProfileDialog({
                         </div>
                         <div className="text-sm flex-shrink-0 text-right sm:min-w-[100px]">
                           {r.status === 'pending' && !isUnresolvable && (
-                            <span className="text-text-tertiary text-xs">Ready</span>
+                            <span className="text-text-tertiary text-xs">{t('servers.connect.status.ready')}</span>
                           )}
                           {r.status === 'already-installed' && (
                             <span
@@ -1077,40 +1077,40 @@ export default function ImportProfileDialog({
                               title={t('importProfile.alreadyInstalled')}
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="hidden sm:inline">On disk</span>
+                              <span className="hidden sm:inline">{t('importProfile.onDisk')}</span>
                             </span>
                           )}
                           {r.status === 'queued' && (
-                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs" title="Queued">
+                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.queued')}>
                               <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
-                              <span className="hidden sm:inline">Queued</span>
+                              <span className="hidden sm:inline">{t('importProfile.status.queued')}</span>
                             </span>
                           )}
                           {r.status === 'downloading' && (
-                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs" title="Downloading">
+                            <span className="text-accent inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.downloading')}>
                               <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
                               <span className="hidden sm:inline">
-                                {progressPct !== null ? `${Math.round(progressPct)}%` : 'Downloading'}
+                                {progressPct !== null ? `${Math.round(progressPct)}%` : t('importProfile.status.downloading')}
                               </span>
                             </span>
                           )}
                           {r.status === 'installed' && (
-                            <span className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs" title="Installed">
+                            <span className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs" title={t('importProfile.status.installed')}>
                               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="hidden sm:inline">Installed</span>
+                              <span className="hidden sm:inline">{t('nav.installed')}</span>
                             </span>
                           )}
                           {r.status === 'failed' && (
                             <span
                               className="text-red-400 inline-flex items-center gap-1.5 justify-end text-xs"
-                              title={r.statusMessage ?? 'Failed'}
+                              title={r.statusMessage ?? t('importProfile.status.failed')}
                             >
                               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
-                              <span className="hidden sm:inline">Failed</span>
+                              <span className="hidden sm:inline">{t('importProfile.status.failed')}</span>
                             </span>
                           )}
                           {r.status === 'skipped' && (
-                            <span className="text-text-tertiary text-xs">Skipped</span>
+                            <span className="text-text-tertiary text-xs">{t('importProfile.status.skipped')}</span>
                           )}
                         </div>
                       </div>
@@ -1120,7 +1120,7 @@ export default function ImportProfileDialog({
                           {r.detailsLoading && (
                             <div className="text-xs text-text-secondary flex items-center gap-1.5">
                               <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              Loading files...
+                              {t('importProfile.loadingFiles')}
                             </div>
                           )}
                           {r.detailsError && (
@@ -1202,14 +1202,15 @@ export default function ImportProfileDialog({
                 {importedProfileName ? (
                   <span className="text-green-400 inline-flex items-center gap-1.5 min-w-0">
                     <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
-                    <span className="truncate">Imported as "{importedProfileName}"</span>
+                    <span className="truncate">{t('importProfile.importedAs', { name: importedProfileName })}</span>
                   </span>
                 ) : importing ? (
                   <span className="truncate inline-block max-w-full">
-                    {counts.downloading}↓ · {counts.queued} queued · {counts.installed} done{counts.failed > 0 ? ` · ${counts.failed} failed` : ''}
+                    {t('importProfile.progressSummary', { downloading: counts.downloading, queued: counts.queued, installed: counts.installed })}
+                    {counts.failed > 0 ? t('importProfile.progressFailedSuffix', { failed: counts.failed }) : ''}
                   </span>
                 ) : (
-                  `${selectedCount} of ${selectableCount} selected`
+                  t('importProfile.selectedSummary', { selected: selectedCount, total: selectableCount })
                 )}
                 {finalizeError && (
                   <div className="text-red-400 mt-1 inline-flex items-center gap-1">
@@ -1220,7 +1221,7 @@ export default function ImportProfileDialog({
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="secondary" onClick={onClose} disabled={importing && !downloadsSettled}>
-                  {importedProfileName ? 'Done' : 'Cancel'}
+                  {importedProfileName ? t('common.actions.done') : t('common.actions.cancel')}
                 </Button>
                 {!importedProfileName && (
                   <Button
@@ -1229,7 +1230,7 @@ export default function ImportProfileDialog({
                     disabled={importing || selectedCount === 0 || !activeDeadlockPath || profileName.trim() === ''}
                     isLoading={importing && counts.queued + counts.downloading === 0 && !downloadsSettled}
                   >
-                    Import {selectedCount > 0 ? selectedCount : ''}
+                    {t('profiles.actions.import')} {selectedCount > 0 ? selectedCount : ''}
                   </Button>
                 )}
               </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Loader2, AlertCircle, Check, RefreshCw, RotateCcw } from 'lucide-react';
 import {
   applyTrippySkin,
@@ -47,6 +48,7 @@ export default function TrippySkinPanel({
   active = true,
   onAppliedChange,
 }: TrippySkinPanelProps) {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -187,7 +189,7 @@ export default function TrippySkinPanel({
   if (loading) {
     return (
       <div className="flex items-center gap-2 py-4 text-xs text-text-secondary">
-        <Loader2 className="h-4 w-4 animate-spin" /> Loading...
+        <Loader2 className="h-4 w-4 animate-spin" /> {t('locker.trippy.loading')}
       </div>
     );
   }
@@ -203,10 +205,7 @@ export default function TrippySkinPanel({
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-text-secondary">
-        Paint {heroName}&apos;s body and gun textures with a flowing procedural pattern: the paint
-        scrolls in game. This composes with anything applied on the Abilities surface.
-      </p>
+      <p className="text-xs text-text-secondary">{t('locker.trippy.description', { hero: heroName })}</p>
 
       <TrippyPatternPicker
         style={style}
@@ -219,16 +218,20 @@ export default function TrippySkinPanel({
             {TRIPPY_STYLE_LABELS[style]}
             <span className="text-text-secondary">
               {' '}
-              · {pct(intensity)}% · scroll {pct(scroll)}%
+              {t('locker.trippy.summarySuffix', { intensity: pct(intensity), scroll: pct(scroll) })}
             </span>
           </>
         }
         status={
           !applied
-            ? 'No trippy skin applied'
+            ? t('locker.trippy.statusNone')
             : !dirty
-              ? 'Applied'
-              : `Applied: ${TRIPPY_STYLE_LABELS[activeSkin.style]} · ${pct(activeSkin.intensity)}% · ${activeSkin.targets}`
+              ? t('locker.trippy.applied')
+              : t('locker.trippy.statusApplied', {
+                  style: TRIPPY_STYLE_LABELS[activeSkin.style],
+                  intensity: pct(activeSkin.intensity),
+                  targets: activeSkin.targets,
+                })
         }
         onStyle={setStyle}
         onIntensity={setIntensity}
@@ -238,7 +241,8 @@ export default function TrippySkinPanel({
       {/* Runtime UV-scroll speed (how fast the paint flows in game). */}
       <label className="block space-y-1">
         <span className="text-[11px] font-medium text-text-secondary">
-          Scroll speed <span className="tabular-nums text-text-secondary/70">{pct(scroll)}%</span>
+          {t('locker.trippy.scrollSpeed')}{' '}
+          <span className="tabular-nums text-text-secondary/70">{pct(scroll)}%</span>
         </span>
         <input
           type="range"
@@ -253,17 +257,21 @@ export default function TrippySkinPanel({
       </label>
 
       <div className="flex items-center gap-2">
-        <span className="text-[11px] font-medium text-text-secondary">Paint</span>
+        <span className="text-[11px] font-medium text-text-secondary">{t('locker.trippy.paint')}</span>
         <div className="inline-flex rounded-md border border-border p-0.5 text-xs">
-          {(['all', 'body', 'weapons'] as const).map((t) => (
+          {(['all', 'body', 'weapons'] as const).map((target) => (
             <button
-              key={t}
+              key={target}
               type="button"
               disabled={busy}
-              onClick={() => setTargets(t)}
-              className={segBtn(targets === t)}
+              onClick={() => setTargets(target)}
+              className={segBtn(targets === target)}
             >
-              {t === 'all' ? 'Body + Gun' : t === 'body' ? 'Body' : 'Gun'}
+              {target === 'all'
+                ? t('locker.trippy.bodyGun')
+                : target === 'body'
+                  ? t('locker.trippy.body')
+                  : t('locker.trippy.gun')}
             </button>
           ))}
         </div>
@@ -278,7 +286,7 @@ export default function TrippySkinPanel({
           className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
         >
           {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Check className="h-3.5 w-3.5" />}
-          {applied && !dirty ? 'Applied' : 'Apply Paint'}
+          {applied && !dirty ? t('locker.trippy.applied') : t('locker.trippy.applyPaint')}
         </button>
         {applied && (
           <button
@@ -288,16 +296,13 @@ export default function TrippySkinPanel({
             className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <RotateCcw className="h-3.5 w-3.5" />
-            Remove
+            {t('common.actions.remove')}
           </button>
         )}
       </div>
 
       {busy && (
-        <p className="text-[11px] text-text-secondary/80">
-          Baking the paint. The first time for a given combination can take a while (it re-encodes
-          the affected textures); the same combination is instant after that.
-        </p>
+        <p className="text-[11px] text-text-secondary/80">{t('locker.trippy.baking')}</p>
       )}
 
       {actionError && (
@@ -318,8 +323,8 @@ export default function TrippySkinPanel({
           <RefreshCw className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
           <span>
             {gameRunning
-              ? 'Restart Deadlock for this change to take effect (addons mount at game start).'
-              : 'Saved. This paint mounts the next time you Launch Modded.'}
+              ? t('locker.trippy.restartRequired')
+              : t('locker.trippy.saved')}
           </span>
         </div>
       )}

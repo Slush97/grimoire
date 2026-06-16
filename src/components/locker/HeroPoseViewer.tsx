@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
@@ -442,6 +443,7 @@ export default function HeroPoseViewer({
    *  undefined for the plain skin. */
   trippyPreview?: TrippyPreview;
 }) {
+  const { t } = useTranslation();
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
   const [clips, setClips] = useState<THREE.AnimationClip[]>([]);
   const [rigged, setRigged] = useState(false);
@@ -575,7 +577,7 @@ export default function HeroPoseViewer({
     return (
       <div className="absolute inset-0 flex items-center justify-center">
         <p className="max-w-xs text-center text-sm text-text-secondary">
-          This hero can&apos;t be posed in 3D yet.
+          {t('locker.pose.cannotPose')}
         </p>
       </div>
     );
@@ -587,8 +589,9 @@ export default function HeroPoseViewer({
         <Loader2 className="h-6 w-6 animate-spin text-white/80" />
         {generating && (
           <p className="text-xs text-text-secondary">
-            Posing {heroName}
-            {skinSources.length > 1 ? ` with ${skinSources.length} active mods` : ''}...
+            {skinSources.length > 1
+              ? t('locker.pose.posingWithMods', { hero: heroName, count: skinSources.length })
+              : t('locker.pose.posing', { hero: heroName })}
           </p>
         )}
       </div>

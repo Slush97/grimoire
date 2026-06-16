@@ -1,4 +1,5 @@
 import { EyeOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { MergedModSource } from '../types/mod';
 import { getHeroRenderPath } from '../lib/lockerUtils';
 import ImageContextMenu from './ImageContextMenu';
@@ -41,6 +42,7 @@ export default function ModThumbnail({
   mergedSources,
   onRevealInFolder,
 }: ModThumbnailProps) {
+  const { t } = useTranslation();
   const shouldBlur = nsfw && hideNsfw;
   // Hero portrait wins over the uploader's thumbnail. NSFW blur is suppressed
   // here because hero renders are official Valve art, not user uploads.
@@ -66,7 +68,7 @@ export default function ModThumbnail({
     return (
       fallback ?? (
         <div className={`flex items-center justify-center text-text-secondary text-xs ${className}`}>
-          No preview
+          {t('modThumbnail.noPreview')}
         </div>
       )
     );
@@ -89,7 +91,7 @@ export default function ModThumbnail({
       {resolvedBlur && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/40">
           <EyeOff className="w-4 h-4 text-white/70" />
-          <span className="text-[9px] text-white/70 mt-0.5">NSFW</span>
+          <span className="text-[9px] text-white/70 mt-0.5">{t('modThumbnail.nsfw')}</span>
         </div>
       )}
     </div>
@@ -119,6 +121,7 @@ interface MergedCollageProps {
  * with more than 16 thumbnails the last cell becomes a "+N more" tile.
  */
 function MergedCollage({ sources, alt, className, shouldBlur, onRevealInFolder }: MergedCollageProps) {
+  const { t } = useTranslation();
   const { cells, cols } = buildCollage(sources);
   return (
     <div className={`relative overflow-hidden bg-bg-tertiary ${className}`}>
@@ -160,7 +163,7 @@ function MergedCollage({ sources, alt, className, shouldBlur, onRevealInFolder }
       {shouldBlur && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-bg-primary/40 pointer-events-none">
           <EyeOff className="w-4 h-4 text-white/70" />
-          <span className="text-[9px] text-white/70 mt-0.5">NSFW</span>
+          <span className="text-[9px] text-white/70 mt-0.5">{t('modThumbnail.nsfw')}</span>
         </div>
       )}
     </div>

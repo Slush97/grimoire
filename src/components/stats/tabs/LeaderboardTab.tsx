@@ -1,4 +1,5 @@
 import { useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Trophy } from 'lucide-react'
 import { Card, Button } from '../../common/ui'
 import { useLeaderboardStore } from '../../../stores/stats/leaderboardStore'
@@ -15,6 +16,7 @@ const REGIONS: { value: LeaderboardRegion; label: string }[] = [
 ]
 
 export function LeaderboardTab() {
+    const { t } = useTranslation()
     const region = useLeaderboardStore((s) => s.region)
     const leaderboard = useLeaderboardStore((s) => s.leaderboard)
     const loadLeaderboard = useLeaderboardStore((s) => s.loadLeaderboard)
@@ -33,17 +35,17 @@ export function LeaderboardTab() {
                         size="sm"
                         onClick={() => loadLeaderboard(r.value)}
                     >
-                        {r.label}
+                        {r.value === 'Asia' ? t('stats.leaderboard.asia') : r.label}
                     </Button>
                 ))}
             </div>
 
-            <Card title="Top Players" icon={Trophy} description="Valve leaderboard, updated hourly">
+            <Card title={t('stats.leaderboard.topPlayers')} icon={Trophy} description={t('stats.leaderboard.valveLeaderboardUpdatedHourly')}>
                 <AsyncSection
                     state={leaderboard}
                     onRetry={() => loadLeaderboard()}
                     emptyIcon={Trophy}
-                    emptyText="No leaderboard data for this region"
+                    emptyText={t('stats.leaderboard.noDataForRegion')}
                     skeletonRows={10}
                 >
                     {(entries) => (
@@ -76,10 +78,10 @@ export function LeaderboardTab() {
                                             {rankLabelFromBadge(entry.badge_level)}
                                         </span>
                                         {entry.wins !== undefined && (
-                                            <span className="text-green-400">{entry.wins} wins</span>
+                                            <span className="text-green-400">{t('stats.leaderboard.winsCount', { count: entry.wins })}</span>
                                         )}
                                         {entry.matches_played !== undefined && (
-                                            <span>{entry.matches_played} matches</span>
+                                            <span>{t('stats.leaderboard.matchesCount', { count: entry.matches_played })}</span>
                                         )}
                                     </div>
                                 </div>

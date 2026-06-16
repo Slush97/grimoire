@@ -7,15 +7,16 @@ import { useSocialStore } from '../../stores/socialStore';
 import { SteamIcon } from './SteamIcon';
 
 function KeyringNotice() {
+  const { t } = useTranslation();
   return (
     <div
       className="inline-flex min-h-9 max-w-full items-center gap-1.5 rounded-sm border border-yellow-500/25 bg-yellow-500/[0.07] px-2.5 py-1.5 text-[11px] leading-tight text-yellow-100"
-      title="Electron safeStorage is not reporting an encrypted OS keychain backend to Grimoire."
+      title={t('social.account.safeStorageUnencrypted')}
     >
       <ShieldAlert className="h-3.5 w-3.5 flex-shrink-0 text-yellow-300" />
       <span className="min-w-0">
-        <span className="font-medium text-yellow-200">Session only.</span>{' '}
-        <span className="text-text-secondary">Keyring unavailable to Grimoire.</span>
+        <span className="font-medium text-yellow-200">{t('social.account.sessionOnlyPunctuated')}</span>{' '}
+        <span className="text-text-secondary">{t('social.account.keyringUnavailable')}</span>
       </span>
     </div>
   );
@@ -52,7 +53,7 @@ export default function SocialAccountSection() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-text-secondary -mt-2">
-        Sign in with Steam to publish profiles and like ones you find. Importing works without an account.
+        {t('social.account.signInPrompt')}
       </p>
 
       {error && (
@@ -65,7 +66,7 @@ export default function SocialAccountSection() {
             onClick={clearError}
             className="text-xs text-red-300 hover:text-red-200 underline shrink-0"
           >
-            Dismiss
+            {t('common.actions.dismiss')}
           </button>
         </div>
       )}
@@ -90,9 +91,9 @@ export default function SocialAccountSection() {
                 {status.user.display_name}
               </div>
               <div className="text-xs text-text-secondary flex items-center gap-2 mt-0.5">
-                <Badge variant="success">Signed in</Badge>
+                <Badge variant="success">{t('social.account.signedIn')}</Badge>
                 {status.persistenceMode === 'session-only' && (
-                  <Badge variant="warning" className="font-normal">Session only</Badge>
+                  <Badge variant="warning" className="font-normal">{t('social.account.sessionOnly')}</Badge>
                 )}
               </div>
             </div>
@@ -104,7 +105,7 @@ export default function SocialAccountSection() {
 
           <div className="flex flex-wrap gap-2 pt-2 border-t border-white/5">
             <Button variant="secondary" icon={LogOut} onClick={logout} disabled={loading}>
-              Sign out
+              {t('social.account.signOut')}
             </Button>
             <Button
               variant="danger"
@@ -112,7 +113,7 @@ export default function SocialAccountSection() {
               onClick={() => setDeleteConfirmOpen(true)}
               disabled={loading}
             >
-              Delete account
+              {t('social.account.deleteAccount')}
             </Button>
           </div>
         </div>
@@ -122,11 +123,11 @@ export default function SocialAccountSection() {
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex items-center gap-2 flex-wrap">
                 <Button icon={SteamIcon} onClick={handleLogin} isLoading={loading} disabled={loading}>
-                  Sign in with Steam
+                  {t('social.account.signInWithSteam')}
                 </Button>
                 {loading && (
                   <Button variant="secondary" icon={X} onClick={cancelLogin}>
-                    Cancel
+                    {t('common.actions.cancel')}
                   </Button>
                 )}
               </div>
@@ -137,14 +138,14 @@ export default function SocialAccountSection() {
             <div className="text-xs text-text-secondary flex items-center gap-1.5">
               <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0" />
               <span>
-                Opens Steam in your browser. Grimoire never sees your password.
+                {t('social.account.opensSteamInBrowser')}
               </span>
             </div>
             {loading && (
               <div className="text-xs text-text-secondary flex items-start gap-1.5">
                 <ExternalLink className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
                 <span>
-                  Finish signing in with Steam in your browser. This page will update automatically when you're done.
+                  {t('social.account.finishSigningIn')}
                 </span>
               </div>
             )}
@@ -156,9 +157,9 @@ export default function SocialAccountSection() {
         isOpen={deleteConfirmOpen}
         onCancel={() => setDeleteConfirmOpen(false)}
         onConfirm={handleDelete}
-        title="Delete Grimoire Social account"
+        title={t('social.account.deleteAccountTitle')}
         message={t('social.account.deleteMessage')}
-        confirmLabel="Delete account"
+        confirmLabel={t('social.account.deleteAccount')}
         variant="danger"
       />
     </div>

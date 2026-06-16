@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { Outlet, useLocation, useNavigate } from 'react-router-dom';
 import { AlertTriangle, Loader2 } from 'lucide-react';
 import Sidebar from './Sidebar';
@@ -19,6 +20,7 @@ import MultiVpkPickerModal from './MultiVpkPickerModal';
 import DiscordPresence from './DiscordPresence';
 
 export default function Layout() {
+  const { t } = useTranslation();
   const navigate = useNavigate();
   const location = useLocation();
   const outletKey = location.pathname.startsWith('/locker') ? '/locker' : location.pathname;
@@ -131,14 +133,14 @@ export default function Layout() {
   // lives here rather than inside one page.
   useEffect(() => {
     const unsubscribe = window.electronAPI.onGameBananaRateLimited(() => {
-      showToast('GameBanana is rate-limiting Grimoire. Pause a moment before retrying.', {
+      showToast(t('layout.rateLimited'), {
         tone: 'warning',
         duration: 8000,
         dismissable: true,
       });
     });
     return unsubscribe;
-  }, []);
+  }, [t]);
 
   const respondToSuspicious = async (accepted: boolean) => {
     if (!suspiciousPrompt) return;
@@ -204,14 +206,14 @@ export default function Layout() {
             <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 text-yellow-200">
               <AlertTriangle className="h-5 w-5 text-yellow-400" />
               <div className="flex-1 text-sm">
-                <span className="font-semibold">gameinfo.gi issue:</span> {gameinfoAlert}
+                <span className="font-semibold">{t('layout.gameinfoIssue')}</span> {gameinfoAlert}
               </div>
               <div className="flex items-center gap-2">
                 <Button variant="warning" size="sm" onClick={handleFixGameinfo} isLoading={isFixingGameinfo}>
-                  Fix now
+                  {t('layout.fixNow')}
                 </Button>
                 <Button variant="secondary" size="sm" onClick={() => navigate('/settings')}>
-                  Open settings
+                  {t('layout.openSettings')}
                 </Button>
               </div>
             </div>
@@ -231,18 +233,21 @@ export default function Layout() {
       <ToastStack />
       <ConfirmModal
         isOpen={!!suspiciousPrompt}
-        title="Suspicious files detected"
+        title={t('layout.suspicious.title')}
         variant="danger"
-        confirmLabel="Install anyway"
-        cancelLabel="Cancel"
+        confirmLabel={t('layout.suspicious.installAnyway')}
+        cancelLabel={t('common.actions.cancel')}
         onConfirm={() => respondToSuspicious(true)}
         onCancel={() => respondToSuspicious(false)}
         message={
           suspiciousPrompt ? (
             <div className="space-y-3">
               <p>
-                <span className="font-semibold text-text-primary">{suspiciousPrompt.modName}</span>{' '}
-                contains files that aren&apos;t typical for a Deadlock mod:
+                <Trans
+                  i18nKey="layout.suspicious.body"
+                  values={{ modName: suspiciousPrompt.modName }}
+                  components={{ name: <span className="font-semibold text-text-primary" /> }}
+                />
               </p>
               <ul className="max-h-40 overflow-y-auto rounded-sm border border-border bg-bg-tertiary px-3 py-2 text-xs font-mono text-yellow-200">
                 {suspiciousPrompt.files.slice(0, 30).map((f) => (
@@ -250,14 +255,15 @@ export default function Layout() {
                 ))}
                 {suspiciousPrompt.files.length > 30 && (
                   <li className="text-text-secondary">
-                    …and {suspiciousPrompt.files.length - 30} more
+                    {t('layout.suspicious.andMore', { count: suspiciousPrompt.files.length - 30 })}
                   </li>
                 )}
               </ul>
               <p className="text-xs">
-                Grimoire only extracts <code className="rounded bg-bg-tertiary px-1">.vpk</code> files:
-                these won&apos;t be installed even if you continue. Review the mod&apos;s GameBanana
-                page if anything looks off.
+                <Trans
+                  i18nKey="layout.suspicious.extractsNote"
+                  components={{ code: <code className="rounded bg-bg-tertiary px-1" /> }}
+                />
               </p>
             </div>
           ) : null

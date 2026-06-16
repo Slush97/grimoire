@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
     X,
@@ -112,13 +113,14 @@ function ParamSliders({
     disabled: boolean;
     onChange: (next: AbilitySoundParams) => void;
 }) {
+    const { t } = useTranslation();
     const volumeDb = params.volumeDb ?? 0;
     const pitch = params.pitch ?? 1;
     const dirty = volumeDb !== 0 || pitch !== 1;
     return (
         <div className="space-y-2 border-t border-border/50 px-3 py-2">
             <div className="flex items-center gap-2">
-                <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">Volume</span>
+                <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">{t('lockerOverrides.volume')}</span>
                 <input
                     type="range"
                     min={VOLUME_MIN}
@@ -130,11 +132,11 @@ function ParamSliders({
                     className="h-1 flex-1 cursor-pointer accent-accent disabled:cursor-not-allowed"
                 />
                 <span className="w-12 text-right text-[10px] tabular-nums text-text-secondary">
-                    {volumeDb > 0 ? `+${volumeDb}` : volumeDb} dB
+                    {t('lockerOverrides.db', { value: volumeDb > 0 ? `+${volumeDb}` : volumeDb })}
                 </span>
             </div>
             <div className="flex items-center gap-2">
-                <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">Pitch</span>
+                <span className="w-10 text-[10px] uppercase tracking-wide text-text-secondary">{t('lockerOverrides.pitch')}</span>
                 <input
                     type="range"
                     min={PITCH_MIN}
@@ -151,7 +153,7 @@ function ParamSliders({
             </div>
             <div className="flex items-center justify-between">
                 <span className="text-[9px] text-text-secondary/70">
-                    {saving ? 'Saving...' : 'Applies on release'}
+                    {saving ? t('lockerOverrides.saving') : t('lockerOverrides.appliesOnRelease')}
                 </span>
                 {dirty && !disabled && (
                     <button
@@ -159,7 +161,7 @@ function ParamSliders({
                         onClick={() => onChange({ volumeDb: 0, pitch: 1 })}
                         className="text-[9px] font-semibold uppercase tracking-wide text-accent hover:underline"
                     >
-                        Reset
+                        {t('common.actions.reset')}
                     </button>
                 )}
             </div>
@@ -185,6 +187,7 @@ export function LockerOverridesModal({
     onClose: () => void;
     onChanged?: () => void;
 }) {
+    const { t } = useTranslation();
     const navigate = useNavigate();
     const mods = useAppStore((s) => s.mods);
     const loadMods = useAppStore((s) => s.loadMods);
@@ -424,9 +427,9 @@ export function LockerOverridesModal({
                     <div className="flex items-center gap-2.5">
                         <Wand2 className="h-5 w-5 text-accent" />
                         <div>
-                            <h2 id="locker-overrides-title" className="text-base font-semibold text-text-primary">Locker Overrides</h2>
+                            <h2 id="locker-overrides-title" className="text-base font-semibold text-text-primary">{t('lockerOverrides.title')}</h2>
                             <p className="text-xs text-text-secondary">
-                                Always-on cosmetics, separate from your mod load order and the 99-slot cap.
+                                {t('lockerOverrides.subtitle')}
                             </p>
                         </div>
                     </div>
@@ -434,7 +437,7 @@ export function LockerOverridesModal({
                         type="button"
                         onClick={() => !busy && onClose()}
                         disabled={busy}
-                        aria-label="Close"
+                        aria-label={t('common.actions.close')}
                         className="rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
                     >
                         <X className="h-5 w-5" />
@@ -444,10 +447,10 @@ export function LockerOverridesModal({
                 {/* Tabs */}
                 <div className="flex items-center gap-1 border-b border-border px-3 pt-2">
                     {([
-                        { id: 'cards' as const, label: 'Hero Cards', icon: ImageIcon, count: cards.length },
-                        { id: 'sounds' as const, label: 'Ability Sounds', icon: Volume2, count: sounds.length },
-                        { id: 'colors' as const, label: 'Ability Colors', icon: Palette, count: colors.length },
-                        { id: 'effects' as const, label: 'Trippy Skins', icon: Sparkles, count: trippySkins.length },
+                        { id: 'cards' as const, label: t('lockerOverrides.tabs.cards'), icon: ImageIcon, count: cards.length },
+                        { id: 'sounds' as const, label: t('lockerOverrides.tabs.sounds'), icon: Volume2, count: sounds.length },
+                        { id: 'colors' as const, label: t('lockerOverrides.tabs.colors'), icon: Palette, count: colors.length },
+                        { id: 'effects' as const, label: t('lockerOverrides.tabs.effects'), icon: Sparkles, count: trippySkins.length },
                     ]).map(({ id, label, icon: Icon, count }) => (
                         <button
                             key={id}
@@ -568,7 +571,7 @@ export function LockerOverridesModal({
                                     <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-300">
                                         <RefreshCw className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
                                         <span>
-                                            Restart Deadlock for sound changes to take effect (addons mount at game start).
+                                            {t('lockerOverrides.restartForSound')}
                                         </span>
                                     </div>
                                 )}
@@ -595,7 +598,7 @@ export function LockerOverridesModal({
                                                         {sound.tuned && (
                                                             <SlidersHorizontal
                                                                 className="h-3 w-3 text-accent"
-                                                                aria-label="volume/pitch tuned"
+                                                                aria-label={t('lockerOverrides.tuned')}
                                                             />
                                                         )}
                                                     </div>
@@ -611,7 +614,7 @@ export function LockerOverridesModal({
                                                     disabled={busy}
                                                     onClick={() => removeSound(sound.heroName, sound.slot)}
                                                 >
-                                                    Remove
+                                                    {t('common.actions.remove')}
                                                 </Button>
                                             </div>
                                             {mod?.audioUrl && (
@@ -726,7 +729,7 @@ export function LockerOverridesModal({
                                                 disabled={busy}
                                                 onClick={() => removeColor(color.heroName)}
                                             >
-                                                Remove
+                                                {t('common.actions.remove')}
                                             </Button>
                                         </div>
                                     );
@@ -769,10 +772,10 @@ export function LockerOverridesModal({
                                                 <div className="truncate text-xs text-text-secondary tabular-nums">
                                                     {`${skin.style} · ${Math.round(skin.intensity * 100)}% · ${
                                                         skin.targets === 'all'
-                                                            ? 'body + gun'
+                                                            ? t('lockerOverrides.targets.bodyGun')
                                                             : skin.targets === 'body'
-                                                              ? 'body'
-                                                              : 'gun'
+                                                              ? t('lockerOverrides.targets.body')
+                                                              : t('lockerOverrides.targets.gun')
                                                     }`}
                                                 </div>
                                             </div>
@@ -784,7 +787,7 @@ export function LockerOverridesModal({
                                                 disabled={busy}
                                                 onClick={() => removeTrippySkin(skin.heroName)}
                                             >
-                                                Remove
+                                                {t('common.actions.remove')}
                                             </Button>
                                         </div>
                                     );
@@ -805,7 +808,7 @@ export function LockerOverridesModal({
                         className="flex items-center gap-1.5 text-xs text-text-secondary hover:text-text-primary cursor-pointer"
                     >
                         <ExternalLink className="h-3.5 w-3.5" />
-                        Add or change in the Locker
+                        {t('lockerOverrides.addOrChange')}
                     </button>
                     {((tab === 'cards' && cards.length > 0) ||
                         (tab === 'sounds' && sounds.length > 0) ||
@@ -819,14 +822,16 @@ export function LockerOverridesModal({
                             disabled={busy}
                             onClick={() => clearTab(tab)}
                         >
-                            Remove all{' '}
-                            {tab === 'cards'
-                                ? 'cards'
-                                : tab === 'sounds'
-                                  ? 'sounds'
-                                  : tab === 'colors'
-                                    ? 'colors'
-                                    : 'trippy skins'}
+                            {t('lockerOverrides.removeAll', {
+                                scope:
+                                    tab === 'cards'
+                                        ? t('lockerOverrides.scope.cards')
+                                        : tab === 'sounds'
+                                          ? t('lockerOverrides.scope.sounds')
+                                          : tab === 'colors'
+                                            ? t('lockerOverrides.scope.colors')
+                                            : t('lockerOverrides.scope.trippySkins'),
+                            })}
                         </Button>
                     )}
                 </div>
@@ -842,24 +847,25 @@ function EmptyState({
     kind: Tab;
     onOpenLocker: () => void;
 }) {
+    const { t } = useTranslation();
     const Icon =
         kind === 'cards' ? ImageIcon : kind === 'sounds' ? Volume2 : kind === 'effects' ? Sparkles : Palette;
     const noun =
         kind === 'cards'
-            ? 'hero card'
+            ? t('lockerOverrides.noun.heroCard')
             : kind === 'sounds'
-              ? 'ability sound'
+              ? t('lockerOverrides.noun.abilitySound')
               : kind === 'effects'
-                ? 'trippy skin'
-                : 'ability color';
+                ? t('lockerOverrides.noun.trippySkin')
+                : t('lockerOverrides.noun.abilityColor');
     return (
         <div className="flex flex-col items-center justify-center gap-3 py-12 text-center">
             <Icon className="h-8 w-8 text-text-secondary/50" />
             <p className="text-sm text-text-secondary">
-                No {noun} overrides applied yet.
+                {t('lockerOverrides.emptyApplied', { noun })}
             </p>
             <Button variant="secondary" size="sm" icon={ExternalLink} onClick={onOpenLocker}>
-                Open the Locker
+                {t('lockerOverrides.openLocker')}
             </Button>
         </div>
     );

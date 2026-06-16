@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useTranslation, Trans } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Gauge, ExternalLink, RefreshCw, RotateCcw, Settings2, SquarePen } from 'lucide-react';
 import { Card, Badge, Button } from '../common/ui';
@@ -31,6 +32,7 @@ const SQOOKY_ARTIST: BrowseArtistRef = {
 // Applies Sqooky's community fps config onto gameinfo.gi in place, shows
 // whether a game update wiped it, and credits the upstream project.
 export default function PerformanceConfigCard() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<PerformanceConfigStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -51,10 +53,10 @@ export default function PerformanceConfigCard() {
         state: 'error',
         appliedVersion: null,
         bundledVersion: '',
-        message: 'Could not read gameinfo.gi status. Check your Deadlock path in Settings.',
+        message: t('performance.statusReadError'),
       });
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void refresh();
@@ -110,53 +112,55 @@ export default function PerformanceConfigCard() {
 
   return (
     <Card
-      title="Performance Config"
+      title={t('settings.experimental.performanceConfig')}
       icon={Gauge}
       className="lg:col-span-2"
-      description="Sqooky's community fps preset (OptimizationLock), applied without touching your mods."
+      description={t('performance.cardDescription')}
       action={
         status && (
           <Badge variant={applied ? (status.handEdited ? 'info' : 'success') : wiped ? 'warning' : status.state === 'error' ? 'error' : 'neutral'}>
             {applied
-              ? `Applied v${status.appliedVersion}${status.handEdited ? ' (edited)' : ''}`
-              : wiped ? 'Wiped by game update' : status.state === 'error' ? 'Error' : 'Not applied'}
+              ? status.handEdited
+                ? t('performance.badge.appliedEdited', { version: status.appliedVersion })
+                : t('performance.badge.applied', { version: status.appliedVersion })
+              : wiped ? t('performance.badge.wiped') : status.state === 'error' ? t('performance.badge.error') : t('performance.badge.notApplied')}
           </Badge>
         )
       }
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="min-w-0 space-y-1">
-          <p className="text-sm text-text-secondary">{status?.message ?? 'Checking gameinfo.gi...'}</p>
+          <p className="text-sm text-text-secondary">{status?.message ?? t('performance.checkingGameinfo')}</p>
           <p className="text-xs text-text-secondary">
-            Map looks dark? Set in-game shadows to Medium or Low. Game updates wipe the config; Grimoire
-            spots that here so you can reapply. By{' '}
-            <button
-              type="button"
-              onClick={viewSqookyInBrowse}
-              className="text-accent hover:underline"
-            >
-              Sqooky
-            </button>{' '}
-            and{' '}
-            <a
-              href={OPTIMIZATIONLOCK_URL}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-accent hover:underline inline-flex items-center gap-0.5"
-            >
-              contributors
-              <ExternalLink className="w-3 h-3" aria-hidden="true" />
-            </a>
-            . If it helps,{' '}
-            <a
-              href={SQOOKY_KOFI_URL}
-              target="_blank"
-              rel="noreferrer noopener"
-              className="text-accent hover:underline"
-            >
-              buy them a coffee
-            </a>
-            .
+            <Trans
+              i18nKey="performance.credit"
+              components={{
+                sqooky: (
+                  <button
+                    type="button"
+                    onClick={viewSqookyInBrowse}
+                    className="text-accent hover:underline"
+                  />
+                ),
+                contributors: (
+                  <a
+                    href={OPTIMIZATIONLOCK_URL}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="text-accent hover:underline inline-flex items-center gap-0.5"
+                  />
+                ),
+                extlink: <ExternalLink className="w-3 h-3" aria-hidden="true" />,
+                kofi: (
+                  <a
+                    href={SQOOKY_KOFI_URL}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="text-accent hover:underline"
+                  />
+                ),
+              }}
+            />
           </p>
           {openError && <p className="text-xs text-red-400">{openError}</p>}
         </div>
@@ -168,7 +172,7 @@ export default function PerformanceConfigCard() {
               icon={RotateCcw}
               size="sm"
             >
-              Restore Backup
+              {t('performance.restoreBackup')}
             </Button>
           )}
           <Button
@@ -178,16 +182,16 @@ export default function PerformanceConfigCard() {
             variant={canRestore ? 'secondary' : 'primary'}
             size="sm"
           >
-            {applied ? 'Reapply' : wiped ? 'Reapply Config' : 'Apply Config'}
+            {applied ? t('performance.reapply') : wiped ? t('performance.reapplyConfig') : t('performance.applyConfig')}
           </Button>
           {(applied || wiped) && (
             <Button onClick={() => run(removePerformanceConfig)} disabled={busy} variant="secondary" size="sm">
-              Remove
+              {t('common.actions.remove')}
             </Button>
           )}
           {applied && (
             <Button onClick={onEditFile} disabled={busy} variant="ghost" size="sm" icon={SquarePen}>
-              Edit File
+              {t('performance.editFile')}
             </Button>
           )}
           {applied && settings?.externalEditorPath !== undefined && (
@@ -195,8 +199,8 @@ export default function PerformanceConfigCard() {
               type="button"
               onClick={() => setPickerOpen(true)}
               disabled={busy}
-              title="Change editor"
-              aria-label="Change editor"
+              title={t('performance.changeEditor')}
+              aria-label={t('performance.changeEditor')}
               className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary"
             >
               <Settings2 className="w-4 h-4" aria-hidden="true" />
@@ -209,7 +213,7 @@ export default function PerformanceConfigCard() {
               variant="ghost"
               size="sm"
             >
-              Reset Overrides
+              {t('performance.resetOverrides')}
             </Button>
           )}
         </div>

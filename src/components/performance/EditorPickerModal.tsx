@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { AppWindow, FolderOpen, MonitorCog, X } from 'lucide-react';
 import { listEditorCandidates, showOpenDialog } from '../../lib/api';
 import type { EditorCandidate } from '../../types/electron';
@@ -14,6 +15,7 @@ interface Props {
 // for .gi is text/plain, which often resolves to a word processor, so users
 // pick a real editor once and Grimoire remembers it.
 export default function EditorPickerModal({ onClose, onChoose }: Props) {
+  const { t } = useTranslation();
   const [candidates, setCandidates] = useState<EditorCandidate[]>([]);
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
 
   const browse = async () => {
     const path = await showOpenDialog({
-      title: 'Choose an editor application',
+      title: t('performance.editor.chooseTitle'),
       filters: navigator.platform.startsWith('Win')
         ? [{ name: 'Applications', extensions: ['exe'] }]
         : undefined,
@@ -64,17 +66,16 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
         <div className="flex items-start justify-between gap-3">
           <div>
             <h2 id="editor-picker-title" className="text-base font-semibold text-text-primary">
-              Open gameinfo.gi with
+              {t('performance.editor.title')}
             </h2>
             <p className="text-xs text-text-secondary mt-1">
-              Pick the editor for config tweaks. Grimoire remembers this; the gear button next to
-              Edit File switches it later.
+              {t('performance.editor.description')}
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
             className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
           >
             <X className="w-4 h-4" aria-hidden="true" />
@@ -84,9 +85,9 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
           <button type="button" className={rowClass} onClick={() => onChoose(null)}>
             <MonitorCog className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
             <span className="min-w-0">
-              <span className="block text-sm text-text-primary">System default</span>
+              <span className="block text-sm text-text-primary">{t('settings.language.systemDefault')}</span>
               <span className="block text-xs text-text-secondary">
-                Whatever your OS opens text files with
+                {t('performance.editor.systemDefaultHint')}
               </span>
             </span>
           </button>
@@ -106,7 +107,7 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
           ))}
           <button type="button" className={rowClass} onClick={() => void browse()}>
             <FolderOpen className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
-            <span className="block text-sm text-text-primary">Browse for an application...</span>
+            <span className="block text-sm text-text-primary">{t('performance.editor.browse')}</span>
           </button>
         </div>
       </div>
