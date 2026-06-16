@@ -84,7 +84,7 @@
       "performance": {
         "category": "Performance",
         "uncapFps": {
-          "name": "Uncap FPS",
+          "name": "infinite FPS",
           "description": "Remove framerate limit"
         },
         "capFps144": {
@@ -105,7 +105,7 @@
         }
       },
       "network": {
-        "category": "Network",
+        "category": "Wifi",
         "maxNetworkRate": {
           "name": "Max Network Rate",
           "description": "Maximum network update rate"
@@ -193,7 +193,7 @@
   },
   "downloadQueue": {
     "cancelDownload": "Cancel download",
-    "collapse": "Collapse",
+    "collapse": "Less info",
     "downloads": "Downloads",
     "eta": {
       "seconds_one": "{{count}}s",
