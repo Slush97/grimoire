@@ -581,16 +581,39 @@ export default function SoulContainerImportModal({
           </div>
         </div>
 
-        {/* Conflict notice + error, full width above the footer */}
+        {/* High-poly + error notices, full width above the footer. The
+            "already enabled" conflict toast lives in the footer row itself. */}
         <div className="px-5 space-y-3">
+          {highPoly && (
+            <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
+              <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
+              <span>
+                {t('locker.soulImport.preview.highPolyWarning', {
+                  count: triangleCount.toLocaleString(),
+                  threshold: TRIANGLE_WARN_THRESHOLD.toLocaleString(),
+                })}
+              </span>
+            </div>
+          )}
+
+          {error && (
+            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+              {error}
+            </div>
+          )}
+        </div>
+
+        <div className="flex items-center gap-3 p-5 border-t border-border mt-3">
+          {/* "Already enabled" conflict toast, inline on the left of the bottom
+              bar; the action buttons stay pinned right via ml-auto. */}
           {existingSoulImports.length > 0 && (
             <div
-              className="flex items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2"
+              className="flex min-w-0 items-center gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2"
               title={t('locker.soulImport.conflict.body', { name: existingSoulImports[0].name })}
             >
               <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
               <span className="truncate text-amber-200/90">{t('locker.soulImport.conflict.heading')}</span>
-              <div className="ml-auto flex shrink-0 overflow-hidden rounded-md border border-amber-500/40">
+              <div className="flex shrink-0 overflow-hidden rounded-md border border-amber-500/40">
                 <button
                   onClick={() => setDisableExisting(true)}
                   className={`px-2.5 py-1 text-[11px] cursor-pointer transition-colors ${
@@ -614,42 +637,23 @@ export default function SoulContainerImportModal({
               </div>
             </div>
           )}
-
-          {highPoly && (
-            <div className="flex items-start gap-2 text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3">
-              <AlertTriangle className="w-4 h-4 shrink-0 mt-px" />
-              <span>
-                {t('locker.soulImport.preview.highPolyWarning', {
-                  count: triangleCount.toLocaleString(),
-                  threshold: TRIANGLE_WARN_THRESHOLD.toLocaleString(),
-                })}
-              </span>
-            </div>
-          )}
-
-          {error && (
-            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
-              {error}
-            </div>
-          )}
-        </div>
-
-        <div className="flex justify-end gap-3 p-5 border-t border-border mt-3">
-          <button
-            onClick={onClose}
-            disabled={submitting}
-            className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {t('common.actions.cancel')}
-          </button>
-          <button
-            onClick={handleSubmit}
-            disabled={!canSubmit}
-            className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-          >
-            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            {t('locker.soulImport.submit')}
-          </button>
+          <div className="flex justify-end gap-3 ml-auto shrink-0">
+            <button
+              onClick={onClose}
+              disabled={submitting}
+              className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
+            >
+              {t('common.actions.cancel')}
+            </button>
+            <button
+              onClick={handleSubmit}
+              disabled={!canSubmit}
+              className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              {t('locker.soulImport.submit')}
+            </button>
+          </div>
         </div>
       </div>
     </div>,
