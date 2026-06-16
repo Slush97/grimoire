@@ -15,7 +15,7 @@ import https from 'https';
 import dgram from 'dgram';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
-import { path7za } from '7zip-bin';
+import { find7zPath } from './extract';
 import {
     getDeadworksAddonsPath,
     getDeadworksMapsPath,
@@ -265,7 +265,11 @@ function decompressBz2(
     onProgress: (written: number) => void,
 ): Promise<void> {
     return new Promise<void>((resolve, reject) => {
-        const proc = spawn(path7za, ['e', '-so', bz2Path], { stdio: ['ignore', 'pipe', 'pipe'] });
+        // Use the same resolver as the archive extractor: it rewrites the bundled
+        // 7za path to its app.asar.unpacked location (binaries inside the asar
+        // can't be spawned) and falls back to a system 7-Zip / PATH lookup.
+        const sevenZip = find7zPath()[0];
+        const proc = spawn(sevenZip, ['e', '-so', bz2Path], { stdio: ['ignore', 'pipe', 'pipe'] });
         const out = createWriteStream(destPath);
         let written = 0;
         let settled = false;

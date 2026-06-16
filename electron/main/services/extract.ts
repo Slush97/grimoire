@@ -18,7 +18,7 @@ function resolveUnpackedPath(p: string): string {
 /**
  * Find 7z executable paths, preferring the bundled binary over system installs.
  */
-function find7zPath(): string[] {
+export function find7zPath(): string[] {
     const candidates: string[] = [];
 
     // 1. Bundled 7za (ships with the app, no user install required)
