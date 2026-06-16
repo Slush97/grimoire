@@ -561,6 +561,81 @@
   "locker": {
     "empty": {
       "noGamePath": "Set your Deadlock path or enable dev mode."
+    },
+    "global": {
+      "activeBadgeTitle": "This soul container is active and loaded in-game",
+      "disabledBadge": "Disabled",
+      "disabledBadgeTitle": "This mod is disabled and not loaded in-game"
+    },
+    "soulImport": {
+      "trigger": {
+        "label": "Import Soul Container (GLB)",
+        "ariaLabel": "Import soul container from GLB",
+        "title": "Import a soul container from a 3D model (.glb): orient it, preview it, and build a tracked local mod"
+      },
+      "title": "Import Soul Container (GLB)",
+      "submit": "Build & Import",
+      "dropzone": {
+        "ariaBrowse": "Drop a GLB here or press Enter to browse",
+        "ariaSelected": "GLB selected: {{path}}. Press Enter to change.",
+        "prompt": "Drop a .glb here, or click to browse",
+        "previewEmpty": "Drop a GLB to preview it fitted to the soul container."
+      },
+      "preview": {
+        "noMeshGeometry": "No mesh geometry",
+        "statsLabel_one": "{{count}} mesh · {{verts}} verts · span {{span}}",
+        "statsLabel_other": "{{count}} meshes · {{verts}} verts · span {{span}}",
+        "orientationLabel": "Orientation:",
+        "vanillaShell": "Vanilla shell"
+      },
+      "fields": {
+        "name": "Name",
+        "namePlaceholder": "My soul container",
+        "notes": "Notes",
+        "notesOptional": "(optional)",
+        "notesPlaceholder": "e.g. test build, source GLB notes",
+        "nsfw": "Mark as NSFW"
+      },
+      "orient": {
+        "label": "Orientation",
+        "yUp": "Y-up",
+        "zUp": "Z-up",
+        "flipY": "Flip Y",
+        "auto": "Auto",
+        "customRotation": "custom rotation",
+        "customRotationResolved": "custom rotation ({{orient}})",
+        "rotateMinus": "Rotate {{axis}} minus 90",
+        "rotatePlus": "Rotate {{axis}} plus 90",
+        "axisDegrees": "{{axis}} degrees",
+        "deg": "deg",
+        "flipVertical": "Flip vertical"
+      },
+      "glow": {
+        "label": "Soul glow",
+        "recolor": "Recolor",
+        "recolorHint": "Tint the soul glow to the model's dominant color",
+        "base": "Keep gold",
+        "baseHint": "Ship the stock gold glow unchanged",
+        "off": "None",
+        "offHint": "Don't ship particles; base game glow plays",
+        "notShownHint": "The glow color isn't shown in this preview (particles render in-game only)."
+      },
+      "conflict": {
+        "heading": "A soul container is already enabled",
+        "body": "Only one soul container can be active at a time (they override the same model). Choose what to do with “{{name}}”:",
+        "replace": "Replace it",
+        "addNew": "Add as new (both enabled)"
+      },
+      "errors": {
+        "noMeshGeometry": "GLB preview loaded, but it has no mesh geometry.",
+        "previewFailed": "Soul container preview failed: {{error}}",
+        "expectedGlb": "Expected a .glb file (got “{{name}}”).",
+        "dropPathUnresolved": "Could not resolve the dropped file path."
+      },
+      "dialog": {
+        "title": "Select a GLB model",
+        "filterName": "glTF binary"
+      }
     }
   },
   "profiles": {

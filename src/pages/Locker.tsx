@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star } from 'lucide-react';
+import { ArrowLeft, Boxes, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   getGamebananaCategories,
@@ -19,6 +19,9 @@ import ModThumbnail from '../components/ModThumbnail';
 import { SoulRegistryProvider } from '../components/locker/SoulRegistryProvider';
 const SoulContainerTile = lazy(() => import('../components/locker/SoulContainerTile'));
 const SoulContainerCanvas = lazy(() => import('../components/locker/SoulContainerCanvas'));
+// Heavy (three.js): only pulled in when the user opens the soul-container GLB
+// import from the global Locker tab, mirroring the Installed-page trigger.
+const SoulContainerImportModal = lazy(() => import('../components/locker/SoulContainerImportModal'));
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { GlobalModType, Mod } from '../types/mod';
@@ -139,6 +142,15 @@ export default function Locker() {
     return stored === 'list' ? 'list' : 'gallery';
   });
   const [abilityRecolorSupport, setAbilityRecolorSupport] = useState<Record<string, boolean>>({});
+  // Soul-container GLB import (lazy three.js modal), openable from the global
+  // Locker tab. Mirrors the Installed-page trigger.
+  const [soulImportOpen, setSoulImportOpen] = useState(false);
+  // Enabled soul-container imports (they override the same model), so the modal
+  // can warn + offer to replace rather than silently stack two.
+  const existingSoulImports = useMemo(
+    () => mods.filter((m) => m.enabled && m.globalType === 'soul-container'),
+    [mods]
+  );
   // List-view accordion state. The Settings preference decides the initial
   // state; after that, manual expand/collapse stays under the user's control.
   const [expandedHeroes, setExpandedHeroes] = useState<Set<number>>(() => new Set());
@@ -830,8 +842,21 @@ export default function Locker() {
             onBack={() => navigate('/locker')}
             onToggle={selectGlobalMod}
             onSetGlobalType={tagModGlobalType}
+            onImportSoul={() => setSoulImportOpen(true)}
           />
         </div>
+      )}
+
+      {soulImportOpen && (
+        <Suspense fallback={null}>
+          <SoulContainerImportModal
+            onClose={() => setSoulImportOpen(false)}
+            existingSoulImports={existingSoulImports}
+            onImported={() => {
+              void loadMods();
+            }}
+          />
+        </Suspense>
       )}
     </div>
   );
@@ -915,6 +940,8 @@ interface LockerGlobalViewProps {
   onToggle: (modId: string) => void | Promise<unknown>;
   /** Reassign a mod to another global type, or null to drop it off the axis. */
   onSetGlobalType: (modId: string, globalType: GlobalModType | null) => void | Promise<unknown>;
+  /** Open the soul-container GLB import modal (shown on the soul-container tab). */
+  onImportSoul: () => void;
 }
 
 /**
@@ -922,7 +949,8 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onImportSoul }: LockerGlobalViewProps) {
+  const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
   const available = GLOBAL_MOD_TYPE_ORDER.filter((type) => groups[type].length > 0);
   const [selectedType, setSelectedType] = useState<GlobalModType>(
@@ -1081,6 +1109,17 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                 <span className="text-xs text-white/60">
                   {activeMods.length} mod{activeMods.length !== 1 ? 's' : ''}
                 </span>
+                {activeType === 'soul-container' && (
+                  <button
+                    type="button"
+                    onClick={onImportSoul}
+                    className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                    title={t('locker.soulImport.trigger.title')}
+                  >
+                    <Boxes className="h-3.5 w-3.5" />
+                    {t('locker.soulImport.trigger.label')}
+                  </button>
+                )}
               </div>
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
                 {activeMods.map((mod) => {
@@ -1184,9 +1223,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                                   tone="accent"
                                   variant="overlay"
                                   icon={Check}
-                                  title="This soul container is active and loaded in-game"
+                                  title={t('locker.global.activeBadgeTitle')}
                                 >
-                                  Active
+                                  {t('common.status.active')}
                                 </Tag>
                               </div>
                             )
@@ -1196,9 +1235,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType 
                                   tone="neutral"
                                   variant="overlay"
                                   icon={PowerOff}
-                                  title="This mod is disabled and not loaded in-game"
+                                  title={t('locker.global.disabledBadgeTitle')}
                                 >
-                                  Disabled
+                                  {t('locker.global.disabledBadge')}
                                 </Tag>
                               </div>
                             )}

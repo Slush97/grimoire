@@ -1,5 +1,7 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import * as THREE from 'three';
 import {
   AlertTriangle,
@@ -29,17 +31,17 @@ interface SoulContainerImportModalProps {
   initialGlbPath?: string;
 }
 
-const ORIENT_OPTIONS: { value: SoulOrientMode; label: string }[] = [
-  { value: 'y-up', label: 'Y-up' },
-  { value: 'z-up', label: 'Z-up' },
-  { value: 'flip-y', label: 'Flip Y' },
-  { value: 'auto', label: 'Auto' },
+const ORIENT_OPTIONS: { value: SoulOrientMode; labelKey: string }[] = [
+  { value: 'y-up', labelKey: 'locker.soulImport.orient.yUp' },
+  { value: 'z-up', labelKey: 'locker.soulImport.orient.zUp' },
+  { value: 'flip-y', labelKey: 'locker.soulImport.orient.flipY' },
+  { value: 'auto', labelKey: 'locker.soulImport.orient.auto' },
 ];
 
-const GLOW_OPTIONS: { value: GlowMode; label: string; hint: string }[] = [
-  { value: 'recolor', label: 'Recolor', hint: "Tint the soul glow to the model's dominant color" },
-  { value: 'base', label: 'Keep gold', hint: 'Ship the stock gold glow unchanged' },
-  { value: 'off', label: 'None', hint: "Don't ship particles; base game glow plays" },
+const GLOW_OPTIONS: { value: GlowMode; labelKey: string; hintKey: string }[] = [
+  { value: 'recolor', labelKey: 'locker.soulImport.glow.recolor', hintKey: 'locker.soulImport.glow.recolorHint' },
+  { value: 'base', labelKey: 'locker.soulImport.glow.base', hintKey: 'locker.soulImport.glow.baseHint' },
+  { value: 'off', labelKey: 'locker.soulImport.glow.off', hintKey: 'locker.soulImport.glow.offHint' },
 ];
 
 function deriveNameFromPath(path: string): string {
@@ -52,7 +54,7 @@ function norm360(deg: number): number {
   return ((deg % 360) + 360) % 360;
 }
 
-function describeScene(scene: THREE.Object3D): { meshCount: number; label: string } {
+function describeScene(scene: THREE.Object3D, t: TFunction): { meshCount: number; label: string } {
   let meshCount = 0;
   let vertexCount = 0;
   const box = new THREE.Box3();
@@ -73,13 +75,17 @@ function describeScene(scene: THREE.Object3D): { meshCount: number; label: strin
     }
   });
 
-  if (!meshCount || !hasBounds) return { meshCount, label: 'No mesh geometry' };
+  if (!meshCount || !hasBounds) return { meshCount, label: t('locker.soulImport.preview.noMeshGeometry') };
 
   const size = box.getSize(new THREE.Vector3());
   const span = Math.max(size.x, size.y, size.z);
   return {
     meshCount,
-    label: `${meshCount} mesh${meshCount === 1 ? '' : 'es'} · ${vertexCount.toLocaleString()} verts · span ${span.toFixed(2)}`,
+    label: t('locker.soulImport.preview.statsLabel', {
+      count: meshCount,
+      verts: vertexCount.toLocaleString(),
+      span: span.toFixed(2),
+    }),
   };
 }
 
@@ -89,6 +95,7 @@ export default function SoulContainerImportModal({
   existingSoulImports,
   initialGlbPath = '',
 }: SoulContainerImportModalProps) {
+  const { t } = useTranslation();
   const [glbPath, setGlbPath] = useState<string>(initialGlbPath);
   const [name, setName] = useState<string>(initialGlbPath ? deriveNameFromPath(initialGlbPath) : '');
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
@@ -146,16 +153,16 @@ export default function SoulContainerImportModal({
           sceneRef.current = gltf.scene;
           setScene(gltf.scene);
           setResolvedOrient(preview.orient);
-          const stats = describeScene(gltf.scene);
+          const stats = describeScene(gltf.scene, t);
           setPreviewStats(stats.label);
-          if (stats.meshCount === 0) setError('GLB preview loaded, but it has no mesh geometry.');
+          if (stats.meshCount === 0) setError(t('locker.soulImport.errors.noMeshGeometry'));
         } catch (err) {
           if (!cancelled) {
             if (sceneRef.current) disposeScene(sceneRef.current);
             sceneRef.current = null;
             setScene(null);
             setPreviewStats(null);
-            setError(`Soul container preview failed: ${String(err)}`);
+            setError(t('locker.soulImport.errors.previewFailed', { error: String(err) }));
           }
         } finally {
           if (!cancelled) setBuilding(false);
@@ -167,7 +174,7 @@ export default function SoulContainerImportModal({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [glbPath, orientMode, rotate, glow, hasRotation]);
+  }, [glbPath, orientMode, rotate, glow, hasRotation, t]);
 
   const acceptGlbPath = (picked: string) => {
     setError(null);
@@ -177,8 +184,8 @@ export default function SoulContainerImportModal({
 
   const pickGlb = async () => {
     const picked = await showOpenDialog({
-      title: 'Select a GLB model',
-      filters: [{ name: 'glTF binary', extensions: ['glb'] }],
+      title: t('locker.soulImport.dialog.title'),
+      filters: [{ name: t('locker.soulImport.dialog.filterName'), extensions: ['glb'] }],
     });
     if (picked) acceptGlbPath(picked);
   };
@@ -190,12 +197,12 @@ export default function SoulContainerImportModal({
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
     if (!/\.glb$/i.test(file.name)) {
-      setError(`Expected a .glb file (got "${file.name}").`);
+      setError(t('locker.soulImport.errors.expectedGlb', { name: file.name }));
       return;
     }
     const path = window.electronAPI.getDroppedFilePath(file);
     if (!path) {
-      setError('Could not resolve the dropped file path.');
+      setError(t('locker.soulImport.errors.dropPathUnresolved'));
       return;
     }
     acceptGlbPath(path);
@@ -218,7 +225,9 @@ export default function SoulContainerImportModal({
   };
 
   const modeLabel = hasRotation
-    ? `custom rotation${resolvedOrient ? ` (${resolvedOrient})` : ''}`
+    ? resolvedOrient
+      ? t('locker.soulImport.orient.customRotationResolved', { orient: resolvedOrient })
+      : t('locker.soulImport.orient.customRotation')
     : (resolvedOrient ?? orientMode);
 
   const canSubmit = !!glbPath && !!scene && !!name.trim() && !submitting && !building;
@@ -259,12 +268,12 @@ export default function SoulContainerImportModal({
         <div className="flex items-center justify-between p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
             <Boxes className="w-5 h-5" />
-            Import Soul Container (GLB)
+            {t('locker.soulImport.title')}
           </h3>
           <button
             onClick={onClose}
             className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -276,7 +285,7 @@ export default function SoulContainerImportModal({
             <div
               role="button"
               tabIndex={0}
-              aria-label={glbPath ? `GLB selected: ${glbPath}. Press Enter to change.` : 'Drop a GLB here or press Enter to browse'}
+              aria-label={glbPath ? t('locker.soulImport.dropzone.ariaSelected', { path: glbPath }) : t('locker.soulImport.dropzone.ariaBrowse')}
               onClick={pickGlb}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -303,7 +312,7 @@ export default function SoulContainerImportModal({
                 </span>
               ) : (
                 <span className="text-sm text-text-primary font-medium">
-                  Drop a <code className="font-mono text-accent">.glb</code> here, or click to browse
+                  {t('locker.soulImport.dropzone.prompt')}
                 </span>
               )}
             </div>
@@ -322,7 +331,7 @@ export default function SoulContainerImportModal({
                 </Suspense>
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center text-xs text-text-secondary px-6 text-center">
-                  {glbPath ? '' : 'Drop a GLB to preview it fitted to the soul container.'}
+                  {glbPath ? '' : t('locker.soulImport.dropzone.previewEmpty')}
                 </div>
               )}
               {building && (
@@ -342,7 +351,7 @@ export default function SoulContainerImportModal({
                   )}
                 <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between text-[11px]">
                   <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary">
-                    Orientation: <span className="text-text-primary">{modeLabel}</span>
+                    {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
                   </span>
                   <label className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none">
                     <input
@@ -351,7 +360,7 @@ export default function SoulContainerImportModal({
                       onChange={(e) => setShowVanilla(e.target.checked)}
                       className="w-3 h-3 accent-accent cursor-pointer"
                     />
-                    Vanilla shell
+                    {t('locker.soulImport.preview.vanillaShell')}
                   </label>
                 </div>
                 </>
@@ -363,20 +372,20 @@ export default function SoulContainerImportModal({
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-text-primary mb-1.5">
-                Name <span className="text-red-400">*</span>
+                {t('locker.soulImport.fields.name')} <span className="text-red-400">*</span>
               </label>
               <input
                 type="text"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="My soul container"
+                placeholder={t('locker.soulImport.fields.namePlaceholder')}
                 className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
               />
             </div>
 
             {/* Orientation */}
             <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Orientation</label>
+              <label className="block text-sm font-medium text-text-primary mb-1.5">{t('locker.soulImport.orient.label')}</label>
               <div className="grid grid-cols-4 gap-1.5 mb-2">
                 {ORIENT_OPTIONS.map((opt) => (
                   <button
@@ -388,7 +397,7 @@ export default function SoulContainerImportModal({
                         : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
                     }`}
                   >
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </button>
                 ))}
               </div>
@@ -401,14 +410,14 @@ export default function SoulContainerImportModal({
                     <button
                       onClick={() => bumpAxis(axis as 0 | 1 | 2, -90)}
                       className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer"
-                      aria-label={`Rotate ${axisLabel} minus 90`}
+                      aria-label={t('locker.soulImport.orient.rotateMinus', { axis: axisLabel })}
                     >
                       <RotateCcw className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => bumpAxis(axis as 0 | 1 | 2, 90)}
                       className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer"
-                      aria-label={`Rotate ${axisLabel} plus 90`}
+                      aria-label={t('locker.soulImport.orient.rotatePlus', { axis: axisLabel })}
                     >
                       <RotateCw className="w-3.5 h-3.5" />
                     </button>
@@ -418,9 +427,9 @@ export default function SoulContainerImportModal({
                       onChange={(e) => setAxis(axis as 0 | 1 | 2, parseFloat(e.target.value))}
                       step={15}
                       className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent"
-                      aria-label={`${axisLabel} degrees`}
+                      aria-label={t('locker.soulImport.orient.axisDegrees', { axis: axisLabel })}
                     />
-                    <span className="text-[11px] text-text-secondary">deg</span>
+                    <span className="text-[11px] text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
                   </div>
                 ))}
                 <div className="flex gap-1.5 pt-0.5">
@@ -428,13 +437,13 @@ export default function SoulContainerImportModal({
                     onClick={() => bumpAxis(0, 180)}
                     className="flex-1 px-2 py-1 rounded border border-border bg-bg-tertiary/60 text-xs text-text-secondary hover:bg-bg-tertiary cursor-pointer"
                   >
-                    Flip vertical
+                    {t('locker.soulImport.orient.flipVertical')}
                   </button>
                   <button
                     onClick={() => setRotate([0, 0, 0])}
                     className="flex-1 px-2 py-1 rounded border border-border bg-bg-tertiary/60 text-xs text-text-secondary hover:bg-bg-tertiary cursor-pointer flex items-center justify-center gap-1"
                   >
-                    <RefreshCw className="w-3 h-3" /> Reset
+                    <RefreshCw className="w-3 h-3" /> {t('common.actions.reset')}
                   </button>
                 </div>
               </div>
@@ -442,37 +451,37 @@ export default function SoulContainerImportModal({
 
             {/* Glow */}
             <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">Soul glow</label>
+              <label className="block text-sm font-medium text-text-primary mb-1.5">{t('locker.soulImport.glow.label')}</label>
               <div className="grid grid-cols-3 gap-1.5">
                 {GLOW_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
                     onClick={() => setGlow(opt.value)}
-                    title={opt.hint}
+                    title={t(opt.hintKey)}
                     className={`px-2 py-1.5 rounded-lg text-xs font-medium border transition-colors cursor-pointer ${
                       glow === opt.value
                         ? 'border-accent/60 bg-accent/15 text-text-primary'
                         : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
                     }`}
                   >
-                    {opt.label}
+                    {t(opt.labelKey)}
                   </button>
                 ))}
               </div>
               <p className="mt-1 text-[11px] text-text-secondary">
-                The glow color isn&apos;t shown in this preview (particles render in-game only).
+                {t('locker.soulImport.glow.notShownHint')}
               </p>
             </div>
 
             <div>
               <label className="block text-sm font-medium text-text-primary mb-1.5">
-                Notes <span className="text-text-secondary font-normal">(optional)</span>
+                {t('locker.soulImport.fields.notes')} <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
               </label>
               <input
                 type="text"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
-                placeholder="e.g. test build, source GLB notes"
+                placeholder={t('locker.soulImport.fields.notesPlaceholder')}
                 className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
               />
             </div>
@@ -484,7 +493,7 @@ export default function SoulContainerImportModal({
                 onChange={(e) => setNsfw(e.target.checked)}
                 className="w-4 h-4 accent-accent cursor-pointer"
               />
-              Mark as NSFW
+              {t('locker.soulImport.fields.nsfw')}
             </label>
           </div>
         </div>
@@ -495,11 +504,10 @@ export default function SoulContainerImportModal({
             <div className="text-sm text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-3 space-y-2">
               <div className="flex items-center gap-2 font-medium">
                 <AlertTriangle className="w-4 h-4" />
-                A soul container is already enabled
+                {t('locker.soulImport.conflict.heading')}
               </div>
               <p className="text-xs text-amber-200/90">
-                Only one soul container can be active at a time (they override the same model). Choose what to do with
-                <span className="text-text-primary"> &ldquo;{existingSoulImports[0].name}&rdquo;</span>:
+                {t('locker.soulImport.conflict.body', { name: existingSoulImports[0].name })}
               </p>
               <div className="flex gap-1.5">
                 <button
@@ -510,7 +518,7 @@ export default function SoulContainerImportModal({
                       : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
                   }`}
                 >
-                  Replace it
+                  {t('locker.soulImport.conflict.replace')}
                 </button>
                 <button
                   onClick={() => setReplaceExisting(false)}
@@ -520,7 +528,7 @@ export default function SoulContainerImportModal({
                       : 'border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary'
                   }`}
                 >
-                  Add as new (both enabled)
+                  {t('locker.soulImport.conflict.addNew')}
                 </button>
               </div>
             </div>
@@ -539,7 +547,7 @@ export default function SoulContainerImportModal({
             disabled={submitting}
             className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
           >
-            Cancel
+            {t('common.actions.cancel')}
           </button>
           <button
             onClick={handleSubmit}
@@ -547,7 +555,7 @@ export default function SoulContainerImportModal({
             className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
           >
             {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
-            Build &amp; Import
+            {t('locker.soulImport.submit')}
           </button>
         </div>
       </div>

@@ -2902,7 +2902,7 @@ export default function Installed() {
                 Import Custom Mod
               </Button>
               <Button variant="secondary" onClick={() => setSoulImportOpen(true)} icon={Boxes}>
-                Import Soul Container (GLB)
+                {t('locker.soulImport.trigger.label')}
               </Button>
             </div>
           }
@@ -3245,8 +3245,8 @@ export default function Installed() {
               onClick={() => setSoulImportOpen(true)}
               icon={Boxes}
               className="!px-2.5"
-              aria-label="Import soul container from GLB"
-              title="Import a soul container from a 3D model (.glb): orient it, preview it, and build a tracked local mod"
+              aria-label={t('locker.soulImport.trigger.ariaLabel')}
+              title={t('locker.soulImport.trigger.title')}
             />
             <Button
               variant="secondary"
