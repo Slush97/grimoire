@@ -723,6 +723,7 @@ export interface ElectronAPI {
         download: (
             languageCode: string
         ) => Promise<import('./locales').DownloadedLocale>;
+        refresh: () => Promise<import('./locales').DownloadedLocale[]>;
     };
 
     // Stats API

@@ -883,6 +883,11 @@ export async function downloadLocale(languageCode: string): Promise<DownloadedLo
   return window.electronAPI.locales.download(languageCode);
 }
 
+/** Re-fetch downloaded catalogs, returning only the ones whose content changed. */
+export async function refreshDownloadedLocales(): Promise<DownloadedLocale[]> {
+  return window.electronAPI.locales.refresh();
+}
+
 // ── Deadworks custom-server browser ──
 import type {
   DeadworksServer,

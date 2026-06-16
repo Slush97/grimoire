@@ -3,6 +3,7 @@ import {
     downloadLanguage,
     fetchRemoteManifest,
     listDownloadedLanguages,
+    refreshDownloadedLanguages,
 } from '../services/localeDownload';
 
 ipcMain.handle('locales:getManifest', async () => {
@@ -15,4 +16,8 @@ ipcMain.handle('locales:listDownloaded', async () => {
 
 ipcMain.handle('locales:download', async (_event, languageCode: string) => {
     return downloadLanguage(languageCode);
+});
+
+ipcMain.handle('locales:refresh', async () => {
+    return refreshDownloadedLanguages();
 });

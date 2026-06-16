@@ -136,7 +136,29 @@ export async function hydrateDownloadedLocales(): Promise<string[]> {
   } catch {
     // localStorage unavailable; bundled-language users are unaffected.
   }
+  // In the background, pull any translation fixes published to `main` since these
+  // catalogs were downloaded. Non-blocking so it never delays first paint.
+  void refreshDownloadedCatalogs(api);
   return codes;
+}
+
+/**
+ * Re-fetch downloaded catalogs and live-swap any that changed on `main`. If the
+ * active language was among them, nudge i18next so mounted components re-render
+ * with the updated strings. Silent on failure (offline, etc.).
+ */
+async function refreshDownloadedCatalogs(
+  api: NonNullable<typeof window.electronAPI>['locales']
+): Promise<void> {
+  try {
+    const updated = await api.refresh();
+    if (!updated.length) return;
+    for (const { code, catalog } of updated) registerDownloadedCatalog(code, catalog);
+    const active = i18n.language;
+    if (updated.some((u) => u.code === active)) void i18n.changeLanguage(active);
+  } catch {
+    // Offline or IPC failure: users keep their cached catalogs.
+  }
 }
 
 /** Human-readable name for a language code, in that language's own form

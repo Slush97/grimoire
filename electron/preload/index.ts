@@ -475,6 +475,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
         listDownloaded: () => ipcRenderer.invoke('locales:listDownloaded'),
         download: (languageCode: string) =>
             ipcRenderer.invoke('locales:download', languageCode),
+        refresh: () => ipcRenderer.invoke('locales:refresh'),
     },
 
     // Stats
