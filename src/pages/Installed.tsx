@@ -64,7 +64,7 @@ import {
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
 import { showToast } from '../stores/toastStore';
-import { useAppStore } from '../stores/appStore';
+import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
@@ -621,6 +621,7 @@ export default function Installed() {
     importCustomMod,
     soundVolume,
     setInstalledScrollTop,
+    setBrowseUi,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
 
@@ -1044,7 +1045,7 @@ export default function Installed() {
     setDetailsDates(null);
     try {
       const [details, cached] = await Promise.all([
-        getModDetails(m.gameBananaId, section),
+        getModDetails(m.gameBananaId, section, { includeSubmitter: true }),
         window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null),
       ]);
       setDetailsMod(details);
@@ -2362,27 +2363,40 @@ export default function Installed() {
   const openEntryPicker = useStableCallback((gameBananaId: number) => {
     setPickerGroupId(gameBananaId);
   });
-  // Open the mod author's GameBanana profile. We don't store the submitter
-  // locally, so resolve from the catalog cache first (instant when the mod is
-  // mirrored) and fall back to a live details fetch.
+  // Open an artist's page inside Grimoire by entering Browse's artist mode (the
+  // grid scoped to that submitter), the same surface the artist card in a mod's
+  // details opens.
+  const openArtistPage = useStableCallback((artist: BrowseArtistRef) => {
+    if (!artist?.id || artist.id <= 0) return;
+    closeModDetails();
+    setBrowseUi({ submitter: artist });
+    navigate('/browse');
+  });
+  // Kebab-menu entry point: we don't store the submitter locally, so resolve it
+  // from the catalog cache first (instant when the mod is mirrored) and fall
+  // back to a live details fetch before opening the artist page.
   const viewEntryAuthor = useStableCallback(async (mod: Mod) => {
     if (!mod.gameBananaId) return;
     try {
       const cached = await window.electronAPI.getCachedMod(mod.gameBananaId).catch(() => null);
-      let url =
+      let artist: BrowseArtistRef | undefined =
         cached?.submitterId && cached.submitterId > 0
-          ? `https://gamebanana.com/members/${cached.submitterId}`
+          ? { id: cached.submitterId, name: cached.submitterName ?? 'Artist', profileUrl: cached.profileUrl }
           : undefined;
-      if (!url) {
-        const details = await getModDetails(mod.gameBananaId, mod.sourceSection ?? 'Mod');
+      if (!artist) {
+        const details = await getModDetails(mod.gameBananaId, mod.sourceSection ?? 'Mod', {
+          includeSubmitter: true,
+        });
         const s = details.submitter;
-        url = s?.profileUrl ?? (s && s.id > 0 ? `https://gamebanana.com/members/${s.id}` : undefined);
+        if (s && s.id > 0) {
+          artist = { id: s.id, name: s.name, avatarUrl: s.avatarUrl, profileUrl: s.profileUrl, kofiUrl: s.kofiUrl };
+        }
       }
-      if (!url) {
+      if (!artist) {
         showToast("Couldn't find this mod's author page", { tone: 'error' });
         return;
       }
-      window.open(url, '_blank', 'noopener,noreferrer');
+      openArtistPage(artist);
     } catch (err) {
       showToast(`Couldn't open author page: ${err instanceof Error ? err.message : String(err)}`, {
         tone: 'error',
@@ -3618,6 +3632,7 @@ export default function Installed() {
           ignoreUpdates={detailsIgnoreUpdates}
           onToggleIgnoreUpdates={handleToggleIgnoreUpdates}
           onClose={closeModDetails}
+          onViewArtist={openArtistPage}
           onDownload={handleDetailsDownload}
           onNavigatePrevious={
             previousDetailsEntry ? () => navigateToDetailsEntry(previousDetailsEntry) : undefined
