@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Check, type LucideIcon } from 'lucide-react';
+import Tx from '../translation/Tx';
 
 interface CardProps {
     children?: ReactNode;
@@ -7,7 +8,7 @@ interface CardProps {
     contentClassName?: string;
     title?: ReactNode;
     icon?: LucideIcon;
-    description?: string;
+    description?: ReactNode;
     action?: ReactNode;
     // Controls the left accent bar. 'subtle' is the default HUD callout look;
     // 'active' makes the bar thicker and full-opacity so it can stand in for a
@@ -125,7 +126,7 @@ export function Tag({
 export function ArchivedTag({ className = '' }: { className?: string }) {
     return (
         <span className={`flex-shrink-0 text-[10px] uppercase tracking-wide bg-bg-primary text-text-secondary rounded px-1.5 py-0.5 border border-border ${className}`}>
-            Archived
+            <Tx k="common.status.archived" fallback="Archived" />
         </span>
     );
 }
@@ -164,7 +165,7 @@ interface SliderProps {
     max: number;
     step?: number;
     onChange: (value: number) => void;
-    label?: string;
+    label?: ReactNode;
     showValue?: boolean;
     className?: string;
     formatValue?: (val: number) => string;
@@ -270,8 +271,8 @@ export function Slider({
 interface ToggleProps {
     checked: boolean;
     onChange: (checked: boolean) => void;
-    label?: string;
-    description?: string;
+    label?: ReactNode;
+    description?: ReactNode;
     className?: string;
     disabled?: boolean;
 }

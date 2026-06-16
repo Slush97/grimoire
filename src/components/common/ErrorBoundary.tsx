@@ -1,5 +1,6 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
+import Tx from '../translation/Tx';
 
 interface ErrorBoundaryProps {
     children: ReactNode;
@@ -54,9 +55,14 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                     <div className="p-4 bg-red-500/10 rounded-full mb-4">
                         <AlertTriangle className="w-12 h-12 text-red-400" />
                     </div>
-                    <h2 className="text-xl font-bold text-text-primary mb-2">Something went wrong</h2>
+                    <h2 className="text-xl font-bold text-text-primary mb-2">
+                        <Tx k="common.errorBoundary.title" fallback="Something went wrong" />
+                    </h2>
                     <p className="text-text-secondary max-w-md mb-4">
-                        An error occurred while rendering this component. This won't affect other parts of the app.
+                        <Tx
+                            k="common.errorBoundary.description"
+                            fallback="An error occurred while rendering this component. This won't affect other parts of the app."
+                        />
                     </p>
                     {this.state.error && (
                         <pre className="text-xs text-red-400 bg-red-500/5 border border-red-500/20 rounded-lg p-3 mb-4 max-w-lg overflow-auto">
@@ -68,7 +74,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                         className="flex items-center gap-2 px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer"
                     >
                         <RefreshCw className="w-4 h-4" />
-                        Try Again
+                        <Tx k="common.errorBoundary.tryAgain" fallback="Try Again" />
                     </button>
                 </div>
             );

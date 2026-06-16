@@ -1,5 +1,7 @@
 import { ArrowDownUp, Crown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ModConflict } from '../../lib/api';
+import Tx from '../translation/Tx';
 
 interface ConflictModRef {
   id: string;
@@ -34,6 +36,7 @@ export default function ConflictReorderActions({
   busy,
   onSetWinner,
 }: ConflictReorderActionsProps) {
+  const { t } = useTranslation();
   const aIdx = orderedEnabledIds.indexOf(modA.id);
   const bIdx = orderedEnabledIds.indexOf(modB.id);
   // Reordering only moves mods that hold a load-order slot. A disabled mod has
@@ -44,11 +47,9 @@ export default function ConflictReorderActions({
   const aWins = bothEnabled && aIdx < bIdx;
   const bWins = bothEnabled && bIdx < aIdx;
 
-  const label =
-    conflict.conflictType === 'file' ? 'Wins shared files' : 'Resolve by load order';
   const hint = bothEnabled
-    ? 'The mod that loads first overrides shared files. This sets the pair adjacent in load order.'
-    : 'Enable both mods to set their load order.';
+    ? t('conflicts.reorder.hint')
+    : t('conflicts.reorder.enableBothHint');
 
   const renderButton = (mod: ConflictModRef, other: ConflictModRef, isWinner: boolean) => (
     <button
@@ -57,10 +58,10 @@ export default function ConflictReorderActions({
       disabled={busy || !bothEnabled || isWinner}
       title={
         !bothEnabled
-          ? 'Enable both mods to set their load order.'
+          ? t('conflicts.reorder.enableBothHint')
           : isWinner
-            ? `${mod.name} already wins this conflict`
-            : `Make ${mod.name} win (load it before ${other.name})`
+            ? t('conflicts.reorder.alreadyWins', { name: mod.name })
+            : t('conflicts.reorder.makeWinner', { name: mod.name, other: other.name })
       }
       className={`flex min-w-0 items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-xs font-medium transition-colors ${
         isWinner
@@ -82,7 +83,11 @@ export default function ConflictReorderActions({
         title={hint}
       >
         <ArrowDownUp className="w-3 h-3 flex-shrink-0" />
-        {label}
+        {conflict.conflictType === 'file' ? (
+          <Tx k="conflicts.reorder.winsSharedFiles" fallback="Wins shared files" />
+        ) : (
+          <Tx k="conflicts.reorder.resolveByLoadOrder" fallback="Resolve by load order" />
+        )}
       </div>
       <div className="grid grid-cols-2 gap-2">
         {renderButton(modA, modB, aWins)}

@@ -9,9 +9,11 @@ import {
     AlertCircle,
     type LucideIcon,
 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '../components/common/ui'
 import { Skeleton } from '../components/common/Skeleton'
 import { EmptyState } from '../components/common/PageComponents'
+import Tx from '../components/translation/Tx'
 import { usePlayerStore } from '../stores/stats/playerStore'
 import { useHeroStore } from '../stores/stats/heroStore'
 import { useLeaderboardStore } from '../stores/stats/leaderboardStore'
@@ -24,14 +26,15 @@ import { LeaderboardTab } from '../components/stats/tabs/LeaderboardTab'
 
 type Tab = 'overview' | 'matches' | 'social' | 'leaderboard'
 
-const TABS: { id: Tab; label: string; icon: LucideIcon; playerScoped: boolean }[] = [
-    { id: 'overview', label: 'Overview', icon: BarChart3, playerScoped: true },
-    { id: 'matches', label: 'Matches', icon: Gamepad2, playerScoped: true },
-    { id: 'social', label: 'Social', icon: Users2, playerScoped: true },
-    { id: 'leaderboard', label: 'Leaderboard', icon: Trophy, playerScoped: false },
+const TABS: { id: Tab; icon: LucideIcon; playerScoped: boolean }[] = [
+    { id: 'overview', icon: BarChart3, playerScoped: true },
+    { id: 'matches', icon: Gamepad2, playerScoped: true },
+    { id: 'social', icon: Users2, playerScoped: true },
+    { id: 'leaderboard', icon: Trophy, playerScoped: false },
 ]
 
 export default function Stats() {
+    const { t } = useTranslation()
     const [activeTab, setActiveTab] = useState<Tab>('overview')
 
     const detectSteamUsers = usePlayerStore((s) => s.detectSteamUsers)
@@ -72,13 +75,44 @@ export default function Stats() {
 
     const tab = TABS.find((t) => t.id === activeTab) ?? TABS[0]
 
+    const tabLabel = (id: Tab) => {
+        switch (id) {
+            case 'matches':
+                return t('stats.tabs.matches')
+            case 'social':
+                return t('stats.tabs.social')
+            case 'leaderboard':
+                return t('stats.tabs.leaderboard')
+            default:
+                return t('stats.tabs.overview')
+        }
+    }
+
+    const renderTabLabel = (id: Tab) => {
+        switch (id) {
+            case 'matches':
+                return <Tx k="stats.tabs.matches" fallback="Matches" />
+            case 'social':
+                return <Tx k="stats.tabs.social" fallback="Social" />
+            case 'leaderboard':
+                return <Tx k="stats.tabs.leaderboard" fallback="Leaderboard" />
+            default:
+                return <Tx k="stats.tabs.overview" fallback="Overview" />
+        }
+    }
+
     const renderPlayerScoped = (content: () => React.ReactNode) => {
         if (!selectedAccountId) {
             return (
                 <EmptyState
                     icon={Users}
-                    title="No player selected"
-                    description="Add a player from the dropdown in the top right to see their stats."
+                    title={<Tx k="stats.empty.noPlayerSelected.title" fallback="No player selected" />}
+                    description={
+                        <Tx
+                            k="stats.empty.noPlayerSelected.description"
+                            fallback="Add a player from the dropdown in the top right to see their stats."
+                        />
+                    }
                 />
             )
         }
@@ -86,12 +120,12 @@ export default function Stats() {
             return (
                 <EmptyState
                     icon={AlertCircle}
-                    title="Failed to load player data"
+                    title={<Tx k="stats.error.playerDataTitle" fallback="Failed to load player data" />}
                     description={playerData.error}
                     variant="error"
                     action={
                         <Button variant="secondary" icon={RefreshCw} onClick={() => syncPlayerData(selectedAccountId)}>
-                            Retry
+                            <Tx k="common.actions.retry" fallback="Retry" />
                         </Button>
                     }
                 />
@@ -121,29 +155,32 @@ export default function Stats() {
             <div className="px-6 py-3 border-b border-white/5 flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                     <BarChart3 className="w-6 h-6 text-accent shrink-0" />
-                    <h1 className="text-xl font-bold font-reaver tracking-wide truncate">Deadlock Stats</h1>
+                    <h1 className="text-xl font-bold font-reaver tracking-wide truncate">
+                        <Tx k="stats.title" fallback="Deadlock Stats" />
+                    </h1>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                     <PlayerSelect />
                     <Button variant="secondary" onClick={handleRefresh} icon={RefreshCw}>
-                        Refresh
+                        <Tx k="common.actions.refresh" fallback="Refresh" />
                     </Button>
                 </div>
             </div>
 
             <div className="flex gap-1 px-4 py-2 border-b border-white/5 overflow-x-auto">
-                {TABS.map((t) => (
+                {TABS.map((tabOption) => (
                     <button
-                        key={t.id}
-                        onClick={() => setActiveTab(t.id)}
+                        key={tabOption.id}
+                        onClick={() => setActiveTab(tabOption.id)}
+                        aria-label={tabLabel(tabOption.id)}
                         className={`flex items-center gap-2 px-4 py-2 rounded-sm transition-colors text-sm whitespace-nowrap cursor-pointer ${
-                            activeTab === t.id
+                            activeTab === tabOption.id
                                 ? 'border border-accent/40 bg-accent/10 text-accent'
                                 : 'border border-transparent text-text-secondary hover:text-white hover:bg-white/5'
                         }`}
                     >
-                        <t.icon className="w-4 h-4" />
-                        {t.label}
+                        <tabOption.icon className="w-4 h-4" />
+                        {renderTabLabel(tabOption.id)}
                     </button>
                 ))}
             </div>

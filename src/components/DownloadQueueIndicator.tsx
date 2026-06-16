@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, Loader2, X, ChevronUp, ChevronDown } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import type { DownloadQueueItem, DownloadProgressData } from '../types/electron';
 import { formatBytes } from '../lib/formatBytes';
+import Tx from './translation/Tx';
 
 interface DownloadQueueIndicatorProps {
     className?: string;
@@ -23,17 +26,18 @@ function formatSpeed(bytesPerSec: number): string {
     return `${formatBytes(bytesPerSec)}/s`;
 }
 
-function formatEta(seconds: number): string {
+function formatEta(seconds: number, t: TFunction): string {
     if (!isFinite(seconds) || seconds <= 0) return '';
-    if (seconds < 60) return `${Math.round(seconds)}s`;
+    if (seconds < 60) return t('downloadQueue.eta.seconds', { count: Math.round(seconds) });
     const m = Math.floor(seconds / 60);
     const s = Math.round(seconds % 60);
-    if (m < 60) return `${m}m ${s}s`;
+    if (m < 60) return t('downloadQueue.eta.minutesSeconds', { minutes: m, seconds: s });
     const h = Math.floor(m / 60);
-    return `${h}h ${m % 60}m`;
+    return t('downloadQueue.eta.hoursMinutes', { hours: h, minutes: m % 60 });
 }
 
 export default function DownloadQueueIndicator({ className = '' }: DownloadQueueIndicatorProps) {
+    const { t } = useTranslation();
     const [queueState, setQueueState] = useState<QueueState>({
         queue: [],
         currentDownload: null,
@@ -130,7 +134,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
 
     if (totalItems === 0) return null;
 
-    const currentFileName = queueState.currentDownload?.fileName ?? 'Preparing…';
+    const currentFileName = queueState.currentDownload?.fileName ?? t('downloadQueue.preparing');
     const currentTooltip = queueState.currentDownload?.modName ?? currentFileName;
 
     return (
@@ -147,7 +151,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                         type="button"
                         onClick={() => setIsExpanded(true)}
                         className="flex min-w-0 flex-1 items-center gap-2.5 px-3 py-2 cursor-pointer text-left"
-                        title="Show download details"
+                        title={t('downloadQueue.showDetails')}
                     >
                         <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded-full bg-accent/15">
                             {queueState.currentDownload ? (
@@ -171,7 +175,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 {totalItems > 1 && (
                                     <>
                                         <span className="opacity-50">·</span>
-                                        <span>{totalItems - 1} queued</span>
+                                        <span>{t('downloadQueue.remainingQueued', { count: totalItems - 1 })}</span>
                                     </>
                                 )}
                             </div>
@@ -186,8 +190,8 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                 void handleCancelActive();
                             }}
                             className="flex flex-shrink-0 items-center justify-center border-l border-white/5 px-3 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
-                            aria-label="Cancel download"
-                            title="Cancel download"
+                            aria-label={t('downloadQueue.cancelDownload')}
+                            title={t('downloadQueue.cancelDownload')}
                         >
                             <X className="h-4 w-4" />
                         </button>
@@ -212,15 +216,17 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                     <div className="flex items-center justify-between border-b border-white/5 px-4 py-3">
                         <div className="flex items-center gap-2">
                             <Download className="h-4 w-4 text-accent" />
-                            <span className="text-sm font-semibold text-text-primary">Downloads</span>
+                            <span className="text-sm font-semibold text-text-primary">
+                                <Tx k="downloadQueue.downloads" fallback="Downloads" />
+                            </span>
                             <span className="text-xs text-text-secondary">({totalItems})</span>
                         </div>
                         <button
                             type="button"
                             onClick={() => setIsExpanded(false)}
                             className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary transition-colors cursor-pointer"
-                            aria-label="Collapse"
-                            title="Collapse"
+                            aria-label={t('downloadQueue.collapse')}
+                            title={t('downloadQueue.collapse')}
                         >
                             <ChevronDown className="h-4 w-4" />
                         </button>
@@ -243,8 +249,8 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                     type="button"
                                     onClick={() => void handleCancelActive()}
                                     className="rounded-md p-1 text-text-secondary transition-colors hover:bg-red-500/10 hover:text-red-300 cursor-pointer"
-                                    aria-label="Cancel download"
-                                    title="Cancel download"
+                                    aria-label={t('downloadQueue.cancelDownload')}
+                                    title={t('downloadQueue.cancelDownload')}
                                 >
                                     <X className="h-3.5 w-3.5" />
                                 </button>
@@ -266,7 +272,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                     {etaSeconds > 0 && (
                                         <>
                                             <span className="opacity-50">·</span>
-                                            <span>{formatEta(etaSeconds)} left</span>
+                                            <span>{t('downloadQueue.eta.left', { eta: formatEta(etaSeconds, t) })}</span>
                                         </>
                                     )}
                                 </span>
@@ -277,7 +283,11 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                     {queueState.queue.length > 0 && (
                         <div className="px-4 py-2 max-h-56 overflow-y-auto">
                             <p className="text-[11px] uppercase tracking-wider text-text-secondary mb-1">
-                                Queued ({queueState.queue.length})
+                                <Tx
+                                    k="downloadQueue.queuedHeader"
+                                    values={{ count: queueState.queue.length }}
+                                    fallback={`Queued (${queueState.queue.length})`}
+                                />
                             </p>
                             <ul className="space-y-0.5">
                                 {queueState.queue.map((item, index) => (
@@ -301,7 +311,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                                 void handleCancelQueued(item.modId);
                                             }}
                                             className="rounded-md p-1 text-text-secondary opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 cursor-pointer"
-                                            title="Remove from queue"
+                                            title={t('downloadQueue.removeFromQueue')}
                                         >
                                             <X className="h-3 w-3" />
                                         </button>
@@ -312,7 +322,9 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                     )}
 
                     {!queueState.currentDownload && queueState.queue.length === 0 && (
-                        <p className="px-4 py-3 text-xs text-text-secondary text-center">No downloads</p>
+                        <p className="px-4 py-3 text-xs text-text-secondary text-center">
+                            <Tx k="downloadQueue.noDownloads" fallback="No downloads" />
+                        </p>
                     )}
                 </div>
             )}

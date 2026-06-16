@@ -1,67 +1,75 @@
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle, Rocket } from 'lucide-react';
 import { getSettings, setSettings } from '../lib/api';
 import { Card, Badge, Button } from '../components/common/ui';
 import { ConfirmModal } from '../components/common/PageComponents';
+import Tx from '../components/translation/Tx';
 import type { AppSettings } from '../types/mod';
 import type { SteamLaunchOptionsStatus } from '../types/electron';
 
 // Popular Deadlock autoexec command presets
 const COMMAND_PRESETS = [
     {
-        category: 'Performance',
+        categoryKey: 'autoexec.presets.performance.category',
+        categoryFallback: 'Performance',
         icon: Zap,
         commands: [
-            { name: 'Uncap FPS', command: 'fps_max 0', description: 'Remove framerate limit' },
-            { name: 'Cap FPS 144', command: 'fps_max 144', description: 'Cap to 144 FPS' },
-            { name: 'Cap FPS 240', command: 'fps_max 240', description: 'Cap to 240 FPS' },
-            { name: 'Low Latency (Nvidia)', command: 'r_low_latency 2', description: 'Enable Nvidia Reflex low latency' },
-            { name: 'Engine Low Latency', command: 'engine_low_latency_sleep_after_client_tick true', description: 'Reduce input lag' },
+            { nameKey: 'autoexec.presets.performance.uncapFps.name', nameFallback: 'Uncap FPS', command: 'fps_max 0', descriptionKey: 'autoexec.presets.performance.uncapFps.description', descriptionFallback: 'Remove framerate limit' },
+            { nameKey: 'autoexec.presets.performance.capFps144.name', nameFallback: 'Cap FPS 144', command: 'fps_max 144', descriptionKey: 'autoexec.presets.performance.capFps144.description', descriptionFallback: 'Cap to 144 FPS' },
+            { nameKey: 'autoexec.presets.performance.capFps240.name', nameFallback: 'Cap FPS 240', command: 'fps_max 240', descriptionKey: 'autoexec.presets.performance.capFps240.description', descriptionFallback: 'Cap to 240 FPS' },
+            { nameKey: 'autoexec.presets.performance.lowLatencyNvidia.name', nameFallback: 'Low Latency (Nvidia)', command: 'r_low_latency 2', descriptionKey: 'autoexec.presets.performance.lowLatencyNvidia.description', descriptionFallback: 'Enable Nvidia Reflex low latency' },
+            { nameKey: 'autoexec.presets.performance.engineLowLatency.name', nameFallback: 'Engine Low Latency', command: 'engine_low_latency_sleep_after_client_tick true', descriptionKey: 'autoexec.presets.performance.engineLowLatency.description', descriptionFallback: 'Reduce input lag' },
         ],
     },
     {
-        category: 'Network',
+        categoryKey: 'autoexec.presets.network.category',
+        categoryFallback: 'Network',
         icon: Globe,
         commands: [
-            { name: 'Max Network Rate', command: 'rate 1000000', description: 'Maximum network update rate' },
+            { nameKey: 'autoexec.presets.network.maxNetworkRate.name', nameFallback: 'Max Network Rate', command: 'rate 1000000', descriptionKey: 'autoexec.presets.network.maxNetworkRate.description', descriptionFallback: 'Maximum network update rate' },
         ],
     },
     {
-        category: 'HUD & UI',
+        categoryKey: 'autoexec.presets.hud.category',
+        categoryFallback: 'HUD & UI',
         icon: Layout,
         commands: [
-            { name: 'New Health Bars', command: 'citadel_unit_status_use_new true', description: 'Enable new-style health bars' },
-            { name: 'Hide HUD', command: 'citadel_hud_visible false', description: 'Hide the entire HUD' },
-            { name: 'Show HUD', command: 'citadel_hud_visible true', description: 'Show the HUD' },
-            { name: 'Disable Post-Match Survey', command: 'deadlock_post_match_survey_disabled true', description: 'Skip the survey after matches' },
+            { nameKey: 'autoexec.presets.hud.newHealthBars.name', nameFallback: 'New Health Bars', command: 'citadel_unit_status_use_new true', descriptionKey: 'autoexec.presets.hud.newHealthBars.description', descriptionFallback: 'Enable new-style health bars' },
+            { nameKey: 'autoexec.presets.hud.hideHud.name', nameFallback: 'Hide HUD', command: 'citadel_hud_visible false', descriptionKey: 'autoexec.presets.hud.hideHud.description', descriptionFallback: 'Hide the entire HUD' },
+            { nameKey: 'autoexec.presets.hud.showHud.name', nameFallback: 'Show HUD', command: 'citadel_hud_visible true', descriptionKey: 'autoexec.presets.hud.showHud.description', descriptionFallback: 'Show the HUD' },
+            { nameKey: 'autoexec.presets.hud.disablePostMatchSurvey.name', nameFallback: 'Disable Post-Match Survey', command: 'deadlock_post_match_survey_disabled true', descriptionKey: 'autoexec.presets.hud.disablePostMatchSurvey.description', descriptionFallback: 'Skip the survey after matches' },
         ],
     },
     {
-        category: 'Minimap',
+        categoryKey: 'autoexec.presets.minimap.category',
+        categoryFallback: 'Minimap',
         icon: Map,
         commands: [
-            { name: 'Faster Minimap', command: 'minimap_update_rate_hz 60', description: 'Update minimap at 60Hz' },
-            { name: 'Larger Click Radius', command: 'citadel_minimap_unit_click_radius 200', description: 'Easier to click units on minimap' },
-            { name: 'Larger Player Icons', command: 'citadel_minimap_player_width 6.5', description: 'Bigger player icons on minimap' },
-            { name: 'Thicker Ziplines', command: 'citadel_minimap_zip_line_thickness 2', description: 'More visible ziplines' },
+            { nameKey: 'autoexec.presets.minimap.fasterMinimap.name', nameFallback: 'Faster Minimap', command: 'minimap_update_rate_hz 60', descriptionKey: 'autoexec.presets.minimap.fasterMinimap.description', descriptionFallback: 'Update minimap at 60Hz' },
+            { nameKey: 'autoexec.presets.minimap.largerClickRadius.name', nameFallback: 'Larger Click Radius', command: 'citadel_minimap_unit_click_radius 200', descriptionKey: 'autoexec.presets.minimap.largerClickRadius.description', descriptionFallback: 'Easier to click units on minimap' },
+            { nameKey: 'autoexec.presets.minimap.largerPlayerIcons.name', nameFallback: 'Larger Player Icons', command: 'citadel_minimap_player_width 6.5', descriptionKey: 'autoexec.presets.minimap.largerPlayerIcons.description', descriptionFallback: 'Bigger player icons on minimap' },
+            { nameKey: 'autoexec.presets.minimap.thickerZiplines.name', nameFallback: 'Thicker Ziplines', command: 'citadel_minimap_zip_line_thickness 2', descriptionKey: 'autoexec.presets.minimap.thickerZiplines.description', descriptionFallback: 'More visible ziplines' },
         ],
     },
     {
-        category: 'Matchmaking',
+        categoryKey: 'autoexec.presets.matchmaking.category',
+        categoryFallback: 'Matchmaking',
         icon: Users,
         commands: [
-            { name: 'Solo Queue Only', command: 'mm_prefer_solo_only 1', description: 'Prefer matches with solo players' },
-            { name: 'NA Region', command: 'citadel_region_override 0', description: 'Force North America servers' },
-            { name: 'EU Region', command: 'citadel_region_override 1', description: 'Force Europe servers' },
-            { name: 'Asia Region', command: 'citadel_region_override 2', description: 'Force Asia servers' },
-            { name: 'Auto Region', command: 'citadel_region_override -1', description: 'Automatic region selection' },
+            { nameKey: 'autoexec.presets.matchmaking.soloQueueOnly.name', nameFallback: 'Solo Queue Only', command: 'mm_prefer_solo_only 1', descriptionKey: 'autoexec.presets.matchmaking.soloQueueOnly.description', descriptionFallback: 'Prefer matches with solo players' },
+            { nameKey: 'autoexec.presets.matchmaking.naRegion.name', nameFallback: 'NA Region', command: 'citadel_region_override 0', descriptionKey: 'autoexec.presets.matchmaking.naRegion.description', descriptionFallback: 'Force North America servers' },
+            { nameKey: 'autoexec.presets.matchmaking.euRegion.name', nameFallback: 'EU Region', command: 'citadel_region_override 1', descriptionKey: 'autoexec.presets.matchmaking.euRegion.description', descriptionFallback: 'Force Europe servers' },
+            { nameKey: 'autoexec.presets.matchmaking.asiaRegion.name', nameFallback: 'Asia Region', command: 'citadel_region_override 2', descriptionKey: 'autoexec.presets.matchmaking.asiaRegion.description', descriptionFallback: 'Force Asia servers' },
+            { nameKey: 'autoexec.presets.matchmaking.autoRegion.name', nameFallback: 'Auto Region', command: 'citadel_region_override -1', descriptionKey: 'autoexec.presets.matchmaking.autoRegion.description', descriptionFallback: 'Automatic region selection' },
         ],
     },
     {
-        category: 'Mouse & Sensitivity',
+        categoryKey: 'autoexec.presets.mouse.category',
+        categoryFallback: 'Mouse & Sensitivity',
         icon: MousePointer2,
         commands: [
-            { name: '1:1 ADS Sensitivity', command: 'zoom_sensitivity_ratio 0.818933027098955175', description: 'Match ADS to hip-fire sensitivity' },
+            { nameKey: 'autoexec.presets.mouse.adsSensitivity.name', nameFallback: '1:1 ADS Sensitivity', command: 'zoom_sensitivity_ratio 0.818933027098955175', descriptionKey: 'autoexec.presets.mouse.adsSensitivity.description', descriptionFallback: 'Match ADS to hip-fire sensitivity' },
         ],
     },
 ];
@@ -73,6 +81,7 @@ interface AutoexecStatus {
 }
 
 export default function Autoexec() {
+    const { t } = useTranslation();
     const [gamePath, setGamePath] = useState<string | null>(null);
     const [status, setStatus] = useState<AutoexecStatus | null>(null);
     const [commands, setCommands] = useState<string[]>([]);
@@ -81,6 +90,7 @@ export default function Autoexec() {
     const [copied, setCopied] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
+    const [saveMessageTone, setSaveMessageTone] = useState<'success' | 'error' | null>(null);
     const [hasUnsaved, setHasUnsaved] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
@@ -92,6 +102,7 @@ export default function Autoexec() {
     const [launchStatus, setLaunchStatus] = useState<SteamLaunchOptionsStatus | null>(null);
     const [launchSaving, setLaunchSaving] = useState(false);
     const [launchMessage, setLaunchMessage] = useState<string | null>(null);
+    const [launchMessageTone, setLaunchMessageTone] = useState<'success' | 'error' | null>(null);
 
     // Load game path, autoexec status, and existing commands
     useEffect(() => {
@@ -125,11 +136,13 @@ export default function Autoexec() {
         if (!appSettings) return;
         setLaunchSaving(true);
         setLaunchMessage(null);
+        setLaunchMessageTone(null);
         try {
             const next: AppSettings = { ...appSettings, steamLaunchOptions: launchOptionsDraft };
             await setSettings(next);
             setAppSettings(next);
-            setLaunchMessage('Saved. Applied next time you launch Deadlock via grimoire.');
+            setLaunchMessage(t('autoexec.launchOptions.saved'));
+            setLaunchMessageTone('success');
             // Re-read current VDF value so the user sees the actual on-disk
             // state (it only changes when we write before a launch).
             try {
@@ -140,7 +153,8 @@ export default function Autoexec() {
             }
             setTimeout(() => setLaunchMessage(null), 4000);
         } catch (err) {
-            setLaunchMessage(`Error: ${err}`);
+            setLaunchMessage(t('autoexec.status.error', { error: String(err) }));
+            setLaunchMessageTone('error');
         } finally {
             setLaunchSaving(false);
         }
@@ -153,12 +167,12 @@ export default function Autoexec() {
         return COMMAND_PRESETS.map(cat => ({
             ...cat,
             commands: cat.commands.filter(cmd =>
-                cmd.name.toLowerCase().includes(lowerSearch) ||
+                t(cmd.nameKey).toLowerCase().includes(lowerSearch) ||
                 cmd.command.toLowerCase().includes(lowerSearch) ||
-                cmd.description.toLowerCase().includes(lowerSearch)
+                t(cmd.descriptionKey).toLowerCase().includes(lowerSearch)
             )
         })).filter(cat => cat.commands.length > 0);
-    }, [searchTerm]);
+    }, [searchTerm, t]);
 
     const handleAddCommand = (command: string) => {
         if (commands.includes(command)) return;
@@ -185,21 +199,25 @@ export default function Autoexec() {
 
     const handleSave = async () => {
         if (!gamePath) {
-            setSaveMessage('Game path not configured');
+            setSaveMessage(t('autoexec.status.gamePathNotConfigured'));
+            setSaveMessageTone('error');
             return;
         }
         setIsSaving(true);
         setSaveMessage(null);
+        setSaveMessageTone(null);
         try {
             await window.electronAPI.saveAutoexecCommands(gamePath, commands);
-            setSaveMessage('Saved to autoexec.cfg!');
+            setSaveMessage(t('autoexec.status.savedToAutoexec'));
+            setSaveMessageTone('success');
             setHasUnsaved(false);
             // Refresh status
             const s = await window.electronAPI.getAutoexecStatus(gamePath);
             setStatus(s);
             setTimeout(() => setSaveMessage(null), 3000);
         } catch (err) {
-            setSaveMessage(`Error: ${err}`);
+            setSaveMessage(t('autoexec.status.error', { error: String(err) }));
+            setSaveMessageTone('error');
         } finally {
             setIsSaving(false);
         }
@@ -222,20 +240,20 @@ export default function Autoexec() {
                             type="text"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder="Search commands..."
+                            placeholder={t('autoexec.search.placeholder')}
                             className="w-full pl-10 pr-4 py-2.5 bg-bg-secondary border border-white/5 rounded-xl text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-text-secondary/50"
                         />
                     </div>
 
                     <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                         {/* Custom Command Input */}
-                        <Card title="Custom Command">
+                        <Card title={<Tx k="autoexec.customCommand.title" fallback="Custom Command" />}>
                             <div className="flex gap-2">
                                 <input
                                     type="text"
                                     value={customCommand}
                                     onChange={(e) => setCustomCommand(e.target.value)}
-                                    placeholder="e.g. fps_max 0"
+                                    placeholder={t('autoexec.customCommand.placeholder')}
                                     className="flex-1 px-3 py-2 bg-bg-tertiary border border-white/10 rounded-lg text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
                                 />
@@ -244,7 +262,11 @@ export default function Autoexec() {
                         </Card>
 
                         {filteredPresets.map((category) => (
-                            <Card key={category.category} title={category.category} icon={category.icon}>
+                            <Card
+                                key={category.categoryKey}
+                                title={<Tx k={category.categoryKey} fallback={category.categoryFallback} />}
+                                icon={category.icon}
+                            >
                                 <div className="space-y-1">
                                     {category.commands.map((cmd) => {
                                         const isAdded = commands.includes(cmd.command);
@@ -260,12 +282,12 @@ export default function Autoexec() {
                                             >
                                                 <div className="flex items-center justify-between mb-1">
                                                     <span className={`text-sm font-medium ${isAdded ? 'text-accent' : 'text-text-primary'}`}>
-                                                        {cmd.name}
+                                                        <Tx k={cmd.nameKey} fallback={cmd.nameFallback} />
                                                     </span>
                                                     {isAdded && <Check className="w-3 h-3 text-accent" />}
                                                 </div>
                                                 <div className="flex items-center justify-between text-xs text-text-secondary">
-                                                    <span>{cmd.description}</span>
+                                                    <span><Tx k={cmd.descriptionKey} fallback={cmd.descriptionFallback} /></span>
                                                     <code className="bg-black/30 px-1.5 py-0.5 rounded font-mono text-text-primary/80">
                                                         {cmd.command}
                                                     </code>
@@ -285,12 +307,22 @@ export default function Autoexec() {
                         className="flex flex-col"
                         title={
                             <span className="flex items-center gap-2 min-w-0">
-                                <span className="truncate">Your Commands ({commands.length})</span>
+                                <span className="truncate">
+                                    <Tx
+                                        k="autoexec.commands.title"
+                                        values={{ count: commands.length }}
+                                        fallback={`Your Commands (${commands.length})`}
+                                    />
+                                </span>
                                 {status ? (
                                     status.exists ? (
-                                        <Badge variant="success">Active</Badge>
+                                        <Badge variant="success">
+                                            <Tx k="common.status.active" fallback="Active" />
+                                        </Badge>
                                     ) : (
-                                        <Badge variant="warning">Missing</Badge>
+                                        <Badge variant="warning">
+                                            <Tx k="common.status.missing" fallback="Missing" />
+                                        </Badge>
                                     )
                                 ) : null}
                             </span>
@@ -299,10 +331,14 @@ export default function Autoexec() {
                         action={
                             <div className="flex gap-2">
                                 <Button size="sm" variant="secondary" onClick={() => setClearConfirmOpen(true)} disabled={commands.length === 0} icon={RefreshCw}>
-                                    Clear
+                                    <Tx k="common.actions.clear" fallback="Clear" />
                                 </Button>
                                 <Button size="sm" variant="secondary" onClick={handleCopy} disabled={commands.length === 0} icon={copied ? Check : Copy}>
-                                    {copied ? 'Copied' : 'Copy'}
+                                    {copied ? (
+                                        <Tx k="common.status.copied" fallback="Copied" />
+                                    ) : (
+                                        <Tx k="common.actions.copy" fallback="Copy" />
+                                    )}
                                 </Button>
                                 <Button
                                     size="sm"
@@ -311,7 +347,7 @@ export default function Autoexec() {
                                     isLoading={isSaving}
                                     icon={Save}
                                 >
-                                    Save
+                                    <Tx k="common.actions.save" fallback="Save" />
                                 </Button>
                             </div>
                         }
@@ -321,19 +357,22 @@ export default function Autoexec() {
                                 {!gamePath && (
                                     <div className="text-xs text-yellow-400 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
                                         <AlertTriangle className="w-3 h-3 flex-shrink-0" />
-                                        Game path not configured. Set it in Settings to save.
+                                        <Tx
+                                            k="autoexec.status.gamePathWarning"
+                                            fallback="Game path not configured. Set it in Settings to save."
+                                        />
                                     </div>
                                 )}
                                 {saveMessage && (
-                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessage.includes('Error') ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
-                                        {saveMessage.includes('Error') ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessageTone === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
+                                        {saveMessageTone === 'error' ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
                                         {saveMessage}
                                     </div>
                                 )}
                                 {hasUnsaved && !saveMessage && (
                                     <div className="text-xs text-yellow-400 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
                                         <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                                        You have unsaved changes
+                                        <Tx k="autoexec.status.unsavedChanges" fallback="You have unsaved changes" />
                                     </div>
                                 )}
                             </div>
@@ -352,7 +391,7 @@ export default function Autoexec() {
                                         <button
                                             onClick={() => handleRemoveCommand(i)}
                                             className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded transition-all cursor-pointer"
-                                            title="Remove"
+                                            title={t('common.actions.remove')}
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </button>
@@ -362,8 +401,12 @@ export default function Autoexec() {
                                 <div className="flex items-center gap-3 py-6 text-text-secondary opacity-50">
                                     <Terminal className="w-6 h-6" />
                                     <div>
-                                        <p className="text-sm font-medium">No commands added</p>
-                                        <p className="text-xs">Select from presets on the left</p>
+                                        <p className="text-sm font-medium">
+                                            <Tx k="autoexec.commands.emptyTitle" fallback="No commands added" />
+                                        </p>
+                                        <p className="text-xs">
+                                            <Tx k="autoexec.commands.emptyDescription" fallback="Select from presets on the left" />
+                                        </p>
                                     </div>
                                 </div>
                             )}
@@ -372,11 +415,13 @@ export default function Autoexec() {
 
                     {/* Launch options — lives below Your Commands so the
                         primary editor surface owns the top of the column. */}
-                    <Card title="Launch Options" icon={Rocket} className="shrink-0">
+                    <Card title={<Tx k="autoexec.launchOptions.title" fallback="Launch Options" />} icon={Rocket} className="shrink-0">
                         <div className="space-y-2.5">
                             <p className="text-xs text-text-secondary">
-                                Args passed to Deadlock when launched via Steam. Written into
-                                Steam&apos;s config right before grimoire launches the game.
+                                <Tx
+                                    k="autoexec.launchOptions.description"
+                                    fallback="Args passed to Deadlock when launched via Steam. Written into Steam's config right before grimoire launches the game."
+                                />
                             </p>
 
                             <div className="flex gap-2">
@@ -393,7 +438,7 @@ export default function Autoexec() {
                                     isLoading={launchSaving}
                                     icon={Save}
                                 >
-                                    Save
+                                    <Tx k="common.actions.save" fallback="Save" />
                                 </Button>
                             </div>
 
@@ -402,12 +447,12 @@ export default function Autoexec() {
                                     role="status"
                                     aria-live="polite"
                                     className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${
-                                        launchMessage.startsWith('Error')
+                                        launchMessageTone === 'error'
                                             ? 'bg-red-500/10 border-red-500/20 text-red-400'
                                             : 'bg-green-500/10 border-green-500/20 text-green-400'
                                     }`}
                                 >
-                                    {launchMessage.startsWith('Error') ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                    {launchMessageTone === 'error' ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
                                     {launchMessage}
                                 </div>
                             )}
@@ -418,8 +463,10 @@ export default function Autoexec() {
                                         <div className="flex items-start gap-1.5 text-xs text-yellow-400">
                                             <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
                                             <span>
-                                                Steam config not found. Launch Deadlock via Steam once,
-                                                then come back.
+                                                <Tx
+                                                    k="autoexec.launchOptions.steamConfigMissing"
+                                                    fallback="Steam config not found. Launch Deadlock via Steam once, then come back."
+                                                />
                                             </span>
                                         </div>
                                     );
@@ -431,23 +478,30 @@ export default function Autoexec() {
                                     <div className="space-y-2 pt-1 border-t border-border/40">
                                         {!inSync && (
                                             <div className="flex items-baseline justify-between gap-2 text-xs">
-                                                <span className="text-text-secondary uppercase tracking-wide">In Steam now</span>
+                                                <span className="text-text-secondary uppercase tracking-wide">
+                                                    <Tx k="autoexec.launchOptions.inSteamNow" fallback="In Steam now" />
+                                                </span>
                                                 <code className="font-mono text-text-primary/80 bg-black/30 px-1.5 py-0.5 rounded truncate min-w-0">
-                                                    {onDisk || '(empty)'}
+                                                    {onDisk || t('common.emptyValue')}
                                                 </code>
                                             </div>
                                         )}
                                         {!inSync && !launchSaving && (
                                             <div className="text-[11px] text-text-secondary/70">
-                                                Your saved value will overwrite this on next grimoire launch.
+                                                <Tx
+                                                    k="autoexec.launchOptions.savedWillOverwrite"
+                                                    fallback="Your saved value will overwrite this on next grimoire launch."
+                                                />
                                             </div>
                                         )}
                                         {launchStatus.steamRunning && (
                                             <div className="flex items-start gap-1.5 text-xs text-yellow-400">
                                                 <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
                                                 <span>
-                                                    Steam is running. Close it before launching Deadlock
-                                                    via grimoire so the write isn&apos;t clobbered.
+                                                    <Tx
+                                                        k="autoexec.launchOptions.steamRunning"
+                                                        fallback="Steam is running. Close it before launching Deadlock via grimoire so the write isn't clobbered."
+                                                    />
                                                 </span>
                                             </div>
                                         )}
@@ -463,9 +517,15 @@ export default function Autoexec() {
                 isOpen={clearConfirmOpen}
                 onCancel={() => setClearConfirmOpen(false)}
                 onConfirm={confirmClear}
-                title="Clear all commands?"
-                message={`Remove all ${commands.length} command${commands.length === 1 ? '' : 's'} from the list? Your saved autoexec.cfg won't change until you click Save.`}
-                confirmLabel="Clear"
+                title={<Tx k="autoexec.confirm.clearTitle" fallback="Clear all commands?" />}
+                message={
+                    <Tx
+                        k="autoexec.confirm.clearMessage"
+                        values={{ count: commands.length }}
+                        fallback={`Remove all ${commands.length} command${commands.length === 1 ? '' : 's'} from the list? Your saved autoexec.cfg won't change until you click Save.`}
+                    />
+                }
+                confirmLabel={<Tx k="common.actions.clear" fallback="Clear" />}
                 variant="danger"
             />
         </div>

@@ -28,6 +28,7 @@ import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import PublishDialog from '../components/social/PublishDialog';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import Tx from '../components/translation/Tx';
 import type { Mod } from '../types/mod';
 
 type ProfileModEntry = Profile['mods'][number];
@@ -179,11 +180,11 @@ export default function Profiles() {
       const json = await loadSnapshot(snapshotId);
       setRestoringSnapshotJson(json);
     } catch (err) {
-      setError(`Failed to load snapshot: ${String(err)}`);
+      setError(t('profiles.errors.loadSnapshotFailed', { error: String(err) }));
     } finally {
       setRestoringSnapshotId(null);
     }
-  }, []);
+  }, [t]);
 
   const handleCreateManualSnapshot = useCallback(async () => {
     setCreatingSnapshot(true);
@@ -192,11 +193,11 @@ export default function Profiles() {
       await loadSnapshotList();
       setSnapshotsExpanded(true);
     } catch (err) {
-      setError(`Failed to capture snapshot: ${String(err)}`);
+      setError(t('profiles.errors.captureSnapshotFailed', { error: String(err) }));
     } finally {
       setCreatingSnapshot(false);
     }
-  }, [loadSnapshotList]);
+  }, [loadSnapshotList, t]);
 
   const handleDeleteSnapshot = useCallback(async (snapshotId: string) => {
     try {
@@ -209,11 +210,11 @@ export default function Profiles() {
         return next;
       });
     } catch (err) {
-      setError(`Failed to delete snapshot: ${String(err)}`);
+      setError(t('profiles.errors.deleteSnapshotFailed', { error: String(err) }));
     } finally {
       setDeleteSnapshotConfirmId(null);
     }
-  }, [loadSnapshotList]);
+  }, [loadSnapshotList, t]);
 
   const toggleSnapshotSelected = useCallback((snapshotId: string) => {
     setSelectedSnapshotIds((prev) => {
@@ -247,9 +248,13 @@ export default function Profiles() {
     setBulkDeleteSnapshotsOpen(false);
     setBulkDeletingSnapshots(false);
     if (failures.length > 0) {
-      setError(`Failed to delete ${failures.length} of ${ids.length} snapshots: ${failures[0]}`);
+      setError(t('profiles.errors.bulkDeleteSnapshotsFailed', {
+        failed: failures.length,
+        total: ids.length,
+        error: failures[0],
+      }));
     }
-  }, [selectedSnapshotIds, loadSnapshotList]);
+  }, [selectedSnapshotIds, loadSnapshotList, t]);
 
   // Drop selections that refer to snapshots no longer in the list (deleted
   // elsewhere, refresh dropped them). Keeps the bulk-delete count honest.
@@ -376,7 +381,9 @@ export default function Profiles() {
     return (
       <div className="flex flex-col items-center justify-center h-full text-text-secondary">
         <RefreshCw className="w-8 h-8 animate-spin mb-4 text-accent" />
-        <p>Loading profiles...</p>
+        <p>
+          <Tx k="profiles.loading" fallback="Loading profiles..." />
+        </p>
       </div>
     );
   }
@@ -393,15 +400,15 @@ export default function Profiles() {
           )}
 
           {/* Create New Profile */}
-          <Card title="Create New Profile" icon={Plus}>
+          <Card title={<Tx k="profiles.create.title" fallback="Create New Profile" />} icon={Plus}>
             <div className="flex flex-wrap gap-3">
               <input
                 type="text"
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateProfile()}
-                placeholder="Enter profile name (e.g. Competitive, Casual, Testing)..."
-                aria-label="Profile name"
+                placeholder={t('profiles.create.placeholder')}
+                aria-label={t('profiles.create.profileName')}
                 className="flex-1 px-4 py-2.5 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
               />
               <Button
@@ -410,15 +417,15 @@ export default function Profiles() {
                 isLoading={isCreating}
                 icon={Save}
               >
-                Create Profile
+                <Tx k="profiles.create.submit" fallback="Create Profile" />
               </Button>
               <Button
                 variant="secondary"
                 onClick={() => setShowImport(true)}
                 icon={Upload}
-                title="Import a portable profile from a share code or file"
+                title={t('profiles.import.title')}
               >
-                Import
+                <Tx k="profiles.actions.import" fallback="Import" />
               </Button>
             </div>
           </Card>
@@ -428,7 +435,13 @@ export default function Profiles() {
               supports manual capture. Restore re-uses the portable-import
               dialog so the user sees exactly what will re-download. */}
           <Card
-            title={`Snapshots${snapshots.length > 0 ? ` (${snapshots.length})` : ''}`}
+            title={
+              <Tx
+                k="profiles.snapshots.title"
+                values={{ count: snapshots.length }}
+                fallback={`Snapshots${snapshots.length > 0 ? ` (${snapshots.length})` : ''}`}
+              />
+            }
             icon={History}
             action={
               <div className="flex items-center gap-1">
@@ -439,18 +452,18 @@ export default function Profiles() {
                   onClick={handleCreateManualSnapshot}
                   isLoading={creatingSnapshot}
                   disabled={creatingSnapshot}
-                  title="Capture your current installed mods now. Use this before experimenting (mass-installing variants, testing a collection, etc.) so you can roll back to this exact state."
-                  aria-label="Snapshot now"
+                  title={t('profiles.snapshots.snapshotNowTitle')}
+                  aria-label={t('profiles.snapshots.snapshotNow')}
                 >
-                  Snapshot now
+                  <Tx k="profiles.snapshots.snapshotNow" fallback="Snapshot now" />
                 </Button>
                 <Button
                   size="sm"
                   variant="ghost"
                   onClick={() => setSnapshotsExpanded((v) => !v)}
                   icon={snapshotsExpanded ? ChevronUp : ChevronDown}
-                  aria-label={snapshotsExpanded ? 'Collapse snapshots' : 'Expand snapshots'}
-                  title={snapshotsExpanded ? 'Collapse list' : 'Show all snapshots'}
+                  aria-label={snapshotsExpanded ? t('profiles.snapshots.collapse') : t('profiles.snapshots.expand')}
+                  title={snapshotsExpanded ? t('profiles.snapshots.collapseList') : t('profiles.snapshots.showAll')}
                   className="px-1.5"
                 />
               </div>
@@ -459,15 +472,32 @@ export default function Profiles() {
             {!snapshotsExpanded ? (
               <p
                 className="text-xs text-text-secondary"
-                title="Snapshots are automatic recovery points taken before mod updates and profile applies. They store the list of installed mods (not the VPK files), and restore by re-downloading from GameBanana. Snapshots accumulate until you delete them."
+                title={t('profiles.snapshots.tooltip')}
               >
                 {snapshots.length === 0
-                  ? 'Automatic recovery points captured before updates or profile applies. None yet — one will appear here the next time you run either.'
-                  : `Most recent: ${formatRelativeDate(snapshots[0].createdAt)} · ${snapshots[0].modCount} mods.`}
+                  ? (
+                    <Tx
+                      k="profiles.snapshots.collapsedEmpty"
+                      fallback="Automatic recovery points captured before updates or profile applies. None yet - one will appear here the next time you run either."
+                    />
+                  )
+                  : (
+                    <Tx
+                      k="profiles.snapshots.mostRecent"
+                      values={{
+                        date: formatRelativeDate(snapshots[0].createdAt),
+                        count: snapshots[0].modCount,
+                      }}
+                      fallback={`Most recent: ${formatRelativeDate(snapshots[0].createdAt)} - ${snapshots[0].modCount} mods.`}
+                    />
+                  )}
               </p>
             ) : snapshots.length === 0 ? (
               <p className="text-xs text-text-secondary">
-                Grimoire takes a snapshot of your installed mod set automatically before each mod update and before applying a profile. Restore re-downloads those mods from GameBanana, so a bad update or wrong-profile-applied can be rolled back. Snapshots store only the list of mods (their GameBanana IDs), never the VPK files, so disk cost stays tiny — they accumulate until you delete them. You can also capture one manually with the button above before experimenting.
+                <Tx
+                  k="profiles.snapshots.expandedEmpty"
+                  fallback="Grimoire takes a snapshot of your installed mod set automatically before each mod update and before applying a profile. Restore re-downloads those mods from GameBanana, so a bad update or wrong-profile-applied can be rolled back. Snapshots store only the list of mods (their GameBanana IDs), never the VPK files, so disk cost stays tiny - they accumulate until you delete them. You can also capture one manually with the button above before experimenting."
+                />
               </p>
             ) : (
               <>
@@ -489,14 +519,24 @@ export default function Profiles() {
                           checked={allSelected}
                           ref={(el) => { if (el) el.indeterminate = someSelected; }}
                           onChange={toggleAll}
-                          aria-label={allSelected ? 'Clear selection' : 'Select all snapshots'}
+                          aria-label={allSelected ? t('profiles.snapshots.clearSelection') : t('profiles.snapshots.selectAll')}
                           className="peer sr-only"
                         />
                         <CheckboxMark checked={allSelected} indeterminate={someSelected} />
                         <span>
-                          {selectedSnapshotIds.size === 0
-                            ? `Select to bulk delete (${snapshots.length})`
-                            : `${selectedSnapshotIds.size} selected`}
+                          {selectedSnapshotIds.size === 0 ? (
+                            <Tx
+                              k="profiles.snapshots.selectToBulkDelete"
+                              values={{ count: snapshots.length }}
+                              fallback={`Select to bulk delete (${snapshots.length})`}
+                            />
+                          ) : (
+                            <Tx
+                              k="profiles.snapshots.selected"
+                              values={{ count: selectedSnapshotIds.size }}
+                              fallback={`${selectedSnapshotIds.size} selected`}
+                            />
+                          )}
                         </span>
                       </label>
                       {selectedSnapshotIds.size > 0 && (
@@ -506,9 +546,13 @@ export default function Profiles() {
                           icon={Trash2}
                           onClick={() => setBulkDeleteSnapshotsOpen(true)}
                           className="ml-auto text-red-400 hover:text-red-300"
-                          title={`Delete the ${selectedSnapshotIds.size} selected snapshot${selectedSnapshotIds.size === 1 ? '' : 's'}.`}
+                          title={t('profiles.snapshots.deleteSelectedTitle', { count: selectedSnapshotIds.size })}
                         >
-                          Delete {selectedSnapshotIds.size}
+                          <Tx
+                            k="profiles.actions.deleteCount"
+                            values={{ count: selectedSnapshotIds.size }}
+                            fallback={`Delete ${selectedSnapshotIds.size}`}
+                          />
                         </Button>
                       )}
                     </div>
@@ -520,16 +564,16 @@ export default function Profiles() {
                   const isSelected = selectedSnapshotIds.has(snap.snapshotId);
                   const triggerLabel =
                     snap.trigger === 'pre-update'
-                      ? 'Before update'
+                      ? t('profiles.snapshots.trigger.preUpdate')
                       : snap.trigger === 'pre-apply-profile'
-                      ? 'Before applying profile'
-                      : 'Manual';
+                      ? t('profiles.snapshots.trigger.preApplyProfile')
+                      : t('profiles.snapshots.trigger.manual');
                   const triggerExplanation =
                     snap.trigger === 'pre-update'
-                      ? 'Captured automatically right before mod files were replaced by an update.'
+                      ? t('profiles.snapshots.explanation.preUpdate')
                       : snap.trigger === 'pre-apply-profile'
-                      ? 'Captured automatically right before a saved profile was applied (enable/disable layout rewritten).'
-                      : 'You captured this manually from the Snapshot now button.';
+                      ? t('profiles.snapshots.explanation.preApplyProfile')
+                      : t('profiles.snapshots.explanation.manual');
                   return (
                     <li
                       key={snap.snapshotId}
@@ -540,7 +584,7 @@ export default function Profiles() {
                           type="checkbox"
                           checked={isSelected}
                           onChange={() => toggleSnapshotSelected(snap.snapshotId)}
-                          aria-label={isSelected ? 'Unselect snapshot' : 'Select snapshot'}
+                          aria-label={isSelected ? t('profiles.snapshots.unselect') : t('profiles.snapshots.select')}
                           className="peer sr-only"
                         />
                         <CheckboxMark checked={isSelected} />
@@ -551,7 +595,14 @@ export default function Profiles() {
                           title={triggerExplanation}
                         >
                           {triggerLabel}
-                          <span className="text-text-secondary"> · {snap.modCount} mods</span>
+                          <span className="text-text-secondary">
+                            {' · '}
+                            <Tx
+                              k="profiles.mods.count"
+                              values={{ count: snap.modCount }}
+                              fallback={`${snap.modCount} mods`}
+                            />
+                          </span>
                         </div>
                         <div
                           className="text-xs text-text-secondary"
@@ -568,17 +619,17 @@ export default function Profiles() {
                           onClick={() => handleRestoreSnapshot(snap.snapshotId)}
                           isLoading={isRestoring}
                           disabled={isRestoring}
-                          title="Opens the import dialog with this snapshot's mod list pre-resolved. Mods already on disk stay as-is; anything missing or different re-downloads from GameBanana. Confirming creates a new profile you can apply to swap your install set back to this state."
+                          title={t('profiles.snapshots.restoreTitle')}
                         >
-                          Restore
+                          <Tx k="profiles.actions.restore" fallback="Restore" />
                         </Button>
                         <Button
                           size="sm"
                           variant="ghost"
                           icon={Trash2}
                           onClick={() => setDeleteSnapshotConfirmId(snap.snapshotId)}
-                          title="Delete this snapshot file. Other snapshots are unaffected; your installed mods are unaffected."
-                          aria-label="Delete snapshot"
+                          title={t('profiles.snapshots.deleteTitle')}
+                          aria-label={t('profiles.snapshots.delete')}
                           className="px-1.5"
                         />
                       </div>
@@ -595,8 +646,8 @@ export default function Profiles() {
             <div className="py-16">
               <EmptyState
                 icon={User}
-                title="No Profiles Yet"
-                description={t('profiles.empty.noProfiles')}
+                title={<Tx k="profiles.empty.title" fallback="No Profiles Yet" />}
+                description={<Tx k="profiles.empty.noProfiles" fallback="Create a profile to save your current mod setup." />}
               />
             </div>
           ) : (
@@ -627,7 +678,7 @@ export default function Profiles() {
                           }}
                           onBlur={submitRename}
                           disabled={isRenaming}
-                          aria-label="Rename profile"
+                          aria-label={t('profiles.actions.renameProfile')}
                           className="w-full px-2 py-1 bg-bg-tertiary border border-white/10 rounded text-text-primary text-lg font-semibold font-reaver focus:outline-none focus:ring-2 focus:ring-accent"
                         />
                       ) : (
@@ -644,8 +695,8 @@ export default function Profiles() {
                             type="button"
                             onClick={() => startRename(profile)}
                             disabled={isApplying || isUpdating}
-                            aria-label="Rename profile"
-                            title="Rename profile"
+                            aria-label={t('profiles.actions.renameProfile')}
+                            title={t('profiles.actions.renameProfile')}
                             className="p-1 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <Pencil className="w-3.5 h-3.5" />
@@ -657,29 +708,37 @@ export default function Profiles() {
                             onMouseDown={(e) => e.preventDefault()}
                             onClick={cancelRename}
                             disabled={isRenaming}
-                            aria-label="Cancel rename"
-                            title="Cancel"
+                            aria-label={t('profiles.actions.cancelRename')}
+                            title={t('common.actions.cancel')}
                             className="p-1 text-text-secondary hover:text-text-primary hover:bg-white/5 rounded transition-colors disabled:opacity-50"
                           >
                             <X className="w-3.5 h-3.5" />
                           </button>
                         )}
                         {isActive ? (
-                          <Badge variant="success" className="animate-pulse">Active</Badge>
+                          <Badge variant="success" className="animate-pulse">
+                            <Tx k="common.status.active" fallback="Active" />
+                          </Badge>
                         ) : (
-                          <Badge variant="neutral">Inactive</Badge>
+                          <Badge variant="neutral">
+                            <Tx k="common.status.inactive" fallback="Inactive" />
+                          </Badge>
                         )}
                       </div>
                     }
                   >
                     <div className="flex flex-col gap-4">
-                      <div className="flex items-center justify-between text-sm text-text-secondary bg-black/20 p-4 rounded-lg border border-white/5">
-                        <div className="flex flex-col items-center">
-                          <span className="text-2xl font-bold text-text-primary">{profileModGroups.length}</span>
-                          <span className="text-xs uppercase tracking-wider opacity-70">Mods</span>
-                        </div>
-                        <div className="text-right text-xs">
-                          <div className="mb-1 opacity-70">Updated</div>
+                        <div className="flex items-center justify-between text-sm text-text-secondary bg-black/20 p-4 rounded-lg border border-white/5">
+                          <div className="flex flex-col items-center">
+                            <span className="text-2xl font-bold text-text-primary">{profileModGroups.length}</span>
+                            <span className="text-xs uppercase tracking-wider opacity-70">
+                              <Tx k="profiles.mods.label" fallback="Mods" />
+                            </span>
+                          </div>
+                          <div className="text-right text-xs">
+                          <div className="mb-1 opacity-70">
+                            <Tx k="profiles.updated" fallback="Updated" />
+                          </div>
                           <div className="text-text-primary font-mono">{new Date(profile.updatedAt).toLocaleDateString()}</div>
                         </div>
                       </div>
@@ -687,9 +746,15 @@ export default function Profiles() {
                       {/* Capabilities Indicators */}
                       {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
                         <div className="flex gap-2">
-                          <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-md text-xs text-text-secondary" title="Includes Autoexec Commands">
+                          <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-md text-xs text-text-secondary" title={t('profiles.autoexec.includesTitle')}>
                             <Terminal className="w-3 h-3 text-blue-400" />
-                            <span>Autoexec ({profile.autoexecCommands.length})</span>
+                            <span>
+                              <Tx
+                                k="profiles.autoexec.count"
+                                values={{ count: profile.autoexecCommands.length }}
+                                fallback={`Autoexec (${profile.autoexecCommands.length})`}
+                              />
+                            </span>
                           </div>
                         </div>
                       )}
@@ -706,11 +771,15 @@ export default function Profiles() {
                             variant={isActive ? 'secondary' : 'primary'}
                             title={
                               isActive
-                                ? 'Re-apply: snap mods back to this profile if they have drifted'
+                                ? t('profiles.actions.reapplyTitle')
                                 : undefined
                             }
                           >
-                            {isActive ? 'Re-apply' : 'Apply'}
+                            {isActive ? (
+                              <Tx k="profiles.actions.reapply" fallback="Re-apply" />
+                            ) : (
+                              <Tx k="profiles.actions.apply" fallback="Apply" />
+                            )}
                           </Button>
                           <Button
                             size="sm"
@@ -724,9 +793,9 @@ export default function Profiles() {
                             disabled={isUpdating || isApplying}
                             isLoading={isUpdating}
                             icon={Save}
-                            title="Overwrite this profile with your current mods"
+                            title={t('profiles.actions.updateTitle')}
                           >
-                            Update
+                            <Tx k="profiles.actions.update" fallback="Update" />
                           </Button>
                         </div>
                         <div className="flex items-center gap-1 ml-auto">
@@ -736,8 +805,8 @@ export default function Profiles() {
                             onClick={() => setExportingProfileId(profile.id)}
                             disabled={isApplying || isUpdating}
                             icon={Share2}
-                            title="Export / share profile"
-                            aria-label="Export profile"
+                            title={t('profiles.actions.exportTitle')}
+                            aria-label={t('profiles.actions.exportProfile')}
                             className="px-1.5"
                           />
                           {socialSignedIn && (
@@ -747,8 +816,8 @@ export default function Profiles() {
                               onClick={() => setPublishingProfileId(profile.id)}
                               disabled={isApplying || isUpdating}
                               icon={Globe}
-                              title="Publish to Discover"
-                              aria-label="Publish to Discover"
+                              title={t('profiles.actions.publishToDiscover')}
+                              aria-label={t('profiles.actions.publishToDiscover')}
                               className="px-1.5"
                             />
                           )}
@@ -757,8 +826,8 @@ export default function Profiles() {
                             variant="ghost"
                             onClick={() => toggleExpand(profile.id)}
                             icon={isExpanded ? ChevronUp : ChevronDown}
-                            title={isExpanded ? 'Collapse details' : 'Expand details'}
-                            aria-label={isExpanded ? 'Collapse details' : 'Expand details'}
+                            title={isExpanded ? t('common.actions.collapseDetails') : t('common.actions.expandDetails')}
+                            aria-label={isExpanded ? t('common.actions.collapseDetails') : t('common.actions.expandDetails')}
                             className="px-1.5"
                           />
                           <Button
@@ -767,8 +836,8 @@ export default function Profiles() {
                             onClick={() => setDeleteConfirmId(profile.id)}
                             disabled={isApplying || isUpdating}
                             icon={Trash2}
-                            title="Delete Profile"
-                            aria-label="Delete profile"
+                            title={t('profiles.actions.deleteProfile')}
+                            aria-label={t('profiles.actions.deleteProfile')}
                             className="px-1.5"
                           />
                         </div>
@@ -780,7 +849,19 @@ export default function Profiles() {
                           {/* Mods List */}
                           <div>
                             <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-                              {`Mods (${profileModGroups.length}${profileFileCount !== profileModGroups.length ? `, ${profileFileCount} files` : ''})`}
+                              {profileFileCount !== profileModGroups.length ? (
+                                <Tx
+                                  k="profiles.mods.groupsAndFiles"
+                                  values={{ mods: profileModGroups.length, files: profileFileCount }}
+                                  fallback={`Mods (${profileModGroups.length}, ${profileFileCount} files)`}
+                                />
+                              ) : (
+                                <Tx
+                                  k="profiles.mods.groups"
+                                  values={{ count: profileModGroups.length }}
+                                  fallback={`Mods (${profileModGroups.length})`}
+                                />
+                              )}
                             </div>
                             <div className="max-h-32 overflow-y-auto pr-2 space-y-1">
                               {profileModGroups.map((group) => {
@@ -799,7 +880,11 @@ export default function Profiles() {
                                     <div className="flex items-center gap-2 shrink-0">
                                       {group.variants.length > 1 && (
                                         <span className="text-[10px] text-text-secondary bg-white/5 rounded px-1.5 py-0.5">
-                                          {group.variants.length} files
+                                          <Tx
+                                            k="profiles.mods.files"
+                                            values={{ count: group.variants.length }}
+                                            fallback={`${group.variants.length} files`}
+                                          />
                                         </span>
                                       )}
                                       {group.enabled && <Check className="w-3 h-3 text-green-400" />}
@@ -808,7 +893,9 @@ export default function Profiles() {
                                 );
                               })}
                               {profileModGroups.length === 0 && (
-                                <div className="text-xs text-text-secondary italic">No mods in profile</div>
+                                <div className="text-xs text-text-secondary italic">
+                                  <Tx k="profiles.mods.empty" fallback="No mods in profile" />
+                                </div>
                               )}
                             </div>
                           </div>
@@ -816,11 +903,23 @@ export default function Profiles() {
                           {/* Crosshair Preview */}
                           {profile.crosshair && (
                             <div className="pt-3 border-t border-white/5">
-                              <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">Crosshair</div>
+                              <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
+                                <Tx k="nav.crosshair" fallback="Crosshair" />
+                              </div>
                               <div className="flex items-center gap-4">
                                 <CrosshairPreview size={56} scale={1.3} settings={profile.crosshair} />
                                 <div className="text-xs text-text-secondary space-y-1">
-                                  <div>Gap: {profile.crosshair.pipGap} | Height: {profile.crosshair.pipHeight} | Width: {profile.crosshair.pipWidth}</div>
+                                  <div>
+                                    <Tx
+                                      k="profiles.crosshair.summary"
+                                      values={{
+                                        gap: profile.crosshair.pipGap,
+                                        height: profile.crosshair.pipHeight,
+                                        width: profile.crosshair.pipWidth,
+                                      }}
+                                      fallback={`Gap: ${profile.crosshair.pipGap} | Height: ${profile.crosshair.pipHeight} | Width: ${profile.crosshair.pipWidth}`}
+                                    />
+                                  </div>
                                   <div className="flex items-center gap-2">
                                     <div
                                       className="w-3 h-3 rounded-sm border border-white/20"
@@ -837,7 +936,11 @@ export default function Profiles() {
                           {profile.autoexecCommands && profile.autoexecCommands.length > 0 && (
                             <div className="pt-3 border-t border-white/5">
                               <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-                                Autoexec ({profile.autoexecCommands.length} commands)
+                                <Tx
+                                  k="profiles.autoexec.commandsCount"
+                                  values={{ count: profile.autoexecCommands.length }}
+                                  fallback={`Autoexec (${profile.autoexecCommands.length} commands)`}
+                                />
                               </div>
                               <div className="space-y-1 max-h-24 overflow-y-auto">
                                 {profile.autoexecCommands.map((cmd, idx) => (
@@ -869,19 +972,17 @@ export default function Profiles() {
           setUpdateConfirmId(null);
           if (id) handleUpdateProfile(id);
         }}
-        title="Update Profile"
+        title={<Tx k="profiles.confirm.updateTitle" fallback="Update Profile" />}
         message={
           <>
-            Overwrite{' '}
-            <span className="text-text-primary font-medium">
-              {profiles.find((p) => p.id === updateConfirmId)?.name ?? 'this profile'}
-            </span>{' '}
-            with your currently enabled mods? The profile's saved mod list will be
-            replaced and can't be undone. (To load this profile onto your install
-            instead, use Apply.) You can turn this prompt off in Settings &rarr; Preferences.
+            <Tx
+              k="profiles.confirm.updateMessage"
+              values={{ name: profiles.find((p) => p.id === updateConfirmId)?.name ?? t('profiles.thisProfile') }}
+              fallback={`Overwrite ${profiles.find((p) => p.id === updateConfirmId)?.name ?? 'this profile'} with your currently enabled mods? The profile's saved mod list will be replaced and can't be undone. (To load this profile onto your install instead, use Apply.) You can turn this prompt off in Settings -> Preferences.`}
+            />
           </>
         }
-        confirmLabel="Update"
+        confirmLabel={<Tx k="profiles.actions.update" fallback="Update" />}
       />
 
       {/* Delete Confirmation Modal */}
@@ -889,9 +990,9 @@ export default function Profiles() {
         isOpen={deleteConfirmId !== null}
         onCancel={() => setDeleteConfirmId(null)}
         onConfirm={() => deleteConfirmId && handleDeleteProfile(deleteConfirmId)}
-        title="Delete Profile"
-        message="Are you sure you want to delete this profile? This action cannot be undone."
-        confirmLabel="Delete"
+        title={<Tx k="profiles.confirm.deleteTitle" fallback="Delete Profile" />}
+        message={<Tx k="profiles.confirm.deleteMessage" fallback="Are you sure you want to delete this profile? This action cannot be undone." />}
+        confirmLabel={<Tx k="common.actions.delete" fallback="Delete" />}
         variant="danger"
       />
 
@@ -936,9 +1037,9 @@ export default function Profiles() {
         isOpen={deleteSnapshotConfirmId !== null}
         onCancel={() => setDeleteSnapshotConfirmId(null)}
         onConfirm={() => deleteSnapshotConfirmId && handleDeleteSnapshot(deleteSnapshotConfirmId)}
-        title="Delete Snapshot"
-        message="Delete this recovery snapshot? You won't be able to restore from it later."
-        confirmLabel="Delete"
+        title={<Tx k="profiles.confirm.deleteSnapshotTitle" fallback="Delete Snapshot" />}
+        message={<Tx k="profiles.confirm.deleteSnapshotMessage" fallback="Delete this recovery snapshot? You won't be able to restore from it later." />}
+        confirmLabel={<Tx k="common.actions.delete" fallback="Delete" />}
         variant="danger"
       />
 
@@ -946,9 +1047,25 @@ export default function Profiles() {
         isOpen={bulkDeleteSnapshotsOpen}
         onCancel={() => !bulkDeletingSnapshots && setBulkDeleteSnapshotsOpen(false)}
         onConfirm={handleBulkDeleteSnapshots}
-        title="Delete Selected Snapshots"
-        message={`Delete ${selectedSnapshotIds.size} snapshot${selectedSnapshotIds.size === 1 ? '' : 's'}? Your installed mods are unaffected. You won't be able to restore from the deleted snapshots later.`}
-        confirmLabel={bulkDeletingSnapshots ? 'Deleting…' : `Delete ${selectedSnapshotIds.size}`}
+        title={<Tx k="profiles.confirm.deleteSelectedSnapshotsTitle" fallback="Delete Selected Snapshots" />}
+        message={
+          <Tx
+            k="profiles.confirm.deleteSelectedSnapshotsMessage"
+            values={{ count: selectedSnapshotIds.size }}
+            fallback={`Delete ${selectedSnapshotIds.size} snapshot${selectedSnapshotIds.size === 1 ? '' : 's'}? Your installed mods are unaffected. You won't be able to restore from the deleted snapshots later.`}
+          />
+        }
+        confirmLabel={
+          bulkDeletingSnapshots ? (
+            <Tx k="profiles.actions.deleting" fallback="Deleting..." />
+          ) : (
+            <Tx
+              k="profiles.actions.deleteCount"
+              values={{ count: selectedSnapshotIds.size }}
+              fallback={`Delete ${selectedSnapshotIds.size}`}
+            />
+          )
+        }
         variant="danger"
       />
     </div>

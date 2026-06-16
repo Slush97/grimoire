@@ -1,6 +1,7 @@
 import { type ReactNode } from 'react';
 import { type LucideIcon } from 'lucide-react';
 import { Modal } from './Modal';
+import Tx from '../translation/Tx';
 
 // ============================================================================
 // SectionHeader - Consistent section header styling
@@ -72,7 +73,7 @@ export function ViewModeToggle({ value, options, onChange, className = '' }: Vie
 // ============================================================================
 
 interface PageHeaderProps {
-    title: string;
+    title: ReactNode;
     description?: ReactNode;
     action?: ReactNode;
     stats?: ReactNode;
@@ -102,7 +103,7 @@ export function PageHeader({ title, description, action, stats, className = '' }
 
 interface EmptyStateProps {
     icon: LucideIcon;
-    title: string;
+    title: ReactNode;
     description?: ReactNode;
     action?: ReactNode;
     variant?: 'default' | 'error';
@@ -133,10 +134,10 @@ export function EmptyState({ icon: Icon, title, description, action, variant = '
 
 interface ConfirmModalProps {
     isOpen: boolean;
-    title: string;
+    title: ReactNode;
     message: ReactNode;
-    confirmLabel?: string;
-    cancelLabel?: string;
+    confirmLabel?: ReactNode;
+    cancelLabel?: ReactNode;
     variant?: 'danger' | 'primary';
     onConfirm: () => void;
     onCancel: () => void;
@@ -146,8 +147,8 @@ export function ConfirmModal({
     isOpen,
     title,
     message,
-    confirmLabel = 'Confirm',
-    cancelLabel = 'Cancel',
+    confirmLabel,
+    cancelLabel,
     variant = 'primary',
     onConfirm,
     onCancel,
@@ -172,13 +173,13 @@ export function ConfirmModal({
                     onClick={onCancel}
                     className="px-4 py-2 bg-bg-tertiary border border-border rounded-sm hover:bg-white/10 transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-white/60"
                 >
-                    {cancelLabel}
+                    {cancelLabel ?? <Tx k="common.actions.cancel" fallback="Cancel" />}
                 </button>
                 <button
                     onClick={onConfirm}
                     className={`px-4 py-2 rounded-sm font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${confirmClass}`}
                 >
-                    {confirmLabel}
+                    {confirmLabel ?? <Tx k="common.actions.confirm" fallback="Confirm" />}
                 </button>
             </div>
         </Modal>

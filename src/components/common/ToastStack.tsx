@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, Check, Info } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useToastStore, type Toast } from '../../stores/toastStore';
+import Tx from '../translation/Tx';
 
 // Renders the toast queue bottom-center at z-60 (above modals; see the
 // z-index scale in index.css). Mounted once in Layout.
@@ -28,6 +30,7 @@ export function ToastStack() {
 }
 
 function ToastItem({ toast }: { toast: Toast }) {
+  const { t } = useTranslation();
   const dismissToast = useToastStore((s) => s.dismissToast);
   const [closing, setClosing] = useState(false);
 
@@ -61,9 +64,9 @@ function ToastItem({ toast }: { toast: Toast }) {
           type="button"
           onClick={() => dismissToast(toast.id)}
           className="flex-shrink-0 cursor-pointer opacity-70 transition-opacity hover:opacity-100"
-          aria-label="Dismiss"
+          aria-label={t('common.actions.dismiss')}
         >
-          Dismiss
+          <Tx k="common.actions.dismiss" fallback="Dismiss" />
         </button>
       )}
     </div>

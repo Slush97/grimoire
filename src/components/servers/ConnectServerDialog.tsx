@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Loader2, X, Download, CheckCircle2, AlertTriangle, Play } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '../common/ui';
 import { Modal } from '../common/Modal';
+import Tx from '../translation/Tx';
 import {
   deadworksConnect,
   deadworksOnDownloadProgress,
@@ -15,15 +17,7 @@ interface Props {
 }
 
 type Phase = 'working' | 'done' | 'error';
-
-const STATUS_LABEL: Record<DeadworksConnectProgress['status'], string> = {
-  fetching: 'Checking server content',
-  checking: 'Verifying files',
-  downloading: 'Downloading content',
-  decompressing: 'Unpacking content',
-  ready: 'Ready',
-  connecting: 'Handing off to Steam',
-};
+type MessageKey = 'preparing' | 'launching' | 'connectionFailed';
 
 function formatBytes(n: number): string {
   if (!n || n < 0) return '';
@@ -32,10 +26,29 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
+function renderStatusLabel(status: DeadworksConnectProgress['status']) {
+  switch (status) {
+    case 'checking':
+      return <Tx k="servers.connect.status.checking" fallback="Verifying files" />;
+    case 'downloading':
+      return <Tx k="servers.connect.status.downloading" fallback="Downloading content" />;
+    case 'decompressing':
+      return <Tx k="servers.connect.status.decompressing" fallback="Unpacking content" />;
+    case 'ready':
+      return <Tx k="servers.connect.status.ready" fallback="Ready" />;
+    case 'connecting':
+      return <Tx k="servers.connect.status.connecting" fallback="Handing off to Steam" />;
+    default:
+      return <Tx k="servers.connect.status.fetching" fallback="Checking server content" />;
+  }
+}
+
 export default function ConnectServerDialog({ server, onClose }: Props) {
+  const { t } = useTranslation();
   const [progress, setProgress] = useState<DeadworksConnectProgress | null>(null);
   const [phase, setPhase] = useState<Phase>('working');
-  const [message, setMessage] = useState('Preparing to connect...');
+  const [messageKey, setMessageKey] = useState<MessageKey>('preparing');
+  const [messageText, setMessageText] = useState('');
   const startedRef = useRef(false);
 
   useEffect(() => {
@@ -48,15 +61,21 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
         .then((result) => {
           if (result.success) {
             setPhase('done');
-            setMessage('Launching Deadlock through Steam. Accept any Steam prompt to join.');
+            setMessageKey('launching');
+            setMessageText('');
           } else {
             setPhase('error');
-            setMessage(result.message);
+            setMessageText(result.message);
           }
         })
         .catch((e: unknown) => {
           setPhase('error');
-          setMessage(e instanceof Error ? e.message : 'Connection failed.');
+          if (e instanceof Error) {
+            setMessageText(e.message);
+          } else {
+            setMessageKey('connectionFailed');
+            setMessageText('');
+          }
         });
     }
 
@@ -70,6 +89,13 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
       ? Math.min(100, Math.round((progress.bytesDownloaded / progress.totalBytes) * 100))
       : null;
   const indeterminate = progress?.status === 'decompressing';
+  const message = messageText || (
+    messageKey === 'launching'
+      ? t('servers.connect.launchingSteam')
+      : messageKey === 'connectionFailed'
+        ? t('servers.connect.connectionFailed')
+        : t('servers.connect.preparingToConnect')
+  );
 
   return (
     <Modal
@@ -85,7 +111,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
             onClick={onClose}
             disabled={phase === 'working'}
             className="rounded-sm p-1 text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary disabled:opacity-30 disabled:cursor-not-allowed"
-            aria-label="Close"
+            aria-label={t('common.actions.close')}
           >
             <X size={18} />
           </button>
@@ -102,7 +128,11 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
                 )}
                 <div className="min-w-0">
                   <div className="text-sm font-medium">
-                    {progress ? STATUS_LABEL[progress.status] : 'Preparing...'}
+                    {progress ? (
+                      renderStatusLabel(progress.status)
+                    ) : (
+                      <Tx k="servers.connect.preparing" fallback="Preparing..." />
+                    )}
                   </div>
                   {progress?.name && (
                     <div className="truncate text-xs text-text-secondary">
@@ -144,7 +174,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
               <CheckCircle2 size={40} className="text-green-400" />
               <p className="text-sm text-text-secondary">{message}</p>
               <Button variant="primary" icon={Play} onClick={onClose} className="mt-2">
-                Done
+                <Tx k="common.actions.done" fallback="Done" />
               </Button>
             </div>
           )}
@@ -154,7 +184,7 @@ export default function ConnectServerDialog({ server, onClose }: Props) {
               <AlertTriangle size={40} className="text-red-500" />
               <p className="text-sm text-text-secondary">{message}</p>
               <Button variant="secondary" onClick={onClose} className="mt-2">
-                Close
+                <Tx k="common.actions.close" fallback="Close" />
               </Button>
             </div>
           )}

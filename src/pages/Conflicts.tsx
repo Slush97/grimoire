@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2 } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import {
   getConflicts,
   disableMod,
@@ -16,6 +17,7 @@ import { useAppStore } from '../stores/appStore';
 import { Button } from '../components/common/ui';
 import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, type ViewMode } from '../components/common/PageComponents';
 import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
+import Tx from '../components/translation/Tx';
 
 const CONFLICTS_VIEW_MODE_KEY = 'grimoire:conflicts-view-mode';
 
@@ -112,6 +114,7 @@ function ConflictsSkeleton() {
 }
 
 export default function Conflicts() {
+  const { t } = useTranslation();
   const [conflicts, setConflicts] = useState<ModConflict[]>([]);
   const [modsMap, setModsMap] = useState<Map<string, ModWithThumbnail>>(new Map());
   // Enabled mod ids in true load order (index 0 loads first). Drives the
@@ -237,7 +240,7 @@ export default function Conflicts() {
       const order = orderedEnabledIds.slice();
       const winnerIdx = order.indexOf(winnerId);
       if (winnerIdx === -1 || !order.includes(loserId)) {
-        throw new Error('Both mods must be enabled to set their load order.');
+        throw new Error(t('conflicts.errors.bothModsEnabled'));
       }
       order.splice(winnerIdx, 1);
       const loserIdx = order.indexOf(loserId);
@@ -282,7 +285,7 @@ export default function Conflicts() {
       } else {
         // Partial failure — backend is the source of truth, refetch.
         await loadConflicts();
-        setError(`Failed to ignore ${failures.length} pair${failures.length === 1 ? '' : 's'}. See console for details.`);
+        setError(t('conflicts.errors.ignoreFailed', { count: failures.length }));
         console.warn('[Conflicts] ignore-all failures:', failures);
       }
       // Single event after the whole batch — the Sidebar badge re-fetches
@@ -330,7 +333,7 @@ export default function Conflicts() {
       await loadConflicts();
       if (failures.length > 0) {
         console.warn('[Conflicts] clear ignored failures:', failures);
-        setError(`Failed to clear ${failures.length} ignored pair${failures.length === 1 ? '' : 's'}. See console for details.`);
+        setError(t('conflicts.errors.clearIgnoredFailed', { count: failures.length }));
       }
       window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
     } finally {
@@ -379,11 +382,13 @@ export default function Conflicts() {
       <div className="h-full flex items-center justify-center p-6">
         <EmptyState
           icon={AlertTriangle}
-          title="Error Loading Conflicts"
+          title={<Tx k="conflicts.errorTitle" fallback="Error Loading Conflicts" />}
           description={error ?? undefined}
           variant="error"
           action={
-            <Button onClick={loadConflicts}>Retry</Button>
+            <Button onClick={loadConflicts}>
+              <Tx k="common.actions.retry" fallback="Retry" />
+            </Button>
           }
         />
       </div>
@@ -395,10 +400,17 @@ export default function Conflicts() {
       <div className="h-full flex items-center justify-center p-6">
         <EmptyState
           icon={CheckCircle}
-          title="No Conflicts Detected"
-          description="Your installed mods don't have any conflicts. Great!"
+          title={<Tx k="conflicts.empty.noConflicts.title" fallback="No Conflicts Detected" />}
+          description={
+            <Tx
+              k="conflicts.empty.noConflicts.description"
+              fallback="Your installed mods don't have any conflicts. Great!"
+            />
+          }
           action={
-            <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
+            <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>
+              <Tx k="common.actions.refresh" fallback="Refresh" />
+            </Button>
           }
         />
       </div>
@@ -408,11 +420,25 @@ export default function Conflicts() {
   return (
     <div className="p-6 max-w-5xl mx-auto animate-fade-in">
       <PageHeader
-        title={`Conflicts (${conflicts.length})`}
+        title={
+          <Tx
+            k="conflicts.title"
+            values={{ count: conflicts.length }}
+            fallback={`Conflicts (${conflicts.length})`}
+          />
+        }
         description={
-          conflicts.length === 0
-            ? 'No active conflicts — review or restore your ignored pairs below.'
-            : 'Resolve conflicts between installed mods'
+          conflicts.length === 0 ? (
+            <Tx
+              k="conflicts.header.noActiveDescription"
+              fallback="No active conflicts - review or restore your ignored pairs below."
+            />
+          ) : (
+            <Tx
+              k="conflicts.header.description"
+              fallback="Resolve conflicts between installed mods"
+            />
+          )
         }
         action={
           <div className="flex items-center gap-2">
@@ -421,8 +447,8 @@ export default function Conflicts() {
                 value={viewMode}
                 onChange={(mode) => setViewMode(mode === 'list' ? 'list' : 'grid')}
                 options={[
-                  { value: 'grid', label: 'Grid view', icon: LayoutGrid },
-                  { value: 'list', label: 'List view', icon: List },
+                  { value: 'grid', label: t('conflicts.view.grid'), icon: LayoutGrid },
+                  { value: 'list', label: t('conflicts.view.list'), icon: List },
                 ]}
               />
             )}
@@ -431,12 +457,14 @@ export default function Conflicts() {
                 variant="secondary"
                 onClick={() => setIgnoreAllConfirmOpen(true)}
                 icon={EyeOff}
-                title="Move every active conflict pair to the Ignored section. Reversible per-pair via Unignore."
+                title={t('conflicts.actions.ignoreAllTitle')}
               >
-                Ignore all
+                <Tx k="conflicts.actions.ignoreAll" fallback="Ignore all" />
               </Button>
             )}
-            <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>Refresh</Button>
+            <Button variant="secondary" onClick={loadConflicts} icon={RefreshCw}>
+              <Tx k="common.actions.refresh" fallback="Refresh" />
+            </Button>
           </div>
         }
         className="mb-6"
@@ -449,7 +477,15 @@ export default function Conflicts() {
       {conflicts.length === 0 && (
         <div className="mb-6 p-4 rounded-xl border border-border bg-bg-secondary text-sm text-text-secondary flex items-center gap-2">
           <CheckCircle className="w-4 h-4 text-green-400" />
-          No active conflicts. {ignored.size > 0 && `${ignored.size} pair(s) currently ignored — see below.`}
+          {ignored.size > 0 ? (
+            <Tx
+              k="conflicts.empty.activeWithIgnored"
+              values={{ count: ignored.size }}
+              fallback={`No active conflicts. ${ignored.size} pair(s) currently ignored - see below.`}
+            />
+          ) : (
+            <Tx k="conflicts.empty.noActive" fallback="No active conflicts." />
+          )}
         </div>
       )}
 
@@ -468,7 +504,7 @@ export default function Conflicts() {
                     <img src={mod.thumbnailUrl} alt={mod.name} className="h-full w-full object-cover" />
                   ) : (
                     <div className="flex h-full w-full items-center justify-center text-[11px] text-text-tertiary">
-                      No Preview
+                      <Tx k="conflicts.noPreview" fallback="No Preview" />
                     </div>
                   )}
                 </div>
@@ -490,8 +526,8 @@ export default function Conflicts() {
                 <button
                   type="button"
                   onClick={() => setDisableTarget(mod)}
-                  aria-label={`Disable ${mod.name}`}
-                  title={`Disable ${mod.name}`}
+                  aria-label={t('conflicts.actions.disableNamed', { name: mod.name })}
+                  title={t('conflicts.actions.disableNamed', { name: mod.name })}
                   className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-md border border-red-500/30 bg-red-500/10 text-red-300 transition-colors hover:bg-red-500/20 hover:text-red-200 cursor-pointer"
                 >
                   <X className="h-4 w-4" />
@@ -513,16 +549,18 @@ export default function Conflicts() {
                     type="button"
                     onClick={() => handleIgnore(conflict)}
                     disabled={pendingPair === getConflictIgnoreKey(conflict)}
-                    title="Stop flagging this pair as a conflict"
+                    title={t('conflicts.actions.ignoreTitle')}
                     className="inline-flex flex-shrink-0 items-center gap-1 rounded px-2 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                   >
                     <EyeOff className="h-3.5 w-3.5" />
-                    Ignore
+                    <Tx k="conflicts.actions.ignore" fallback="Ignore" />
                   </button>
                 </div>
                 <div className="grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] items-center gap-3 p-4">
                   {renderListSide(modA, variantA)}
-                  <span className="text-center text-sm font-bold text-text-tertiary">VS</span>
+                  <span className="text-center text-sm font-bold text-text-tertiary">
+                    <Tx k="common.versus" fallback="VS" />
+                  </span>
                   {renderListSide(modB, variantB)}
                 </div>
                 <ConflictReorderActions
@@ -560,11 +598,11 @@ export default function Conflicts() {
                     type="button"
                     onClick={() => handleIgnore(conflict)}
                     disabled={pendingPair === getConflictIgnoreKey(conflict)}
-                    title="Stop flagging this pair as a conflict"
+                    title={t('conflicts.actions.ignoreTitle')}
                     className="flex-shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                   >
                     <EyeOff className="w-3.5 h-3.5" />
-                    Ignore
+                    <Tx k="conflicts.actions.ignore" fallback="Ignore" />
                   </button>
                 </div>
 
@@ -581,16 +619,17 @@ export default function Conflicts() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-text-tertiary">
-                          No Preview
+                          <Tx k="conflicts.noPreview" fallback="No Preview" />
                         </div>
                       )}
                       <button
                         onClick={() => setDisableTarget(modA)}
-                        aria-label={`Disable ${modA.name}`}
+                        aria-label={t('conflicts.actions.disableNamed', { name: modA.name })}
                         className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
                       >
                         <span className="text-white text-sm font-medium flex items-center gap-1">
-                          <X className="w-4 h-4" /> Disable
+                          <X className="w-4 h-4" />
+                          <Tx k="conflicts.actions.disable" fallback="Disable" />
                         </span>
                       </button>
                     </div>
@@ -611,7 +650,9 @@ export default function Conflicts() {
 
                   {/* VS divider */}
                   <div className="h-full flex items-center justify-center">
-                    <span className="text-text-tertiary text-sm font-bold">VS</span>
+                    <span className="text-text-tertiary text-sm font-bold">
+                      <Tx k="common.versus" fallback="VS" />
+                    </span>
                   </div>
 
                   {/* Mod B Card */}
@@ -625,16 +666,17 @@ export default function Conflicts() {
                         />
                       ) : (
                         <div className="w-full h-full flex items-center justify-center text-text-tertiary">
-                          No Preview
+                          <Tx k="conflicts.noPreview" fallback="No Preview" />
                         </div>
                       )}
                       <button
                         onClick={() => setDisableTarget(modB)}
-                        aria-label={`Disable ${modB.name}`}
+                        aria-label={t('conflicts.actions.disableNamed', { name: modB.name })}
                         className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
                       >
                         <span className="text-white text-sm font-medium flex items-center gap-1">
-                          <X className="w-4 h-4" /> Disable
+                          <X className="w-4 h-4" />
+                          <Tx k="conflicts.actions.disable" fallback="Disable" />
                         </span>
                       </button>
                     </div>
@@ -677,16 +719,20 @@ export default function Conflicts() {
           <div className="mb-3 flex items-center justify-between gap-3">
             <h3 className="text-sm font-semibold uppercase tracking-wide text-text-secondary flex items-center gap-2">
               <EyeOff className="w-4 h-4" />
-              Ignored ({ignored.size})
+              <Tx
+                k="conflicts.ignored.title"
+                values={{ count: ignored.size }}
+                fallback={`Ignored (${ignored.size})`}
+              />
             </h3>
             <Button
               variant="secondary"
               size="sm"
               icon={Trash2}
               onClick={() => setClearIgnoredConfirmOpen(true)}
-              title="Restore conflict detection for every ignored pair"
+              title={t('conflicts.ignored.clearTitle')}
             >
-              Clear ignored
+              <Tx k="conflicts.actions.clearIgnored" fallback="Clear ignored" />
             </Button>
           </div>
           <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
@@ -698,8 +744,8 @@ export default function Conflicts() {
               // entry (using a placeholder) so the user can clean it up. The
               // backend's filter is a no-op for missing ids — they just
               // never re-appear as active conflicts.
-              const aName = a?.name ?? '(removed mod)';
-              const bName = b?.name ?? '(removed mod)';
+              const aName = a?.name ?? t('conflicts.removedMod');
+              const bName = b?.name ?? t('conflicts.removedMod');
               const aVariant = a ? getVariantLabel(a) : null;
               const bVariant = b ? getVariantLabel(b) : null;
               return (
@@ -708,7 +754,9 @@ export default function Conflicts() {
                     <span className="truncate text-text-primary" title={aVariant ? `${aName} - ${aVariant}` : aName}>
                       {aName}{aVariant ? ` (${aVariant})` : ''}
                     </span>
-                    <span className="text-text-tertiary text-xs flex-shrink-0">vs</span>
+                    <span className="text-text-tertiary text-xs flex-shrink-0">
+                      <Tx k="common.versusLower" fallback="vs" />
+                    </span>
                     <span className="truncate text-text-primary" title={bVariant ? `${bName} - ${bVariant}` : bName}>
                       {bName}{bVariant ? ` (${bVariant})` : ''}
                     </span>
@@ -718,10 +766,10 @@ export default function Conflicts() {
                     onClick={() => handleUnignore(key)}
                     disabled={pendingPair === key}
                     className="flex-shrink-0 inline-flex items-center gap-1 px-2.5 py-1 text-xs text-text-secondary hover:text-text-primary hover:bg-bg-tertiary rounded transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
-                    title="Restore conflict detection for this pair"
+                    title={t('conflicts.ignored.unignoreTitle')}
                   >
                     <Eye className="w-3.5 h-3.5" />
-                    Unignore
+                    <Tx k="conflicts.actions.unignore" fallback="Unignore" />
                   </button>
                 </div>
               );
@@ -734,12 +782,16 @@ export default function Conflicts() {
         isOpen={disableTarget !== null}
         onCancel={() => !disabling && setDisableTarget(null)}
         onConfirm={confirmDisable}
-        title="Disable this mod?"
+        title={<Tx k="conflicts.confirm.disableTitle" fallback="Disable this mod?" />}
         message={
           disableTarget ? (
             <>
               <p className="mb-2">
-                <span className="text-text-primary font-medium">{disableTarget.name}</span> will be disabled and moved out of the addons folder. You can re-enable it from the Installed page.
+                <Tx
+                  k="conflicts.confirm.disableMessage"
+                  values={{ name: disableTarget.name }}
+                  fallback={`${disableTarget.name} will be disabled and moved out of the addons folder. You can re-enable it from the Installed page.`}
+                />
               </p>
               {getVariantLabel(disableTarget) && (
                 <p className="text-xs text-accent truncate" title={getVariantLabel(disableTarget) ?? undefined}>
@@ -752,7 +804,13 @@ export default function Conflicts() {
             </>
           ) : ''
         }
-        confirmLabel={disabling ? 'Disabling…' : 'Disable'}
+        confirmLabel={
+          disabling ? (
+            <Tx k="conflicts.actions.disabling" fallback="Disabling..." />
+          ) : (
+            <Tx k="conflicts.actions.disable" fallback="Disable" />
+          )
+        }
         variant="danger"
       />
 
@@ -760,36 +818,76 @@ export default function Conflicts() {
         isOpen={ignoreAllConfirmOpen}
         onCancel={() => !ignoringAll && setIgnoreAllConfirmOpen(false)}
         onConfirm={handleIgnoreAll}
-        title={`Ignore all ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}?`}
+        title={
+          <Tx
+            k="conflicts.confirm.ignoreAllTitle"
+            values={{ count: conflicts.length }}
+            fallback={`Ignore all ${conflicts.length} conflict${conflicts.length === 1 ? '' : 's'}?`}
+          />
+        }
         message={
           <>
             <p className="mb-2">
-              Every currently active conflict pair will move to the <span className="text-text-primary font-medium">Ignored</span> section below.
+              <Tx
+                k="conflicts.confirm.ignoreAllMessage"
+                fallback="Every currently active conflict pair will move to the Ignored section below."
+              />
             </p>
             <p className="text-xs text-text-tertiary">
-              Reversible — you can restore any pair individually with <em>Unignore</em>.
+              <Tx
+                k="conflicts.confirm.ignoreAllHint"
+                fallback="Reversible - you can restore any pair individually with Unignore."
+              />
             </p>
           </>
         }
-        confirmLabel={ignoringAll ? 'Ignoring…' : `Ignore ${conflicts.length}`}
+        confirmLabel={
+          ignoringAll ? (
+            <Tx k="conflicts.actions.ignoring" fallback="Ignoring..." />
+          ) : (
+            <Tx
+              k="conflicts.actions.ignoreCount"
+              values={{ count: conflicts.length }}
+              fallback={`Ignore ${conflicts.length}`}
+            />
+          )
+        }
       />
 
       <ConfirmModal
         isOpen={clearIgnoredConfirmOpen}
         onCancel={() => !clearingIgnored && setClearIgnoredConfirmOpen(false)}
         onConfirm={handleClearIgnored}
-        title={`Clear ${ignored.size} ignored conflict${ignored.size === 1 ? '' : 's'}?`}
+        title={
+          <Tx
+            k="conflicts.confirm.clearIgnoredTitle"
+            values={{ count: ignored.size }}
+            fallback={`Clear ${ignored.size} ignored conflict${ignored.size === 1 ? '' : 's'}?`}
+          />
+        }
         message={
           <>
             <p className="mb-2">
-              Every ignored pair will be restored to normal conflict detection.
+              <Tx
+                k="conflicts.confirm.clearIgnoredMessage"
+                fallback="Every ignored pair will be restored to normal conflict detection."
+              />
             </p>
             <p className="text-xs text-text-tertiary">
-              Pairs that still conflict will reappear in the active list after refresh.
+              <Tx
+                k="conflicts.confirm.clearIgnoredHint"
+                fallback="Pairs that still conflict will reappear in the active list after refresh."
+              />
             </p>
           </>
         }
-        confirmLabel={clearingIgnored ? 'Clearing…' : 'Clear ignored'}
+        confirmLabel={
+          clearingIgnored ? (
+            <Tx k="conflicts.actions.clearing" fallback="Clearing..." />
+          ) : (
+            <Tx k="conflicts.actions.clearIgnored" fallback="Clear ignored" />
+          )
+        }
       />
     </div>
   );

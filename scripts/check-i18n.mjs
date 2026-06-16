@@ -34,6 +34,7 @@ function walk(dir) {
 }
 
 const keyRe = /\bt\(\s*['"]([\w.-]+)['"]/g;
+const txKeyRe = /<Tx\b[^>]*\bk\s*=\s*['"]([\w.-]+)['"]/g;
 const referenced = new Set();
 const missing = [];
 for (const file of walk(join(root, 'src'))) {
@@ -43,6 +44,11 @@ for (const file of walk(join(root, 'src'))) {
     const key = m[1];
     referenced.add(key);
     // A missing key resolves to itself; count:2 lets plural keys resolve.
+    if (i18next.t(key, { count: 2 }) === key) missing.push(`${file.replace(root, '')}: ${key}`);
+  }
+  while ((m = txKeyRe.exec(src))) {
+    const key = m[1];
+    referenced.add(key);
     if (i18next.t(key, { count: 2 }) === key) missing.push(`${file.replace(root, '')}: ${key}`);
   }
 }

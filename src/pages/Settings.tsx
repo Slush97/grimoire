@@ -21,6 +21,7 @@ import { AVAILABLE_LANGUAGES, languageDisplayName } from '../i18n';
 import { TRANSLATION_LANGUAGE_OPTIONS, translationLanguageLabel } from '../lib/translationLanguages';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
+import Tx from '../components/translation/Tx';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
 import { DEFAULT_SIDEBAR_HERO, HERO_NAMES_SORTED, getHeroChipIconPath } from '../lib/lockerUtils';
 import SocialAccountSection from '../components/social/SocialAccountSection';
@@ -37,13 +38,14 @@ const releaseTagUrl = (version?: string | null) =>
 // A version number that links to its GitHub release notes. Renders nothing when
 // there's no version to point at.
 function ReleaseVersionLink({ version, className = '' }: { version?: string | null; className?: string }) {
+  const { t } = useTranslation();
   if (!version) return null;
   return (
     <a
       href={releaseTagUrl(version)}
       target="_blank"
       rel="noopener noreferrer"
-      title={`View v${version} release notes on GitHub`}
+      title={t('settings.updates.releaseNotesTitle', { version })}
       className={`underline decoration-dotted underline-offset-2 transition-colors hover:text-accent ${className}`}
     >
       v{version}
@@ -180,7 +182,7 @@ export default function Settings() {
     if (isDevMode) return;
     const selected = await showOpenDialog({
       directory: true,
-      title: 'Select Deadlock Installation Folder',
+      title: t('settings.gamePath.selectFolder'),
     });
 
     if (selected) {
@@ -420,7 +422,7 @@ export default function Settings() {
     setCleanupResult(null);
     try {
       const result = await cleanupAddons();
-      setCleanupResult(`${result.removedArchives} archive file(s) removed.`);
+      setCleanupResult(t('settings.maintenance.archivesRemoved', { count: result.removedArchives }));
     } catch (err) {
       setCleanupResult(String(err));
     } finally {
@@ -451,7 +453,7 @@ export default function Settings() {
       const text = await buildDiagnosticReport(bugDescription, { includeFullLog });
       setBugReportText(text);
     } catch (err) {
-      setBugReportError(`Couldn't build report: ${String(err)}`);
+      setBugReportError(t('settings.support.reportBuildFailed', { error: String(err) }));
     } finally {
       setIsBuildingReport(false);
     }
@@ -475,7 +477,7 @@ export default function Settings() {
   // "copy the report, then click the button, then paste."
   const githubIssueUrl = useMemo(() => {
     const firstLine = bugDescription.split('\n').find((l) => l.trim().length > 0) ?? '';
-    const title = firstLine.trim().slice(0, 100) || 'Bug report';
+    const title = firstLine.trim().slice(0, 100) || t('settings.support.bugReportTitle');
     const body = [
       bugDescription.trim() || '<!-- describe what happened -->',
       '',
@@ -489,7 +491,7 @@ export default function Settings() {
     ].join('\n');
     const q = `?title=${encodeURIComponent(title)}&body=${encodeURIComponent(body)}`;
     return `https://github.com/Slush97/grimoire/issues/new${q}`;
-  }, [bugDescription]);
+  }, [bugDescription, t]);
 
   // Load sync status
   useEffect(() => {
@@ -595,7 +597,7 @@ export default function Settings() {
       await window.electronAPI.wipeModCache();
       const status = await window.electronAPI.getSyncStatus();
       setSyncStatus(status);
-      setWipeResult('Cache cleared.');
+      setWipeResult(t('settings.cache.cleared'));
     } catch (err) {
       setWipeResult(String(err));
     } finally {
@@ -610,7 +612,7 @@ export default function Settings() {
     try {
       const { bytesFreed } = await window.electronAPI.clearPreviewCache();
       setPreviewCacheBytes(0);
-      setPreviewResult(`Cleared ${formatBytes(bytesFreed)}.`);
+      setPreviewResult(t('settings.cache.previewCleared', { size: formatBytes(bytesFreed) }));
     } catch (err) {
       setPreviewResult(String(err));
     } finally {
@@ -623,7 +625,7 @@ export default function Settings() {
     if (!settings) return;
     try {
       await saveSettings({ ...settings, hasCompletedSetup: false });
-      setResetResult('The setup wizard will appear on the next app launch.');
+      setResetResult(t('settings.setupWizard.resetResult'));
       setTimeout(() => setResetResult(null), 5000);
     } catch (err) {
       setResetResult(`Error: ${String(err)}`);
@@ -649,21 +651,33 @@ export default function Settings() {
   return (
     <div className="p-8 max-w-5xl mx-auto space-y-8 animate-fade-in">
       <PageHeader
-        title="Settings"
-        description={t('settings.header.description')}
+        title={<Tx k="nav.settings" fallback="Settings" />}
+        description={<Tx k="settings.header.description" fallback="Game paths, preferences, and maintenance" />}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Game Configuration Section - Full Width */}
-        <Card title="Game Configuration" icon={HardDrive} className="lg:col-span-2">
+        <Card title={<Tx k="settings.sections.gameConfiguration" fallback="Game Configuration" />} icon={HardDrive} className="lg:col-span-2">
           <div className="space-y-6">
             <div>
               <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-medium text-text-primary">Deadlock Installation Path</label>
+                <label className="text-sm font-medium text-text-primary">
+                  <Tx k="settings.gamePath.label" fallback="Deadlock Installation Path" />
+                </label>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-text-secondary">
-                    {isValidPath === true && <span className="text-green-400 flex items-center gap-1"><Check className="w-3 h-3" /> Valid</span>}
-                    {isValidPath === false && <span className="text-red-400 flex items-center gap-1"><X className="w-3 h-3" /> Invalid</span>}
+                    {isValidPath === true && (
+                      <span className="text-green-400 flex items-center gap-1">
+                        <Check className="w-3 h-3" />
+                        <Tx k="common.status.valid" fallback="Valid" />
+                      </span>
+                    )}
+                    {isValidPath === false && (
+                      <span className="text-red-400 flex items-center gap-1">
+                        <X className="w-3 h-3" />
+                        <Tx k="common.status.invalid" fallback="Invalid" />
+                      </span>
+                    )}
                   </span>
                   {!isDevMode && (
                     <Button
@@ -674,7 +688,7 @@ export default function Settings() {
                       size="sm"
                       icon={RefreshCw}
                     >
-                      Auto-detect
+                      <Tx k="settings.gamePath.autoDetect" fallback="Auto-detect" />
                     </Button>
                   )}
                 </div>
@@ -697,14 +711,22 @@ export default function Settings() {
                   variant="secondary"
                   icon={FolderOpen}
                 >
-                  Browse
+                  <Tx k="common.actions.browse" fallback="Browse" />
                 </Button>
               </div>
 
               <p className="text-xs text-text-secondary mt-2 pl-1">
-                {isDevMode
-                  ? 'Dev mode is active. Deadlock path selection is disabled.'
-                  : "Select your Deadlock game folder (contains the 'game' directory)"}
+                {isDevMode ? (
+                  <Tx
+                    k="settings.gamePath.devModeActive"
+                    fallback="Dev mode is active. Deadlock path selection is disabled."
+                  />
+                ) : (
+                  <Tx
+                    k="settings.gamePath.selectHint"
+                    fallback="Select your Deadlock game folder (contains the 'game' directory)"
+                  />
+                )}
               </p>
             </div>
 
@@ -713,26 +735,39 @@ export default function Settings() {
             <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
               <div>
                 <div className="font-medium flex items-center gap-2">
-                  gameinfo.gi Status
+                  <Tx k="settings.gameinfo.title" fallback="gameinfo.gi Status" />
                   {gameinfoConfigured ? (
-                    <Badge variant="success">Configured</Badge>
+                    <Badge variant="success">
+                      <Tx k="common.status.configured" fallback="Configured" />
+                    </Badge>
                   ) : gameinfoConfigured === false ? (
-                    <Badge variant="error" className="animate-pulse">Issues Found</Badge>
+                    <Badge variant="error" className="animate-pulse">
+                      <Tx k="settings.gameinfo.issuesFound" fallback="Issues Found" />
+                    </Badge>
                   ) : (
-                    <Badge variant="neutral">Checking...</Badge>
+                    <Badge variant="neutral">
+                      <Tx k="common.status.checking" fallback="Checking..." />
+                    </Badge>
                   )}
                 </div>
                 <p className="text-xs text-text-secondary mt-1 max-w-md">
-                  {gameinfoStatus ?? 'Checking gameinfo.gi status...'}
+                  {gameinfoStatus ?? t('settings.gameinfo.checkingStatus')}
                 </p>
                 {gameinfoMissing && (
                   <div className="mt-2 max-w-md space-y-1">
                     <p className="text-xs text-text-secondary">
-                      In Steam: right-click Deadlock {'>'} Properties {'>'} Installed Files {'>'} Verify integrity of game files.
+                      <Tx
+                        k="settings.gameinfo.verifySteam"
+                        fallback="In Steam: right-click Deadlock > Properties > Installed Files > Verify integrity of game files."
+                      />
                     </p>
                     {gameinfoCandidates.length > 0 && (
                       <p className="text-xs text-amber-300">
-                        Found nearby: {gameinfoCandidates.join(', ')}. Rename one to gameinfo.gi to restore.
+                        <Tx
+                          k="settings.gameinfo.foundNearby"
+                          values={{ candidates: gameinfoCandidates.join(', ') }}
+                          fallback={`Found nearby: ${gameinfoCandidates.join(', ')}. Rename one to gameinfo.gi to restore.`}
+                        />
                       </p>
                     )}
                   </div>
@@ -745,7 +780,7 @@ export default function Settings() {
                   variant="primary"
                   icon={FolderOpen}
                 >
-                  Open Game Folder
+                  <Tx k="settings.gamePath.openGameFolder" fallback="Open Game Folder" />
                 </Button>
               ) : (
                 <Button
@@ -755,7 +790,7 @@ export default function Settings() {
                   variant={gameinfoConfigured ? 'secondary' : 'primary'}
                   icon={Wrench}
                 >
-                  Fix Configuration
+                  <Tx k="settings.gameinfo.fixConfiguration" fallback="Fix Configuration" />
                 </Button>
               )}
             </div>
@@ -763,27 +798,33 @@ export default function Settings() {
         </Card>
 
         {/* Updates */}
-        <Card title="Updates" icon={Download} className="lg:col-span-2">
+        <Card title={<Tx k="settings.sections.updates" fallback="Updates" />} icon={Download} className="lg:col-span-2">
           <div className="space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
               <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium">Current Version</span>
+                  <span className="text-sm font-medium">
+                    <Tx k="settings.updates.currentVersion" fallback="Current Version" />
+                  </span>
                   <Badge variant="info">v{appVersion || '...'}</Badge>
                 </div>
                 {updateStatus?.available && !updateStatus.downloaded && (
                   <span className="text-xs text-accent">
-                    <ReleaseVersionLink version={updateStatus.updateInfo?.version} /> available!
+                    <ReleaseVersionLink version={updateStatus.updateInfo?.version} />{' '}
+                    <Tx k="settings.updates.available" fallback="available!" />
                   </span>
                 )}
                 {updateStatus?.downloaded && (
                   <span className="text-xs text-green-400 inline-flex items-center gap-1">
                     <Sparkles className="w-3 h-3" />
-                    <ReleaseVersionLink version={updateStatus.updateInfo?.version} /> ready to install
+                    <ReleaseVersionLink version={updateStatus.updateInfo?.version} />{' '}
+                    <Tx k="settings.updates.readyToInstall" fallback="ready to install" />
                   </span>
                 )}
                 {upToDate && !updateStatus?.available && !updateStatus?.checking && (
-                  <span className="text-xs text-green-400">✓ You're up to date!</span>
+                  <span className="text-xs text-green-400">
+                    <Tx k="settings.updates.upToDate" fallback="✓ You're up to date!" />
+                  </span>
                 )}
                 {updateStatus?.error && (
                   <span className="text-xs text-red-400 basis-full">{updateStatus.error}</span>
@@ -797,21 +838,21 @@ export default function Settings() {
                   variant="secondary"
                   icon={Sparkles}
                 >
-                  What's New
+                  <Tx k="settings.updates.whatsNew" fallback="What's New" />
                 </Button>
                 {installSource === 'managed' ? null : updateStatus?.downloaded ? (
                   <Button
                     onClick={handleInstallUpdate}
                     icon={ArrowDownCircle}
                   >
-                    Install & Restart
+                    <Tx k="settings.updates.installRestart" fallback="Install & Restart" />
                   </Button>
                 ) : updateStatus?.available && !updateStatus.downloading ? (
                   <Button
                     onClick={handleDownloadUpdate}
                     icon={Download}
                   >
-                    Download Update
+                    <Tx k="settings.updates.downloadUpdate" fallback="Download Update" />
                   </Button>
                 ) : (
                   <Button
@@ -821,7 +862,11 @@ export default function Settings() {
                     variant="secondary"
                     icon={RefreshCw}
                   >
-                    {updateStatus?.checking ? 'Checking...' : 'Check for Updates'}
+                    {updateStatus?.checking ? (
+                      <Tx k="common.status.checking" fallback="Checking..." />
+                    ) : (
+                      <Tx k="settings.updates.checkForUpdates" fallback="Check for Updates" />
+                    )}
                   </Button>
                 )}
               </div>
@@ -829,15 +874,21 @@ export default function Settings() {
 
             {installSource === 'managed' && (
               <div className="rounded-lg bg-bg-tertiary border border-white/10 p-3 text-sm text-text-secondary space-y-2">
-                <p className="text-text-primary font-medium">Updates are managed by your package manager.</p>
-                <p>
-                  Grimoire was installed via a system package. Update with your distro's tools:{' '}
-                  <code className="font-mono text-text-primary">yay -Syu grimoire-bin</code> on Arch, or{' '}
-                  <code className="font-mono text-text-primary">{'sudo apt update && sudo apt upgrade'}</code> on Debian/Ubuntu.
+                <p className="text-text-primary font-medium">
+                  <Tx k="settings.updates.managed" fallback="Updates are managed by your package manager." />
                 </p>
                 <p>
-                  Installed the <code className="font-mono text-text-primary">.deb</code> manually? Add the apt repository for
-                  automatic updates (instructions at <code className="font-mono text-text-primary">grimoiremods.com/download</code>).
+                  <Tx k="settings.updates.managedPrefix" fallback="Grimoire was installed via a system package. Update with your distro's tools:" />{' '}
+                  <code className="font-mono text-text-primary">yay -Syu grimoire-bin</code>{' '}
+                  <Tx k="settings.updates.onArchOr" fallback="on Arch, or" />{' '}
+                  <code className="font-mono text-text-primary">{'sudo apt update && sudo apt upgrade'}</code>{' '}
+                  <Tx k="settings.updates.onDebianUbuntu" fallback="on Debian/Ubuntu." />
+                </p>
+                <p>
+                  <Tx k="settings.updates.installedDebPrefix" fallback="Installed the" />{' '}
+                  <code className="font-mono text-text-primary">.deb</code>{' '}
+                  <Tx k="settings.updates.installedDebSuffix" fallback="manually? Add the apt repository for automatic updates (instructions at" />{' '}
+                  <code className="font-mono text-text-primary">grimoiremods.com/download</code>).
                 </p>
               </div>
             )}
@@ -845,7 +896,7 @@ export default function Settings() {
             {updateStatus?.downloading && (
               <div className="animate-fade-in">
                 <div className="flex justify-between text-xs text-text-secondary mb-1">
-                  <span>Downloading update...</span>
+                  <span><Tx k="settings.updates.downloading" fallback="Downloading update..." /></span>
                   <span>{Math.round(updateStatus.progress)}%</span>
                 </div>
                 <div className="w-full bg-bg-tertiary rounded-sm h-1.5 overflow-hidden">
@@ -861,7 +912,7 @@ export default function Settings() {
 
         {/* Appearance */}
         <Card
-          title="Appearance"
+          title={<Tx k="settings.sections.appearance" fallback="Appearance" />}
           icon={Palette}
           className="lg:col-span-2"
           action={
@@ -881,7 +932,7 @@ export default function Settings() {
                           type="button"
                           onClick={() => handleAccentChange(preset.color)}
                           title={preset.name}
-                          aria-label={`Accent: ${preset.name}`}
+                          aria-label={t('settings.appearance.accentNamed', { name: preset.name })}
                           aria-pressed={isActive}
                           className={`${swatchBase} ${
                             isActive
@@ -898,8 +949,8 @@ export default function Settings() {
                     <button
                       type="button"
                       onClick={openCustomPicker}
-                      title="Pick a custom color"
-                      aria-label="Accent: Custom"
+                      title={t('settings.appearance.pickCustomColor')}
+                      aria-label={t('settings.appearance.accentCustom')}
                       aria-pressed={isCustomActive}
                       aria-haspopup="dialog"
                       className={`${swatchBase} ${
@@ -924,8 +975,16 @@ export default function Settings() {
                         setCustomPickerOpen(false);
                         setHeroPickerOpen(true);
                       }}
-                      title={selectedSidebarHero ? `Sidebar highlight: ${selectedSidebarHero}` : 'Sidebar highlight: None'}
-                      aria-label={selectedSidebarHero ? `Sidebar highlight: ${selectedSidebarHero}` : 'Sidebar highlight: None'}
+                      title={
+                        selectedSidebarHero
+                          ? t('settings.appearance.sidebarHighlightNamed', { hero: selectedSidebarHero })
+                          : t('settings.appearance.sidebarHighlightNone')
+                      }
+                      aria-label={
+                        selectedSidebarHero
+                          ? t('settings.appearance.sidebarHighlightNamed', { hero: selectedSidebarHero })
+                          : t('settings.appearance.sidebarHighlightNone')
+                      }
                       aria-haspopup="dialog"
                       className={`${swatchBase} bg-bg-tertiary ${
                         selectedSidebarHero
@@ -957,12 +1016,12 @@ export default function Settings() {
                           onClick={(e) => e.stopPropagation()}
                           role="dialog"
                           aria-modal="true"
-                          aria-label="Custom accent color"
+                          aria-label={t('settings.appearance.customAccentColor')}
                         >
                           <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
                           <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver mb-4 flex items-center gap-2">
                             <Pipette className="w-4 h-4 text-accent" />
-                            Custom Accent
+                            <Tx k="settings.appearance.customAccent" fallback="Custom Accent" />
                           </h3>
                           <div className="space-y-4">
                             <HexColorPicker
@@ -974,7 +1033,7 @@ export default function Settings() {
                               <span
                                 className="block w-9 h-9 rounded-sm border border-white/10 shrink-0"
                                 style={{ backgroundColor: customDraft ?? settings?.accentColor ?? DEFAULT_ACCENT_COLOR }}
-                                aria-label="Selected color preview"
+                                aria-label={t('settings.appearance.selectedColorPreview')}
                               />
                               <span className="text-xs text-text-secondary font-mono">#</span>
                               <HexColorInput
@@ -993,14 +1052,14 @@ export default function Settings() {
                                   setCustomPickerOpen(false);
                                 }}
                               >
-                                Cancel
+                                <Tx k="common.actions.cancel" fallback="Cancel" />
                               </Button>
                               <Button
                                 variant="primary"
                                 size="sm"
                                 onClick={() => void commitCustomDraft()}
                               >
-                                Apply
+                                <Tx k="common.actions.apply" fallback="Apply" />
                               </Button>
                             </div>
                           </div>
@@ -1026,17 +1085,17 @@ export default function Settings() {
                           <div className="mb-4 flex items-center justify-between gap-3">
                             <div className="min-w-0">
                               <h3 id="sidebar-hero-picker-title" className="text-lg font-semibold text-text-primary tracking-wide font-reaver">
-                                Sidebar Highlight
+                                <Tx k="settings.appearance.sidebarHighlight" fallback="Sidebar Highlight" />
                               </h3>
                               <p className="text-xs text-text-secondary">
-                                {selectedSidebarHero ?? 'None'}
+                                {selectedSidebarHero ?? t('common.none')}
                               </p>
                             </div>
                             <button
                               type="button"
                               onClick={() => setHeroPickerOpen(false)}
-                              title="Close"
-                              aria-label="Close sidebar highlight picker"
+                              title={t('common.actions.close')}
+                              aria-label={t('settings.appearance.closeSidebarHighlightPicker')}
                               className="flex h-8 w-8 items-center justify-center rounded-sm border border-white/10 text-text-secondary transition-colors hover:border-white/25 hover:bg-white/5 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                             >
                               <X className="h-4 w-4" aria-hidden />
@@ -1046,8 +1105,8 @@ export default function Settings() {
                             <button
                               type="button"
                               onClick={() => void handleSidebarHeroHighlightChange(null)}
-                              title="None"
-                              aria-label="Sidebar highlight: None"
+                              title={t('common.none')}
+                              aria-label={t('settings.appearance.sidebarHighlightNone')}
                               aria-pressed={selectedSidebarHero === null}
                               className={`relative flex aspect-square items-center justify-center rounded-sm border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                                 selectedSidebarHero === null
@@ -1070,7 +1129,7 @@ export default function Settings() {
                                   type="button"
                                   onClick={() => void handleSidebarHeroHighlightChange(heroName)}
                                   title={heroName}
-                                  aria-label={`Sidebar highlight: ${heroName}`}
+                                  aria-label={t('settings.appearance.sidebarHighlightNamed', { hero: heroName })}
                                   aria-pressed={active}
                                   className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-sm border bg-bg-tertiary transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                                     active
@@ -1107,19 +1166,19 @@ export default function Settings() {
 
         {/* Grimoire Social */}
         {settings?.experimentalSocial && (
-          <Card title="Grimoire Social" icon={Globe} className="lg:col-span-2">
+          <Card title={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />} icon={Globe} className="lg:col-span-2">
             <SocialAccountSection />
           </Card>
         )}
 
         {/* Preferences */}
-        <Card title="Preferences" icon={Shield}>
+        <Card title={<Tx k="settings.sections.preferences" fallback="Preferences" />} icon={Shield}>
           <div className="space-y-6">
             <Toggle
               checked={settings?.hideNsfwPreviews ?? true}
               onChange={handleHideNsfwChange}
-              label="Hide NSFW Content"
-              description="Blur thumbnail images for mods marked as NSFW."
+              label={<Tx k="settings.preferences.hideNsfw" fallback="Hide NSFW Content" />}
+              description={<Tx k="settings.preferences.hideNsfwDescription" fallback="Blur thumbnail images for mods marked as NSFW." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1127,8 +1186,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.hideOutdatedMods ?? false}
               onChange={handleHideOutdatedChange}
-              label="Hide Outdated Mods"
-              description={t('settings.toggles.hideOutdated')}
+              label={<Tx k="settings.preferences.hideOutdated" fallback="Hide Outdated Mods" />}
+              description={<Tx k="settings.toggles.hideOutdated" fallback="Hide Browse mods older than the current game version." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1136,8 +1195,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.lockerCardsExpandedByDefault ?? false}
               onChange={handleLockerCardsExpandedByDefaultChange}
-              label="Expand Locker cards by default"
-              description={t('settings.toggles.expandLocker')}
+              label={<Tx k="settings.preferences.expandLocker" fallback="Expand Locker cards by default" />}
+              description={<Tx k="settings.toggles.expandLocker" fallback="Start Locker list view with hero cards expanded." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1145,8 +1204,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.autoDisableSiblingVariants ?? true}
               onChange={handleAutoDisableSiblingsChange}
-              label="Switch variants instead of stacking them"
-              description={t('settings.toggles.switchVariants')}
+              label={<Tx k="settings.preferences.switchVariants" fallback="Switch variants instead of stacking them" />}
+              description={<Tx k="settings.toggles.switchVariants" fallback="Installing a new variant disables the old one. Off keeps both active. Updates always replace the old file." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1154,8 +1213,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.autoEnableDownloads ?? false}
               onChange={handleAutoEnableDownloadsChange}
-              label="Enable mods after download"
-              description={t('settings.toggles.enableAfterDownload')}
+              label={<Tx k="settings.preferences.enableAfterDownload" fallback="Enable mods after download" />}
+              description={<Tx k="settings.toggles.enableAfterDownload" fallback="Enable mods as soon as they finish downloading. Stays disabled if no slot is free." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1163,8 +1222,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.confirmProfileUpdate ?? true}
               onChange={handleConfirmProfileUpdateChange}
-              label="Confirm before updating a profile"
-              description={t('settings.toggles.confirmProfileUpdate')}
+              label={<Tx k="settings.preferences.confirmProfileUpdate" fallback="Confirm before updating a profile" />}
+              description={<Tx k="settings.toggles.confirmProfileUpdate" fallback="Confirm before overwriting a profile's saved mods. Off overwrites immediately." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1172,8 +1231,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.ignoreConflictsByDefault ?? false}
               onChange={handleIgnoreConflictsByDefaultChange}
-              label="Ignore conflicts by default"
-              description={t('settings.toggles.ignoreConflicts')}
+              label={<Tx k="settings.preferences.ignoreConflicts" fallback="Ignore conflicts by default" />}
+              description={<Tx k="settings.toggles.ignoreConflicts" fallback="Hide all conflicts from the Conflicts page. Off shows them." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1181,8 +1240,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.discordRpcEnabled ?? false}
               onChange={handleDiscordRpcChange}
-              label="Discord Rich Presence"
-              description={t('settings.toggles.discordRpc')}
+              label={<Tx k="settings.preferences.discordRpc" fallback="Discord Rich Presence" />}
+              description={<Tx k="settings.toggles.discordRpc" fallback="Show your current Grimoire activity on your Discord profile. Talks only to your local Discord app and sends nothing to Grimoire." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1191,15 +1250,15 @@ export default function Settings() {
               <Toggle
                 checked={settings?.contributeMatchSalts ?? false}
                 onChange={handleContributeMatchSaltsChange}
-                label="Contribute match data to deadlock-api.com"
-                description={t('settings.toggles.contributeSalts')}
+                label={<Tx k="settings.preferences.contributeMatchData" fallback="Contribute match data to deadlock-api.com" />}
+                description={<Tx k="settings.toggles.contributeSalts" fallback="Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, and two download keys: no account id, no username, nothing about you or your mods." />}
               />
               {settings?.contributeMatchSalts && saltIngestStatus && (
                 <div className="mt-2 text-xs text-text-secondary">
                   {saltIngestStatus.totalSubmitted > 0
-                    ? `${saltIngestStatus.totalSubmitted} match salt${saltIngestStatus.totalSubmitted === 1 ? '' : 's'} contributed so far.`
-                    : 'Nothing to contribute yet. Salts appear after you view match details in-game.'}
-                  {saltIngestStatus.lastError ? ` Last attempt failed: ${saltIngestStatus.lastError}.` : ''}
+                    ? t('settings.preferences.saltsContributed', { count: saltIngestStatus.totalSubmitted })
+                    : t('settings.preferences.noSaltsYet')}
+                  {saltIngestStatus.lastError ? ` ${t('settings.preferences.lastSaltAttemptFailed', { error: saltIngestStatus.lastError })}` : ''}
                 </div>
               )}
             </div>
@@ -1211,8 +1270,8 @@ export default function Settings() {
                 checked={isDevMode}
                 onChange={handleDevModeChange}
                 disabled={isCreatingDevPath}
-                label="Developer Mode"
-                description="Use a dummy Deadlock directory for local testing without game files."
+                label={<Tx k="settings.preferences.developerMode" fallback="Developer Mode" />}
+                description={<Tx k="settings.preferences.developerModeDescription" fallback="Use a dummy Deadlock directory for local testing without game files." />}
               />
               {isDevMode && settings?.devDeadlockPath && (
                 <div className="mt-2 text-xs font-mono bg-black/30 p-2 rounded-sm text-text-secondary break-all">
@@ -1224,9 +1283,14 @@ export default function Settings() {
             <div className="h-px bg-white/5" />
 
             <div>
-              <label className="text-sm font-medium text-text-primary block">Date Format</label>
+              <label className="text-sm font-medium text-text-primary block">
+                <Tx k="settings.preferences.dateFormat" fallback="Date Format" />
+              </label>
               <p className="text-xs text-text-secondary mt-0.5 mb-2">
-                How upload and update dates are shown on mods and files.
+                <Tx
+                  k="settings.preferences.dateFormatDescription"
+                  fallback="How upload and update dates are shown on mods and files."
+                />
               </p>
               <div className="inline-flex rounded-md border border-white/10 overflow-hidden">
                 {(['MM/DD/YYYY', 'DD/MM/YYYY'] as const).map((fmt, i) => {
@@ -1257,10 +1321,10 @@ export default function Settings() {
 
                 <div>
                   <label className="text-sm font-medium text-text-primary block">
-                    {t('settings.language.label')}
+                    <Tx k="settings.language.label" fallback="Language" />
                   </label>
                   <p className="text-xs text-text-secondary mt-0.5 mb-2">
-                    {t('settings.language.description')}
+                    <Tx k="settings.language.description" fallback="Choose the app language, or follow your system preference." />
                   </p>
                   <select
                     value={settings?.language ?? ''}
@@ -1281,17 +1345,20 @@ export default function Settings() {
         </Card>
 
         {/* Experimental Features */}
-        <Card title="Experimental Features" icon={Beaker}>
+        <Card title={<Tx k="settings.sections.experimentalFeatures" fallback="Experimental Features" />} icon={Beaker}>
           <div className="space-y-6">
             <p className="text-xs text-text-secondary -mt-2">
-              These features are still in development and may be incomplete or buggy.
+              <Tx
+                k="settings.experimental.description"
+                fallback="These features are still in development and may be incomplete or buggy."
+              />
             </p>
 
             <Toggle
               checked={settings?.experimentalStats ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalStats: checked })}
-              label="Stats Dashboard"
-              description="Track your performance with data from the Deadlock Stats API."
+              label={<Tx k="settings.experimental.statsDashboard" fallback="Stats Dashboard" />}
+              description={<Tx k="settings.experimental.statsDashboardDescription" fallback="Track your performance with data from the Deadlock Stats API." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1299,8 +1366,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.experimentalCrosshair ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalCrosshair: checked })}
-              label="Crosshair Designer"
-              description="Create custom crosshairs with a live preview."
+              label={<Tx k="settings.experimental.crosshairDesigner" fallback="Crosshair Designer" />}
+              description={<Tx k="settings.experimental.crosshairDesignerDescription" fallback="Create custom crosshairs with a live preview." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1308,8 +1375,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.experimentalSocial ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalSocial: checked })}
-              label="Grimoire Social"
-              description="Sign in with Steam to publish profiles and browse uploads from other players in Discover."
+              label={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />}
+              description={<Tx k="settings.experimental.socialDescription" fallback="Sign in with Steam to publish profiles and browse uploads from other players in Discover." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1318,20 +1385,20 @@ export default function Settings() {
               <Toggle
                 checked={settings?.experimentalTranslationMode ?? false}
                 onChange={handleTranslationModeChange}
-                label="Translation Mode"
-                description={t('settings.toggles.translationMode')}
+                label={<Tx k="settings.experimental.translationMode" fallback="Translation Mode" />}
+                description={<Tx k="settings.toggles.translationMode" fallback="Double-click translated labels to suggest edits. Requires Steam sign-in." />}
               />
               {settings?.experimentalTranslationMode && (
                 <div className="max-w-xs">
                   <label className="text-xs font-medium uppercase tracking-wider text-text-secondary">
-                    Target language
+                    <Tx k="settings.translationMode.targetLanguage" fallback="Target language" />
                   </label>
                   <select
                     value={settings.translationModeLanguage ?? ''}
                     onChange={(event) => handleTranslationModeLanguageChange(event.target.value)}
                     className="mt-1 w-full rounded-md border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary"
                   >
-                    <option value="">Choose a language</option>
+                    <option value="">{t('settings.translationMode.chooseLanguage')}</option>
                     {settings.translationModeLanguage &&
                       !TRANSLATION_LANGUAGE_OPTIONS.some(
                         (language) => language.code === settings.translationModeLanguage
@@ -1347,7 +1414,10 @@ export default function Settings() {
                     ))}
                   </select>
                   <p className="mt-1 text-xs text-text-secondary">
-                    Pick the language that should receive your translation suggestions.
+                    <Tx
+                      k="settings.translationMode.pickLanguageDescription"
+                      fallback="Pick the language that should receive your translation suggestions."
+                    />
                   </p>
                 </div>
               )}
@@ -1358,8 +1428,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.experimentalUnknownModMatching ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalUnknownModMatching: checked })}
-              label="Fix Unknown Mods"
-              description={t('settings.toggles.fixUnknown')}
+              label={<Tx k="settings.experimental.fixUnknownMods" fallback="Fix Unknown Mods" />}
+              description={<Tx k="settings.toggles.fixUnknown" fallback="Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1367,8 +1437,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.experimentalDeadworksServers ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalDeadworksServers: checked })}
-              label="Deadworks Servers"
-              description={t('settings.toggles.deadworks')}
+              label={<Tx k="settings.experimental.deadworksServers" fallback="Deadworks Servers" />}
+              description={<Tx k="settings.toggles.deadworks" fallback="Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1376,8 +1446,8 @@ export default function Settings() {
             <Toggle
               checked={settings?.experimentalPerformanceConfig ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalPerformanceConfig: checked })}
-              label="Performance Config"
-              description={t('settings.toggles.performanceConfig')}
+              label={<Tx k="settings.experimental.performanceConfig" fallback="Performance Config" />}
+              description={<Tx k="settings.toggles.performanceConfig" fallback="One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time." />}
             />
           </div>
         </Card>
@@ -1385,11 +1455,14 @@ export default function Settings() {
         {settings?.experimentalPerformanceConfig && <PerformanceConfigCard />}
 
         {/* Support */}
-        <Card title="Support" icon={LifeBuoy} className="lg:col-span-2">
+        <Card title={<Tx k="settings.sections.support" fallback="Support" />} icon={LifeBuoy} className="lg:col-span-2">
           <div className="space-y-6">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <p className="text-sm text-text-secondary">
-                Found a bug or have a feature request? File an issue on GitHub or drop into our Discord.
+                <Tx
+                  k="settings.support.description"
+                  fallback="Found a bug or have a feature request? File an issue on GitHub or drop into our Discord."
+                />
               </p>
               <div className="flex flex-col sm:flex-row gap-2">
                 <a
@@ -1399,7 +1472,7 @@ export default function Settings() {
                   className="inline-flex items-center justify-center gap-2 rounded-sm px-4 py-2 text-sm font-medium border border-border bg-bg-tertiary/40 text-text-primary hover:bg-bg-tertiary/70 hover:border-text-secondary/60 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-text-secondary/60 whitespace-nowrap"
                 >
                   <Github className="w-4 h-4" aria-hidden="true" />
-                  GitHub Issues
+                  <Tx k="settings.support.githubIssues" fallback="GitHub Issues" />
                 </a>
                 <a
                   href="https://discord.gg/KgYGHEMq2P"
@@ -1414,7 +1487,7 @@ export default function Settings() {
                   >
                     <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
                   </svg>
-                  Join Discord
+                  <Tx k="settings.support.joinDiscord" fallback="Join Discord" />
                 </a>
               </div>
             </div>
@@ -1425,17 +1498,20 @@ export default function Settings() {
               <div>
                 <h4 className="font-medium text-sm flex items-center gap-2">
                   <Bug className="w-4 h-4 text-text-secondary" aria-hidden="true" />
-                  Share a bug report
+                  <Tx k="settings.support.shareBugReport" fallback="Share a bug report" />
                 </h4>
                 <p className="text-xs text-text-secondary mt-1">
-                  Describe what went wrong, generate a sanitized report, then paste it into Discord or a GitHub issue. The report bundles app and OS info plus the tail of your log; home paths, Steam IDs, bearer tokens, and emails are stripped before it leaves the app.
+                  <Tx
+                    k="settings.support.bugReportDescription"
+                    fallback="Describe what went wrong, generate a sanitized report, then paste it into Discord or a GitHub issue. The report bundles app and OS info plus the tail of your log; home paths, Steam IDs, bearer tokens, and emails are stripped before it leaves the app."
+                  />
                 </p>
               </div>
 
               <textarea
                 value={bugDescription}
                 onChange={(e) => setBugDescription(e.target.value)}
-                placeholder="What were you doing when it broke? (Optional but helpful.)"
+                placeholder={t('settings.support.bugPlaceholder')}
                 rows={3}
                 className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-white/5 rounded-sm text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-y"
               />
@@ -1448,7 +1524,11 @@ export default function Settings() {
                   variant="secondary"
                   icon={FileText}
                 >
-                  {bugReportText ? 'Regenerate report' : 'Generate report'}
+                  {bugReportText ? (
+                    <Tx k="settings.support.regenerateReport" fallback="Regenerate report" />
+                  ) : (
+                    <Tx k="settings.support.generateReport" fallback="Generate report" />
+                  )}
                 </Button>
                 <label className="inline-flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
                   <input
@@ -1457,7 +1537,10 @@ export default function Settings() {
                     onChange={(e) => setIncludeFullLog(e.target.checked)}
                     className="h-3.5 w-3.5 rounded-sm border border-white/20 bg-bg-tertiary accent-accent focus:outline-none focus:ring-2 focus:ring-accent"
                   />
-                  Include full log (up to 5 MB; Discord auto-attaches as a file)
+                  <Tx
+                    k="settings.support.includeFullLog"
+                    fallback="Include full log (up to 5 MB; Discord auto-attaches as a file)"
+                  />
                 </label>
               </div>
 
@@ -1468,7 +1551,10 @@ export default function Settings() {
               {bugReportText && (
                 <div className="space-y-2 animate-fade-in">
                   <p className="text-[11px] text-text-secondary/70">
-                    Review before sharing. Nothing is sent automatically.
+                    <Tx
+                      k="settings.support.reviewBeforeSharing"
+                      fallback="Review before sharing. Nothing is sent automatically."
+                    />
                   </p>
                   <textarea
                     value={bugReportText}
@@ -1484,10 +1570,10 @@ export default function Settings() {
                       icon={bugCopyState === 'copied' ? Check : Copy}
                     >
                       {bugCopyState === 'copied'
-                        ? 'Copied'
+                        ? <Tx k="common.status.copied" fallback="Copied" />
                         : bugCopyState === 'failed'
-                          ? 'Copy failed: select and Ctrl+C'
-                          : 'Copy report'}
+                          ? <Tx k="settings.support.copyFailed" fallback="Copy failed: select and Ctrl+C" />
+                          : <Tx k="settings.support.copyReport" fallback="Copy report" />}
                     </Button>
                     <a
                       href="https://discord.gg/KgYGHEMq2P"
@@ -1498,7 +1584,7 @@ export default function Settings() {
                       <svg aria-hidden="true" viewBox="0 0 24 24" className="w-4 h-4 fill-current">
                         <path d="M20.317 4.37a19.791 19.791 0 0 0-4.885-1.515.074.074 0 0 0-.079.037c-.21.375-.444.864-.608 1.25a18.27 18.27 0 0 0-5.487 0 12.64 12.64 0 0 0-.617-1.25.077.077 0 0 0-.079-.037A19.736 19.736 0 0 0 3.677 4.37a.07.07 0 0 0-.032.027C.533 9.046-.32 13.58.099 18.057a.082.082 0 0 0 .031.057 19.9 19.9 0 0 0 5.993 3.03.078.078 0 0 0 .084-.028 14.09 14.09 0 0 0 1.226-1.994.076.076 0 0 0-.041-.106 13.107 13.107 0 0 1-1.872-.892.077.077 0 0 1-.008-.128 10.2 10.2 0 0 0 .372-.292.074.074 0 0 1 .077-.01c3.928 1.793 8.18 1.793 12.062 0a.074.074 0 0 1 .078.01c.12.098.246.198.373.292a.077.077 0 0 1-.006.127 12.299 12.299 0 0 1-1.873.892.077.077 0 0 0-.041.107c.36.698.772 1.362 1.225 1.993a.076.076 0 0 0 .084.028 19.839 19.839 0 0 0 6.002-3.03.077.077 0 0 0 .032-.054c.5-5.177-.838-9.674-3.549-13.66a.061.061 0 0 0-.031-.03zM8.02 15.33c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.956-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.956 2.418-2.157 2.418zm7.975 0c-1.183 0-2.157-1.085-2.157-2.419 0-1.333.955-2.419 2.157-2.419 1.21 0 2.176 1.096 2.157 2.42 0 1.333-.946 2.418-2.157 2.418z" />
                       </svg>
-                      Open Discord
+                      <Tx k="settings.support.openDiscord" fallback="Open Discord" />
                     </a>
                     <a
                       href={githubIssueUrl}
@@ -1507,7 +1593,7 @@ export default function Settings() {
                       className="inline-flex items-center justify-center gap-2 rounded-sm px-3 py-1.5 text-sm font-medium border border-border bg-bg-tertiary/40 text-text-primary hover:bg-bg-tertiary/70 hover:border-text-secondary/60 transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-text-secondary/60"
                     >
                       <Github className="w-4 h-4" aria-hidden="true" />
-                      Open GitHub issue
+                      <Tx k="settings.support.openGithubIssue" fallback="Open GitHub issue" />
                     </a>
                   </div>
                 </div>
@@ -1517,13 +1603,18 @@ export default function Settings() {
         </Card>
 
         {/* Maintenance */}
-        <Card title="Maintenance" icon={Wrench} className="lg:col-span-2">
+        <Card title={<Tx k="settings.sections.maintenance" fallback="Maintenance" />} icon={Wrench} className="lg:col-span-2">
           <div className="space-y-6">
             <div className="flex justify-between items-start gap-4">
               <div>
-                <h4 className="font-medium text-sm">Cleanup Addons Folder</h4>
+                <h4 className="font-medium text-sm">
+                  <Tx k="settings.maintenance.cleanupAddons" fallback="Cleanup Addons Folder" />
+                </h4>
                 <p className="text-xs text-text-secondary mt-1">
-                  Remove leftover archive downloads (zip, 7z).
+                  <Tx
+                    k="settings.maintenance.cleanupDescription"
+                    fallback="Remove leftover archive downloads (zip, 7z)."
+                  />
                 </p>
                 {cleanupResult && (
                   <p className="text-xs text-accent mt-2 animate-fade-in">{cleanupResult}</p>
@@ -1537,7 +1628,7 @@ export default function Settings() {
                 size="sm"
                 icon={Trash2}
               >
-                Cleanup
+                <Tx k="settings.maintenance.cleanup" fallback="Cleanup" />
               </Button>
             </div>
 
@@ -1545,9 +1636,14 @@ export default function Settings() {
 
             <div className="flex justify-between items-start gap-4">
               <div>
-                <h4 className="font-medium text-sm">Reset Setup Wizard</h4>
+                <h4 className="font-medium text-sm">
+                  <Tx k="settings.setupWizard.title" fallback="Reset Setup Wizard" />
+                </h4>
                 <p className="text-xs text-text-secondary mt-1">
-                  Show the first-run setup wizard again on next app launch.
+                  <Tx
+                    k="settings.setupWizard.description"
+                    fallback="Show the first-run setup wizard again on next app launch."
+                  />
                 </p>
                 {resetResult && (
                   <p className="text-xs text-accent mt-2 animate-fade-in">{resetResult}</p>
@@ -1559,7 +1655,7 @@ export default function Settings() {
                 size="sm"
                 icon={RefreshCw}
               >
-                Reset
+                <Tx k="common.actions.reset" fallback="Reset" />
               </Button>
             </div>
 
@@ -1570,25 +1666,27 @@ export default function Settings() {
         </Card>
 
         {/* Mod Database Cache - Full Width */}
-        <Card title="Mod Database Cache" icon={Database} className="lg:col-span-2">
+        <Card title={<Tx k="settings.sections.modDatabaseCache" fallback="Mod Database Cache" />} icon={Database} className="lg:col-span-2">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-center gap-4 mb-2">
                 <div className="text-2xl font-bold font-valvepulp text-text-primary">
                   {syncStatus ? totalCachedMods.toLocaleString() : '---'}
                 </div>
-                <Badge variant="info">Cached Mods</Badge>
+                <Badge variant="info">
+                  <Tx k="settings.cache.cachedMods" fallback="Cached Mods" />
+                </Badge>
               </div>
               <p className="text-xs text-text-secondary">
                 {lastSyncTime > 0
-                  ? `Last synchronized: ${new Date(lastSyncTime * 1000).toLocaleString()}`
-                  : 'Never synchronized'}
+                  ? t('settings.cache.lastSynchronized', { date: new Date(lastSyncTime * 1000).toLocaleString() })
+                  : t('settings.cache.neverSynchronized')}
               </p>
 
               {syncProgress && (
                 <div className="mt-4 animate-fade-in">
                   <div className="flex justify-between text-xs text-text-secondary mb-1">
-                    <span>Syncing {syncProgress.section}...</span>
+                    <span>{t('settings.cache.syncingSection', { section: syncProgress.section })}</span>
                     <span>{Math.round((syncProgress.modsProcessed / syncProgress.totalMods) * 100)}%</span>
                   </div>
                   <div className="w-full bg-bg-tertiary rounded-sm h-1.5 overflow-hidden">
@@ -1613,7 +1711,7 @@ export default function Settings() {
                 variant="danger"
                 icon={Trash2}
               >
-                Wipe Cache
+                <Tx k="settings.cache.wipeCache" fallback="Wipe Cache" />
               </Button>
               <Button
                 onClick={handleSyncDatabase}
@@ -1621,26 +1719,29 @@ export default function Settings() {
                 isLoading={isSyncing}
                 icon={RefreshCw}
               >
-                Sync Database
+                <Tx k="settings.cache.syncDatabase" fallback="Sync Database" />
               </Button>
             </div>
           </div>
         </Card>
 
         {/* Local preview cache - Full Width */}
-        <Card title="Local preview cache" icon={HardDrive} className="lg:col-span-2">
+        <Card title={<Tx k="settings.sections.localPreviewCache" fallback="Local preview cache" />} icon={HardDrive} className="lg:col-span-2">
           <div className="flex flex-col sm:flex-row items-center justify-between gap-6">
             <div className="flex-1">
               <div className="flex items-center gap-4 mb-2">
                 <div className="text-2xl font-bold font-valvepulp text-text-primary">
                   {previewCacheBytes != null ? formatBytes(previewCacheBytes) : '---'}
                 </div>
-                <Badge variant="info">On Disk</Badge>
+                <Badge variant="info">
+                  <Tx k="settings.cache.onDisk" fallback="On Disk" />
+                </Badge>
               </div>
               <p className="text-xs text-text-secondary">
-                3D model stills, hero portraits, and locker card thumbnails. These
-                rebuild automatically from your installed mods when next viewed.
-                Your installed mods are not affected.
+                <Tx
+                  k="settings.cache.previewDescription"
+                  fallback="3D model stills, hero portraits, and locker card thumbnails. These rebuild automatically from your installed mods when next viewed. Your installed mods are not affected."
+                />
               </p>
               {previewResult && (
                 <p className="text-xs text-text-secondary mt-2 animate-fade-in">{previewResult}</p>
@@ -1655,7 +1756,7 @@ export default function Settings() {
                 variant="danger"
                 icon={Trash2}
               >
-                Clear
+                <Tx k="common.actions.clear" fallback="Clear" />
               </Button>
             </div>
           </div>
@@ -1670,11 +1771,16 @@ export default function Settings() {
             <div className="flex items-center justify-between p-6 border-b border-white/10">
               <div>
                 <h2 className="text-xl font-bold">
-                  What's New in <ReleaseVersionLink version={updateStatus.updateInfo.version} />
+                  <Tx k="settings.updates.whatsNewIn" fallback="What's New in" />{' '}
+                  <ReleaseVersionLink version={updateStatus.updateInfo.version} />
                 </h2>
                 {updateStatus.updateInfo.releaseDate && (
                   <p className="text-sm text-text-secondary mt-1">
-                    Released {new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString()}
+                    <Tx
+                      k="settings.updates.released"
+                      values={{ date: new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString() }}
+                      fallback={`Released ${new Date(updateStatus.updateInfo.releaseDate).toLocaleDateString()}`}
+                    />
                   </p>
                 )}
               </div>
@@ -1708,7 +1814,9 @@ export default function Settings() {
                   ))}
                 </div>
               ) : (
-                <p className="text-text-secondary">No release notes available.</p>
+                <p className="text-text-secondary">
+                  <Tx k="settings.updates.noReleaseNotes" fallback="No release notes available." />
+                </p>
               )}
             </div>
             <div className="flex justify-end gap-3 p-6 border-t border-white/10">
@@ -1716,7 +1824,7 @@ export default function Settings() {
                 onClick={() => setShowChangelog(false)}
                 variant="secondary"
               >
-                Close
+                <Tx k="common.actions.close" fallback="Close" />
               </Button>
               <Button
                 onClick={() => {
@@ -1725,7 +1833,7 @@ export default function Settings() {
                 }}
                 icon={Download}
               >
-                Download Update
+                <Tx k="settings.updates.downloadUpdate" fallback="Download Update" />
               </Button>
             </div>
           </div>
@@ -1736,9 +1844,9 @@ export default function Settings() {
         isOpen={wipeConfirmOpen}
         onCancel={() => setWipeConfirmOpen(false)}
         onConfirm={handleWipeCache}
-        title="Wipe mod cache?"
-        message={t('settings.cache.wipeMessage')}
-        confirmLabel="Wipe Cache"
+        title={<Tx k="settings.cache.wipeTitle" fallback="Wipe mod cache?" />}
+        message={<Tx k="settings.cache.wipeMessage" fallback="Removes cached mod metadata and sync state. Browse re-syncs from GameBanana next time. Installed mods are not affected." />}
+        confirmLabel={<Tx k="settings.cache.wipeCache" fallback="Wipe Cache" />}
         variant="danger"
       />
 
@@ -1746,9 +1854,9 @@ export default function Settings() {
         isOpen={previewConfirmOpen}
         onCancel={() => setPreviewConfirmOpen(false)}
         onConfirm={handleClearPreviewCache}
-        title="Clear preview cache?"
-        message={t('settings.cache.clearPreviewMessage')}
-        confirmLabel="Clear"
+        title={<Tx k="settings.cache.clearPreviewTitle" fallback="Clear preview cache?" />}
+        message={<Tx k="settings.cache.clearPreviewMessage" fallback="Deletes cached preview images to reclaim disk. They regenerate when you next view them. Installed mods are not affected." />}
+        confirmLabel={<Tx k="common.actions.clear" fallback="Clear" />}
         variant="danger"
       />
 
@@ -1756,9 +1864,14 @@ export default function Settings() {
         isOpen={resetConfirmOpen}
         onCancel={() => setResetConfirmOpen(false)}
         onConfirm={handleResetWizard}
-        title="Reset setup wizard?"
-        message="The first-run setup wizard will appear the next time you launch the app. Your settings and installed mods are not affected."
-        confirmLabel="Reset"
+        title={<Tx k="settings.setupWizard.confirmTitle" fallback="Reset setup wizard?" />}
+        message={
+          <Tx
+            k="settings.setupWizard.confirmMessage"
+            fallback="The first-run setup wizard will appear the next time you launch the app. Your settings and installed mods are not affected."
+          />
+        }
+        confirmLabel={<Tx k="common.actions.reset" fallback="Reset" />}
         variant="primary"
       />
     </div>
@@ -1767,6 +1880,7 @@ export default function Settings() {
 
 // Autoexec.cfg helper section
 function AutoexecSection({ gamePath }: { gamePath: string | null }) {
+  const { t } = useTranslation();
   const [status, setStatus] = useState<{
     exists: boolean;
     path: string | null;
@@ -1789,7 +1903,7 @@ function AutoexecSection({ gamePath }: { gamePath: string | null }) {
     setResult(null);
     try {
       const res = await window.electronAPI.createAutoexec(gamePath);
-      setResult(`Created: ${res.path}`);
+      setResult(t('settings.autoexec.created', { path: res.path }));
       const newStatus = await window.electronAPI.getAutoexecStatus(gamePath);
       setStatus(newStatus);
     } catch (err) {
@@ -1806,17 +1920,26 @@ function AutoexecSection({ gamePath }: { gamePath: string | null }) {
       <div className="flex justify-between items-start gap-4">
         <div>
           <h4 className="font-medium text-sm flex items-center gap-2">
-            Autoexec Configuration
+            <Tx k="settings.autoexec.title" fallback="Autoexec Configuration" />
             {status === null ? (
-              <span className="text-xs text-text-secondary">Checking...</span>
+              <span className="text-xs text-text-secondary">
+                <Tx k="common.status.checking" fallback="Checking..." />
+              </span>
             ) : status.exists ? (
-              <Badge variant="success">Active</Badge>
+              <Badge variant="success">
+                <Tx k="common.status.active" fallback="Active" />
+              </Badge>
             ) : (
-              <Badge variant="warning">Missing</Badge>
+              <Badge variant="warning">
+                <Tx k="common.status.missing" fallback="Missing" />
+              </Badge>
             )}
           </h4>
           <p className="text-xs text-text-secondary mt-1">
-            Ensure autoexec.cfg exists for crosshairs and commands.
+            <Tx
+              k="settings.autoexec.description"
+              fallback="Ensure autoexec.cfg exists for crosshairs and commands."
+            />
           </p>
           {result && <p className="text-xs text-accent mt-2">{result}</p>}
         </div>
@@ -1829,7 +1952,7 @@ function AutoexecSection({ gamePath }: { gamePath: string | null }) {
             size="sm"
             icon={Loader2}
           >
-            Create File
+            <Tx k="settings.autoexec.createFile" fallback="Create File" />
           </Button>
         )}
       </div>

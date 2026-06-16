@@ -1,6 +1,46 @@
 {
   "common": {
-    "view": "View"
+    "view": "View",
+    "actions": {
+      "cancel": "Cancel",
+      "clear": "Clear",
+      "close": "Close",
+      "confirm": "Confirm",
+      "copy": "Copy",
+      "delete": "Delete",
+      "dismiss": "Dismiss",
+      "done": "Done",
+      "apply": "Apply",
+      "browse": "Browse",
+      "remove": "Remove",
+      "refresh": "Refresh",
+      "reset": "Reset",
+      "retry": "Retry",
+      "save": "Save",
+      "collapseDetails": "Collapse details",
+      "expandDetails": "Expand details",
+      "tryAgain": "Try again"
+    },
+    "errorBoundary": {
+      "title": "Something went wrong",
+      "description": "An error occurred while rendering this component. This won't affect other parts of the app.",
+      "tryAgain": "Try Again"
+    },
+    "status": {
+      "active": "Active",
+      "archived": "Archived",
+      "checking": "Checking...",
+      "configured": "Configured",
+      "copied": "Copied",
+      "inactive": "Inactive",
+      "invalid": "Invalid",
+      "missing": "Missing",
+      "valid": "Valid"
+    },
+    "emptyValue": "(empty)",
+    "none": "None",
+    "versus": "VS",
+    "versusLower": "vs"
   },
   "nav": {
     "installed": "Installed",
@@ -15,14 +55,419 @@
     "stats": "Stats",
     "settings": "Settings"
   },
+  "autoexec": {
+    "commands": {
+      "emptyTitle": "No commands added",
+      "emptyDescription": "Select from presets on the left",
+      "title_one": "Your Commands ({{count}})",
+      "title_other": "Your Commands ({{count}})"
+    },
+    "confirm": {
+      "clearTitle": "Clear all commands?",
+      "clearMessage_one": "Remove {{count}} command from the list? Your saved autoexec.cfg won't change until you click Save.",
+      "clearMessage_other": "Remove all {{count}} commands from the list? Your saved autoexec.cfg won't change until you click Save."
+    },
+    "customCommand": {
+      "title": "Custom Command",
+      "placeholder": "e.g. fps_max 0"
+    },
+    "launchOptions": {
+      "description": "Args passed to Deadlock when launched via Steam. Written into Steam's config right before grimoire launches the game.",
+      "inSteamNow": "In Steam now",
+      "saved": "Saved. Applied next time you launch Deadlock via grimoire.",
+      "savedWillOverwrite": "Your saved value will overwrite this on next grimoire launch.",
+      "steamConfigMissing": "Steam config not found. Launch Deadlock via Steam once, then come back.",
+      "steamRunning": "Steam is running. Close it before launching Deadlock via grimoire so the write isn't clobbered.",
+      "title": "Launch Options"
+    },
+    "presets": {
+      "performance": {
+        "category": "Performance",
+        "uncapFps": { "name": "Uncap FPS", "description": "Remove framerate limit" },
+        "capFps144": { "name": "Cap FPS 144", "description": "Cap to 144 FPS" },
+        "capFps240": { "name": "Cap FPS 240", "description": "Cap to 240 FPS" },
+        "lowLatencyNvidia": { "name": "Low Latency (Nvidia)", "description": "Enable Nvidia Reflex low latency" },
+        "engineLowLatency": { "name": "Engine Low Latency", "description": "Reduce input lag" }
+      },
+      "network": {
+        "category": "Network",
+        "maxNetworkRate": { "name": "Max Network Rate", "description": "Maximum network update rate" }
+      },
+      "hud": {
+        "category": "HUD & UI",
+        "newHealthBars": { "name": "New Health Bars", "description": "Enable new-style health bars" },
+        "hideHud": { "name": "Hide HUD", "description": "Hide the entire HUD" },
+        "showHud": { "name": "Show HUD", "description": "Show the HUD" },
+        "disablePostMatchSurvey": { "name": "Disable Post-Match Survey", "description": "Skip the survey after matches" }
+      },
+      "minimap": {
+        "category": "Minimap",
+        "fasterMinimap": { "name": "Faster Minimap", "description": "Update minimap at 60Hz" },
+        "largerClickRadius": { "name": "Larger Click Radius", "description": "Easier to click units on minimap" },
+        "largerPlayerIcons": { "name": "Larger Player Icons", "description": "Bigger player icons on minimap" },
+        "thickerZiplines": { "name": "Thicker Ziplines", "description": "More visible ziplines" }
+      },
+      "matchmaking": {
+        "category": "Matchmaking",
+        "soloQueueOnly": { "name": "Solo Queue Only", "description": "Prefer matches with solo players" },
+        "naRegion": { "name": "NA Region", "description": "Force North America servers" },
+        "euRegion": { "name": "EU Region", "description": "Force Europe servers" },
+        "asiaRegion": { "name": "Asia Region", "description": "Force Asia servers" },
+        "autoRegion": { "name": "Auto Region", "description": "Automatic region selection" }
+      },
+      "mouse": {
+        "category": "Mouse & Sensitivity",
+        "adsSensitivity": { "name": "1:1 ADS Sensitivity", "description": "Match ADS to hip-fire sensitivity" }
+      }
+    },
+    "search": {
+      "placeholder": "Search commands..."
+    },
+    "status": {
+      "error": "Error: {{error}}",
+      "gamePathNotConfigured": "Game path not configured",
+      "gamePathWarning": "Game path not configured. Set it in Settings to save.",
+      "savedToAutoexec": "Saved to autoexec.cfg!",
+      "unsavedChanges": "You have unsaved changes"
+    }
+  },
+  "downloadQueue": {
+    "cancelDownload": "Cancel download",
+    "collapse": "Collapse",
+    "downloads": "Downloads",
+    "eta": {
+      "seconds_one": "{{count}}s",
+      "seconds_other": "{{count}}s",
+      "minutesSeconds": "{{minutes}}m {{seconds}}s",
+      "hoursMinutes": "{{hours}}h {{minutes}}m",
+      "left": "{{eta}} left"
+    },
+    "noDownloads": "No downloads",
+    "preparing": "Preparing…",
+    "queuedHeader_one": "Queued ({{count}})",
+    "queuedHeader_other": "Queued ({{count}})",
+    "remainingQueued_one": "{{count}} queued",
+    "remainingQueued_other": "{{count}} queued",
+    "removeFromQueue": "Remove from queue",
+    "showDetails": "Show download details"
+  },
+  "stats": {
+    "title": "Deadlock Stats",
+    "tabs": {
+      "overview": "Overview",
+      "matches": "Matches",
+      "social": "Social",
+      "leaderboard": "Leaderboard"
+    },
+    "empty": {
+      "noPlayerSelected": {
+        "title": "No player selected",
+        "description": "Add a player from the dropdown in the top right to see their stats."
+      }
+    },
+    "error": {
+      "playerDataTitle": "Failed to load player data"
+    }
+  },
+  "servers": {
+    "actions": {
+      "join": "Join"
+    },
+    "connect": {
+      "connectionFailed": "Connection failed.",
+      "launchingSteam": "Launching Deadlock through Steam. Accept any Steam prompt to join.",
+      "preparing": "Preparing...",
+      "preparingToConnect": "Preparing to connect...",
+      "status": {
+        "checking": "Verifying files",
+        "connecting": "Handing off to Steam",
+        "decompressing": "Unpacking content",
+        "downloading": "Downloading content",
+        "fetching": "Checking server content",
+        "ready": "Ready"
+      }
+    },
+    "contentCount_one": "{{count}} content",
+    "contentCount_other": "{{count}} content",
+    "empty": {
+      "filtersTitle": "No servers match your filters",
+      "filtersDescription": "Try clearing the search, region, or map filter.",
+      "noneTitle": "No servers online",
+      "noneDescription": "No Deadworks servers are currently registered. Check back later, or host one (server hosting requires Windows)."
+    },
+    "errors": {
+      "relayTitle": "Could not reach the relay",
+      "relayUnreachable": "Could not reach the relay."
+    },
+    "filters": {
+      "allMaps": "All maps",
+      "allRegions": "All regions",
+      "hasSpace": "Has space",
+      "searchPlaceholder": "Search by name or map"
+    },
+    "header": {
+      "description": "Browse and join Deadworks community dedicated servers.",
+      "playersOnline_one": "{{count}} playing",
+      "playersOnline_other": "{{count}} playing",
+      "serversOnline_one": "{{count}} online",
+      "serversOnline_other": "{{count}} online"
+    },
+    "join": {
+      "serverFull": "Server is full",
+      "setGamePathFirst": "Set your game path first"
+    },
+    "loading": "Loading servers...",
+    "ping": {
+      "ms": "{{ms}} ms",
+      "unavailable": "n/a"
+    },
+    "status": {
+      "online": "Online",
+      "passwordProtected": "Password protected",
+      "stale": "Stale"
+    },
+    "table": {
+      "server": "Server",
+      "map": "Map",
+      "players": "Players",
+      "ping": "Ping"
+    },
+    "warning": {
+      "gamePathRequired": "Set your Deadlock game path in Settings before joining a server."
+    }
+  },
+  "conflicts": {
+    "actions": {
+      "clearIgnored": "Clear ignored",
+      "clearing": "Clearing…",
+      "disable": "Disable",
+      "disableNamed": "Disable {{name}}",
+      "disabling": "Disabling…",
+      "ignore": "Ignore",
+      "ignoreAll": "Ignore all",
+      "ignoreAllTitle": "Move every active conflict pair to the Ignored section. Reversible per-pair via Unignore.",
+      "ignoreCount_one": "Ignore {{count}}",
+      "ignoreCount_other": "Ignore {{count}}",
+      "ignoreTitle": "Stop flagging this pair as a conflict",
+      "ignoring": "Ignoring…",
+      "unignore": "Unignore"
+    },
+    "confirm": {
+      "clearIgnoredHint": "Pairs that still conflict will reappear in the active list after refresh.",
+      "clearIgnoredMessage": "Every ignored pair will be restored to normal conflict detection.",
+      "clearIgnoredTitle_one": "Clear {{count}} ignored conflict?",
+      "clearIgnoredTitle_other": "Clear {{count}} ignored conflicts?",
+      "disableMessage": "{{name}} will be disabled and moved out of the addons folder. You can re-enable it from the Installed page.",
+      "disableTitle": "Disable this mod?",
+      "ignoreAllHint": "Reversible — you can restore any pair individually with Unignore.",
+      "ignoreAllMessage": "Every currently active conflict pair will move to the Ignored section below.",
+      "ignoreAllTitle_one": "Ignore all {{count}} conflict?",
+      "ignoreAllTitle_other": "Ignore all {{count}} conflicts?"
+    },
+    "empty": {
+      "activeWithIgnored_one": "No active conflicts. {{count}} pair currently ignored — see below.",
+      "activeWithIgnored_other": "No active conflicts. {{count}} pairs currently ignored — see below.",
+      "noActive": "No active conflicts.",
+      "noConflicts": {
+        "title": "No Conflicts Detected",
+        "description": "Your installed mods don't have any conflicts. Great!"
+      }
+    },
+    "errors": {
+      "bothModsEnabled": "Both mods must be enabled to set their load order.",
+      "clearIgnoredFailed_one": "Failed to clear {{count}} ignored pair. See console for details.",
+      "clearIgnoredFailed_other": "Failed to clear {{count}} ignored pairs. See console for details.",
+      "ignoreFailed_one": "Failed to ignore {{count}} pair. See console for details.",
+      "ignoreFailed_other": "Failed to ignore {{count}} pairs. See console for details."
+    },
+    "errorTitle": "Error Loading Conflicts",
+    "header": {
+      "description": "Resolve conflicts between installed mods",
+      "noActiveDescription": "No active conflicts — review or restore your ignored pairs below."
+    },
+    "ignored": {
+      "clearTitle": "Restore conflict detection for every ignored pair",
+      "title_one": "Ignored ({{count}})",
+      "title_other": "Ignored ({{count}})",
+      "unignoreTitle": "Restore conflict detection for this pair"
+    },
+    "noPreview": "No Preview",
+    "removedMod": "(removed mod)",
+    "reorder": {
+      "alreadyWins": "{{name}} already wins this conflict",
+      "enableBothHint": "Enable both mods to set their load order.",
+      "hint": "The mod that loads first overrides shared files. This sets the pair adjacent in load order.",
+      "makeWinner": "Make {{name}} win (load it before {{other}})",
+      "resolveByLoadOrder": "Resolve by load order",
+      "winsSharedFiles": "Wins shared files"
+    },
+    "title_one": "Conflicts ({{count}})",
+    "title_other": "Conflicts ({{count}})",
+    "view": {
+      "grid": "Grid view",
+      "list": "List view"
+    }
+  },
   "settings": {
+    "header": {
+      "description": "Game paths, preferences, and maintenance"
+    },
+    "sections": {
+      "gameConfiguration": "Game Configuration",
+      "updates": "Updates",
+      "appearance": "Appearance",
+      "grimoireSocial": "Grimoire Social",
+      "preferences": "Preferences",
+      "experimentalFeatures": "Experimental Features",
+      "support": "Support",
+      "maintenance": "Maintenance",
+      "modDatabaseCache": "Mod Database Cache",
+      "localPreviewCache": "Local preview cache"
+    },
     "language": {
       "label": "Language",
       "description": "Choose the app language, or follow your system preference.",
       "systemDefault": "System default"
     },
-    "header": {
-      "description": "Game paths, preferences, and maintenance"
+    "gamePath": {
+      "selectFolder": "Select Deadlock folder",
+      "label": "Deadlock Installation Path",
+      "autoDetect": "Auto-detect",
+      "devModeActive": "Dev mode is active. Deadlock path selection is disabled.",
+      "selectHint": "Select your Deadlock game folder (contains the 'game' directory)",
+      "openGameFolder": "Open Game Folder"
+    },
+    "gameinfo": {
+      "checkingStatus": "Checking gameinfo.gi status...",
+      "title": "gameinfo.gi Status",
+      "issuesFound": "Issues Found",
+      "verifySteam": "In Steam: right-click Deadlock > Properties > Installed Files > Verify integrity of game files.",
+      "foundNearby": "Found nearby: {{candidates}}. Rename one to gameinfo.gi to restore.",
+      "fixConfiguration": "Fix Configuration"
+    },
+    "updates": {
+      "releaseNotesTitle": "View release notes for {{version}}",
+      "currentVersion": "Current Version",
+      "available": "available!",
+      "readyToInstall": "ready to install",
+      "upToDate": "You're up to date!",
+      "whatsNew": "What's New",
+      "installRestart": "Install & Restart",
+      "downloadUpdate": "Download Update",
+      "checkForUpdates": "Check for Updates",
+      "managed": "Updates are managed by your package manager.",
+      "managedPrefix": "Grimoire was installed via a system package. Update with your distro's tools:",
+      "onArchOr": "on Arch, or",
+      "onDebianUbuntu": "on Debian/Ubuntu.",
+      "installedDebPrefix": "Installed the",
+      "installedDebSuffix": "manually? Add the apt repository for automatic updates (instructions at",
+      "downloading": "Downloading update...",
+      "whatsNewIn": "What's New in",
+      "released": "Released {{date}}",
+      "noReleaseNotes": "No release notes available."
+    },
+    "appearance": {
+      "accentNamed": "Use {{name}} accent color",
+      "pickCustomColor": "Pick custom color",
+      "accentCustom": "Custom accent",
+      "sidebarHighlightNamed": "Sidebar highlight: {{hero}}",
+      "sidebarHighlightNone": "No sidebar highlight",
+      "customAccentColor": "Custom accent color",
+      "selectedColorPreview": "Selected color preview",
+      "closeSidebarHighlightPicker": "Close sidebar highlight picker",
+      "customAccent": "Custom Accent",
+      "sidebarHighlight": "Sidebar Highlight"
+    },
+    "preferences": {
+      "hideNsfw": "Hide NSFW Content",
+      "hideNsfwDescription": "Blur thumbnail images for mods marked as NSFW.",
+      "hideOutdated": "Hide Outdated Mods",
+      "expandLocker": "Expand Locker cards by default",
+      "switchVariants": "Switch variants instead of stacking them",
+      "enableAfterDownload": "Enable mods after download",
+      "confirmProfileUpdate": "Confirm before updating a profile",
+      "ignoreConflicts": "Ignore conflicts by default",
+      "discordRpc": "Discord Rich Presence",
+      "contributeMatchData": "Contribute match data to deadlock-api.com",
+      "saltsContributed_one": "{{count}} match key contributed.",
+      "saltsContributed_other": "{{count}} match keys contributed.",
+      "noSaltsYet": "Nothing to contribute yet. Salts appear after you view matches in-game.",
+      "lastSaltAttemptFailed": "Last upload failed: {{error}}",
+      "developerMode": "Developer Mode",
+      "developerModeDescription": "Use a dummy Deadlock directory for local testing without game files.",
+      "dateFormat": "Date Format",
+      "dateFormatDescription": "How upload and update dates are shown on mods and files."
+    },
+    "translationMode": {
+      "chooseLanguage": "Choose a language",
+      "targetLanguage": "Target language",
+      "pickLanguageDescription": "Pick the language that should receive your translation suggestions."
+    },
+    "experimental": {
+      "description": "These features are still in development and may be incomplete or buggy.",
+      "statsDashboard": "Stats Dashboard",
+      "statsDashboardDescription": "Track your performance with data from the Deadlock Stats API.",
+      "crosshairDesigner": "Crosshair Designer",
+      "crosshairDesignerDescription": "Create custom crosshairs with a live preview.",
+      "socialDescription": "Sign in with Steam to publish profiles and browse uploads from other players in Discover.",
+      "translationMode": "Translation Mode",
+      "fixUnknownMods": "Fix Unknown Mods",
+      "deadworksServers": "Deadworks Servers",
+      "performanceConfig": "Performance Config"
+    },
+    "support": {
+      "reportBuildFailed": "Failed to build report: {{error}}",
+      "bugReportTitle": "Grimoire bug report",
+      "bugPlaceholder": "Describe what went wrong...",
+      "description": "Found a bug or have a feature request? File an issue on GitHub or drop into our Discord.",
+      "githubIssues": "GitHub Issues",
+      "joinDiscord": "Join Discord",
+      "shareBugReport": "Share a bug report",
+      "bugReportDescription": "Describe what went wrong, generate a sanitized report, then paste it into Discord or a GitHub issue. The report bundles app and OS info plus the tail of your log; home paths, Steam IDs, bearer tokens, and emails are stripped before it leaves the app.",
+      "regenerateReport": "Regenerate report",
+      "generateReport": "Generate report",
+      "includeFullLog": "Include full log (up to 5 MB; Discord auto-attaches as a file)",
+      "reviewBeforeSharing": "Review before sharing. Nothing is sent automatically.",
+      "copyFailed": "Copy failed: select and Ctrl+C",
+      "copyReport": "Copy report",
+      "openDiscord": "Open Discord",
+      "openGithubIssue": "Open GitHub issue"
+    },
+    "maintenance": {
+      "archivesRemoved_one": "Removed {{count}} archive.",
+      "archivesRemoved_other": "Removed {{count}} archives.",
+      "cleanupAddons": "Cleanup Addons Folder",
+      "cleanupDescription": "Remove leftover archive downloads (zip, 7z).",
+      "cleanup": "Cleanup"
+    },
+    "setupWizard": {
+      "resetResult": "Setup wizard will show on next launch.",
+      "title": "Reset Setup Wizard",
+      "description": "Show the first-run setup wizard again on next app launch.",
+      "confirmTitle": "Reset setup wizard?",
+      "confirmMessage": "The first-run setup wizard will appear the next time you launch the app. Your settings and installed mods are not affected."
+    },
+    "cache": {
+      "cleared": "Cache cleared.",
+      "previewCleared": "Cleared {{size}} from preview cache.",
+      "lastSynchronized": "Last synchronized {{date}}",
+      "neverSynchronized": "Never synchronized",
+      "syncingSection": "Syncing {{section}}",
+      "cachedMods": "Cached Mods",
+      "wipeCache": "Wipe Cache",
+      "syncDatabase": "Sync Database",
+      "onDisk": "On Disk",
+      "previewDescription": "3D model stills, hero portraits, and locker card thumbnails. These rebuild automatically from your installed mods when next viewed. Your installed mods are not affected.",
+      "wipeTitle": "Wipe mod cache?",
+      "wipeMessage": "Removes cached mod metadata and sync state. Browse re-syncs from GameBanana next time. Installed mods are not affected.",
+      "clearPreviewTitle": "Clear preview cache?",
+      "clearPreviewMessage": "Deletes cached preview images to reclaim disk. They regenerate when you next view them. Installed mods are not affected."
+    },
+    "autoexec": {
+      "created": "Created {{path}}",
+      "title": "Autoexec Configuration",
+      "description": "Ensure autoexec.cfg exists for crosshairs and commands.",
+      "createFile": "Create File"
     },
     "toggles": {
       "hideOutdated": "Hide Browse mods older than the current game version.",
@@ -37,16 +482,79 @@
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
       "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."
-    },
-    "cache": {
-      "wipeMessage": "Removes cached mod metadata and sync state. Browse re-syncs from GameBanana next time. Installed mods are not affected.",
-      "clearPreviewMessage": "Deletes cached preview images to reclaim disk. They regenerate when you next view them. Installed mods are not affected."
     }
   },
   "crosshair": {
+    "actions": {
+      "applyToGame": "Apply to Game",
+      "copyCode": "Copy Code",
+      "importFromGame": "Import from Game",
+      "importTitle": "Load your current in-game crosshair settings into the editor",
+      "saveAsNewPreset": "Save as New Preset"
+    },
+    "alert": {
+      "applyPresetFailed": "Failed to apply preset. Make sure the game path is correct.",
+      "clearFailed": "Failed to clear crosshair. Check the game path in Settings.",
+      "configureGamePath": "Please configure your Deadlock game path in Settings first.",
+      "noSettingsFound": "No crosshair settings found in the game config. Change any crosshair setting in-game once, then try again.",
+      "readConfigFailed": "Failed to read the game config. Check the game path in Settings."
+    },
+    "colors": {
+      "blue": "Blue",
+      "cyan": "Cyan",
+      "green": "Green",
+      "magenta": "Magenta",
+      "red": "Red",
+      "white": "White",
+      "yellow": "Yellow"
+    },
+    "confirm": {
+      "clearActive": "Remove the active crosshair from autoexec.cfg? Your saved presets will be kept.\n\nNote: an in-progress game session keeps its current crosshair until you restart the game.",
+      "deletePreset": "Delete this crosshair preset?"
+    },
+    "controls": {
+      "gap": "Gap",
+      "height": "Height",
+      "opacity": "Opacity",
+      "outlineColor": "Outline color",
+      "outlineGap": "Outline Gap",
+      "outlineOpacity": "Outline Opacity",
+      "outlineWidth": "Outline Width",
+      "size": "Size",
+      "width": "Width"
+    },
+    "hints": {
+      "pressF7": "Press F7 in-game"
+    },
+    "presetNamePlaceholder": "Name...",
+    "presets": {
+      "deselectActive": "Deselect Active",
+      "deselectTitle": "Remove the active crosshair from autoexec.cfg (presets are kept)",
+      "savedTitle_one": "Saved Presets ({{count}})",
+      "savedTitle_other": "Saved Presets ({{count}})"
+    },
+    "preview": {
+      "description": "Preview approximates the in-game crosshair at the selected resolution. Dynamic spread bloom is not simulated.",
+      "pinned": "Pinned",
+      "pinTitle": "Keep the mod manager window on top of the game for quick adjustments",
+      "pinWindow": "Pin Window",
+      "resolutionTitle": "Render the preview at this display resolution's in-game size",
+      "zoom": "Zoom:"
+    },
+    "sections": {
+      "centerDot": "Center Dot",
+      "color": "Color",
+      "inGameBehavior": "In-Game Behavior",
+      "shape": "Crosshair Shape"
+    },
+    "status": {
+      "imported": "Imported"
+    },
     "toggles": {
       "staticGap": "Keep the gap fixed. Off lets it expand with weapon spread (not shown in preview).",
-      "disableHeroCrosshairs": "Force your custom crosshair on heroes that override it."
+      "staticGapLabel": "Static Gap",
+      "disableHeroCrosshairs": "Force your custom crosshair on heroes that override it.",
+      "disableHeroCrosshairsLabel": "Disable Hero Crosshairs"
     }
   },
   "installed": {
@@ -61,8 +569,116 @@
     }
   },
   "profiles": {
+    "loading": "Loading profiles...",
+    "thisProfile": "this profile",
+    "updated": "Updated",
+    "errors": {
+      "loadSnapshotFailed": "Failed to load snapshot: {{error}}",
+      "captureSnapshotFailed": "Failed to capture snapshot: {{error}}",
+      "deleteSnapshotFailed": "Failed to delete snapshot: {{error}}",
+      "bulkDeleteSnapshotsFailed": "Failed to delete {{failed}} of {{total}} snapshots: {{error}}"
+    },
+    "create": {
+      "title": "Create New Profile",
+      "placeholder": "Enter profile name, e.g. Competitive, Casual",
+      "profileName": "Profile name",
+      "submit": "Create Profile"
+    },
+    "import": {
+      "title": "Import a portable profile from a share code or file"
+    },
     "empty": {
+      "title": "No Profiles Yet",
       "noProfiles": "Create a profile to save your current mod setup."
+    },
+    "actions": {
+      "import": "Import",
+      "renameProfile": "Rename profile",
+      "cancelRename": "Cancel rename",
+      "reapplyTitle": "Re-apply this profile",
+      "updateTitle": "Overwrite this profile with your current mods",
+      "exportTitle": "Export/share profile",
+      "exportProfile": "Export Profile",
+      "publishToDiscover": "Publish to Discover",
+      "deleteProfile": "Delete profile",
+      "deleteCount_one": "Delete {{count}}",
+      "deleteCount_other": "Delete {{count}}",
+      "restore": "Restore",
+      "reapply": "Re-apply",
+      "apply": "Apply",
+      "update": "Update",
+      "deleting": "Deleting..."
+    },
+    "snapshots": {
+      "title_zero": "Snapshots",
+      "title_one": "Snapshots ({{count}})",
+      "title_other": "Snapshots ({{count}})",
+      "snapshotNowTitle": "Capture your current installed mods now. Use this before experimenting.",
+      "snapshotNow": "Snapshot now",
+      "collapse": "Collapse snapshots",
+      "expand": "Expand snapshots",
+      "collapseList": "Collapse snapshot list",
+      "showAll": "Show all snapshots",
+      "tooltip": "Snapshots are automatic recovery points taken before updates or profile applies.",
+      "collapsedEmpty": "Automatic recovery points captured before updates or profile applies. None yet - one will appear here the next time you run either.",
+      "mostRecent_one": "Most recent: {{date}} - {{count}} mod.",
+      "mostRecent_other": "Most recent: {{date}} - {{count}} mods.",
+      "expandedEmpty": "Grimoire takes a snapshot of your installed mod set automatically before each mod update and before applying a profile. Restore re-downloads those mods from GameBanana, so a bad update or wrong profile can be rolled back. Snapshots store only mod IDs, not VPK files, so disk cost stays tiny. You can also capture one manually before experimenting.",
+      "selectToBulkDelete_one": "Select to bulk delete ({{count}})",
+      "selectToBulkDelete_other": "Select to bulk delete ({{count}})",
+      "selected_one": "{{count}} selected",
+      "selected_other": "{{count}} selected",
+      "clearSelection": "Clear selection",
+      "selectAll": "Select all snapshots",
+      "deleteSelectedTitle_one": "Delete {{count}} selected snapshot",
+      "deleteSelectedTitle_other": "Delete {{count}} selected snapshots",
+      "trigger": {
+        "preUpdate": "Before mod update",
+        "preApplyProfile": "Before applying profile",
+        "manual": "Manual snapshot"
+      },
+      "explanation": {
+        "preUpdate": "Captured before a mod update changed your installed set.",
+        "preApplyProfile": "Captured before applying a profile changed your installed set.",
+        "manual": "Captured manually from the Profiles page."
+      },
+      "unselect": "Unselect snapshot",
+      "select": "Select snapshot",
+      "restoreTitle": "Opens the import dialog with this snapshot preloaded",
+      "deleteTitle": "Delete snapshot",
+      "delete": "Delete snapshot"
+    },
+    "mods": {
+      "label": "Mods",
+      "count_one": "{{count}} mod",
+      "count_other": "{{count}} mods",
+      "groupsAndFiles": "Mods ({{mods}}, {{files}} files)",
+      "groups_one": "Mods ({{count}})",
+      "groups_other": "Mods ({{count}})",
+      "files_one": "{{count}} file",
+      "files_other": "{{count}} files",
+      "empty": "No mods in profile"
+    },
+    "autoexec": {
+      "includesTitle": "Includes autoexec commands",
+      "count_one": "Autoexec ({{count}})",
+      "count_other": "Autoexec ({{count}})",
+      "commandsCount_one": "Autoexec ({{count}} command)",
+      "commandsCount_other": "Autoexec ({{count}} commands)"
+    },
+    "crosshair": {
+      "summary": "Gap: {{gap}} | Height: {{height}} | Width: {{width}}"
+    },
+    "confirm": {
+      "updateTitle": "Update Profile",
+      "updateMessage": "Overwrite {{name}} with your currently enabled mods? The profile's saved mod list will be replaced and can't be undone. To load this profile onto your install instead, use Apply. You can turn this prompt off in Settings -> Preferences.",
+      "deleteTitle": "Delete Profile",
+      "deleteMessage": "Are you sure you want to delete this profile? This action cannot be undone.",
+      "deleteSnapshotTitle": "Delete Snapshot",
+      "deleteSnapshotMessage": "Delete this recovery snapshot? You won't be able to restore from it later.",
+      "deleteSelectedSnapshotsTitle": "Delete Selected Snapshots",
+      "deleteSelectedSnapshotsMessage_one": "Delete {{count}} snapshot? Your installed mods are unaffected. You won't be able to restore from the deleted snapshot later.",
+      "deleteSelectedSnapshotsMessage_other": "Delete {{count}} snapshots? Your installed mods are unaffected. You won't be able to restore from the deleted snapshots later."
     }
   },
   "social": {
