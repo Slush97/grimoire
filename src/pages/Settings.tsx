@@ -25,6 +25,7 @@ import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/a
 import { DEFAULT_SIDEBAR_HERO, HERO_NAMES_SORTED, getHeroChipIconPath } from '../lib/lockerUtils';
 import SocialAccountSection from '../components/social/SocialAccountSection';
 import PerformanceConfigCard from '../components/performance/PerformanceConfigCard';
+import KofiSupportButton from '../components/KofiSupportButton';
 import type { SaltIngestStatus } from '../types/electron';
 
 // GitHub Releases is the source of truth for changelogs. When we have local
@@ -634,6 +635,7 @@ export default function Settings() {
       <PageHeader
         title={<Tx k="nav.settings" fallback="Settings" />}
         description={<Tx k="settings.header.description" fallback="Game paths, preferences, and maintenance" />}
+        action={<KofiSupportButton />}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

@@ -106,6 +106,7 @@
 
   /* Third-party brand colors (buttons/links that represent the brand itself). */
   --color-brand-discord: #5865F2;
+  --color-brand-kofi: #FF5E5B;
 
   --font-radiance: 'Radiance', system-ui, sans-serif;
   --font-reaver: 'Reaver', serif;
@@ -817,6 +818,65 @@ body {
 
 .animate-scale-in {
   animation: scaleIn 0.25s ease-out forwards;
+}
+
+/* ============================================================================
+   Ko-fi support button: Mina (with her red umbrella) sits muted in the back,
+   fading behind the label, her hero icon as the leading mark. Static, no
+   animation, no glow: neutral border with a faint kofi tint. Images are set
+   inline (getAssetPath) so they resolve in packaged builds.
+   ========================================================================== */
+.kofi-button {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background-color: color-mix(in srgb, var(--color-bg-tertiary) 60%, transparent);
+  border-color: var(--color-border);
+  transition: border-color 0.2s ease, background-color 0.2s ease;
+}
+
+.kofi-button:hover {
+  border-color: color-mix(in srgb, var(--color-brand-kofi) 40%, var(--color-border));
+  background-color: var(--color-bg-tertiary);
+}
+
+/* Mina render, pinned to the right and muted: her red umbrella and bats fan out
+   toward the label, the face sits behind "coffee". Dimmed + desaturated so she
+   reads as a quiet backdrop, not a vivid sticker. */
+.kofi-mina {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 78%;
+  z-index: -2;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: 55% 20%;
+  opacity: 0.4;
+  filter: saturate(0.7) brightness(0.85);
+  pointer-events: none;
+}
+
+.kofi-button:hover .kofi-mina {
+  opacity: 0.55;
+}
+
+/* Fade the card colour across her so the label stays readable. */
+.kofi-fade {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    var(--color-bg-tertiary) 40%,
+    color-mix(in srgb, var(--color-bg-tertiary) 65%, transparent) 65%,
+    color-mix(in srgb, var(--color-bg-tertiary) 25%, transparent) 100%);
+}
+
+/* Slightly soften the hero icon so it sits with the muted backdrop. */
+.kofi-icon {
+  opacity: 0.92;
 }
 
 .mod-details-body-content,
