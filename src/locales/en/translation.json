@@ -1,40 +1,40 @@
 {
   "common": {
-    "view": "View",
+    "view": "Looking at",
     "actions": {
-      "cancel": "Cancel",
+      "cancel": "No thanks",
       "clear": "Clear",
-      "close": "Close",
-      "confirm": "Confirm",
-      "copy": "Copy",
-      "delete": "Delete",
+      "close": "Exit",
+      "confirm": "Yes Please",
+      "copy": "Copy That",
+      "delete": "Delete That",
       "dismiss": "Dismiss",
-      "done": "Done",
+      "done": "Its finished sir",
       "apply": "Apply",
-      "browse": "Browse",
+      "browse": "Look at gassy mod",
       "remove": "Remove",
       "refresh": "Refresh",
       "reset": "Reset",
-      "retry": "Retry",
+      "retry": "Try Again",
       "save": "Save",
-      "collapseDetails": "Collapse details",
-      "expandDetails": "Expand details",
-      "tryAgain": "Try again"
+      "collapseDetails": "Less details",
+      "expandDetails": "More details",
+      "tryAgain": "Try again and again"
     },
     "errorBoundary": {
-      "title": "Something went wrong",
-      "description": "An error occurred while rendering this component. This won't affect other parts of the app.",
-      "tryAgain": "Try Again"
+      "title": "Something went wrong :(",
+      "description": "An error occurred while rendering this component. This won't affect other parts of the app. Womp Womp",
+      "tryAgain": "Try Again now papi"
     },
     "status": {
       "active": "Active",
       "archived": "Archived",
       "checking": "Checking...",
-      "configured": "Configured",
+      "configured": "Configured ",
       "copied": "Copied",
-      "inactive": "Inactive",
-      "invalid": "Invalid",
-      "missing": "Missing",
+      "inactive": "Not Active",
+      "invalid": "Not valid",
+      "missing": "Not Found",
       "valid": "Valid"
     },
     "emptyValue": "(empty)",
@@ -43,42 +43,42 @@
     "versusLower": "vs"
   },
   "nav": {
-    "installed": "Installed",
-    "browse": "Browse",
-    "discover": "Discover",
-    "servers": "Servers",
-    "locker": "Locker",
-    "conflicts": "Conflicts",
-    "profiles": "Profiles",
+    "installed": "Installed :)",
+    "browse": "Browsers",
+    "discover": "Discover New Mods",
+    "servers": "Play With Friends",
+    "locker": "Fortnite Locker",
+    "conflicts": "Problems",
+    "profiles": "Saves",
     "crosshair": "Crosshair",
-    "autoexec": "Autoexec",
-    "stats": "Stats",
-    "settings": "Settings"
+    "autoexec": "Code Thingy",
+    "stats": "Loosing Streak",
+    "settings": "Config"
   },
   "autoexec": {
     "commands": {
-      "emptyTitle": "No commands added",
-      "emptyDescription": "Select from presets on the left",
+      "emptyTitle": "Add Some commands",
+      "emptyDescription": "choose presents from the left pwease",
       "title_one": "Your Commands ({{count}})",
       "title_other": "Your Commands ({{count}})"
     },
     "confirm": {
-      "clearTitle": "Clear all commands?",
+      "clearTitle": "Are you sure you wanna clear all commands?",
       "clearMessage_one": "Remove {{count}} command from the list? Your saved autoexec.cfg won't change until you click Save.",
       "clearMessage_other": "Remove all {{count}} commands from the list? Your saved autoexec.cfg won't change until you click Save."
     },
     "customCommand": {
       "title": "Custom Command",
-      "placeholder": "e.g. fps_max 0"
+      "placeholder": "e.g. fps_max 0 (more fps)"
     },
     "launchOptions": {
       "description": "Args passed to Deadlock when launched via Steam. Written into Steam's config right before grimoire launches the game.",
-      "inSteamNow": "In Steam now",
-      "saved": "Saved. Applied next time you launch Deadlock via grimoire.",
+      "inSteamNow": "In Steam now ",
+      "saved": "Saved. Applied next time you launch Deadlock via grimoire. ",
       "savedWillOverwrite": "Your saved value will overwrite this on next grimoire launch.",
       "steamConfigMissing": "Steam config not found. Launch Deadlock via Steam once, then come back.",
       "steamRunning": "Steam is running. Close it before launching Deadlock via grimoire so the write isn't clobbered.",
-      "title": "Launch Options"
+      "title": "Launch Options for deadgame"
     },
     "presets": {
       "performance": {
@@ -114,7 +114,7 @@
       "hud": {
         "category": "HUD & UI",
         "newHealthBars": {
-          "name": "New Health Bars",
+          "name": "New Health Bars ",
           "description": "Enable new-style health bars"
         },
         "hideHud": {
@@ -126,8 +126,8 @@
           "description": "Show the HUD"
         },
         "disablePostMatchSurvey": {
-          "name": "Disable Post-Match Survey",
-          "description": "Skip the survey after matches"
+          "name": "Disable Post-Match Survey (why would you do this)",
+          "description": "Skip the survey after matches (shame on you for not helping a developing game)"
         }
       },
       "minimap": {
@@ -145,14 +145,14 @@
           "description": "Bigger player icons on minimap"
         },
         "thickerZiplines": {
-          "name": "Thicker Ziplines",
+          "name": "Dummy Thicker Ziplines ",
           "description": "More visible ziplines"
         }
       },
       "matchmaking": {
         "category": "Matchmaking",
         "soloQueueOnly": {
-          "name": "Solo Queue Only",
+          "name": "Solo Queue Only ",
           "description": "Prefer matches with solo players"
         },
         "naRegion": {
@@ -184,10 +184,10 @@
       "placeholder": "Search commands..."
     },
     "status": {
-      "error": "Error: {{error}}",
-      "gamePathNotConfigured": "Game path not configured",
+      "error": "Error: {{error}},  Lol you got an error",
+      "gamePathNotConfigured": "Game path not configured, you should fix that",
       "gamePathWarning": "Game path not configured. Set it in Settings to save.",
-      "savedToAutoexec": "Saved to autoexec.cfg!",
+      "savedToAutoexec": "Saved to autoexec.cfg! YAY",
       "unsavedChanges": "You have unsaved changes"
     }
   },
@@ -203,21 +203,21 @@
       "left": "{{eta}} left"
     },
     "noDownloads": "No downloads",
-    "preparing": "Preparing…",
+    "preparing": "Preparing… brppapapa",
     "queuedHeader_one": "Queued ({{count}})",
     "queuedHeader_other": "Queued ({{count}})",
     "remainingQueued_one": "{{count}} queued",
     "remainingQueued_other": "{{count}} queued",
-    "removeFromQueue": "Remove from queue",
+    "removeFromQueue": "Remove from queue :(",
     "showDetails": "Show download details"
   },
   "stats": {
-    "title": "Deadlock Stats",
+    "title": "Deadgame Stats",
     "tabs": {
       "overview": "Overview",
       "matches": "Matches",
       "social": "Social",
-      "leaderboard": "Leaderboard"
+      "leaderboard": "Leaderboard, if you dont see Peterxb9 its glitched"
     },
     "empty": {
       "noPlayerSelected": {
@@ -263,7 +263,7 @@
       "winRatePercent": "{{rate}}% WR",
       "winLoss": "{{wins}}W - {{losses}}L",
       "noSocialData": "No social data for this player yet",
-      "bestTeammates": "Best Teammates",
+      "bestTeammates": "Best Teammates (me)",
       "frequentOpponents": "Frequent Opponents",
       "minSharedMatches": "Min 3 shared matches",
       "gamesTogether": "{{count}} games together",
@@ -307,7 +307,7 @@
     },
     "connect": {
       "connectionFailed": "Connection failed.",
-      "launchingSteam": "Launching Deadlock through Steam. Accept any Steam prompt to join.",
+      "launchingSteam": "Launching DeadGame through Steam. Accept any Steam prompt to join.",
       "preparing": "Preparing...",
       "preparingToConnect": "Preparing to connect...",
       "status": {
@@ -365,7 +365,7 @@
       "ping": "Ping"
     },
     "warning": {
-      "gamePathRequired": "Set your Deadlock game path in Settings before joining a server."
+      "gamePathRequired": "Set your DeadGane game path in Settings before joining a server."
     }
   },
   "conflicts": {
@@ -464,19 +464,19 @@
       "downloadFailed": "Could not download that language. Check your connection and try again."
     },
     "gamePath": {
-      "selectFolder": "Select Deadlock folder",
-      "label": "Deadlock Installation Path",
+      "selectFolder": "Select DeadGame folder",
+      "label": "DeadGame Installation Path",
       "autoDetect": "Auto-detect",
-      "devModeActive": "Dev mode is active. Deadlock path selection is disabled.",
-      "selectHint": "Select your Deadlock game folder (contains the 'game' directory)",
+      "devModeActive": "Dev mode is active. DeadGame path selection is disabled.",
+      "selectHint": "Select your DeadGame game folder (contains the 'game' directory)",
       "openGameFolder": "Open Game Folder",
-      "pathPlaceholder": "/path/to/Deadlock"
+      "pathPlaceholder": "/path/to/DeadGame"
     },
     "gameinfo": {
       "checkingStatus": "Checking gameinfo.gi status...",
       "title": "gameinfo.gi Status",
       "issuesFound": "Issues Found",
-      "verifySteam": "In Steam: right-click Deadlock > Properties > Installed Files > Verify integrity of game files.",
+      "verifySteam": "In Steam: right-click DeadGame > Properties > Installed Files > Verify integrity of game files.",
       "foundNearby": "Found nearby: {{candidates}}. Rename one to gameinfo.gi to restore.",
       "fixConfiguration": "Fix Configuration"
     },
@@ -523,20 +523,20 @@
       "confirmProfileUpdate": "Confirm before updating a profile",
       "ignoreConflicts": "Ignore conflicts by default",
       "discordRpc": "Discord Rich Presence",
-      "contributeMatchData": "Contribute match data to deadlock-api.com",
+      "contributeMatchData": "Contribute match data to DeadGame-api.com",
       "saltsContributed_one": "{{count}} match key contributed.",
       "saltsContributed_other": "{{count}} match keys contributed.",
       "noSaltsYet": "Nothing to contribute yet. Salts appear after you view matches in-game.",
       "lastSaltAttemptFailed": "Last upload failed: {{error}}",
       "developerMode": "Developer Mode",
-      "developerModeDescription": "Use a dummy Deadlock directory for local testing without game files.",
+      "developerModeDescription": "Use a dummy DeadGame directory for local testing without game files.",
       "dateFormat": "Date Format",
       "dateFormatDescription": "How upload and update dates are shown on mods and files."
     },
     "experimental": {
       "description": "These features are still in development and may be incomplete or buggy.",
       "statsDashboard": "Stats Dashboard",
-      "statsDashboardDescription": "Track your performance with data from the Deadlock Stats API.",
+      "statsDashboardDescription": "Track your performance with data from the DeadGame Stats API.",
       "crosshairDesigner": "Crosshair Designer",
       "crosshairDesignerDescription": "Create custom crosshairs with a live preview.",
       "socialDescription": "Sign in with Steam to publish profiles and browse uploads from other players in Discover.",
@@ -625,7 +625,7 @@
     "alert": {
       "applyPresetFailed": "Failed to apply preset. Make sure the game path is correct.",
       "clearFailed": "Failed to clear crosshair. Check the game path in Settings.",
-      "configureGamePath": "Please configure your Deadlock game path in Settings first.",
+      "configureGamePath": "Please configure your DeadGame game path in Settings first.",
       "noSettingsFound": "No crosshair settings found in the game config. Change any crosshair setting in-game once, then try again.",
       "readConfigFailed": "Failed to read the game config. Check the game path in Settings."
     },
@@ -689,7 +689,7 @@
   },
   "installed": {
     "empty": {
-      "noGamePath": "Set your Deadlock path or enable dev mode.",
+      "noGamePath": "Set your DeadGame path or enable dev mode.",
       "noMods": "Download mods from Browse or import a custom VPK to get started.",
       "noModsTitle": "No Mods Found",
       "noGamePathTitle": "No Game Path Set",
@@ -948,7 +948,7 @@
   },
   "locker": {
     "empty": {
-      "noGamePath": "Set your Deadlock path or enable dev mode."
+      "noGamePath": "Set your DeadGame path or enable dev mode."
     },
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
@@ -1111,14 +1111,14 @@
         "weapons": "Gun FX"
       },
       "bakingHint": "Baking the recolor. The first time for a given pick can take up to a minute (it re-encodes every effect texture); the same pick is instant after that.",
-      "restartHint": "Restart Deadlock for this change to take effect (addons mount at game start).",
+      "restartHint": "Restart DeadGame for this change to take effect (addons mount at game start).",
       "savedHint": "Saved. This pick mounts the next time you Launch Modded."
     },
     "sounds": {
       "soundsByAbility": "Sounds by Ability",
       "experimental": "Experimental",
       "intro": "Your tagged sound mods for {{hero}}, grouped by the ability each one changes. Pick one source per ability and it's isolated into a single Locker-managed sound that wins over your other mods; pick the applied source again to revert. Tune the applied source's volume and pitch with the sliders.",
-      "restartHint": "Restart Deadlock for these sound changes to take effect (addons mount at game start).",
+      "restartHint": "Restart DeadGame for these sound changes to take effect (addons mount at game start).",
       "savedHint": "Saved. These sound changes mount the next time you Launch Modded.",
       "loadingAbilities": "Loading abilities...",
       "abilityN": "Ability {{slot}}",
@@ -1179,7 +1179,7 @@
       "gun": "Gun",
       "applyPaint": "Apply Paint",
       "baking": "Baking the paint. The first time for a given combination can take a while (it re-encodes the affected textures); the same combination is instant after that.",
-      "restartRequired": "Restart Deadlock for this change to take effect (addons mount at game start).",
+      "restartRequired": "Restart DeadGame for this change to take effect (addons mount at game start).",
       "saved": "Saved. This paint mounts the next time you Launch Modded."
     },
     "trippyPattern": {
@@ -1665,12 +1665,12 @@
     "autoDetectFailed": "Auto-detect failed. Browse to your Steam library:",
     "title": "Welcome to Grimoire",
     "subtitle": "Let's set up your mod manager",
-    "selectFolderTitle": "Select Deadlock Installation Folder",
-    "steamPathExample": "steamapps/common/Deadlock",
+    "selectFolderTitle": "Select DeadGame Installation Folder",
+    "steamPathExample": "steamapps/common/DeadGame",
     "gameinfoNeedsConfig": "gameinfo.gi needs to be configured for mods to load.",
     "createAutoexecHint": "Create autoexec.cfg for crosshairs and console commands.",
     "steps": {
-      "location": "Deadlock Location",
+      "location": "DeadGame Location",
       "gameFiles": "Game Files"
     },
     "status": {
@@ -1698,7 +1698,7 @@
     "updateAvailable": "Update available",
     "updateAvailableTitle": "Update available. Click to view release notes.",
     "tooltip": {
-      "installed": "Mods currently in your Deadlock addons folder.",
+      "installed": "Mods currently in your DeadGame addons folder.",
       "browse": "Discover and download mods from GameBanana.",
       "discover": "Browse and import profiles published by other Grimoire users.",
       "discoverNew_one": "{{count}} new published profile.",
@@ -1712,12 +1712,12 @@
       "profiles": "Save and swap sets of enabled mods."
     },
     "launch": {
-      "noPath": "Configure your Deadlock path in Settings first",
-      "moddedStash": "Restores stashed mods first, then launches Deadlock via Steam",
-      "moddedDefault": "Launch Deadlock with mods active",
+      "noPath": "Configure your DeadGame path in Settings first",
+      "moddedStash": "Restores stashed mods first, then launches DeadGame via Steam",
+      "moddedDefault": "Launch DeadGame with mods active",
       "vanillaStash": "A vanilla session is already active. Restore mods first.",
-      "vanillaDefault": "Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts",
-      "stopTitle": "Stop the running Deadlock process",
+      "vanillaDefault": "Temporarily stash mods, launch DeadGame via Steam, then auto-restore after the game starts",
+      "stopTitle": "Stop the running DeadGame process",
       "hideArt": "Hide background art",
       "showArt": "Show background art"
     },
@@ -1731,19 +1731,19 @@
     "toast": {
       "restoredAfterVanilla_one": "Restored {{count}} mod after vanilla launch.",
       "restoredAfterVanilla_other": "Restored {{count}} mods after vanilla launch.",
-      "restoreFailedRetry_one": "Couldn't restore {{count}} mod. Make sure Deadlock is closed, then retry.",
-      "restoreFailedRetry_other": "Couldn't restore {{count}} mods. Make sure Deadlock is closed, then retry.",
-      "restoreFailedRunning_one": "Couldn't restore {{count}} mod. Is Deadlock still running?",
-      "restoreFailedRunning_other": "Couldn't restore {{count}} mods. Is Deadlock still running?",
+      "restoreFailedRetry_one": "Couldn't restore {{count}} mod. Make sure DeadGame is closed, then retry.",
+      "restoreFailedRetry_other": "Couldn't restore {{count}} mods. Make sure DeadGame is closed, then retry.",
+      "restoreFailedRunning_one": "Couldn't restore {{count}} mod. Is DeadGame still running?",
+      "restoreFailedRunning_other": "Couldn't restore {{count}} mods. Is DeadGame still running?",
       "restored_one": "Restored {{count}} mod.",
       "restored_other": "Restored {{count}} mods.",
       "disabledVariants_one": "Disabled older variant: {{names}}.",
       "disabledVariants_other": "Disabled older variants: {{names}}.",
       "andMore": " and {{count}} more",
-      "stopped": "Stopped Deadlock.",
-      "notRunning": "Deadlock was not running.",
-      "stoppedRestoreFailed_one": "Stopped Deadlock, but couldn't restore {{count}} mod.",
-      "stoppedRestoreFailed_other": "Stopped Deadlock, but couldn't restore {{count}} mods.",
+      "stopped": "Stopped DeadGame.",
+      "notRunning": "DeadGame was not running.",
+      "stoppedRestoreFailed_one": "Stopped DeadGame, but couldn't restore {{count}} mod.",
+      "stoppedRestoreFailed_other": "Stopped DeadGame, but couldn't restore {{count}} mods.",
       "restoredStashed_one": "Restored {{count}} stashed mod.",
       "restoredStashed_other": "Restored {{count}} stashed mods."
     },
@@ -1761,7 +1761,7 @@
     },
     "empty": {
       "configureGamePathTitle": "Configure Game Path",
-      "configureGamePathBody": "Set your Deadlock installation path in Settings (or enable dev mode) before downloading mods.",
+      "configureGamePathBody": "Set your DeadGame installation path in Settings (or enable dev mode) before downloading mods.",
       "couldntLoadMods": "Couldn't load mods"
     },
     "artist": {
@@ -1912,7 +1912,7 @@
       "previewHidden": "NSFW preview hidden"
     },
     "viewOnGamebanana": "View on GameBanana",
-    "outdatedWarning": "This mod was last updated on {{date}} and may not be compatible with the current Deadlock version.",
+    "outdatedWarning": "This mod was last updated on {{date}} and may not be compatible with the current DeadGame version.",
     "deleteFile": {
       "title": "Delete installed file?",
       "body": "Delete <name>{{fileName}}</name> from your installed mods? This action cannot be undone."
@@ -1963,7 +1963,7 @@
     "suspicious": {
       "title": "Suspicious files detected",
       "installAnyway": "Install anyway",
-      "body": "<name>{{modName}}</name> contains files that aren't typical for a Deadlock mod:",
+      "body": "<name>{{modName}}</name> contains files that aren't typical for a DeadGame mod:",
       "andMore": "...and {{count}} more",
       "extractsNote": "Grimoire only extracts <code>.vpk</code> files: these won't be installed even if you continue. Review the mod's GameBanana page if anything looks off."
     }
@@ -2044,7 +2044,7 @@
     }
   },
   "performance": {
-    "statusReadError": "Could not read gameinfo.gi status. Check your Deadlock path in Settings.",
+    "statusReadError": "Could not read gameinfo.gi status. Check your DeadGame path in Settings.",
     "cardDescription": "Sqooky's community fps preset (OptimizationLock), applied without touching your mods.",
     "checkingGameinfo": "Checking gameinfo.gi...",
     "badge": {
@@ -2084,7 +2084,7 @@
       "colors": "Ability Colors",
       "effects": "Trippy Skins"
     },
-    "restartForSound": "Restart Deadlock for sound changes to take effect (addons mount at game start).",
+    "restartForSound": "Restart DeadGame for sound changes to take effect (addons mount at game start).",
     "tuned": "volume/pitch tuned",
     "targets": {
       "bodyGun": "body + gun",
