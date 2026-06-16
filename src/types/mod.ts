@@ -518,6 +518,10 @@ export interface SoulContainerImportInfo {
   orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
   /** Extra Euler rotation in degrees [X, Y, Z] applied after orient, if any. */
   rotate?: [number, number, number];
+  /** Facing yaw in degrees: turn about the orb's vertical axis, if any. */
+  yaw?: number;
+  /** False when the upright orientation pass was opted out (defaults true). */
+  upright?: boolean;
   /** Soul-glow particle handling. */
   glow: 'recolor' | 'base' | 'off';
   /** vpkmerge version that built the VPK. */

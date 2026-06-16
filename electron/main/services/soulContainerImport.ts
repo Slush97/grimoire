@@ -23,6 +23,12 @@ export interface BuildSoulContainerArgs {
     orient: SoulOrient;
     /** Extra Euler degrees [X, Y, Z] applied after orient. */
     rotate?: [number, number, number];
+    /** Facing yaw in degrees: turn the fitted orb in place about its vertical
+     *  axis. The slider knob; survives the upright orientation pass. */
+    yaw?: number;
+    /** Apply the psyduck upright-orientation recipe so the orb stands still and
+     *  upright instead of tumbling. Defaults to true when omitted. */
+    upright?: boolean;
     glow: SoulGlow;
 }
 
@@ -33,6 +39,8 @@ export interface SoulImportCliReport {
     fitScale?: number;
     sourceSpan?: number;
     targetSpan?: number;
+    yaw?: number;
+    upright?: boolean;
     glowHue?: number;
     entryCount?: number;
 }
@@ -101,6 +109,13 @@ export async function buildSoulContainerVpk(
     const rotate = nonZeroRotate(args.rotate);
     if (rotate) {
         cliArgs.push('--rotate', `${rotate[0]},${rotate[1]},${rotate[2]}`);
+    }
+    if (args.yaw) {
+        cliArgs.push('--yaw', `${args.yaw}`);
+    }
+    // Upright defaults on in the CLI; only pass the opt-out flag.
+    if (args.upright === false) {
+        cliArgs.push('--no-upright');
     }
 
     let stdout = '';

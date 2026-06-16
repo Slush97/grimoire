@@ -1012,9 +1012,7 @@
       },
       "facing": {
         "label": "Facing yaw",
-        "upright": "Keep upright (no tumble)",
-        "uprightHint": "Orb stands still and faces one way. Use the slider or arrows to aim it.",
-        "tumbleHint": "Orb spins freely like the default gold orb. Turn this on to aim a fixed facing."
+        "upright": "Lock in place"
       },
       "glow": {
         "label": "Soul glow",

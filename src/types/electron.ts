@@ -158,6 +158,10 @@ export interface ImportSoulContainerGlbArgs {
     orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
     /** Extra Euler degrees [X, Y, Z] applied after orient. */
     rotate?: [number, number, number];
+    /** Facing yaw in degrees: turn the fitted orb about its vertical axis. */
+    yaw?: number;
+    /** Upright orientation (psyduck recipe); defaults true when omitted. */
+    upright?: boolean;
     glow: 'recolor' | 'base' | 'off';
     /** User-tracked test status; defaults to 'untested'. */
     status?: SoulImportStatus;
@@ -176,6 +180,10 @@ export interface PreviewSoulContainerGlbArgs {
     glbPath: string;
     orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
     rotate?: [number, number, number];
+    /** Facing yaw in degrees: turn the fitted orb about its vertical axis. */
+    yaw?: number;
+    /** Upright orientation (psyduck recipe); defaults true when omitted. */
+    upright?: boolean;
     glow: 'recolor' | 'base' | 'off';
 }
 

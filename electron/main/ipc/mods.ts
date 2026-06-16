@@ -899,6 +899,8 @@ ipcMain.handle(
             name: 'preview',
             orient: args.orient,
             rotate: args.rotate,
+            yaw: args.yaw,
+            upright: args.upright,
             glow: args.glow,
         });
         return {
@@ -926,7 +928,7 @@ ipcMain.handle(
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
-        const { glbPath, name, orient, rotate, glow, status, notes, nsfw, thumbnailDataUrl, replaceMetaKey } = args;
+        const { glbPath, name, orient, rotate, yaw, upright, glow, status, notes, nsfw, thumbnailDataUrl, replaceMetaKey } = args;
         if (!name?.trim()) {
             throw new Error('A name is required');
         }
@@ -937,6 +939,8 @@ ipcMain.handle(
             name: name.trim(),
             orient,
             rotate,
+            yaw,
+            upright,
             glow,
         });
 
@@ -965,6 +969,8 @@ ipcMain.handle(
                 orient,
                 glow,
                 ...(rotate && (rotate[0] || rotate[1] || rotate[2]) ? { rotate } : {}),
+                ...(yaw ? { yaw } : {}),
+                ...(upright === false ? { upright } : {}),
                 vpkmergeVersion: built.report.version,
                 fitScale: built.report.fitScale,
                 sourceSpan: built.report.sourceSpan,

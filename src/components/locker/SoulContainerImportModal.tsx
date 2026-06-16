@@ -20,8 +20,8 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { importSoulContainerGlb, previewSoulContainerGlb, showOpenDialog } from '../../lib/api';
-import { parseGltfPreview } from '../../lib/loadGltfPreview';
+import { exportHeroPose, getHeroPoseInfo, importSoulContainerGlb, previewSoulContainerGlb, showOpenDialog } from '../../lib/api';
+import { loadGltfPreview, parseGltfPreview } from '../../lib/loadGltfPreview';
 import { computeSceneStats, deriveNameFromPath, norm360, TRIANGLE_WARN_THRESHOLD } from '../../lib/soulImport';
 import { useAppStore } from '../../stores/appStore';
 import type { Mod } from '../../types/mod';
@@ -53,6 +53,18 @@ const GLOW_OPTIONS: { value: GlowMode; labelKey: string; hintKey: string }[] = [
   { value: 'base', labelKey: 'locker.soulImport.glow.base', hintKey: 'locker.soulImport.glow.baseHint' },
   { value: 'off', labelKey: 'locker.soulImport.glow.off', hintKey: 'locker.soulImport.glow.offHint' },
 ];
+
+// Fixed default hero used as the size/facing yardstick beside the orb. A
+// medium build that reliably exports a pose; the reference is approximate, so
+// the in-game read remains the source of truth.
+const SCALE_HERO_NAME = 'Abrams';
+const HERO_POSE_SCHEME = 'grimoire-hero';
+
+/** Build the privileged URL the `grimoire-hero:` protocol serves the posed GLB
+ *  from (mirrors HeroPoseViewer's helper). */
+function heroPoseUrl(key: string, mtimeMs: number | null): string {
+  return `${HERO_POSE_SCHEME}://m/${encodeURIComponent(key)}/model.glb?v=${mtimeMs ?? 0}`;
+}
 
 function describeScene(
   scene: THREE.Object3D,
@@ -90,10 +102,22 @@ export default function SoulContainerImportModal({
   const [scene, setScene] = useState<THREE.Object3D | null>(null);
   const [orientMode, setOrientMode] = useState<SoulOrientMode>('y-up');
   const [rotate, setRotate] = useState<[number, number, number]>([0, 0, 0]);
+  // Facing yaw (degrees), baked about the orb's vertical axis. The slider knob
+  // for dialing in which way the orb faces near a hero's hip.
+  const [yaw, setYaw] = useState<number>(0);
+  // Upright orientation (psyduck recipe): orb stands still instead of tumbling.
+  // On by default so the yaw facing is stable.
+  const [upright, setUpright] = useState<boolean>(true);
   const [resolvedOrient, setResolvedOrient] = useState<string | null>(null);
   const [glow, setGlow] = useState<GlowMode>('recolor');
   const [showVanilla, setShowVanilla] = useState(true);
   const [spinning, setSpinning] = useState(true);
+  // Hero-for-scale reference: a standing default hero rendered beside the orb.
+  // Loaded lazily the first time the toggle is switched on, then cached.
+  const [showHero, setShowHero] = useState(false);
+  const [heroScene, setHeroScene] = useState<THREE.Object3D | null>(null);
+  const [heroLoading, setHeroLoading] = useState(false);
+  const heroSceneRef = useRef<THREE.Object3D | null>(null);
   const [nsfw, setNsfw] = useState(false);
   const [notes, setNotes] = useState('');
   // When another soul container is already enabled, default to disabling it
@@ -118,8 +142,41 @@ export default function SoulContainerImportModal({
   useEffect(() => {
     return () => {
       if (sceneRef.current) disposeScene(sceneRef.current);
+      if (heroSceneRef.current) disposeScene(heroSceneRef.current);
     };
   }, []);
+
+  // Lazily load the fixed scale-reference hero the first time the toggle is
+  // switched on, then cache it for the rest of the modal's life. Exporting the
+  // pose can take a moment, hence the loading flag.
+  useEffect(() => {
+    if (!showHero || heroSceneRef.current) return;
+    let cancelled = false;
+    setHeroLoading(true);
+    (async () => {
+      try {
+        let info = await getHeroPoseInfo(SCALE_HERO_NAME, []);
+        if (!info.hasModel) info = await exportHeroPose(SCALE_HERO_NAME, []);
+        if (cancelled || !info.hasModel) return;
+        const gltf = await loadGltfPreview(heroPoseUrl(info.key, info.mtimeMs));
+        if (cancelled) {
+          disposeScene(gltf.scene);
+          return;
+        }
+        heroSceneRef.current = gltf.scene;
+        setHeroScene(gltf.scene);
+      } catch {
+        // Reference hero is a nicety; on failure just leave the toggle on with
+        // no hero rather than surfacing an error over the import flow.
+        if (!cancelled) setShowHero(false);
+      } finally {
+        if (!cancelled) setHeroLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [showHero]);
 
   const hasRotation = rotate[0] !== 0 || rotate[1] !== 0 || rotate[2] !== 0;
 
@@ -137,10 +194,15 @@ export default function SoulContainerImportModal({
     const handle = window.setTimeout(() => {
       (async () => {
         try {
+          // `upright` only edits the soul particle, which the model-export
+          // preview does not render, so it is intentionally omitted here (no
+          // pointless rebuild when it toggles). `yaw` is baked into geometry, so
+          // it does show up in the exported mesh.
           const preview = await previewSoulContainerGlb({
             glbPath,
             orient: orientMode,
             rotate: hasRotation ? rotate : undefined,
+            yaw: yaw || undefined,
             glow,
           });
           const gltf = await parseGltfPreview(preview.glb);
@@ -175,7 +237,7 @@ export default function SoulContainerImportModal({
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [glbPath, orientMode, rotate, glow, hasRotation, t]);
+  }, [glbPath, orientMode, rotate, yaw, glow, hasRotation, t]);
 
   const acceptGlbPath = (picked: string) => {
     setError(null);
@@ -225,6 +287,17 @@ export default function SoulContainerImportModal({
     });
   };
 
+  // Facing yaw, normalized to (-180, 180]. The left/right preview arrows nudge
+  // it; the slider covers the full range. Final-space, so it is unambiguous
+  // unlike the pre-swizzle rotate Euler.
+  const normYaw = (deg: number) => {
+    if (!Number.isFinite(deg)) return 0;
+    let d = ((deg + 180) % 360 + 360) % 360 - 180;
+    if (d === -180) d = 180;
+    return d;
+  };
+  const bumpYaw = (delta: number) => setYaw((y) => normYaw(y + delta));
+
   const rerollBackdrop = () => {
     setBackdropIndex((current) => {
       if (SOUL_BACKDROP_COUNT <= 1) return current;
@@ -254,6 +327,8 @@ export default function SoulContainerImportModal({
         name: name.trim(),
         orient: orientMode,
         rotate: hasRotation ? rotate : undefined,
+        yaw: yaw || undefined,
+        upright,
         glow,
         status: 'untested',
         notes: notes.trim() || undefined,
@@ -336,8 +411,9 @@ export default function SoulContainerImportModal({
               </div>
             </div>
 
-            {/* Preview surface */}
-            <div className="relative w-full flex-1 min-h-[16rem] rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
+            {/* Preview surface: kept square so the orb and the hero-scale view
+                read consistently and the canvas never stretches. */}
+            <div className="relative w-full aspect-square rounded-lg border border-border bg-bg-tertiary/40 overflow-hidden">
               {scene ? (
                 <Suspense fallback={null}>
                   <SoulImportPreview
@@ -347,6 +423,7 @@ export default function SoulContainerImportModal({
                     showVanilla={showVanilla}
                     spinning={spinning}
                     backdropIndex={backdropIndex}
+                    heroScene={showHero ? heroScene : null}
                     captureRef={captureRef}
                   />
                 </Suspense>
@@ -376,17 +453,9 @@ export default function SoulContainerImportModal({
                     </span>
                   )}
 
-                  {/* Top-right: vanilla shell toggle + backdrop reroll. */}
+                  {/* Top-right: playback only (pause + backdrop reroll). The view
+                      toggles live in the bottom bar to keep the top uncluttered. */}
                   <div className="absolute top-2 right-2 z-10 flex items-center gap-1.5 text-[11px]">
-                    <label className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={showVanilla}
-                        onChange={(e) => setShowVanilla(e.target.checked)}
-                        className="w-3 h-3 accent-accent cursor-pointer"
-                      />
-                      {t('locker.soulImport.preview.vanillaShell')}
-                    </label>
                     <button
                       type="button"
                       onClick={() => setSpinning((s) => !s)}
@@ -407,9 +476,10 @@ export default function SoulContainerImportModal({
                     </button>
                   </div>
 
-                  {/* Directional arrows over the preview for quick visual
-                      reorientation (quarter turns; pitch on X, yaw on Y). Each
-                      tweaks rotate and rebuilds, like the side-panel nudges. */}
+                  {/* Directional arrows over the preview. Up/down quarter-turn
+                      the pre-swizzle pitch (rotate X) to upright the mesh;
+                      left/right nudge the final-space facing yaw (the stable
+                      facing knob, distinct from the ambiguous Euler rotate). */}
                   <button
                     type="button"
                     onClick={() => bumpAxis(0, 90)}
@@ -428,7 +498,7 @@ export default function SoulContainerImportModal({
                   </button>
                   <button
                     type="button"
-                    onClick={() => bumpAxis(1, -90)}
+                    onClick={() => bumpYaw(-15)}
                     className="absolute left-1.5 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
                     aria-label={t('locker.soulImport.orient.turnLeft')}
                   >
@@ -436,18 +506,44 @@ export default function SoulContainerImportModal({
                   </button>
                   <button
                     type="button"
-                    onClick={() => bumpAxis(1, 90)}
+                    onClick={() => bumpYaw(15)}
                     className="absolute right-1.5 top-1/2 -translate-y-1/2 z-10 p-1 rounded-full bg-black/45 text-white/80 hover:bg-black/70 hover:text-white cursor-pointer"
                     aria-label={t('locker.soulImport.orient.turnRight')}
                   >
                     <ArrowRight className="w-4 h-4" />
                   </button>
 
-                  {/* Bottom: resolved orientation label. */}
-                  <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center text-[11px]">
-                    <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary">
+                  {/* Bottom: resolved orientation label (left) + view toggles
+                      (right). Vanilla shell is hidden in hero mode (no effect). */}
+                  <div className="absolute bottom-2 left-2 right-2 z-10 flex items-center justify-between gap-2 text-[11px]">
+                    <span className="px-2 py-0.5 rounded bg-black/50 text-text-secondary truncate">
                       {t('locker.soulImport.preview.orientationLabel')} <span className="text-text-primary">{modeLabel}</span>
                     </span>
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <label
+                        className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none"
+                        title={t('locker.soulImport.preview.heroScaleHint')}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={showHero}
+                          onChange={(e) => setShowHero(e.target.checked)}
+                          className="w-3 h-3 accent-accent cursor-pointer"
+                        />
+                        {heroLoading ? t('locker.soulImport.preview.heroScaleLoading') : t('locker.soulImport.preview.heroScale')}
+                      </label>
+                      {!showHero && (
+                        <label className="px-2 py-0.5 rounded bg-black/50 text-text-secondary flex items-center gap-1.5 cursor-pointer select-none">
+                          <input
+                            type="checkbox"
+                            checked={showVanilla}
+                            onChange={(e) => setShowVanilla(e.target.checked)}
+                            className="w-3 h-3 accent-accent cursor-pointer"
+                          />
+                          {t('locker.soulImport.preview.vanillaShell')}
+                        </label>
+                      )}
+                    </div>
                   </div>
                 </>
               )}
@@ -533,6 +629,54 @@ export default function SoulContainerImportModal({
                   </button>
                 </div>
               </div>
+            </div>
+
+            {/* Facing: final-space yaw (the stable facing knob) + upright toggle */}
+            <div>
+              <label className="block text-sm font-medium text-text-primary mb-1.5">
+                {t('locker.soulImport.facing.label')}
+              </label>
+              <div className="flex items-center gap-2 mb-2">
+                <input
+                  type="range"
+                  min={-180}
+                  max={180}
+                  step={5}
+                  value={yaw}
+                  onChange={(e) => setYaw(normYaw(parseFloat(e.target.value)))}
+                  disabled={!upright}
+                  className="flex-1 accent-accent cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label={t('locker.soulImport.facing.label')}
+                />
+                <input
+                  type="number"
+                  value={yaw}
+                  onChange={(e) => setYaw(normYaw(parseFloat(e.target.value)))}
+                  step={15}
+                  disabled={!upright}
+                  className="w-16 px-2 py-1 bg-bg-tertiary border border-border rounded text-xs text-text-primary focus:outline-none focus:border-accent disabled:opacity-40"
+                  aria-label={t('locker.soulImport.facing.label')}
+                />
+                <span className="text-[11px] text-text-secondary">{t('locker.soulImport.orient.deg')}</span>
+                <button
+                  type="button"
+                  onClick={() => setYaw(0)}
+                  disabled={!upright || yaw === 0}
+                  className="p-1.5 rounded border border-border bg-bg-tertiary/60 text-text-secondary hover:bg-bg-tertiary cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+                  aria-label={t('common.actions.reset')}
+                >
+                  <RefreshCw className="w-3 h-3" />
+                </button>
+              </div>
+              <label className="flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={upright}
+                  onChange={(e) => setUpright(e.target.checked)}
+                  className="accent-accent cursor-pointer"
+                />
+                <span>{t('locker.soulImport.facing.upright')}</span>
+              </label>
             </div>
 
             {/* Glow */}
