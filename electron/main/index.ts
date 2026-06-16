@@ -74,7 +74,7 @@ import './ipc/stats';
 import './ipc/updater';
 import './ipc/launch';
 import './ipc/social';
-import './ipc/translation';
+import './ipc/locales';
 import './ipc/diagnostics';
 import './ipc/portraits';
 import './ipc/abilitySounds';

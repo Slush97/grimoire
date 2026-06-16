@@ -326,8 +326,10 @@
     },
     "language": {
       "label": "Language",
-      "description": "Choose the app language, or follow your system preference.",
-      "systemDefault": "System default"
+      "description": "Choose the app language, or follow your system preference. Percentages show how much of the app each community translation covers.",
+      "systemDefault": "System default",
+      "downloading": "Downloading language pack...",
+      "downloadFailed": "Could not download that language. Check your connection and try again."
     },
     "gamePath": {
       "selectFolder": "Select Deadlock folder",
@@ -398,11 +400,6 @@
       "dateFormat": "Date Format",
       "dateFormatDescription": "How upload and update dates are shown on mods and files."
     },
-    "translationMode": {
-      "chooseLanguage": "Choose a language",
-      "targetLanguage": "Target language",
-      "pickLanguageDescription": "Pick the language that should receive your translation suggestions."
-    },
     "experimental": {
       "description": "These features are still in development and may be incomplete or buggy.",
       "statsDashboard": "Stats Dashboard",
@@ -410,7 +407,6 @@
       "crosshairDesigner": "Crosshair Designer",
       "crosshairDesignerDescription": "Create custom crosshairs with a live preview.",
       "socialDescription": "Sign in with Steam to publish profiles and browse uploads from other players in Discover.",
-      "translationMode": "Translation Mode",
       "fixUnknownMods": "Fix Unknown Mods",
       "deadworksServers": "Deadworks Servers",
       "performanceConfig": "Performance Config"
@@ -478,7 +474,6 @@
       "ignoreConflicts": "Hide all conflicts from the Conflicts page. Off shows them.",
       "discordRpc": "Show your current Grimoire activity on your Discord profile. Talks only to your local Discord app and sends nothing to Grimoire.",
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, and two download keys: no account id, no username, nothing about you or your mods.",
-      "translationMode": "Double-click translated labels to suggest edits. Requires Steam sign-in.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
       "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."

@@ -63,6 +63,15 @@ jobs:
         working-directory: grimoire
         run: pnpm exec tsc -b --noEmit
 
+      # Every referenced t()/Tx key must exist in the English catalog, and the
+      # committed locale manifest (what the app fetches from `main` to populate
+      # the language picker) must match the catalogs on disk.
+      - name: i18n catalog + manifest
+        working-directory: grimoire
+        run: |
+          pnpm i18n:check
+          node scripts/gen-locale-manifest.mjs --check
+
       # The prod-build gate refuses to build without GRIMOIRE_SOCIAL_BASE_URL
       # set to an https URL. CI uses a placeholder to exercise the build
       # pipeline; the value is meaningless at runtime (CI doesn't run the app).

@@ -17,11 +17,10 @@ import {
 } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
-import { AVAILABLE_LANGUAGES, languageDisplayName } from '../i18n';
-import { TRANSLATION_LANGUAGE_OPTIONS, translationLanguageLabel } from '../lib/translationLanguages';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
+import LanguageSelector from '../components/settings/LanguageSelector';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
 import { DEFAULT_SIDEBAR_HERO, HERO_NAMES_SORTED, getHeroChipIconPath } from '../lib/lockerUtils';
 import SocialAccountSection from '../components/social/SocialAccountSection';
@@ -376,24 +375,6 @@ export default function Settings() {
     if (settings && (settings.language ?? null) !== language) {
       await saveSettings({ ...settings, language });
     }
-  };
-
-  const handleTranslationModeChange = async (checked: boolean) => {
-    if (!settings) return;
-    const existingLanguage = settings.translationModeLanguage ?? null;
-    const preferredLanguage =
-      settings.language && settings.language !== 'en' ? settings.language : null;
-    await saveSettings({
-      ...settings,
-      experimentalTranslationMode: checked,
-      translationModeLanguage: checked ? existingLanguage ?? preferredLanguage : existingLanguage,
-    });
-  };
-
-  const handleTranslationModeLanguageChange = async (language: string) => {
-    if (!settings) return;
-    const normalized = language.trim() || null;
-    await saveSettings({ ...settings, translationModeLanguage: normalized });
   };
 
   const handleDevModeChange = async (checked: boolean) => {
@@ -1315,32 +1296,12 @@ export default function Settings() {
               </div>
             </div>
 
-            {AVAILABLE_LANGUAGES.length > 1 && (
-              <>
-                <div className="h-px bg-white/5" />
+            <div className="h-px bg-white/5" />
 
-                <div>
-                  <label className="text-sm font-medium text-text-primary block">
-                    <Tx k="settings.language.label" fallback="Language" />
-                  </label>
-                  <p className="text-xs text-text-secondary mt-0.5 mb-2">
-                    <Tx k="settings.language.description" fallback="Choose the app language, or follow your system preference." />
-                  </p>
-                  <select
-                    value={settings?.language ?? ''}
-                    onChange={(event) => handleLanguageChange(event.target.value || null)}
-                    className="w-full max-w-xs rounded-md border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary"
-                  >
-                    <option value="">{t('settings.language.systemDefault')}</option>
-                    {AVAILABLE_LANGUAGES.map((code) => (
-                      <option key={code} value={code}>
-                        {languageDisplayName(code)}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </>
-            )}
+            <LanguageSelector
+              value={settings?.language ?? null}
+              onChange={handleLanguageChange}
+            />
           </div>
         </Card>
 
@@ -1378,50 +1339,6 @@ export default function Settings() {
               label={<Tx k="settings.sections.grimoireSocial" fallback="Grimoire Social" />}
               description={<Tx k="settings.experimental.socialDescription" fallback="Sign in with Steam to publish profiles and browse uploads from other players in Discover." />}
             />
-
-            <div className="h-px bg-white/5" />
-
-            <div className="space-y-3">
-              <Toggle
-                checked={settings?.experimentalTranslationMode ?? false}
-                onChange={handleTranslationModeChange}
-                label={<Tx k="settings.experimental.translationMode" fallback="Translation Mode" />}
-                description={<Tx k="settings.toggles.translationMode" fallback="Double-click translated labels to suggest edits. Requires Steam sign-in." />}
-              />
-              {settings?.experimentalTranslationMode && (
-                <div className="max-w-xs">
-                  <label className="text-xs font-medium uppercase tracking-wider text-text-secondary">
-                    <Tx k="settings.translationMode.targetLanguage" fallback="Target language" />
-                  </label>
-                  <select
-                    value={settings.translationModeLanguage ?? ''}
-                    onChange={(event) => handleTranslationModeLanguageChange(event.target.value)}
-                    className="mt-1 w-full rounded-md border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary placeholder:text-text-tertiary"
-                  >
-                    <option value="">{t('settings.translationMode.chooseLanguage')}</option>
-                    {settings.translationModeLanguage &&
-                      !TRANSLATION_LANGUAGE_OPTIONS.some(
-                        (language) => language.code === settings.translationModeLanguage
-                      ) && (
-                        <option value={settings.translationModeLanguage}>
-                          {translationLanguageLabel(settings.translationModeLanguage)}
-                        </option>
-                      )}
-                    {TRANSLATION_LANGUAGE_OPTIONS.map((language) => (
-                      <option key={language.code} value={language.code}>
-                        {language.name} ({language.code})
-                      </option>
-                    ))}
-                  </select>
-                  <p className="mt-1 text-xs text-text-secondary">
-                    <Tx
-                      k="settings.translationMode.pickLanguageDescription"
-                      fallback="Pick the language that should receive your translation suggestions."
-                    />
-                  </p>
-                </div>
-              )}
-            </div>
 
             <div className="h-px bg-white/5" />
 

@@ -716,18 +716,14 @@ export interface ElectronAPI {
         ) => () => void;
     };
 
-    // Translation Mode
-    translation: {
-        registerContributor: () => Promise<import('./translation').TranslationContributorResponse>;
-        getCatalog: (
+    // Language packs (downloaded on demand from GitHub)
+    locales: {
+        getManifest: () => Promise<import('./locales').LocaleManifest>;
+        listDownloaded: () => Promise<import('./locales').DownloadedLocale[]>;
+        download: (
             languageCode: string
-        ) => Promise<import('./translation').TranslationCatalogResponse>;
-        getProgress: (
-            languageCode: string
-        ) => Promise<import('./translation').TranslationProgressResponse>;
-        saveSuggestion: (
-            body: import('./translation').TranslationSuggestionRequest
-        ) => Promise<import('./translation').TranslationSuggestionResponse>;
+        ) => Promise<import('./locales').DownloadedLocale>;
+        refresh: () => Promise<import('./locales').DownloadedLocale[]>;
     };
 
     // Stats API

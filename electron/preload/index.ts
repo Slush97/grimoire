@@ -52,7 +52,6 @@ import type {
     UpdateStatus,
 } from '../../src/types/electron';
 import type { DeadworksConnectProgress } from '../../src/types/deadworks';
-import type { TranslationSuggestionRequest } from '../../src/types/translation';
 import type {
     ProfileSort,
     PublishRequest,
@@ -470,15 +469,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         },
     },
 
-    // Translation Mode
-    translation: {
-        registerContributor: () => ipcRenderer.invoke('translation:registerContributor'),
-        getCatalog: (languageCode: string) =>
-            ipcRenderer.invoke('translation:getCatalog', languageCode),
-        getProgress: (languageCode: string) =>
-            ipcRenderer.invoke('translation:getProgress', languageCode),
-        saveSuggestion: (body: TranslationSuggestionRequest) =>
-            ipcRenderer.invoke('translation:saveSuggestion', body),
+    // Language packs (downloaded on demand from GitHub)
+    locales: {
+        getManifest: () => ipcRenderer.invoke('locales:getManifest'),
+        listDownloaded: () => ipcRenderer.invoke('locales:listDownloaded'),
+        download: (languageCode: string) =>
+            ipcRenderer.invoke('locales:download', languageCode),
+        refresh: () => ipcRenderer.invoke('locales:refresh'),
     },
 
     // Stats

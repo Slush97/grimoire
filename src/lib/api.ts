@@ -19,14 +19,7 @@ import type {
   GameBananaCollectionItemsResponse,
   GameBananaArtistLink,
 } from '../types/gamebanana';
-import type {
-  TranslationCatalogResponse,
-  TranslationCatalogRow,
-  TranslationContributorResponse,
-  TranslationProgressResponse,
-  TranslationSuggestionRequest,
-  TranslationSuggestionResponse,
-} from '../types/translation';
+import type { DownloadedLocale, LocaleManifest } from '../types/locales';
 
 // Re-export types for convenience
 export type {
@@ -870,38 +863,29 @@ export function socialOnSessionChanged(
 }
 
 // =====================
-// Translation Mode API
+// Language packs API
 // =====================
 
-export type {
-  TranslationCatalogResponse,
-  TranslationCatalogRow,
-  TranslationContributorResponse,
-  TranslationProgressResponse,
-  TranslationSuggestionRequest,
-  TranslationSuggestionResponse,
-};
+export type { DownloadedLocale, LocaleManifest };
 
-export async function registerTranslationContributor(): Promise<TranslationContributorResponse> {
-  return window.electronAPI.translation.registerContributor();
+/** Fetch the language index from GitHub `main` (falls back to the bundled copy). */
+export async function getLocaleManifest(): Promise<LocaleManifest> {
+  return window.electronAPI.locales.getManifest();
 }
 
-export async function getTranslationCatalog(
-  languageCode: string
-): Promise<TranslationCatalogResponse> {
-  return window.electronAPI.translation.getCatalog(languageCode);
+/** Languages already downloaded and cached to disk. */
+export async function listDownloadedLocales(): Promise<DownloadedLocale[]> {
+  return window.electronAPI.locales.listDownloaded();
 }
 
-export async function getTranslationProgress(
-  languageCode: string
-): Promise<TranslationProgressResponse> {
-  return window.electronAPI.translation.getProgress(languageCode);
+/** Download a language's catalog from GitHub and cache it for offline use. */
+export async function downloadLocale(languageCode: string): Promise<DownloadedLocale> {
+  return window.electronAPI.locales.download(languageCode);
 }
 
-export async function saveTranslationSuggestion(
-  body: TranslationSuggestionRequest
-): Promise<TranslationSuggestionResponse> {
-  return window.electronAPI.translation.saveSuggestion(body);
+/** Re-fetch downloaded catalogs, returning only the ones whose content changed. */
+export async function refreshDownloadedLocales(): Promise<DownloadedLocale[]> {
+  return window.electronAPI.locales.refresh();
 }
 
 // ── Deadworks custom-server browser ──

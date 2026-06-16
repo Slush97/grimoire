@@ -735,10 +735,6 @@ export interface AppSettings {
   experimentalCrosshair: boolean;
   /** Grimoire Social: Discover page + publish/account UI. */
   experimentalSocial: boolean;
-  /** In-app translation contribution mode. Requires Grimoire Social sign-in. */
-  experimentalTranslationMode: boolean;
-  /** Target language code for in-app translation suggestions. */
-  translationModeLanguage?: string | null;
   /** Auto-match unknown local VPKs against GameBanana (CRC-32 + filter
    *  search). Off by default while the matching path is reworked: the
    *  current implementation hits GameBanana rate limits hard on libraries

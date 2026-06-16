@@ -17,7 +17,6 @@ import { useAppStore } from '../stores/appStore';
 import type { OneClickSuspiciousFilesData, MultiVpkPickData } from '../types/electron';
 import MultiVpkPickerModal from './MultiVpkPickerModal';
 import DiscordPresence from './DiscordPresence';
-import TranslationModeBridge from './translation/TranslationModeBridge';
 
 export default function Layout() {
   const navigate = useNavigate();
@@ -198,7 +197,6 @@ export default function Layout() {
       <div className="flex min-h-0 flex-1">
       {/* Headless: drives opt-in Discord Rich Presence from the active route. */}
       <DiscordPresence />
-      <TranslationModeBridge />
       <Sidebar />
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary">
         {gameinfoAlert && (
