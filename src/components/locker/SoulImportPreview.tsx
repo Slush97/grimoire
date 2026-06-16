@@ -190,11 +190,13 @@ function PreviewScene({
   sourceScene,
   fit,
   showVanilla,
+  spinning,
   captureRef,
 }: {
   sourceScene: THREE.Object3D;
   fit: PreviewFit;
   showVanilla: boolean;
+  spinning: boolean;
   captureRef?: MutableRefObject<(() => string | null) | null>;
 }) {
   const spinGroup = useRef<THREE.Group>(null);
@@ -234,6 +236,7 @@ function PreviewScene({
   }, [captureRef, gl, scene, camera]);
 
   useFrame((_, delta) => {
+    if (!spinning) return;
     const group = spinGroup.current;
     if (group) group.rotation.y += delta * SPIN_RATE;
   });
@@ -261,6 +264,7 @@ export default function SoulImportPreview({
   orientMode,
   rotate,
   showVanilla,
+  spinning = true,
   backdropIndex = -1,
   captureRef,
 }: {
@@ -269,6 +273,8 @@ export default function SoulImportPreview({
   orientMode: SoulOrientMode;
   rotate: [number, number, number];
   showVanilla: boolean;
+  /** Whether the model auto-rotates. Paused models hold their current angle. */
+  spinning?: boolean;
   /** Index into SOUL_BACKDROPS for the baked background; < 0 for none. */
   backdropIndex?: number;
   captureRef?: MutableRefObject<(() => string | null) | null>;
@@ -295,7 +301,7 @@ export default function SoulImportPreview({
       <directionalLight position={[-3, 2, -2]} intensity={0.5} />
       {/* Faint accent rim from below/behind for a subtle soul glow. */}
       <pointLight position={[0, -SOUL_TARGET_SPAN, -SOUL_TARGET_SPAN]} intensity={0.6} color="#f97316" />
-      <PreviewScene sourceScene={scene} fit={fit} showVanilla={showVanilla} captureRef={captureRef} />
+      <PreviewScene sourceScene={scene} fit={fit} showVanilla={showVanilla} spinning={spinning} captureRef={captureRef} />
     </Canvas>
   );
 }

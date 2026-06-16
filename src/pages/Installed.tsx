@@ -1,4 +1,4 @@
-import { lazy, memo, startTransition, Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { memo, startTransition, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -61,7 +61,6 @@ import {
   FileText,
   Banana,
   HelpCircle,
-  Boxes,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
@@ -169,11 +168,6 @@ function modEntryKey(mod: Mod): string {
   return `single:local:${mod.name}:${mod.size}`;
 }
 
-// Heavy (three.js): only pulled in when the user opens the soul-container GLB
-// import, so three stays out of the Installed page's main chunk.
-const SoulContainerImportModal = lazy(
-  () => import('../components/locker/SoulContainerImportModal')
-);
 
 function buildModEntries(mods: Mod[]): ModEntry[] {
   const byGb = new Map<number, Mod[]>();
@@ -634,13 +628,6 @@ export default function Installed() {
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
 
-  // Enabled soul-container imports (override the same model), so the import modal
-  // can warn + offer to replace rather than silently stack two.
-  const existingSoulImports = useMemo(
-    () => mods.filter((m) => m.enabled && m.globalType === 'soul-container'),
-    [mods]
-  );
-
   // Source mods absorbed into a merged VPK still live on disk (disabled) so
   // unmerge can restore them, but the user shouldn't see them as separate
   // cards: the merged mod is now the source of truth. Build the absorbed
@@ -836,7 +823,6 @@ export default function Installed() {
   // picker reflect immediately without juggling a separate snapshot.
   const [pickerGroupId, setPickerGroupId] = useState<number | null>(null);
   const [importOpen, setImportOpen] = useState(false);
-  const [soulImportOpen, setSoulImportOpen] = useState(false);
   const [unknownFilterGuess, setUnknownFilterGuess] = useState<{
     mod: Mod;
     loading: boolean;
@@ -2901,9 +2887,6 @@ export default function Installed() {
               <Button variant="secondary" onClick={() => setImportOpen(true)} icon={FilePlus}>
                 Import Custom Mod
               </Button>
-              <Button variant="secondary" onClick={() => setSoulImportOpen(true)} icon={Boxes}>
-                {t('locker.soulImport.trigger.label')}
-              </Button>
             </div>
           }
         />
@@ -2914,17 +2897,6 @@ export default function Installed() {
               await importCustomMod(args);
             }}
           />
-        )}
-        {soulImportOpen && (
-          <Suspense fallback={null}>
-            <SoulContainerImportModal
-              onClose={() => setSoulImportOpen(false)}
-              existingSoulImports={existingSoulImports}
-              onImported={() => {
-                void loadMods();
-              }}
-            />
-          </Suspense>
         )}
       </>
     );
@@ -3242,14 +3214,6 @@ export default function Installed() {
             />
             <Button
               variant="secondary"
-              onClick={() => setSoulImportOpen(true)}
-              icon={Boxes}
-              className="!px-2.5"
-              aria-label={t('locker.soulImport.trigger.ariaLabel')}
-              title={t('locker.soulImport.trigger.title')}
-            />
-            <Button
-              variant="secondary"
               onClick={() => openModsFolder().catch(() => {})}
               icon={FolderOpen}
               className="!px-2.5"
@@ -3541,17 +3505,6 @@ export default function Installed() {
         />
       )}
 
-      {soulImportOpen && (
-        <Suspense fallback={null}>
-          <SoulContainerImportModal
-            onClose={() => setSoulImportOpen(false)}
-            existingSoulImports={existingSoulImports}
-            onImported={() => {
-              void loadMods();
-            }}
-          />
-        </Suspense>
-      )}
 
       {localEditMod && (
         <EditLocalModModal

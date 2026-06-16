@@ -588,9 +588,12 @@
         "orientationLabel": "Orientation:",
         "vanillaShell": "Vanilla shell",
         "shuffleBackdrop": "Shuffle background",
+        "pause": "Pause rotation",
+        "play": "Resume rotation",
         "highPolyWarning": "This model has {{count}} triangles, well above the {{threshold}} a soul container usually needs. It will still build, but a very heavy model can hurt in-game performance."
       },
       "fields": {
+        "source": "Source model",
         "name": "Name",
         "namePlaceholder": "My soul container",
         "notes": "Notes",
@@ -623,8 +626,7 @@
         "base": "Keep gold",
         "baseHint": "Ship the stock gold glow unchanged",
         "off": "None",
-        "offHint": "Don't ship particles; base game glow plays",
-        "notShownHint": "The glow color isn't shown in this preview (particles render in-game only)."
+        "offHint": "Don't ship particles; base game glow plays"
       },
       "conflict": {
         "heading": "A soul container is already enabled",

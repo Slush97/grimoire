@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Boxes, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   getGamebananaCategories,
@@ -1116,7 +1116,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                     className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
                     title={t('locker.soulImport.trigger.title')}
                   >
-                    <Boxes className="h-3.5 w-3.5" />
+                    <Ghost className="h-3.5 w-3.5" />
                     {t('locker.soulImport.trigger.label')}
                   </button>
                 )}
