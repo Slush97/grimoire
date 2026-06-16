@@ -112,6 +112,15 @@ When you're working on social features in this repo:
 
 If the parent design needs to change (API surface, schema, identity provider), update `docs/social-architecture.md` and add an ADR to `docs/social-architecture-decisions.md` rather than editing existing ADRs.
 
+## Internationalization (i18n)
+
+i18next + react-i18next. `src/i18n.ts` eagerly globs `src/locales/*/translation.json`, so adding a language is purely a catalog drop, no code change.
+
+- **`src/locales/en/translation.json` is the source of truth and the only translatable catalog.** It must contain *only* real, displayed strings (keys actually referenced by `t()`/`<Tx>`). It is what Weblate (grimoire-translate) translates.
+- **`src/locales/unwired-en.json` is an English-only staging file**, never translated and never bundled at runtime (the glob only matches `*/translation.json`). It holds `unwired.*` keys: a developer to-do list of hardcoded strings still to be wired. `pnpm i18n:extract-unwired -- --merge` appends candidates here. Wiring a string means giving it a real key in `translation.json` and deleting the `unwired.*` entry. Keeping these out of `translation.json` is what stops Weblate from showing translators strings that are never displayed and keeps the completeness percentage honest.
+- **Translation round-trip (the leg that's easy to forget):** en strings reach translators only after they land on `main`; finished translations come back on a `translations/<lang>` branch (e.g. `origin/translations/he`), which must be **merged to `main`** and then `pnpm i18n:manifest` run to regenerate `src/locales/manifest.json`. The app fetches that manifest + each catalog from `raw.githubusercontent.com/Slush97/grimoire/main` on demand (download-on-demand language packs, ETag-refreshed on startup; see `electron/main/services/localeDownload.ts`). **Until a `translations/*` branch is merged, the picker offers English only**, however complete the catalog is on the Weblate side.
+- **Gates (CI `ci.yml` + husky `pre-push`):** `pnpm i18n:check` (every referenced key must exist in en) and `gen-locale-manifest.mjs --check` (committed manifest must match the catalogs). Regenerate the manifest with `pnpm i18n:manifest` after any catalog change. Whether new keys auto-sync *into* Weblate depends on the Weblate component's repo-pull setting (webhook/poll), which lives on the Weblate server, not in this repo.
+
 ## Conventions
 
 - **No em-dashes** anywhere - in UI strings, comments, or replies. Substitute colon, period, or parens.

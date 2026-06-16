@@ -1,10 +1,13 @@
 // Finds hardcoded user-facing strings in renderer pages/components and can
-// append them to src/locales/en/translation.json under unwired.* keys.
+// append them to the unwired staging catalog (src/locales/unwired-en.json)
+// under unwired.* keys. These are a developer to-do list of strings still to be
+// wired to t()/Tx; they are deliberately kept OUT of translation.json so Weblate
+// only ever sees real, displayed strings. See grimoire/CLAUDE.md (i18n).
 //
 // Report only:
 //   pnpm i18n:extract-unwired
 //
-// Merge candidates into the English source catalog:
+// Merge candidates into the staging catalog:
 //   pnpm i18n:extract-unwired -- --merge
 
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
@@ -16,6 +19,7 @@ const root = fileURLToPath(new URL('..', import.meta.url));
 const srcRoot = join(root, 'src');
 const scanRoots = [join(srcRoot, 'pages'), join(srcRoot, 'components')];
 const catalogPath = join(srcRoot, 'locales/en/translation.json');
+const unwiredPath = join(srcRoot, 'locales/unwired-en.json');
 const reportPath = join(root, 'reports/i18n-unwired-candidates.json');
 const shouldMerge = process.argv.includes('--merge');
 
@@ -60,7 +64,13 @@ const EXCLUDED_FILES = [
 ];
 
 const catalog = JSON.parse(readFileSync(catalogPath, 'utf8'));
-const existingKeys = new Set(flattenKeys(catalog));
+// Staging catalog of not-yet-wired English strings. A candidate counts as
+// "known" if it is already staged here OR already present in the real catalog,
+// so a string that has since been wired is never re-suggested.
+const unwiredCatalog = existsSync(unwiredPath)
+  ? JSON.parse(readFileSync(unwiredPath, 'utf8'))
+  : { unwired: {} };
+const existingKeys = new Set([...flattenKeys(catalog), ...flattenKeys(unwiredCatalog)]);
 const files = scanRoots.flatMap((dir) => walk(dir));
 const candidates = new Map();
 
@@ -75,15 +85,15 @@ writeJson(reportPath, {
 });
 
 if (shouldMerge) {
-  for (const row of rows) setCatalogValue(catalog, row.key, row.source);
-  writeJson(catalogPath, catalog);
+  for (const row of rows) setCatalogValue(unwiredCatalog, row.key, row.source);
+  writeJson(unwiredPath, unwiredCatalog);
 }
 
 console.log(`${rows.length} unwired i18n candidates written to ${relative(root, reportPath)}.`);
 console.log(
   shouldMerge
-    ? `Merged candidates into ${relative(root, catalogPath)} under unwired.*.`
-    : 'Run with --merge to append candidates to the English source catalog.'
+    ? `Merged candidates into ${relative(root, unwiredPath)} (staging only; not sent to Weblate).`
+    : 'Run with --merge to append candidates to the unwired staging catalog.'
 );
 
 function scanFile(file) {
