@@ -187,10 +187,12 @@ export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
   return window.electronAPI.getSoulModelInfo(key);
 }
 
-/** Export a soul-container mod's model via the bundled vpkmerge exporter.
- *  Keyed by the mod's metaKey (folder-qualified for overflow mods). */
-export async function exportSoulModel(metaKey: string): Promise<SoulModelInfo> {
-  return window.electronAPI.exportSoulModel(metaKey);
+/** Export a soul-container mod's model via the bundled vpkmerge exporter. The
+ *  SOURCE VPK is located by `metaKey` (folder-qualified for overflow mods); the
+ *  cache is keyed by `cacheKey` (the mod's content-stable sha256) so an
+ *  enable/disable rename can't serve a different soul's stale export. */
+export async function exportSoulModel(metaKey: string, cacheKey: string): Promise<SoulModelInfo> {
+  return window.electronAPI.exportSoulModel(metaKey, cacheKey);
 }
 
 /** Whether a hero's posed 3D still exists for the given active skin stack (+ mtime, key). */

@@ -355,6 +355,20 @@ export function getLockerSkinKey(mod: Mod): string {
     : `mod:${mod.id}`;
 }
 
+/**
+ * Global load-order rank of a mod: lower = higher priority (loads as pak01,
+ * wins file conflicts). With overflow folders the pakNN (mod.priority) repeats
+ * per folder, so we fold in the folder index from metaKey (addons{N}/...) to
+ * get a single monotonic order. Base citadel/addons (and disabled) is folder 0,
+ * addons1 is 1, etc. Mirrors the formula used by the Installed page so reorder
+ * math stays consistent across both surfaces.
+ */
+export function modLoadOrder(mod: Mod): number {
+  const match = mod.metaKey.match(/^addons(\d+)\//);
+  const folderIndex = match ? parseInt(match[1], 10) : 0;
+  return folderIndex * 100 + mod.priority;
+}
+
 export function groupLockerSkins(mods: Mod[]): LockerSkin[] {
   const bySkin = new Map<string, Mod[]>();
   for (const mod of mods) {

@@ -181,11 +181,21 @@ export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
 /**
  * Export a soul-container mod's model to a `.glb` by running the bundled
  * `vpkmerge model export` against the mod's VPK (mesh + textures) with the base
- * pak as the fallback resolver. Keyed by the mod's metaKey.
+ * pak as the fallback resolver.
+ *
+ * The SOURCE VPK is resolved by `metaKey` (its on-disk location, which changes
+ * as a mod is enabled/disabled), but the CACHE is keyed by `cacheKey` (the mod's
+ * content-stable sha256). Keying the cache by metaKey was wrong: enabling a soul
+ * renames it to a `pakNN_dir.vpk` slot, and that slot name is reused by other
+ * soul containers over time, so a lookup by the slot name could serve a stale
+ * GLB exported for whatever soul last occupied it (the "wrong/white model on
+ * select" bug). Content addressing also means a toggle (same content, new
+ * metaKey) is a cache hit, so enabling/disabling no longer re-exports or flickers.
  */
 export async function exportSoulModel(
     deadlockPath: string,
-    metaKey: string
+    metaKey: string,
+    cacheKey: string
 ): Promise<SoulModelInfo> {
     const vpk = await resolveModVpk(deadlockPath, metaKey);
     if (!vpk) {
@@ -193,9 +203,9 @@ export async function exportSoulModel(
     }
     const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
 
-    const dir = modelDir(metaKey);
+    const dir = modelDir(cacheKey);
     await fs.mkdir(dir, { recursive: true });
-    const out = modelFile(metaKey);
+    const out = modelFile(cacheKey);
 
     await runVpkmerge([
         'model',
@@ -217,9 +227,9 @@ export async function exportSoulModel(
     const raw = await fs.readFile(out);
     const patched = stripGlbSkins(raw);
     if (patched !== raw) await fs.writeFile(out, patched);
-    await fs.writeFile(versionFile(metaKey), SOUL_CACHE_VERSION);
+    await fs.writeFile(versionFile(cacheKey), SOUL_CACHE_VERSION);
 
-    return getSoulModelInfo(metaKey);
+    return getSoulModelInfo(cacheKey);
 }
 
 /**

@@ -1,8 +1,25 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ExternalLink } from 'lucide-react';
+import { ChevronDown, ExternalLink, GripVertical, Trash2 } from 'lucide-react';
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import type { Mod } from '../../types/mod';
-import { getLockerSkinKey } from '../../lib/lockerUtils';
+import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
 import { useAppStore } from '../../stores/appStore';
 import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
@@ -24,6 +41,13 @@ function variantPillLabel(mod: Mod): string {
     mod.sourceFileName ??
     mod.fileName
   );
+}
+
+/** A group's enabled variant VPKs in load order (lower pak## first). */
+function groupEnabledVariants(group: SkinGroup): Mod[] {
+  return group.variants
+    .filter((v) => v.enabled)
+    .sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
 }
 
 function groupVariants(mods: Mod[]): SkinGroup[] {
@@ -63,6 +87,10 @@ interface HeroSkinsPanelProps {
    *  in the same group, so a model VPK + voice-lines VPK can both stay on.
    *  Falls back to onSelect when not provided. */
   onToggleVariant?: (modId: string) => void;
+  /** Request deletion of a whole skin group (all its variant VPKs). The page
+   *  owns the confirmation dialog + the delete; the panel only asks. When
+   *  omitted, no delete affordance is shown. */
+  onRequestDelete?: (modIds: string[], name: string) => void;
   hideNsfwPreviews?: boolean;
   categoryId?: number;
   /** Render thumbnails as the hero portrait instead of the mod's uploader
@@ -88,35 +116,214 @@ interface HeroSkinsPanelProps {
   layout?: 'list' | 'cards';
 }
 
-/** One skin group as a media card (hero detail view). The whole card is the
- *  select control for single-variant groups; multi-variant groups select via
- *  their footer pills instead, mirroring the list rows' behavior. */
+/** One row of the Load order strip: a drag handle, position badge, thumbnail
+ *  and name for an enabled skin group. */
+function LoadOrderRow({
+  group,
+  position,
+  hideNsfwPreviews,
+  useHeroPortraitThumbnails,
+  heroName,
+}: {
+  group: SkinGroup;
+  position: number;
+  hideNsfwPreviews: boolean;
+  useHeroPortraitThumbnails: boolean;
+  heroName?: string;
+}) {
+  const { t } = useTranslation();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: group.key,
+  });
+  const primary = group.primary;
+  const enabledCount = groupEnabledVariants(group).length;
+  // The whole row is the drag handle (and keyboard-focusable via the sortable
+  // attributes), so you can grab a skin anywhere on its card, not just a tiny
+  // handle. touch-none keeps a drag from scrolling the sidebar mid-grab.
+  return (
+    <div
+      ref={setNodeRef}
+      {...attributes}
+      {...listeners}
+      role="button"
+      aria-label={t('locker.skins.dragToReorder')}
+      title={t('locker.skins.dragToReorder')}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={`flex touch-none items-center gap-2.5 rounded-md border px-2 py-1.5 transition-colors ${
+        isDragging
+          ? 'z-10 cursor-grabbing border-accent/40 bg-[#1c1c1c] opacity-95 shadow-lg shadow-black/40'
+          : 'cursor-grab border-white/[0.08] bg-[#141414]/70 hover:border-white/[0.18] hover:bg-[#1a1a1a]/80'
+      }`}
+    >
+      <GripVertical className="h-4 w-4 flex-shrink-0 text-white/40" aria-hidden />
+      <span className="flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-full bg-accent/20 text-[11px] font-semibold tabular-nums text-accent">
+        {position}
+      </span>
+      <div className="h-9 w-9 flex-shrink-0 overflow-hidden rounded bg-bg-tertiary">
+        <ModThumbnail
+          src={primary.thumbnailUrl}
+          alt={primary.name}
+          nsfw={primary.nsfw}
+          hideNsfw={hideNsfwPreviews}
+          heroPortrait={useHeroPortraitThumbnails ? heroName : undefined}
+          className="h-full w-full"
+        />
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="truncate text-xs font-medium text-white" title={primary.name}>
+          {primary.name}
+        </div>
+        {enabledCount > 1 && (
+          <div className="text-[10px] text-white/50">{`${enabledCount} files`}</div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Enabled skin groups for a hero in load order (top loads first / wins). */
+function activeSkinGroups(mods: Mod[]): SkinGroup[] {
+  return groupVariants(mods)
+    .filter((g) => g.variants.some((v) => v.enabled))
+    .sort(
+      (a, b) =>
+        modLoadOrder(groupEnabledVariants(a)[0]) - modLoadOrder(groupEnabledVariants(b)[0])
+    );
+}
+
+/** Draggable list of the hero's currently-enabled skins. Top = loads first
+ *  (pak01) = wins when two skins write the same file. Self-contained: pass the
+ *  hero's skin `mods` and it renders nothing unless 2+ are active. Lives in the
+ *  hero detail sidebar (see LockerHero), separate from the skin grid. */
+export function SkinLoadOrderStrip({
+  mods,
+  onReorder,
+  hideNsfwPreviews = false,
+  useHeroPortraitThumbnails = false,
+  heroName,
+}: {
+  mods: Mod[];
+  onReorder: (orderedModIds: string[]) => void | Promise<void>;
+  hideNsfwPreviews?: boolean;
+  useHeroPortraitThumbnails?: boolean;
+  heroName?: string;
+}) {
+  const { t } = useTranslation();
+  const groups = useMemo(() => activeSkinGroups(mods), [mods]);
+  // Local draft order so the list reflects a drop instantly instead of snapping
+  // back while the rename round-trips through the main process. Re-synced from
+  // props (the post-rescan order) only when the enabled SET changes (a skin was
+  // enabled/disabled) — a pure reorder keeps the same set, so we keep our draft.
+  // Adjusting state during render (vs an effect) is React's recommended pattern
+  // for deriving state from props and avoids a cascading re-render.
+  const propKeys = useMemo(() => groups.map((g) => g.key), [groups]);
+  const [orderedKeys, setOrderedKeys] = useState<string[]>(propKeys);
+  const [prevPropKeys, setPrevPropKeys] = useState<string[]>(propKeys);
+  if (propKeys !== prevPropKeys) {
+    setPrevPropKeys(propKeys);
+    const sameSet =
+      orderedKeys.length === propKeys.length && orderedKeys.every((k) => propKeys.includes(k));
+    if (!sameSet) setOrderedKeys(propKeys);
+  }
+
+  const byKey = useMemo(() => new Map(groups.map((g) => [g.key, g])), [groups]);
+  const orderedGroups = orderedKeys
+    .map((k) => byKey.get(k))
+    .filter((g): g is SkinGroup => Boolean(g));
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
+    if (!over || active.id === over.id) return;
+    const oldIndex = orderedKeys.indexOf(String(active.id));
+    const newIndex = orderedKeys.indexOf(String(over.id));
+    if (oldIndex < 0 || newIndex < 0) return;
+    const nextKeys = arrayMove(orderedKeys, oldIndex, newIndex);
+    setOrderedKeys(nextKeys);
+    const flatIds = nextKeys.flatMap((k) =>
+      groupEnabledVariants(byKey.get(k)!).map((v) => v.id)
+    );
+    void onReorder(flatIds);
+  };
+
+  // Load order is only meaningful when 2+ skins are stacked.
+  if (groups.length < 2) return null;
+
+  return (
+    <div className="animate-drop-in rounded-lg border border-white/[0.08] bg-black/20 p-2.5 backdrop-blur-sm">
+      <div className="mb-2 px-0.5">
+        <div className="text-xs font-semibold text-white">{t('locker.skins.loadOrder')}</div>
+        <div className="text-[11px] leading-snug text-white/60">
+          {t('locker.skins.loadOrderHint')}
+        </div>
+      </div>
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={orderedKeys} strategy={verticalListSortingStrategy}>
+          <div className="flex flex-col gap-1.5">
+            {orderedGroups.map((group, i) => (
+              <LoadOrderRow
+                key={group.key}
+                group={group}
+                position={i + 1}
+                hideNsfwPreviews={hideNsfwPreviews}
+                useHeroPortraitThumbnails={useHeroPortraitThumbnails}
+                heroName={heroName}
+              />
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    </div>
+  );
+}
+
+/** One skin group as a media card (hero detail view). Every card holds the same
+ *  height (media + title + a fixed status row); the variant chooser opens as a
+ *  floating popover so expanding it never reflows the grid. */
 function SkinGroupCard({
   group,
   onSelect,
   onToggleVariant,
+  onRequestDelete,
   hideNsfwPreviews,
   useHeroPortraitThumbnails,
   heroName,
   soundVolume,
+  loadOrderPosition,
 }: {
   group: SkinGroup;
   onSelect: (modId: string) => void;
   onToggleVariant?: (modId: string) => void;
+  onRequestDelete?: (modIds: string[], name: string) => void;
   hideNsfwPreviews: boolean;
   useHeroPortraitThumbnails: boolean;
   heroName?: string;
   soundVolume: number;
+  /** 1-based load-order position, shown as a corner chip. Only set when 2+
+   *  skins are active for the hero (otherwise order is meaningless). */
+  loadOrderPosition?: number;
 }) {
   const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
   const primary = group.primary;
-  // Variant tray, collapsed by default so multi-variant cards match the
-  // single-variant card height. Starts open when nothing is enabled yet:
-  // that's the one moment the user must pick before anything works.
-  const [variantsOpen, setVariantsOpen] = useState(enabledCount === 0);
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [variantsOpen, setVariantsOpen] = useState(false);
+  // Close the variant popover on any click outside the card.
+  useEffect(() => {
+    if (!variantsOpen) return;
+    const onPointerDown = (e: MouseEvent) => {
+      if (cardRef.current && !cardRef.current.contains(e.target as Node)) {
+        setVariantsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', onPointerDown);
+    return () => document.removeEventListener('mousedown', onPointerDown);
+  }, [variantsOpen]);
   // Skipped when NSFW previews are hidden so we never bleed hidden imagery
   // into the glass tint, even blurred.
   const glassBackdropUrl =
@@ -124,11 +331,12 @@ function SkinGroupCard({
 
   return (
     <div
+      ref={cardRef}
       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
         groupActive
           ? 'border-accent bg-white/[0.02] hover:bg-white/[0.04]'
           : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
-      }`}
+      } ${variantsOpen ? 'z-20' : ''}`}
     >
       {/* Glass backdrop: a blurred copy of the cover art bleeds behind the
           card so it's tinted by its own thumbnail, matching the Global view
@@ -176,6 +384,14 @@ function SkinGroupCard({
             {t('common.status.active')}
           </span>
         )}
+        {loadOrderPosition !== undefined && (
+          <span
+            className="pointer-events-none absolute bottom-2 right-2 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-black/65 px-1.5 text-[10px] font-semibold tabular-nums text-white backdrop-blur-sm"
+            title={t('locker.skins.loadOrderPosition', { position: loadOrderPosition })}
+          >
+            {`#${loadOrderPosition}`}
+          </span>
+        )}
       </div>
 
       {/* Title. */}
@@ -189,13 +405,11 @@ function SkinGroupCard({
       </div>
 
       {/* Whole card is the primary control: select for single-variant groups,
-          open/close the variant tray for multi. Sits under the tray/audio
-          (z-20) so those keep their own handlers. */}
+          open/close the variant popover for multi. Sits under the popover/audio
+          (z-30) so those keep their own handlers. */}
       <button
         type="button"
-        onClick={() =>
-          isMulti ? setVariantsOpen((open) => !open) : onSelect(primary.id)
-        }
+        onClick={() => (isMulti ? setVariantsOpen((open) => !open) : onSelect(primary.id))}
         aria-pressed={isMulti ? undefined : groupActive}
         aria-expanded={isMulti ? variantsOpen : undefined}
         aria-label={
@@ -217,12 +431,32 @@ function SkinGroupCard({
         className="absolute inset-0 z-10 cursor-pointer rounded-[10px]"
       />
 
+      {/* Delete: removes the whole group (every variant VPK). Hover-revealed so
+          it stays out of the way; z-30 keeps it above the full-card toggle. */}
+      {onRequestDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRequestDelete(
+              group.variants.map((v) => v.id),
+              primary.name
+            );
+          }}
+          aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
+          title={t('locker.skins.deleteSkin', { name: primary.name })}
+          className="absolute right-1.5 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-red-500/80 hover:text-white focus-visible:opacity-100 group-hover/card:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+
       {/* Sound preview. All variants of one GameBanana submission share the
           same preview clip, so the group's primary audioUrl is the
-          representative sample. z-20 keeps it above the full-card toggle. */}
+          representative sample. z-30 keeps it above the full-card toggle. */}
       {primary.sourceSection === 'Sound' && primary.audioUrl && (
         <div
-          className="relative z-20 mt-2"
+          className="relative z-30 mt-2"
           onClick={(e) => e.stopPropagation()}
           onMouseDown={(e) => e.stopPropagation()}
         >
@@ -230,14 +464,14 @@ function SkinGroupCard({
         </div>
       )}
 
-      {/* Variant state line + collapsible tray (multi-variant groups only).
-          Collapsed it's a one-line summary, so the card holds the same height
-          as its single-variant neighbors; the whole-card button (z-10 under
-          this) toggles it. */}
+      {/* Fixed-height status row for multi-variant groups: a one-line summary
+          that toggles the variant popover. Keeping it a single line means every
+          card holds the same height; the popover floats (absolute) so opening
+          it never reflows the grid. */}
       {isMulti && (
         <>
           <div
-            className={`pointer-events-none mt-0.5 flex items-center gap-1 px-0.5 text-[11px] ${
+            className={`pointer-events-none mt-1 flex items-center gap-1 px-0.5 text-[11px] ${
               enabledCount === 0 ? 'text-accent' : 'text-text-secondary'
             }`}
           >
@@ -247,18 +481,15 @@ function SkinGroupCard({
                 : `${enabledCount}/${group.variants.length} active`}
             </span>
             <ChevronDown
-              className={`h-3 w-3 transition-transform duration-200 ${
-                variantsOpen ? 'rotate-180' : ''
-              }`}
+              className={`h-3 w-3 transition-transform duration-200 ${variantsOpen ? 'rotate-180' : ''}`}
             />
           </div>
           {variantsOpen && (
             <div
-              className={`relative z-20 mt-1.5 flex flex-wrap items-center gap-1.5 rounded-md border px-2 py-1.5 ${
-                enabledCount === 0 ? 'border-accent/30 bg-accent/[0.04]' : 'border-white/[0.08]'
-              }`}
+              className="absolute left-2 right-2 top-full z-30 mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-white/[0.12] bg-bg-secondary/95 px-2 py-2 shadow-xl shadow-black/50 backdrop-blur-md"
               role="group"
               aria-label={t('locker.skins.variantToggles')}
+              onMouseDown={(e) => e.stopPropagation()}
             >
               {group.variants.map((variant) => {
                 const label = variantPillLabel(variant);
@@ -294,6 +525,7 @@ function SkinGroupRow({
   group,
   onSelect,
   onToggleVariant,
+  onRequestDelete,
   hideNsfwPreviews,
   useHeroPortraitThumbnails,
   heroName,
@@ -302,6 +534,7 @@ function SkinGroupRow({
   group: SkinGroup;
   onSelect: (modId: string) => void;
   onToggleVariant?: (modId: string) => void;
+  onRequestDelete?: (modIds: string[], name: string) => void;
   hideNsfwPreviews: boolean;
   useHeroPortraitThumbnails: boolean;
   heroName?: string;
@@ -314,12 +547,29 @@ function SkinGroupRow({
   const primary = group.primary;
   return (
     <div
-      className={`rounded-md border transition-colors ${
+      className={`group/row relative rounded-md border transition-colors ${
         groupActive
           ? 'border-accent/60 bg-white/[0.04] backdrop-blur-sm'
           : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
       }`}
     >
+      {onRequestDelete && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onRequestDelete(
+              group.variants.map((v) => v.id),
+              primary.name
+            );
+          }}
+          aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
+          title={t('locker.skins.deleteSkin', { name: primary.name })}
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-red-500/80 hover:text-white focus-visible:opacity-100 group-hover/row:opacity-100"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
       <button
         type="button"
         onClick={() => {
@@ -432,6 +682,7 @@ export default function HeroSkinsPanel({
   mods,
   onSelect,
   onToggleVariant,
+  onRequestDelete,
   hideNsfwPreviews = false,
   categoryId,
   useHeroPortraitThumbnails = false,
@@ -444,6 +695,23 @@ export default function HeroSkinsPanel({
   const hasMods = mods.length > 0;
   const soundVolume = useAppStore((s) => s.soundVolume);
   const groups = useMemo(() => groupVariants(mods), [mods]);
+
+  // Per-card #N chip: the load-order position of each active skin. Mirrors the
+  // SkinLoadOrderStrip (now in the hero sidebar). The chip only shows when 2+
+  // skins are active — a single active skin has no meaningful order.
+  const loadOrderByKey = useMemo(() => {
+    const map = new Map<string, number>();
+    const active = groups
+      .filter((g) => g.variants.some((v) => v.enabled))
+      .sort(
+        (a, b) =>
+          modLoadOrder(groupEnabledVariants(a)[0]) - modLoadOrder(groupEnabledVariants(b)[0])
+      );
+    if (active.length >= 2) {
+      active.forEach((g, i) => map.set(g.key, i + 1));
+    }
+    return map;
+  }, [groups]);
 
   const browseLink = browseAction ? (
     <button
@@ -459,6 +727,7 @@ export default function HeroSkinsPanel({
   const groupProps = {
     onSelect,
     onToggleVariant,
+    onRequestDelete,
     hideNsfwPreviews,
     useHeroPortraitThumbnails,
     heroName,
@@ -472,7 +741,12 @@ export default function HeroSkinsPanel({
           {layout === 'cards' ? (
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {groups.map((group) => (
-                <SkinGroupCard key={group.key} group={group} {...groupProps} />
+                <SkinGroupCard
+                  key={group.key}
+                  group={group}
+                  loadOrderPosition={loadOrderByKey.get(group.key)}
+                  {...groupProps}
+                />
               ))}
             </div>
           ) : (

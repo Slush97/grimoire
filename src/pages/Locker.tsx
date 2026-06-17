@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   getGamebananaCategories,
@@ -25,7 +25,7 @@ const SoulContainerImportModal = lazy(() => import('../components/locker/SoulCon
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { GlobalModType, Mod } from '../types/mod';
-import { ViewModeToggle, EmptyState, SectionHeader } from '../components/common/PageComponents';
+import { ViewModeToggle, EmptyState, SectionHeader, ConfirmModal } from '../components/common/PageComponents';
 import { Tag } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -46,6 +46,7 @@ import {
   groupModsByCategory,
   isLockerManagedMod,
   isLockerManagedSound,
+  modLoadOrder,
   readStoredFavorites,
   type GlobalModGroups,
   type HeroCategory,
@@ -129,7 +130,7 @@ function RainbowPaletteIcon({ className = '', title }: { className?: string; tit
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, setBrowseUi, setLockerHeroName } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -480,6 +481,55 @@ export default function Locker() {
     await toggleMod(modId);
   };
 
+  // Reorder the load order of a hero's enabled skins. `orderedModIds` is the
+  // new desired order of THIS hero's enabled skin VPK ids (lower index = loads
+  // first = wins file conflicts). We splice that order into the full global
+  // enabled list in place (every other mod keeps its relative slot) and hand
+  // the whole list to reorderMods, which renames pak## prefixes to match. We
+  // must pass the FULL list, not just the subset: reorderMods packs the ids it
+  // receives into the lowest free slots, so a subset would yank these skins to
+  // the front of the global load order.
+  const reorderHeroSkins = async (heroId: number, orderedModIds: string[]) => {
+    const skins = heroMods.map.get(heroId) ?? [];
+    const heroSkinIds = new Set(skins.map((m) => m.id));
+    // Keep only ids that really belong to this hero and are enabled, in the
+    // requested order; ignore anything stale.
+    const desired = orderedModIds.filter(
+      (id) => heroSkinIds.has(id) && mods.find((m) => m.id === id)?.enabled
+    );
+    if (desired.length < 2) return;
+
+    const globalEnabled = mods
+      .filter((m) => m.enabled)
+      .sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
+
+    const desiredSet = new Set(desired);
+    let cursor = 0;
+    const nextOrder = globalEnabled.map((m) =>
+      desiredSet.has(m.id) ? desired[cursor++] : m.id
+    );
+
+    const prevOrder = globalEnabled.map((m) => m.id);
+    if (nextOrder.every((id, i) => id === prevOrder[i])) return;
+
+    await reorderMods(nextOrder);
+  };
+
+  // Delete a skin (all its variant VPKs) straight from the Locker. We confirm
+  // first, then delete sequentially to keep priority bookkeeping coherent (the
+  // store removes each id locally as it goes).
+  // Shared delete confirmation for the Locker (hero skins + global cosmetics).
+  // Holds the mod ids to remove and a display name for the prompt copy.
+  const [deletePrompt, setDeletePrompt] = useState<{ ids: string[]; name: string } | null>(null);
+  const confirmDeleteMods = async () => {
+    if (!deletePrompt) return;
+    const { ids } = deletePrompt;
+    setDeletePrompt(null);
+    for (const id of ids) {
+      await deleteMod(id);
+    }
+  };
+
   // Soul containers are single-select: there's one soul-container slot, so
   // enabling one disables any other active soul container, and clicking the
   // already-active card turns it back off (vanilla). Other global types keep
@@ -702,6 +752,7 @@ export default function Locker() {
               onBrowseSkins={() => openHeroInBrowse(hero)}
               onSelect={(modId) => setActiveSkin(hero.id, modId)}
               onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
+              onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onToggleFavorite={() =>
                 setFavoriteHeroes((prev) =>
@@ -807,6 +858,8 @@ export default function Locker() {
             }
             onSelect={(modId) => setActiveSkin(overlayHero.id, modId)}
             onToggleVariant={(modId) => toggleHeroVariant(overlayHero.id, modId)}
+            onReorderSkins={(orderedModIds) => reorderHeroSkins(overlayHero.id, orderedModIds)}
+            onRequestDeleteSkin={(ids, name) => setDeletePrompt({ ids, name })}
             hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
           />
         </div>
@@ -845,6 +898,7 @@ export default function Locker() {
             onBack={() => navigate('/locker')}
             onToggle={selectGlobalMod}
             onSetGlobalType={tagModGlobalType}
+            onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
             onImportSoul={() => setSoulImportOpen(true)}
           />
         </div>
@@ -861,6 +915,16 @@ export default function Locker() {
           />
         </Suspense>
       )}
+
+      <ConfirmModal
+        isOpen={deletePrompt !== null}
+        variant="danger"
+        title={t('locker.deleteConfirm.title')}
+        message={t('locker.deleteConfirm.body', { name: deletePrompt?.name ?? '' })}
+        confirmLabel={t('common.actions.delete')}
+        onConfirm={confirmDeleteMods}
+        onCancel={() => setDeletePrompt(null)}
+      />
     </div>
   );
 }
@@ -876,6 +940,7 @@ interface HeroCardProps {
   onBrowseSkins: () => void;
   onSelect: (modId: string) => void;
   onToggleVariant: (modId: string) => void;
+  onRequestDelete: (modIds: string[], name: string) => void;
   isFavorite: boolean;
   onToggleFavorite: () => void;
   hideNsfwPreviews: boolean;
@@ -944,6 +1009,8 @@ interface LockerGlobalViewProps {
   onToggle: (modId: string) => void | Promise<unknown>;
   /** Reassign a mod to another global type, or null to drop it off the axis. */
   onSetGlobalType: (modId: string, globalType: GlobalModType | null) => void | Promise<unknown>;
+  /** Request deletion of a global mod (its VPK). The page owns the confirm. */
+  onRequestDelete: (modIds: string[], name: string) => void;
   /** Open the soul-container GLB import modal (shown on the soul-container tab). */
   onImportSoul: () => void;
 }
@@ -953,7 +1020,7 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onImportSoul }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
   const available = GLOBAL_MOD_TYPE_ORDER.filter((type) => groups[type].length > 0);
@@ -1271,11 +1338,26 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             }}
                             aria-label={t('locker.page.changeCategoryForNamed', { name: mod.name })}
                             title={t('locker.page.changeCategory')}
-                            className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                            className="absolute right-11 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-opacity hover:bg-black/65 focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
                           >
                             <MoreVertical className="h-4 w-4" />
                           </button>
                         )}
+                        {/* Delete: removes this global mod's VPK. Sits above the
+                            full-card toggle (z-20 > z-10), to the right of the
+                            retag kebab; red on hover. */}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onRequestDelete([mod.id], mod.name);
+                          }}
+                          aria-label={t('locker.global.deleteMod', { name: mod.name })}
+                          title={t('locker.global.deleteMod', { name: mod.name })}
+                          className="absolute right-2 top-2 z-20 flex h-7 w-7 items-center justify-center rounded-md border border-white/15 bg-black/45 text-white/85 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] hover:bg-red-500/80 hover:text-white focus:opacity-100 focus-visible:opacity-100 group-hover/card:opacity-100"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
                       </div>
 
                       {/* Title only — the whole card is the enable/disable control. */}
@@ -1326,6 +1408,18 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             <p className="text-sm text-white/70">{t('locker.page.noGlobalNonHeroCosmeticsInstalledYet')}</p>
           )}
         </div>
+
+        {/* Shared 3D canvas for the Global soul-container grid: one WebGL context
+            renders every card (scissored into its on-screen rect), so the grid
+            can't exhaust the browser's live-context cap. Mounted INSIDE the pane
+            (not at the view root) so its z-[5] sits below each card's tags/kebab
+            but above the card background, keeping chrome on top of the model.
+            Only mounted while that type is selected. */}
+        {activeType === 'soul-container' && (
+          <Suspense fallback={null}>
+            <SoulContainerCanvas paneRef={paneRef} />
+          </Suspense>
+        )}
       </div>
 
       {/* Retag menu (fixed-positioned, anchored at the kebab's viewport coords so
@@ -1384,15 +1478,6 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
         </>
       )}
 
-      {/* Shared 3D canvas for the Global soul-container grid: one WebGL context
-          renders every card (scissored into its on-screen rect), so the grid
-          can't exhaust the browser's live-context cap. Only mounted while that
-          type is selected. */}
-      {activeType === 'soul-container' && (
-        <Suspense fallback={null}>
-          <SoulContainerCanvas paneRef={paneRef} />
-        </Suspense>
-      )}
     </div>
     </SoulRegistryProvider>
   );
@@ -1604,6 +1689,7 @@ function HeroCard({
   onBrowseSkins,
   onSelect,
   onToggleVariant,
+  onRequestDelete,
   isFavorite,
   onToggleFavorite,
   hideNsfwPreviews,
@@ -1765,6 +1851,7 @@ function HeroCard({
           mods={activeList}
           onSelect={onSelect}
           onToggleVariant={onToggleVariant}
+          onRequestDelete={onRequestDelete}
           hideNsfwPreviews={hideNsfwPreviews}
           showDownloadable={activeSection === 'skins'}
           browseAction={

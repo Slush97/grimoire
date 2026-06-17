@@ -11,7 +11,7 @@ import {
   Sparkles,
   type LucideIcon,
 } from 'lucide-react';
-import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import HeroSkinsPanel, { SkinLoadOrderStrip } from '../components/locker/HeroSkinsPanel';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
 import HeroEffectsPanel from '../components/locker/HeroEffectsPanel';
@@ -42,6 +42,12 @@ interface LockerHeroViewProps {
   onToggleFavorite: () => void;
   onSelect: (modId: string) => void | Promise<void>;
   onToggleVariant: (modId: string) => void | Promise<void>;
+  /** Reorder the load order of this hero's enabled skins. `orderedModIds` is
+   *  the new desired order of enabled skin VPK ids (lower index = loads first). */
+  onReorderSkins?: (orderedModIds: string[]) => void | Promise<void>;
+  /** Request deletion of a skin group (all its variant VPKs). The page owns the
+   *  confirmation dialog and the actual delete. */
+  onRequestDeleteSkin?: (modIds: string[], name: string) => void;
   hideNsfwPreviews?: boolean;
 }
 
@@ -70,6 +76,8 @@ export function LockerHeroView({
   onToggleFavorite,
   onSelect,
   onToggleVariant,
+  onReorderSkins,
+  onRequestDeleteSkin,
   hideNsfwPreviews = false,
 }: LockerHeroViewProps) {
   const { t } = useTranslation();
@@ -210,6 +218,7 @@ export function LockerHeroView({
         mods={skinList}
         onSelect={handleSelect}
         onToggleVariant={handleToggleVariant}
+        onRequestDelete={onRequestDeleteSkin}
         hideNsfwPreviews={hideNsfwPreviews}
         categoryId={hero.id}
         showDownloadable
@@ -381,6 +390,17 @@ export function LockerHeroView({
             );
           })}
         </nav>
+
+        {/* Load order for stacked skins. Lives in the sidebar (not over the
+            grid) and self-hides unless 2+ skins are active. Only relevant to
+            the Skins section. */}
+        {activeSection === 'skins' && onReorderSkins && (
+          <SkinLoadOrderStrip
+            mods={skinList}
+            onReorder={onReorderSkins}
+            hideNsfwPreviews={hideNsfwPreviews}
+          />
+        )}
       </div>
 
       {/* Right pane: the active section's content. Width-capped on lg+ so the

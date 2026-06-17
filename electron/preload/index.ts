@@ -139,8 +139,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-applied-custom-card', heroName),
     getSoulModelInfo: (key: string) =>
         ipcRenderer.invoke('get-soul-model-info', key),
-    exportSoulModel: (metaKey: string) =>
-        ipcRenderer.invoke('export-soul-model', metaKey),
+    exportSoulModel: (metaKey: string, cacheKey: string) =>
+        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey),
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
     exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>

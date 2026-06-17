@@ -33,8 +33,9 @@ export default function SoulContainerTile({
   /** Content-stable id (sha256) used as the registry key, so the model survives
    *  the metaKey change that a toggle causes. */
   tileId: string;
-  /** The mod's metaKey: the source the main process resolves and exports from,
-   *  and the on-disk model cache key. Changes when the mod is enabled/disabled. */
+  /** The mod's metaKey: the SOURCE the main process resolves and exports from.
+   *  Changes when the mod is enabled/disabled (the VPK is renamed); the export
+   *  CACHE is keyed by the content-stable tileId instead, not this. */
   modKey: string;
 }) {
   const registry = useSoulRegistry();
@@ -53,13 +54,19 @@ export default function SoulContainerTile({
     let cancelled = false;
     (async () => {
       try {
-        let info = await getSoulModelInfo(modKey);
+        // The export cache is keyed by tileId (the mod's content-stable sha256),
+        // NOT modKey: a mod's metaKey changes when it's enabled/disabled (the VPK
+        // is renamed into a reused pakNN slot), and keying by it served a stale
+        // GLB from whatever soul last held that slot (wrong/white model on
+        // select). Content addressing also makes a toggle a cache hit, so it no
+        // longer re-exports. The SOURCE for an export is still resolved by modKey.
+        let info = await getSoulModelInfo(tileId);
         if (!info.hasModel) {
           if (cancelled) return;
           // Spinner only when there's nothing to show yet; on a reload (toggle)
           // the existing model keeps rendering instead.
           if (!rootRef.current) setGenerating(true);
-          info = await exportSoulModel(modKey);
+          info = await exportSoulModel(modKey, tileId);
           if (cancelled) return;
           setGenerating(false);
         }
@@ -67,7 +74,7 @@ export default function SoulContainerTile({
           if (!rootRef.current && !cancelled) setFailed(true);
           return;
         }
-        const url = meshUrlFor(modKey, info.mtimeMs);
+        const url = meshUrlFor(tileId, info.mtimeMs);
         const gltf = await loadGltfPreview(url);
         if (cancelled) {
           disposeScene(gltf.scene);

@@ -132,9 +132,13 @@ export default function SoulContainerCanvas({
   paneRef: RefObject<HTMLElement | null>;
 }) {
   return (
-    // z-30 keeps models above the cards' frosted backdrop but below the retag
-    // menu (z-80) and any modal/toast, so an overlay never sits under a dialog.
-    <div className="pointer-events-none fixed inset-0 z-30">
+    // Mounted INSIDE the scroll pane (its stacking context), so z-[5] lands the
+    // models above each card's background/frosted panel (z-auto) but BELOW the
+    // card chrome (Active/Disabled tags z-10, retag + delete buttons z-20) so
+    // that chrome paints on top of the model instead of behind it. Still
+    // `fixed inset-0` (not absolute) so it overlays the viewport rather than
+    // scrolling away with the pane content; per-tile scissor clamps to the pane.
+    <div className="pointer-events-none fixed inset-0 z-[5]">
       {/* r3f sets pointerEvents:'auto' on its own container div, which would
           override the wrapper above and swallow every click on the page. We
           don't raycast, so force it back to none (merged after r3f's default). */}

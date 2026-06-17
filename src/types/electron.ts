@@ -488,7 +488,7 @@ export interface ElectronAPI {
         heroName: string
     ) => Promise<{ variant: string; dataUrl: string }[]>;
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
-    exportSoulModel: (metaKey: string) => Promise<SoulModelInfo>;
+    exportSoulModel: (metaKey: string, cacheKey: string) => Promise<SoulModelInfo>;
     getHeroPoseInfo: (
         heroName: string,
         skinSources?: HeroPoseSkinSource[]

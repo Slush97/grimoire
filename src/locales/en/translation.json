@@ -953,7 +953,8 @@
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
       "disabledBadge": "Disabled",
-      "disabledBadgeTitle": "This mod is disabled and not loaded in-game"
+      "disabledBadgeTitle": "This mod is disabled and not loaded in-game",
+      "deleteMod": "Delete {{name}}"
     },
     "soulImport": {
       "trigger": {
@@ -1196,7 +1197,16 @@
     "skins": {
       "noPreview": "No preview",
       "pickAVariant": "Pick a variant",
-      "variantToggles": "Variant toggles"
+      "variantToggles": "Variant toggles",
+      "loadOrder": "Load order",
+      "loadOrderHint": "Drag to set which skin wins when two cover the same files. Top loads first.",
+      "dragToReorder": "Drag to reorder",
+      "loadOrderPosition": "Load order position {{position}}",
+      "deleteSkin": "Delete {{name}}"
+    },
+    "deleteConfirm": {
+      "title": "Delete mod?",
+      "body": "Permanently delete \"{{name}}\" and its files? This cannot be undone."
     },
     "crop": {
       "imageLoadFailed": "That image could not be loaded. Try a different PNG or JPG.",
