@@ -6030,8 +6030,8 @@ function ModCard({
     ? 'grid min-h-[58px] grid-cols-[52px_64px_minmax(0,1fr)_auto] items-center gap-3 px-3 py-0'
     : isCompact
       ? 'flex h-full flex-col gap-0 p-2'
-      : 'flex h-full flex-col gap-0 p-2.5';
-  const mediaSpacingClasses = 'mb-2';
+      : 'flex h-full flex-col gap-0 p-2';
+  const mediaSpacingClasses = isCompact ? 'mb-2' : 'mb-1.5';
   const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
   const audioOverlayClasses = isCompact
     ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer'
@@ -6041,12 +6041,11 @@ function ModCard({
     : 'w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]';
   const titleClasses = isCompact
     ? 'text-[14px] font-semibold leading-[18px] truncate'
-    : 'text-[15px] font-medium leading-[19px] truncate';
-  // Compact cards stay single-line (too small to wrap nicely); standard grid
-  // cards may wrap so a hero + category + 18+ + files chip never clips mid-chip.
-  // The resting row no longer carries the hover-date span (see below), so a lone
-  // chip stays on one line and only genuinely chip-heavy cards ever wrap.
-  const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'min-h-7 flex-wrap';
+    : 'text-[15px] font-medium leading-[18px] truncate';
+  // Grid footers stay single-line. The hover-only date can appear after the
+  // chips when there is room, but it must never wrap into a second line and
+  // resize the card.
+  const gridTagsClasses = viewMode === 'compact' ? 'h-[26px] flex-nowrap' : 'h-7 flex-nowrap';
   // Locker global axis (HUD, Soul Containers, ...). Surfaced as a card chip so a
   // manual or auto global tag is visible here, not just in the Locker. A global
   // mod has no hero, so the two chips never both show.
@@ -6519,7 +6518,7 @@ function ModCard({
             onRename={onRenameLocal}
           />
           <div
-            className={`${isCompact ? 'mt-1.5 h-7' : 'mt-1.5'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-3`}
+            className={`${isCompact ? 'mt-1.5 h-7' : 'mt-1'} grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-3`}
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
@@ -6560,10 +6559,6 @@ function ModCard({
                 </span>
               )}
               {!isCompact && (
-                // Hidden (not just transparent) until hover so it never occupies
-                // row width at rest: an always-present date span sitting next to a
-                // chip overflowed the column and wrapped the row to a second line,
-                // making chip cards taller than chip-less ones.
                 <span
                   className="hidden flex-shrink-0 items-center pl-1.5 text-[11px] tabular-nums text-text-secondary/55 group-hover/card:inline-flex"
                   title={`Installed ${formatAbsoluteDate(mod.installedAt)}`}
