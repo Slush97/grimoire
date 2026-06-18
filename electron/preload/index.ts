@@ -240,6 +240,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-locker-mod-image', skinKey, source),
     removeLockerModImage: (skinKey: string) =>
         ipcRenderer.invoke('remove-locker-mod-image', skinKey),
+    setLockerCardImageFromDataUrl: (skinKey: string, pngDataUrl: string) =>
+        ipcRenderer.invoke('set-locker-card-image-from-data-url', skinKey, pngDataUrl),
     mergeMods: (args: MergeModsArgs) => ipcRenderer.invoke('merge-mods', args),
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>

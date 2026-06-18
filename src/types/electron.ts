@@ -585,6 +585,10 @@ export interface ElectronAPI {
     getLockerModImages: () => Promise<Record<string, string>>;
     setLockerModImage: (skinKey: string, source: string) => Promise<string>;
     removeLockerModImage: (skinKey: string) => Promise<void>;
+    /** Store a baked 3D card snapshot (a `data:image/png;base64,...` URL) into
+     *  the same per-skin override slot as setLockerModImage. Returns the stored
+     *  data URL. Used by the "Generate from installed skin" Locker action. */
+    setLockerCardImageFromDataUrl: (skinKey: string, pngDataUrl: string) => Promise<string>;
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;

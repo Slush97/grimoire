@@ -470,6 +470,15 @@ export async function removeLockerModImage(skinKey: string): Promise<void> {
   return window.electronAPI.removeLockerModImage(skinKey);
 }
 
+/** Store a baked 3D card snapshot (PNG data URL) into the per-skin Locker image
+ *  override slot. Returns the stored data URL. */
+export async function setLockerCardImageFromDataUrl(
+  skinKey: string,
+  pngDataUrl: string
+): Promise<string> {
+  return window.electronAPI.setLockerCardImageFromDataUrl(skinKey, pngDataUrl);
+}
+
 export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
   return window.electronAPI.mergeMods(args);
 }

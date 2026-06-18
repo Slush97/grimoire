@@ -1,11 +1,14 @@
 import { useEffect, useId, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Loader2, Upload, Trash2 } from 'lucide-react';
+import { Check, Loader2, Sparkles, Upload, Trash2 } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import type { GameBananaImage } from '../../types/gamebanana';
+import type { HeroPoseSkinSource } from '../../types/portrait';
 import { Modal } from '../common/Modal';
 import { getModDetails, readImageDataUrl, showOpenDialog } from '../../lib/api';
 import { useAppStore } from '../../stores/appStore';
+import { useToastStore } from '../../stores/toastStore';
+import { HeroCardBaker } from '../../lib/heroCardBake';
 
 /**
  * Issue #208: pick the image that represents a skin in the Locker. Sources are
@@ -16,10 +19,18 @@ import { useAppStore } from '../../stores/appStore';
 export function LockerModImagePicker({
   mod,
   skinKey,
+  heroName,
+  skinSources,
   onClose,
 }: {
   mod: Mod;
   skinKey: string;
+  /** Canonical hero name, when this skin belongs to a hero. Enables the
+   *  "Generate from installed skin" 3D bake action. */
+  heroName?: string;
+  /** Enabled visual VPK stack for the hero (load order), fed to the 3D bake.
+   *  Omitted for sound mods / unassigned skins (no bake offered). */
+  skinSources?: HeroPoseSkinSource[];
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -27,11 +38,18 @@ export function LockerModImagePicker({
   const hasOverride = useAppStore((s) => Boolean(s.lockerModImages[skinKey]));
   const setImage = useAppStore((s) => s.setLockerModImage);
   const removeImage = useAppStore((s) => s.removeLockerModImage);
+  const applyCardImage = useAppStore((s) => s.applyLockerCardImage);
+  const showToast = useToastStore((s) => s.showToast);
 
   const [images, setImages] = useState<GameBananaImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [baking, setBaking] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // The bake is only meaningful for a hero with at least one enabled skin in
+  // the stack (the model is posed from the equipped look).
+  const canBake = Boolean(heroName && skinSources && skinSources.length > 0);
 
   // Pull the mod's gallery from GameBanana. Local-only mods (no id) skip this
   // and just offer the custom upload + current thumbnail.
@@ -101,6 +119,30 @@ export function LockerModImagePicker({
     }
   };
 
+  // Bake a 3D snapshot of the equipped skin over its panorama backdrop and
+  // store it as this skin's Locker image. Uses a throwaway one-shot baker (a
+  // single render, then disposed) since this is a single-card action.
+  const generateFromSkin = async () => {
+    if (busy || baking || !heroName || !skinSources) return;
+    setBaking(true);
+    setError(null);
+    const baker = new HeroCardBaker();
+    try {
+      const dataUrl = await baker.bakeHeroCard(heroName, skinKey, skinSources);
+      // bakeHeroCard already persisted the PNG via the main process; just sync
+      // the store so the open Locker card refreshes without a reload.
+      applyCardImage(skinKey, dataUrl);
+      onClose();
+    } catch (err) {
+      console.error('Failed to bake Locker card from skin', err);
+      setError(t('locker.cardBake.error'));
+      showToast(t('locker.cardBake.errorToast', { hero: heroName }), { tone: 'error' });
+    } finally {
+      baker.dispose();
+      setBaking(false);
+    }
+  };
+
   // Gallery choices, plus the mod's own thumbnail if it isn't already the first
   // gallery image (local mods often have only the thumbnail).
   const galleryUrls = images.map((img) => ({
@@ -139,10 +181,31 @@ export function LockerModImagePicker({
       </div>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {canBake && (
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={generateFromSkin}
+              disabled={busy || baking}
+              className="flex w-full items-center justify-center gap-2 rounded-lg border border-accent/50 bg-accent/10 py-3 text-sm font-medium text-text-primary transition-colors hover:border-accent/70 hover:bg-accent/20 disabled:opacity-50"
+            >
+              {baking ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Sparkles className="h-4 w-4" />
+              )}
+              {baking ? t('locker.cardBake.generating') : t('locker.cardBake.generate')}
+            </button>
+            <p className="mt-1.5 px-0.5 text-center text-[11px] leading-snug text-text-secondary">
+              {t('locker.cardBake.hint')}
+            </p>
+          </div>
+        )}
+
         <button
           type="button"
           onClick={pickCustom}
-          disabled={busy}
+          disabled={busy || baking}
           className="mb-4 flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border py-3 text-sm font-medium text-text-secondary transition-colors hover:border-accent/60 hover:text-text-primary disabled:opacity-50"
         >
           <Upload className="h-4 w-4" />

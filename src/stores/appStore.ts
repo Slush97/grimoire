@@ -251,6 +251,13 @@ interface AppState {
   /** `source` is a `data:` URL (custom upload) or an `http(s)` gallery URL. */
   setLockerModImage: (skinKey: string, source: string) => Promise<void>;
   removeLockerModImage: (skinKey: string) => Promise<void>;
+  /** Store a baked 3D card snapshot (PNG data URL) into the per-skin override
+   *  slot, updating the in-memory map so the card reflects it immediately. */
+  setLockerCardImageFromDataUrl: (skinKey: string, pngDataUrl: string) => Promise<void>;
+  /** Merge an already-persisted card image (data URL) into the in-memory map.
+   *  Used by the 3D bake, which persists via the main process directly and only
+   *  needs the store synced so open cards refresh without a reload. */
+  applyLockerCardImage: (skinKey: string, dataUrl: string) => void;
 }
 
 // The main process throws this exact phrase from every "out of enabled slots"
@@ -332,6 +339,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       delete next[skinKey];
       return { lockerModImages: next };
     });
+  },
+  setLockerCardImageFromDataUrl: async (skinKey: string, pngDataUrl: string) => {
+    const dataUrl = await api.setLockerCardImageFromDataUrl(skinKey, pngDataUrl);
+    set((state) => ({
+      lockerModImages: { ...state.lockerModImages, [skinKey]: dataUrl },
+    }));
+  },
+  applyLockerCardImage: (skinKey: string, dataUrl: string) => {
+    set((state) => ({
+      lockerModImages: { ...state.lockerModImages, [skinKey]: dataUrl },
+    }));
   },
 
   // Auto-detect Deadlock installation
