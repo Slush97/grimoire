@@ -5,6 +5,7 @@ import type {
   HeroPoseInfo,
   HeroPoseSkinSource,
   HeroPoseSelection,
+  HeroBackdrop,
   SoulModelInfo,
 } from '../types/portrait';
 import type {
@@ -130,6 +131,16 @@ export async function setModLockerHero(
 
 export async function getHeroPortraits(heroName: string): Promise<HeroPortrait[]> {
   return window.electronAPI.getHeroPortraits(heroName);
+}
+
+/** Resolve the panorama card art to use as the backdrop behind a hero's baked
+ *  3D card snapshot: the active skin stack's own card art if a mod ships it,
+ *  else the base game's vanilla art. Null when the hero has no panorama art. */
+export async function getHeroPanoramaBackdrop(
+  heroName: string,
+  skinSources?: HeroPoseSkinSource[]
+): Promise<HeroBackdrop | null> {
+  return window.electronAPI.getHeroPanoramaBackdrop(heroName, skinSources);
 }
 
 export async function getHeroAbilitySlots(heroName: string): Promise<HeroAbilitySlot[]> {

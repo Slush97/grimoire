@@ -74,6 +74,24 @@ export interface HeroPoseSelection {
 }
 
 /**
+ * A hero's panorama card art, resolved for use as the backdrop behind a baked
+ * 3D card snapshot. Comes from the active skin stack's own `*_card` art when a
+ * mod ships it, else the base game's vanilla card art. Decoded to a PNG data
+ * URL in the main process; the renderer drops it straight into a three.js
+ * texture / <img>.
+ */
+export interface HeroBackdrop {
+  dataUrl: string;
+  width: number;
+  height: number;
+  /** Which panorama variant this came from: card | vertical | card_gloat | ... */
+  variant: string;
+  /** 'skin' when the active skin stack shipped its own card art; 'vanilla' when
+   *  it fell back to the base game's art. */
+  source: 'skin' | 'vanilla';
+}
+
+/**
  * Whether a hero's posed 3D still exists in the user's library (for the given
  * active skin stack), its mtime (to cache-bust the `grimoire-hero:` URL after a
  * re-export), and the storage `key` the renderer builds that URL from. The key

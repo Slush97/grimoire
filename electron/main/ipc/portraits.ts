@@ -1,6 +1,6 @@
 import { ipcMain } from 'electron';
 import { getActiveDeadlockPath } from '../services/settings';
-import { getHeroPortraits } from '../services/heroPortraits';
+import { getHeroPortraits, getHeroPanoramaBackdrop } from '../services/heroPortraits';
 import { applyHeroCard, revertHeroCard, getActiveHeroCard } from '../services/heroCards';
 import {
     getCustomCardSlots,
@@ -24,7 +24,7 @@ import {
     type HeroPoseSkinSource,
     type HeroPoseSelection,
 } from '../services/heroPoseModels';
-import type { HeroPortrait } from '../../../src/types/portrait';
+import type { HeroPortrait, HeroBackdrop } from '../../../src/types/portrait';
 import type { ApplyHeroCardResult } from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as ipc/mods.ts). */
@@ -34,6 +34,19 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) return [];
         return getHeroPortraits(deadlockPath, heroName);
+    }
+);
+
+ipcMain.handle(
+    'get-hero-panorama-backdrop',
+    async (
+        _,
+        heroName: string,
+        skinSources?: HeroPoseSkinSource[]
+    ): Promise<HeroBackdrop | null> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) return null;
+        return getHeroPanoramaBackdrop(deadlockPath, heroName, skinSources);
     }
 );
 

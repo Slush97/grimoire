@@ -14,11 +14,14 @@
 import { promises as fs } from 'fs';
 import { basename, join } from 'path';
 import { app } from 'electron';
-import { getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
+import { getAddonFolderPaths, getDisabledPath, metaKeyFor, getCitadelPath } from './deadlock';
 import { parseVpkDirectoryCached } from './vpk';
 import { vpkmergeBinaryPath, runVpkmerge } from './modMerger';
 import { getModMetadata } from './metadata';
-import type { HeroPortrait } from '../../../src/types/portrait';
+// HeroPoseSkinSource is imported from the shared portrait types (not from
+// heroPoseModels) to avoid a cycle: heroPoseModels already imports
+// codenamesForHero from this module.
+import type { HeroPortrait, HeroBackdrop, HeroPoseSkinSource } from '../../../src/types/portrait';
 
 // Display name -> panorama codename. This is the `class_name` namespace
 // (deadlock-api `hero_<codename>`, stripped of the `hero_` prefix) that hero
@@ -219,4 +222,114 @@ export async function getHeroPortraits(
         }
     }
     return results;
+}
+
+/** Variant preference for a card BACKDROP: the full hero-select cover art
+ *  first, then the tall portrait, then the situational card variants, then
+ *  whatever the source carries. (Excludes the tiny minimap/small icons, which
+ *  make poor backdrops; they're only used as a last resort below.) */
+const BACKDROP_VARIANT_PRIORITY = ['card', 'vertical', 'card_gloat', 'card_critical'];
+
+function pickBackdropVariant(portraits: HeroPortrait[]): HeroPortrait | null {
+    for (const variant of BACKDROP_VARIANT_PRIORITY) {
+        const hit = portraits.find((p) => p.variant === variant);
+        if (hit) return hit;
+    }
+    // Fall back to any decoded variant (e.g. a pack that ships only `other`).
+    return portraits[0] ?? null;
+}
+
+/**
+ * Decode the panorama card art a single VPK carries for one codename. Mirrors
+ * the inner loop of getHeroPortraits but standalone (no managed-VPK skipping):
+ * the caller chooses exactly which VPK to read. Returns [] when the VPK doesn't
+ * carry this codename's art or decoding fails (logged, never throws), so the
+ * caller can fall through to the next candidate.
+ */
+async function decodeHeroPanorama(
+    vpk: string,
+    codename: string,
+    sourceId: string
+): Promise<HeroPortrait[]> {
+    const tree = parseVpkDirectoryCached(vpk);
+    if (!tree || !tree.some((p) => p.startsWith(`panorama/images/heroes/${codename}`))) return [];
+
+    const outDir = join(app.getPath('userData'), 'portrait-cache', sanitize(sourceId), codename);
+    const manifestPath = join(outDir, 'manifest.json');
+    const out: HeroPortrait[] = [];
+    try {
+        await runVpkmerge(
+            ['portrait', vpk, '--hero', codename, '--out', outDir, '--manifest', manifestPath],
+            60000
+        );
+        const manifest = JSON.parse(await fs.readFile(manifestPath, 'utf-8')) as PortraitManifest;
+        for (const p of manifest.portraits) {
+            if (!p.output_path) continue;
+            const png = await fs.readFile(p.output_path);
+            out.push({
+                modFileName: sourceId,
+                variant: p.variant,
+                width: p.width,
+                height: p.height,
+                formatName: p.format_name,
+                dataUrl: `data:image/png;base64,${png.toString('base64')}`,
+            });
+        }
+    } catch (err) {
+        console.warn(
+            `[heroPortraits] panorama backdrop decode failed for ${basename(vpk)} (${codename}): ${String(err)}`
+        );
+    }
+    return out;
+}
+
+function toBackdrop(p: HeroPortrait, source: 'skin' | 'vanilla'): HeroBackdrop {
+    return { dataUrl: p.dataUrl, width: p.width, height: p.height, variant: p.variant, source };
+}
+
+/**
+ * Resolve the panorama card art to use as the backdrop behind a hero's baked 3D
+ * card snapshot.
+ *
+ * Preference order:
+ *   1. The active skin stack's OWN card art, highest priority first (a skin that
+ *      ships its own `panorama/images/heroes/<codename>_card` wins). Most body
+ *      skins don't, so this usually misses.
+ *   2. The base game's vanilla card art from pak01 (the chosen fallback).
+ *
+ * Returns null only when the hero is unknown or neither source carries any
+ * panorama art (the bake then renders the model on a plain backdrop).
+ */
+export async function getHeroPanoramaBackdrop(
+    deadlockPath: string,
+    heroName: string,
+    skinSources: HeroPoseSkinSource[] = []
+): Promise<HeroBackdrop | null> {
+    const codenames = codenamesForHero(heroName);
+    if (codenames.length === 0) return null;
+    vpkmergeBinaryPath(); // fail fast with a clear error if the binary is missing/old
+
+    // 1) The active skin stack's own card art (highest priority first).
+    const installed = await listAddonVpks(deadlockPath);
+    const byMetaKey = new Map(installed.map((vpk) => [metaKeyFor(vpk), vpk]));
+    const orderedSkinVpks = [...skinSources]
+        .sort((a, b) => b.priority - a.priority)
+        .map((source) => byMetaKey.get(source.metaKey))
+        .filter((vpk): vpk is string => Boolean(vpk));
+
+    for (const vpk of orderedSkinVpks) {
+        for (const codename of codenames) {
+            const pick = pickBackdropVariant(await decodeHeroPanorama(vpk, codename, metaKeyFor(vpk)));
+            if (pick) return toBackdrop(pick, 'skin');
+        }
+    }
+
+    // 2) Vanilla fallback from the base pak.
+    const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+    for (const codename of codenames) {
+        const pick = pickBackdropVariant(await decodeHeroPanorama(pak01, codename, 'vanilla'));
+        if (pick) return toBackdrop(pick, 'vanilla');
+    }
+
+    return null;
 }

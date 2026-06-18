@@ -45,7 +45,7 @@ import type {
     GameBananaCommentsResponse,
     GameBananaArtistLink,
 } from './gamebanana';
-import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource, HeroPoseSelection } from './portrait';
+import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource, HeroPoseSelection, HeroBackdrop } from './portrait';
 import type {
     DeadworksServer,
     DeadworksContentItem,
@@ -468,6 +468,10 @@ export interface ElectronAPI {
     setVariantLabel: (modId: string, label: string) => Promise<Mod>;
     setModLockerHero: (modId: string, heroName: string | null) => Promise<Mod>;
     getHeroPortraits: (heroName: string) => Promise<HeroPortrait[]>;
+    getHeroPanoramaBackdrop: (
+        heroName: string,
+        skinSources?: HeroPoseSkinSource[]
+    ) => Promise<HeroBackdrop | null>;
     getHeroAbilitySlots: (heroName: string) => Promise<HeroAbilitySlot[]>;
     applyHeroCard: (heroName: string, sourceFileName: string) => Promise<ApplyHeroCardResult>;
     revertHeroCard: (heroName: string) => Promise<ApplyHeroCardResult>;
