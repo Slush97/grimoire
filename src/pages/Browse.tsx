@@ -2623,7 +2623,7 @@ export default function Browse() {
         installedFileIds={installedFileIds}
         installedFileStates={installedFileStates}
         onEnableFile={toggleMod}
-        downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
+        downloadingFileId={downloading && downloading.modId === selectedMod.id ? downloading.fileId : null}
         queuedFileIds={selectedQueuedFileIds}
         extracting={extracting}
         progress={downloadProgress}
