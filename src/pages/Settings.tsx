@@ -1368,6 +1368,23 @@ export default function Settings() {
               label={<Tx k="settings.experimental.performanceConfig" fallback="Performance Config" />}
               description={<Tx k="settings.toggles.performanceConfig" fallback="One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time." />}
             />
+
+            {/* Dev-only: the Locker pose-authoring tool. The config writeback is
+                refused by the main process in a packaged build, so the toggle is
+                only shown when the renderer runs under Vite dev. Follows the same
+                experimental-flag idiom as the toggles above. */}
+            {import.meta.env.DEV && (
+              <>
+                <div className="h-px bg-white/5" />
+
+                <Toggle
+                  checked={settings?.experimentalPoseAuthoring ?? false}
+                  onChange={(checked) => settings && saveSettings({ ...settings, experimentalPoseAuthoring: checked })}
+                  label={<Tx k="locker.poseAuthor.settingsLabel" fallback="Pose Authoring (dev)" />}
+                  description={<Tx k="locker.poseAuthor.settingsDescription" fallback="Dial in the per-hero camera framing and pose for the 3D Locker card snapshot, then commit it to the checked-in config. Dev builds only." />}
+                />
+              </>
+            )}
           </div>
         </Card>
 
