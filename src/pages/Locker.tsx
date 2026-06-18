@@ -12,6 +12,7 @@ import {
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import { RegenerateAllCardsButton, type CardBakeJob } from '../components/locker/RegenerateAllCardsButton';
 import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
 
@@ -364,6 +365,25 @@ export default function Locker() {
     },
     [heroMods, lockerModImages]
   );
+
+  // Bake jobs for "Regenerate all hero cards": every hero with at least one
+  // enabled skin. The card stores under the active skin's key (what the hero
+  // card reads), posed from the full enabled visual stack. Recomputed at click
+  // time via a thunk so the live enabled set is used.
+  const getCardBakeJobs = useCallback((): CardBakeJob[] => {
+    const jobs: CardBakeJob[] = [];
+    for (const hero of baseHeroList) {
+      const skins = heroMods.map.get(hero.id) ?? [];
+      const active = activeLockerSkin(skins);
+      if (!active) continue; // no enabled skin -> nothing to pose.
+      const skinSources = skins
+        .filter((mod) => mod.enabled)
+        .map((mod) => ({ metaKey: mod.metaKey, priority: mod.priority }))
+        .sort((a, b) => b.priority - a.priority || a.metaKey.localeCompare(b.metaKey));
+      jobs.push({ heroName: hero.name, storeKey: getLockerSkinKey(active), skinSources });
+    }
+    return jobs;
+  }, [baseHeroList, heroMods]);
   const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
   const installedSoundCount = useMemo(() => countLockerSkins(lockerSounds), [lockerSounds]);
   const unassignedSkins = useMemo(() => groupLockerSkins(heroMods.unassigned), [heroMods]);
@@ -717,6 +737,7 @@ export default function Locker() {
             <Filter className="w-4 h-4" />
             {hideEmptyHeroes ? t('locker.page.showEmpty') : t('locker.page.hideEmpty')}
           </button>
+          {installedSkinCount > 0 && <RegenerateAllCardsButton getJobs={getCardBakeJobs} />}
           <ViewModeToggle
             value={viewMode}
             options={[

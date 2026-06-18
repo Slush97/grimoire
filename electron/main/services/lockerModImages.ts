@@ -154,3 +154,26 @@ export async function removeLockerModImage(skinKey: string): Promise<void> {
     if (!skinKey.trim()) return;
     await clearKey(imagesDir(), keyStem(skinKey));
 }
+
+/** Store a baked 3D card snapshot (a `data:image/png;base64,...` URL) as this
+ *  skin's Locker image, replacing any existing one. Writes into the SAME store
+ *  the gallery/upload picker uses (so the Locker card override slot is shared);
+ *  the only difference is the bytes come straight from an in-renderer canvas
+ *  readback rather than a gallery URL or a file dialog. Always lands as a .png
+ *  (the bake renderer reads back PNG). Returns the stored data URL for display. */
+export async function setLockerCardImageFromDataUrl(
+    skinKey: string,
+    pngDataUrl: string
+): Promise<string> {
+    if (!skinKey.trim()) throw new Error('Missing skin key');
+    if (!pngDataUrl.startsWith('data:image/png')) {
+        throw new Error('Card snapshot must be a PNG data URL');
+    }
+    const { buf, ext } = decodeDataUrl(pngDataUrl);
+    const dir = await ensureDir();
+    const stem = keyStem(skinKey);
+    await clearKey(dir, stem);
+    const dest = join(dir, `${stem}${ext}`);
+    await fs.writeFile(dest, buf);
+    return readAsDataUrl(dest);
+}

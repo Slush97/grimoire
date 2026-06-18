@@ -19,6 +19,7 @@ import {
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import type { Mod } from '../../types/mod';
+import type { HeroPoseSkinSource } from '../../types/portrait';
 import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
 import { useAppStore } from '../../stores/appStore';
 import ModThumbnail from '../ModThumbnail';
@@ -754,6 +755,18 @@ export default function HeroSkinsPanel({
   const pickImageFor = (group: SkinGroup) =>
     group.primary.sourceSection === 'Sound' ? undefined : () => setPickerGroup(group);
 
+  // Enabled visual VPK stack for the hero (load order), fed to the 3D card bake
+  // so the snapshot reflects the full equipped look. Only meaningful for skins,
+  // so sounds (the picker isn't offered for them anyway) contribute nothing.
+  const bakeSkinSources = useMemo<HeroPoseSkinSource[]>(
+    () =>
+      mods
+        .filter((mod) => mod.enabled && mod.sourceSection !== 'Sound')
+        .map((mod) => ({ metaKey: mod.metaKey, priority: mod.priority }))
+        .sort((a, b) => b.priority - a.priority || a.metaKey.localeCompare(b.metaKey)),
+    [mods]
+  );
+
   // Per-card #N chip: the load-order position of each active skin. Mirrors the
   // SkinLoadOrderStrip (now in the hero sidebar). The chip only shows when 2+
   // skins are active — a single active skin has no meaningful order.
@@ -839,6 +852,8 @@ export default function HeroSkinsPanel({
         <LockerModImagePicker
           mod={pickerGroup.primary}
           skinKey={pickerGroup.key}
+          heroName={heroName}
+          skinSources={bakeSkinSources}
           onClose={() => setPickerGroup(null)}
         />
       )}

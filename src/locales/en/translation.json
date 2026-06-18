@@ -962,6 +962,19 @@
       "noGallery": "No images available. Upload a custom one above.",
       "reset": "Reset to default"
     },
+    "cardBake": {
+      "generate": "Generate from installed skin",
+      "generating": "Generating snapshot...",
+      "hint": "Render a 3D snapshot of your equipped skin over its card backdrop.",
+      "error": "Could not generate the snapshot. Please try again.",
+      "errorToast": "Could not generate a card for {{hero}}.",
+      "regenAll": "Regenerate all cards",
+      "regenTitle": "Regenerate a 3D snapshot card for every hero with an active skin",
+      "regenProgress": "Generating {{done}}/{{total}}...",
+      "regenNone": "No heroes have an active skin to generate a card from.",
+      "regenDone_one": "Generated {{count}} hero card ({{failed}} skipped).",
+      "regenDone_other": "Generated {{count}} hero cards ({{failed}} skipped)."
+    },
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
       "disabledBadge": "Disabled",
