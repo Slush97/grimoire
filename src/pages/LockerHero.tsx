@@ -18,14 +18,17 @@ import HeroEffectsPanel from '../components/locker/HeroEffectsPanel';
 import FloatingModelPanel from '../components/locker/FloatingModelPanel';
 // three.js viewer is heavy; only pull the chunk when the user flips to 3D.
 const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
+import { useAppStore } from '../stores/appStore';
 import { useTrippyPreviewStore } from '../stores/trippyPreviewStore';
 import type { Mod } from '../types/mod';
 import type { HeroPoseSkinSource } from '../types/portrait';
 import {
+  activeLockerSkin,
   countLockerSkins,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
+  getLockerSkinKey,
   type HeroCategory,
 } from '../lib/lockerUtils';
 
@@ -81,6 +84,13 @@ export function LockerHeroView({
   hideNsfwPreviews = false,
 }: LockerHeroViewProps) {
   const { t } = useTranslation();
+  // Issue #208: the backdrop reflects the active skin's chosen Locker image, if
+  // the user picked one (set per skin in the skins list below).
+  const lockerModImages = useAppStore((s) => s.lockerModImages);
+  const cardImage = useMemo(() => {
+    const active = activeLockerSkin(skinList);
+    return active ? lockerModImages[getLockerSkinKey(active)] : undefined;
+  }, [skinList, lockerModImages]);
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [view3d, setView3d] = useState(false);
@@ -146,13 +156,14 @@ export function LockerHeroView({
   ];
 
   const renderSrc =
-    renderFallbackStep === 0
+    cardImage ??
+    (renderFallbackStep === 0
       ? getHeroRenderPath(hero.name)
       : renderFallbackStep === 1
         ? getHeroWikiUrl(hero.name)
         : renderFallbackStep === 2
           ? (hero.iconUrl ?? '')
-          : '';
+          : '');
 
   const handleRenderError = () => {
     if (renderFallbackStep === 0) {
@@ -243,8 +254,12 @@ export function LockerHeroView({
           <img
             src={renderSrc}
             alt={hero.name}
-            className="absolute top-0 right-0 h-full w-auto max-w-none"
-            onError={handleRenderError}
+            className={
+              cardImage
+                ? 'absolute inset-0 h-full w-full object-cover'
+                : 'absolute top-0 right-0 h-full w-auto max-w-none'
+            }
+            onError={cardImage ? undefined : handleRenderError}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">

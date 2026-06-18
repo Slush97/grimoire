@@ -369,6 +369,18 @@ export function modLoadOrder(mod: Mod): number {
   return folderIndex * 100 + mod.priority;
 }
 
+/**
+ * The "active" skin for a hero: the highest-priority enabled mod (lowest load
+ * order, i.e. the one that wins file conflicts). Used to decide which skin's
+ * chosen Locker image represents the hero on its card / detail backdrop
+ * (issue #208). Returns undefined when nothing is enabled.
+ */
+export function activeLockerSkin(mods: Mod[]): Mod | undefined {
+  return mods
+    .filter((m) => m.enabled)
+    .sort((a, b) => modLoadOrder(a) - modLoadOrder(b))[0];
+}
+
 export function groupLockerSkins(mods: Mod[]): LockerSkin[] {
   const bySkin = new Map<string, Mod[]>();
   for (const mod of mods) {

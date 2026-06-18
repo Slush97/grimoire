@@ -201,6 +201,12 @@ interface AppState {
   // Presence can show the viewed hero. Renderer-only, never persisted.
   lockerHeroName: string | null;
 
+  // Issue #208: per-mod (per-skin) Locker view images (display override).
+  // Map is { skinKey -> data URL }, loaded lazily when the Locker opens. Keyed
+  // by getLockerSkinKey(mod). A skin without an entry falls back to its
+  // GameBanana thumbnail; a hero card falls back to the hero render.
+  lockerModImages: Record<string, string>;
+
   // Actions
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -241,6 +247,10 @@ interface AppState {
   setBrowseSession: (cache: BrowseSessionCache | null) => void;
   setInstalledScrollTop: (scrollTop: number) => void;
   setLockerHeroName: (name: string | null) => void;
+  loadLockerModImages: () => Promise<void>;
+  /** `source` is a `data:` URL (custom upload) or an `http(s)` gallery URL. */
+  setLockerModImage: (skinKey: string, source: string) => Promise<void>;
+  removeLockerModImage: (skinKey: string) => Promise<void>;
 }
 
 // The main process throws this exact phrase from every "out of enabled slots"
@@ -268,6 +278,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   browseSession: null,
   installedScrollTop: 0,
   lockerHeroName: null,
+  lockerModImages: {},
 
   // Load settings from backend
   loadSettings: async () => {
@@ -297,6 +308,30 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       set({ settingsError: String(err), settingsLoading: false });
     }
+  },
+
+  // Issue #208: per-mod (per-skin) Locker view image overrides (display only).
+  loadLockerModImages: async () => {
+    try {
+      const images = await api.getLockerModImages();
+      set({ lockerModImages: images });
+    } catch {
+      // Non-fatal: skins just fall back to their GameBanana thumbnail.
+    }
+  },
+  setLockerModImage: async (skinKey: string, source: string) => {
+    const dataUrl = await api.setLockerModImage(skinKey, source);
+    set((state) => ({
+      lockerModImages: { ...state.lockerModImages, [skinKey]: dataUrl },
+    }));
+  },
+  removeLockerModImage: async (skinKey: string) => {
+    await api.removeLockerModImage(skinKey);
+    set((state) => {
+      const next = { ...state.lockerModImages };
+      delete next[skinKey];
+      return { lockerModImages: next };
+    });
   },
 
   // Auto-detect Deadlock installation

@@ -45,26 +45,33 @@ one-click pick, instead of opening `ModDetailsModal`.
 - Difficulty: **M**. Deferred because part 1 removes most of the actual pain;
   reassess whether the dropdown is still wanted.
 
-### #208 - Show the installed skin on the Locker card - Deferred
+### #208 - Show the installed skin on the Locker card - Shipped (per-mod)
 
 Request: the hero's Locker card should show the skin actually applied, not the
-generic render. User also wants a manual image override because some poses clip
-with some skins.
+generic render, with manual image control (some poses clip with some skins).
 
-Two paths, ship in order:
+Shipped as a **per-mod (per-skin) Locker image**, not a per-hero override (the
+maintainer's call): the user picks, per skin, which image represents it in the
+Locker, choosing from the mod's own GameBanana gallery (fetched on demand) or a
+custom upload. The picker opens from a small image button on each skin
+card/row in the Locker (`LockerModImagePicker.tsx`). The hero card / detail
+backdrop shows the **active** (highest-priority enabled) skin's chosen image,
+falling back to the hero render when none is set (`activeLockerSkin` in
+`lockerUtils.ts`).
 
-1. **User-provided image (do first, ~M).** Reuse the existing
-   `HeroCardPicker.tsx` + `CardCropper.tsx` upload/crop flow. Store a per-hero
-   override image; render-path falls back to it before the vanilla render. This
-   alone satisfies the stated need (manual control over clipping poses).
-2. **Auto pose-to-PNG (follow-up, L).** Reuse `exportHeroPose()` (already proven
-   by `HeroPoseViewer`) to render the posed GLB with the active skin stack to a
-   cached PNG. Cache must be content-addressed by skin-stack hash (same lesson
-   as the soul-export cache) and invalidated on enable/disable/reorder. Watch
-   the packaged-build CSP/blob gotcha (see the packaged-3D-CSP note).
+Storage: `userData/locker-mod-images/<encodeURIComponent(skinKey)>.<ext>`, keyed
+by `getLockerSkinKey(mod)` (stable across folder/priority moves, unlike
+metaKey). Gallery picks are downloaded and custom uploads copied in locally, so
+the Locker stays offline-capable; both are served back as `data:` URLs (already
+allowed by img-src, so no CSP change). Backend: `lockerModImages.ts` service +
+`ipc/lockerModImages.ts`; store map `lockerModImages` keyed by skin key. Skin
+thumbnails + the card glass backdrop honor the override; sound mods get no
+picker (they keep the hero-portrait thumbnail). i18n under `locker.modImage.*`.
 
-Hero cards render art via CSS `background-image` + `object-position`, so the
-display swap touches layout, not just an `<img src>`.
+Possible follow-up (not built): auto pose-to-PNG of the active skin stack via
+`exportHeroPose()` as a default when the user hasn't picked an image. Would need
+a content-addressed cache (skin-stack hash) and to mind the packaged-3D CSP/blob
+gotcha. Deferred: the manual per-skin picker already satisfies the stated need.
 
 ### #210 - Unify background art settings - Deferred
 

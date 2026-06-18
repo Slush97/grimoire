@@ -950,6 +950,18 @@
     "empty": {
       "noGamePath": "Set your Deadlock path or enable dev mode."
     },
+    "modImage": {
+      "set": "Set Locker image for {{name}}",
+      "title": "Choose a Locker image",
+      "dialogTitle": "Choose a custom image",
+      "uploadCustom": "Upload a custom image",
+      "fromMod": "From this mod",
+      "loadingGallery": "Loading images...",
+      "galleryError": "Could not load this mod's images.",
+      "applyError": "Could not set the image. Please try again.",
+      "noGallery": "No images available. Upload a custom one above.",
+      "reset": "Reset to default"
+    },
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
       "disabledBadge": "Disabled",

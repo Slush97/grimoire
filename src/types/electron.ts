@@ -568,6 +568,12 @@ export interface ElectronAPI {
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) => Promise<SoulContainerPreview>;
     readGlbFile: (glbPath: string) => Promise<string>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
+    /** Issue #208: per-mod (per-skin) Locker view images (display override).
+     *  Map is { skinKey -> data URL }; `source` is a `data:` URL (custom upload)
+     *  or an `http(s)` gallery URL to download. Setter returns the new data URL. */
+    getLockerModImages: () => Promise<Record<string, string>>;
+    setLockerModImage: (skinKey: string, source: string) => Promise<string>;
+    removeLockerModImage: (skinKey: string) => Promise<void>;
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;

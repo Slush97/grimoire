@@ -81,6 +81,7 @@ import './ipc/abilitySounds';
 import './ipc/abilityColors';
 import './ipc/trippyEffects';
 import './ipc/locker';
+import './ipc/lockerModImages';
 import './ipc/previewCache';
 import './ipc/discord';
 import './ipc/saltIngest';

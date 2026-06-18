@@ -33,9 +33,11 @@ import {
   FAVORITE_HEROES_KEY,
   GLOBAL_MOD_TYPE_LABELS,
   GLOBAL_MOD_TYPE_ORDER,
+  activeLockerSkin,
   buildHeroList,
   countGlobalMods,
   countLockerSkins,
+  getLockerSkinKey,
   getEffectiveGlobalType,
   getHeroFacePosition,
   getHeroNamePath,
@@ -130,7 +132,7 @@ function RainbowPaletteIcon({ className = '', title }: { className?: string; tit
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, loadLockerModImages } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -186,6 +188,11 @@ export default function Locker() {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Issue #208: per-mod (per-skin) Locker view images (display only).
+  useEffect(() => {
+    loadLockerModImages();
+  }, [loadLockerModImages]);
 
   useEffect(() => {
     if (activeDeadlockPath) {
@@ -347,6 +354,16 @@ export default function Locker() {
   const heroSounds = useMemo(() => {
     return groupModsByCategory(lockerSounds, baseHeroList);
   }, [lockerSounds, baseHeroList]);
+  // Issue #208: the image shown on a hero's card/backdrop is the active
+  // (highest-priority enabled) skin's chosen Locker image, if the user picked
+  // one. Otherwise undefined and the card falls back to the hero render.
+  const heroCardImage = useCallback(
+    (heroId: number): string | undefined => {
+      const active = activeLockerSkin(heroMods.map.get(heroId) ?? []);
+      return active ? lockerModImages[getLockerSkinKey(active)] : undefined;
+    },
+    [heroMods, lockerModImages]
+  );
   const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
   const installedSoundCount = useMemo(() => countLockerSkins(lockerSounds), [lockerSounds]);
   const unassignedSkins = useMemo(() => groupLockerSkins(heroMods.unassigned), [heroMods]);
@@ -732,6 +749,7 @@ export default function Locker() {
               skinCount={countLockerSkins(heroMods.map.get(hero.id) ?? [])}
               soundCount={countLockerSkins(heroSounds.map.get(hero.id) ?? [])}
               hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
+              cardImage={heroCardImage(hero.id)}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onNavigate={() => goToHero(hero)}
               onBrowse={() => openHeroInBrowse(hero)}
@@ -785,6 +803,7 @@ export default function Locker() {
               mods={heroMods.map.get(hero.id) ?? []}
               sounds={heroSounds.map.get(hero.id) ?? []}
               hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
+              cardImage={heroCardImage(hero.id)}
               expanded={expandedHeroes.has(hero.id)}
               onToggleExpanded={() => toggleHeroExpanded(hero.id)}
               onBrowseSkins={() => openHeroInBrowse(hero)}
@@ -973,6 +992,9 @@ interface HeroCardProps {
   mods: Mod[];
   sounds: Mod[];
   hasAbilityRecolor: boolean;
+  /** Issue #208: the active skin's chosen Locker image (data URL), shown as the
+   *  card backdrop in place of the hero render. Undefined = use the render. */
+  cardImage?: string;
   expanded: boolean;
   onToggleExpanded: () => void;
   onBrowseSkins: () => void;
@@ -989,6 +1011,9 @@ interface HeroGalleryCardProps {
   skinCount: number;
   soundCount: number;
   hasAbilityRecolor: boolean;
+  /** Issue #208: the active skin's chosen Locker image (data URL), shown as the
+   *  card backdrop in place of the hero render. Undefined = use the render. */
+  cardImage?: string;
   isFavorite: boolean;
   onNavigate: () => void;
   onBrowse: () => void;
@@ -1539,6 +1564,7 @@ function HeroGalleryCard({
   skinCount,
   soundCount,
   hasAbilityRecolor,
+  cardImage,
   isFavorite,
   onNavigate,
   onBrowse,
@@ -1553,14 +1579,16 @@ function HeroGalleryCard({
   const [nameFailed, setNameFailed] = useState(false);
   const [, setImageCacheVersion] = useState(0);
 
-  const renderSrc = fallbackStep === 0
+  // A user-provided card image (issue #208) wins over the render chain. Data
+  // URLs paint immediately, so they skip the loaded-image gate / skeleton.
+  const renderSrc = cardImage ?? (fallbackStep === 0
     ? renderLocal
     : fallbackStep === 1
       ? wikiUrl
       : fallbackStep === 2
         ? (hero.iconUrl ?? '')
-        : '';
-  const isRenderReady = !!renderSrc && lockerLoadedImageUrls.has(renderSrc);
+        : '');
+  const isRenderReady = !!cardImage || (!!renderSrc && lockerLoadedImageUrls.has(renderSrc));
 
   useEffect(() => {
     const tick = () => setImageCacheVersion((version) => version + 1);
@@ -1604,7 +1632,7 @@ function HeroGalleryCard({
               className="absolute inset-0 h-full w-full bg-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] scale-100 transition-transform duration-500"
               style={{
                 backgroundImage: `url(${JSON.stringify(renderSrc)})`,
-                backgroundPosition: `${facePositionX}% 20%`,
+                backgroundPosition: cardImage ? 'center' : `${facePositionX}% 20%`,
                 imageRendering: 'auto',
                 transform: 'translateZ(0)',
               }}
@@ -1617,8 +1645,10 @@ function HeroGalleryCard({
               aria-hidden
               className="pointer-events-none absolute h-px w-px opacity-0"
               decoding="async"
-              onLoad={() => rememberLockerImageLoaded(renderSrc)}
-              onError={handleRenderError}
+              onLoad={() => {
+                if (!cardImage) rememberLockerImageLoaded(renderSrc);
+              }}
+              onError={cardImage ? undefined : handleRenderError}
             />
           </>
         )}
@@ -1722,6 +1752,7 @@ function HeroCard({
   mods,
   sounds,
   hasAbilityRecolor,
+  cardImage,
   expanded,
   onToggleExpanded,
   onBrowseSkins,
@@ -1748,14 +1779,17 @@ function HeroCard({
   const activeSection = section === 'sounds' && !hasSounds ? 'skins' : section;
   const activeList = activeSection === 'sounds' ? sounds : mods;
 
+  // A user-provided card image (issue #208) wins outright; otherwise fall back
+  // through the render chain: local render -> wiki render -> GameBanana icon.
   const bgSrc =
-    bgFallbackStep === 0
+    cardImage ??
+    (bgFallbackStep === 0
       ? localUrl
       : bgFallbackStep === 1
         ? wikiUrl
         : bgFallbackStep === 2
           ? (hero.iconUrl ?? '')
-          : '';
+          : '');
 
   const handleBgError = () => {
     if (bgFallbackStep === 0) {
@@ -1791,9 +1825,9 @@ function HeroCard({
           aria-hidden
           decoding="async"
           onLoad={() => rememberLockerImageLoaded(bgSrc)}
-          onError={handleBgError}
+          onError={cardImage ? undefined : handleBgError}
           className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-          style={{ objectPosition: `${facePositionX}% 18%` }}
+          style={{ objectPosition: cardImage ? 'center' : `${facePositionX}% 18%` }}
         />
       )}
       <div

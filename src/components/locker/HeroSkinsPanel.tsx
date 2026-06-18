@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ExternalLink, GripVertical, Trash2 } from 'lucide-react';
+import { ChevronDown, ExternalLink, GripVertical, ImagePlus, Trash2 } from 'lucide-react';
 import {
   DndContext,
   KeyboardSensor,
@@ -24,6 +24,7 @@ import { useAppStore } from '../../stores/appStore';
 import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
+import { LockerModImagePicker } from './LockerModImagePicker';
 
 interface SkinGroup {
   key: string;
@@ -293,6 +294,8 @@ function SkinGroupCard({
   heroName,
   soundVolume,
   loadOrderPosition,
+  overrideSrc,
+  onPickImage,
 }: {
   group: SkinGroup;
   onSelect: (modId: string) => void;
@@ -305,12 +308,18 @@ function SkinGroupCard({
   /** 1-based load-order position, shown as a corner chip. Only set when 2+
    *  skins are active for the hero (otherwise order is meaningless). */
   loadOrderPosition?: number;
+  /** Issue #208: user-chosen Locker image for this skin (data URL), if any. */
+  overrideSrc?: string;
+  /** Open the image picker for this skin. Omitted for sound mods. */
+  onPickImage?: () => void;
 }) {
   const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
   const primary = group.primary;
+  // The user's chosen image wins over the uploader's thumbnail (issue #208).
+  const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   const cardRef = useRef<HTMLDivElement>(null);
   const [variantsOpen, setVariantsOpen] = useState(false);
   // Close the variant popover on any click outside the card.
@@ -327,7 +336,7 @@ function SkinGroupCard({
   // Skipped when NSFW previews are hidden so we never bleed hidden imagery
   // into the glass tint, even blurred.
   const glassBackdropUrl =
-    primary.thumbnailUrl && !(primary.nsfw && hideNsfwPreviews) ? primary.thumbnailUrl : null;
+    displaySrc && !(primary.nsfw && hideNsfwPreviews) ? displaySrc : null;
 
   return (
     <div
@@ -364,11 +373,11 @@ function SkinGroupCard({
           }`}
         >
           <ModThumbnail
-            src={primary.thumbnailUrl}
+            src={displaySrc}
             alt={primary.name}
-            nsfw={primary.nsfw}
+            nsfw={overrideSrc ? false : primary.nsfw}
             hideNsfw={hideNsfwPreviews}
-            heroPortrait={useHeroPortraitThumbnails ? heroName : undefined}
+            heroPortrait={overrideSrc ? undefined : useHeroPortraitThumbnails ? heroName : undefined}
             className="h-full w-full"
             imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-hover/card:scale-[1.03]"
             fallback={
@@ -430,6 +439,25 @@ function SkinGroupCard({
         }
         className="absolute inset-0 z-10 cursor-pointer rounded-[10px]"
       />
+
+      {/* Set Locker image (issue #208): pick this skin's view from its gallery
+          or a custom upload. Hover-revealed; z-30 keeps it above the toggle. */}
+      {onPickImage && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPickImage();
+          }}
+          aria-label={t('locker.modImage.set', { name: primary.name })}
+          title={t('locker.modImage.set', { name: primary.name })}
+          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100 ${
+            overrideSrc ? 'opacity-100' : 'opacity-0'
+          } ${onRequestDelete ? 'right-9' : 'right-1.5'}`}
+        >
+          <ImagePlus className="h-3.5 w-3.5" />
+        </button>
+      )}
 
       {/* Delete: removes the whole group (every variant VPK). Hover-revealed so
           it stays out of the way; z-30 keeps it above the full-card toggle. */}
@@ -530,6 +558,8 @@ function SkinGroupRow({
   useHeroPortraitThumbnails,
   heroName,
   soundVolume,
+  overrideSrc,
+  onPickImage,
 }: {
   group: SkinGroup;
   onSelect: (modId: string) => void;
@@ -539,12 +569,18 @@ function SkinGroupRow({
   useHeroPortraitThumbnails: boolean;
   heroName?: string;
   soundVolume: number;
+  /** Issue #208: user-chosen Locker image for this skin (data URL), if any. */
+  overrideSrc?: string;
+  /** Open the image picker for this skin. Omitted for sound mods. */
+  onPickImage?: () => void;
 }) {
   const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
   const groupActive = group.variants.some((v) => v.enabled);
   const enabledCount = group.variants.filter((v) => v.enabled).length;
   const primary = group.primary;
+  // The user's chosen image wins over the uploader's thumbnail (issue #208).
+  const displaySrc = overrideSrc ?? primary.thumbnailUrl;
   return (
     <div
       className={`group/row relative rounded-md border transition-colors ${
@@ -553,6 +589,22 @@ function SkinGroupRow({
           : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
       }`}
     >
+      {onPickImage && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onPickImage();
+          }}
+          aria-label={t('locker.modImage.set', { name: primary.name })}
+          title={t('locker.modImage.set', { name: primary.name })}
+          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100 ${
+            overrideSrc ? 'opacity-100' : 'opacity-0'
+          } ${onRequestDelete ? 'right-10' : 'right-2'}`}
+        >
+          <ImagePlus className="h-3.5 w-3.5" />
+        </button>
+      )}
       {onRequestDelete && (
         <button
           type="button"
@@ -589,11 +641,11 @@ function SkinGroupRow({
       >
         <div className="w-20 h-20 rounded-md overflow-hidden bg-bg-tertiary flex-shrink-0">
           <ModThumbnail
-            src={primary.thumbnailUrl}
+            src={displaySrc}
             alt={primary.name}
-            nsfw={primary.nsfw}
+            nsfw={overrideSrc ? false : primary.nsfw}
             hideNsfw={hideNsfwPreviews}
-            heroPortrait={useHeroPortraitThumbnails ? heroName : undefined}
+            heroPortrait={overrideSrc ? undefined : useHeroPortraitThumbnails ? heroName : undefined}
             className="w-full h-full"
             fallback={
               <div className="w-full h-full flex items-center justify-center text-text-secondary text-[10px]">
@@ -694,7 +746,13 @@ export default function HeroSkinsPanel({
 }: HeroSkinsPanelProps) {
   const hasMods = mods.length > 0;
   const soundVolume = useAppStore((s) => s.soundVolume);
+  const lockerModImages = useAppStore((s) => s.lockerModImages);
   const groups = useMemo(() => groupVariants(mods), [mods]);
+  // Issue #208: which skin's image picker is open (null = none). Skins only;
+  // sound mods keep the hero-portrait thumbnail and get no picker.
+  const [pickerGroup, setPickerGroup] = useState<SkinGroup | null>(null);
+  const pickImageFor = (group: SkinGroup) =>
+    group.primary.sourceSection === 'Sound' ? undefined : () => setPickerGroup(group);
 
   // Per-card #N chip: the load-order position of each active skin. Mirrors the
   // SkinLoadOrderStrip (now in the hero sidebar). The chip only shows when 2+
@@ -745,12 +803,22 @@ export default function HeroSkinsPanel({
                   key={group.key}
                   group={group}
                   loadOrderPosition={loadOrderByKey.get(group.key)}
+                  overrideSrc={lockerModImages[group.key]}
+                  onPickImage={pickImageFor(group)}
                   {...groupProps}
                 />
               ))}
             </div>
           ) : (
-            groups.map((group) => <SkinGroupRow key={group.key} group={group} {...groupProps} />)
+            groups.map((group) => (
+              <SkinGroupRow
+                key={group.key}
+                group={group}
+                overrideSrc={lockerModImages[group.key]}
+                onPickImage={pickImageFor(group)}
+                {...groupProps}
+              />
+            ))
           )}
           {browseLink && (
             <div className="flex justify-center px-1 pt-0.5">
@@ -766,6 +834,14 @@ export default function HeroSkinsPanel({
       )}
 
       {showDownloadable && categoryId && <DownloadableSkinsSection categoryId={categoryId} />}
+
+      {pickerGroup && (
+        <LockerModImagePicker
+          mod={pickerGroup.primary}
+          skinKey={pickerGroup.key}
+          onClose={() => setPickerGroup(null)}
+        />
+      )}
     </div>
   );
 }

@@ -425,6 +425,18 @@ export async function readImageDataUrl(imagePath: string): Promise<string> {
   return window.electronAPI.readImageDataUrl(imagePath);
 }
 
+export async function getLockerModImages(): Promise<Record<string, string>> {
+  return window.electronAPI.getLockerModImages();
+}
+
+export async function setLockerModImage(skinKey: string, source: string): Promise<string> {
+  return window.electronAPI.setLockerModImage(skinKey, source);
+}
+
+export async function removeLockerModImage(skinKey: string): Promise<void> {
+  return window.electronAPI.removeLockerModImage(skinKey);
+}
+
 export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
   return window.electronAPI.mergeMods(args);
 }

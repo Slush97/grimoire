@@ -226,6 +226,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('read-glb-file', glbPath),
     readImageDataUrl: (imagePath: string) =>
         ipcRenderer.invoke('read-image-data-url', imagePath),
+    getLockerModImages: () => ipcRenderer.invoke('get-locker-mod-images'),
+    setLockerModImage: (skinKey: string, source: string) =>
+        ipcRenderer.invoke('set-locker-mod-image', skinKey, source),
+    removeLockerModImage: (skinKey: string) =>
+        ipcRenderer.invoke('remove-locker-mod-image', skinKey),
     mergeMods: (args: MergeModsArgs) => ipcRenderer.invoke('merge-mods', args),
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>
