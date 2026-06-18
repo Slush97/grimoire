@@ -22,6 +22,7 @@ import {
     exportRiggedHeroPose,
     type HeroPoseInfo,
     type HeroPoseSkinSource,
+    type HeroPoseSelection,
 } from '../services/heroPoseModels';
 import type { HeroPortrait } from '../../../src/types/portrait';
 import type { ApplyHeroCardResult } from '../../../src/types/mod';
@@ -122,8 +123,13 @@ ipcMain.handle(
 
 ipcMain.handle(
     'get-hero-pose-info',
-    async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroPoseInfo> => {
-        return getHeroPoseInfo(heroName, skinSources);
+    async (
+        _,
+        heroName: string,
+        skinSources?: HeroPoseSkinSource[],
+        pose?: HeroPoseSelection
+    ): Promise<HeroPoseInfo> => {
+        return getHeroPoseInfo(heroName, skinSources, pose);
     }
 );
 
@@ -133,11 +139,12 @@ ipcMain.handle(
         _,
         heroName: string,
         skinSources?: HeroPoseSkinSource[],
-        fallbackSkinMetaKey?: string
+        fallbackSkinMetaKey?: string,
+        pose?: HeroPoseSelection
     ): Promise<HeroPoseInfo> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return exportHeroPose(deadlockPath, heroName, skinSources, fallbackSkinMetaKey);
+        return exportHeroPose(deadlockPath, heroName, skinSources, fallbackSkinMetaKey, pose);
     }
 );
 

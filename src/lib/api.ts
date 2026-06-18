@@ -4,6 +4,7 @@ import type {
   CustomCardSlot,
   HeroPoseInfo,
   HeroPoseSkinSource,
+  HeroPoseSelection,
   SoulModelInfo,
 } from '../types/portrait';
 import type {
@@ -198,19 +199,23 @@ export async function exportSoulModel(metaKey: string, cacheKey: string): Promis
 /** Whether a hero's posed 3D still exists for the given active skin stack (+ mtime, key). */
 export async function getHeroPoseInfo(
   heroName: string,
-  skinSources?: HeroPoseSkinSource[]
+  skinSources?: HeroPoseSkinSource[],
+  pose?: HeroPoseSelection
 ): Promise<HeroPoseInfo> {
-  return window.electronAPI.getHeroPoseInfo(heroName, skinSources);
+  return window.electronAPI.getHeroPoseInfo(heroName, skinSources, pose);
 }
 
 /** Generate a hero's posed 3D still via the bundled vpkmerge `--pose` exporter.
- *  Pass the active skin stack to pose the current equipped look; omit for vanilla. */
+ *  Pass the active skin stack to pose the current equipped look; omit for vanilla.
+ *  Pass `pose` (clip + frame) to bake a specific pose; omit for the default
+ *  menu/idle pose. Each distinct pose caches as its own still. */
 export async function exportHeroPose(
   heroName: string,
   skinSources?: HeroPoseSkinSource[],
-  fallbackSkinMetaKey?: string
+  fallbackSkinMetaKey?: string,
+  pose?: HeroPoseSelection
 ): Promise<HeroPoseInfo> {
-  return window.electronAPI.exportHeroPose(heroName, skinSources, fallbackSkinMetaKey);
+  return window.electronAPI.exportHeroPose(heroName, skinSources, fallbackSkinMetaKey, pose);
 }
 
 /** Whether a hero's RIGGED (animated, skinned) glb exists for the active skin

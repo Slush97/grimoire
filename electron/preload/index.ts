@@ -141,10 +141,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-soul-model-info', key),
     exportSoulModel: (metaKey: string, cacheKey: string) =>
         ipcRenderer.invoke('export-soul-model', metaKey, cacheKey),
-    getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
-        ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
-    exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
-        ipcRenderer.invoke('export-hero-pose', heroName, skinSources, fallbackSkinMetaKey),
+    getHeroPoseInfo: (heroName: string, skinSources?: unknown[], pose?: unknown) =>
+        ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources, pose),
+    exportHeroPose: (
+        heroName: string,
+        skinSources?: unknown[],
+        fallbackSkinMetaKey?: string,
+        pose?: unknown
+    ) => ipcRenderer.invoke('export-hero-pose', heroName, skinSources, fallbackSkinMetaKey, pose),
     getRiggedHeroPose: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-rigged-hero-pose', heroName, skinSources),
     exportRiggedHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>

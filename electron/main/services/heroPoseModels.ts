@@ -121,13 +121,51 @@ export interface HeroPoseSkinSource {
     priority: number;
 }
 
-function poseKey(heroName: string, skinSources: HeroPoseSkinSource[] = []): string {
-    if (skinSources.length === 0) return `${heroName}::vanilla`;
-    if (skinSources.length === 1) return `${heroName}::${skinSources[0].metaKey}`;
-    const stack = skinSources
-        .map((source) => `${source.priority}:${source.metaKey}`)
-        .join('+');
-    return `${heroName}::stack::${stack}`;
+/** Which clip+frame to bake (vpkmerge `--pose <CLIP[@FRAME]>`). Mirrors the
+ *  renderer-side HeroPoseSelection in src/types/portrait.ts; the two are kept
+ *  structurally identical, like HeroPoseSkinSource. An empty/clipless selection
+ *  is the default menu/idle pose. */
+export interface HeroPoseSelection {
+    clip?: string;
+    frame?: number;
+}
+
+/** A trimmed clip + clamped frame, or null for the default (bare `--pose`).
+ *  Centralises the "frame without a clip is meaningless" + "frame 0 == default"
+ *  rules so poseKey() and the export args agree on what counts as non-default. */
+function normalizePose(pose?: HeroPoseSelection): { clip: string; frame: number } | null {
+    const clip = pose?.clip?.trim();
+    if (!clip) return null;
+    const frame = pose?.frame && pose.frame > 0 ? Math.floor(pose.frame) : 0;
+    return { clip, frame };
+}
+
+/** The `--pose ...` token(s) for the export command. `--pose=clip[@frame]` (the
+ *  `=` form) is used for a named clip so clap can't mistake the trailing
+ *  `--require-pose` for the optional value; bare `--pose` keeps the default. */
+function poseExportArgs(pose?: HeroPoseSelection): string[] {
+    const p = normalizePose(pose);
+    if (!p) return ['--pose'];
+    return [`--pose=${p.clip}${p.frame ? `@${p.frame}` : ''}`];
+}
+
+function poseKey(
+    heroName: string,
+    skinSources: HeroPoseSkinSource[] = [],
+    pose?: HeroPoseSelection
+): string {
+    const base =
+        skinSources.length === 0
+            ? `${heroName}::vanilla`
+            : skinSources.length === 1
+              ? `${heroName}::${skinSources[0].metaKey}`
+              : `${heroName}::stack::${skinSources
+                    .map((source) => `${source.priority}:${source.metaKey}`)
+                    .join('+')}`;
+    // Default (clipless) poses keep the legacy key untouched so existing cached
+    // stills and the rigged sibling (which never passes a pose) stay valid.
+    const p = normalizePose(pose);
+    return p ? `${base}::pose::${p.clip}${p.frame ? `@${p.frame}` : ''}` : base;
 }
 
 function modelDir(key: string): string {
@@ -456,9 +494,10 @@ async function infoForKey(key: string): Promise<HeroPoseInfo> {
  *  and storage key. */
 export async function getHeroPoseInfo(
     heroName: string,
-    skinSources?: HeroPoseSkinSource[]
+    skinSources?: HeroPoseSkinSource[],
+    pose?: HeroPoseSelection
 ): Promise<HeroPoseInfo> {
-    return infoForKey(poseKey(heroName, normalizeSkinSources(skinSources)));
+    return infoForKey(poseKey(heroName, normalizeSkinSources(skinSources), pose));
 }
 
 async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {
@@ -508,14 +547,15 @@ export async function exportHeroPose(
     deadlockPath: string,
     heroName: string,
     skinSources?: HeroPoseSkinSource[],
-    fallbackSkinMetaKey?: string
+    fallbackSkinMetaKey?: string,
+    pose?: HeroPoseSelection
 ): Promise<HeroPoseInfo> {
     const normalized = normalizeSkinSources(skinSources);
-    const requestKey = poseKey(heroName, normalized);
+    const requestKey = poseKey(heroName, normalized, pose);
     const existing = inFlightExports.get(requestKey);
     if (existing) return existing;
 
-    const work = runHeroPoseExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey);
+    const work = runHeroPoseExport(deadlockPath, heroName, normalized, fallbackSkinMetaKey, pose);
     inFlightExports.set(requestKey, work);
     try {
         const info = await work;
@@ -532,10 +572,11 @@ async function runHeroPoseExport(
     deadlockPath: string,
     heroName: string,
     skinSources: HeroPoseSkinSource[],
-    fallbackSkinMetaKey?: string
+    fallbackSkinMetaKey?: string,
+    pose?: HeroPoseSelection
 ): Promise<HeroPoseInfo> {
     try {
-        return await runHeroPoseExportForSources(deadlockPath, heroName, skinSources);
+        return await runHeroPoseExportForSources(deadlockPath, heroName, skinSources, pose);
     } catch (err) {
         if (skinSources.length <= 1 || !fallbackSkinMetaKey) throw err;
         const fallback =
@@ -543,14 +584,15 @@ async function runHeroPoseExport(
                 metaKey: fallbackSkinMetaKey,
                 priority: 0,
             };
-        return runHeroPoseExportForSources(deadlockPath, heroName, [fallback]);
+        return runHeroPoseExportForSources(deadlockPath, heroName, [fallback], pose);
     }
 }
 
 async function runHeroPoseExportForSources(
     deadlockPath: string,
     heroName: string,
-    skinSources: HeroPoseSkinSource[]
+    skinSources: HeroPoseSkinSource[],
+    pose?: HeroPoseSelection
 ): Promise<HeroPoseInfo> {
     const selectors = modelSelectorsForHero(heroName);
     if (selectors.length === 0) {
@@ -560,7 +602,7 @@ async function runHeroPoseExportForSources(
     const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
     const source = await resolvePoseSource(deadlockPath, pak01, skinSources);
     try {
-        const key = poseKey(heroName, source.sources);
+        const key = poseKey(heroName, source.sources, pose);
         const dir = modelDir(key);
         await fs.mkdir(dir, { recursive: true });
         const out = modelFile(key);
@@ -576,7 +618,9 @@ async function runHeroPoseExportForSources(
                     ...selector,
                     '--base',
                     pak01,
-                    '--pose',
+                    // Bare `--pose` for the default menu/idle pose, or
+                    // `--pose=clip[@frame]` when a specific pose is requested.
+                    ...poseExportArgs(pose),
                     // Refuse to bake a static bind/T-pose: a clipless WIP hero
                     // (Apollo, Billy, Celeste, Mina, Paige, Rem) errors here and the
                     // Locker falls back to the 2D portrait instead of an unposed model.

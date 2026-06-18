@@ -59,6 +59,21 @@ export interface HeroPoseSkinSource {
 }
 
 /**
+ * Which animation frame to bake into a hero's static pose still. Maps directly
+ * onto vpkmerge `model export --pose <CLIP[@FRAME]>`:
+ *   - undefined / no clip          -> bare `--pose` (the model's default menu/idle pose)
+ *   - { clip: 'ui_hero_pose' }      -> `--pose=ui_hero_pose` (frame 0)
+ *   - { clip: 'idle_loadout', frame: 5 } -> `--pose=idle_loadout@5`
+ * A `frame` without a `clip` is ignored (a frame index is meaningless without a
+ * named clip). Omitting the selection entirely is the default and keeps the pose
+ * cache key byte-identical to the legacy default-pose stills.
+ */
+export interface HeroPoseSelection {
+  clip?: string;
+  frame?: number;
+}
+
+/**
  * Whether a hero's posed 3D still exists in the user's library (for the given
  * active skin stack), its mtime (to cache-bust the `grimoire-hero:` URL after a
  * re-export), and the storage `key` the renderer builds that URL from. The key
