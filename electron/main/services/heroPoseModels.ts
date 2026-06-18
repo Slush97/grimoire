@@ -27,7 +27,7 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import { app, protocol, net } from 'electron';
-import { runVpkmerge, verifyVpkOutput } from './modMerger';
+import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { codenamesForHero } from './heroPortraits';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
@@ -498,6 +498,73 @@ export async function getHeroPoseInfo(
     pose?: HeroPoseSelection
 ): Promise<HeroPoseInfo> {
     return infoForKey(poseKey(heroName, normalizeSkinSources(skinSources), pose));
+}
+
+/** One animation clip a hero's body model carries, as reported by `vpkmerge
+ *  model clips --json`. Structurally mirrors the renderer's HeroPoseClip in
+ *  src/types/portrait.ts (kept identical, like HeroPoseSkinSource). The `name`
+ *  is usable verbatim as a `--pose <name>` clip; `frameCount` bounds `@N`. */
+export interface HeroPoseClip {
+    name: string;
+    frameCount: number;
+    fps: number;
+    durationSeconds: number;
+    looping: boolean;
+    /** True for the model's default/menu pose clip. */
+    default: boolean;
+}
+
+/**
+ * List the animation clips the hero's body model carries, for the pose-authoring
+ * clip picker. Uses the EXACT same model selection + skin-stack source as
+ * exportHeroPose (pinned `--entry` for reworked heroes else `--hero`, the same
+ * merged skin VPK, `--base pak01`), so every listed clip name is bakeable
+ * verbatim and bounds its frame by `frameCount`. A clipless WIP hero (or an
+ * unresolved model) yields an empty list rather than throwing.
+ */
+export async function getHeroPoseClips(
+    deadlockPath: string,
+    heroName: string,
+    skinSources?: HeroPoseSkinSource[]
+): Promise<HeroPoseClip[]> {
+    const selectors = modelSelectorsForHero(heroName);
+    if (selectors.length === 0) return [];
+
+    const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+    const source = await resolvePoseSource(deadlockPath, pak01, normalizeSkinSources(skinSources));
+    try {
+        let lastError: unknown;
+        for (const selector of selectors) {
+            try {
+                const stdout = await runVpkmergeStdout(
+                    ['model', 'clips', '--vpk', source.vpk, ...selector, '--base', pak01, '--json'],
+                    60000
+                );
+                const parsed = JSON.parse(stdout) as HeroPoseClip[];
+                return parsed.map((c) => ({
+                    name: c.name,
+                    frameCount: c.frameCount,
+                    fps: c.fps,
+                    durationSeconds: c.durationSeconds,
+                    looping: c.looping,
+                    default: c.default,
+                }));
+            } catch (err) {
+                lastError = err;
+            }
+        }
+        // Every selector failed to resolve a model (vs. resolving to a clipless
+        // one, which returns []). Surface nothing rather than throwing: the
+        // picker just shows the default pose.
+        if (lastError) {
+            console.warn(`[heroPoseModels] clip listing failed for "${heroName}": ${String(lastError)}`);
+        }
+        return [];
+    } finally {
+        if (source.tempDir) {
+            await fs.rm(source.tempDir, { recursive: true, force: true });
+        }
+    }
 }
 
 async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {

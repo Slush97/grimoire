@@ -3,6 +3,7 @@ import type {
   HeroPortrait,
   CustomCardSlot,
   HeroPoseInfo,
+  HeroPoseClip,
   HeroPoseSkinSource,
   HeroPoseSelection,
   HeroBackdrop,
@@ -244,6 +245,17 @@ export async function exportHeroPose(
   pose?: HeroPoseSelection
 ): Promise<HeroPoseInfo> {
   return window.electronAPI.exportHeroPose(heroName, skinSources, fallbackSkinMetaKey, pose);
+}
+
+/** List the bakeable pose clips a hero's body model carries (name + frame
+ *  count + timing), for the pose-authoring clip-cycle arrows. Uses the same
+ *  model selection as exportHeroPose, so each name is bakeable verbatim. A
+ *  clipless WIP hero returns []. */
+export async function getHeroPoseClips(
+  heroName: string,
+  skinSources?: HeroPoseSkinSource[]
+): Promise<HeroPoseClip[]> {
+  return window.electronAPI.getHeroPoseClips(heroName, skinSources);
 }
 
 /** Whether a hero's RIGGED (animated, skinned) glb exists for the active skin

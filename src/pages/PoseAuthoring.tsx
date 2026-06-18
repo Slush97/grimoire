@@ -28,9 +28,9 @@ import {
   useState,
 } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Camera, Check, Loader2, RotateCcw, X } from 'lucide-react';
+import { Camera, Check, ChevronLeft, ChevronRight, Loader2, RotateCcw, X } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
-import { getHeroPoseAuthoring, writeHeroPoseAuthoring } from '../lib/api';
+import { getHeroPoseAuthoring, getHeroPoseClips, writeHeroPoseAuthoring } from '../lib/api';
 import {
   HERO_NAMES_SORTED,
   groupModsByCategory,
@@ -46,6 +46,7 @@ import type {
   HeroCameraFraming,
   HeroPoseAuthoringEntry,
   HeroPoseAuthoringMap,
+  HeroPoseClip,
   HeroPoseSelection,
   HeroPoseSkinSource,
 } from '../types/portrait';
@@ -211,6 +212,51 @@ function HeroPoseEditor({
   const [clip, setClip] = useState<string>(initialEntry?.pose?.clip ?? '');
   const [frame, setFrame] = useState<number>(initialEntry?.pose?.frame ?? 0);
 
+  // The bakeable clips this hero's model carries (for the cycle arrows). Fetched
+  // per hero + skin stack via the same model selector the export uses, so every
+  // name is bakeable verbatim. A clipless WIP hero yields [] (Default only).
+  const [clips, setClips] = useState<HeroPoseClip[]>([]);
+  const sourceKey = useMemo(
+    () => skinSources.map((s) => `${s.priority}:${s.metaKey}`).join('|') || 'vanilla',
+    [skinSources]
+  );
+  useEffect(() => {
+    let cancelled = false;
+    setClips([]);
+    void getHeroPoseClips(heroName, skinSources)
+      .then((c) => {
+        if (!cancelled) setClips(c);
+      })
+      .catch(() => {
+        if (!cancelled) setClips([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [heroName, sourceKey]);
+
+  // Cycle order: the default menu pose (empty clip) first, then every model clip
+  // in vpkmerge's order. The arrows step through this; the free-text field below
+  // stays in sync (it edits `clip` directly).
+  const poseOptions = useMemo(
+    () => ['', ...clips.map((c) => c.name)],
+    [clips]
+  );
+  const currentPoseIndex = useMemo(() => {
+    const i = poseOptions.indexOf(clip.trim());
+    return i >= 0 ? i : 0;
+  }, [poseOptions, clip]);
+  const cyclePose = useCallback(
+    (delta: number) => {
+      if (poseOptions.length <= 1) return;
+      const next = (currentPoseIndex + delta + poseOptions.length) % poseOptions.length;
+      setClip(poseOptions[next]);
+      setFrame(0);
+    },
+    [poseOptions, currentPoseIndex]
+  );
+
   const [inspect, setInspect] = useState<boolean>(false);
   const [commitState, setCommitState] = useState<CommitState>('idle');
   const [commitError, setCommitError] = useState<string>('');
@@ -273,7 +319,7 @@ function HeroPoseEditor({
     <div className="grid flex-1 grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_360px]">
       {/* Live preview pane */}
       <Card title={<Tx k="locker.poseAuthor.previewTitle" fallback="Live preview" />} icon={Camera}>
-        <div className="relative aspect-[3/4] w-full overflow-hidden rounded-lg bg-black/40">
+        <div className="relative mx-auto aspect-[3/4] h-[68vh] max-h-[680px] max-w-full overflow-hidden rounded-lg bg-black/40">
           <Suspense
             fallback={
               <div className="absolute inset-0 flex items-center justify-center">
@@ -292,6 +338,33 @@ function HeroPoseEditor({
               onInspectCommit={handleInspectCommit}
             />
           </Suspense>
+
+          {/* Pose-cycle arrows. Disabled in Inspect mode (free orbit owns the
+              pointer) and when the model carries no clips (Default only). */}
+          <button
+            type="button"
+            onClick={() => cyclePose(-1)}
+            disabled={inspect || poseOptions.length <= 1}
+            aria-label={t('locker.poseAuthor.prevPose')}
+            title={t('locker.poseAuthor.prevPose')}
+            className="absolute left-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white/90 backdrop-blur transition hover:bg-black/70 disabled:pointer-events-none disabled:opacity-25"
+          >
+            <ChevronLeft className="h-5 w-5" />
+          </button>
+          <button
+            type="button"
+            onClick={() => cyclePose(1)}
+            disabled={inspect || poseOptions.length <= 1}
+            aria-label={t('locker.poseAuthor.nextPose')}
+            title={t('locker.poseAuthor.nextPose')}
+            className="absolute right-2 top-1/2 z-20 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white/90 backdrop-blur transition hover:bg-black/70 disabled:pointer-events-none disabled:opacity-25"
+          >
+            <ChevronRight className="h-5 w-5" />
+          </button>
+          <div className="absolute bottom-2 left-1/2 z-20 max-w-[90%] -translate-x-1/2 truncate rounded-full bg-black/55 px-3 py-1 text-center text-[11px] text-white/90 backdrop-blur">
+            {currentPoseIndex === 0 ? t('locker.poseAuthor.defaultPose') : poseOptions[currentPoseIndex]}
+            {poseOptions.length > 1 ? ` (${currentPoseIndex + 1}/${poseOptions.length})` : ''}
+          </div>
         </div>
         <p className="mt-3 text-xs text-text-secondary">
           <Tx

@@ -74,6 +74,22 @@ export interface HeroPoseSelection {
 }
 
 /**
+ * One animation clip a hero's body model carries, from `vpkmerge model clips`.
+ * Surfaced to the pose-authoring tool's clip-cycle arrows. The `name` is usable
+ * verbatim as a HeroPoseSelection.clip; `frameCount` bounds the frame slider.
+ * Structurally identical to the main-process HeroPoseClip (kept in sync).
+ */
+export interface HeroPoseClip {
+  name: string;
+  frameCount: number;
+  fps: number;
+  durationSeconds: number;
+  looping: boolean;
+  /** True for the model's default/menu pose clip. */
+  default: boolean;
+}
+
+/**
  * A hand-authored camera framing for a hero's baked 3D card snapshot. Spherical
  * around the (normalized, origin-centered) model: `yawDeg`/`pitchDeg` orbit,
  * `distance` is the camera radius (the live viewer's default is 3.2), `target`

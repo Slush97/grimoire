@@ -11,4 +11,17 @@ import type { HeroPoseAuthoringMap } from '../../../src/types/portrait';
  * menu/idle pose + DEFAULT_CAMERA_FRAMING). Shipping is just committing this
  * file; the loader bundles it and overlays any in-session dev edits.
  */
-export const HERO_POSE_AUTHORING: HeroPoseAuthoringMap = {};
+export const HERO_POSE_AUTHORING: HeroPoseAuthoringMap = {
+    "Abrams": {
+        "camera": {
+            "yawDeg": -15.05,
+            "pitchDeg": -0.56,
+            "distance": 2,
+            "target": [
+                -0.05,
+                0.35,
+                0
+            ]
+        }
+    }
+};

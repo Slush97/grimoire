@@ -22,9 +22,11 @@ import {
 import {
     getHeroPoseInfo,
     exportHeroPose,
+    getHeroPoseClips,
     getRiggedHeroPose,
     exportRiggedHeroPose,
     type HeroPoseInfo,
+    type HeroPoseClip,
     type HeroPoseSkinSource,
     type HeroPoseSelection,
 } from '../services/heroPoseModels';
@@ -181,6 +183,15 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
         return exportHeroPose(deadlockPath, heroName, skinSources, fallbackSkinMetaKey, pose);
+    }
+);
+
+ipcMain.handle(
+    'get-hero-pose-clips',
+    async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroPoseClip[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) return [];
+        return getHeroPoseClips(deadlockPath, heroName, skinSources);
     }
 );
 
