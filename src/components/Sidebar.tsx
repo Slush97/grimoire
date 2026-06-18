@@ -26,6 +26,7 @@ import {
   VolumeX,
   Image,
   ImageOff,
+  Camera,
 } from 'lucide-react';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
 import {
@@ -500,7 +501,7 @@ export default function Sidebar() {
       labelKey: string;
       label: string;
       tooltip: string;
-      experimental?: 'crosshair' | 'stats' | 'social' | 'servers';
+      experimental?: 'crosshair' | 'stats' | 'social' | 'servers' | 'poseAuthoring';
       tone?: 'test';
       badge?: number;
       badgeTone?: BadgeTone;
@@ -527,6 +528,9 @@ export default function Sidebar() {
       { to: '/stats', icon: Activity, labelKey: 'nav.stats', label: t('nav.stats'), tooltip: t('sidebar.tooltip.stats'), experimental: 'stats' },
       { to: '/conflicts', icon: Swords, labelKey: 'nav.conflicts', label: t('nav.conflicts'), tooltip: t('sidebar.tooltip.conflicts'), badge: conflictCount, badgeTone: 'warning' },
       { to: '/profiles', icon: BookMarked, labelKey: 'nav.profiles', label: t('nav.profiles'), tooltip: t('sidebar.tooltip.profiles') },
+      // Dev-only pose-authoring tool. Gated on the experimental flag, which is
+      // only togglable under Vite dev (the config writeback is dev-only).
+      { to: '/pose-authoring', icon: Camera, labelKey: 'locker.poseAuthor.navLabel', label: t('locker.poseAuthor.navLabel'), tooltip: t('locker.poseAuthor.navTooltip'), experimental: 'poseAuthoring' },
     ];
 
     return items.filter((item) => {
@@ -534,9 +538,10 @@ export default function Sidebar() {
       if (item.experimental === 'crosshair') return settings?.experimentalCrosshair;
       if (item.experimental === 'social') return settings?.experimentalSocial;
       if (item.experimental === 'servers') return settings?.experimentalDeadworksServers;
+      if (item.experimental === 'poseAuthoring') return import.meta.env.DEV && settings?.experimentalPoseAuthoring;
       return true;
     });
-  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, conflictCount, discoverNotificationCount, installedCount]);
+  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, settings?.experimentalPoseAuthoring, conflictCount, discoverNotificationCount, installedCount]);
 
   // Optimistic nav highlight. The router wraps navigation in startTransition,
   // so location.pathname (and any highlight derived from it) only updates

@@ -12,6 +12,7 @@ import Settings from './pages/Settings';
 import Crosshair from './pages/Crosshair';
 import Autoexec from './pages/Autoexec';
 import Stats from './pages/Stats';
+import PoseAuthoring from './pages/PoseAuthoring';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { useSocialStore } from './stores/socialStore';
 import { useAppStore } from './stores/appStore';
@@ -79,6 +80,11 @@ export default function App() {
             <Route path="crosshair" element={<Crosshair />} />
             <Route path="autoexec" element={<Autoexec />} />
             <Route path="stats" element={<Stats />} />
+            {/* Dev-only pose-authoring tool (gated in Settings + Sidebar by
+                experimentalPoseAuthoring, which is only surfaced under Vite dev).
+                The route stays registered unconditionally; reaching it requires
+                the gated sidebar entry. */}
+            <Route path="pose-authoring" element={<PoseAuthoring />} />
             <Route path="settings" element={<Settings />} />
           </Route>
         </Routes>

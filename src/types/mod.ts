@@ -822,6 +822,14 @@ export interface AppSettings {
    *  to the official Deadworks registry (api.deadworks.net) and can be repointed
    *  via settings.json at any deadworks-shaped relay (e.g. a future grimoire-relay). */
   deadworksRelayUrl?: string;
+  /** Dev-only Locker pose-authoring tool: a gated panel for dialing in the
+   *  per-hero camera framing + pose that the 3D card-snapshot bake reads. The
+   *  config writeback (writeHeroPoseAuthoring) is refused by the main process in
+   *  a packaged build, so the Settings toggle that flips this is only surfaced
+   *  when the renderer runs under Vite dev (import.meta.env.DEV). Optional, like
+   *  the other late-added experimental flags, so the main-process DEFAULT_SETTINGS
+   *  does not need to enumerate it. */
+  experimentalPoseAuthoring?: boolean;
   /** OptimizationLock performance config: apply Sqooky's community fps preset
    *  onto gameinfo.gi from a Settings card. Applied-state lives in a sidecar
    *  file next to gameinfo.gi (main-process owned), not in settings, so a
