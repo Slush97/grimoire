@@ -74,6 +74,37 @@ export interface HeroPoseSelection {
 }
 
 /**
+ * A hand-authored camera framing for a hero's baked 3D card snapshot. Spherical
+ * around the (normalized, origin-centered) model: `yawDeg`/`pitchDeg` orbit,
+ * `distance` is the camera radius (the live viewer's default is 3.2), `target`
+ * is the look-at point offset in normalized model space. The dev pose-authoring
+ * tool writes these; the bake reads them, falling back to DEFAULT_CAMERA_FRAMING
+ * (see src/lib/heroPoseScene.ts) when a hero has none.
+ */
+export interface HeroCameraFraming {
+  yawDeg: number;
+  pitchDeg: number;
+  distance: number;
+  target: [number, number, number];
+}
+
+/**
+ * Per-hero authored settings for the baked card snapshot: which pose to bake,
+ * how to frame the camera, and any extra spin of the model itself. Every field
+ * is optional; an absent field falls back to the pipeline default (default
+ * menu/idle pose, DEFAULT_CAMERA_FRAMING, no extra model spin).
+ */
+export interface HeroPoseAuthoringEntry {
+  pose?: HeroPoseSelection;
+  camera?: HeroCameraFraming;
+  /** Extra rotation of the model about its vertical axis, degrees. */
+  modelYawDeg?: number;
+}
+
+/** Authored settings keyed by hero DISPLAY name (e.g. "Mo & Krill"). */
+export type HeroPoseAuthoringMap = Record<string, HeroPoseAuthoringEntry>;
+
+/**
  * A hero's panorama card art, resolved for use as the backdrop behind a baked
  * 3D card snapshot. Comes from the active skin stack's own `*_card` art when a
  * mod ships it, else the base game's vanilla card art. Decoded to a PNG data

@@ -45,7 +45,7 @@ import type {
     GameBananaCommentsResponse,
     GameBananaArtistLink,
 } from './gamebanana';
-import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource, HeroPoseSelection, HeroBackdrop } from './portrait';
+import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource, HeroPoseSelection, HeroBackdrop, HeroPoseAuthoringEntry, HeroPoseAuthoringMap } from './portrait';
 import type {
     DeadworksServer,
     DeadworksContentItem,
@@ -472,6 +472,11 @@ export interface ElectronAPI {
         heroName: string,
         skinSources?: HeroPoseSkinSource[]
     ) => Promise<HeroBackdrop | null>;
+    getHeroPoseAuthoring: () => Promise<HeroPoseAuthoringMap>;
+    writeHeroPoseAuthoring: (
+        heroName: string,
+        entry: HeroPoseAuthoringEntry
+    ) => Promise<HeroPoseAuthoringMap>;
     getHeroAbilitySlots: (heroName: string) => Promise<HeroAbilitySlot[]>;
     applyHeroCard: (heroName: string, sourceFileName: string) => Promise<ApplyHeroCardResult>;
     revertHeroCard: (heroName: string) => Promise<ApplyHeroCardResult>;

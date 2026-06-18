@@ -120,6 +120,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-hero-portraits', heroName),
     getHeroPanoramaBackdrop: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-panorama-backdrop', heroName, skinSources),
+    getHeroPoseAuthoring: () => ipcRenderer.invoke('get-hero-pose-authoring'),
+    writeHeroPoseAuthoring: (heroName: string, entry: unknown) =>
+        ipcRenderer.invoke('write-hero-pose-authoring', heroName, entry),
     getHeroAbilitySlots: (heroName: string) =>
         ipcRenderer.invoke('get-hero-ability-slots', heroName),
     applyHeroCard: (heroName: string, sourceFileName: string) =>

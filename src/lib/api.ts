@@ -6,6 +6,8 @@ import type {
   HeroPoseSkinSource,
   HeroPoseSelection,
   HeroBackdrop,
+  HeroPoseAuthoringEntry,
+  HeroPoseAuthoringMap,
   SoulModelInfo,
 } from '../types/portrait';
 import type {
@@ -141,6 +143,21 @@ export async function getHeroPanoramaBackdrop(
   skinSources?: HeroPoseSkinSource[]
 ): Promise<HeroBackdrop | null> {
   return window.electronAPI.getHeroPanoramaBackdrop(heroName, skinSources);
+}
+
+/** All per-hero authored pose/camera framings for baked card snapshots
+ *  (committed defaults + any in-session dev edits). */
+export async function getHeroPoseAuthoring(): Promise<HeroPoseAuthoringMap> {
+  return window.electronAPI.getHeroPoseAuthoring();
+}
+
+/** Persist a hero's authored framing (DEV ONLY: rejects in a packaged build).
+ *  Returns the updated full map. */
+export async function writeHeroPoseAuthoring(
+  heroName: string,
+  entry: HeroPoseAuthoringEntry
+): Promise<HeroPoseAuthoringMap> {
+  return window.electronAPI.writeHeroPoseAuthoring(heroName, entry);
 }
 
 export async function getHeroAbilitySlots(heroName: string): Promise<HeroAbilitySlot[]> {

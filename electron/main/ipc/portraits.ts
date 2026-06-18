@@ -1,6 +1,10 @@
 import { ipcMain } from 'electron';
 import { getActiveDeadlockPath } from '../services/settings';
 import { getHeroPortraits, getHeroPanoramaBackdrop } from '../services/heroPortraits';
+import {
+    getHeroPoseAuthoring,
+    writeHeroPoseAuthoringEntry,
+} from '../services/heroPoseAuthoring';
 import { applyHeroCard, revertHeroCard, getActiveHeroCard } from '../services/heroCards';
 import {
     getCustomCardSlots,
@@ -24,7 +28,12 @@ import {
     type HeroPoseSkinSource,
     type HeroPoseSelection,
 } from '../services/heroPoseModels';
-import type { HeroPortrait, HeroBackdrop } from '../../../src/types/portrait';
+import type {
+    HeroPortrait,
+    HeroBackdrop,
+    HeroPoseAuthoringEntry,
+    HeroPoseAuthoringMap,
+} from '../../../src/types/portrait';
 import type { ApplyHeroCardResult } from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as ipc/mods.ts). */
@@ -47,6 +56,20 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) return null;
         return getHeroPanoramaBackdrop(deadlockPath, heroName, skinSources);
+    }
+);
+
+// Per-hero pose/camera authoring for baked card snapshots. Read is available
+// everywhere (the bake consults it); write is dev-only (the service throws in a
+// packaged build) and regenerates the committed data module.
+ipcMain.handle('get-hero-pose-authoring', (): HeroPoseAuthoringMap => {
+    return getHeroPoseAuthoring();
+});
+
+ipcMain.handle(
+    'write-hero-pose-authoring',
+    (_, heroName: string, entry: HeroPoseAuthoringEntry): Promise<HeroPoseAuthoringMap> => {
+        return writeHeroPoseAuthoringEntry(heroName, entry);
     }
 );
 
