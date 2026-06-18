@@ -3235,28 +3235,6 @@ export default function Browse() {
               );
             })()}
           </div>
-
-          {section === 'Sound' && (
-            <div className="mt-3 inline-flex max-w-full items-center gap-3 rounded-lg border border-border bg-bg-secondary/70 px-3 py-2">
-              <div className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-text-primary">
-                <Volume2 className="h-4 w-4 flex-shrink-0 text-text-secondary" />
-                <span>{t('browse.previewVolume')}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(soundVolume * 100)}
-                onChange={(e) => setSoundVolume(parseInt(e.target.value, 10) / 100)}
-                className="h-1.5 w-40 cursor-pointer accent-accent sm:w-48"
-                title={`Volume: ${Math.round(soundVolume * 100)}%`}
-                aria-label={t('browse.previewVolume')}
-              />
-              <span className="w-9 text-right text-xs tabular-nums text-text-secondary">
-                {Math.round(soundVolume * 100)}%
-              </span>
-            </div>
-          )}
         </form>
         )}
       </div>
