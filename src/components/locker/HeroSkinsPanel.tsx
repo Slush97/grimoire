@@ -839,6 +839,8 @@ export default function HeroSkinsPanel({
         <LockerModImagePicker
           mod={pickerGroup.primary}
           skinKey={pickerGroup.key}
+          heroName={heroName ?? pickerGroup.primary.lockerHero ?? ''}
+          cardImageDataUrl={lockerModImages[pickerGroup.key]}
           onClose={() => setPickerGroup(null)}
         />
       )}

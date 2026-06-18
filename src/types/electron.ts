@@ -574,6 +574,33 @@ export interface ElectronAPI {
     getLockerModImages: () => Promise<Record<string, string>>;
     setLockerModImage: (skinKey: string, source: string) => Promise<string>;
     removeLockerModImage: (skinKey: string) => Promise<void>;
+    /** Per-skin display flags for the Locker image override. Map is
+     *  { skinKey -> true } for skins whose hero name label should be hidden
+     *  (the art already shows the name). Cleared when the image is removed. */
+    getLockerModImageFlags: () => Promise<Record<string, boolean>>;
+    setLockerModImageHideName: (skinKey: string, hide: boolean) => Promise<void>;
+    /** Fetch a remote gallery image as a data URL (no storage) to seed the crop
+     *  editor; a renderer canvas can't read pixels from a cross-origin image. */
+    fetchLockerImageDataUrl: (url: string) => Promise<string>;
+    /** Issue #208: per-skin hero-detail backdrop images (framed to 16:9). Same
+     *  shape as the card images; the backdrop falls back to the card image when
+     *  a skin has no background override. */
+    getLockerModBackgrounds: () => Promise<Record<string, string>>;
+    setLockerModBackground: (skinKey: string, source: string) => Promise<string>;
+    removeLockerModBackground: (skinKey: string) => Promise<void>;
+    /** Per-skin backdrop hide-name flags (sparse { skinKey -> true }); hides the
+     *  hero name logo in the focus view when the backdrop art already shows it. */
+    getLockerModBackgroundFlags: () => Promise<Record<string, boolean>>;
+    setLockerModBackgroundHideName: (skinKey: string, hide: boolean) => Promise<void>;
+    /** Per-skin grid thumbnail images (framed 3:4) for the main Locker hero-grid
+     *  card. Independent of the skin-panel card image; the grid card falls back
+     *  to the card image, then the hero render, when a skin has no thumbnail. */
+    getLockerModThumbnails: () => Promise<Record<string, string>>;
+    setLockerModThumbnail: (skinKey: string, source: string) => Promise<string>;
+    removeLockerModThumbnail: (skinKey: string) => Promise<void>;
+    /** Per-skin grid-thumbnail hide-name flags (sparse { skinKey -> true }). */
+    getLockerModThumbnailFlags: () => Promise<Record<string, boolean>>;
+    setLockerModThumbnailHideName: (skinKey: string, hide: boolean) => Promise<void>;
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;

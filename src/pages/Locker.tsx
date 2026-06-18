@@ -132,7 +132,7 @@ function RainbowPaletteIcon({ className = '', title }: { className?: string; tit
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, loadLockerModImages } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -360,9 +360,27 @@ export default function Locker() {
   const heroCardImage = useCallback(
     (heroId: number): string | undefined => {
       const active = activeLockerSkin(heroMods.map.get(heroId) ?? []);
-      return active ? lockerModImages[getLockerSkinKey(active)] : undefined;
+      if (!active) return undefined;
+      // The grid thumbnail is an independent override; fall back to the card
+      // image when a skin has no thumbnail of its own (issue #208).
+      const key = getLockerSkinKey(active);
+      return lockerModThumbnails[key] ?? lockerModImages[key];
     },
-    [heroMods, lockerModImages]
+    [heroMods, lockerModThumbnails, lockerModImages]
+  );
+  // Whether the active skin's image already shows the hero name, so the card's
+  // own name label should be hidden (issue #208). Keyed to the active skin, and
+  // to whichever surface is actually showing (thumbnail wins over card).
+  const heroHideName = useCallback(
+    (heroId: number): boolean => {
+      const active = activeLockerSkin(heroMods.map.get(heroId) ?? []);
+      if (!active) return false;
+      const key = getLockerSkinKey(active);
+      return Boolean(
+        lockerModThumbnails[key] ? lockerThumbHideHeroName[key] : lockerHideHeroName[key]
+      );
+    },
+    [heroMods, lockerModThumbnails, lockerThumbHideHeroName, lockerHideHeroName]
   );
   const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
   const installedSoundCount = useMemo(() => countLockerSkins(lockerSounds), [lockerSounds]);
@@ -750,6 +768,7 @@ export default function Locker() {
               soundCount={countLockerSkins(heroSounds.map.get(hero.id) ?? [])}
               hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
               cardImage={heroCardImage(hero.id)}
+              hideHeroName={heroHideName(hero.id)}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onNavigate={() => goToHero(hero)}
               onBrowse={() => openHeroInBrowse(hero)}
@@ -1014,6 +1033,9 @@ interface HeroGalleryCardProps {
   /** Issue #208: the active skin's chosen Locker image (data URL), shown as the
    *  card backdrop in place of the hero render. Undefined = use the render. */
   cardImage?: string;
+  /** Issue #208: hide the hero name label because the active skin's image
+   *  already shows the hero name. Only meaningful when cardImage is set. */
+  hideHeroName?: boolean;
   isFavorite: boolean;
   onNavigate: () => void;
   onBrowse: () => void;
@@ -1565,6 +1587,7 @@ function HeroGalleryCard({
   soundCount,
   hasAbilityRecolor,
   cardImage,
+  hideHeroName,
   isFavorite,
   onNavigate,
   onBrowse,
@@ -1725,24 +1748,28 @@ function HeroGalleryCard({
           )}
         </div>
       )}
-      <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex flex-col items-end text-right">
-        {nameFailed ? (
-          <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
-        ) : (
-          <div className="relative w-[70%] h-6 sm:h-7 ml-auto">
-            <img
-              src={namePath}
-              alt={hero.name}
-              className="absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 scale-100 transition-transform duration-300"
-              style={{ transform: 'translateZ(0)' }}
-              decoding="sync"
-              loading="eager"
-              onLoad={() => rememberLockerImageLoaded(namePath)}
-              onError={() => setNameFailed(true)}
-            />
-          </div>
-        )}
-      </div>
+      {/* Issue #208: hide the name label when the active skin's image already
+          shows the hero name. Without an override image the label always shows. */}
+      {!(hideHeroName && cardImage) && (
+        <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex flex-col items-end text-right">
+          {nameFailed ? (
+            <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
+          ) : (
+            <div className="relative w-[70%] h-6 sm:h-7 ml-auto">
+              <img
+                src={namePath}
+                alt={hero.name}
+                className="absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 scale-100 transition-transform duration-300"
+                style={{ transform: 'translateZ(0)' }}
+                decoding="sync"
+                loading="eager"
+                onLoad={() => rememberLockerImageLoaded(namePath)}
+                onError={() => setNameFailed(true)}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

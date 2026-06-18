@@ -437,6 +437,58 @@ export async function removeLockerModImage(skinKey: string): Promise<void> {
   return window.electronAPI.removeLockerModImage(skinKey);
 }
 
+export async function getLockerModImageFlags(): Promise<Record<string, boolean>> {
+  return window.electronAPI.getLockerModImageFlags();
+}
+
+export async function setLockerModImageHideName(skinKey: string, hide: boolean): Promise<void> {
+  return window.electronAPI.setLockerModImageHideName(skinKey, hide);
+}
+
+export async function fetchLockerImageDataUrl(url: string): Promise<string> {
+  return window.electronAPI.fetchLockerImageDataUrl(url);
+}
+
+export async function getLockerModBackgrounds(): Promise<Record<string, string>> {
+  return window.electronAPI.getLockerModBackgrounds();
+}
+
+export async function setLockerModBackground(skinKey: string, source: string): Promise<string> {
+  return window.electronAPI.setLockerModBackground(skinKey, source);
+}
+
+export async function removeLockerModBackground(skinKey: string): Promise<void> {
+  return window.electronAPI.removeLockerModBackground(skinKey);
+}
+
+export async function getLockerModBackgroundFlags(): Promise<Record<string, boolean>> {
+  return window.electronAPI.getLockerModBackgroundFlags();
+}
+
+export async function setLockerModBackgroundHideName(skinKey: string, hide: boolean): Promise<void> {
+  return window.electronAPI.setLockerModBackgroundHideName(skinKey, hide);
+}
+
+export async function getLockerModThumbnails(): Promise<Record<string, string>> {
+  return window.electronAPI.getLockerModThumbnails();
+}
+
+export async function setLockerModThumbnail(skinKey: string, source: string): Promise<string> {
+  return window.electronAPI.setLockerModThumbnail(skinKey, source);
+}
+
+export async function removeLockerModThumbnail(skinKey: string): Promise<void> {
+  return window.electronAPI.removeLockerModThumbnail(skinKey);
+}
+
+export async function getLockerModThumbnailFlags(): Promise<Record<string, boolean>> {
+  return window.electronAPI.getLockerModThumbnailFlags();
+}
+
+export async function setLockerModThumbnailHideName(skinKey: string, hide: boolean): Promise<void> {
+  return window.electronAPI.setLockerModThumbnailHideName(skinKey, hide);
+}
+
 export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
   return window.electronAPI.mergeMods(args);
 }

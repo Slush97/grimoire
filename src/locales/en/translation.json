@@ -953,6 +953,10 @@
     "modImage": {
       "set": "Set Locker image for {{name}}",
       "title": "Choose a Locker image",
+      "tabCard": "Locker image",
+      "tabThumbnail": "Card thumbnail",
+      "tabBackground": "Background",
+      "cropEmptyHint": "Pick an image to frame it here.",
       "dialogTitle": "Choose a custom image",
       "uploadCustom": "Upload a custom image",
       "fromMod": "From this mod",
@@ -960,7 +964,11 @@
       "galleryError": "Could not load this mod's images.",
       "applyError": "Could not set the image. Please try again.",
       "noGallery": "No images available. Upload a custom one above.",
-      "reset": "Reset to default"
+      "reset": "Reset to default",
+      "useImage": "Use image",
+      "useLockerImage": "Use Locker image",
+      "hideHeroName": "Hide hero name label",
+      "hideHeroNameHint": "Turn on when the image already shows the hero's name."
     },
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
@@ -1315,6 +1323,7 @@
       "downloadASkinForThisHero": "Download a skin for this hero to manage it here.",
       "hide3dModel": "Hide 3D model",
       "showLive3dModel": "Show live 3D model",
+      "lockerImages": "Locker images",
       "back": "Back",
       "favorite": "Favorite",
       "lockerSections": "Locker sections",

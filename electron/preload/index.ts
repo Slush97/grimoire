@@ -231,6 +231,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-locker-mod-image', skinKey, source),
     removeLockerModImage: (skinKey: string) =>
         ipcRenderer.invoke('remove-locker-mod-image', skinKey),
+    getLockerModImageFlags: () => ipcRenderer.invoke('get-locker-mod-image-flags'),
+    setLockerModImageHideName: (skinKey: string, hide: boolean) =>
+        ipcRenderer.invoke('set-locker-mod-image-hide-name', skinKey, hide),
+    fetchLockerImageDataUrl: (url: string) =>
+        ipcRenderer.invoke('fetch-locker-image-data-url', url),
+    getLockerModBackgrounds: () => ipcRenderer.invoke('get-locker-mod-backgrounds'),
+    setLockerModBackground: (skinKey: string, source: string) =>
+        ipcRenderer.invoke('set-locker-mod-background', skinKey, source),
+    removeLockerModBackground: (skinKey: string) =>
+        ipcRenderer.invoke('remove-locker-mod-background', skinKey),
+    getLockerModBackgroundFlags: () => ipcRenderer.invoke('get-locker-mod-background-flags'),
+    setLockerModBackgroundHideName: (skinKey: string, hide: boolean) =>
+        ipcRenderer.invoke('set-locker-mod-background-hide-name', skinKey, hide),
+    getLockerModThumbnails: () => ipcRenderer.invoke('get-locker-mod-thumbnails'),
+    setLockerModThumbnail: (skinKey: string, source: string) =>
+        ipcRenderer.invoke('set-locker-mod-thumbnail', skinKey, source),
+    removeLockerModThumbnail: (skinKey: string) =>
+        ipcRenderer.invoke('remove-locker-mod-thumbnail', skinKey),
+    getLockerModThumbnailFlags: () => ipcRenderer.invoke('get-locker-mod-thumbnail-flags'),
+    setLockerModThumbnailHideName: (skinKey: string, hide: boolean) =>
+        ipcRenderer.invoke('set-locker-mod-thumbnail-hide-name', skinKey, hide),
     mergeMods: (args: MergeModsArgs) => ipcRenderer.invoke('merge-mods', args),
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>

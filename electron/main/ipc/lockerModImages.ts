@@ -3,6 +3,19 @@ import {
     getLockerModImages,
     setLockerModImage,
     removeLockerModImage,
+    getLockerModImageFlags,
+    setLockerModImageHideName,
+    fetchLockerImageAsDataUrl,
+    getLockerModBackgrounds,
+    setLockerModBackground,
+    removeLockerModBackground,
+    getLockerModBackgroundFlags,
+    setLockerModBackgroundHideName,
+    getLockerModThumbnails,
+    setLockerModThumbnail,
+    removeLockerModThumbnail,
+    getLockerModThumbnailFlags,
+    setLockerModThumbnailHideName,
 } from '../services/lockerModImages';
 
 // Per-mod (per-skin) Locker view images (issue #208). Display-only override of
@@ -20,3 +33,70 @@ ipcMain.handle('set-locker-mod-image', (_, skinKey: string, source: string): Pro
 ipcMain.handle('remove-locker-mod-image', (_, skinKey: string): Promise<void> => {
     return removeLockerModImage(skinKey);
 });
+
+ipcMain.handle('get-locker-mod-image-flags', (): Promise<Record<string, boolean>> => {
+    return getLockerModImageFlags();
+});
+
+ipcMain.handle(
+    'set-locker-mod-image-hide-name',
+    (_, skinKey: string, hide: boolean): Promise<void> => {
+        return setLockerModImageHideName(skinKey, hide);
+    }
+);
+
+ipcMain.handle('fetch-locker-image-data-url', (_, url: string): Promise<string> => {
+    return fetchLockerImageAsDataUrl(url);
+});
+
+ipcMain.handle('get-locker-mod-backgrounds', (): Promise<Record<string, string>> => {
+    return getLockerModBackgrounds();
+});
+
+ipcMain.handle(
+    'set-locker-mod-background',
+    (_, skinKey: string, source: string): Promise<string> => {
+        return setLockerModBackground(skinKey, source);
+    }
+);
+
+ipcMain.handle('remove-locker-mod-background', (_, skinKey: string): Promise<void> => {
+    return removeLockerModBackground(skinKey);
+});
+
+ipcMain.handle('get-locker-mod-background-flags', (): Promise<Record<string, boolean>> => {
+    return getLockerModBackgroundFlags();
+});
+
+ipcMain.handle(
+    'set-locker-mod-background-hide-name',
+    (_, skinKey: string, hide: boolean): Promise<void> => {
+        return setLockerModBackgroundHideName(skinKey, hide);
+    }
+);
+
+ipcMain.handle('get-locker-mod-thumbnails', (): Promise<Record<string, string>> => {
+    return getLockerModThumbnails();
+});
+
+ipcMain.handle(
+    'set-locker-mod-thumbnail',
+    (_, skinKey: string, source: string): Promise<string> => {
+        return setLockerModThumbnail(skinKey, source);
+    }
+);
+
+ipcMain.handle('remove-locker-mod-thumbnail', (_, skinKey: string): Promise<void> => {
+    return removeLockerModThumbnail(skinKey);
+});
+
+ipcMain.handle('get-locker-mod-thumbnail-flags', (): Promise<Record<string, boolean>> => {
+    return getLockerModThumbnailFlags();
+});
+
+ipcMain.handle(
+    'set-locker-mod-thumbnail-hide-name',
+    (_, skinKey: string, hide: boolean): Promise<void> => {
+        return setLockerModThumbnailHideName(skinKey, hide);
+    }
+);
