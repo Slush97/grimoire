@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   getGamebananaCategories,
@@ -142,6 +142,12 @@ export default function Locker() {
     const stored = localStorage.getItem('lockerViewMode');
     return stored === 'list' ? 'list' : 'gallery';
   });
+  // When on, heroes without any assigned skins/sounds are hidden so the grid
+  // only shows the heroes you've actually customized. Favorited heroes stay
+  // visible regardless. Persisted alongside viewMode.
+  const [hideEmptyHeroes, setHideEmptyHeroes] = useState(
+    () => localStorage.getItem('lockerHideEmpty') === 'true'
+  );
   const [abilityRecolorSupport, setAbilityRecolorSupport] = useState<Record<string, boolean>>({});
   // Soul-container GLB import (lazy three.js modal), openable from the global
   // Locker tab. Mirrors the Installed-page trigger.
@@ -234,6 +240,10 @@ export default function Locker() {
   useEffect(() => {
     localStorage.setItem('lockerViewMode', viewMode);
   }, [viewMode]);
+
+  useEffect(() => {
+    localStorage.setItem('lockerHideEmpty', String(hideEmptyHeroes));
+  }, [hideEmptyHeroes]);
 
   const navigate = useNavigate();
   const location = useLocation();
@@ -367,6 +377,21 @@ export default function Locker() {
       return a.name.localeCompare(b.name);
     });
   }, [baseHeroList, favoriteHeroes, heroMods, heroSounds]);
+
+  // When "hide empty" is on, drop heroes with no assigned skins/sounds. Favorites
+  // are kept so an intentional pin never disappears. Uses the same content test
+  // as the sort above so what's hidden matches what sorts to the bottom.
+  const displayedHeroList = useMemo(() => {
+    if (!hideEmptyHeroes) return heroList;
+    return heroList.filter((hero) => {
+      if (favoriteHeroes.includes(hero.id)) return true;
+      return (
+        countLockerSkins(heroMods.map.get(hero.id) ?? []) > 0 ||
+        countLockerSkins(heroSounds.map.get(hero.id) ?? []) > 0
+      );
+    });
+  }, [heroList, hideEmptyHeroes, favoriteHeroes, heroMods, heroSounds]);
+
   const lockerCardsExpandedByDefault = settings?.lockerCardsExpandedByDefault ?? false;
 
   useEffect(() => {
@@ -625,7 +650,7 @@ export default function Locker() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-text-secondary">
           {[
-            t('locker.page.heroCount', { count: heroList.length }),
+            t('locker.page.heroCount', { count: displayedHeroList.length }),
             t('locker.page.skinCount', { count: installedSkinCount }),
             installedSoundCount > 0
               ? t('locker.page.soundCount', { count: installedSoundCount })
@@ -662,6 +687,19 @@ export default function Locker() {
               {allExpanded ? t('locker.page.collapseAll') : t('locker.page.expandAll')}
             </button>
           )}
+          <button
+            onClick={() => setHideEmptyHeroes((v) => !v)}
+            aria-pressed={hideEmptyHeroes}
+            className={`flex items-center gap-1.5 self-stretch rounded-sm border px-3 text-sm transition-colors cursor-pointer ${
+              hideEmptyHeroes
+                ? 'border-accent/50 bg-accent/15 text-accent hover:bg-accent/25'
+                : 'border-border bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+            }`}
+            title={hideEmptyHeroes ? t('locker.page.showEmptyHeroes') : t('locker.page.hideEmptyHeroes')}
+          >
+            <Filter className="w-4 h-4" />
+            {hideEmptyHeroes ? t('locker.page.showEmpty') : t('locker.page.hideEmpty')}
+          </button>
           <ViewModeToggle
             value={viewMode}
             options={[
@@ -687,7 +725,7 @@ export default function Locker() {
               onNavigate={() => navigate('/locker/global')}
             />
           )}
-          {heroList.map((hero) => (
+          {displayedHeroList.map((hero) => (
             <HeroGalleryCard
               key={hero.id}
               hero={hero}
@@ -740,7 +778,7 @@ export default function Locker() {
               <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
             </button>
           )}
-          {heroList.map((hero) => (
+          {displayedHeroList.map((hero) => (
             <HeroCard
               key={hero.id}
               hero={hero}

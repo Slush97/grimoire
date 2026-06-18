@@ -70,6 +70,7 @@ import { useStableCallback } from '../lib/useStableCallback';
 import type {
   GameBananaMod,
   GameBananaModDetails,
+  GameBananaFile,
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaArtistLink,
@@ -80,6 +81,7 @@ import {
 } from '../stores/appStore';
 import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
 import ModThumbnail from '../components/ModThumbnail';
+import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
@@ -791,7 +793,7 @@ function BrowseReadableAction({
   queuePosition?: number;
   density: BrowseReadableDensity;
   iconOnlyOverride?: boolean;
-  onQuickDownload: () => void;
+  onQuickDownload: (anchor?: HTMLElement) => void;
   onEnable?: () => void;
 }) {
   const { t } = useTranslation();
@@ -910,7 +912,7 @@ function BrowseReadableAction({
     return (
       <button
         type="button"
-        onClick={(event) => { event.stopPropagation(); onQuickDownload(); }}
+        onClick={(event) => { event.stopPropagation(); onQuickDownload(event.currentTarget); }}
         className={`${motionClassName} cursor-pointer`}
         title={`Install ${modName}`}
         aria-label={`Install ${modName}`}
@@ -1101,6 +1103,13 @@ export default function Browse() {
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadQueue, setDownloadQueue] = useState<Array<{ modId: number; fileId: number; fileName: string }>>([]);
+  // Multi-file quick-install picker anchored to a card's Install button (#209).
+  const [filePicker, setFilePicker] = useState<{
+    details: GameBananaModDetails;
+    files: GameBananaFile[];
+    anchor: HTMLElement;
+    dates: { dateAdded: number; dateModified: number };
+  } | null>(null);
   const [playingModId, setPlayingModId] = useState<number | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -2230,7 +2239,27 @@ export default function Browse() {
     }
   });
 
-  const handleQuickDownload = async (mod: GameBananaMod) => {
+  // Kick off the actual download of one specific file. Shared by the single-file
+  // quick install and the multi-file picker so both behave identically.
+  const runDownload = async (modId: number, file: GameBananaFile) => {
+    if (!downloading) {
+      setDownloading({ modId, fileId: file.id });
+      setDownloadProgress({ downloaded: 0, total: 0 });
+      setExtracting(false);
+    }
+    try {
+      await downloadMod(modId, file.id, file.fileName, section, effectiveCategoryId);
+    } catch (err) {
+      setError(String(err));
+      if (downloading?.modId === modId) {
+        setDownloading(null);
+        setDownloadProgress(null);
+        setExtracting(false);
+      }
+    }
+  };
+
+  const handleQuickDownload = async (mod: GameBananaMod, anchor?: HTMLElement) => {
     if (!activeDeadlockPath) return;
 
     // Check if already downloading or in queue
@@ -2239,34 +2268,36 @@ export default function Browse() {
 
     try {
       // Fetch mod details to get the first file. Include the submitter up front
-      // so the multi-file branch below can open the details panel (which shows
-      // the artist card) without a second round-trip against the rate limiter.
+      // so the picker's "View all files" link can open the details panel (which
+      // shows the artist card) without a second round-trip against the limiter.
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       if (!details.files || details.files.length === 0) {
         setError(t('browse.errors.noDownloadableFiles'));
         return;
       }
 
-      // When a mod has more than one downloadable file (different versions,
+      // Archived files are legacy uploads that aren't meant to be installed
+      // anymore, so they shouldn't count toward the "is this a multi-file mod?"
+      // decision. Only fall back to the full list when every file is archived.
+      const liveFiles = details.files.filter((f) => !f.isArchived);
+      const installable = liveFiles.length > 0 ? liveFiles : details.files;
+
+      // When a mod has more than one installable file (different versions,
       // variant builds, etc.) we used to silently pick whichever had the
-      // highest download count. Forum feedback flagged that, so surface the
-      // details modal and let the user choose which file to install.
-      if (details.files.length > 1) {
-        setSelectedMod(details);
-        setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
+      // highest download count. Forum feedback flagged that, so surface a
+      // compact picker anchored to the Install button (issue #209) and let the
+      // user choose. Fall back to the details modal if we have no anchor.
+      if (installable.length > 1) {
+        if (anchor) {
+          setFilePicker({ details, files: installable, anchor, dates: { dateAdded: mod.dateAdded, dateModified: mod.dateModified } });
+        } else {
+          setSelectedMod(details);
+          setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
+        }
         return;
       }
 
-      const file = getPrimaryFile(details.files);
-
-      // If nothing is currently downloading, set this as the active download
-      if (!downloading) {
-        setDownloading({ modId: mod.id, fileId: file.id });
-        setDownloadProgress({ downloaded: 0, total: 0 });
-        setExtracting(false);
-      }
-
-      await downloadMod(mod.id, file.id, file.fileName, section, effectiveCategoryId);
+      await runDownload(mod.id, getPrimaryFile(installable));
     } catch (err) {
       setError(String(err));
       // Only clear downloading state if this was the active download
@@ -3372,7 +3403,7 @@ export default function Browse() {
                               });
                             }}
                             onClick={() => handleModClick(mod)}
-                            onQuickDownload={() => handleQuickDownload(mod)}
+                            onQuickDownload={(anchor) => handleQuickDownload(mod, anchor)}
                             onEnable={installedLocal && !installedLocal.enabled
                               ? () => toggleMod(installedLocal.id)
                               : undefined}
@@ -3412,6 +3443,26 @@ export default function Browse() {
       {/* Mod details: centered modal (portals to body). The sidebar variant is
           mounted in the <aside> outside this scroll container instead. */}
       {!detailsSidebarActive && renderModDetails('modal')}
+
+      {/* Multi-file quick-install picker, anchored to the Install button. */}
+      {filePicker && (
+        <BrowseFileQuickPicker
+          modName={filePicker.details.name}
+          files={filePicker.files}
+          anchor={filePicker.anchor}
+          onPick={(file) => {
+            const modId = filePicker.details.id;
+            setFilePicker(null);
+            void runDownload(modId, file);
+          }}
+          onViewAll={() => {
+            setSelectedMod(filePicker.details);
+            setSelectedModDates(filePicker.dates);
+            setFilePicker(null);
+          }}
+          onClose={() => setFilePicker(null)}
+        />
+      )}
 
       {collectionModalOpen && (
         <ImportCollectionModal
@@ -3772,7 +3823,7 @@ interface ModCardProps {
   actionContextKey?: string;
   onPlayingChange: (playing: boolean) => void;
   onClick: () => void;
-  onQuickDownload: () => void;
+  onQuickDownload: (anchor?: HTMLElement) => void;
   /** Toggle the local mod's enabled state. Provided only when there's an
    *  installed-but-disabled mod to enable. */
   onEnable?: () => void;
@@ -3903,7 +3954,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </span>
             ) : (
               <button
-                onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
+                onClick={(e) => { e.stopPropagation(); onQuickDownload(e.currentTarget); }}
                 className="flex-shrink-0 flex items-center justify-center w-7 h-7 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-full shadow-lg transition-colors cursor-pointer"
                 title={t('browse.card.install')}
               >
@@ -4289,7 +4340,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </div>
         ) : (
           <button
-            onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
+            onClick={(e) => { e.stopPropagation(); onQuickDownload(e.currentTarget); }}
             className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-accent hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
             title={t('browse.card.install')}
           >
