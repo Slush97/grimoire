@@ -586,6 +586,49 @@ function ModDetailsModal({
     );
   };
 
+  const filesSection = files.length > 0 ? (
+    <section>
+      <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
+        {t('modDetails.sections.files')} {files.length > 1 && <span className="text-text-secondary/70 normal-case tracking-normal">({files.length})</span>}
+      </h3>
+      <div className="space-y-2">
+        {currentFiles.map((file) => renderFileRow(file))}
+        {archivedFiles.length > 0 && (
+          <div className={currentFiles.length > 0 ? 'pt-1' : undefined}>
+            <button
+              type="button"
+              onClick={() => setArchivedFilesOpen((open) => !open)}
+              aria-expanded={archivedFilesOpen}
+              className="w-full flex items-center justify-between gap-3 px-1 py-1.5 text-left text-sm text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                {archivedFilesOpen ? (
+                  <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 flex-shrink-0" />
+                )}
+                <span className="font-medium truncate">{t('modDetails.files.archived')}</span>
+                {installedFileIsArchived && (
+                  <span className="flex-shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
+                    {t('modDetails.files.yourVersion')}
+                  </span>
+                )}
+              </span>
+              <span className="flex-shrink-0 text-[11px] leading-none text-text-tertiary">
+                ({archivedFiles.length})
+              </span>
+            </button>
+            {archivedFilesOpen && (
+              <div className="mt-2 space-y-2">
+                {archivedFiles.map((file) => renderFileRow(file, true))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  ) : null;
+
   const navigationSkeleton = (
     <div
       className="mod-details-navigation-skeleton absolute inset-0 bg-bg-secondary"
@@ -838,9 +881,9 @@ function ModDetailsModal({
               </span>
             )}
           </div>
-          {/* Sidebar moves the title down into the body (above the artist) to
-              keep this header from cramming, so here it's just a spacer that
-              pushes the action buttons to the right edge. */}
+          {/* Sidebar moves the title down into the body to keep this header from
+              cramming, so here it's just a spacer that pushes the action buttons
+              to the right edge. */}
           {isSidebar ? (
             <div className="min-w-0 flex-1" />
           ) : (
@@ -1208,8 +1251,8 @@ function ModDetailsModal({
                 installing a file doesn't move the image stack on the left. */}
             <div className={detailsColClass}>
               {/* Sidebar-only title block. The header drops the title to stay
-                  uncluttered, so the mod name lives here, right above the artist,
-                  with its dates/downloads underneath. */}
+                  uncluttered, so the mod name lives here with its
+                  dates/downloads underneath. */}
               {isSidebar && (
                 <div className="space-y-1.5">
                   {isNavigating ? (
@@ -1259,6 +1302,8 @@ function ModDetailsModal({
                   })()}
                 </div>
               )}
+
+              {filesSection}
 
               {submitter && (
                 <section>
@@ -1447,48 +1492,6 @@ function ModDetailsModal({
                 )}
               </section>
 
-              {files.length > 0 && (
-                <section>
-                  <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
-                    {t('modDetails.sections.files')} {files.length > 1 && <span className="text-text-secondary/70 normal-case tracking-normal">({files.length})</span>}
-                  </h3>
-                  <div className="space-y-2">
-                    {currentFiles.map((file) => renderFileRow(file))}
-                    {archivedFiles.length > 0 && (
-                      <div className={currentFiles.length > 0 ? 'pt-1' : undefined}>
-                        <button
-                          type="button"
-                          onClick={() => setArchivedFilesOpen((open) => !open)}
-                          aria-expanded={archivedFilesOpen}
-                          className="w-full flex items-center justify-between gap-3 px-1 py-1.5 text-left text-sm text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-                        >
-                          <span className="flex items-center gap-2 min-w-0">
-                            {archivedFilesOpen ? (
-                              <ChevronDown className="w-4 h-4 flex-shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 flex-shrink-0" />
-                            )}
-                            <span className="font-medium truncate">{t('modDetails.files.archived')}</span>
-                            {installedFileIsArchived && (
-                              <span className="flex-shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
-                                {t('modDetails.files.yourVersion')}
-                              </span>
-                            )}
-                          </span>
-                          <span className="flex-shrink-0 text-[11px] leading-none text-text-tertiary">
-                            ({archivedFiles.length})
-                          </span>
-                        </button>
-                        {archivedFilesOpen && (
-                          <div className="mt-2 space-y-2">
-                            {archivedFiles.map((file) => renderFileRow(file, true))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
               <section>
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <h3 className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
