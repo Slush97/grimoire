@@ -71,6 +71,45 @@ export function Modal({
         return () => window.removeEventListener('keydown', onKey);
     }, [open, dismissable, onClose]);
 
+    // Trap Tab focus inside the panel while open. The WAI-ARIA dialog pattern
+    // (and Radix Dialog) keeps focus within a modal dialog; without this, Tab
+    // walks out to the page behind the backdrop. Cycle at the boundaries.
+    useEffect(() => {
+        if (!open) return;
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key !== 'Tab') return;
+            const panel = panelRef.current;
+            if (!panel) return;
+            const focusable = panel.querySelectorAll<HTMLElement>(
+                'a[href], button:not([disabled]), textarea:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            );
+            // No focusable children: keep focus on the panel itself.
+            if (focusable.length === 0) {
+                e.preventDefault();
+                panel.focus();
+                return;
+            }
+            const first = focusable[0];
+            const last = focusable[focusable.length - 1];
+            const active = document.activeElement;
+            // Focus escaped the panel (or sits on the panel shell): pull it back.
+            if (!panel.contains(active) || active === panel) {
+                e.preventDefault();
+                (e.shiftKey ? last : first).focus();
+                return;
+            }
+            if (e.shiftKey && active === first) {
+                e.preventDefault();
+                last.focus();
+            } else if (!e.shiftKey && active === last) {
+                e.preventDefault();
+                first.focus();
+            }
+        };
+        window.addEventListener('keydown', onKey, true);
+        return () => window.removeEventListener('keydown', onKey, true);
+    }, [open]);
+
     useEffect(() => {
         if (!open) return;
         const previous = document.activeElement;

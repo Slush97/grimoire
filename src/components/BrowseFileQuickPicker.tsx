@@ -195,13 +195,13 @@ export default function BrowseFileQuickPicker({
               )}
               <span className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-secondary">
                 <span className="whitespace-nowrap">{formatFileSize(file.fileSize)}</span>
-                <span className="opacity-50">-</span>
+                <span className="opacity-50" aria-hidden>·</span>
                 <span className="whitespace-nowrap">
                   {t('browse.filePicker.downloads', { count: file.downloadCount })}
                 </span>
                 {file.dateAdded && file.dateAdded > 0 && (
                   <>
-                    <span className="opacity-50">-</span>
+                    <span className="opacity-50" aria-hidden>·</span>
                     <span className="flex items-center gap-1 whitespace-nowrap">
                       <Clock className="h-3 w-3" />
                       {formatDate(file.dateAdded)}

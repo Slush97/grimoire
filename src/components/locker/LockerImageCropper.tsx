@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Loader2, AlertCircle, Crop, ZoomIn, RotateCcw, ImagePlus } from 'lucide-react';
-import { Toggle } from '../common/ui';
+import { AlertCircle, Crop, ZoomIn, RotateCcw, ImagePlus } from 'lucide-react';
+import { Button, Toggle } from '../common/ui';
 import { getHeroNamePath } from '../../lib/lockerUtils';
 
 interface LockerImageCropperProps {
@@ -495,15 +495,17 @@ export default function LockerImageCropper({
         />
       )}
 
-      <button
-        type="button"
+      <Button
+        variant="primary"
+        size="sm"
+        icon={Crop}
+        isLoading={busy}
         disabled={!img || !!error || busy}
         onClick={handleApply}
-        className="inline-flex w-full cursor-pointer items-center justify-center gap-1.5 rounded-md bg-accent px-3 py-2 text-xs font-semibold text-accent-foreground transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+        className="w-full"
       >
-        {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Crop className="h-3.5 w-3.5" />}
         {t('locker.modImage.useImage')}
-      </button>
+      </Button>
     </div>
   );
 }

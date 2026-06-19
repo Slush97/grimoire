@@ -4,6 +4,7 @@ import { Check, Loader2, Upload, Trash2, Copy } from 'lucide-react';
 import type { Mod } from '../../types/mod';
 import type { GameBananaImage } from '../../types/gamebanana';
 import { Modal } from '../common/Modal';
+import { Button, ModalHeader, SegmentedControl } from '../common/ui';
 import {
   getModDetails,
   readImageDataUrl,
@@ -348,64 +349,47 @@ export function LockerModImagePicker({
         ? [{ full: mod.thumbnailUrl, thumb: mod.thumbnailUrl }]
         : [];
 
-  const tabClass = (active: boolean) =>
-    `relative -mb-px whitespace-nowrap border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-      active
-        ? 'border-accent text-text-primary'
-        : 'border-transparent text-text-secondary hover:text-text-primary'
-    }`;
+  // Tabs: the grid thumbnail (3:4) leads as the default since it's the most
+  // visible surface (and the only one that bakes the hero name over the image);
+  // the skin-panel card (16:9) and the backdrop (16:9) follow as independent
+  // per-skin surfaces.
+  const tabOptions: readonly { value: PickerVariant; label: string }[] = [
+    { value: 'thumbnail', label: t('locker.modImage.tabThumbnail') },
+    { value: 'card', label: t('locker.modImage.tabCard') },
+    { value: 'background', label: t('locker.modImage.tabBackground') },
+  ];
 
   return (
     <Modal
       onClose={onClose}
       labelledBy={titleId}
       size="none"
+      backdropClassName="backdrop-blur-sm"
       panelClassName="flex max-h-[90vh] w-full max-w-3xl flex-col"
     >
-      <div className="flex items-start justify-between gap-3 border-b border-border p-4">
-        <div className="min-w-0">
-          <h2 id={titleId} className="truncate text-base font-semibold text-text-primary">
-            {t('locker.modImage.title')}
-          </h2>
-          <p className="truncate text-xs text-text-secondary" title={mod.name}>
-            {mod.name}
-          </p>
-        </div>
-        {hasOverride && (
-          <button
-            type="button"
-            onClick={clear}
-            disabled={busy}
-            className="flex flex-shrink-0 items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-xs font-medium text-text-secondary transition-colors hover:border-red-500/60 hover:text-red-400 disabled:opacity-50"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            {t('locker.modImage.reset')}
-          </button>
-        )}
-      </div>
+      <ModalHeader
+        title={t('locker.modImage.title')}
+        titleId={titleId}
+        subtitle={mod.name}
+        subtitleTitle={mod.name}
+        onClose={onClose}
+        closeLabel={t('common.actions.close')}
+        actions={
+          hasOverride ? (
+            <Button variant="danger" size="sm" icon={Trash2} onClick={clear} disabled={busy}>
+              {t('locker.modImage.reset')}
+            </Button>
+          ) : undefined
+        }
+      />
 
-      {/* Tabs: the grid thumbnail (3:4) leads as the default since it's the most
-          visible surface (and the only one that bakes the hero name over the
-          image); the skin-panel card (16:9) and the backdrop (16:9) follow as
-          independent per-skin surfaces. */}
-      <div className="flex gap-1 overflow-x-auto border-b border-border px-4">
-        <button
-          type="button"
-          onClick={() => switchTab('thumbnail')}
-          className={tabClass(tab === 'thumbnail')}
-        >
-          {t('locker.modImage.tabThumbnail')}
-        </button>
-        <button type="button" onClick={() => switchTab('card')} className={tabClass(tab === 'card')}>
-          {t('locker.modImage.tabCard')}
-        </button>
-        <button
-          type="button"
-          onClick={() => switchTab('background')}
-          className={tabClass(tab === 'background')}
-        >
-          {t('locker.modImage.tabBackground')}
-        </button>
+      <div className="border-b border-border px-4 py-2.5">
+        <SegmentedControl
+          options={tabOptions}
+          value={tab}
+          onChange={switchTab}
+          label={t('locker.modImage.title')}
+        />
       </div>
 
       <div className="flex min-h-0 flex-1 gap-4 p-4">
