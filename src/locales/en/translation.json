@@ -505,13 +505,33 @@
       "accentNamed": "Use {{name}} accent color",
       "pickCustomColor": "Pick custom color",
       "accentCustom": "Custom accent",
-      "sidebarHighlightNamed": "Sidebar highlight: {{hero}}",
-      "sidebarHighlightNone": "No sidebar highlight",
       "customAccentColor": "Custom accent color",
       "selectedColorPreview": "Selected color preview",
-      "closeSidebarHighlightPicker": "Close sidebar highlight picker",
       "customAccent": "Custom Accent",
-      "sidebarHighlight": "Sidebar Highlight"
+      "art": {
+        "title": "Launcher & sidebar art",
+        "description": "Set the background for each launch button, the active tab, and the volume bar.",
+        "uploadImage": "Upload image",
+        "uploadHint": "Click to choose an image, or drag one here.",
+        "applyError": "Could not apply that image.",
+        "defaultHint": "Use Grimoire's built-in look for this surface.",
+        "noneHint": "Hide this surface's background entirely.",
+        "heroHint": "Pick a hero, then frame their render below.",
+        "changeHero": "Choose a different hero",
+        "preview": "Preview",
+        "surface": {
+          "launchModded": "Launch Modded",
+          "launchVanilla": "Launch Vanilla",
+          "activeTab": "Active tab",
+          "volume": "Volume bar"
+        },
+        "kind": {
+          "default": "Default",
+          "hero": "Hero",
+          "custom": "Custom image",
+          "none": "None"
+        }
+      }
     },
     "preferences": {
       "hideNsfw": "Hide NSFW Content",
@@ -1235,7 +1255,10 @@
       "resetZoom": "Reset zoom",
       "upscaleWarning": "Source is {{sourceWidth}} x {{sourceHeight}}, smaller than the {{targetWidth}} x {{targetHeight}} target, so it will be upscaled and may look soft.",
       "instructions": "Drag to reposition, scroll or use the slider to zoom. The frame is locked to the card's aspect so the result is not stretched.",
-      "useCrop": "Use crop"
+      "useCrop": "Use crop",
+      "boxHint": "Drag the box to move it, drag a corner to resize. The selection is locked to the surface's shape.",
+      "selectionSize": "Selection size",
+      "resetCrop": "Reset selection"
     },
     "model": {
       "close3d": "Close 3D model",
@@ -1751,8 +1774,8 @@
       "vanillaStash": "A vanilla session is already active. Restore mods first.",
       "vanillaDefault": "Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts",
       "stopTitle": "Stop the running Deadlock process",
-      "hideArt": "Hide background art",
-      "showArt": "Show background art"
+      "switchToModded": "Switch to Launch Modded",
+      "switchToVanilla": "Switch to Launch Vanilla"
     },
     "vanilla": {
       "stashed": "Vanilla: {{count}} stashed",

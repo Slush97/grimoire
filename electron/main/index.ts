@@ -82,6 +82,7 @@ import './ipc/abilityColors';
 import './ipc/trippyEffects';
 import './ipc/locker';
 import './ipc/lockerModImages';
+import './ipc/appearanceImages';
 import './ipc/previewCache';
 import './ipc/discord';
 import './ipc/saltIngest';

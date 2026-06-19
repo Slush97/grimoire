@@ -55,6 +55,7 @@ import type {
     LockerImageVariant,
     CropRect,
 } from '../../src/types/electron';
+import type { AppearanceSurface } from '../../src/types/mod';
 import type { DeadworksConnectProgress } from '../../src/types/deadworks';
 import type {
     ProfileSort,
@@ -228,6 +229,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('read-glb-file', glbPath),
     readImageDataUrl: (imagePath: string) =>
         ipcRenderer.invoke('read-image-data-url', imagePath),
+    readRendererAsset: (relPath: string) =>
+        ipcRenderer.invoke('read-renderer-asset', relPath),
     getLockerModImages: () => ipcRenderer.invoke('get-locker-mod-images'),
     setLockerModImage: (skinKey: string, source: string) =>
         ipcRenderer.invoke('set-locker-mod-image', skinKey, source),
@@ -262,6 +265,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
         source: string,
         crop: CropRect
     ) => ipcRenderer.invoke('set-locker-mod-image-edit', variant, skinKey, source, crop),
+    getAppearanceImages: () => ipcRenderer.invoke('get-appearance-images'),
+    setAppearanceImage: (surface: AppearanceSurface, source: string) =>
+        ipcRenderer.invoke('set-appearance-image', surface, source),
+    removeAppearanceImage: (surface: AppearanceSurface) =>
+        ipcRenderer.invoke('remove-appearance-image', surface),
+    setAppearanceImageEdit: (surface: AppearanceSurface, source: string, crop: CropRect) =>
+        ipcRenderer.invoke('set-appearance-image-edit', surface, source, crop),
+    getAppearanceImageEdit: (surface: AppearanceSurface) =>
+        ipcRenderer.invoke('get-appearance-image-edit', surface),
     mergeMods: (args: MergeModsArgs) => ipcRenderer.invoke('merge-mods', args),
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>

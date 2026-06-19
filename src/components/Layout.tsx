@@ -41,9 +41,11 @@ export default function Layout() {
   // even when the user has picked a different accent.
   const accentColor = useAppStore((s) => s.settings?.accentColor);
   const loadStoreSettings = useAppStore((s) => s.loadSettings);
+  const loadAppearanceImages = useAppStore((s) => s.loadAppearanceImages);
   useEffect(() => {
     loadStoreSettings();
-  }, [loadStoreSettings]);
+    loadAppearanceImages();
+  }, [loadStoreSettings, loadAppearanceImages]);
   useEffect(() => {
     applyAccentColor(accentColor);
   }, [accentColor]);

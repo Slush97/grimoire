@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
 import type {
   HeroPortrait,
   CustomCardSlot,
@@ -425,6 +425,10 @@ export async function readImageDataUrl(imagePath: string): Promise<string> {
   return window.electronAPI.readImageDataUrl(imagePath);
 }
 
+export async function readRendererAsset(relPath: string): Promise<string> {
+  return window.electronAPI.readRendererAsset(relPath);
+}
+
 export async function getLockerModImages(): Promise<Record<string, string>> {
   return window.electronAPI.getLockerModImages();
 }
@@ -503,6 +507,36 @@ export async function setLockerModImageEdit(
   crop: CropRect
 ): Promise<void> {
   return window.electronAPI.setLockerModImageEdit(variant, skinKey, source, crop);
+}
+
+// Custom launcher / sidebar background images (issue: unify launcher backgrounds).
+export async function getAppearanceImages(): Promise<Partial<Record<AppearanceSurface, string>>> {
+  return window.electronAPI.getAppearanceImages();
+}
+
+export async function setAppearanceImage(
+  surface: AppearanceSurface,
+  source: string,
+): Promise<string> {
+  return window.electronAPI.setAppearanceImage(surface, source);
+}
+
+export async function removeAppearanceImage(surface: AppearanceSurface): Promise<void> {
+  return window.electronAPI.removeAppearanceImage(surface);
+}
+
+export async function setAppearanceImageEdit(
+  surface: AppearanceSurface,
+  source: string,
+  crop: CropRect,
+): Promise<void> {
+  return window.electronAPI.setAppearanceImageEdit(surface, source, crop);
+}
+
+export async function getAppearanceImageEdit(
+  surface: AppearanceSurface,
+): Promise<LockerImageEdit | null> {
+  return window.electronAPI.getAppearanceImageEdit(surface);
 }
 
 export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
