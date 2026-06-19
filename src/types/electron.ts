@@ -32,6 +32,7 @@ import type {
     LockerCardThumbnail,
     LockerClearScope,
     SoulImportStatus,
+    AppearanceSurface,
 } from './mod';
 import type {
     GameBananaModsResponse,
@@ -637,6 +638,24 @@ export interface ElectronAPI {
         source: string,
         crop: CropRect
     ) => Promise<void>;
+    /** Custom launcher / sidebar background images (issue: unify launcher
+     *  backgrounds). Map is { surface -> data URL } of baked overrides; `source`
+     *  is a `data:` URL. The *choice* per surface lives in AppSettings
+     *  (`appearanceBackgrounds`); these only store the custom image bytes. */
+    getAppearanceImages: () => Promise<Partial<Record<AppearanceSurface, string>>>;
+    setAppearanceImage: (surface: AppearanceSurface, source: string) => Promise<string>;
+    removeAppearanceImage: (surface: AppearanceSurface) => Promise<void>;
+    /** Full-fidelity crop persistence for a custom surface image: the ORIGINAL
+     *  source (data URL) + a normalized crop rect, so the crop editor reopens on
+     *  the exact framing. Returns null when the surface has no stored edit. */
+    setAppearanceImageEdit: (
+        surface: AppearanceSurface,
+        source: string,
+        crop: CropRect
+    ) => Promise<void>;
+    getAppearanceImageEdit: (
+        surface: AppearanceSurface
+    ) => Promise<LockerImageEdit | null>;
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;

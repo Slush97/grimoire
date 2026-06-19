@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import type { GlobalModType, Mod } from '../types/mod';
+import type { AppearanceBg, AppearanceSurface, AppSettings, GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
@@ -155,6 +155,35 @@ export const HERO_NAMES_SORTED: readonly string[] = Array.from(
 ).sort((a, b) => a.localeCompare(b));
 
 export const DEFAULT_SIDEBAR_HERO = HERO_NAMES_SORTED[0] ?? 'Abrams';
+
+/**
+ * Resolve the background descriptor for a launcher / sidebar surface, applying
+ * defaults so callers never deal with `undefined` (issue: unify launcher
+ * backgrounds). One place owns the per-surface fallback rules:
+ *
+ * - When `appearanceBackgrounds[surface]` is set, use it verbatim.
+ * - `activeTab` otherwise migrates the legacy `sidebarHeroHighlight` field:
+ *   null/'' -> none, a hero name -> that hero, undefined -> the default hero.
+ *   (So existing installs keep the highlight they already chose.)
+ * - The launch buttons and volume popup otherwise default to their built-in art.
+ */
+export function resolveAppearanceBg(
+  settings: AppSettings | null | undefined,
+  surface: AppearanceSurface,
+): AppearanceBg {
+  const explicit = settings?.appearanceBackgrounds?.[surface];
+  if (explicit) return explicit;
+
+  if (surface === 'activeTab') {
+    const legacy = settings?.sidebarHeroHighlight;
+    if (legacy === null || legacy === '') return { kind: 'none' };
+    if (legacy && HERO_NAMES_SORTED.includes(legacy)) return { kind: 'hero', hero: legacy };
+    if (legacy) return { kind: 'hero', hero: legacy };
+    return { kind: 'hero', hero: DEFAULT_SIDEBAR_HERO };
+  }
+
+  return { kind: 'default' };
+}
 
 /**
  * Infer the Deadlock hero associated with a mod title. Re-exported from the

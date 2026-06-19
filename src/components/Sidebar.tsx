@@ -24,10 +24,7 @@ import {
   Square,
   Volume2,
   VolumeX,
-  Image,
-  ImageOff,
 } from 'lucide-react';
-import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
 import {
   getConflicts,
   getGameRunningStatus,
@@ -44,13 +41,13 @@ import {
 
 import { getAssetPath } from '../lib/assetPath';
 import { rollMemeTooltip } from '../lib/easterEggs';
-import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath } from '../lib/lockerUtils';
+import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath, resolveAppearanceBg } from '../lib/lockerUtils';
+import type { AppearanceBg } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
 import Tx from './translation/Tx';
 
 const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
-const LAUNCH_BG_HIDDEN_KEY = 'grimoire:launch-bg-hidden';
 const LABEL_TRANSITION_MS = 180;
 const DISCOVER_LAST_SEEN_KEY = 'grimoire:discover:last-seen-created-at';
 const DISCOVER_BADGE_POLL_MS = 2 * 60 * 1000;
@@ -63,11 +60,6 @@ const PREVIEW_VOLUME_BG = getAssetPath('/sidebar/preview-volume-bg.jpg');
 function readCollapsedPreference(): boolean {
   if (typeof window === 'undefined') return false;
   return localStorage.getItem(COLLAPSED_KEY) === '1';
-}
-
-function readLaunchBgHiddenPreference(): boolean {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(LAUNCH_BG_HIDDEN_KEY) === '1';
 }
 
 function readDiscoverLastSeen(): number | null {
@@ -153,10 +145,14 @@ function LaunchButtonBackdrop({
   src,
   position = 'center',
   warm = false,
+  imageStyle,
 }: {
   src: string;
   position?: string;
   warm?: boolean;
+  /** Full object-position/margin override (used for hero renders, which need the
+   *  shared face-crop framing). Takes precedence over `position`. */
+  imageStyle?: CSSProperties;
 }) {
   return (
     <span aria-hidden className="pointer-events-none absolute inset-0">
@@ -166,7 +162,7 @@ function LaunchButtonBackdrop({
         className={`h-full w-full object-cover opacity-65 transition-transform duration-300 group-hover:scale-[1.04] ${
           warm ? 'saturate-[0.95]' : 'saturate-[1.05]'
         }`}
-        style={{ objectPosition: position }}
+        style={imageStyle ?? { objectPosition: position }}
       />
       <span
         className={`absolute inset-0 ${
@@ -180,6 +176,40 @@ function LaunchButtonBackdrop({
   );
 }
 
+/** Render a launch-button / volume-popup backdrop from its resolved descriptor
+ *  (issue: unify launcher backgrounds). `none` -> no art; `hero` -> a hero render
+ *  with the shared face crop; `custom` -> the user's uploaded image (falling back
+ *  to the built-in art if its bytes are missing); `default` -> the built-in art. */
+function SurfaceBackdrop({
+  bg,
+  defaultSrc,
+  defaultPosition = 'center',
+  warm = false,
+  customSrc,
+}: {
+  bg: AppearanceBg;
+  defaultSrc: string;
+  defaultPosition?: string;
+  warm?: boolean;
+  customSrc?: string;
+}) {
+  if (bg.kind === 'none') return null;
+  if (bg.kind === 'hero') {
+    const hero = bg.hero ?? DEFAULT_SIDEBAR_HERO;
+    return (
+      <LaunchButtonBackdrop
+        src={getHeroRenderPath(hero)}
+        imageStyle={getSidebarHeroImageStyle(hero)}
+        warm={warm}
+      />
+    );
+  }
+  if (bg.kind === 'custom' && customSrc) {
+    return <LaunchButtonBackdrop src={customSrc} position="center" warm={warm} />;
+  }
+  return <LaunchButtonBackdrop src={defaultSrc} position={defaultPosition} warm={warm} />;
+}
+
 export default function Sidebar() {
   const { t } = useTranslation();
   const [conflictCount, setConflictCount] = useState(0);
@@ -187,6 +217,7 @@ export default function Sidebar() {
   const [appVersion, setAppVersion] = useState('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const settings = useAppStore((state) => state.settings);
+  const appearanceImages = useAppStore((state) => state.appearanceImages);
   const mods = useAppStore((state) => state.mods);
   const loadMods = useAppStore((state) => state.loadMods);
   const soundVolume = useAppStore((state) => state.soundVolume);
@@ -216,7 +247,6 @@ export default function Sidebar() {
   // through the main-process settings file. This is pure UI state.
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsedPreference);
   const [memeTooltip, setMemeTooltip] = useState<{ to: string; text: string } | null>(null);
-  const [launchBgHidden, setLaunchBgHidden] = useState<boolean>(readLaunchBgHiddenPreference);
   const [labelsVisible, setLabelsVisible] = useState<boolean>(() => !readCollapsedPreference());
   const [labelMounted, setLabelMounted] = useState<boolean>(() => !readCollapsedPreference());
   const [showPreviewVolume, setShowPreviewVolume] = useState(false);
@@ -299,15 +329,25 @@ export default function Sidebar() {
   const navLabelClass = `flex-1 ${labelTransitionClass}`;
   const actionLabelClass = `flex-1 text-left ${labelTransitionClass}`;
   const actionIconClass = 'flex h-full w-10 flex-shrink-0 items-center justify-center';
-  const configuredSidebarHero = settings?.sidebarHeroHighlight;
-  const sidebarHeroHighlight =
-    configuredSidebarHero === null || configuredSidebarHero === ''
-      ? null
-      : configuredSidebarHero ?? DEFAULT_SIDEBAR_HERO;
-  const sidebarHeroHighlightSrc = sidebarHeroHighlight
-    ? getHeroRenderPath(sidebarHeroHighlight)
-    : null;
-  const sidebarHeroImageStyle = getSidebarHeroImageStyle(sidebarHeroHighlight);
+  // Resolve each customizable surface's background (issue: unify launcher
+  // backgrounds). resolveAppearanceBg owns the default + legacy fallback rules.
+  const launchModdedBg = resolveAppearanceBg(settings, 'launchModded');
+  const launchVanillaBg = resolveAppearanceBg(settings, 'launchVanilla');
+  const volumeBg = resolveAppearanceBg(settings, 'volume');
+  const activeTabBg = resolveAppearanceBg(settings, 'activeTab');
+  // The active-tab highlight only ever paints an image (hero/custom) or the plain
+  // accent glow (default/none). A truthy src drives the image styling; null keeps
+  // today's accent-border active state.
+  const sidebarHeroHighlightSrc =
+    activeTabBg.kind === 'hero'
+      ? getHeroRenderPath(activeTabBg.hero ?? DEFAULT_SIDEBAR_HERO)
+      : activeTabBg.kind === 'custom'
+        ? appearanceImages.activeTab ?? null
+        : null;
+  const sidebarHeroImageStyle: CSSProperties =
+    activeTabBg.kind === 'hero'
+      ? getSidebarHeroImageStyle(activeTabBg.hero ?? DEFAULT_SIDEBAR_HERO)
+      : { objectPosition: 'center' };
   const settingsActive = location.pathname.startsWith('/settings');
   const discoverActive = location.pathname.startsWith('/discover');
 
@@ -599,18 +639,6 @@ export default function Sidebar() {
       window.removeEventListener('resize', measureActiveNavItem);
     };
   }, [activeNavIndex, measureActiveNavItem]);
-
-  const toggleLaunchBg = () => {
-    setLaunchBgHidden((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(LAUNCH_BG_HIDDEN_KEY, next ? '1' : '0');
-      } catch {
-        /* quota / private mode */
-      }
-      return next;
-    });
-  };
 
   const handleLaunchModded = async () => {
     if (launchPending || stopPending) return;
@@ -932,12 +960,8 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* flex+gap rather than space-y: the launch context-menu trigger is a
-            display:contents span around both launch buttons, so space-y's
-            direct-child margin selector skips them while flex gap still
-            applies (they participate in the parent's layout individually).
-            gap-2 matches the footer rail's space-y-2 rhythm (launch buttons,
-            update flag, and Settings all sit 8px apart). */}
+        {/* flex+gap matches the footer rail's space-y-2 rhythm: the launch
+            buttons, update flag, and Settings all sit 8px apart. */}
         <div className="flex flex-col gap-2">
           {showPreviewVolume && (collapsed ? (
             <button
@@ -947,7 +971,7 @@ export default function Sidebar() {
               aria-label={t('sidebar.previewVolume.levelLabel', { percent: Math.round(soundVolume * 100) })}
               className="group relative flex h-8 w-full items-center justify-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-accent/35 hover:text-text-primary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 animate-fade-in"
             >
-              <LaunchButtonBackdrop src={PREVIEW_VOLUME_BG} position="center 43%" />
+              <SurfaceBackdrop bg={volumeBg} defaultSrc={PREVIEW_VOLUME_BG} defaultPosition="center 43%" customSrc={appearanceImages.volume} />
               {soundVolume > 0 ? (
                 <Volume2 className="relative z-10 h-4 w-4 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
               ) : (
@@ -956,7 +980,7 @@ export default function Sidebar() {
             </button>
           ) : (
             <div className="group relative flex h-10 w-full items-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] animate-fade-in">
-              <LaunchButtonBackdrop src={PREVIEW_VOLUME_BG} position="center 43%" />
+              <SurfaceBackdrop bg={volumeBg} defaultSrc={PREVIEW_VOLUME_BG} defaultPosition="center 43%" customSrc={appearanceImages.volume} />
               <button
                 type="button"
                 onClick={() => setSoundVolume(soundVolume > 0 ? 0 : 0.7)}
@@ -1006,9 +1030,7 @@ export default function Sidebar() {
               )}
             </button>
           ) : (
-            <MenuRoot>
-              <MenuTrigger asChild>
-                <span className="contents">
+            <>
           <button
             onClick={handleLaunchModded}
             disabled={!canLaunch || !!launchPending || stopPending}
@@ -1021,7 +1043,7 @@ export default function Sidebar() {
             }
             className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {!launchBgHidden && <LaunchButtonBackdrop src={LAUNCH_MODDED_BG} position="center 45%" />}
+            <SurfaceBackdrop bg={launchModdedBg} defaultSrc={LAUNCH_MODDED_BG} defaultPosition="center 45%" customSrc={appearanceImages.launchModded} />
             <span className={`relative z-10 ${actionIconClass}`}>
               {launchPending === 'modded' ? (
                 <Loader2 className="w-[18px] h-[18px] animate-spin" />
@@ -1047,10 +1069,10 @@ export default function Sidebar() {
                   : t('sidebar.launch.vanillaDefault')
             }
             className={`group relative flex w-full h-8 items-center overflow-hidden rounded-sm text-text-primary/85 ring-1 ring-white/10 hover:text-text-primary hover:ring-amber-400/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed ${
-              launchBgHidden ? 'bg-bg-tertiary' : ''
+              launchVanillaBg.kind === 'none' ? 'bg-bg-tertiary' : ''
             }`}
           >
-            {!launchBgHidden && <LaunchButtonBackdrop src={LAUNCH_VANILLA_BG} position="center 48%" warm />}
+            <SurfaceBackdrop bg={launchVanillaBg} defaultSrc={LAUNCH_VANILLA_BG} defaultPosition="center 48%" warm customSrc={appearanceImages.launchVanilla} />
             <span className={`relative z-10 ${actionIconClass}`}>
               {launchPending === 'vanilla' ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
@@ -1064,14 +1086,7 @@ export default function Sidebar() {
               </span>
             )}
           </button>
-                </span>
-              </MenuTrigger>
-              <MenuContent>
-                <MenuItem icon={launchBgHidden ? Image : ImageOff} onSelect={toggleLaunchBg}>
-                  {launchBgHidden ? t('sidebar.launch.showArt') : t('sidebar.launch.hideArt')}
-                </MenuItem>
-              </MenuContent>
-            </MenuRoot>
+            </>
           )}
         </div>
 

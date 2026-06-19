@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Mod, AppSettings, EditLocalModArgs, GlobalModType } from '../types/mod';
+import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType } from '../types/mod';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import { applyLanguagePreference } from '../i18n';
@@ -230,6 +230,12 @@ interface AppState {
   // thumbnail counterpart of lockerHideHeroName. Sparse { skinKey -> true }.
   lockerThumbHideHeroName: Record<string, boolean>;
 
+  // Custom launcher / sidebar background images (issue: unify launcher
+  // backgrounds). Map is { surface -> data URL } of user uploads, loaded on app
+  // start (the Sidebar is always mounted). The per-surface *choice* lives in
+  // settings.appearanceBackgrounds; this only holds the custom image bytes.
+  appearanceImages: Partial<Record<AppearanceSurface, string>>;
+
   // Actions
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -284,6 +290,13 @@ interface AppState {
   removeLockerModThumbnail: (skinKey: string) => Promise<void>;
   /** Hide (or show) the hero name label over this skin's grid thumbnail. */
   setLockerModThumbnailHideName: (skinKey: string, hide: boolean) => Promise<void>;
+
+  /** Load all custom launcher / sidebar background images from the main process. */
+  loadAppearanceImages: () => Promise<void>;
+  /** Store a custom image (baked data URL) for a surface and refresh the map. */
+  setAppearanceImage: (surface: AppearanceSurface, source: string) => Promise<void>;
+  /** Drop the custom image for a surface (e.g. switching away from `custom`). */
+  removeAppearanceImage: (surface: AppearanceSurface) => Promise<void>;
 }
 
 // The main process throws this exact phrase from every "out of enabled slots"
@@ -317,6 +330,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   lockerBgHideHeroName: {},
   lockerModThumbnails: {},
   lockerThumbHideHeroName: {},
+  appearanceImages: {},
 
   // Load settings from backend
   loadSettings: async () => {
@@ -447,6 +461,30 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (hide) nextFlags[skinKey] = true;
       else delete nextFlags[skinKey];
       return { lockerThumbHideHeroName: nextFlags };
+    });
+  },
+
+  // Custom launcher / sidebar background images (issue: unify launcher backgrounds).
+  loadAppearanceImages: async () => {
+    try {
+      const images = await api.getAppearanceImages();
+      set({ appearanceImages: images });
+    } catch {
+      // Non-fatal: surfaces just fall back to their built-in art / hero render.
+    }
+  },
+  setAppearanceImage: async (surface: AppearanceSurface, source: string) => {
+    const dataUrl = await api.setAppearanceImage(surface, source);
+    set((state) => ({
+      appearanceImages: { ...state.appearanceImages, [surface]: dataUrl },
+    }));
+  },
+  removeAppearanceImage: async (surface: AppearanceSurface) => {
+    await api.removeAppearanceImage(surface);
+    set((state) => {
+      const next = { ...state.appearanceImages };
+      delete next[surface];
+      return { appearanceImages: next };
     });
   },
 

@@ -747,6 +747,25 @@ export interface ModConflict {
   details: string;
 }
 
+/** The customizable launcher/sidebar art surfaces (issue: unify launcher
+ *  backgrounds). Each maps to one rendered area in the Sidebar. */
+export type AppearanceSurface = 'launchModded' | 'launchVanilla' | 'activeTab' | 'volume';
+
+/** Where a surface's background art comes from:
+ *  - `default`: the built-in scenic art (launch buttons / volume popup) or, for
+ *    the active tab, the plain accent glow.
+ *  - `hero`: a hero render chosen by the user (`hero` holds the hero name).
+ *  - `custom`: a user-uploaded image, stored out-of-band by the appearanceImages
+ *    service and keyed by the surface id.
+ *  - `none`: no art (hidden). */
+export type AppearanceBgKind = 'default' | 'hero' | 'custom' | 'none';
+
+export interface AppearanceBg {
+  kind: AppearanceBgKind;
+  /** Hero name, only meaningful when `kind === 'hero'`. */
+  hero?: string | null;
+}
+
 export interface AppSettings {
   deadlockPath: string | null;
   devMode: boolean;
@@ -794,8 +813,17 @@ export interface AppSettings {
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;
-  /** Hero render used as the active sidebar highlight background. */
+  /** Hero render used as the active sidebar highlight background.
+   *  @deprecated Superseded by `appearanceBackgrounds.activeTab`. Kept as a
+   *  legacy compat read so existing installs keep their chosen highlight; the
+   *  Appearance UI now writes `appearanceBackgrounds` instead. */
   sidebarHeroHighlight?: string | null;
+  /** Per-surface launcher / sidebar background art (issue: unify launcher
+   *  backgrounds). Each of the four surfaces independently chooses default art,
+   *  a hero render, a custom upload, or none. Custom image bytes live out-of-band
+   *  in the appearanceImages service (keyed by surface id), not here. Surfaces
+   *  absent from the map fall back to their defaults (see resolveAppearanceBg). */
+  appearanceBackgrounds?: Partial<Record<AppearanceSurface, AppearanceBg>>;
   /** Order used to render absolute dates (mod/file upload + update dates). */
   dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY';
   /** Preferred UI language. Null uses the OS/browser language when available. */
