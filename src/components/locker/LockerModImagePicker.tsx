@@ -421,7 +421,7 @@ export function LockerModImagePicker({
             empty up front so the framing surface is previewed before a pick.
             Sized to the window by the cropper; scrolls itself only as a fallback
             on very short windows so it never clips. */}
-        <div className="flex-shrink-0 overflow-y-auto">
+        <div className="w-80 flex-shrink-0 overflow-y-auto">
           <LockerImageCropper
             key={tab}
             imageDataUrl={cropSource}
