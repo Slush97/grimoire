@@ -25,11 +25,23 @@ interface LockerImageCropperProps {
   namePosition?: 'card' | 'backdrop';
   /** Initial state of the "hide hero name label" toggle. */
   initialHideHeroName?: boolean;
+  /** Restore the previous framing (normalized source-fraction rect) when reopening
+   *  on a stored original source, instead of centering at cover. Applied on each
+   *  (re)load of `imageDataUrl`; clear it when staging a freshly picked source so
+   *  the new pick centers. The rect's aspect should match `aspect`. */
+  initialCrop?: { sx: number; sy: number; sw: number; sh: number };
   /** Hint shown over the empty viewport before a source is chosen. */
   emptyHint?: string;
   busy?: boolean;
-  /** Receives the framed image (PNG data URL at `aspect`) and the name choice. */
-  onApply: (result: { dataUrl: string; hideHeroName: boolean }) => void;
+  /** Receives the framed image (PNG data URL at `aspect`), the name choice, and
+   *  the ORIGINAL source + normalized crop rect so the edit can be persisted for
+   *  a full-fidelity reopen. */
+  onApply: (result: {
+    dataUrl: string;
+    hideHeroName: boolean;
+    source: string;
+    crop: { sx: number; sy: number; sw: number; sh: number };
+  }) => void;
 }
 
 /** The editing viewport keeps the target aspect; the source is scaled to cover it
@@ -87,6 +99,7 @@ export default function LockerImageCropper({
   allowHideName,
   namePosition = 'card',
   initialHideHeroName = false,
+  initialCrop,
   emptyHint,
   busy = false,
   onApply,
@@ -144,9 +157,27 @@ export default function LockerImageCropper({
     el.onload = () => {
       if (!active) return;
       setImg(el);
-      const cs = Math.max(VIEW_W / el.naturalWidth, VIEW_H / el.naturalHeight);
-      setOffset({ x: (VIEW_W - el.naturalWidth * cs) / 2, y: (VIEW_H - el.naturalHeight * cs) / 2 });
-      setZoom(1);
+      const natW = el.naturalWidth;
+      const natH = el.naturalHeight;
+      const cs = Math.max(VIEW_W / natW, VIEW_H / natH);
+      if (initialCrop && natW > 0 && natH > 0 && initialCrop.sw > 0) {
+        // Restore the previous framing. The viewport spans `initialCrop.sw * natW`
+        // source px, so the needed render scale is VIEW_W / that. Express it as a
+        // zoom multiple of cover, clamped, then derive the clamped offset.
+        const rawScale = VIEW_W / (initialCrop.sw * natW);
+        const z = Math.min(MAX_ZOOM, Math.max(1, rawScale / cs));
+        const scale = cs * z;
+        const drawnWNow = natW * scale;
+        const drawnHNow = natH * scale;
+        setZoom(z);
+        setOffset({
+          x: Math.min(0, Math.max(VIEW_W - drawnWNow, -initialCrop.sx * natW * scale)),
+          y: Math.min(0, Math.max(VIEW_H - drawnHNow, -initialCrop.sy * natH * scale)),
+        });
+      } else {
+        setOffset({ x: (VIEW_W - natW * cs) / 2, y: (VIEW_H - natH * cs) / 2 });
+        setZoom(1);
+      }
       setError(null);
     };
     el.onerror = () => {
@@ -156,7 +187,7 @@ export default function LockerImageCropper({
     return () => {
       active = false;
     };
-  }, [imageDataUrl, t, VIEW_W, VIEW_H]);
+  }, [imageDataUrl, initialCrop, t, VIEW_W, VIEW_H]);
 
   // Zoom around the viewport center so the framed subject stays put.
   const applyZoom = useCallback(
@@ -205,13 +236,18 @@ export default function LockerImageCropper({
   };
 
   const handleApply = () => {
-    if (!img) return;
+    if (!img || !imageDataUrl) return;
     const scale = coverScale * zoom;
     // The viewport maps to this rect in source-image natural coordinates.
     const srcX = -offset.x / scale;
     const srcY = -offset.y / scale;
     const srcW = VIEW_W / scale;
     const srcH = VIEW_H / scale;
+    // Normalized (source-fraction) crop rect, persisted alongside the original
+    // source so reopening restores this exact framing (and can reveal more).
+    const natW = img.naturalWidth;
+    const natH = img.naturalHeight;
+    const crop = { sx: srcX / natW, sy: srcY / natH, sw: srcW / natW, sh: srcH / natH };
     // Bake at the crop's own resolution (capped on the long edge), preserving aspect.
     const longSrc = Math.max(srcW, srcH);
     const k = longSrc > MAX_OUTPUT_LONG ? MAX_OUTPUT_LONG / longSrc : 1;
@@ -227,7 +263,7 @@ export default function LockerImageCropper({
     }
     ctx.imageSmoothingQuality = 'high';
     ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, outW, outH);
-    onApply({ dataUrl: canvas.toDataURL('image/png'), hideHeroName });
+    onApply({ dataUrl: canvas.toDataURL('image/png'), hideHeroName, source: imageDataUrl, crop });
   };
 
   const namePath = getHeroNamePath(heroName);

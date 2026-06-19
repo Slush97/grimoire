@@ -1,4 +1,4 @@
-import { useEffect, useId, useState } from 'react';
+import { useEffect, useId, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Loader2, Upload, Trash2, Copy } from 'lucide-react';
 import type { Mod } from '../../types/mod';
@@ -9,7 +9,10 @@ import {
   readImageDataUrl,
   showOpenDialog,
   fetchLockerImageDataUrl,
+  getLockerModImageEdit,
+  setLockerModImageEdit,
 } from '../../lib/api';
+import type { CropRect } from '../../types/electron';
 import { useAppStore } from '../../stores/appStore';
 import LockerImageCropper from './LockerImageCropper';
 
@@ -150,14 +153,73 @@ export function LockerModImagePicker({
   const [cropSource, setCropSource] = useState<string | null>(
     () => overrideFor(initialVariant) ?? null
   );
+  // When the active surface has a stored full-fidelity edit (original source +
+  // crop), this holds its crop rect so the cropper restores the exact framing
+  // (and the user can zoom out / pan to reveal area cropped outside the baked
+  // frame). Undefined = no stored edit; the cropper centers the baked seed / a
+  // freshly picked source instead.
+  const [restoredCrop, setRestoredCrop] = useState<CropRect | undefined>(undefined);
+
+  // Identifies the latest edit-load request so a slow fetch from a previous tab
+  // can't clobber the current one (the cropper remounts per tab via key={tab},
+  // but the async result still has to be discarded if the tab changed again).
+  // Also flipped to a fresh value on unmount via `mounted` so a late resolve is a
+  // no-op rather than a setState on an unmounted component.
+  const editLoadId = useRef(0);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  // Load the stored full-fidelity edit (original source + crop) for a tab. If
+  // present, swap the cropper onto the original at the saved framing; if absent,
+  // leave the synchronous baked-seed behavior and clear any restored crop.
+  const loadEdit = (variant: PickerVariant) => {
+    const reqId = ++editLoadId.current;
+    getLockerModImageEdit(variant, skinKey)
+      .then((edit) => {
+        if (!mounted.current || editLoadId.current !== reqId) return; // stale
+        if (edit) {
+          setCropSource(edit.source);
+          setRestoredCrop(edit.crop);
+        } else {
+          setRestoredCrop(undefined);
+        }
+      })
+      .catch(() => {
+        // Non-fatal: degrade to the baked-seed framing already in cropSource.
+        if (mounted.current && editLoadId.current === reqId) setRestoredCrop(undefined);
+      });
+  };
+
+  // On open, try to upgrade the initial tab's baked seed to its full edit.
+  useEffect(() => {
+    loadEdit(initialVariant);
+    // Runs once on mount; subsequent tab loads go through switchTab.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Switching tabs swaps the target aspect, so any staged framing no longer
-  // applies; reseed with the new surface's stored image (or empty if none).
+  // applies; reseed with the new surface's stored image (or empty if none), then
+  // try to upgrade to its full-fidelity edit.
   const switchTab = (next: PickerVariant) => {
     if (next === tab) return;
     setTab(next);
     setCropSource(overrideFor(next) ?? null);
+    setRestoredCrop(undefined);
     setError(null);
+    loadEdit(next);
+  };
+
+  // Picking a NEW source (gallery / upload / mirror) discards the restored crop
+  // so the cropper centers the new pick instead of forcing the old framing.
+  const stageSource = (dataUrl: string) => {
+    editLoadId.current++; // cancel any in-flight edit load for this tab
+    setRestoredCrop(undefined);
+    setCropSource(dataUrl);
   };
 
   // Pull the mod's gallery from GameBanana. Local-only mods (no id) skip this
@@ -189,7 +251,7 @@ export function LockerModImagePicker({
     setError(null);
     try {
       const dataUrl = url.startsWith('data:') ? url : await fetchLockerImageDataUrl(url);
-      setCropSource(dataUrl);
+      stageSource(dataUrl);
     } catch (err) {
       console.error('Failed to load gallery image for cropping', err);
       setError(t('locker.modImage.applyError'));
@@ -207,7 +269,7 @@ export function LockerModImagePicker({
     if (!path) return;
     try {
       const dataUrl = await readImageDataUrl(path);
-      setCropSource(dataUrl);
+      stageSource(dataUrl);
     } catch (err) {
       console.error('Failed to read custom image', err);
       setError(t('locker.modImage.applyError'));
@@ -215,12 +277,18 @@ export function LockerModImagePicker({
   };
 
   // Commit the framed image (+ the hero-name choice) for the active tab, close.
+  // Also persists the ORIGINAL source + normalized crop rect so the editor can be
+  // reopened on the exact framing and reveal area cropped outside the baked frame.
   const applyCrop = async ({
     dataUrl,
     hideHeroName,
+    source,
+    crop,
   }: {
     dataUrl: string;
     hideHeroName: boolean;
+    source: string;
+    crop: CropRect;
   }) => {
     if (busy) return;
     setBusy(true);
@@ -228,6 +296,15 @@ export function LockerModImagePicker({
     try {
       await surface.setImage(skinKey, dataUrl);
       await surface.setHide(skinKey, hideHeroName);
+      // The full-fidelity edit (original + crop) is a best-effort resume aid; if
+      // it fails to store, the baked image + hide flag still persisted above, so
+      // don't let it block the save or the close (the editor just degrades to a
+      // baked seed on the next open).
+      try {
+        await setLockerModImageEdit(tab, skinKey, source, crop);
+      } catch (editErr) {
+        console.error('Failed to store Locker image edit (resume framing)', editErr);
+      }
       onClose();
     } catch (err) {
       console.error('Failed to set Locker skin image', err);
@@ -341,6 +418,7 @@ export function LockerModImagePicker({
             namePosition={surface.namePosition}
             heroName={heroName}
             initialHideHeroName={initialHideHeroName}
+            initialCrop={restoredCrop}
             emptyHint={t('locker.modImage.cropEmptyHint')}
             busy={busy}
             onApply={applyCrop}
@@ -352,7 +430,10 @@ export function LockerModImagePicker({
           {showMirror && (
             <button
               type="button"
-              onClick={() => !busy && setCropSource(lockerImageDataUrl ?? null)}
+              onClick={() => {
+                // Mirror only renders when lockerImageDataUrl is present.
+                if (!busy && lockerImageDataUrl) stageSource(lockerImageDataUrl);
+              }}
               disabled={busy}
               className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/5 py-3 text-sm font-medium text-text-primary transition-colors hover:border-accent/70 hover:bg-accent/10 disabled:opacity-50"
             >

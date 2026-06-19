@@ -66,10 +66,40 @@ function metaPath(dir: string): string {
     return join(dir, 'meta.json');
 }
 
-/** Per-skin display flags. Currently just `hideHeroName`. Each image kind (card
- *  vs background) keeps its own flags in its own directory's meta.json. */
+/** Which surface the picker is editing. Maps 1:1 to the storage dirs above. */
+export type LockerImageVariant = 'card' | 'thumbnail' | 'background';
+
+/** The storage dir for a surface variant. */
+function dirForVariant(variant: LockerImageVariant): string {
+    return variant === 'card'
+        ? imagesDir()
+        : variant === 'thumbnail'
+          ? thumbnailsDir()
+          : backgroundsDir();
+}
+
+/** Subdirectory of a surface dir holding the ORIGINAL (pre-crop) source bytes,
+ *  one per skin, so the crop editor can be reopened with the full original. The
+ *  baked override lives at the dir root; the source lives one level down here so
+ *  readImageMap/clearKey (which list only the dir root, never recurse) never
+ *  mistake it for a baked override. */
+function sourcesDir(dir: string): string {
+    return join(dir, 'sources');
+}
+
+/** A viewport-independent crop rectangle in source-image fractions (each 0..1):
+ *  sx/sy = top-left, sw/sh = width/height. Stored alongside the ORIGINAL source
+ *  bytes so reopening the crop editor restores the exact framing AND lets the
+ *  user zoom out / pan to reveal area cropped outside the last baked frame. */
+export type CropRect = { sx: number; sy: number; sw: number; sh: number };
+
+/** Per-skin display flags. `hideHeroName` is the name-label toggle; `crop` is the
+ *  normalized crop rect for the stored original source (issue #208 follow-up).
+ *  Each image kind (card vs background) keeps its own flags in its own
+ *  directory's meta.json. */
 interface SkinImageFlags {
     hideHeroName?: boolean;
+    crop?: CropRect;
 }
 
 type FlagsFile = Record<string, SkinImageFlags>;
@@ -113,6 +143,20 @@ async function setHideName(dir: string, skinKey: string, hide: boolean): Promise
     await writeFlags(dir, flags);
 }
 
+/** Store the crop rect for `skinKey` under `dir`, merging with existing flags. */
+async function setCrop(dir: string, skinKey: string, crop: CropRect): Promise<void> {
+    if (!skinKey.trim()) return;
+    const flags = await readFlags(dir);
+    flags[skinKey] = { ...flags[skinKey], crop };
+    await writeFlags(dir, flags);
+}
+
+/** Read the stored crop rect for `skinKey` under `dir`, or null if none. */
+async function readCrop(dir: string, skinKey: string): Promise<CropRect | null> {
+    const flags = await readFlags(dir);
+    return flags[skinKey]?.crop ?? null;
+}
+
 /** Drop all flags for `skinKey` under `dir` (called when its image is removed). */
 async function clearFlags(dir: string, skinKey: string): Promise<void> {
     const flags = await readFlags(dir);
@@ -148,7 +192,15 @@ async function clearKey(dir: string, stem: string): Promise<void> {
     }
     await Promise.all(
         entries
-            .filter((name) => basename(name, extname(name)) === stem)
+            // Only baked image files at the dir root; never the `sources/` subdir
+            // (it has no image extension, but guard explicitly so it's never
+            // mistaken for a baked override even if a stem ever collides).
+            .filter(
+                (name) =>
+                    name !== 'sources' &&
+                    MIME_BY_EXT[extname(name).toLowerCase()] &&
+                    basename(name, extname(name)) === stem
+            )
             .map((name) => fs.rm(join(dir, name), { force: true }))
     );
 }
@@ -214,19 +266,21 @@ async function readImageMap(dir: string): Promise<Record<string, string>> {
     return out;
 }
 
+/** Resolve `source` (a `data:` URL or an `http(s)` URL to download) into bytes +
+ *  a file extension. Shared by the baked-override and original-source writers. */
+async function resolveImageBytes(source: string): Promise<{ buf: Buffer; ext: string }> {
+    if (!source) throw new Error('Missing image source');
+    if (source.startsWith('data:')) return decodeDataUrl(source);
+    if (/^https?:\/\//i.test(source)) return fetchImage(source);
+    throw new Error('Unsupported image source');
+}
+
 /** Store `source` (a `data:` URL or an `http(s)` URL to download) under `dir` for
  *  this skin, replacing any existing one. Returns the new data URL. */
 async function storeImage(dir: string, skinKey: string, source: string): Promise<string> {
     if (!skinKey.trim()) throw new Error('Missing skin key');
-    if (!source) throw new Error('Missing image source');
 
-    const { buf, ext } = source.startsWith('data:')
-        ? decodeDataUrl(source)
-        : /^https?:\/\//i.test(source)
-          ? await fetchImage(source)
-          : (() => {
-                throw new Error('Unsupported image source');
-            })();
+    const { buf, ext } = await resolveImageBytes(source);
 
     await ensureDir(dir);
     const stem = keyStem(skinKey);
@@ -234,6 +288,75 @@ async function storeImage(dir: string, skinKey: string, source: string): Promise
     const dest = join(dir, `${stem}${ext}`);
     await fs.writeFile(dest, buf);
     return readAsDataUrl(dest);
+}
+
+/** Write the ORIGINAL source bytes for `skinKey` into `<dir>/sources/`, replacing
+ *  any prior source (any extension). */
+async function storeSource(dir: string, skinKey: string, source: string): Promise<void> {
+    if (!skinKey.trim()) throw new Error('Missing skin key');
+    const { buf, ext } = await resolveImageBytes(source);
+    const sub = sourcesDir(dir);
+    await ensureDir(sub);
+    const stem = keyStem(skinKey);
+    await clearKey(sub, stem);
+    await fs.writeFile(join(sub, `${stem}${ext}`), buf);
+}
+
+/** Read the stored original source for `skinKey` from `<dir>/sources/` as a data
+ *  URL, or null if none is stored. */
+async function readSource(dir: string, skinKey: string): Promise<string | null> {
+    const sub = sourcesDir(dir);
+    const stem = keyStem(skinKey);
+    let entries: string[] = [];
+    try {
+        entries = await fs.readdir(sub);
+    } catch {
+        return null;
+    }
+    const match = entries.find(
+        (name) => MIME_BY_EXT[extname(name).toLowerCase()] && basename(name, extname(name)) === stem
+    );
+    if (!match) return null;
+    try {
+        return await readAsDataUrl(join(sub, match));
+    } catch {
+        return null;
+    }
+}
+
+/** Delete the stored original source for `skinKey` from `<dir>/sources/`. */
+async function clearSource(dir: string, skinKey: string): Promise<void> {
+    await clearKey(sourcesDir(dir), keyStem(skinKey));
+}
+
+/** Persist the editable state for a surface: the ORIGINAL source bytes (in the
+ *  dir's `sources/` subdir) plus a normalized crop rect (in the dir's meta).
+ *  Reopening the crop editor can then restore the exact framing and reveal area
+ *  cropped outside the last baked frame. Independent of the baked override write. */
+export async function setLockerModImageEdit(
+    variant: LockerImageVariant,
+    skinKey: string,
+    source: string,
+    crop: CropRect
+): Promise<void> {
+    if (!skinKey.trim()) return;
+    const dir = dirForVariant(variant);
+    await storeSource(dir, skinKey, source);
+    await setCrop(dir, skinKey, crop);
+}
+
+/** Read back the editable state for a surface (original source data URL + crop
+ *  rect), or null if either piece is missing (no migration: legacy overrides
+ *  predate this and just have no source/crop). */
+export async function getLockerModImageEdit(
+    variant: LockerImageVariant,
+    skinKey: string
+): Promise<{ source: string; crop: CropRect } | null> {
+    if (!skinKey.trim()) return null;
+    const dir = dirForVariant(variant);
+    const [source, crop] = await Promise.all([readSource(dir, skinKey), readCrop(dir, skinKey)]);
+    if (!source || !crop) return null;
+    return { source, crop };
 }
 
 /** All stored skin card images as { skinKey -> data URL }. */
@@ -257,17 +380,21 @@ export async function setLockerModBackground(skinKey: string, source: string): P
     return storeImage(backgroundsDir(), skinKey, source);
 }
 
-/** Remove this skin's stored Locker card image AND its display flags, if any. */
+/** Remove this skin's stored Locker card image, original source, AND its display
+ *  flags (hideHeroName + crop), if any. */
 export async function removeLockerModImage(skinKey: string): Promise<void> {
     if (!skinKey.trim()) return;
     await clearKey(imagesDir(), keyStem(skinKey));
+    await clearSource(imagesDir(), skinKey);
     await clearFlags(imagesDir(), skinKey);
 }
 
-/** Remove this skin's stored backdrop image AND its display flags, if any. */
+/** Remove this skin's stored backdrop image, original source, AND its display
+ *  flags (hideHeroName + crop), if any. */
 export async function removeLockerModBackground(skinKey: string): Promise<void> {
     if (!skinKey.trim()) return;
     await clearKey(backgroundsDir(), keyStem(skinKey));
+    await clearSource(backgroundsDir(), skinKey);
     await clearFlags(backgroundsDir(), skinKey);
 }
 
@@ -281,10 +408,12 @@ export async function setLockerModThumbnail(skinKey: string, source: string): Pr
     return storeImage(thumbnailsDir(), skinKey, source);
 }
 
-/** Remove this skin's stored grid-thumbnail image AND its display flags, if any. */
+/** Remove this skin's stored grid-thumbnail image, original source, AND its
+ *  display flags (hideHeroName + crop), if any. */
 export async function removeLockerModThumbnail(skinKey: string): Promise<void> {
     if (!skinKey.trim()) return;
     await clearKey(thumbnailsDir(), keyStem(skinKey));
+    await clearSource(thumbnailsDir(), skinKey);
     await clearFlags(thumbnailsDir(), skinKey);
 }
 

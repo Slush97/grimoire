@@ -425,6 +425,27 @@ export interface SaltIngestStatus {
     lastError: string | null;
 }
 
+/** Which Locker surface a per-skin image override applies to. Maps 1:1 to the
+ *  storage dirs in lockerModImages.ts (issue #208). */
+export type LockerImageVariant = 'card' | 'thumbnail' | 'background';
+
+/** A viewport-independent crop rectangle in source-image fractions (each 0..1):
+ *  sx/sy = top-left, sw/sh = width/height. Persisted alongside the original
+ *  source so the crop editor can be reopened on the exact framing. */
+export interface CropRect {
+    sx: number;
+    sy: number;
+    sw: number;
+    sh: number;
+}
+
+/** The persisted editable state for a per-skin Locker image override: the
+ *  ORIGINAL (pre-crop) source as a data URL plus the normalized crop rect. */
+export interface LockerImageEdit {
+    source: string;
+    crop: CropRect;
+}
+
 export interface ElectronAPI {
     // Host platform ('win32', 'linux', ...), captured in the preload. The
     // renderer uses it to decide whether to draw the custom Windows title
@@ -601,6 +622,21 @@ export interface ElectronAPI {
     /** Per-skin grid-thumbnail hide-name flags (sparse { skinKey -> true }). */
     getLockerModThumbnailFlags: () => Promise<Record<string, boolean>>;
     setLockerModThumbnailHideName: (skinKey: string, hide: boolean) => Promise<void>;
+    /** Full-fidelity crop persistence (issue #208 follow-up): the ORIGINAL source
+     *  (data URL) + a viewport-independent crop rect for a surface, so reopening
+     *  the crop editor restores the exact framing and lets the user zoom out / pan
+     *  to recover area cropped outside the last baked frame. Returns null when a
+     *  skin has no stored edit (legacy overrides predate this). */
+    getLockerModImageEdit: (
+        variant: LockerImageVariant,
+        skinKey: string
+    ) => Promise<LockerImageEdit | null>;
+    setLockerModImageEdit: (
+        variant: LockerImageVariant,
+        skinKey: string,
+        source: string,
+        crop: CropRect
+    ) => Promise<void>;
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;

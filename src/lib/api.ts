@@ -489,6 +489,22 @@ export async function setLockerModThumbnailHideName(skinKey: string, hide: boole
   return window.electronAPI.setLockerModThumbnailHideName(skinKey, hide);
 }
 
+export async function getLockerModImageEdit(
+  variant: LockerImageVariant,
+  skinKey: string
+): Promise<LockerImageEdit | null> {
+  return window.electronAPI.getLockerModImageEdit(variant, skinKey);
+}
+
+export async function setLockerModImageEdit(
+  variant: LockerImageVariant,
+  skinKey: string,
+  source: string,
+  crop: CropRect
+): Promise<void> {
+  return window.electronAPI.setLockerModImageEdit(variant, skinKey, source, crop);
+}
+
 export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
   return window.electronAPI.mergeMods(args);
 }
@@ -770,7 +786,7 @@ export function conflictPairKey(a: string, b: string): string {
 // Profile wire types are single-sourced in types/electron.ts; re-exported
 // here to preserve this module's existing import surface.
 export type { Profile, ProfileMod, ProfileCrosshairSettings } from '../types/electron';
-import type { Profile, ProfileCrosshairSettings, PerformanceConfigStatus, EditorCandidate } from '../types/electron';
+import type { Profile, ProfileCrosshairSettings, PerformanceConfigStatus, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
 
 export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();

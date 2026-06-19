@@ -52,6 +52,8 @@ import type {
     MultiVpkPickData,
     SyncProgressData,
     UpdateStatus,
+    LockerImageVariant,
+    CropRect,
 } from '../../src/types/electron';
 import type { DeadworksConnectProgress } from '../../src/types/deadworks';
 import type {
@@ -252,6 +254,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getLockerModThumbnailFlags: () => ipcRenderer.invoke('get-locker-mod-thumbnail-flags'),
     setLockerModThumbnailHideName: (skinKey: string, hide: boolean) =>
         ipcRenderer.invoke('set-locker-mod-thumbnail-hide-name', skinKey, hide),
+    getLockerModImageEdit: (variant: LockerImageVariant, skinKey: string) =>
+        ipcRenderer.invoke('get-locker-mod-image-edit', variant, skinKey),
+    setLockerModImageEdit: (
+        variant: LockerImageVariant,
+        skinKey: string,
+        source: string,
+        crop: CropRect
+    ) => ipcRenderer.invoke('set-locker-mod-image-edit', variant, skinKey, source, crop),
     mergeMods: (args: MergeModsArgs) => ipcRenderer.invoke('merge-mods', args),
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>

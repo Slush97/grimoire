@@ -16,6 +16,10 @@ import {
     removeLockerModThumbnail,
     getLockerModThumbnailFlags,
     setLockerModThumbnailHideName,
+    getLockerModImageEdit,
+    setLockerModImageEdit,
+    type LockerImageVariant,
+    type CropRect,
 } from '../services/lockerModImages';
 
 // Per-mod (per-skin) Locker view images (issue #208). Display-only override of
@@ -98,5 +102,33 @@ ipcMain.handle(
     'set-locker-mod-thumbnail-hide-name',
     (_, skinKey: string, hide: boolean): Promise<void> => {
         return setLockerModThumbnailHideName(skinKey, hide);
+    }
+);
+
+// Full-fidelity crop persistence (issue #208 follow-up): the ORIGINAL source +
+// a viewport-independent crop rect, so reopening the editor restores the exact
+// framing and lets the user zoom out / pan to recover area cropped outside the
+// last baked frame. Independent of the baked-override save above.
+ipcMain.handle(
+    'get-locker-mod-image-edit',
+    (
+        _,
+        variant: LockerImageVariant,
+        skinKey: string
+    ): Promise<{ source: string; crop: CropRect } | null> => {
+        return getLockerModImageEdit(variant, skinKey);
+    }
+);
+
+ipcMain.handle(
+    'set-locker-mod-image-edit',
+    (
+        _,
+        variant: LockerImageVariant,
+        skinKey: string,
+        source: string,
+        crop: CropRect
+    ): Promise<void> => {
+        return setLockerModImageEdit(variant, skinKey, source, crop);
     }
 );
