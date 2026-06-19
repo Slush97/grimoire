@@ -86,7 +86,8 @@ export function LockerModImagePicker({
   // `allowHideName` shows the "hide hero name" toggle. The hero name is only
   // baked over the image on the main hero-grid card (the thumbnail surface), so
   // that's the only tab with the toggle. The skin-panel card prints its title as
-  // separate text (no overlay), and the backdrop always shows its name logo.
+  // separate text (no overlay), and the backdrop's name logo is its own page
+  // layer (not part of the framed image), so neither previews a name.
   const surface = {
     card: {
       // The skin-panel card media is aspect-video (16:9), so frame to match it
@@ -116,7 +117,11 @@ export function LockerModImagePicker({
     background: {
       aspect: 16 / 9,
       namePosition: 'backdrop' as const,
-      namePreview: true,
+      // The hero-detail page draws the hero-name logo as its own layer over the
+      // backdrop, never baked into the backdrop image. So previewing a name over
+      // the background you're framing is misleading: the framed image carries no
+      // name. Don't overlay one here.
+      namePreview: false,
       allowHideName: false,
       override: lockerModBackgrounds[skinKey],
       hideName: lockerBgHideHeroName[skinKey],
