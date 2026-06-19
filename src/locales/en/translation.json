@@ -986,6 +986,8 @@
       "noGallery": "No images available. Upload a custom one above.",
       "reset": "Reset to default",
       "useImage": "Use image",
+      "appliedToast": "{{surface}} applied",
+      "removedToast": "{{surface}} reset",
       "useLockerImage": "Use Locker image",
       "hideHeroName": "Hide hero name label",
       "hideHeroNameHint": "Turn on when the image already shows the hero's name."
