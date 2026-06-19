@@ -5,6 +5,7 @@ import type { Mod } from '../../types/mod';
 import type { GameBananaImage } from '../../types/gamebanana';
 import { Modal } from '../common/Modal';
 import { Button, ModalHeader, SegmentedControl } from '../common/ui';
+import { showToast } from '../../stores/toastStore';
 import {
   getModDetails,
   readImageDataUrl,
@@ -131,6 +132,16 @@ export function LockerModImagePicker({
       remove: removeBackground,
     },
   }[tab];
+
+  // The active tab's display label, used in the "applied" / "reset" toasts so
+  // the confirmation names the surface the user just changed.
+  const surfaceLabel = t(
+    tab === 'thumbnail'
+      ? 'locker.modImage.tabThumbnail'
+      : tab === 'card'
+        ? 'locker.modImage.tabCard'
+        : 'locker.modImage.tabBackground'
+  );
 
   const hasOverride = Boolean(surface.override);
   const initialHideHeroName = Boolean(surface.hideName);
@@ -282,9 +293,11 @@ export function LockerModImagePicker({
     }
   };
 
-  // Commit the framed image (+ the hero-name choice) for the active tab, close.
-  // Also persists the ORIGINAL source + normalized crop rect so the editor can be
-  // reopened on the exact framing and reveal area cropped outside the baked frame.
+  // Commit the framed image (+ the hero-name choice) for the active tab. The
+  // picker stays open (it spans several surfaces, so the user can set the next
+  // tab) and a toast confirms the apply. Also persists the ORIGINAL source +
+  // normalized crop rect so the editor can be reopened on the exact framing and
+  // reveal area cropped outside the baked frame.
   const applyCrop = async ({
     dataUrl,
     hideHeroName,
@@ -311,7 +324,10 @@ export function LockerModImagePicker({
       } catch (editErr) {
         console.error('Failed to store Locker image edit (resume framing)', editErr);
       }
-      onClose();
+      showToast(t('locker.modImage.appliedToast', { surface: surfaceLabel }), {
+        tone: 'success',
+        duration: 2200,
+      });
     } catch (err) {
       console.error('Failed to set Locker skin image', err);
       setError(t('locker.modImage.applyError'));
@@ -327,7 +343,15 @@ export function LockerModImagePicker({
     setError(null);
     try {
       await surface.remove(skinKey);
-      onClose();
+      // Stay open and reset the frame to empty so the user can pick a new image
+      // for this surface (or move to another tab) without reopening.
+      editLoadId.current++;
+      setCropSource(null);
+      setRestoredCrop(undefined);
+      showToast(t('locker.modImage.removedToast', { surface: surfaceLabel }), {
+        tone: 'success',
+        duration: 2200,
+      });
     } catch (err) {
       console.error('Failed to remove Locker skin image', err);
       setError(t('locker.modImage.applyError'));
