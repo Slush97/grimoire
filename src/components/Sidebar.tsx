@@ -245,6 +245,10 @@ export default function Sidebar() {
     action?: { label: string; onClick: () => void | Promise<void> };
   } | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  // One-shot "spin into place" for the Settings gear on click. Cleared on
+  // animationend so a re-click can restart it. Hover does a lighter rotate via
+  // CSS; this is the punchier nav-commit flourish.
+  const [gearSpinning, setGearSpinning] = useState(false);
 
   // Persisted via localStorage so it survives reloads without round-tripping
   // through the main-process settings file. This is pure UI state.
@@ -256,10 +260,18 @@ export default function Sidebar() {
   const collapseTimerRef = useRef<number | null>(null);
   const previewVolumeHideTimerRef = useRef<number | null>(null);
   const labelFrameRef = useRef<number | null>(null);
+  const asideRef = useRef<HTMLElement | null>(null);
+  const navScrollRef = useRef<HTMLElement | null>(null);
   const navListRef = useRef<HTMLUListElement | null>(null);
   const navItemRefs = useRef<Array<HTMLLIElement | null>>([]);
+  const settingsItemRef = useRef<HTMLButtonElement | null>(null);
+  // Measured relative to the <aside> (not the nav list) so the single sliding
+  // highlight can travel between a nav tab and the footer Settings button, which
+  // live in different containers with different padding. Hence left/width too.
   const [activeNavMetrics, setActiveNavMetrics] = useState<{
     top: number;
+    left: number;
+    width: number;
     height: number;
   } | null>(null);
 
@@ -602,44 +614,93 @@ export default function Sidebar() {
   );
   const activeNavTone = activeNavIndex >= 0 ? navItems[activeNavIndex]?.tone : undefined;
 
-  const measureActiveNavItem = useCallback(() => {
-    const list = navListRef.current;
-    const item = activeNavIndex >= 0 ? navItemRefs.current[activeNavIndex] : null;
+  // The active target is either the highlighted nav tab or, when on /settings,
+  // the footer Settings button. We measure it against the <aside> so one indicator
+  // can slide across both regions (offsetTop won't work: they have different
+  // offset parents). getBoundingClientRect deltas give aside-relative box coords.
+  const activeTargetEl = (): HTMLElement | null =>
+    settingsActive
+      ? settingsItemRef.current
+      : activeNavIndex >= 0
+        ? navItemRefs.current[activeNavIndex]
+        : null;
 
-    if (!list || !item) {
+  const measureActiveTarget = useCallback(() => {
+    const aside = asideRef.current;
+    const el = activeTargetEl();
+
+    if (!aside || !el) {
       setActiveNavMetrics(null);
       return;
     }
 
+    const asideRect = aside.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
     const next = {
-      top: item.offsetTop,
-      height: item.offsetHeight,
+      top: elRect.top - asideRect.top,
+      left: elRect.left - asideRect.left,
+      width: elRect.width,
+      height: elRect.height,
     };
 
     setActiveNavMetrics((prev) =>
-      prev && prev.top === next.top && prev.height === next.height ? prev : next
+      prev &&
+      prev.top === next.top &&
+      prev.left === next.left &&
+      prev.width === next.width &&
+      prev.height === next.height
+        ? prev
+        : next
     );
-  }, [activeNavIndex]);
+    // activeTargetEl is read fresh each call; deps cover what selects it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNavIndex, settingsActive]);
 
   useLayoutEffect(() => {
-    measureActiveNavItem();
-  }, [measureActiveNavItem, navItems.length, collapsed]);
+    measureActiveTarget();
+  }, [measureActiveTarget, navItems.length, collapsed]);
+
+  // Enable the glide transition only briefly around an active-target change, so
+  // selecting a tab/settings animates the highlight, while nav-list scrolling
+  // (same target, new position) tracks instantly with no trailing ease.
+  const [indicatorSliding, setIndicatorSliding] = useState(false);
+  const slideTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    setIndicatorSliding(true);
+    if (slideTimerRef.current !== null) window.clearTimeout(slideTimerRef.current);
+    slideTimerRef.current = window.setTimeout(() => {
+      setIndicatorSliding(false);
+      slideTimerRef.current = null;
+    }, 300);
+    return () => {
+      if (slideTimerRef.current !== null) {
+        window.clearTimeout(slideTimerRef.current);
+        slideTimerRef.current = null;
+      }
+    };
+  }, [activeNavIndex, settingsActive]);
 
   useEffect(() => {
-    const list = navListRef.current;
-    const item = activeNavIndex >= 0 ? navItemRefs.current[activeNavIndex] : null;
-    if (!list || !item || typeof ResizeObserver === 'undefined') return;
+    const aside = asideRef.current;
+    const el = activeTargetEl();
+    if (!aside || !el || typeof ResizeObserver === 'undefined') return;
 
-    const observer = new ResizeObserver(measureActiveNavItem);
-    observer.observe(list);
-    observer.observe(item);
-    window.addEventListener('resize', measureActiveNavItem);
+    const observer = new ResizeObserver(measureActiveTarget);
+    observer.observe(aside);
+    observer.observe(el);
+    // Re-measure when the nav list scrolls: nav-tab targets shift relative to the
+    // aside (the Settings target is in the fixed footer and is unaffected).
+    const nav = navScrollRef.current;
+    nav?.addEventListener('scroll', measureActiveTarget, { passive: true });
+    window.addEventListener('resize', measureActiveTarget);
 
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', measureActiveNavItem);
+      nav?.removeEventListener('scroll', measureActiveTarget);
+      window.removeEventListener('resize', measureActiveTarget);
     };
-  }, [activeNavIndex, measureActiveNavItem]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNavIndex, settingsActive, measureActiveTarget]);
 
   const handleLaunchModded = async () => {
     if (launchPending || stopPending) return;
@@ -741,9 +802,32 @@ export default function Sidebar() {
 
   return (
     <aside
+      ref={asideRef}
       data-collapsed={collapsed}
-      className="grimoire-sidebar bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden"
+      className="grimoire-sidebar relative bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden"
     >
+      {/* Single sliding highlight, positioned against the <aside> so it can glide
+          between a nav tab and the footer Settings button. Sits at z-0 behind the
+          nav list (z-10) and the footer buttons (which paint later in the DOM), so
+          their transparent active surfaces reveal it. */}
+      {activeNavMetrics && activeNavTone !== 'test' && (
+        <div
+          aria-hidden
+          className={`sidebar-active-indicator pointer-events-none absolute left-0 top-0 z-0 overflow-hidden rounded-sm ${
+            indicatorSliding ? 'sidebar-active-indicator--sliding' : ''
+          }`}
+          style={{
+            width: activeNavMetrics.width,
+            height: activeNavMetrics.height,
+            transform: `translate3d(${activeNavMetrics.left}px, ${activeNavMetrics.top}px, 0)`,
+          }}
+        >
+          <SidebarActiveBackdrop
+            heroSrc={sidebarHeroHighlightSrc}
+            heroImageStyle={sidebarHeroImageStyle}
+          />
+        </div>
+      )}
       <div className="relative flex h-11 flex-shrink-0 items-center overflow-hidden border-b border-border px-3">
         {labelMounted && !collapsed && (
           <div
@@ -776,23 +860,8 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto p-2">
+      <nav ref={navScrollRef} className="flex-1 min-h-0 overflow-y-auto p-2">
         <div className="relative">
-          {activeNavIndex >= 0 && activeNavMetrics && activeNavTone !== 'test' && (
-            <div
-              aria-hidden
-              className="sidebar-active-indicator pointer-events-none absolute left-0 right-0 z-0 overflow-hidden rounded-sm"
-              style={{
-                height: activeNavMetrics.height,
-                transform: `translate3d(0, ${activeNavMetrics.top}px, 0)`,
-              }}
-            >
-              <SidebarActiveBackdrop
-                heroSrc={sidebarHeroHighlightSrc}
-                heroImageStyle={sidebarHeroImageStyle}
-              />
-            </div>
-          )}
           <ul ref={navListRef} className="relative z-10 space-y-0.5">
             {navItems.map(({ to, icon: Icon, labelKey, label, tooltip, tone, badge, badgeTone }, index) => {
               // Style from the optimistic index, not the router's isActive:
@@ -1130,8 +1199,12 @@ export default function Sidebar() {
             Always visible, including collapsed (gear only), since it's now the
             bottom rail's anchor rather than an afterthought. */}
         <button
+          ref={settingsItemRef}
           type="button"
-          onClick={() => navigate('/settings')}
+          onClick={() => {
+            setGearSpinning(true);
+            navigate('/settings');
+          }}
           title={memeTooltip?.to === '/settings' ? memeTooltip.text : t('sidebar.openSettings')}
           onMouseEnter={() => {
             const meme = rollMemeTooltip('/settings');
@@ -1142,19 +1215,17 @@ export default function Sidebar() {
           className={`group relative flex w-full h-10 items-center overflow-hidden rounded-sm border text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
             settingsActive
               ? sidebarHeroHighlightSrc
-                ? 'border-white/15 bg-bg-tertiary text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
-                : 'border-accent/40 bg-bg-tertiary text-text-primary font-semibold hover:border-accent/60'
-              : 'border-border bg-bg-tertiary/30 text-text-secondary hover:bg-accent/5 hover:border-accent/30 hover:text-text-primary'
+                ? 'border-white/15 bg-transparent text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
+                : 'border-accent/40 bg-transparent text-text-primary font-semibold hover:border-accent/60'
+              : 'border-accent/25 bg-bg-tertiary text-text-primary/90 hover:bg-accent/10 hover:border-accent/45 hover:text-text-primary'
           }`}
         >
-          {settingsActive && (
-            <SidebarActiveBackdrop
-              heroSrc={sidebarHeroHighlightSrc}
-              heroImageStyle={sidebarHeroImageStyle}
-            />
-          )}
           <span className={`relative z-10 ${actionIconClass}`}>
-            <Settings2 className="w-[18px] h-[18px]" strokeWidth={settingsActive ? 2 : 1.75} />
+            <Settings2
+              className={`settings-gear w-[18px] h-[18px] ${gearSpinning ? 'settings-gear--spin' : ''}`}
+              strokeWidth={settingsActive ? 2 : 1.75}
+              onAnimationEnd={() => setGearSpinning(false)}
+            />
           </span>
           {labelMounted && (
             <span className={`relative z-10 font-medium ${actionLabelClass}`} aria-hidden={!labelsVisible}>

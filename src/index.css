@@ -992,8 +992,16 @@ body {
 
 .sidebar-active-indicator {
   contain: paint;
-  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
+}
+
+/* Transition only while gliding between targets (tab/settings select). Off by
+   default so the indicator tracks nav-list scroll instantly instead of trailing
+   it by the ease duration. */
+.sidebar-active-indicator--sliding {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .sidebar-offset-transition {
@@ -1006,6 +1014,30 @@ body {
 
 .sidebar-active-backdrop__image {
   will-change: transform;
+}
+
+/* Settings gear: rotates on hover (light tease) and does a one-shot "spin into
+   place" on click (the .settings-gear--spin flourish), which lands just as the
+   route commits. .settings-gear only exists inside the Settings button, so the
+   generic .group:hover scope is effectively settings-only. */
+.settings-gear {
+  transform-origin: 50% 50%;
+  transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.group:hover .settings-gear {
+  transform: rotate(90deg);
+}
+
+/* One-shot mechanical spin: a touch past a full turn, then settles back, like a
+   gear clicking into its seat. Overrides the hover rotate while it runs. */
+.settings-gear--spin {
+  animation: settingsGearSpin 640ms cubic-bezier(0.34, 1.45, 0.5, 1);
+}
+
+@keyframes settingsGearSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
 }
 
 /* Skeleton shimmer — used for async-loading placeholders. Surfaces apply
@@ -1324,6 +1356,7 @@ body {
   .sidebar-title-text,
   .sidebar-collapsible-label,
   .sidebar-active-indicator,
+  .sidebar-active-indicator--sliding,
   .sidebar-offset-transition {
     transition-duration: 0.01ms;
   }
@@ -1351,6 +1384,19 @@ body {
 
   /* Keep the stripe pattern visible (it carries meaning) but stop the slide. */
   .update-stripes::before {
+    animation: none;
+  }
+
+  /* Settings gear: drop the rotate/spin motion. */
+  .settings-gear {
+    transition-duration: 0.01ms;
+  }
+
+  .group:hover .settings-gear {
+    transform: none;
+  }
+
+  .settings-gear--spin {
     animation: none;
   }
 }
