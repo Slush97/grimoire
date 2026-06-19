@@ -369,15 +369,17 @@ function getReadableDensity(targetWidth: number): BrowseReadableDensity {
 function estimateReadableCardBodyHeight(density: BrowseReadableDensity, section: string): number {
   const isSound = section === 'Sound';
 
+  // The category/hero/NSFW chips now float over the thumbnail (revealed on
+  // hover), so the body no longer reserves a chip row or its margin.
   if (density === 'micro') {
     return 8 + 16 + (isSound ? 8 + 28 : 0) + 8 + 24 + 8;
   }
 
   if (density === 'compact') {
-    return 12 + 22 + 5 + 29 + (isSound ? 10 + 22 : 0) + 10 + 24 + 2;
+    return 12 + 29 + (isSound ? 10 + 22 : 0) + 10 + 24 + 2;
   }
 
-  return 14 + 24 + 6 + 32 + (isSound ? 10 + 38 : 0) + 10 + 28 + 6;
+  return 14 + 32 + (isSound ? 10 + 38 : 0) + 10 + 28 + 6;
 }
 
 function estimateBrowseRowHeight(
@@ -404,7 +406,22 @@ function estimateBrowseRowHeight(
   return Math.ceil(mediaHeight + bodyHeight);
 }
 
-function readableChipTone(tone: BrowseReadableChipTone = 'neutral'): string {
+function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = false): string {
+  // On-image chips float over the thumbnail (revealed on hover), so they need an
+  // opaque dark backdrop + blur to stay legible over bright art, mirroring the
+  // hero-gallery badge treatment.
+  if (onImage) {
+    switch (tone) {
+      case 'accent':
+        return 'border-accent/40 bg-black/55 text-accent backdrop-blur-sm';
+      case 'danger':
+        return 'border-state-danger/45 bg-black/55 text-state-danger backdrop-blur-sm';
+      case 'info':
+        return 'border-state-info/40 bg-black/55 text-state-info backdrop-blur-sm';
+      default:
+        return 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm';
+    }
+  }
   switch (tone) {
     case 'accent':
       return 'border-accent/25 bg-accent/[0.08] text-accent';
@@ -483,7 +500,7 @@ function estimateReadableChipWidth(label: string): number {
   return Math.ceil(label.length * 6 + 14);
 }
 
-function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
+function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadableChip; onImage?: boolean }) {
   if (chip.hero) {
     return (
       <img
@@ -492,7 +509,7 @@ function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
         title={chip.label}
         loading="lazy"
         draggable={false}
-        className="h-6 w-6 shrink-0 rounded-full object-cover"
+        className={`h-6 w-6 shrink-0 rounded-full object-cover ${onImage ? 'ring-1 ring-black/40' : ''}`}
       />
     );
   }
@@ -500,7 +517,8 @@ function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
     <span
       title={chip.label}
       className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-[11px] font-medium leading-none ${readableChipTone(
-        chip.tone
+        chip.tone,
+        onImage
       )}`}
     >
       {chip.label}
@@ -512,10 +530,12 @@ function BrowseReadableChipRow({
   chips,
   availableWidth,
   maxVisible = BROWSE_READABLE_MAX_VISIBLE_CHIPS,
+  onImage = false,
 }: {
   chips: BrowseReadableChip[];
   availableWidth: number;
   maxVisible?: number;
+  onImage?: boolean;
 }) {
   const visibleChips: BrowseReadableChip[] = [];
   let usedWidth = 0;
@@ -543,19 +563,23 @@ function BrowseReadableChipRow({
   return (
     <div className="flex h-6 min-w-0 items-start gap-[clamp(5px,2.1429cqw,7px)] overflow-visible">
       {visibleChips.map((chip, index) => (
-        <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} />
+        <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} onImage={onImage} />
       ))}
       {hiddenChips.length > 0 && (
         <div className="group/hidden relative shrink-0">
           <span
             title={`${hiddenChips.length} more`}
-            className="inline-flex h-6 items-center rounded-sm border border-white/[0.1] bg-white/[0.04] px-2 text-[11px] font-medium leading-none text-text-secondary"
+            className={`inline-flex h-6 items-center rounded-sm border px-2 text-[11px] font-medium leading-none ${
+              onImage
+                ? 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm'
+                : 'border-white/[0.1] bg-white/[0.04] text-text-secondary'
+            }`}
           >
             +{hiddenChips.length}
           </span>
           <div className="pointer-events-none absolute left-0 top-[calc(100%+6px)] z-20 hidden min-w-max max-w-[180px] flex-wrap gap-1 rounded-md border border-white/[0.08] bg-bg-secondary/96 p-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md group-hover/hidden:flex">
             {hiddenChips.map((chip, index) => (
-              <BrowseReadableChipBadge key={`${chip.label}-overflow-${index}`} chip={chip} />
+              <BrowseReadableChipBadge key={`${chip.label}-overflow-${index}`} chip={chip} onImage={onImage} />
             ))}
           </div>
         </div>
@@ -3551,11 +3575,9 @@ function ReadableBrowseModCard({
     : isCompactReadable
       ? 'px-[clamp(12px,5cqw,14px)] pb-[clamp(12px,5cqw,14px)] pt-[clamp(12px,5cqw,14px)]'
       : 'px-[clamp(14px,5cqw,16px)] pb-[clamp(14px,5cqw,16px)] pt-[clamp(14px,5cqw,16px)]';
-  const titleMarginClass = showChips
-    ? isCompactReadable
-      ? 'mt-[clamp(4px,2.5cqw,7px)]'
-      : 'mt-[clamp(5px,2.8571cqw,9px)]'
-    : 'mt-0';
+  // Chips moved onto the thumbnail overlay, so the title is now the first body
+  // row in every density and needs no top margin.
+  const titleMarginClass = 'mt-0';
   const footerMarginClass = isMicro
     ? 'mt-[clamp(6px,3.5714cqw,8px)]'
     : 'mt-[clamp(7px,3.5714cqw,11px)]';
@@ -3650,19 +3672,23 @@ function ReadableBrowseModCard({
     >
       <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-md bg-bg-tertiary`}>
         {media}
+        {showChips && chips.length > 0 && (
+          <div className="browse-readable-card-chips pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end bg-gradient-to-t from-black/75 via-black/30 to-transparent px-[clamp(8px,4cqw,12px)] pb-[clamp(7px,3.5cqw,10px)] pt-8">
+            <div className="pointer-events-auto min-w-0">
+              <BrowseReadableChipRow
+                chips={chips}
+                availableWidth={chipRowWidth}
+                maxVisible={readableDensity === 'compact' ? 2 : BROWSE_READABLE_MAX_VISIBLE_CHIPS}
+                onImage
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div
         className={`browse-readable-card-body relative flex flex-none flex-col ${bodyPaddingClass}`}
       >
-        {showChips && (
-          <BrowseReadableChipRow
-            chips={chips}
-            availableWidth={chipRowWidth}
-            maxVisible={readableDensity === 'compact' ? 2 : BROWSE_READABLE_MAX_VISIBLE_CHIPS}
-          />
-        )}
-
         <div className={`${titleMarginClass} min-w-0`}>
           {/* font-semibold, not font-bold: Reaver ships only a 600 face, so
               bolder weights get synthetic (smeared, blurry) emboldening. */}
