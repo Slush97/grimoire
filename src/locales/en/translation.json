@@ -953,8 +953,8 @@
     "modImage": {
       "set": "Set Locker image for {{name}}",
       "title": "Choose a Locker image",
-      "tabCard": "Locker image",
-      "tabThumbnail": "Card thumbnail",
+      "tabCard": "Card thumbnail",
+      "tabThumbnail": "Locker image",
       "tabBackground": "Background",
       "cropEmptyHint": "Pick an image to frame it here.",
       "dialogTitle": "Choose a custom image",

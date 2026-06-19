@@ -12,8 +12,14 @@ interface LockerImageCropperProps {
   aspect?: number;
   /** Hero whose name label is previewed (when nameControls is on). */
   heroName?: string;
-  /** Show the hero-name overlay preview + "hide name" toggle. */
+  /** Show the hero-name overlay preview (matching surfaces that bake the name
+   *  over the image). The "hide name" toggle is gated separately by
+   *  `allowHideName` so a surface can preview its name without offering to hide
+   *  it (e.g. the backdrop, whose name logo always shows). */
   nameControls?: boolean;
+  /** Show the "hide hero name label" toggle. Only meaningful with nameControls.
+   *  Defaults to nameControls so existing callers keep the combined behavior. */
+  allowHideName?: boolean;
   /** Where the name label sits, matching its real surface: the card overlays it
    *  bottom-right; the focus-view backdrop shows the name logo top-left. */
   namePosition?: 'card' | 'backdrop';
@@ -78,6 +84,7 @@ export default function LockerImageCropper({
   aspect = 3 / 4,
   heroName = '',
   nameControls = true,
+  allowHideName,
   namePosition = 'card',
   initialHideHeroName = false,
   emptyHint,
@@ -339,7 +346,7 @@ export default function LockerImageCropper({
         </button>
       </div>
 
-      {nameControls && (
+      {(allowHideName ?? nameControls) && (
         <Toggle
           checked={hideHeroName}
           onChange={setHideHeroName}

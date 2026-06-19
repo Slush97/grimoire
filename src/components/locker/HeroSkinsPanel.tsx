@@ -451,9 +451,7 @@ function SkinGroupCard({
           }}
           aria-label={t('locker.modImage.set', { name: primary.name })}
           title={t('locker.modImage.set', { name: primary.name })}
-          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100 ${
-            overrideSrc ? 'opacity-100' : 'opacity-0'
-          } ${onRequestDelete ? 'right-9' : 'right-1.5'}`}
+          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100 ${onRequestDelete ? 'right-9' : 'right-1.5'}`}
         >
           <ImagePlus className="h-3.5 w-3.5" />
         </button>
@@ -598,9 +596,7 @@ function SkinGroupRow({
           }}
           aria-label={t('locker.modImage.set', { name: primary.name })}
           title={t('locker.modImage.set', { name: primary.name })}
-          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100 ${
-            overrideSrc ? 'opacity-100' : 'opacity-0'
-          } ${onRequestDelete ? 'right-10' : 'right-2'}`}
+          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100 ${onRequestDelete ? 'right-10' : 'right-2'}`}
         >
           <ImagePlus className="h-3.5 w-3.5" />
         </button>
@@ -747,6 +743,8 @@ export default function HeroSkinsPanel({
   const hasMods = mods.length > 0;
   const soundVolume = useAppStore((s) => s.soundVolume);
   const lockerModImages = useAppStore((s) => s.lockerModImages);
+  // The "Locker image" (grid-thumbnail surface) the picker mirrors from.
+  const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
   const groups = useMemo(() => groupVariants(mods), [mods]);
   // Issue #208: which skin's image picker is open (null = none). Skins only;
   // sound mods keep the hero-portrait thumbnail and get no picker.
@@ -840,7 +838,7 @@ export default function HeroSkinsPanel({
           mod={pickerGroup.primary}
           skinKey={pickerGroup.key}
           heroName={heroName ?? pickerGroup.primary.lockerHero ?? ''}
-          cardImageDataUrl={lockerModImages[pickerGroup.key]}
+          lockerImageDataUrl={lockerModThumbnails[pickerGroup.key]}
           onClose={() => setPickerGroup(null)}
         />
       )}

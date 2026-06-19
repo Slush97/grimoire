@@ -88,12 +88,13 @@ export function LockerHeroView({
   const { t } = useTranslation();
   // Issue #208: the backdrop reflects the active skin's chosen Locker image, if
   // the user picked one (set per skin in the skins list below).
-  const lockerModImages = useAppStore((s) => s.lockerModImages);
+  const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
   const lockerModBackgrounds = useAppStore((s) => s.lockerModBackgrounds);
   const lockerBgHideHeroName = useAppStore((s) => s.lockerBgHideHeroName);
   const activeSkin = useMemo(() => activeLockerSkin(skinList), [skinList]);
   const activeSkinKey = activeSkin ? getLockerSkinKey(activeSkin) : undefined;
-  const cardImage = activeSkinKey ? lockerModImages[activeSkinKey] : undefined;
+  // The "Locker image" (grid-thumbnail surface) the picker mirrors from.
+  const thumbnailImage = activeSkinKey ? lockerModThumbnails[activeSkinKey] : undefined;
   // The full-bleed backdrop is its own per-skin image (issue #208), independent
   // of the 3:4 card image. Unset = the hero render. The card image is shown only
   // on the grid card, never here.
@@ -482,14 +483,15 @@ export function LockerHeroView({
         </FloatingModelPanel>
       )}
 
-      {/* Unified per-skin image picker (issue #208): tabbed for the 3:4 card and
-          the 16:9 backdrop, opening on the card tab. */}
+      {/* Unified per-skin image picker (issue #208): tabbed for the 3:4 grid
+          thumbnail, the 16:9 skin-panel card and the 16:9 backdrop, opening on
+          the thumbnail tab. */}
       {pickerOpen && activeSkin && activeSkinKey && (
         <LockerModImagePicker
           mod={activeSkin}
           skinKey={activeSkinKey}
           heroName={hero.name}
-          cardImageDataUrl={cardImage}
+          lockerImageDataUrl={thumbnailImage}
           onClose={() => setPickerOpen(false)}
         />
       )}

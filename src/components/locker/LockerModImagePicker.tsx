@@ -13,15 +13,21 @@ import {
 import { useAppStore } from '../../stores/appStore';
 import LockerImageCropper from './LockerImageCropper';
 
-/** Which surface the picker is choosing an image for. The card is the 3:4
- *  skin-panel card; the thumbnail is the 3:4 image on the main Locker hero-grid
- *  card; the background is the wide 16:9 hero-detail backdrop. The thumbnail and
- *  background can both mirror the card selection in one click. */
+/** Which surface the picker is choosing an image for. NOTE the display labels
+ *  are inverted from these internal names (the names map to the storage dirs and
+ *  can't change without migrating saved images):
+ *    - `thumbnail` -> labelled "Locker image": the 3:4 image on the main Locker
+ *      hero-grid card. The prominent surface, so it's the default tab.
+ *    - `card`      -> labelled "Card thumbnail": the 16:9 skin-panel card
+ *      (aspect-video media) in the hero detail view.
+ *    - `background`-> labelled "Background": the wide 16:9 hero-detail backdrop.
+ *  The card and background tabs can both mirror the "Locker image" (thumbnail)
+ *  selection in one click. */
 type PickerVariant = 'card' | 'thumbnail' | 'background';
 
 /**
  * Issue #208: pick the image that represents a skin in the Locker. A single
- * tabbed surface covers the skin's 3:4 panel card (with the hero-name overlay),
+ * tabbed surface covers the skin's 16:9 panel card (with the hero-name overlay),
  * the 3:4 thumbnail on the main hero grid, and the hero-detail backdrop (16:9),
  * so the formerly-separate menus are unified per skin. Sources are the mod's own
  * GameBanana gallery (shown at full aspect so nothing is cropped before you
@@ -34,8 +40,8 @@ export function LockerModImagePicker({
   mod,
   skinKey,
   heroName,
-  initialVariant = 'card',
-  cardImageDataUrl,
+  initialVariant = 'thumbnail',
+  lockerImageDataUrl,
   onClose,
 }: {
   mod: Mod;
@@ -43,9 +49,10 @@ export function LockerModImagePicker({
   heroName: string;
   /** Which tab opens first. */
   initialVariant?: PickerVariant;
-  /** The skin's current card image, offered as a "Use Locker image" mirror in
-   *  the thumbnail and background tabs. */
-  cardImageDataUrl?: string;
+  /** The skin's current "Locker image" (the grid-thumbnail surface), offered as
+   *  a one-click "Use Locker image" mirror on the Card thumbnail and Background
+   *  tabs. */
+  lockerImageDataUrl?: string;
   onClose: () => void;
 }) {
   const { t } = useTranslation();
@@ -71,11 +78,21 @@ export function LockerModImagePicker({
   const removeThumbnail = useAppStore((s) => s.removeLockerModThumbnail);
   const removeBackground = useAppStore((s) => s.removeLockerModBackground);
 
-  // Per-surface config, resolved for the active tab.
+  // Per-surface config, resolved for the active tab. `namePreview` shows the
+  // hero-name overlay in the cropper where the real surface renders one;
+  // `allowHideName` shows the "hide hero name" toggle. The hero name is only
+  // baked over the image on the main hero-grid card (the thumbnail surface), so
+  // that's the only tab with the toggle. The skin-panel card prints its title as
+  // separate text (no overlay), and the backdrop always shows its name logo.
   const surface = {
     card: {
-      aspect: 3 / 4,
+      // The skin-panel card media is aspect-video (16:9), so frame to match it
+      // (issue #208 follow-up). The baked 16:9 output then drops cleanly into the
+      // card's object-cover with no re-crop.
+      aspect: 16 / 9,
       namePosition: 'card' as const,
+      namePreview: false,
+      allowHideName: false,
       override: lockerModImages[skinKey],
       hideName: lockerHideHeroName[skinKey],
       setImage: setCardImage,
@@ -85,6 +102,8 @@ export function LockerModImagePicker({
     thumbnail: {
       aspect: 3 / 4,
       namePosition: 'card' as const,
+      namePreview: true,
+      allowHideName: true,
       override: lockerModThumbnails[skinKey],
       hideName: lockerThumbHideHeroName[skinKey],
       setImage: setThumbnail,
@@ -94,6 +113,8 @@ export function LockerModImagePicker({
     background: {
       aspect: 16 / 9,
       namePosition: 'backdrop' as const,
+      namePreview: true,
+      allowHideName: false,
       override: lockerModBackgrounds[skinKey],
       hideName: lockerBgHideHeroName[skinKey],
       setImage: setBackground,
@@ -104,22 +125,38 @@ export function LockerModImagePicker({
 
   const hasOverride = Boolean(surface.override);
   const initialHideHeroName = Boolean(surface.hideName);
-  // The card image can be mirrored into the thumbnail and backdrop in one click.
-  const showMirror = tab !== 'card' && Boolean(cardImageDataUrl);
+  // The Locker image (grid thumbnail) can be mirrored into the card and backdrop
+  // in one click; it's the only surface that never shows the mirror (you can't
+  // mirror it onto itself).
+  const showMirror = tab !== 'thumbnail' && Boolean(lockerImageDataUrl);
+
+  // The stored (baked) override for a given surface, used to seed the editor so
+  // reopening shows the last crop instead of an empty frame and the user can
+  // adjust from there (issue #208 follow-up).
+  const overrideFor = (v: PickerVariant) =>
+    v === 'card'
+      ? lockerModImages[skinKey]
+      : v === 'thumbnail'
+        ? lockerModThumbnails[skinKey]
+        : lockerModBackgrounds[skinKey];
 
   const [images, setImages] = useState<GameBananaImage[]>([]);
   const [loading, setLoading] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // The image being framed in the crop adjuster (as a data URL), null = none.
-  const [cropSource, setCropSource] = useState<string | null>(null);
+  // Seeded with the active surface's existing image so the editor opens on the
+  // last crop rather than empty.
+  const [cropSource, setCropSource] = useState<string | null>(
+    () => overrideFor(initialVariant) ?? null
+  );
 
   // Switching tabs swaps the target aspect, so any staged framing no longer
-  // applies; clear it back to the empty preview for the new surface.
+  // applies; reseed with the new surface's stored image (or empty if none).
   const switchTab = (next: PickerVariant) => {
     if (next === tab) return;
     setTab(next);
-    setCropSource(null);
+    setCropSource(overrideFor(next) ?? null);
     setError(null);
   };
 
@@ -265,18 +302,20 @@ export function LockerModImagePicker({
         )}
       </div>
 
-      {/* Tabs: the skin-panel card (3:4) is the default; the grid thumbnail
-          (3:4) and the backdrop (16:9) are independent per-skin surfaces. */}
+      {/* Tabs: the grid thumbnail (3:4) leads as the default since it's the most
+          visible surface (and the only one that bakes the hero name over the
+          image); the skin-panel card (16:9) and the backdrop (16:9) follow as
+          independent per-skin surfaces. */}
       <div className="flex gap-1 overflow-x-auto border-b border-border px-4">
-        <button type="button" onClick={() => switchTab('card')} className={tabClass(tab === 'card')}>
-          {t('locker.modImage.tabCard')}
-        </button>
         <button
           type="button"
           onClick={() => switchTab('thumbnail')}
           className={tabClass(tab === 'thumbnail')}
         >
           {t('locker.modImage.tabThumbnail')}
+        </button>
+        <button type="button" onClick={() => switchTab('card')} className={tabClass(tab === 'card')}>
+          {t('locker.modImage.tabCard')}
         </button>
         <button
           type="button"
@@ -297,7 +336,8 @@ export function LockerModImagePicker({
             key={tab}
             imageDataUrl={cropSource}
             aspect={surface.aspect}
-            nameControls
+            nameControls={surface.namePreview}
+            allowHideName={surface.allowHideName}
             namePosition={surface.namePosition}
             heroName={heroName}
             initialHideHeroName={initialHideHeroName}
@@ -312,7 +352,7 @@ export function LockerModImagePicker({
           {showMirror && (
             <button
               type="button"
-              onClick={() => !busy && setCropSource(cardImageDataUrl ?? null)}
+              onClick={() => !busy && setCropSource(lockerImageDataUrl ?? null)}
               disabled={busy}
               className="mb-2 flex w-full items-center justify-center gap-2 rounded-lg border border-accent/40 bg-accent/5 py-3 text-sm font-medium text-text-primary transition-colors hover:border-accent/70 hover:bg-accent/10 disabled:opacity-50"
             >
