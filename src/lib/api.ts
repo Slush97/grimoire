@@ -425,6 +425,10 @@ export async function readImageDataUrl(imagePath: string): Promise<string> {
   return window.electronAPI.readImageDataUrl(imagePath);
 }
 
+export async function readRendererAsset(relPath: string): Promise<string> {
+  return window.electronAPI.readRendererAsset(relPath);
+}
+
 export async function getLockerModImages(): Promise<Record<string, string>> {
   return window.electronAPI.getLockerModImages();
 }

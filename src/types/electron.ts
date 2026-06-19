@@ -590,6 +590,10 @@ export interface ElectronAPI {
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) => Promise<SoulContainerPreview>;
     readGlbFile: (glbPath: string) => Promise<string>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
+    /** Read a bundled renderer asset (built-in art, hero render) as a data URL.
+     *  Lets the Appearance crop editor frame built-in images without a file://
+     *  fetch (blocked in packaged builds). Path is confined to the renderer dir. */
+    readRendererAsset: (relPath: string) => Promise<string>;
     /** Issue #208: per-mod (per-skin) Locker view images (display override).
      *  Map is { skinKey -> data URL }; `source` is a `data:` URL (custom upload)
      *  or an `http(s)` gallery URL to download. Setter returns the new data URL. */

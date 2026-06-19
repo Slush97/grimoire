@@ -12,7 +12,13 @@ import {
   getSidebarHeroImageStyle,
   resolveAppearanceBg,
 } from '../../lib/lockerUtils';
-import { getAppearanceImageEdit, setAppearanceImageEdit, readImageDataUrl, showOpenDialog } from '../../lib/api';
+import {
+  getAppearanceImageEdit,
+  setAppearanceImageEdit,
+  readImageDataUrl,
+  readRendererAsset,
+  showOpenDialog,
+} from '../../lib/api';
 import type { AppearanceBg, AppearanceBgKind, AppearanceSurface, AppSettings } from '../../types/mod';
 import type { CropRect } from '../../types/electron';
 import { Button } from '../common/ui';
@@ -77,6 +83,26 @@ function kindsFor(surface: SurfaceConfig): AppearanceBgKind[] {
   return surface.allowNone
     ? ['default', 'hero', 'custom', 'none']
     : ['default', 'hero', 'custom'];
+}
+
+/** Read an in-app asset URL (built-in art, hero render) as a data URL so it can be
+ *  fed to the cropper and baked via canvas without tainting. A packaged renderer is
+ *  served from file://, where fetch() of a file:// asset is blocked and a file://
+ *  <img> taints the canvas, so there we round-trip through the main process (which
+ *  mirrors how getAssetPath gates on the file: protocol). In dev (http) fetch works. */
+async function urlToDataUrl(url: string): Promise<string> {
+  if (typeof window !== 'undefined' && window.location.protocol === 'file:') {
+    return readRendererAsset(url);
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to load ${url}: ${res.status}`);
+  const blob = await res.blob();
+  return await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 /** A small live preview of how a surface's chosen background looks. */
@@ -153,8 +179,10 @@ export default function AppearanceArtSection() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Which kind tab is shown inside the modal (separate from the saved kind so the
-  // user can preview a different source before committing).
+  // user can preview a different source before committing). Nothing is persisted
+  // until the user hits Apply (custom commits through the cropper's own button).
   const [draftKind, setDraftKind] = useState<AppearanceBgKind>('default');
+  const [draftHero, setDraftHero] = useState<string>(DEFAULT_SIDEBAR_HERO);
   const editLoadId = useRef(0);
 
   const close = useCallback(() => {
@@ -177,19 +205,70 @@ export default function AppearanceArtSection() {
 
   const openEditor = (surface: AppearanceSurface) => {
     const current = resolveAppearanceBg(settings, surface);
+    const config = SURFACES.find((s) => s.id === surface);
+    const hero = current.kind === 'hero' ? current.hero ?? DEFAULT_SIDEBAR_HERO : DEFAULT_SIDEBAR_HERO;
     setEditing(surface);
     setError(null);
     setBusy(false);
     setDraftKind(current.kind);
+    setDraftHero(hero);
     setCropSource(null);
     setRestoredCrop(undefined);
-    if (current.kind === 'custom') void loadEdit(surface);
+    // Restore framing for the saved selection (image kinds only).
+    if (config) void seedForKind(surface, config, current.kind, hero, true);
   };
 
-  // Seed the cropper with the stored original + crop so reopening restores the
-  // exact framing (best-effort: falls back to the baked image, then empty).
-  const loadEdit = async (surface: AppearanceSurface) => {
+  // Seed the cropper with the source for a kind: the stored original + crop when
+  // it matches the saved selection (so reopening restores the exact framing), or
+  // the fresh source for that kind (built-in art / hero render). `custom` waits
+  // for an upload; `none` and the activeTab accent-glow `default` have no source.
+  const seedForKind = async (
+    surface: AppearanceSurface,
+    config: SurfaceConfig,
+    kind: AppearanceBgKind,
+    hero: string,
+    restore: boolean
+  ) => {
+    setError(null);
     const loadId = ++editLoadId.current;
+    setCropSource(null);
+    setRestoredCrop(undefined);
+    if (kind === 'none') return;
+    if (kind === 'custom') {
+      // Restore a stored custom upload only when the surface was already custom.
+      if (restore && resolveAppearanceBg(settings, surface).kind === 'custom') void loadEdit(surface, loadId);
+      return;
+    }
+    if (kind === 'default' && !config.defaultSrc) return; // accent glow, nothing to frame
+
+    const saved = resolveAppearanceBg(settings, surface);
+    const matches =
+      restore && saved.kind === kind && (kind !== 'hero' || (saved.hero ?? DEFAULT_SIDEBAR_HERO) === hero);
+    try {
+      if (matches) {
+        const edit = await getAppearanceImageEdit(surface);
+        if (editLoadId.current !== loadId) return;
+        if (edit) {
+          setCropSource(edit.source);
+          setRestoredCrop(edit.crop);
+          return;
+        }
+      }
+      // Fresh source for the kind.
+      const url = kind === 'default' ? config.defaultSrc! : getHeroRenderPath(hero);
+      const dataUrl = await urlToDataUrl(url);
+      if (editLoadId.current !== loadId) return;
+      setRestoredCrop(undefined);
+      setCropSource(dataUrl);
+    } catch (err) {
+      if (editLoadId.current !== loadId) return;
+      console.error('Failed to load appearance source', err);
+      setError(t('settings.appearance.art.applyError', 'Could not apply that image.'));
+    }
+  };
+
+  // Restore a stored custom edit (original + crop), falling back to the baked image.
+  const loadEdit = async (surface: AppearanceSurface, loadId = ++editLoadId.current) => {
     try {
       const edit = await getAppearanceImageEdit(surface);
       if (editLoadId.current !== loadId) return;
@@ -217,41 +296,37 @@ export default function AppearanceArtSection() {
     await saveSettings({ ...settings, ...patch });
   };
 
-  // Default / None apply immediately and close; if leaving custom, drop the
-  // stored bytes so they don't linger.
-  const chooseKind = async (kind: AppearanceBgKind) => {
+  // Tabs only switch the draft kind (no auto-apply). Hero opens to its grid; the
+  // other kinds seed the cropper (or, for none / accent-glow default, nothing).
+  const selectKind = (kind: AppearanceBgKind) => {
     if (!editing || !editingConfig) return;
     setDraftKind(kind);
     setError(null);
-    if (kind === 'default' || kind === 'none') {
-      if (resolveAppearanceBg(settings, editing).kind === 'custom') {
-        await removeAppearanceImage(editing);
-      }
-      await persist(editing, { kind });
-      close();
-      return;
-    }
     if (kind === 'hero') {
+      // Show the hero grid first; picking a hero loads it into the cropper.
+      editLoadId.current++;
       setCropSource(null);
+      setRestoredCrop(undefined);
       return;
     }
-    // custom: load any prior edit to seed the cropper.
-    setCropSource(null);
-    setRestoredCrop(undefined);
-    void loadEdit(editing);
+    void seedForKind(editing, editingConfig, kind, draftHero, false);
   };
 
-  const chooseHero = async (hero: string) => {
-    if (!editing) return;
-    await persist(editing, { kind: 'hero', hero });
+  const selectHero = (hero: string) => {
+    if (!editing || !editingConfig) return;
+    setDraftHero(hero);
+    void seedForKind(editing, editingConfig, 'hero', hero, false);
+  };
+
+  // Commit a non-image draft (none, or the activeTab accent-glow default). Drops
+  // any baked image so the live/glow render takes over. Image kinds commit through
+  // the cropper's own "use image" button (it has to bake first).
+  const applyDraft = async () => {
+    if (!editing || busy) return;
+    if (appearanceImages[editing]) await removeAppearanceImage(editing);
+    const bg: AppearanceBg = draftKind === 'hero' ? { kind: 'hero', hero: draftHero } : { kind: draftKind };
+    await persist(editing, bg);
     close();
-  };
-
-  // Picking a NEW source discards the restored crop so the cropper centers it.
-  const stageSource = (dataUrl: string) => {
-    editLoadId.current++;
-    setRestoredCrop(undefined);
-    setCropSource(dataUrl);
   };
 
   const pickCustom = async () => {
@@ -263,13 +338,17 @@ export default function AppearanceArtSection() {
     if (!path) return;
     try {
       const dataUrl = await readImageDataUrl(path);
-      stageSource(dataUrl);
+      editLoadId.current++;
+      setRestoredCrop(undefined);
+      setCropSource(dataUrl);
     } catch (err) {
       console.error('Failed to read custom image', err);
       setError(t('settings.appearance.art.applyError', 'Could not apply that image.'));
     }
   };
 
+  // Any framed image kind (default / hero / custom) bakes here and stores the
+  // result as the surface image, plus the original + crop for a faithful reopen.
   const applyCrop = async ({
     dataUrl,
     source,
@@ -291,7 +370,8 @@ export default function AppearanceArtSection() {
       } catch (editErr) {
         console.error('Failed to store appearance image edit (resume framing)', editErr);
       }
-      await persist(editing, { kind: 'custom' });
+      const bg: AppearanceBg = draftKind === 'hero' ? { kind: 'hero', hero: draftHero } : { kind: draftKind };
+      await persist(editing, bg);
       close();
     } catch (err) {
       console.error('Failed to set appearance image', err);
@@ -300,6 +380,15 @@ export default function AppearanceArtSection() {
       setBusy(false);
     }
   };
+
+  // What the modal body shows for the current draft.
+  const hasDefaultArt = !!editingConfig?.defaultSrc;
+  const showHeroGrid = draftKind === 'hero' && !cropSource;
+  const showCropper =
+    draftKind === 'custom' || (draftKind === 'default' && hasDefaultArt) || (draftKind === 'hero' && !!cropSource);
+  const showFooter = !showCropper && !showHeroGrid; // none, or the activeTab accent-glow default
+  // The preview header reflects the live draft (used when no cropper is shown).
+  const draftBg: AppearanceBg = draftKind === 'hero' ? { kind: 'hero', hero: draftHero } : { kind: draftKind };
 
   return (
     <div>
@@ -352,7 +441,7 @@ export default function AppearanceArtSection() {
           role="presentation"
         >
           <div
-            className="relative w-full max-w-md overflow-hidden rounded-sm border border-white/10 bg-bg-secondary p-5 shadow-2xl"
+            className="relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-sm border border-white/10 bg-bg-secondary shadow-2xl"
             onClick={(e) => e.stopPropagation()}
             role="dialog"
             aria-modal="true"
@@ -361,7 +450,9 @@ export default function AppearanceArtSection() {
             })}
           >
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
-            <div className="mb-4 flex items-center justify-between gap-3">
+
+            {/* Header (pinned) */}
+            <div className="flex flex-shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-4">
               <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver">
                 {t(editingConfig.labelKey, editingConfig.fallbackLabel)}
               </h3>
@@ -376,83 +467,131 @@ export default function AppearanceArtSection() {
               </button>
             </div>
 
-            {/* Source-kind tabs */}
-            <div className="mb-4 flex flex-wrap gap-1.5">
-              {kindsFor(editingConfig).map((kind) => {
-                const active = draftKind === kind;
-                return (
-                  <button
-                    key={kind}
-                    type="button"
-                    onClick={() => void chooseKind(kind)}
-                    aria-pressed={active}
-                    className={`rounded-sm border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                      active
-                        ? 'border-accent/70 bg-accent/15 text-text-primary'
-                        : 'border-white/10 bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary'
-                    }`}
-                  >
-                    {t(`settings.appearance.art.kind.${kind}`)}
-                  </button>
-                );
-              })}
-            </div>
-
-            {draftKind === 'hero' && (
-              <div className="grid max-h-[50vh] grid-cols-5 gap-2 overflow-y-auto sm:grid-cols-6">
-                {HERO_NAMES_SORTED.map((heroName) => {
-                  const current = resolveAppearanceBg(settings, editing);
-                  const active = current.kind === 'hero' && (current.hero ?? DEFAULT_SIDEBAR_HERO) === heroName;
+            {/* Body (scrolls) */}
+            <div className="min-h-0 flex-1 overflow-y-auto px-5">
+              {/* Source-kind tabs (selection only; nothing is saved until Apply) */}
+              <div className="mb-4 flex flex-wrap gap-1.5">
+                {kindsFor(editingConfig).map((kind) => {
+                  const active = draftKind === kind;
                   return (
                     <button
-                      key={heroName}
+                      key={kind}
                       type="button"
-                      onClick={() => void chooseHero(heroName)}
-                      title={heroName}
-                      aria-label={heroName}
+                      onClick={() => selectKind(kind)}
                       aria-pressed={active}
-                      className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-sm border bg-bg-tertiary transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                      className={`rounded-sm border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                         active
-                          ? 'border-accent/70 bg-accent/15'
-                          : 'border-white/10 hover:border-accent/50 hover:bg-accent/10'
+                          ? 'border-accent/70 bg-accent/15 text-text-primary'
+                          : 'border-white/10 bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary'
                       }`}
                     >
-                      <img
-                        src={getHeroChipIconPath(heroName)}
-                        alt=""
-                        aria-hidden
-                        className="h-8 w-8 object-contain"
-                        loading="lazy"
-                      />
-                      {active && (
-                        <span className="absolute right-0.5 top-0.5 rounded-sm bg-accent p-0.5 text-accent-foreground">
-                          <Check className="h-2.5 w-2.5" aria-hidden />
-                        </span>
-                      )}
+                      {t(`settings.appearance.art.kind.${kind}`)}
                     </button>
                   );
                 })}
               </div>
-            )}
 
-            {draftKind === 'custom' && (
-              <div className="space-y-3">
-                <LockerImageCropper
-                  imageDataUrl={cropSource}
-                  aspect={SURFACE_ASPECT}
-                  initialCrop={restoredCrop}
-                  emptyHint={t('settings.appearance.art.uploadHint', 'Upload an image to frame it.')}
-                  busy={busy}
-                  onApply={applyCrop}
-                />
-                <Button variant="secondary" size="sm" onClick={() => void pickCustom()} disabled={busy}>
-                  <Upload className="h-4 w-4" />
-                  <Tx k="settings.appearance.art.uploadImage" fallback="Upload image" />
+              {/* Preview header only when there's no cropper acting as the preview. */}
+              {showFooter && (
+                <div className="mb-4">
+                  <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-text-secondary">
+                    {t('settings.appearance.art.preview', 'Preview')}
+                  </span>
+                  <SurfacePreview bg={draftBg} config={editingConfig} customSrc={appearanceImages[editing]} className="h-16 w-full" />
+                  <p className="mt-3 text-center text-sm text-text-secondary">
+                    {t(draftKind === 'none' ? 'settings.appearance.art.noneHint' : 'settings.appearance.art.defaultHint')}
+                  </p>
+                </div>
+              )}
+
+              {showHeroGrid && (
+                <>
+                  <p className="mb-2 text-xs text-text-secondary">{t('settings.appearance.art.heroHint')}</p>
+                  <div className="grid max-h-[44vh] grid-cols-5 gap-2 overflow-y-auto sm:grid-cols-6">
+                    {HERO_NAMES_SORTED.map((heroName) => {
+                      const active = draftHero === heroName;
+                      return (
+                        <button
+                          key={heroName}
+                          type="button"
+                          onClick={() => selectHero(heroName)}
+                          title={heroName}
+                          aria-label={heroName}
+                          aria-pressed={active}
+                          className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-sm border bg-bg-tertiary transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                            active
+                              ? 'border-accent/70 bg-accent/15'
+                              : 'border-white/10 hover:border-accent/50 hover:bg-accent/10'
+                          }`}
+                        >
+                          <img
+                            src={getHeroChipIconPath(heroName)}
+                            alt=""
+                            aria-hidden
+                            className="h-8 w-8 object-contain"
+                            loading="lazy"
+                          />
+                          {active && (
+                            <span className="absolute right-0.5 top-0.5 rounded-sm bg-accent p-0.5 text-accent-foreground">
+                              <Check className="h-2.5 w-2.5" aria-hidden />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </>
+              )}
+
+              {showCropper && (
+                <div className="space-y-3 pb-1">
+                  <LockerImageCropper
+                    imageDataUrl={cropSource}
+                    aspect={SURFACE_ASPECT}
+                    nameControls={false}
+                    initialCrop={restoredCrop}
+                    emptyHint={t('settings.appearance.art.uploadHint', 'Upload an image to frame it.')}
+                    busy={busy}
+                    onApply={applyCrop}
+                  />
+                  {draftKind === 'custom' && (
+                    <Button variant="secondary" size="sm" onClick={() => void pickCustom()} disabled={busy}>
+                      <Upload className="h-4 w-4" />
+                      <Tx k="settings.appearance.art.uploadImage" fallback="Upload image" />
+                    </Button>
+                  )}
+                  {draftKind === 'hero' && (
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => {
+                        editLoadId.current++;
+                        setCropSource(null);
+                        setRestoredCrop(undefined);
+                      }}
+                      disabled={busy}
+                    >
+                      {t('settings.appearance.art.changeHero', 'Choose a different hero')}
+                    </Button>
+                  )}
+                </div>
+              )}
+
+              {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+            </div>
+
+            {/* Footer (pinned). Image kinds commit through the cropper's own button,
+                so only the non-image states (none / accent-glow default) get Apply. */}
+            {showFooter && (
+              <div className="flex flex-shrink-0 justify-end gap-2 border-t border-white/10 px-5 py-4">
+                <Button variant="secondary" size="sm" onClick={close} disabled={busy}>
+                  {t('common.actions.cancel')}
+                </Button>
+                <Button size="sm" onClick={() => void applyDraft()} disabled={busy}>
+                  {t('common.actions.apply')}
                 </Button>
               </div>
             )}
-
-            {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
           </div>
         </div>,
         document.body

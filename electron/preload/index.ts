@@ -229,6 +229,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('read-glb-file', glbPath),
     readImageDataUrl: (imagePath: string) =>
         ipcRenderer.invoke('read-image-data-url', imagePath),
+    readRendererAsset: (relPath: string) =>
+        ipcRenderer.invoke('read-renderer-asset', relPath),
     getLockerModImages: () => ipcRenderer.invoke('get-locker-mod-images'),
     setLockerModImage: (skinKey: string, source: string) =>
         ipcRenderer.invoke('set-locker-mod-image', skinKey, source),

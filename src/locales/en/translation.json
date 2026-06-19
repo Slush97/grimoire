@@ -515,6 +515,11 @@
         "uploadImage": "Upload image",
         "uploadHint": "Upload an image to frame it.",
         "applyError": "Could not apply that image.",
+        "defaultHint": "Use Grimoire's built-in look for this surface.",
+        "noneHint": "Hide this surface's background entirely.",
+        "heroHint": "Pick a hero, then frame their render below.",
+        "changeHero": "Choose a different hero",
+        "preview": "Preview",
         "surface": {
           "launchModded": "Launch Modded",
           "launchVanilla": "Launch Vanilla",
@@ -1251,7 +1256,10 @@
       "resetZoom": "Reset zoom",
       "upscaleWarning": "Source is {{sourceWidth}} x {{sourceHeight}}, smaller than the {{targetWidth}} x {{targetHeight}} target, so it will be upscaled and may look soft.",
       "instructions": "Drag to reposition, scroll or use the slider to zoom. The frame is locked to the card's aspect so the result is not stretched.",
-      "useCrop": "Use crop"
+      "useCrop": "Use crop",
+      "boxHint": "Drag the box to move it, drag a corner to resize. The selection is locked to the surface's shape.",
+      "selectionSize": "Selection size",
+      "resetCrop": "Reset selection"
     },
     "model": {
       "close3d": "Close 3D model",

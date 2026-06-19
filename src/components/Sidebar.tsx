@@ -177,9 +177,11 @@ function LaunchButtonBackdrop({
 }
 
 /** Render a launch-button / volume-popup backdrop from its resolved descriptor
- *  (issue: unify launcher backgrounds). `none` -> no art; `hero` -> a hero render
- *  with the shared face crop; `custom` -> the user's uploaded image (falling back
- *  to the built-in art if its bytes are missing); `default` -> the built-in art. */
+ *  (issue: unify launcher backgrounds). `none` -> no art. Otherwise, if the user
+ *  framed this surface, a baked image (`customSrc`) is stored for ANY kind and is
+ *  rendered centered (the framing is baked in). With no baked image we fall back
+ *  to the live source: `hero` -> a hero render with the shared face crop; anything
+ *  else -> the built-in art (this also covers legacy installs that never framed). */
 function SurfaceBackdrop({
   bg,
   defaultSrc,
@@ -194,6 +196,10 @@ function SurfaceBackdrop({
   customSrc?: string;
 }) {
   if (bg.kind === 'none') return null;
+  // A framed surface bakes its crop into customSrc, regardless of source kind.
+  if (customSrc) {
+    return <LaunchButtonBackdrop src={customSrc} position="center" warm={warm} />;
+  }
   if (bg.kind === 'hero') {
     const hero = bg.hero ?? DEFAULT_SIDEBAR_HERO;
     return (
@@ -203,9 +209,6 @@ function SurfaceBackdrop({
         warm={warm}
       />
     );
-  }
-  if (bg.kind === 'custom' && customSrc) {
-    return <LaunchButtonBackdrop src={customSrc} position="center" warm={warm} />;
   }
   return <LaunchButtonBackdrop src={defaultSrc} position={defaultPosition} warm={warm} />;
 }
@@ -335,17 +338,15 @@ export default function Sidebar() {
   const launchVanillaBg = resolveAppearanceBg(settings, 'launchVanilla');
   const volumeBg = resolveAppearanceBg(settings, 'volume');
   const activeTabBg = resolveAppearanceBg(settings, 'activeTab');
-  // The active-tab highlight only ever paints an image (hero/custom) or the plain
-  // accent glow (default/none). A truthy src drives the image styling; null keeps
-  // today's accent-border active state.
+  // The active-tab highlight either paints an image (a framed/baked surface, or a
+  // live hero render) or the plain accent glow (default). A baked image wins for
+  // any kind; otherwise a hero render; otherwise null keeps the accent-border state.
+  const activeTabBaked = appearanceImages.activeTab ?? null;
   const sidebarHeroHighlightSrc =
-    activeTabBg.kind === 'hero'
-      ? getHeroRenderPath(activeTabBg.hero ?? DEFAULT_SIDEBAR_HERO)
-      : activeTabBg.kind === 'custom'
-        ? appearanceImages.activeTab ?? null
-        : null;
+    activeTabBaked ??
+    (activeTabBg.kind === 'hero' ? getHeroRenderPath(activeTabBg.hero ?? DEFAULT_SIDEBAR_HERO) : null);
   const sidebarHeroImageStyle: CSSProperties =
-    activeTabBg.kind === 'hero'
+    !activeTabBaked && activeTabBg.kind === 'hero'
       ? getSidebarHeroImageStyle(activeTabBg.hero ?? DEFAULT_SIDEBAR_HERO)
       : { objectPosition: 'center' };
   const settingsActive = location.pathname.startsWith('/settings');

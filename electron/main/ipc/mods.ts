@@ -1,6 +1,6 @@
 import { ipcMain, shell } from 'electron';
 import { promises as fs, existsSync } from 'fs';
-import { extname, basename } from 'path';
+import { extname, basename, join, resolve, sep } from 'path';
 import { loadSettings, saveSettings, getActiveDeadlockPath } from '../services/settings';
 import {
     scanMods,
@@ -829,6 +829,29 @@ ipcMain.handle('read-image-data-url', async (_, imagePath: string): Promise<stri
         throw new Error('Image file not found');
     }
     return readImageAsDataUrl(imagePath);
+});
+
+// read-renderer-asset
+// Reads a BUNDLED renderer asset (e.g. built-in launcher art, a hero render) as a
+// data URL. The Appearance crop editor needs the bytes to bake/frame a built-in
+// image, but a packaged renderer is served from file:// where fetch() of a file://
+// asset is blocked and a file:// <img> taints the canvas. Main reads it instead.
+// Confined to the renderer output dir, traversal guarded.
+const RENDERER_ASSET_ROOT = resolve(join(__dirname, '../renderer'));
+ipcMain.handle('read-renderer-asset', async (_, relPath: string): Promise<string> => {
+    if (typeof relPath !== 'string' || !relPath) {
+        throw new Error('Invalid asset path');
+    }
+    // Drop any query/hash, then strip leading ./ or / so it resolves under the root.
+    const clean = relPath.split(/[?#]/)[0].replace(/^[./]+/, '');
+    const resolved = resolve(RENDERER_ASSET_ROOT, clean);
+    if (resolved !== RENDERER_ASSET_ROOT && !resolved.startsWith(RENDERER_ASSET_ROOT + sep)) {
+        throw new Error('Asset path escapes the renderer root');
+    }
+    if (!existsSync(resolved)) {
+        throw new Error('Asset not found');
+    }
+    return readImageAsDataUrl(resolved);
 });
 
 // import-custom-mod
