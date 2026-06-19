@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Image as ImageIcon, X, Play, Wand2, Volume2, type LucideIcon } from 'lucide-react';
+import { Check, Image as ImageIcon, Play, Wand2, Volume2, type LucideIcon } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { getAssetPath } from '../../lib/assetPath';
 import {
@@ -21,7 +21,7 @@ import {
 } from '../../lib/api';
 import type { AppearanceBg, AppearanceBgKind, AppearanceSurface, AppSettings } from '../../types/mod';
 import type { CropRect } from '../../types/electron';
-import { Button } from '../common/ui';
+import { Button, ModalHeader, SegmentedControl } from '../common/ui';
 import Tx from '../translation/Tx';
 import LockerImageCropper from '../locker/LockerImageCropper';
 import { Modal } from '../common/Modal';
@@ -187,7 +187,7 @@ function SurfacePreview({
         ? getSidebarHeroImageStyle(bg.hero ?? DEFAULT_SIDEBAR_HERO)
         : { objectPosition: 'center' };
     return (
-      <span className={`${base} ${heroSrc ? '' : 'bg-bg-tertiary'} border border-white/10`} aria-hidden>
+      <span className={`${base} ${heroSrc ? '' : 'bg-bg-tertiary'} border border-border`} aria-hidden>
         <SidebarActiveBackdrop heroSrc={heroSrc} heroImageStyle={heroImageStyle} />
         <span className="relative z-10 flex items-center gap-1.5 pl-2">
           <span className="h-3.5 w-3.5 flex-shrink-0 rounded-sm bg-text-primary/40" />
@@ -201,7 +201,7 @@ function SurfacePreview({
   if (config.surfaceKind === 'volume') {
     // Mirror the preview-volume bar: backdrop, volume glyph, then a slider line.
     return (
-      <span className={`${base} bg-bg-tertiary border border-white/10`} aria-hidden>
+      <span className={`${base} bg-bg-tertiary border border-border`} aria-hidden>
         <SurfaceBackdrop
           bg={bg}
           defaultSrc={config.defaultSrc!}
@@ -509,7 +509,7 @@ export default function AppearanceArtSection() {
               key={config.id}
               type="button"
               onClick={() => openEditor(config.id)}
-              className="group flex items-center gap-3 rounded-sm border border-white/10 bg-bg-tertiary/40 p-2 text-left transition-colors hover:border-accent/40 hover:bg-accent/5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              className="group flex items-center gap-3 rounded-sm border border-border bg-bg-tertiary/40 p-2 text-left transition-colors hover:border-accent/40 hover:bg-accent/5 cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
             >
               <SurfacePreview
                 bg={bg}
@@ -540,48 +540,28 @@ export default function AppearanceArtSection() {
         >
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
 
-            {/* Header (pinned) */}
-            <div className="flex flex-shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-4">
-              <h3
-                id="appearance-art-modal-title"
-                className="text-lg font-semibold text-text-primary tracking-wide font-reaver"
-              >
-                {t(editingConfig.labelKey, editingConfig.fallbackLabel)}
-              </h3>
-              <button
-                type="button"
-                onClick={close}
-                title={t('common.actions.close')}
-                aria-label={t('common.actions.close')}
-                className="flex h-8 w-8 items-center justify-center rounded-sm border border-white/10 text-text-secondary transition-colors hover:border-white/25 hover:bg-white/5 hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-              >
-                <X className="h-4 w-4" aria-hidden />
-              </button>
-            </div>
+            {/* Header (pinned). Close is disabled while busy to match the blocked
+                Escape/backdrop (dismissable={!busy}). */}
+            <ModalHeader
+              title={t(editingConfig.labelKey, editingConfig.fallbackLabel)}
+              titleId="appearance-art-modal-title"
+              onClose={close}
+              closeLabel={t('common.actions.close')}
+              closeDisabled={busy}
+            />
 
             {/* Body (scrolls) */}
-            <div className="min-h-0 flex-1 overflow-y-auto px-5">
+            <div className="min-h-0 flex-1 overflow-y-auto px-5 pt-4">
               {/* Source-kind tabs (selection only; nothing is saved until Apply) */}
-              <div className="mb-4 flex flex-wrap gap-1.5">
-                {kindsFor(editingConfig).map((kind) => {
-                  const active = draftKind === kind;
-                  return (
-                    <button
-                      key={kind}
-                      type="button"
-                      onClick={() => selectKind(kind)}
-                      aria-pressed={active}
-                      className={`rounded-sm border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
-                        active
-                          ? 'border-accent/70 bg-accent/15 text-text-primary'
-                          : 'border-white/10 bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary'
-                      }`}
-                    >
-                      {t(`settings.appearance.art.kind.${kind}`)}
-                    </button>
-                  );
-                })}
-              </div>
+              <SegmentedControl
+                className="mb-4"
+                options={kindsFor(editingConfig).map((kind) => ({
+                  value: kind,
+                  label: t(`settings.appearance.art.kind.${kind}`),
+                }))}
+                value={draftKind}
+                onChange={selectKind}
+              />
 
               {/* Preview header only when there's no cropper acting as the preview. */}
               {showFooter && (
@@ -613,7 +593,7 @@ export default function AppearanceArtSection() {
                           className={`relative flex aspect-square items-center justify-center overflow-hidden rounded-sm border bg-bg-tertiary transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                             active
                               ? 'border-accent/70 bg-accent/15'
-                              : 'border-white/10 hover:border-accent/50 hover:bg-accent/10'
+                              : 'border-border hover:border-accent/50 hover:bg-accent/10'
                           }`}
                         >
                           <img
@@ -671,7 +651,7 @@ export default function AppearanceArtSection() {
             {/* Footer (pinned). Image kinds commit through the cropper's own button,
                 so only the non-image states (none / accent-glow default) get Apply. */}
             {showFooter && (
-              <div className="flex flex-shrink-0 justify-end gap-2 border-t border-white/10 px-5 py-4">
+              <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
                 <Button variant="secondary" size="sm" onClick={close} disabled={busy}>
                   {t('common.actions.cancel')}
                 </Button>

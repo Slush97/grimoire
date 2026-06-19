@@ -152,8 +152,8 @@ function LoadOrderRow({
       style={{ transform: CSS.Transform.toString(transform), transition }}
       className={`flex touch-none items-center gap-2.5 rounded-md border px-2 py-1.5 transition-colors ${
         isDragging
-          ? 'z-10 cursor-grabbing border-accent/40 bg-[#1c1c1c] opacity-95 shadow-lg shadow-black/40'
-          : 'cursor-grab border-white/[0.08] bg-[#141414]/70 hover:border-white/[0.18] hover:bg-[#1a1a1a]/80'
+          ? 'z-10 cursor-grabbing border-accent/40 bg-bg-secondary opacity-95 shadow-lg shadow-black/40'
+          : 'cursor-grab border-white/[0.08] bg-bg-secondary/60 hover:border-white/[0.18] hover:bg-bg-secondary/80'
       }`}
     >
       <GripVertical className="h-4 w-4 flex-shrink-0 text-white/40" aria-hidden />
@@ -344,7 +344,7 @@ function SkinGroupCard({
       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
         groupActive
           ? 'border-accent bg-white/[0.02] hover:bg-white/[0.04]'
-          : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
+          : 'border-white/[0.08] bg-bg-secondary/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
       } ${variantsOpen ? 'z-20' : ''}`}
     >
       {/* Glass backdrop: a blurred copy of the cover art bleeds behind the
@@ -471,7 +471,7 @@ function SkinGroupCard({
           }}
           aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
           title={t('locker.skins.deleteSkin', { name: primary.name })}
-          className="absolute right-1.5 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-red-500/80 hover:text-white focus-visible:opacity-100 group-hover/card:opacity-100"
+          className="absolute right-1.5 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/card:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
@@ -613,7 +613,7 @@ function SkinGroupRow({
           }}
           aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
           title={t('locker.skins.deleteSkin', { name: primary.name })}
-          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-red-500/80 hover:text-white focus-visible:opacity-100 group-hover/row:opacity-100"
+          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/row:opacity-100"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
