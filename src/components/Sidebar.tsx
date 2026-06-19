@@ -15,6 +15,7 @@ import {
   Settings2,
   AlertTriangle,
   ArrowRight,
+  ArrowRightLeft,
   Download,
   Play,
   Wand2,
@@ -48,6 +49,7 @@ import UpdateModal from './UpdateModal';
 import Tx from './translation/Tx';
 
 const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
+const LAUNCH_MODE_KEY = 'grimoire:launch-mode';
 const LABEL_TRANSITION_MS = 180;
 const DISCOVER_LAST_SEEN_KEY = 'grimoire:discover:last-seen-created-at';
 const DISCOVER_BADGE_POLL_MS = 2 * 60 * 1000;
@@ -60,6 +62,15 @@ const PREVIEW_VOLUME_BG = getAssetPath('/sidebar/preview-volume-bg.jpg');
 function readCollapsedPreference(): boolean {
   if (typeof window === 'undefined') return false;
   return localStorage.getItem(COLLAPSED_KEY) === '1';
+}
+
+// Which mode the single dual-use launch button fires (issue: unify launch
+// buttons). Persisted like the collapse preference; defaults to modded.
+type LaunchMode = 'modded' | 'vanilla';
+
+function readLaunchModePreference(): LaunchMode {
+  if (typeof window === 'undefined') return 'modded';
+  return localStorage.getItem(LAUNCH_MODE_KEY) === 'vanilla' ? 'vanilla' : 'modded';
 }
 
 function readDiscoverLastSeen(): number | null {
@@ -233,6 +244,7 @@ export default function Sidebar() {
 
   const [stashStatus, setStashStatus] = useState<VanillaStashStatus>({ active: false });
   const [launchPending, setLaunchPending] = useState<'modded' | 'vanilla' | null>(null);
+  const [launchMode, setLaunchMode] = useState<LaunchMode>(readLaunchModePreference);
   const [gameRunning, setGameRunning] = useState(false);
   const [stopPending, setStopPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
@@ -800,6 +812,60 @@ export default function Sidebar() {
 
   const canLaunch = !!settings?.deadlockPath || !!settings?.devDeadlockPath;
 
+  // Single dual-use launch button (issue: unify launch buttons): one persisted
+  // mode drives the icon, label, art, handler, and enable/disable rules. The
+  // trailing swap control and right-click both flip between Modded and Vanilla.
+  const swapLaunchMode = useCallback(() => {
+    setLaunchMode((prev) => {
+      const next = prev === 'modded' ? 'vanilla' : 'modded';
+      try {
+        localStorage.setItem(LAUNCH_MODE_KEY, next);
+      } catch {
+        /* quota / private mode */
+      }
+      return next;
+    });
+  }, []);
+
+  const isModdedLaunch = launchMode === 'modded';
+  const LaunchIcon = isModdedLaunch ? Wand2 : Play;
+  const launchConfig = isModdedLaunch
+    ? {
+        onLaunch: handleLaunchModded,
+        labelKey: 'sidebar.launchModded',
+        bg: launchModdedBg,
+        defaultSrc: LAUNCH_MODDED_BG,
+        defaultPosition: 'center 45%',
+        warm: false,
+        customSrc: appearanceImages.launchModded,
+        // Modded is always available; it auto-restores a stash on the way in.
+        disabled: !canLaunch || !!launchPending || stopPending,
+        title: !canLaunch
+          ? t('sidebar.launch.noPath')
+          : stashStatus.active
+            ? t('sidebar.launch.moddedStash')
+            : t('sidebar.launch.moddedDefault'),
+        switchTitle: t('sidebar.launch.switchToVanilla'),
+      }
+    : {
+        onLaunch: handleLaunchVanilla,
+        labelKey: 'sidebar.launchVanilla',
+        bg: launchVanillaBg,
+        defaultSrc: LAUNCH_VANILLA_BG,
+        defaultPosition: 'center 48%',
+        warm: true,
+        customSrc: appearanceImages.launchVanilla,
+        // Vanilla is disabled while a stash is already active (restore first; the
+        // banner above explains it). Right-click can still swap back to Modded.
+        disabled: !canLaunch || !!launchPending || stopPending || stashStatus.active,
+        title: !canLaunch
+          ? t('sidebar.launch.noPath')
+          : stashStatus.active
+            ? t('sidebar.launch.vanillaStash')
+            : t('sidebar.launch.vanillaDefault'),
+        switchTitle: t('sidebar.launch.switchToModded'),
+      };
+
   return (
     <aside
       ref={asideRef}
@@ -1100,63 +1166,69 @@ export default function Sidebar() {
               )}
             </button>
           ) : (
-            <>
-          <button
-            onClick={handleLaunchModded}
-            disabled={!canLaunch || !!launchPending || stopPending}
-            title={
-              !canLaunch
-                ? t('sidebar.launch.noPath')
-                : stashStatus.active
-                  ? t('sidebar.launch.moddedStash')
-                  : t('sidebar.launch.moddedDefault')
-            }
-            className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <SurfaceBackdrop bg={launchModdedBg} defaultSrc={LAUNCH_MODDED_BG} defaultPosition="center 45%" customSrc={appearanceImages.launchModded} />
-            <span className={`relative z-10 ${actionIconClass}`}>
-              {launchPending === 'modded' ? (
-                <Loader2 className="w-[18px] h-[18px] animate-spin" />
-              ) : (
-                <Wand2 className="w-[18px] h-[18px]" strokeWidth={2} />
-              )}
-            </span>
-            {labelMounted && (
-              <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
-                {t('sidebar.launchModded')}
-              </span>
-            )}
-          </button>
+            <div
+              className="group/launch relative"
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (launchPending || stopPending) return;
+                swapLaunchMode();
+              }}
+            >
+              <button
+                onClick={launchConfig.onLaunch}
+                disabled={launchConfig.disabled}
+                title={launchConfig.title}
+                className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SurfaceBackdrop
+                  bg={launchConfig.bg}
+                  defaultSrc={launchConfig.defaultSrc}
+                  defaultPosition={launchConfig.defaultPosition}
+                  warm={launchConfig.warm}
+                  customSrc={launchConfig.customSrc}
+                />
+                <span className={`relative z-10 ${actionIconClass}`}>
+                  {launchPending ? (
+                    <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                  ) : (
+                    <LaunchIcon className="w-[18px] h-[18px]" strokeWidth={2} />
+                  )}
+                </span>
+                {labelMounted && (
+                  <span
+                    className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`}
+                    aria-hidden={!labelsVisible}
+                  >
+                    {t(launchConfig.labelKey)}
+                  </span>
+                )}
+              </button>
 
-          <button
-            onClick={handleLaunchVanilla}
-            disabled={!canLaunch || !!launchPending || stopPending || stashStatus.active}
-            title={
-              !canLaunch
-                ? t('sidebar.launch.noPath')
-                : stashStatus.active
-                  ? t('sidebar.launch.vanillaStash')
-                  : t('sidebar.launch.vanillaDefault')
-            }
-            className={`group relative flex w-full h-8 items-center overflow-hidden rounded-sm text-text-primary/85 ring-1 ring-white/10 hover:text-text-primary hover:ring-amber-400/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed ${
-              launchVanillaBg.kind === 'none' ? 'bg-bg-tertiary' : ''
-            }`}
-          >
-            <SurfaceBackdrop bg={launchVanillaBg} defaultSrc={LAUNCH_VANILLA_BG} defaultPosition="center 48%" warm customSrc={appearanceImages.launchVanilla} />
-            <span className={`relative z-10 ${actionIconClass}`}>
-              {launchPending === 'vanilla' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
+              {/* Swap affordance (issue: unify launch buttons). Expanded: a faint
+                  trailing icon that brightens on hover and flips the mode WITHOUT
+                  launching (it sits in its own zone, so it never eats a launch
+                  click). Collapsed: a hover-only hint glyph; the swap itself is the
+                  wrapper's right-click. Right-click anywhere always swaps. */}
+              {labelMounted ? (
+                <button
+                  type="button"
+                  onClick={swapLaunchMode}
+                  disabled={!!launchPending || stopPending}
+                  title={launchConfig.switchTitle}
+                  aria-label={launchConfig.switchTitle}
+                  className="absolute right-1.5 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-primary/45 opacity-70 drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-all duration-200 hover:bg-black/30 hover:text-text-primary hover:opacity-100 group-hover/launch:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                </button>
               ) : (
-                <Play className="w-4 h-4" strokeWidth={2} />
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute right-0.5 top-0.5 z-20 text-text-primary/0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] transition-colors duration-200 group-hover/launch:text-text-primary/70"
+                >
+                  <ArrowRightLeft className="h-3 w-3" />
+                </span>
               )}
-            </span>
-            {labelMounted && (
-              <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
-                {t('sidebar.launchVanilla')}
-              </span>
-            )}
-          </button>
-            </>
+            </div>
           )}
         </div>
 

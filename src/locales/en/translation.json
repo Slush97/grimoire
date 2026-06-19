@@ -511,7 +511,6 @@
       "art": {
         "title": "Launcher & sidebar art",
         "description": "Set the background for each launch button, the active tab, and the volume bar.",
-        "editNamed": "Customize {{surface}}",
         "uploadImage": "Upload image",
         "uploadHint": "Upload an image to frame it.",
         "applyError": "Could not apply that image.",
@@ -1774,7 +1773,9 @@
       "moddedDefault": "Launch Deadlock with mods active",
       "vanillaStash": "A vanilla session is already active. Restore mods first.",
       "vanillaDefault": "Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts",
-      "stopTitle": "Stop the running Deadlock process"
+      "stopTitle": "Stop the running Deadlock process",
+      "switchToModded": "Switch to Launch Modded",
+      "switchToVanilla": "Switch to Launch Vanilla"
     },
     "vanilla": {
       "stashed": "Vanilla: {{count}} stashed",

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type CSSProperties } from 'react';
-import { createPortal } from 'react-dom';
+import { useCallback, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Check, Image as ImageIcon, Ban, Upload, X } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
@@ -24,11 +23,46 @@ import type { CropRect } from '../../types/electron';
 import { Button } from '../common/ui';
 import Tx from '../translation/Tx';
 import LockerImageCropper from '../locker/LockerImageCropper';
+import { Modal } from '../common/Modal';
 
 // The launch buttons / volume bar are wide-and-short banners; frame custom
 // uploads to roughly that shape so the crop preview matches what's rendered.
 // (The Sidebar backdrops use object-cover, so the exact ratio is forgiving.)
 const SURFACE_ASPECT = 11 / 2;
+
+/** Cap a freshly picked upload's long edge before it's framed/stored. The baked
+ *  output is already capped (in the cropper), but the ORIGINAL source is kept for
+ *  a faithful reopen; without this a 40MP photo would round-trip through IPC and
+ *  sit in memory + on disk at full size. */
+const MAX_SOURCE_LONG = 2560;
+
+/** Downscale a data URL so its long edge is <= MAX_SOURCE_LONG, re-encoding in a
+ *  size-appropriate format (preserve PNG/WebP alpha; everything else -> JPEG).
+ *  Returns the input untouched when already within bounds or on any failure. */
+async function capSourceImage(dataUrl: string): Promise<string> {
+  const img = await new Promise<HTMLImageElement | null>((resolve) => {
+    const el = new Image();
+    el.onload = () => resolve(el);
+    el.onerror = () => resolve(null);
+    el.src = dataUrl;
+  });
+  if (!img) return dataUrl;
+  const long = Math.max(img.naturalWidth, img.naturalHeight);
+  if (long <= MAX_SOURCE_LONG) return dataUrl;
+  const k = MAX_SOURCE_LONG / long;
+  const w = Math.max(1, Math.round(img.naturalWidth * k));
+  const h = Math.max(1, Math.round(img.naturalHeight * k));
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return dataUrl;
+  ctx.imageSmoothingQuality = 'high';
+  ctx.drawImage(img, 0, 0, w, h);
+  const mime = dataUrl.slice(5, Math.max(5, dataUrl.indexOf(';')));
+  const outType = mime === 'image/png' || mime === 'image/webp' ? mime : 'image/jpeg';
+  return canvas.toDataURL(outType, outType === 'image/jpeg' ? 0.9 : undefined);
+}
 
 interface SurfaceConfig {
   id: AppearanceSurface;
@@ -193,16 +227,6 @@ export default function AppearanceArtSection() {
     setBusy(false);
   }, []);
 
-  // Close the modal on Escape.
-  useEffect(() => {
-    if (!editing) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') close();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [editing, close]);
-
   const openEditor = (surface: AppearanceSurface) => {
     const current = resolveAppearanceBg(settings, surface);
     const config = SURFACES.find((s) => s.id === surface);
@@ -263,7 +287,7 @@ export default function AppearanceArtSection() {
     } catch (err) {
       if (editLoadId.current !== loadId) return;
       console.error('Failed to load appearance source', err);
-      setError(t('settings.appearance.art.applyError', 'Could not apply that image.'));
+      setError(t('settings.appearance.art.applyError'));
     }
   };
 
@@ -332,18 +356,18 @@ export default function AppearanceArtSection() {
   const pickCustom = async () => {
     if (busy) return;
     const path = await showOpenDialog({
-      title: t('settings.appearance.art.uploadImage', 'Upload image'),
+      title: t('settings.appearance.art.uploadImage'),
       filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
     });
     if (!path) return;
     try {
-      const dataUrl = await readImageDataUrl(path);
+      const dataUrl = await capSourceImage(await readImageDataUrl(path));
       editLoadId.current++;
       setRestoredCrop(undefined);
       setCropSource(dataUrl);
     } catch (err) {
       console.error('Failed to read custom image', err);
-      setError(t('settings.appearance.art.applyError', 'Could not apply that image.'));
+      setError(t('settings.appearance.art.applyError'));
     }
   };
 
@@ -375,7 +399,7 @@ export default function AppearanceArtSection() {
       close();
     } catch (err) {
       console.error('Failed to set appearance image', err);
-      setError(t('settings.appearance.art.applyError', 'Could not apply that image.'));
+      setError(t('settings.appearance.art.applyError'));
     } finally {
       setBusy(false);
     }
@@ -434,26 +458,23 @@ export default function AppearanceArtSection() {
         })}
       </div>
 
-      {editing && editingConfig && createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-fade-in"
-          onClick={close}
-          role="presentation"
+      {editing && editingConfig && (
+        <Modal
+          onClose={close}
+          size="sm"
+          dismissable={!busy}
+          labelledBy="appearance-art-modal-title"
+          backdropClassName="backdrop-blur-sm"
+          panelClassName="relative flex max-h-[90vh] flex-col overflow-hidden"
         >
-          <div
-            className="relative flex max-h-[90vh] w-full max-w-md flex-col overflow-hidden rounded-sm border border-white/10 bg-bg-secondary shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-            role="dialog"
-            aria-modal="true"
-            aria-label={t('settings.appearance.art.editNamed', {
-              surface: t(editingConfig.labelKey, editingConfig.fallbackLabel),
-            })}
-          >
             <span aria-hidden className="absolute left-0 top-0 bottom-0 w-[2px] bg-accent/60" />
 
             {/* Header (pinned) */}
             <div className="flex flex-shrink-0 items-center justify-between gap-3 px-5 pt-5 pb-4">
-              <h3 className="text-lg font-semibold text-text-primary tracking-wide font-reaver">
+              <h3
+                id="appearance-art-modal-title"
+                className="text-lg font-semibold text-text-primary tracking-wide font-reaver"
+              >
                 {t(editingConfig.labelKey, editingConfig.fallbackLabel)}
               </h3>
               <button
@@ -495,7 +516,7 @@ export default function AppearanceArtSection() {
               {showFooter && (
                 <div className="mb-4">
                   <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-text-secondary">
-                    {t('settings.appearance.art.preview', 'Preview')}
+                    {t('settings.appearance.art.preview')}
                   </span>
                   <SurfacePreview bg={draftBg} config={editingConfig} customSrc={appearanceImages[editing]} className="h-16 w-full" />
                   <p className="mt-3 text-center text-sm text-text-secondary">
@@ -550,7 +571,7 @@ export default function AppearanceArtSection() {
                     aspect={SURFACE_ASPECT}
                     nameControls={false}
                     initialCrop={restoredCrop}
-                    emptyHint={t('settings.appearance.art.uploadHint', 'Upload an image to frame it.')}
+                    emptyHint={t('settings.appearance.art.uploadHint')}
                     busy={busy}
                     onApply={applyCrop}
                   />
@@ -571,7 +592,7 @@ export default function AppearanceArtSection() {
                       }}
                       disabled={busy}
                     >
-                      {t('settings.appearance.art.changeHero', 'Choose a different hero')}
+                      {t('settings.appearance.art.changeHero')}
                     </Button>
                   )}
                 </div>
@@ -592,9 +613,7 @@ export default function AppearanceArtSection() {
                 </Button>
               </div>
             )}
-          </div>
-        </div>,
-        document.body
+        </Modal>
       )}
     </div>
   );

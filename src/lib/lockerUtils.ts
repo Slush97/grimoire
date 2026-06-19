@@ -177,7 +177,6 @@ export function resolveAppearanceBg(
   if (surface === 'activeTab') {
     const legacy = settings?.sidebarHeroHighlight;
     if (legacy === null || legacy === '') return { kind: 'none' };
-    if (legacy && HERO_NAMES_SORTED.includes(legacy)) return { kind: 'hero', hero: legacy };
     if (legacy) return { kind: 'hero', hero: legacy };
     return { kind: 'hero', hero: DEFAULT_SIDEBAR_HERO };
   }
