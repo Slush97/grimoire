@@ -512,7 +512,7 @@
         "title": "Launcher & sidebar art",
         "description": "Set the background for each launch button, the active tab, and the volume bar.",
         "uploadImage": "Upload image",
-        "uploadHint": "Upload an image to frame it.",
+        "uploadHint": "Click to choose an image, or drag one here.",
         "applyError": "Could not apply that image.",
         "defaultHint": "Use Grimoire's built-in look for this surface.",
         "noneHint": "Hide this surface's background entirely.",

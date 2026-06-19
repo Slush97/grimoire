@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState, type CSSProperties } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, Image as ImageIcon, Ban, Upload, X } from 'lucide-react';
+import { Check, Image as ImageIcon, X, Play, Wand2, Volume2, type LucideIcon } from 'lucide-react';
 import { useAppStore } from '../../stores/appStore';
 import { getAssetPath } from '../../lib/assetPath';
 import {
@@ -11,6 +11,7 @@ import {
   getSidebarHeroImageStyle,
   resolveAppearanceBg,
 } from '../../lib/lockerUtils';
+import { SidebarActiveBackdrop, SurfaceBackdrop } from '../sidebar/surfaceArt';
 import {
   getAppearanceImageEdit,
   setAppearanceImageEdit,
@@ -75,16 +76,25 @@ interface SurfaceConfig {
   /** Surfaces that can be fully hidden. The active tab always needs a visible
    *  highlight, so its `default` IS the accent glow and `none` is omitted. */
   allowNone: boolean;
+  /** How the preview reproduces this surface's real chrome (icon, fade, slider). */
+  surfaceKind: 'launch' | 'activeTab' | 'volume';
+  /** Launch surfaces tint warm (vanilla) vs cool (modded); matches the Sidebar. */
+  warm?: boolean;
+  /** The icon the real surface shows (launch glyph / volume glyph). */
+  icon?: LucideIcon;
+  /** Label baked onto the real surface (launch buttons), shown in the preview. */
+  innerLabelKey?: string;
 }
 
 const SURFACES: readonly SurfaceConfig[] = [
   {
-    id: 'launchModded',
-    labelKey: 'settings.appearance.art.surface.launchModded',
-    fallbackLabel: 'Launch Modded',
-    defaultSrc: getAssetPath('/locker/launch-modded-bg.webp'),
-    defaultPosition: 'center 45%',
-    allowNone: true,
+    id: 'activeTab',
+    labelKey: 'settings.appearance.art.surface.activeTab',
+    fallbackLabel: 'Active tab',
+    defaultSrc: null,
+    defaultPosition: 'center',
+    allowNone: false,
+    surfaceKind: 'activeTab',
   },
   {
     id: 'launchVanilla',
@@ -93,14 +103,22 @@ const SURFACES: readonly SurfaceConfig[] = [
     defaultSrc: getAssetPath('/locker/launch-vanilla-bg.jpg'),
     defaultPosition: 'center 48%',
     allowNone: true,
+    surfaceKind: 'launch',
+    warm: true,
+    icon: Play,
+    innerLabelKey: 'sidebar.launchVanilla',
   },
   {
-    id: 'activeTab',
-    labelKey: 'settings.appearance.art.surface.activeTab',
-    fallbackLabel: 'Active tab',
-    defaultSrc: null,
-    defaultPosition: 'center',
-    allowNone: false,
+    id: 'launchModded',
+    labelKey: 'settings.appearance.art.surface.launchModded',
+    fallbackLabel: 'Launch Modded',
+    defaultSrc: getAssetPath('/locker/launch-modded-bg.webp'),
+    defaultPosition: 'center 45%',
+    allowNone: true,
+    surfaceKind: 'launch',
+    warm: false,
+    icon: Wand2,
+    innerLabelKey: 'sidebar.launchModded',
   },
   {
     id: 'volume',
@@ -109,6 +127,8 @@ const SURFACES: readonly SurfaceConfig[] = [
     defaultSrc: getAssetPath('/sidebar/preview-volume-bg.jpg'),
     defaultPosition: 'center 43%',
     allowNone: true,
+    surfaceKind: 'volume',
+    icon: Volume2,
   },
 ];
 
@@ -139,7 +159,10 @@ async function urlToDataUrl(url: string): Promise<string> {
   });
 }
 
-/** A small live preview of how a surface's chosen background looks. */
+/** A miniature of the REAL surface (not a bare thumbnail), so the choice reads as
+ *  "this is exactly what the launch button / active tab / volume bar will look
+ *  like". Reuses the Sidebar's own backdrop primitives, then layers the surface's
+ *  signature foreground chrome (launch icon + label, nav row, volume slider). */
 function SurfacePreview({
   bg,
   config,
@@ -151,38 +174,70 @@ function SurfacePreview({
   customSrc?: string;
   className?: string;
 }) {
-  const base = `relative overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary ${className}`;
-  if (bg.kind === 'none') {
+  const { t } = useTranslation();
+  const base = `group relative flex items-center overflow-hidden rounded-sm ${className}`;
+
+  if (config.surfaceKind === 'activeTab') {
+    // Mirror the Sidebar's active-tab highlight: a baked image / hero render under
+    // the left fade, or the plain accent glow. The foreground evokes a nav row.
+    const heroSrc =
+      customSrc ?? (bg.kind === 'hero' ? getHeroRenderPath(bg.hero ?? DEFAULT_SIDEBAR_HERO) : null);
+    const heroImageStyle: CSSProperties =
+      !customSrc && bg.kind === 'hero'
+        ? getSidebarHeroImageStyle(bg.hero ?? DEFAULT_SIDEBAR_HERO)
+        : { objectPosition: 'center' };
     return (
-      <span className={`${base} flex items-center justify-center`} aria-hidden>
-        <Ban className="h-4 w-4 text-text-secondary" />
+      <span className={`${base} ${heroSrc ? '' : 'bg-bg-tertiary'} border border-white/10`} aria-hidden>
+        <SidebarActiveBackdrop heroSrc={heroSrc} heroImageStyle={heroImageStyle} />
+        <span className="relative z-10 flex items-center gap-1.5 pl-2">
+          <span className="h-3.5 w-3.5 flex-shrink-0 rounded-sm bg-text-primary/40" />
+          <span className="h-1.5 w-10 rounded-full bg-text-primary/35" />
+        </span>
       </span>
     );
   }
-  let src: string | null = null;
-  let style: CSSProperties = { objectPosition: config.defaultPosition };
-  if (bg.kind === 'hero') {
-    const hero = bg.hero ?? DEFAULT_SIDEBAR_HERO;
-    src = getHeroRenderPath(hero);
-    style = getSidebarHeroImageStyle(hero);
-  } else if (bg.kind === 'custom') {
-    src = customSrc ?? config.defaultSrc;
-    style = { objectPosition: 'center' };
-  } else {
-    src = config.defaultSrc;
-  }
-  if (!src) {
-    // activeTab default: the plain accent glow.
+
+  const Icon = config.icon;
+  if (config.surfaceKind === 'volume') {
+    // Mirror the preview-volume bar: backdrop, volume glyph, then a slider line.
     return (
-      <span className={`${base} bg-accent/15`} aria-hidden>
-        <span className="absolute inset-0 bg-gradient-to-r from-accent/25 via-accent/10 to-transparent" />
+      <span className={`${base} bg-bg-tertiary border border-white/10`} aria-hidden>
+        <SurfaceBackdrop
+          bg={bg}
+          defaultSrc={config.defaultSrc!}
+          defaultPosition={config.defaultPosition}
+          customSrc={customSrc}
+        />
+        {Icon && (
+          <Icon className="relative z-10 ml-2 h-3.5 w-3.5 flex-shrink-0 text-text-primary/85 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
+        )}
+        <span className="relative z-10 mx-2 h-1 flex-1 rounded-full bg-text-primary/30">
+          <span className="block h-full w-2/3 rounded-full bg-accent" />
+        </span>
       </span>
     );
   }
+
+  // Launch button: backdrop (warm/cool tint), launch glyph, and the baked label.
+  // `none` renders the plain button (SurfaceBackdrop returns nothing), exactly as
+  // the real button looks with art turned off.
   return (
-    <span className={base} aria-hidden>
-      <img src={src} alt="" className="h-full w-full object-cover opacity-80" style={style} />
-      <span className="absolute inset-0 bg-gradient-to-r from-bg-primary/70 via-bg-primary/30 to-transparent" />
+    <span className={`${base} bg-bg-tertiary ring-1 ring-white/10`} aria-hidden>
+      <SurfaceBackdrop
+        bg={bg}
+        defaultSrc={config.defaultSrc!}
+        defaultPosition={config.defaultPosition}
+        warm={config.warm}
+        customSrc={customSrc}
+      />
+      {Icon && (
+        <Icon className="relative z-10 ml-2 h-3.5 w-3.5 flex-shrink-0 text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]" />
+      )}
+      {config.innerLabelKey && (
+        <span className="relative z-10 ml-1.5 truncate text-[11px] font-semibold tracking-wide text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)]">
+          {t(config.innerLabelKey)}
+        </span>
+      )}
     </span>
   );
 }
@@ -353,6 +408,21 @@ export default function AppearanceArtSection() {
     close();
   };
 
+  // Stage a freshly chosen custom source (from the native picker or a drop) into
+  // the cropper: cap its size and clear any restored framing so it centers.
+  const stageCustomSource = async (dataUrl: string) => {
+    try {
+      const capped = await capSourceImage(dataUrl);
+      editLoadId.current++;
+      setRestoredCrop(undefined);
+      setCropSource(capped);
+    } catch (err) {
+      console.error('Failed to read custom image', err);
+      setError(t('settings.appearance.art.applyError'));
+    }
+  };
+
+  // Open the native file picker (invoked by clicking the empty crop frame).
   const pickCustom = async () => {
     if (busy) return;
     const path = await showOpenDialog({
@@ -360,15 +430,16 @@ export default function AppearanceArtSection() {
       filters: [{ name: 'Images', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp'] }],
     });
     if (!path) return;
-    try {
-      const dataUrl = await capSourceImage(await readImageDataUrl(path));
-      editLoadId.current++;
-      setRestoredCrop(undefined);
-      setCropSource(dataUrl);
-    } catch (err) {
-      console.error('Failed to read custom image', err);
-      setError(t('settings.appearance.art.applyError'));
-    }
+    await stageCustomSource(await readImageDataUrl(path));
+  };
+
+  // Read an image file dropped onto the empty crop frame.
+  const dropCustom = (file: File) => {
+    if (busy) return;
+    const reader = new FileReader();
+    reader.onload = () => void stageCustomSource(reader.result as string);
+    reader.onerror = () => setError(t('settings.appearance.art.applyError'));
+    reader.readAsDataURL(file);
   };
 
   // Any framed image kind (default / hero / custom) bakes here and stores the
@@ -444,7 +515,7 @@ export default function AppearanceArtSection() {
                 bg={bg}
                 config={config}
                 customSrc={appearanceImages[config.id]}
-                className="h-9 w-16 flex-shrink-0"
+                className="h-9 w-36 flex-shrink-0"
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-text-primary">
@@ -572,15 +643,11 @@ export default function AppearanceArtSection() {
                     nameControls={false}
                     initialCrop={restoredCrop}
                     emptyHint={t('settings.appearance.art.uploadHint')}
+                    onPickClick={draftKind === 'custom' ? () => void pickCustom() : undefined}
+                    onDropFile={draftKind === 'custom' ? dropCustom : undefined}
                     busy={busy}
                     onApply={applyCrop}
                   />
-                  {draftKind === 'custom' && (
-                    <Button variant="secondary" size="sm" onClick={() => void pickCustom()} disabled={busy}>
-                      <Upload className="h-4 w-4" />
-                      <Tx k="settings.appearance.art.uploadImage" fallback="Upload image" />
-                    </Button>
-                  )}
                   {draftKind === 'hero' && (
                     <Button
                       variant="secondary"

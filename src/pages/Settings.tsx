@@ -874,7 +874,7 @@ export default function Settings() {
         <Card
           title={<Tx k="settings.sections.appearance" fallback="Appearance" />}
           icon={Palette}
-          className="lg:col-span-2 bg-[radial-gradient(120%_90%_at_0%_0%,rgba(244,114,182,0.12),transparent_55%),radial-gradient(120%_90%_at_100%_0%,rgba(56,189,248,0.12),transparent_55%),radial-gradient(150%_120%_at_50%_140%,rgba(52,211,153,0.10),transparent_60%)]"
+          className="lg:col-span-2"
           action={
             <div className="flex flex-wrap gap-2 items-center justify-end">
               {(() => {
