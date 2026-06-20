@@ -102,7 +102,7 @@ export interface PlayerMatch {
   team_abandoned: boolean
   abandoned_time_s: number | null
   match_duration_s: number
-  match_result: number  // 0 = loss, 1 = win
+  match_result: number  // WINNING TEAM id (0 or 1); player won iff match_result === player_team
   objectives_mask_team0: number
   objectives_mask_team1: number
   username: string

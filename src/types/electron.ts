@@ -898,6 +898,7 @@ export interface ElectronAPI {
         getLocalMMRHistory: (accountId: number, limit?: number) => Promise<unknown[]>;
         getLocalMatchHistory: (accountId: number, limit?: number, offset?: number) => Promise<unknown[]>;
         getLocalMatchCount: (accountId: number) => Promise<number>;
+        recordMatches: (accountId: number, matches: unknown[]) => Promise<void>;
         getLocalHeroStats: (accountId: number, heroId?: number) => Promise<unknown[]>;
         getAggregatedStats: (accountId: number) => Promise<unknown | null>;
 

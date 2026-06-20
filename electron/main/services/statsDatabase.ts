@@ -149,8 +149,63 @@ export function initDatabase(): Database.Database {
         CREATE INDEX IF NOT EXISTS idx_hero_stats_account ON hero_stats_snapshots(account_id, snapshot_date DESC);
     `)
 
+    // One-time correction for the inverted win/loss bug: match rows synced
+    // before the fix stored match_outcome from `match_result === 1`, which
+    // inverted every team-0 game. Flip those once and recompute aggregates.
+    correctInvertedMatchOutcomes(db)
+
     console.log('[StatsDatabase] Database initialized successfully')
     return db
+}
+
+/**
+ * Historical fix for the win/loss inversion (see stats.ts getPlayerMatchHistory):
+ * earlier syncs labelled outcomes with `match_result === 1`, treating the
+ * winning-team id as the player's result. That inverted the outcome for every
+ * game the player was on team 0. Those rows are deterministically wrong, so flip
+ * the outcome for all team-0 rows once, then recompute aggregated stats. Guarded
+ * by a settings flag so it runs exactly once.
+ */
+const WINLOSS_FIX_FLAG = 'winloss_team0_outcome_fix_v1'
+function correctInvertedMatchOutcomes(database: Database.Database): void {
+    const done = database
+        .prepare('SELECT value FROM stats_settings WHERE key = ?')
+        .get(WINLOSS_FIX_FLAG) as { value: string } | undefined
+    if (done) return
+
+    const apply = database.transaction(() => {
+        const result = database
+            .prepare(
+                `UPDATE match_history
+                 SET match_outcome = CASE
+                     WHEN match_outcome = 'Win' THEN 'Loss'
+                     WHEN match_outcome = 'Loss' THEN 'Win'
+                     ELSE match_outcome
+                 END
+                 WHERE CAST(player_team AS INTEGER) = 0`
+            )
+            .run()
+
+        // Recompute aggregated stats for every account that has stored matches
+        // so totals/streaks/win-rate reflect the corrected outcomes.
+        const accounts = database
+            .prepare('SELECT DISTINCT account_id FROM match_history')
+            .all() as Array<{ account_id: number }>
+        for (const { account_id } of accounts) {
+            updateAggregatedStats(account_id)
+        }
+
+        database
+            .prepare('INSERT INTO stats_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+            .run(WINLOSS_FIX_FLAG, new Date().toISOString())
+
+        return result.changes
+    })
+
+    const changed = apply()
+    if (changed > 0) {
+        console.log(`[StatsDatabase] Corrected ${changed} inverted match outcome(s) (team-0 win/loss fix)`)
+    }
 }
 
 /**
