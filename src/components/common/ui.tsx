@@ -495,6 +495,13 @@ interface SegmentedControlProps<T extends string> {
     onChange: (value: T) => void;
     label?: string;
     className?: string;
+    /** Equal-width segments that stretch to fill the container, instead of the
+     *  default content-width chips. Use for full-width pickers (e.g. a settings
+     *  popover row) where the segments should split the available width. */
+    fill?: boolean;
+    /** Disable the whole control (no clicks, no roving focus). Dimming is left to
+     *  the caller so the control's label can dim alongside it. */
+    disabled?: boolean;
 }
 
 export function SegmentedControl<T extends string>({
@@ -503,17 +510,20 @@ export function SegmentedControl<T extends string>({
     onChange,
     label,
     className = '',
+    fill = false,
+    disabled = false,
 }: SegmentedControlProps<T>) {
     const refs = useRef<(HTMLButtonElement | null)[]>([]);
 
     const move = (from: number, dir: -1 | 1) => {
+        if (disabled) return;
         const next = (from + dir + options.length) % options.length;
         onChange(options[next].value);
         refs.current[next]?.focus();
     };
 
     return (
-        <div role="tablist" aria-label={label} className={`flex flex-wrap gap-1.5 ${className}`}>
+        <div role="tablist" aria-label={label} className={`flex gap-1.5 ${fill ? 'w-full' : 'flex-wrap'} ${className}`}>
             {options.map((opt, i) => {
                 const active = opt.value === value;
                 return (
@@ -524,7 +534,8 @@ export function SegmentedControl<T extends string>({
                         role="tab"
                         aria-selected={active}
                         tabIndex={active ? 0 : -1}
-                        onClick={() => onChange(opt.value)}
+                        disabled={disabled}
+                        onClick={() => !disabled && onChange(opt.value)}
                         onKeyDown={(e) => {
                             if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
                                 e.preventDefault();
@@ -534,7 +545,7 @@ export function SegmentedControl<T extends string>({
                                 move(i, -1);
                             }
                         }}
-                        className={`whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
+                        className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${fill ? 'flex-1' : ''} ${
                             active
                                 ? 'border-accent/70 bg-accent/15 text-text-primary'
                                 : 'border-border bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary'

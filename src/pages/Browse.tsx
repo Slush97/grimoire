@@ -86,7 +86,7 @@ import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
-import { Button, IconButton, Tag } from '../components/common/ui';
+import { Button, IconButton, SegmentedControl, Tag } from '../components/common/ui';
 import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
@@ -2934,32 +2934,16 @@ export default function Browse() {
                   <div className="space-y-4">
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setLayout('grid')}
-                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
-                            layout === 'grid'
-                              ? 'border-accent/50 bg-accent/10 text-accent'
-                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          <LayoutGrid className="h-4 w-4" />
-                          {t('browse.viewOptions.grid')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLayout('list')}
-                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
-                            layout === 'list'
-                              ? 'border-accent/50 bg-accent/10 text-accent'
-                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          <List className="h-4 w-4" />
-                          {t('browse.viewOptions.list')}
-                        </button>
-                      </div>
+                      <SegmentedControl<BrowseLayout>
+                        fill
+                        label={t('browse.viewOptions.layout')}
+                        value={layout}
+                        onChange={setLayout}
+                        options={[
+                          { value: 'grid', label: <><LayoutGrid className="h-4 w-4" />{t('browse.viewOptions.grid')}</> },
+                          { value: 'list', label: <><List className="h-4 w-4" />{t('browse.viewOptions.list')}</> },
+                        ]}
+                      />
                     </div>
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
@@ -2990,54 +2974,31 @@ export default function Browse() {
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.cardDesign')}>
-                        {(['readable', 'classic'] as const).map((design) => {
-                          const active = browseCardDesign === design;
-                          return (
-                            <button
-                              key={design}
-                              type="button"
-                              role="tab"
-                              aria-selected={active}
-                              disabled={layout === 'list'}
-                              onClick={() => setBrowseCardDesign(design)}
-                              className={`h-9 rounded-md border text-xs font-semibold transition-colors disabled:cursor-default ${
-                                active
-                                  ? 'border-accent/50 bg-accent/10 text-accent'
-                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {design === 'readable' ? t('browse.cardStyle.default') : t('browse.cardStyle.classic')}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <SegmentedControl<BrowseCardDesign>
+                        fill
+                        disabled={layout === 'list'}
+                        label={t('browse.viewOptions.cardDesign')}
+                        value={browseCardDesign}
+                        onChange={setBrowseCardDesign}
+                        options={[
+                          { value: 'readable', label: t('browse.cardStyle.default') },
+                          { value: 'classic', label: t('browse.cardStyle.classic') },
+                        ]}
+                      />
                     </div>
 
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.modDetailsView')}>
-                        {(['modal', 'sidebar'] as const).map((view) => {
-                          const active = browseDetailsView === view;
-                          return (
-                            <button
-                              key={view}
-                              type="button"
-                              role="tab"
-                              aria-selected={active}
-                              onClick={() => setBrowseDetailsView(view)}
-                              className={`flex h-9 items-center justify-center gap-1.5 rounded-md border text-xs font-semibold transition-colors ${
-                                active
-                                  ? 'border-accent/50 bg-accent/10 text-accent'
-                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {view === 'modal' ? <Maximize2 className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
-                              {view === 'modal' ? t('browse.detailsView.window') : t('browse.detailsView.sidebar')}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <SegmentedControl<BrowseDetailsView>
+                        fill
+                        label={t('browse.viewOptions.modDetailsView')}
+                        value={browseDetailsView}
+                        onChange={setBrowseDetailsView}
+                        options={[
+                          { value: 'modal', label: <><Maximize2 className="h-3.5 w-3.5" />{t('browse.detailsView.window')}</> },
+                          { value: 'sidebar', label: <><PanelRight className="h-3.5 w-3.5" />{t('browse.detailsView.sidebar')}</> },
+                        ]}
+                      />
                     </div>
 
                   </div>
