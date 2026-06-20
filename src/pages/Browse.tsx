@@ -87,6 +87,7 @@ import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { Button, IconButton, SegmentedControl, Tag } from '../components/common/ui';
+import { Select } from '../components/common/forms';
 import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
@@ -3133,18 +3134,17 @@ export default function Browse() {
                         {categoryOptions.length > 0 && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.category')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByCategory')}
                               value={String(categoryId)}
                               onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                               disabled={heroCategoryId !== 'all'}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <option value="all">{t('browse.filters.allCategories')}</option>
                               {categoryOptions.map((cat) => (
                                 <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
                               ))}
-                            </select>
+                            </Select>
                             {heroCategoryId !== 'all' && (
                               <span className="block text-[11px] text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
                             )}
@@ -3156,34 +3156,32 @@ export default function Browse() {
                         {hasLocalCache && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByContentRating')}
                               value={nsfw}
                               onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">{t('browse.filters.contentAll')}</option>
                               <option value="sfw">{t('browse.filters.sfwOnly')}</option>
                               <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
-                            </select>
+                            </Select>
                           </div>
                         )}
 
                         {hasLocalCache && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByDateAdded')}
                               value={addedWithin}
                               onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">{t('browse.filters.anyTime')}</option>
                               <option value="today">{t('browse.filters.today')}</option>
                               <option value="week">{t('browse.filters.thisWeek')}</option>
                               <option value="month">{t('browse.filters.thisMonth')}</option>
                               <option value="custom">{t('browse.filters.customRange')}</option>
-                            </select>
+                            </Select>
                             {addedWithin === 'custom' && (
                               <div className="mt-2 grid grid-cols-2 gap-2">
                                 <label className="block">

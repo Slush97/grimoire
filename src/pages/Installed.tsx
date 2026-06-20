@@ -88,6 +88,7 @@ import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { Button, IconButton, Tag } from '../components/common/ui';
+import { FormField, Input, Select } from '../components/common/forms';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -4919,18 +4920,20 @@ function UnknownManualSearch({
                     {files && files.length > 0 && (
                       <label className="block text-xs text-text-secondary">
                         {t('installed.unknown.pinExactFile')}
-                        <select
-                          value={fileId ?? ''}
-                          onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
-                          className="mt-1 w-full bg-bg-primary border border-white/10 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent/50"
-                        >
-                          <option value="">{t('installed.unknown.dontPinFile')}</option>
-                          {files.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.fileName}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="mt-1">
+                          <Select
+                            inputSize="sm"
+                            value={fileId ?? ''}
+                            onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
+                          >
+                            <option value="">{t('installed.unknown.dontPinFile')}</option>
+                            {files.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.fileName}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
                       </label>
                     )}
                     <div className="flex justify-end">
@@ -6784,21 +6787,18 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
           </div>
         </div>
 
-        <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="local-mod-name">
-          {t('locker.soulImport.fields.name')}
-        </label>
-        <input
-          id="local-mod-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-            if (e.key === 'Escape') onClose();
-          }}
-          autoFocus
-          className="mt-2 w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/60 focus:border-accent focus:ring-2 focus:ring-accent/25"
-          placeholder={t('installed.edit.modNamePlaceholder')}
-        />
+        <FormField className="mt-5" label={t('locker.soulImport.fields.name')}>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit();
+              if (e.key === 'Escape') onClose();
+            }}
+            autoFocus
+            placeholder={t('installed.edit.modNamePlaceholder')}
+          />
+        </FormField>
         <p className="mt-2 truncate text-xs text-text-secondary" title={mod.fileName}>
           {t('installed.edit.fileLabel', { fileName: mod.fileName })}
         </p>
@@ -7108,18 +7108,13 @@ function ImportCustomModModal({
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.modName')} <span className="text-state-danger">*</span>
-            </label>
-            <input
-              type="text"
+          <FormField label={t('installed.import.modName')} required>
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('installed.import.modNamePlaceholder')}
-              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
             />
-          </div>
+          </FormField>
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
