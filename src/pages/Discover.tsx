@@ -25,7 +25,7 @@ import {
 import { useAppStore } from '../stores/appStore';
 import { useSocialStore } from '../stores/socialStore';
 import { Card, Button } from '../components/common/ui';
-import { EmptyState, PageHeader } from '../components/common/PageComponents';
+import { EmptyState, PageHeader, PageLayout } from '../components/common/PageComponents';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import MyPublishedSection from '../components/social/MyPublishedSection';
 import PublishPickerDialog from '../components/social/PublishPickerDialog';
@@ -300,8 +300,8 @@ export default function Discover() {
   );
 
   return (
-    <div className="h-full overflow-y-auto">
-      <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <>
+      <PageLayout maxWidth="7xl">
       <div>
         <PageHeader
           title={t('nav.discover')}
@@ -626,7 +626,7 @@ export default function Discover() {
         </div>
       )}
 
-      </div>
+      </PageLayout>
       {showPicker && (
         <PublishPickerDialog
           onClose={() => setShowPicker(false)}
@@ -668,6 +668,6 @@ export default function Discover() {
           }}
         />
       )}
-    </div>
+    </>
   );
 }

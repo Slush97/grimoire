@@ -19,7 +19,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { Input, Textarea } from '../components/common/forms';
-import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
+import { PageHeader, ConfirmModal, PageLayout } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import LanguageSelector from '../components/settings/LanguageSelector';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
@@ -609,7 +609,7 @@ export default function Settings() {
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8 animate-fade-in">
+    <PageLayout maxWidth="5xl">
       <PageHeader
         title={<Tx k="nav.settings" fallback="Settings" />}
         description={<Tx k="settings.header.description" fallback="Game paths, preferences, and maintenance" />}
@@ -1649,7 +1649,7 @@ export default function Settings() {
         confirmLabel={<Tx k="common.actions.reset" fallback="Reset" />}
         variant="primary"
       />
-    </div>
+    </PageLayout>
   );
 }
 

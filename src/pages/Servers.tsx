@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, Badge } from '../components/common/ui';
-import { EmptyState, PageHeader } from '../components/common/PageComponents';
+import { EmptyState, PageHeader, PageLayout } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import { useAppStore } from '../stores/appStore';
 import {
@@ -108,7 +108,7 @@ export default function Servers() {
   }, [servers, query, region, mapFilter, hideFull]);
 
   return (
-    <div className="space-y-5 p-6">
+    <PageLayout>
       <PageHeader
         title={<Tx k="nav.servers" fallback="Servers" />}
         description={
@@ -349,6 +349,6 @@ export default function Servers() {
       {connectTarget && (
         <ConnectServerDialog server={connectTarget} onClose={() => setConnectTarget(null)} />
       )}
-    </div>
+    </PageLayout>
   );
 }
