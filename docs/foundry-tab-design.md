@@ -150,11 +150,14 @@ can show "catalog matches your installed version."
   tree (per-hero `generated_vo_hero_<code>.vsndevts_c`, ~1600 events each; `bebop` has 1620).
 - **Ability map.** `examples/ult_sound_map.rs` already produces the per-ult swap-target
   catalog (`exports/ult-sound-map.json`); feed it straight into Sound Studio.
-- **Display labels.** Hero / ability names come from `scripts/heroes.vdata_c` /
-  `scripts/abilities.vdata_c` (already parsed by `ult_sound_map`), not from a localization
-  file. NOTE: `resource/localization/items_english.txt` in base `citadel` is only a stub
-  (`"lang" { "Language" "English" }`); real UI/item display strings live in the per-language
-  paks, so source nice labels from the vdata, not from base-pak localization.
+- **Display labels (corrected; hero half built).** `heroes.vdata_c` / `abilities.vdata_c` hold
+  the codenames + a name *token* (e.g. `#hero_inferno_search`), but the token's *value* is in a
+  **loose** Valve-KeyValues file, not the vdata and not the base pak. `items_english.txt` in base
+  `citadel` is only a stub; the real strings are loose `.txt` under
+  `citadel/resource/localization/` (e.g. `citadel_gc_hero_names_<lang>.txt`, keyed `hero_<code>`).
+  The hero resolver (`vpkmerge-core::localization`, see below) reads the pak for the roster + flags
+  AND that loose tree for the names. Ability / item names are the same pattern, pending a fuzzy
+  icon -> vdata-node join.
 
 ### Voice-line search (built; scanned and corrected against the live pak)
 
@@ -223,9 +226,9 @@ Item tabs.
   [--search TEXT] [--limit N] [--json] [--thumbs DIR [--thumb-size N]]`. `--thumbs` writes the
   PNG set + manifest for every matching entry (honors filters, ignores `--limit`).
 
-Still open on the catalog: nicer display labels for heroes/abilities/items from
-`scripts/heroes.vdata_c` / `scripts/abilities.vdata_c` (the `label` here is the asset filename,
-good enough to search but not the in-game display name).
+Hero display names are done (see below). Still open: ability / item display names (same
+localization tree, but they join to their icons only through a fuzzy filename / vdata-node
+mapping; the filename-derived `label` already reads fine for those).
 
 ### On-disk cache (built; keyed by game build)
 
@@ -250,6 +253,32 @@ them from cache is ~0.25s, so the UI gets the catalog at launch without the resc
   indexes and prints the fingerprint + per-index hit/miss. The natural Grimoire hook is to run
   this once on app start (or after a detected pak update) to pre-warm the Foundry catalog.
 
+### Hero display names (built; codename -> in-game name)
+
+Shipped as `vpkmerge-core::localization` (`build_hero_roster`, `HeroInfo`, `parse_kv_tokens`,
+`hero_name_tokens`, `localization_dir_for_pak`), exposed as `vpkmerge catalog heroes` and
+`examples/hero_roster.rs`. The catalog indexes key by engine codename (`hornet`, `vampirebat`);
+this resolves the display name (`Vindicta`, `Mina`) the UI shows.
+
+- **Where the names live (corrected).** Not in `pak01`. The earlier note "source labels from the
+  vdata" was half-right: `heroes.vdata_c` holds the codenames + availability flags + a name
+  *token* (`#hero_inferno_search`), but the token's *value* is in a **loose** Valve-KeyValues
+  `.txt` under `<game>/citadel/resource/localization/citadel_gc_hero_names/`
+  (`citadel_gc_hero_names_<lang>.txt`), where `hero_<codename>` maps straight to the name. So the
+  resolver reads the pak (vdata, for the roster + flags) AND the loose localization tree (for the
+  strings).
+- **Result.** `build_hero_roster(vpk, loc_dir?, lang)` -> `Vec<HeroInfo { codename, name,
+  selectable, in_development, disabled }>`. Live build: 38 selectable / 59 total, all the
+  non-obvious mappings correct (`atlas`->Abrams, `forge`->McGinnis, `familiar`->Rem,
+  `orion`->Grey Talon, `synth`->Pocket, `frank`->Victor). Missing localization degrades names to
+  the codename (still returns the roster + flags). This supersedes the hardcoded 14-hero map in
+  `ult_sound_map.rs`.
+- **CLI.** `vpkmerge catalog heroes --vpk <VPK> [--loc-dir DIR] [--lang L] [--all] [--json]`
+  (selectable only by default).
+- **Still open: ability / item names.** Same localization tree, but they join to their icons only
+  through a fuzzy filename / vdata-node mapping; the filename-derived `label` already reads fine,
+  so this is a later pass.
+
 ## Phasing / recommendation
 
 1. **Catalog engine first.** Local pak scan -> cached manifest with thumbnails + sound
@@ -261,7 +290,9 @@ them from cache is ~0.25s, so the UI gets the catalog at launch without the resc
    `cache_texture_thumbnails`), exposed as `vpkmerge catalog texture` (filters: `--category`,
    `--hero`, `--search`, `--limit`; `--json`; `--thumbs DIR`). The on-disk cache keyed by game
    build is **done** too: `vpkmerge-core::catalog_cache` (`CatalogCache`), exposed as `vpkmerge
-   catalog cache`. Still to do: display labels from the hero/ability vdata.
+   catalog cache`. Hero display names are **done**: `vpkmerge-core::localization`
+   (`build_hero_roster`), exposed as `vpkmerge catalog heroes`. Catalog engine is effectively
+   complete; only ability / item display names (a fuzzy icon -> vdata join) remain.
 2. **Tier 1 in the Foundry tab.** Sound / Texture / Items with the build tray and output
    into the mod manager. This already ships a better-than-web-tool product.
 3. **Tier 2 as the headline.** Recolor / Prism / ability-music / material presets, lifted
@@ -277,8 +308,9 @@ lift from rather than rebuild; the end state folds that logic into this Grimoire
 - **Catalog home:** resolved. Voice-line index (`vpkmerge-core::catalog`, `vpkmerge catalog
   voiceline`), texture/icon index (`vpkmerge-core::texture_catalog`, `vpkmerge catalog
   texture`), and the on-disk cache keyed by game build (`vpkmerge-core::catalog_cache`,
-  `vpkmerge catalog cache`) all ship. Remaining catalog polish: display labels from the
-  hero/ability vdata.
+  `vpkmerge catalog cache`) and hero display names (`vpkmerge-core::localization`, `vpkmerge
+  catalog heroes`) all ship. Remaining catalog polish: ability / item display names (fuzzy icon
+  -> vdata join).
 - **Sharing:** should a forged mod be one-click publishable via `grimoire-social`? Natural
   follow-on, out of scope for v1.
 - **Engine reuse:** Grimoire is Electron/TS; `vpkmerge-core` is Rust. Decide the bridge
@@ -300,5 +332,8 @@ lift from rather than rebuild; the end state folds that logic into this Grimoire
   `vpkmerge-core/examples/texture_index.rs`
 - On-disk catalog cache (built): `vpkmerge-core/src/catalog_cache.rs` +
   `vpkmerge-core/examples/catalog_cache.rs`
+- Hero display names (built): `vpkmerge-core/src/localization.rs` +
+  `vpkmerge-core/examples/hero_roster.rs` (loose `citadel/resource/localization/
+  citadel_gc_hero_names_<lang>.txt`, keyed `hero_<codename>`)
 - Caption format: `citadel/pak01` -> `resource/localization/citadel_generated_vo/
   citadel_generated_vo_english.dat` (VCCD v2, CRC-32/ISO-HDLC keyed)
