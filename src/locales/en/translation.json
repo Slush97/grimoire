@@ -507,7 +507,7 @@
       "customAccent": "Custom Accent",
       "launchButtons": {
         "combine": "Combine launch buttons",
-        "combineDescription": "Use one launch button you switch between Modded and Vanilla (the swap icon or right-click), instead of two stacked buttons."
+        "combineDescription": "Use a single launch button and switch between Modded and Vanilla with the swap icon or right-click, instead of two stacked buttons."
       },
       "art": {
         "title": "Launcher & sidebar art",

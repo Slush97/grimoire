@@ -494,7 +494,7 @@ export default function AppearanceArtSection() {
         description={
           <Tx
             k="settings.appearance.launchButtons.combineDescription"
-            fallback="Use one launch button you switch between Modded and Vanilla (the swap icon or right-click), instead of two stacked buttons."
+            fallback="Use a single launch button and switch between Modded and Vanilla with the swap icon or right-click, instead of two stacked buttons."
           />
         }
         className="mb-5"
