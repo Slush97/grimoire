@@ -881,6 +881,7 @@
       "shareCodeCopiedToast": "Share code copied"
     },
     "select": {
+      "dragHint": "Drag to move",
       "noneSelected": "No mods selected",
       "countSelected_one": "{{count}} mod selected",
       "countSelected_other": "{{count}} mods selected",

@@ -61,6 +61,7 @@ import {
   FileText,
   Banana,
   HelpCircle,
+  GripVertical,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
@@ -580,6 +581,8 @@ const CARD_SIZE_MULTIPLIER_STEP = 0.1;
 // responsive multiplier.
 const CARD_SIZE_COMPACT_MULTIPLIER = 0.95;
 const INSTALLED_CARD_SIZE_MULTIPLIER_KEY = 'installedCardSizeMultiplier';
+// localStorage key for the user-dragged position of the floating select bar.
+const SELECT_BAR_POS_KEY = 'installedSelectBarPos';
 
 function clampCardSizeMultiplier(value: number): number {
   return Math.min(CARD_SIZE_MULTIPLIER_MAX, Math.max(CARD_SIZE_MULTIPLIER_MIN, value));
@@ -818,6 +821,100 @@ export default function Installed() {
     done: number;
     total: number;
   } | null>(null);
+  // Persisted screen position of the floating select bar. `null` means
+  // "use the default top-center anchor"; once the user drags it we store the
+  // top-left corner in px and reuse it next time the bar appears.
+  const [selectBarPos, setSelectBarPos] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const raw = localStorage.getItem(SELECT_BAR_POS_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (typeof p?.x === 'number' && typeof p?.y === 'number') return p;
+    } catch {
+      // ignore malformed/unavailable storage
+    }
+    return null;
+  });
+  const selectBarRef = useRef<HTMLDivElement>(null);
+  // Pointer offset from the bar's top-left captured on drag start, plus the
+  // live move/end listeners so they can detach themselves.
+  const selectBarDragRef = useRef<{ dx: number; dy: number } | null>(null);
+
+  const clampSelectBarPos = useCallback((x: number, y: number) => {
+    const el = selectBarRef.current;
+    const w = el?.offsetWidth ?? 0;
+    const h = el?.offsetHeight ?? 0;
+    const maxX = Math.max(0, window.innerWidth - w);
+    const maxY = Math.max(0, window.innerHeight - h);
+    return {
+      x: Math.min(Math.max(0, x), maxX),
+      y: Math.min(Math.max(0, y), maxY),
+    };
+  }, []);
+
+  const handleSelectBarDragMove = useCallback(
+    (e: PointerEvent) => {
+      const drag = selectBarDragRef.current;
+      if (!drag) return;
+      setSelectBarPos(clampSelectBarPos(e.clientX - drag.dx, e.clientY - drag.dy));
+    },
+    [clampSelectBarPos],
+  );
+
+  const handleSelectBarDragEnd = useCallback(() => {
+    selectBarDragRef.current = null;
+    window.removeEventListener('pointermove', handleSelectBarDragMove);
+    window.removeEventListener('pointerup', handleSelectBarDragEnd);
+    setSelectBarPos((p) => {
+      if (p) {
+        try {
+          localStorage.setItem(SELECT_BAR_POS_KEY, JSON.stringify(p));
+        } catch {
+          // ignore unavailable storage
+        }
+      }
+      return p;
+    });
+  }, [handleSelectBarDragMove]);
+
+  const handleSelectBarDragStart = useCallback(
+    (e: React.PointerEvent) => {
+      const el = selectBarRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      selectBarDragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+      // Pin the current pixel position so it doesn't jump from the centered
+      // anchor to absolute coords on the first move.
+      setSelectBarPos(clampSelectBarPos(rect.left, rect.top));
+      window.addEventListener('pointermove', handleSelectBarDragMove);
+      window.addEventListener('pointerup', handleSelectBarDragEnd);
+      e.preventDefault();
+    },
+    [clampSelectBarPos, handleSelectBarDragMove, handleSelectBarDragEnd],
+  );
+
+  // Detach drag listeners if the component unmounts mid-drag.
+  useEffect(() => {
+    return () => {
+      window.removeEventListener('pointermove', handleSelectBarDragMove);
+      window.removeEventListener('pointerup', handleSelectBarDragEnd);
+    };
+  }, [handleSelectBarDragMove, handleSelectBarDragEnd]);
+
+  // Keep a saved (dragged) bar position on-screen when the bar appears and on
+  // window resize, so a position saved at a larger window size doesn't strand
+  // the bar off the viewport.
+  useEffect(() => {
+    if (!selectMode || !selectBarPos) return;
+    const reclamp = () => setSelectBarPos((p) => (p ? clampSelectBarPos(p.x, p.y) : p));
+    reclamp();
+    window.addEventListener('resize', reclamp);
+    return () => window.removeEventListener('resize', reclamp);
+    // selectBarPos intentionally omitted: this only re-pins on appear/resize,
+    // not on every drag tick (which would fight the active drag).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectMode, clampSelectBarPos]);
+
   // GB id of the group whose picker is open, or null. The actual entry is
   // derived from live `mods` each render so per-file deletes inside the
   // picker reflect immediately without juggling a separate snapshot.
@@ -3806,11 +3903,24 @@ export default function Installed() {
       )}
 
       {selectMode && (
-        // z-40 keeps this floating bar above the page + sticky header (z-30)
-        // but below modal overlays (z-50), so an open modal's backdrop dims it
-        // like the rest of the page instead of the bar painting over the modal
-        // (e.g. the variant picker overlapping it in a short window).
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
+        // Floats at top-center. z-40 keeps this bar above the page + sticky
+        // header (z-30) but below modal overlays (z-50), so an open modal's
+        // backdrop dims it like the rest of the page instead of the bar
+        // painting over the modal (e.g. the variant picker overlapping it in a
+        // short window).
+        <div
+          ref={selectBarRef}
+          className={`fixed z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-accent/40 ring-1 ring-accent/15 rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2 ${selectBarPos ? '' : 'top-4 left-1/2 -translate-x-1/2'}`}
+          style={selectBarPos ? { left: selectBarPos.x, top: selectBarPos.y } : undefined}
+        >
+          <span
+            onPointerDown={handleSelectBarDragStart}
+            className="flex items-center self-stretch -ml-1 px-0.5 text-text-secondary hover:text-text-primary cursor-grab active:cursor-grabbing touch-none select-none"
+            title={t('installed.select.dragHint')}
+            aria-hidden="true"
+          >
+            <GripVertical className="w-4 h-4" />
+          </span>
           {bulkProgress ? (
             <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
@@ -3897,7 +4007,7 @@ export default function Installed() {
                   <div
                     role="dialog"
                     aria-label={t('installed.select.tagDialogLabel')}
-                    className="absolute bottom-full mb-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
+                    className="absolute top-full mt-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
                   >
                     <button
                       type="button"
