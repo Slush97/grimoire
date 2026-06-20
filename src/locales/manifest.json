@@ -7,6 +7,12 @@
       "name": "English",
       "translatedKeys": 1669,
       "pct": 100
+    },
+    {
+      "code": "fr",
+      "name": "français",
+      "translatedKeys": 1668,
+      "pct": 100
     }
   ]
 }
