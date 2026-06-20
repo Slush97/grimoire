@@ -3037,7 +3037,7 @@ export default function Installed() {
                 </span>
               )}
               {filterOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm shadow-xl shadow-black/40">
+                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans">
                   <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                     <ArrowDownUp className="h-3.5 w-3.5" /> {t('installed.filters.sort')}
                   </div>
@@ -3264,7 +3264,7 @@ export default function Installed() {
                 title={t('installed.view.styleAndCardSize')}
               />
               {viewMenuOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm shadow-xl shadow-black/40">
+                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans [&_input]:font-sans">
                   <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                     {t('installed.view.style')}
                   </div>
