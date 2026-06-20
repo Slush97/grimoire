@@ -223,10 +223,32 @@ Item tabs.
   [--search TEXT] [--limit N] [--json] [--thumbs DIR [--thumb-size N]]`. `--thumbs` writes the
   PNG set + manifest for every matching entry (honors filters, ignores `--limit`).
 
-Still open on the catalog: a cached on-disk form keyed by game build (chunk-mtime invalidation),
-and nicer display labels for heroes/abilities/items from `scripts/heroes.vdata_c` /
-`scripts/abilities.vdata_c` (the `label` here is the asset filename, good enough to search but
-not the in-game display name).
+Still open on the catalog: nicer display labels for heroes/abilities/items from
+`scripts/heroes.vdata_c` / `scripts/abilities.vdata_c` (the `label` here is the asset filename,
+good enough to search but not the in-game display name).
+
+### On-disk cache (built; keyed by game build)
+
+Shipped as `vpkmerge-core::catalog_cache` (`CatalogCache`, `BuildFingerprint`,
+`CACHE_SCHEMA_VERSION`), exposed as `vpkmerge catalog cache` and `examples/catalog_cache.rs`.
+The voice-line scan touches ~76K events; rebuilding both indexes cold is ~1.2s, but loading
+them from cache is ~0.25s, so the UI gets the catalog at launch without the rescan.
+
+- **API.** `CatalogCache::new(dir)` then `voicelines_cached(vpk)` / `textures_cached(vpk)`
+  (returning `(items, was_hit)`) or the flag-dropping `voicelines(vpk)` / `textures(vpk)`:
+  load-or-build-and-store in one call. One JSON file per kind (`voiceline.json`,
+  `texture.json`), written atomically (temp + rename), wrapped in an envelope carrying the
+  schema version + the source build's fingerprint.
+- **Invalidation by build.** The fingerprint is the `_dir.vpk` byte length + mtime. Steam
+  rewrites that file on every pak update (the same property the chunk-mtime update-diff tooling
+  uses), so the freshness check is a single `stat` with no VPK open, and it never serves stale
+  data after a real update. (valve_pak does not expose the V2 `tree_checksum`, so the file stat
+  stands in for it.) A corrupt / wrong-schema / stale cache is a **miss, not an error**: the UI
+  silently rebuilds. `CACHE_SCHEMA_VERSION` invalidates everything on a format change;
+  `clear()` forces a rebuild.
+- **CLI.** `vpkmerge catalog cache --vpk <VPK> [--dir DIR] [--clear] [--json]` warms both
+  indexes and prints the fingerprint + per-index hit/miss. The natural Grimoire hook is to run
+  this once on app start (or after a detected pak update) to pre-warm the Foundry catalog.
 
 ## Phasing / recommendation
 
@@ -237,8 +259,9 @@ not the in-game display name).
    `--search`, `--limit`; `--json`). The texture/icon/item half is **done** too:
    `vpkmerge-core::texture_catalog` (`build_texture_index` + `thumbnail_png` +
    `cache_texture_thumbnails`), exposed as `vpkmerge catalog texture` (filters: `--category`,
-   `--hero`, `--search`, `--limit`; `--json`; `--thumbs DIR`). Still to do: a cached on-disk
-   form keyed by game build, and display labels from the hero/ability vdata.
+   `--hero`, `--search`, `--limit`; `--json`; `--thumbs DIR`). The on-disk cache keyed by game
+   build is **done** too: `vpkmerge-core::catalog_cache` (`CatalogCache`), exposed as `vpkmerge
+   catalog cache`. Still to do: display labels from the hero/ability vdata.
 2. **Tier 1 in the Foundry tab.** Sound / Texture / Items with the build tray and output
    into the mod manager. This already ships a better-than-web-tool product.
 3. **Tier 2 as the headline.** Recolor / Prism / ability-music / material presets, lifted
@@ -251,9 +274,11 @@ lift from rather than rebuild; the end state folds that logic into this Grimoire
 
 ## Open questions
 
-- **Catalog home:** resolved for the voice-line index (`vpkmerge-core::catalog`, `vpkmerge
-  catalog voiceline`) and the texture/icon index (`vpkmerge-core::texture_catalog`, `vpkmerge
-  catalog texture`). Remaining: decide the on-disk cache format keyed by game build.
+- **Catalog home:** resolved. Voice-line index (`vpkmerge-core::catalog`, `vpkmerge catalog
+  voiceline`), texture/icon index (`vpkmerge-core::texture_catalog`, `vpkmerge catalog
+  texture`), and the on-disk cache keyed by game build (`vpkmerge-core::catalog_cache`,
+  `vpkmerge catalog cache`) all ship. Remaining catalog polish: display labels from the
+  hero/ability vdata.
 - **Sharing:** should a forged mod be one-click publishable via `grimoire-social`? Natural
   follow-on, out of scope for v1.
 - **Engine reuse:** Grimoire is Electron/TS; `vpkmerge-core` is Rust. Decide the bridge
@@ -273,5 +298,7 @@ lift from rather than rebuild; the end state folds that logic into this Grimoire
   `vpkmerge-core/examples/voiceline_index.rs`
 - Texture / icon index (built): `vpkmerge-core/src/texture_catalog.rs` +
   `vpkmerge-core/examples/texture_index.rs`
+- On-disk catalog cache (built): `vpkmerge-core/src/catalog_cache.rs` +
+  `vpkmerge-core/examples/catalog_cache.rs`
 - Caption format: `citadel/pak01` -> `resource/localization/citadel_generated_vo/
   citadel_generated_vo_english.dat` (VCCD v2, CRC-32/ISO-HDLC keyed)
