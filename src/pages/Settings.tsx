@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useTranslation } from 'react-i18next';
+import { useTranslation, Trans } from 'react-i18next';
 import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github, Globe, FileText, Bug, Copy } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import DOMPurify from 'dompurify';
@@ -838,17 +838,22 @@ export default function Settings() {
                   <Tx k="settings.updates.managed" fallback="Updates are managed by your package manager." />
                 </p>
                 <p>
-                  <Tx k="settings.updates.managedPrefix" fallback="Grimoire was installed via a system package. Update with your distro's tools:" />{' '}
-                  <code className="font-mono text-text-primary">yay -Syu grimoire-bin</code>{' '}
-                  <Tx k="settings.updates.onArchOr" fallback="on Arch, or" />{' '}
-                  <code className="font-mono text-text-primary">{'sudo apt update && sudo apt upgrade'}</code>{' '}
-                  <Tx k="settings.updates.onDebianUbuntu" fallback="on Debian/Ubuntu." />
+                  <Trans
+                    i18nKey="settings.updates.managedInstructions"
+                    components={{
+                      arch: <code className="font-mono text-text-primary" />,
+                      apt: <code className="font-mono text-text-primary" />,
+                    }}
+                  />
                 </p>
                 <p>
-                  <Tx k="settings.updates.installedDebPrefix" fallback="Installed the" />{' '}
-                  <code className="font-mono text-text-primary">.deb</code>{' '}
-                  <Tx k="settings.updates.installedDebSuffix" fallback="manually? Add the apt repository for automatic updates (instructions at" />{' '}
-                  <code className="font-mono text-text-primary">grimoiremods.com/download</code>).
+                  <Trans
+                    i18nKey="settings.updates.installedDeb"
+                    components={{
+                      deb: <code className="font-mono text-text-primary" />,
+                      url: <code className="font-mono text-text-primary" />,
+                    }}
+                  />
                 </p>
               </div>
             )}
