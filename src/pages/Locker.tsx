@@ -1313,7 +1313,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                               mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
                             }`}
                           />
-                          <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f0f]/45 via-[#0f0f0f]/65 to-[#0f0f0f]/[0.88]" />
+                          <div className="absolute inset-0 scrim-bottom" />
                         </div>
                       )}
 

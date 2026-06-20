@@ -1353,7 +1353,7 @@ function ModDetailsModal({
                         target="_blank"
                         rel="noopener noreferrer"
                         title={`Support ${submitter.name} on Ko-fi`}
-                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5E5B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-kofi/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
                       >
                         <Coffee className="h-4 w-4" />
                         {t('modDetails.meta.koFi')}

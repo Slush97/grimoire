@@ -18,6 +18,7 @@ import {
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
+import { Input, Textarea } from '../components/common/forms';
 import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import LanguageSelector from '../components/settings/LanguageSelector';
@@ -656,13 +657,13 @@ export default function Settings() {
 
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <input
+                  <Input
                     type="text"
                     value={displayPath}
                     onChange={(e) => handlePathChange(e.target.value)}
                     placeholder={t('settings.gamePath.pathPlaceholder')}
                     disabled={isDevMode}
-                    className="w-full bg-bg-tertiary border border-white/5 rounded-sm px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed font-mono text-sm"
+                    className="font-mono"
                   />
                 </div>
                 <Button
@@ -1283,12 +1284,11 @@ export default function Settings() {
                 </p>
               </div>
 
-              <textarea
+              <Textarea
                 value={bugDescription}
                 onChange={(e) => setBugDescription(e.target.value)}
                 placeholder={t('settings.support.bugPlaceholder')}
                 rows={3}
-                className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-white/5 rounded-sm text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-y"
               />
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -1320,7 +1320,7 @@ export default function Settings() {
               </div>
 
               {bugReportError && (
-                <p className="text-xs text-red-400 break-all">{bugReportError}</p>
+                <p className="text-xs text-state-danger break-all">{bugReportError}</p>
               )}
 
               {bugReportText && (

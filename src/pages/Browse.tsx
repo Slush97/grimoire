@@ -2782,7 +2782,7 @@ export default function Browse() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title={`Support ${submitter.name} on Ko-fi`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542]"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover"
                 >
                   <KofiIcon className="h-4 w-4" />
                   {t('browse.artist.kofi')}

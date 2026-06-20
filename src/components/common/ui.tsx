@@ -53,10 +53,10 @@ interface BadgeProps {
 
 export function Badge({ children, variant = 'neutral', className = '' }: BadgeProps) {
     const variants = {
-        success: 'bg-green-500/10 text-green-400 border-green-500/20',
-        warning: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-        error: 'bg-red-500/10 text-red-400 border-red-500/20',
-        info: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+        success: 'bg-state-success/10 text-state-success border-state-success/20',
+        warning: 'bg-state-warning/10 text-state-warning border-state-warning/20',
+        error: 'bg-state-danger/10 text-state-danger border-state-danger/20',
+        info: 'bg-state-info/10 text-state-info border-state-info/20',
         neutral: 'bg-white/5 text-text-secondary border-white/10',
     };
 

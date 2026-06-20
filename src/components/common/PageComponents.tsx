@@ -111,15 +111,15 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ icon: Icon, title, description, action, variant = 'default', className = '' }: EmptyStateProps) {
-    const iconColor = variant === 'error' ? 'text-red-500' : 'text-text-secondary';
-    const titleColor = variant === 'error' ? 'text-red-400' : 'text-text-primary';
+    const iconColor = variant === 'error' ? 'text-state-danger' : 'text-text-secondary';
+    const titleColor = variant === 'error' ? 'text-state-danger' : 'text-text-primary';
 
     return (
         <div className={`flex flex-col items-center justify-center h-full text-text-secondary animate-fade-in ${className}`}>
             <Icon className={`w-16 h-16 mb-4 opacity-50 ${iconColor}`} />
             <h2 className={`text-xl font-semibold mb-2 ${titleColor}`}>{title}</h2>
             {description && (
-                <div className={`text-center max-w-md ${variant === 'error' ? 'text-red-400' : ''}`}>
+                <div className={`text-center max-w-md ${variant === 'error' ? 'text-state-danger' : ''}`}>
                     {description}
                 </div>
             )}
@@ -154,7 +154,7 @@ export function ConfirmModal({
     onCancel,
 }: ConfirmModalProps) {
     const confirmClass = variant === 'danger'
-        ? 'border border-red-500/40 bg-red-500/10 hover:bg-red-500/20 hover:border-red-500/60 text-red-400 focus-visible:ring-red-400'
+        ? 'border border-state-danger/40 bg-state-danger/10 hover:bg-state-danger/20 hover:border-state-danger/60 text-state-danger focus-visible:ring-state-danger'
         : 'border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary focus-visible:ring-accent';
 
     return (
@@ -165,7 +165,7 @@ export function ConfirmModal({
             size="sm"
             panelClassName="relative overflow-hidden p-6"
         >
-            <span aria-hidden className={`absolute left-0 top-0 bottom-0 w-[2px] ${variant === 'danger' ? 'bg-red-500/60' : 'bg-accent/60'}`} />
+            <span aria-hidden className={`absolute left-0 top-0 bottom-0 w-[2px] ${variant === 'danger' ? 'bg-state-danger/60' : 'bg-accent/60'}`} />
             <h3 id="confirm-modal-title" className="text-lg font-semibold text-text-primary mb-2">{title}</h3>
             <div className="text-text-secondary mb-4">{message}</div>
             <div className="flex justify-end gap-3">

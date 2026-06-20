@@ -107,6 +107,7 @@
   /* Third-party brand colors (buttons/links that represent the brand itself). */
   --color-brand-discord: #5865F2;
   --color-brand-kofi: #FF5E5B;
+  --color-brand-kofi-hover: #ff4542;
 
   --font-radiance: 'Radiance', system-ui, sans-serif;
   --font-reaver: 'Reaver', serif;
@@ -118,6 +119,18 @@
      distinctly from l. To switch to a cleaner neutral look, change this one line
      to: Tahoma, Verdana, system-ui, sans-serif (OS fonts, nothing bundled). */
   --font-mod-title: 'Reaver', serif;
+}
+
+/* Bottom-up dark scrim for art/thumbnail overlays so foreground chrome stays
+   legible over any underlying image. Pairs with `absolute inset-0`. Replaces
+   the gradient that was copy-pasted across the Locker/Installed surfaces. */
+@utility scrim-bottom {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(15 15 15 / 0.45),
+    rgb(15 15 15 / 0.65),
+    rgb(15 15 15 / 0.88)
+  );
 }
 
 /* Base styles */

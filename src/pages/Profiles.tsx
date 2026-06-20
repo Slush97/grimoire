@@ -22,6 +22,7 @@ import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { useSocialStore } from '../stores/socialStore';
 import { Card, Badge, Button, CheckboxMark } from '../components/common/ui';
+import { Input } from '../components/common/forms';
 import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
@@ -402,14 +403,14 @@ export default function Profiles() {
           {/* Create New Profile */}
           <Card title={<Tx k="profiles.create.title" fallback="Create New Profile" />} icon={Plus}>
             <div className="flex flex-wrap gap-3">
-              <input
+              <Input
                 type="text"
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateProfile()}
                 placeholder={t('profiles.create.placeholder')}
                 aria-label={t('profiles.create.profileName')}
-                className="flex-1 px-4 py-2.5 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                className="flex-1"
               />
               <Button
                 onClick={handleCreateProfile}
