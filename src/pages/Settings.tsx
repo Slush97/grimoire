@@ -19,7 +19,7 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { Input, Textarea } from '../components/common/forms';
-import { PageHeader, ConfirmModal, PageLayout } from '../components/common/PageComponents';
+import { PageHeader, ConfirmModal, PageLayout, LoadingState } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import LanguageSelector from '../components/settings/LanguageSelector';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
@@ -601,11 +601,7 @@ export default function Settings() {
     : 0;
 
   if (settingsLoading && !settings) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   return (

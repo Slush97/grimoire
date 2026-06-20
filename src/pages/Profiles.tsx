@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Layers, Plus, Trash2, Play, Save, RefreshCw, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check, Pencil, X, Upload, Share2, Globe, History, RotateCcw, Camera } from 'lucide-react';
+import { Layers, Plus, Trash2, Play, Save, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check, Pencil, X, Upload, Share2, Globe, History, RotateCcw, Camera } from 'lucide-react';
 import {
   getProfiles,
   createProfile,
@@ -23,7 +23,7 @@ import { useCrosshairStore } from '../stores/crosshairStore';
 import { useSocialStore } from '../stores/socialStore';
 import { Card, Badge, Button, CheckboxMark } from '../components/common/ui';
 import { Input } from '../components/common/forms';
-import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
+import { ConfirmModal, EmptyState, PageLayout, LoadingState } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
@@ -379,22 +379,15 @@ export default function Profiles() {
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <RefreshCw className="w-8 h-8 animate-spin mb-4 text-accent" />
-        <p>
-          <Tx k="profiles.loading" fallback="Loading profiles..." />
-        </p>
-      </div>
-    );
+    return <LoadingState label={<Tx k="profiles.loading" fallback="Loading profiles..." />} />;
   }
 
   return (
-    <div className="p-6 h-full max-w-5xl mx-auto w-full flex flex-col overflow-hidden animate-fade-in">
+    <PageLayout variant="fill" maxWidth="5xl">
       <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
         <div className="space-y-6 pr-1">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-red-400">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-state-danger">
               <AlertTriangle className="w-5 h-5" />
               <p>{error}</p>
             </div>
@@ -546,7 +539,7 @@ export default function Profiles() {
                           variant="ghost"
                           icon={Trash2}
                           onClick={() => setBulkDeleteSnapshotsOpen(true)}
-                          className="ml-auto text-red-400 hover:text-red-300"
+                          className="ml-auto text-state-danger hover:text-red-300"
                           title={t('profiles.snapshots.deleteSelectedTitle', { count: selectedSnapshotIds.size })}
                         >
                           <Tx
@@ -1079,6 +1072,6 @@ export default function Profiles() {
         }
         variant="danger"
       />
-    </div>
+    </PageLayout>
   );
 }
