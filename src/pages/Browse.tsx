@@ -86,7 +86,7 @@ import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
-import { Button, Tag } from '../components/common/ui';
+import { Button, IconButton, Tag } from '../components/common/ui';
 import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
@@ -2709,15 +2709,12 @@ export default function Browse() {
       <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
         {artistMode && submitter ? (
           <div className="flex items-center gap-3">
-            <button
-              type="button"
+            <IconButton
+              icon={ArrowLeft}
+              label={t('browse.artist.backToBrowse')}
               onClick={clearArtist}
-              aria-label={t('browse.artist.backToBrowse')}
-              title={t('browse.artist.backToBrowse')}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:text-text-primary cursor-pointer"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+              className="flex-shrink-0"
+            />
             {submitter.avatarUrl && !artistAvatarFailed ? (
               <img
                 src={submitter.avatarUrl}
