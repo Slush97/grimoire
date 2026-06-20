@@ -21,7 +21,7 @@ import {
 } from '../../lib/api';
 import type { AppearanceBg, AppearanceBgKind, AppearanceSurface, AppSettings } from '../../types/mod';
 import type { CropRect } from '../../types/electron';
-import { Button, ModalHeader, SegmentedControl } from '../common/ui';
+import { Button, ModalHeader, SegmentedControl, Toggle } from '../common/ui';
 import Tx from '../translation/Tx';
 import LockerImageCropper from '../locker/LockerImageCropper';
 import { Modal } from '../common/Modal';
@@ -487,6 +487,19 @@ export default function AppearanceArtSection() {
 
   return (
     <div>
+      <Toggle
+        checked={settings?.unifiedLaunchButton ?? false}
+        onChange={(checked) => settings && void saveSettings({ ...settings, unifiedLaunchButton: checked })}
+        label={<Tx k="settings.appearance.launchButtons.combine" fallback="Combine launch buttons" />}
+        description={
+          <Tx
+            k="settings.appearance.launchButtons.combineDescription"
+            fallback="Use one launch button you switch between Modded and Vanilla (the swap icon or right-click), instead of two stacked buttons."
+          />
+        }
+        className="mb-5"
+      />
+
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-text-primary">
           <Tx k="settings.appearance.art.title" fallback="Launcher & sidebar art" />

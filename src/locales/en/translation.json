@@ -508,6 +508,10 @@
       "customAccentColor": "Custom accent color",
       "selectedColorPreview": "Selected color preview",
       "customAccent": "Custom Accent",
+      "launchButtons": {
+        "combine": "Combine launch buttons",
+        "combineDescription": "Use one launch button you switch between Modded and Vanilla (the swap icon or right-click), instead of two stacked buttons."
+      },
       "art": {
         "title": "Launcher & sidebar art",
         "description": "Set the background for each launch button, the active tab, and the volume bar.",
@@ -1351,6 +1355,7 @@
       "lockerImages": "Locker images",
       "back": "Back",
       "favorite": "Favorite",
+      "unfavorite": "Unfavorite",
       "lockerSections": "Locker sections",
       "hero3dModel": "{{hero}} 3D model"
     }

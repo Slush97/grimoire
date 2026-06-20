@@ -34,6 +34,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     zoomFactor: 1,
     discordRpcEnabled: false,
     contributeMatchSalts: false,
+    unifiedLaunchButton: false,
 };
 
 /**

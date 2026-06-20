@@ -708,6 +708,11 @@ export default function Sidebar() {
 
   const canLaunch = !!settings?.deadlockPath || !!settings?.devDeadlockPath;
 
+  // Opt-in: combine the two launch buttons into one dual-use button. Off by
+  // default, so the sidebar keeps the stacked Launch Modded / Launch Vanilla
+  // buttons unless the user turns this on from Appearance.
+  const unifiedLaunch = settings?.unifiedLaunchButton ?? false;
+
   // Single dual-use launch button (issue: unify launch buttons): one persisted
   // mode drives the icon, label, art, handler, and enable/disable rules. The
   // trailing swap control and right-click both flip between Modded and Vanilla.
@@ -1061,6 +1066,77 @@ export default function Sidebar() {
                 </span>
               )}
             </button>
+          ) : !unifiedLaunch ? (
+            // Default: the two stacked launch buttons. Each paints its own
+            // appearance surface (issue: unify launcher backgrounds); the old
+            // right-click "hide art" menu is gone (the Appearance surfaces own
+            // that now).
+            <>
+              <button
+                onClick={handleLaunchModded}
+                disabled={!canLaunch || !!launchPending || stopPending}
+                title={
+                  !canLaunch
+                    ? t('sidebar.launch.noPath')
+                    : stashStatus.active
+                      ? t('sidebar.launch.moddedStash')
+                      : t('sidebar.launch.moddedDefault')
+                }
+                className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SurfaceBackdrop
+                  bg={launchModdedBg}
+                  defaultSrc={LAUNCH_MODDED_BG}
+                  defaultPosition="center 45%"
+                  customSrc={appearanceImages.launchModded}
+                />
+                <span className={`relative z-10 ${actionIconClass}`}>
+                  {launchPending === 'modded' ? (
+                    <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                  ) : (
+                    <Wand2 className="w-[18px] h-[18px]" strokeWidth={2} />
+                  )}
+                </span>
+                {labelMounted && (
+                  <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
+                    {t('sidebar.launchModded')}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={handleLaunchVanilla}
+                disabled={!canLaunch || !!launchPending || stopPending || stashStatus.active}
+                title={
+                  !canLaunch
+                    ? t('sidebar.launch.noPath')
+                    : stashStatus.active
+                      ? t('sidebar.launch.vanillaStash')
+                      : t('sidebar.launch.vanillaDefault')
+                }
+                className="group relative flex w-full h-8 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary/85 ring-1 ring-white/10 hover:text-text-primary hover:ring-amber-400/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <SurfaceBackdrop
+                  bg={launchVanillaBg}
+                  defaultSrc={LAUNCH_VANILLA_BG}
+                  defaultPosition="center 48%"
+                  warm
+                  customSrc={appearanceImages.launchVanilla}
+                />
+                <span className={`relative z-10 ${actionIconClass}`}>
+                  {launchPending === 'vanilla' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" strokeWidth={2} />
+                  )}
+                </span>
+                {labelMounted && (
+                  <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
+                    {t('sidebar.launchVanilla')}
+                  </span>
+                )}
+              </button>
+            </>
           ) : (
             <div
               className="group/launch relative"

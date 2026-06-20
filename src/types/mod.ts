@@ -818,6 +818,12 @@ export interface AppSettings {
    *  legacy compat read so existing installs keep their chosen highlight; the
    *  Appearance UI now writes `appearanceBackgrounds` instead. */
   sidebarHeroHighlight?: string | null;
+  /** Combine the separate Launch Modded / Launch Vanilla buttons into one
+   *  dual-use launch button (swap mode via the trailing icon or right-click).
+   *  Off by default: the sidebar keeps the two stacked buttons unless the user
+   *  opts in from Appearance. The chosen mode for the combined button is UI
+   *  state persisted in localStorage, not here. */
+  unifiedLaunchButton?: boolean;
   /** Per-surface launcher / sidebar background art (issue: unify launcher
    *  backgrounds). Each of the four surfaces independently chooses default art,
    *  a hero render, a custom upload, or none. Custom image bytes live out-of-band
