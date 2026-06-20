@@ -387,7 +387,7 @@ export function LockerHeroView({
             }`}
           >
             <Star className="w-4 h-4" />
-            {isFavorite ? t('locker.hero.favorite') : t('common.actions.save')}
+            {isFavorite ? t('locker.hero.unfavorite') : t('locker.hero.favorite')}
           </button>
         </div>
 
