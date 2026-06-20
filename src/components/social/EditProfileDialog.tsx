@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, AlertTriangle, CheckCircle2, Pencil } from 'lucide-react';
 import { Button } from '../common/ui';
+import { Input, Textarea, FormField } from '../common/forms';
 import { Modal } from '../common/Modal';
 import { socialUpdateProfile, type SocialUpdateProfileResponse } from '../../lib/api';
 
@@ -113,23 +114,18 @@ export default function EditProfileDialog({
           ) : (
             <>
               <div>
-                <label
-                  htmlFor="edit-profile-title-input"
-                  className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5"
+                <FormField
+                  label={t('social.editProfile.title')}
+                  error={titleTooLong ? t('social.editProfile.max80Characters') : undefined}
                 >
-                  {t('social.editProfile.title')}
-                </label>
-                <input
-                  id="edit-profile-title-input"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  maxLength={80}
-                  placeholder={t('social.editProfile.titlePlaceholder')}
-                  className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-                <div className="text-[11px] text-text-secondary mt-1 flex justify-between">
-                  <span>{titleTooLong ? t('social.editProfile.max80Characters') : ' '}</span>
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    maxLength={80}
+                    placeholder={t('social.editProfile.titlePlaceholder')}
+                  />
+                </FormField>
+                <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
                   <span className={titleTooLong ? 'text-red-400' : ''}>
                     {trimmedTitle.length}/80
                   </span>
@@ -137,23 +133,20 @@ export default function EditProfileDialog({
               </div>
 
               <div>
-                <label
-                  htmlFor="edit-profile-description"
-                  className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5"
+                <FormField
+                  label={t('social.editProfile.descriptionOptional')}
+                  error={descriptionTooLong ? t('social.editProfile.max1000Characters') : undefined}
                 >
-                  {t('social.editProfile.descriptionOptional')}
-                </label>
-                <textarea
-                  id="edit-profile-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  maxLength={1000}
-                  rows={4}
-                  placeholder={t('social.editProfile.descriptionPlaceholder')}
-                  className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-none"
-                />
-                <div className="text-[11px] text-text-secondary mt-1 flex justify-between">
-                  <span>{descriptionTooLong ? t('social.editProfile.max1000Characters') : ' '}</span>
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    maxLength={1000}
+                    rows={4}
+                    placeholder={t('social.editProfile.descriptionPlaceholder')}
+                    className="resize-none"
+                  />
+                </FormField>
+                <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
                   <span className={descriptionTooLong ? 'text-red-400' : ''}>
                     {trimmedDescription.length}/1000
                   </span>

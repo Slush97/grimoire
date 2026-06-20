@@ -11,10 +11,10 @@ import {
   Play,
   AlertTriangle,
   CloudOff,
-  Globe2,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button, Badge } from '../components/common/ui';
+import { Input, Select } from '../components/common/forms';
 import { EmptyState, PageHeader, PageLayout } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import { useAppStore } from '../stores/appStore';
@@ -158,47 +158,44 @@ export default function Servers() {
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
-        <div className="relative min-w-[220px] flex-1">
-          <Search size={16} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-secondary" />
-          <input
+        <div className="min-w-[220px] flex-1">
+          <Input
+            icon={Search}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={t('servers.filters.searchPlaceholder')}
-            className="w-full rounded-sm border border-border bg-bg-tertiary py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-secondary/60 focus:border-accent/50 focus:outline-none"
           />
         </div>
 
         {regions.length > 1 && (
-          <div className="flex items-center gap-1.5 rounded-sm border border-border bg-bg-tertiary px-2 py-1.5">
-            <Globe2 size={14} className="text-text-secondary" />
-            <select
+          <div className="w-40">
+            <Select
+              inputSize="sm"
               value={region}
               onChange={(e) => setRegion(e.target.value)}
-              className="bg-transparent text-sm text-text-primary focus:outline-none"
             >
               {regions.map((r) => (
-                <option key={r} value={r} className="bg-bg-secondary">
+                <option key={r} value={r}>
                   {r === 'all' ? t('servers.filters.allRegions') : r}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
 
         {maps.length > 1 && (
-          <div className="flex items-center gap-1.5 rounded-sm border border-border bg-bg-tertiary px-2 py-1.5">
-            <MapPin size={14} className="text-text-secondary" />
-            <select
+          <div className="w-40">
+            <Select
+              inputSize="sm"
               value={mapFilter}
               onChange={(e) => setMapFilter(e.target.value)}
-              className="bg-transparent text-sm text-text-primary focus:outline-none"
             >
               {maps.map((m) => (
-                <option key={m} value={m} className="bg-bg-secondary">
+                <option key={m} value={m}>
                   {m === 'all' ? t('servers.filters.allMaps') : m}
                 </option>
               ))}
-            </select>
+            </Select>
           </div>
         )}
 

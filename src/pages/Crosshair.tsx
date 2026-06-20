@@ -6,6 +6,7 @@ import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import { renderCrosshairThumbnail } from '../components/crosshair/drawCrosshair';
 import { getSettings } from '../lib/api';
 import { Card, Slider, Toggle, Button } from '../components/common/ui';
+import { Input, Select } from '../components/common/forms';
 import Tx from '../components/translation/Tx';
 
 // The in-game crosshair is authored in 1080p-reference px and scaled by
@@ -369,12 +370,13 @@ export default function Crosshair() {
                             <div className="flex items-center gap-2 h-full">
                                 {showSaveInput ? (
                                     <>
-                                        <input
+                                        <Input
+                                            inputSize="sm"
                                             type="text"
                                             value={presetName}
                                             onChange={(e) => setPresetName(e.target.value)}
                                             placeholder={t('crosshair.presetNamePlaceholder')}
-                                            className="flex-1 px-3 py-1.5 bg-bg-tertiary border border-white/10 rounded-lg text-text-primary text-sm focus:outline-none focus:ring-1 focus:ring-accent min-w-0"
+                                            className="flex-1 min-w-0"
                                             onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
                                             autoFocus
                                         />
@@ -408,16 +410,17 @@ export default function Crosshair() {
                     {/* Preview Area */}
                     <Card className="relative w-full" contentClassName="p-0">
                         <div className="absolute top-4 right-4 z-10 flex items-center gap-3 bg-black/40 backdrop-blur-md rounded-full px-3 py-1.5 border border-white/5">
-                            <select
+                            <Select
+                                inputSize="sm"
                                 value={resolution}
                                 onChange={(e) => setResolution(parseInt(e.target.value, 10))}
                                 title={t('crosshair.preview.resolutionTitle')}
-                                className="bg-transparent text-xs text-text-secondary focus:outline-none cursor-pointer [&>option]:bg-bg-tertiary"
+                                className="text-xs"
                             >
                                 {RESOLUTIONS.map((r) => (
                                     <option key={r.height} value={r.height}>{r.label}</option>
                                 ))}
-                            </select>
+                            </Select>
                             <span className="text-xs text-text-secondary">
                                 <Tx k="crosshair.preview.zoom" fallback="Zoom:" />
                             </span>

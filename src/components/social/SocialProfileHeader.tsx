@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Button, Badge } from '../common/ui';
+import { Textarea } from '../common/forms';
 import {
   socialGetProfile,
   socialLike,
@@ -313,13 +314,14 @@ export default function SocialProfileHeader({
             {reportOpen && !reported && (
               <div className="bg-bg-secondary border border-white/10 rounded-md p-2.5 space-y-2">
                 <div className="text-xs font-medium text-text-primary">{t('social.header.reportThisProfile')}</div>
-                <textarea
+                <Textarea
+                  inputSize="sm"
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
                   maxLength={500}
                   rows={2}
                   placeholder={t('social.header.reportIssuePlaceholder')}
-                  className="w-full px-2.5 py-1.5 bg-bg-tertiary border border-white/10 rounded-md text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+                  className="text-xs resize-none"
                 />
                 {reportError && (
                   <div className="text-xs text-red-400 flex items-start gap-1.5">
