@@ -188,7 +188,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
 
             {actionError && (
               <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mt-2">
-                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 text-state-danger flex-shrink-0 mt-0.5" />
                 <div>{actionError}</div>
               </div>
             )}

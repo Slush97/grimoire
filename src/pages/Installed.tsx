@@ -87,7 +87,8 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
-import { Button, Tag } from '../components/common/ui';
+import { Button, IconButton, Tag } from '../components/common/ui';
+import { FormField, Input, Select } from '../components/common/forms';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -3431,17 +3432,19 @@ export default function Installed() {
               ? t('installed.empty.noSearchMatch', { query: search })
               : t('installed.empty.noFilterMatch')}
           </p>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
+            className="mt-1"
             onClick={() => {
               setSearch('');
               setSourceSel(['gamebanana', 'local']);
               setStatusSel(['enabled', 'disabled']);
               setTypeFilter([]);
             }}
-            className="mt-1 px-3 py-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer text-sm"
           >
             {searchNeedle ? t('installed.filters.clearSearch') : t('installed.filters.clearFilters')}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -3705,7 +3708,7 @@ export default function Installed() {
             className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-red-400 mb-2">{t('installed.details.loadFailed')}</h3>
+            <h3 className="text-lg font-semibold text-state-danger mb-2">{t('installed.details.loadFailed')}</h3>
             <p className="text-sm text-text-secondary mb-4">{detailsError}</p>
             <div className="flex justify-end">
               <Button onClick={closeModDetails}>{t('common.actions.close')}</Button>
@@ -3934,21 +3937,13 @@ export default function Installed() {
                   : t('installed.select.countSelected', { count: selectedMods.length })}
               </span>
               <span className="h-5 w-px bg-border" />
-              <button
-                type="button"
-                onClick={selectAllVisible}
-                className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
-              >
+              <Button variant="ghost" size="sm" onClick={selectAllVisible}>
                 {t('installed.select.selectAll')}
-              </button>
+              </Button>
               {selectedMods.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedIds(new Set())}
-                  className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
-                >
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                   {t('common.actions.clear')}
-                </button>
+                </Button>
               )}
               <span className="h-5 w-px bg-border" />
               <Button
@@ -4057,15 +4052,12 @@ export default function Installed() {
                 {t('common.actions.delete')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
               </Button>
               <span className="h-5 w-px bg-border" />
-              <button
-                type="button"
+              <IconButton
+                icon={X}
+                label={t('installed.actions.exitSelectionMode')}
+                size="sm"
                 onClick={exitSelectMode}
-                className="p-1.5 text-text-secondary hover:text-text-primary rounded hover:bg-bg-tertiary cursor-pointer"
-                aria-label={t('installed.actions.exitSelectionMode')}
-                title={t('installed.actions.exitSelectionMode')}
-              >
-                <X className="w-4 h-4" />
-              </button>
+              />
             </>
           )}
         </div>
@@ -4189,14 +4181,11 @@ function UnknownFilterGuessModal({
               {mod.fileName}
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon={X}
+            label={t('common.actions.close')}
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         <UnknownMatchPanel
@@ -4320,14 +4309,11 @@ function BulkUnknownFixModal({
                 </Button>
               </>
             )}
-            <button
-              type="button"
+            <IconButton
+              icon={X}
+              label={t('common.actions.close')}
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-              aria-label={t('common.actions.close')}
-            >
-              <X className="w-5 h-5" />
-            </button>
+            />
           </div>
         </div>
 
@@ -4503,7 +4489,7 @@ function UnknownMatchPanel({
       />
 
       {applyError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{applyError}</span>
         </div>
@@ -4556,7 +4542,7 @@ function UnknownMatchPanel({
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -4866,7 +4852,7 @@ function UnknownManualSearch({
       </div>
 
       {searchError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span>{searchError}</span>
         </div>
@@ -4934,18 +4920,20 @@ function UnknownManualSearch({
                     {files && files.length > 0 && (
                       <label className="block text-xs text-text-secondary">
                         {t('installed.unknown.pinExactFile')}
-                        <select
-                          value={fileId ?? ''}
-                          onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
-                          className="mt-1 w-full bg-bg-primary border border-white/10 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent/50"
-                        >
-                          <option value="">{t('installed.unknown.dontPinFile')}</option>
-                          {files.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.fileName}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="mt-1">
+                          <Select
+                            inputSize="sm"
+                            value={fileId ?? ''}
+                            onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
+                          >
+                            <option value="">{t('installed.unknown.dontPinFile')}</option>
+                            {files.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.fileName}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
                       </label>
                     )}
                     <div className="flex justify-end">
@@ -5166,7 +5154,7 @@ function UnknownFileList({
             </div>
           )}
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -6081,8 +6069,8 @@ function ModCard({
   const stateClasses = hasConflicts
     ? 'bg-state-warning/5 border-state-warning/45'
     : mod.enabled
-      ? 'bg-[#242424] border-white/[0.08] hover:border-white/[0.14] hover:bg-bg-secondary'
-      : 'bg-[#242424]/85 border-white/[0.08] text-text-primary/80 hover:border-white/[0.14] hover:bg-bg-secondary hover:text-text-primary';
+      ? 'bg-bg-tertiary border-white/[0.08] hover:border-white/[0.14] hover:bg-bg-secondary'
+      : 'bg-bg-tertiary/85 border-white/[0.08] text-text-primary/80 hover:border-white/[0.14] hover:bg-bg-secondary hover:text-text-primary';
 
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
@@ -6090,8 +6078,8 @@ function ModCard({
   const glassStateClasses = hasConflicts
     ? 'border-state-warning/45 bg-state-warning/[0.07]'
     : mod.enabled
-      ? 'border-white/[0.12] bg-[#141414]/65 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] hover:border-white/[0.2]'
-      : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary';
+      ? 'border-white/[0.12] bg-bg-sunken/65 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] hover:border-white/[0.2]'
+      : 'border-white/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary';
 
   // Merged mods get a "stacked card" silhouette via two offset box-shadows
   // that read as cards-behind-the-card. Uses only neutral surface/border
@@ -6534,7 +6522,7 @@ function ModCard({
                 mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
               }`}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f0f]/45 via-[#0f0f0f]/65 to-[#0f0f0f]/[0.88]" />
+            <div className="absolute inset-0 scrim-bottom" />
           </div>
         )}
         {(() => {
@@ -6799,21 +6787,18 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
           </div>
         </div>
 
-        <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="local-mod-name">
-          {t('locker.soulImport.fields.name')}
-        </label>
-        <input
-          id="local-mod-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-            if (e.key === 'Escape') onClose();
-          }}
-          autoFocus
-          className="mt-2 w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/60 focus:border-accent focus:ring-2 focus:ring-accent/25"
-          placeholder={t('installed.edit.modNamePlaceholder')}
-        />
+        <FormField className="mt-5" label={t('locker.soulImport.fields.name')}>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit();
+              if (e.key === 'Escape') onClose();
+            }}
+            autoFocus
+            placeholder={t('installed.edit.modNamePlaceholder')}
+          />
+        </FormField>
         <p className="mt-2 truncate text-xs text-text-secondary" title={mod.fileName}>
           {t('installed.edit.fileLabel', { fileName: mod.fileName })}
         </p>
@@ -7066,19 +7051,17 @@ function ImportCustomModModal({
             <FilePlus className="w-5 h-5" />
             {title}
           </h3>
-          <button
+          <IconButton
+            icon={X}
+            label={t('common.actions.close')}
             onClick={onClose}
-            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.vpkFile')} <span className="text-red-400">*</span>
+              {t('installed.import.vpkFile')} <span className="text-state-danger">*</span>
             </label>
             <div
               role="button"
@@ -7125,18 +7108,13 @@ function ImportCustomModModal({
             </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.modName')} <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
+          <FormField label={t('installed.import.modName')} required>
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('installed.import.modNamePlaceholder')}
-              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
             />
-          </div>
+          </FormField>
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
@@ -7195,28 +7173,28 @@ function ImportCustomModModal({
           </label>
 
           {error && (
-            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
               {error}
             </div>
           )}
         </div>
 
         <div className="flex justify-end gap-3 p-5 border-t border-border">
-          <button
+          <Button
+            variant="secondary"
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
           >
             {t('common.actions.cancel')}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            isLoading={submitting}
           >
-            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {submitLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,

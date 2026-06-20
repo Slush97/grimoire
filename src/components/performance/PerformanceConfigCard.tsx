@@ -162,7 +162,7 @@ export default function PerformanceConfigCard() {
               }}
             />
           </p>
-          {openError && <p className="text-xs text-red-400">{openError}</p>}
+          {openError && <p className="text-xs text-state-danger">{openError}</p>}
         </div>
         <div className="flex items-center gap-2 shrink-0">
           {canRestore && (

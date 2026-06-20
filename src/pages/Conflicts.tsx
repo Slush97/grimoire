@@ -15,7 +15,7 @@ import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { Button } from '../components/common/ui';
-import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, type ViewMode } from '../components/common/PageComponents';
+import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, PageLayout, type ViewMode } from '../components/common/PageComponents';
 import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
 import Tx from '../components/translation/Tx';
 
@@ -418,7 +418,7 @@ export default function Conflicts() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto animate-fade-in">
+    <PageLayout maxWidth="5xl">
       <PageHeader
         title={
           <Tx
@@ -889,6 +889,6 @@ export default function Conflicts() {
           )
         }
       />
-    </div>
+    </PageLayout>
   );
 }

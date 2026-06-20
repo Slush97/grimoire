@@ -4,6 +4,7 @@ import { Layers, X, AlertTriangle, Info } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import ModThumbnail from './ModThumbnail';
 import { Button } from './common/ui';
+import { FormField, Input } from './common/forms';
 import { Modal } from './common/Modal';
 
 interface Props {
@@ -109,24 +110,21 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
               />
             </div>
             <div className="flex-1 min-w-0">
-              <label htmlFor="merge-name" className="block text-sm font-medium text-text-primary mb-1.5">
-                {t('mergeMods.mergedModName')} <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="merge-name"
-                type="text"
-                value={liveName}
-                onChange={(e) => {
-                  setNameTouched(true);
-                  setName(e.target.value);
-                }}
-                placeholder={t('mergeMods.namePlaceholder')}
-                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
-                autoFocus
-              />
-              <p className="mt-2 text-xs text-text-secondary">
-                {t('mergeMods.originalsStay')}
-              </p>
+              <FormField
+                label={t('mergeMods.mergedModName')}
+                required
+                hint={t('mergeMods.originalsStay')}
+              >
+                <Input
+                  value={liveName}
+                  onChange={(e) => {
+                    setNameTouched(true);
+                    setName(e.target.value);
+                  }}
+                  placeholder={t('mergeMods.namePlaceholder')}
+                  autoFocus
+                />
+              </FormField>
             </div>
           </div>
 
@@ -238,7 +236,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
 
           {error && (
             <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5">
-              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-state-danger flex-shrink-0 mt-0.5" />
               <div>{error}</div>
             </div>
           )}

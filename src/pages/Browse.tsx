@@ -86,7 +86,8 @@ import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
-import { Button, Tag } from '../components/common/ui';
+import { Button, IconButton, SegmentedControl, Tag } from '../components/common/ui';
+import { Select } from '../components/common/forms';
 import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
@@ -2709,15 +2710,12 @@ export default function Browse() {
       <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
         {artistMode && submitter ? (
           <div className="flex items-center gap-3">
-            <button
-              type="button"
+            <IconButton
+              icon={ArrowLeft}
+              label={t('browse.artist.backToBrowse')}
               onClick={clearArtist}
-              aria-label={t('browse.artist.backToBrowse')}
-              title={t('browse.artist.backToBrowse')}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:text-text-primary cursor-pointer"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+              className="flex-shrink-0"
+            />
             {submitter.avatarUrl && !artistAvatarFailed ? (
               <img
                 src={submitter.avatarUrl}
@@ -2782,7 +2780,7 @@ export default function Browse() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title={`Support ${submitter.name} on Ko-fi`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542]"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover"
                 >
                   <KofiIcon className="h-4 w-4" />
                   {t('browse.artist.kofi')}
@@ -2937,32 +2935,16 @@ export default function Browse() {
                   <div className="space-y-4">
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setLayout('grid')}
-                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
-                            layout === 'grid'
-                              ? 'border-accent/50 bg-accent/10 text-accent'
-                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          <LayoutGrid className="h-4 w-4" />
-                          {t('browse.viewOptions.grid')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLayout('list')}
-                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
-                            layout === 'list'
-                              ? 'border-accent/50 bg-accent/10 text-accent'
-                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          <List className="h-4 w-4" />
-                          {t('browse.viewOptions.list')}
-                        </button>
-                      </div>
+                      <SegmentedControl<BrowseLayout>
+                        fill
+                        label={t('browse.viewOptions.layout')}
+                        value={layout}
+                        onChange={setLayout}
+                        options={[
+                          { value: 'grid', label: <><LayoutGrid className="h-4 w-4" />{t('browse.viewOptions.grid')}</> },
+                          { value: 'list', label: <><List className="h-4 w-4" />{t('browse.viewOptions.list')}</> },
+                        ]}
+                      />
                     </div>
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
@@ -2993,54 +2975,31 @@ export default function Browse() {
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.cardDesign')}>
-                        {(['readable', 'classic'] as const).map((design) => {
-                          const active = browseCardDesign === design;
-                          return (
-                            <button
-                              key={design}
-                              type="button"
-                              role="tab"
-                              aria-selected={active}
-                              disabled={layout === 'list'}
-                              onClick={() => setBrowseCardDesign(design)}
-                              className={`h-9 rounded-md border text-xs font-semibold transition-colors disabled:cursor-default ${
-                                active
-                                  ? 'border-accent/50 bg-accent/10 text-accent'
-                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {design === 'readable' ? t('browse.cardStyle.default') : t('browse.cardStyle.classic')}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <SegmentedControl<BrowseCardDesign>
+                        fill
+                        disabled={layout === 'list'}
+                        label={t('browse.viewOptions.cardDesign')}
+                        value={browseCardDesign}
+                        onChange={setBrowseCardDesign}
+                        options={[
+                          { value: 'readable', label: t('browse.cardStyle.default') },
+                          { value: 'classic', label: t('browse.cardStyle.classic') },
+                        ]}
+                      />
                     </div>
 
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.modDetailsView')}>
-                        {(['modal', 'sidebar'] as const).map((view) => {
-                          const active = browseDetailsView === view;
-                          return (
-                            <button
-                              key={view}
-                              type="button"
-                              role="tab"
-                              aria-selected={active}
-                              onClick={() => setBrowseDetailsView(view)}
-                              className={`flex h-9 items-center justify-center gap-1.5 rounded-md border text-xs font-semibold transition-colors ${
-                                active
-                                  ? 'border-accent/50 bg-accent/10 text-accent'
-                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {view === 'modal' ? <Maximize2 className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
-                              {view === 'modal' ? t('browse.detailsView.window') : t('browse.detailsView.sidebar')}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <SegmentedControl<BrowseDetailsView>
+                        fill
+                        label={t('browse.viewOptions.modDetailsView')}
+                        value={browseDetailsView}
+                        onChange={setBrowseDetailsView}
+                        options={[
+                          { value: 'modal', label: <><Maximize2 className="h-3.5 w-3.5" />{t('browse.detailsView.window')}</> },
+                          { value: 'sidebar', label: <><PanelRight className="h-3.5 w-3.5" />{t('browse.detailsView.sidebar')}</> },
+                        ]}
+                      />
                     </div>
 
                   </div>
@@ -3175,18 +3134,17 @@ export default function Browse() {
                         {categoryOptions.length > 0 && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.category')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByCategory')}
                               value={String(categoryId)}
                               onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                               disabled={heroCategoryId !== 'all'}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <option value="all">{t('browse.filters.allCategories')}</option>
                               {categoryOptions.map((cat) => (
                                 <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
                               ))}
-                            </select>
+                            </Select>
                             {heroCategoryId !== 'all' && (
                               <span className="block text-[11px] text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
                             )}
@@ -3198,34 +3156,32 @@ export default function Browse() {
                         {hasLocalCache && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByContentRating')}
                               value={nsfw}
                               onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">{t('browse.filters.contentAll')}</option>
                               <option value="sfw">{t('browse.filters.sfwOnly')}</option>
                               <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
-                            </select>
+                            </Select>
                           </div>
                         )}
 
                         {hasLocalCache && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByDateAdded')}
                               value={addedWithin}
                               onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">{t('browse.filters.anyTime')}</option>
                               <option value="today">{t('browse.filters.today')}</option>
                               <option value="week">{t('browse.filters.thisWeek')}</option>
                               <option value="month">{t('browse.filters.thisMonth')}</option>
                               <option value="custom">{t('browse.filters.customRange')}</option>
-                            </select>
+                            </Select>
                             {addedWithin === 'custom' && (
                               <div className="mt-2 grid grid-cols-2 gap-2">
                                 <label className="block">
@@ -3662,7 +3618,7 @@ function ReadableBrowseModCard({
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
       style={cardFrameStyle}
-      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-[#141414] text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-bg-sunken text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -3693,7 +3649,7 @@ function ReadableBrowseModCard({
           {/* font-semibold, not font-bold: Reaver ships only a 600 face, so
               bolder weights get synthetic (smeared, blurry) emboldening. */}
           <h3
-            className={`block truncate font-mod-title font-semibold text-[#eee8df] ${
+            className={`block truncate font-mod-title font-semibold text-mod-title ${
               isMicro
                 ? 'text-[13px] leading-4'
                 : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'
@@ -3743,7 +3699,7 @@ function ReadableBrowseModCard({
                     )}
                   </button>
                   {showVolumeSlider && (
-                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-[#0a0c10]/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
+                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-bg-glass/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
                       <input
                         type="range"
                         min={0}

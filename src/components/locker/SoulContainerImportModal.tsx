@@ -25,6 +25,7 @@ import { loadGltfPreview, parseGltfPreview } from '../../lib/loadGltfPreview';
 import { computeSceneStats, deriveNameFromPath, norm360, TRIANGLE_WARN_THRESHOLD } from '../../lib/soulImport';
 import { useAppStore } from '../../stores/appStore';
 import type { Mod } from '../../types/mod';
+import { FormField, Input } from '../common/forms';
 import SoulImportPreview from './SoulImportPreview';
 import { SOUL_BACKDROP_COUNT } from './soulBackdrops';
 import { disposeScene } from './soulModel';
@@ -552,18 +553,13 @@ export default function SoulContainerImportModal({
 
           {/* Right: controls */}
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">
-                {t('locker.soulImport.fields.name')} <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
+            <FormField label={t('locker.soulImport.fields.name')} required>
+              <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('locker.soulImport.fields.namePlaceholder')}
-                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
               />
-            </div>
+            </FormField>
 
             {/* Orientation */}
             <div>
@@ -700,18 +696,20 @@ export default function SoulContainerImportModal({
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">
-                {t('locker.soulImport.fields.notes')} <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
-              </label>
-              <input
-                type="text"
+            <FormField
+              label={
+                <>
+                  {t('locker.soulImport.fields.notes')}{' '}
+                  <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
+                </>
+              }
+            >
+              <Input
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder={t('locker.soulImport.fields.notesPlaceholder')}
-                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
               />
-            </div>
+            </FormField>
 
             <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
               <input
@@ -741,7 +739,7 @@ export default function SoulContainerImportModal({
           )}
 
           {error && (
-            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
               {error}
             </div>
           )}

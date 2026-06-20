@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle, Rocket } from 'lucide-react';
 import { getSettings, setSettings } from '../lib/api';
 import { Card, Badge, Button } from '../components/common/ui';
+import { Input } from '../components/common/forms';
 import { ConfirmModal } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import type { AppSettings } from '../types/mod';
@@ -235,14 +236,13 @@ export default function Autoexec() {
             <div className="flex flex-col lg:flex-row flex-1 gap-6 min-h-0 overflow-auto">
                 {/* Left Panel - Command Presets */}
                 <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-hidden order-2 lg:order-1">
-                    <div className="relative shrink-0">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary" />
-                        <input
+                    <div className="shrink-0">
+                        <Input
+                            icon={Search}
                             type="text"
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             placeholder={t('autoexec.search.placeholder')}
-                            className="w-full pl-10 pr-4 py-2.5 bg-bg-secondary border border-white/5 rounded-xl text-text-primary text-sm focus:outline-none focus:ring-2 focus:ring-accent placeholder:text-text-secondary/50"
                         />
                     </div>
 
@@ -250,12 +250,12 @@ export default function Autoexec() {
                         {/* Custom Command Input */}
                         <Card title={<Tx k="autoexec.customCommand.title" fallback="Custom Command" />}>
                             <div className="flex gap-2">
-                                <input
+                                <Input
                                     type="text"
                                     value={customCommand}
                                     onChange={(e) => setCustomCommand(e.target.value)}
                                     placeholder={t('autoexec.customCommand.placeholder')}
-                                    className="flex-1 px-3 py-2 bg-bg-tertiary border border-white/10 rounded-lg text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
+                                    className="flex-1 font-mono"
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
                                 />
                                 <Button onClick={handleAddCustomCommand} disabled={!customCommand.trim()} icon={Plus} />
@@ -365,7 +365,7 @@ export default function Autoexec() {
                                     </div>
                                 )}
                                 {saveMessage && (
-                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessageTone === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
+                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessageTone === 'error' ? 'bg-red-500/10 border-red-500/20 text-state-danger' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
                                         {saveMessageTone === 'error' ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
                                         {saveMessage}
                                     </div>
@@ -391,7 +391,7 @@ export default function Autoexec() {
                                         </div>
                                         <button
                                             onClick={() => handleRemoveCommand(i)}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded transition-all cursor-pointer"
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-state-danger rounded transition-all cursor-pointer"
                                             title={t('common.actions.remove')}
                                         >
                                             <Trash2 className="w-4 h-4" />
@@ -426,12 +426,12 @@ export default function Autoexec() {
                             </p>
 
                             <div className="flex gap-2">
-                                <input
+                                <Input
                                     type="text"
                                     value={launchOptionsDraft}
                                     onChange={(e) => setLaunchOptionsDraft(e.target.value)}
                                     placeholder="-high -nojoy"
-                                    className="flex-1 px-3 py-2 bg-bg-tertiary border border-white/10 rounded-lg text-text-primary text-sm font-mono focus:outline-none focus:ring-2 focus:ring-accent"
+                                    className="flex-1 font-mono"
                                 />
                                 <Button
                                     onClick={handleSaveLaunchOptions}
@@ -449,7 +449,7 @@ export default function Autoexec() {
                                     aria-live="polite"
                                     className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${
                                         launchMessageTone === 'error'
-                                            ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                                            ? 'bg-red-500/10 border-red-500/20 text-state-danger'
                                             : 'bg-green-500/10 border-green-500/20 text-green-400'
                                     }`}
                                 >

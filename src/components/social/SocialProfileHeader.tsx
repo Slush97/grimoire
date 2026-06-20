@@ -13,6 +13,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { Button, Badge } from '../common/ui';
+import { Textarea } from '../common/forms';
 import {
   socialGetProfile,
   socialLike,
@@ -230,7 +231,7 @@ export default function SocialProfileHeader({
       {/* Body */}
       <div className="px-4 py-3 space-y-3 text-sm">
         {error && !view && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -304,7 +305,7 @@ export default function SocialProfileHeader({
             </div>
 
             {likeError && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2 text-xs text-red-400 flex items-start gap-2">
+              <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2 text-xs text-state-danger flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <span>{likeError}</span>
               </div>
@@ -313,16 +314,17 @@ export default function SocialProfileHeader({
             {reportOpen && !reported && (
               <div className="bg-bg-secondary border border-white/10 rounded-md p-2.5 space-y-2">
                 <div className="text-xs font-medium text-text-primary">{t('social.header.reportThisProfile')}</div>
-                <textarea
+                <Textarea
+                  inputSize="sm"
                   value={reportReason}
                   onChange={(e) => setReportReason(e.target.value)}
                   maxLength={500}
                   rows={2}
                   placeholder={t('social.header.reportIssuePlaceholder')}
-                  className="w-full px-2.5 py-1.5 bg-bg-tertiary border border-white/10 rounded-md text-xs text-text-primary placeholder:text-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent resize-none"
+                  className="text-xs resize-none"
                 />
                 {reportError && (
-                  <div className="text-xs text-red-400 flex items-start gap-1.5">
+                  <div className="text-xs text-state-danger flex items-start gap-1.5">
                     <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                     <span>{reportError}</span>
                   </div>

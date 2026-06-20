@@ -34,6 +34,7 @@ import {
 } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import { ArchivedTag, Button, CheckboxMark, Tag } from './common/ui';
+import { Input } from './common/forms';
 import { Modal } from './common/Modal';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { formatBytes } from '../lib/formatBytes';
@@ -328,9 +329,9 @@ export default function VariantPickerModal({
                         <CheckboxMark checked={isActive} />
                         <div className="min-w-0 flex-1">
                             {isEditing ? (
-                                <input
+                                <Input
                                     ref={editInputRef}
-                                    type="text"
+                                    inputSize="sm"
                                     value={editing.draft}
                                     onChange={(e) => setEditing({ id: v.id, draft: e.target.value })}
                                     onClick={(e) => e.stopPropagation()}
@@ -346,7 +347,6 @@ export default function VariantPickerModal({
                                     }}
                                     placeholder={t('variantPicker.renamePlaceholder')}
                                     maxLength={80}
-                                    className="w-full bg-bg-secondary border border-accent/50 rounded px-2 py-1 text-sm text-text-primary focus:outline-none focus:ring-2 focus:ring-accent"
                                 />
                             ) : (
                                 <div className="flex items-center gap-2 min-w-0">
@@ -477,7 +477,7 @@ export default function VariantPickerModal({
                             type="button"
                             onClick={() => handleDelete(v)}
                             disabled={overlay || !!pending}
-                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-state-danger hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
                             title={`Delete ${primaryTitle}`}
                             aria-label={`Delete ${primaryTitle}`}
                         >

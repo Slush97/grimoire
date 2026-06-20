@@ -31,7 +31,7 @@ import { getModComments, getModUpdates } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
-import { ArchivedTag } from './common/ui';
+import { ArchivedTag, Button, IconButton } from './common/ui';
 import ImageContextMenu from './ImageContextMenu';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
@@ -531,38 +531,32 @@ function ModDetailsModal({
         </div>
         <div className="col-start-2 flex min-w-0 flex-wrap items-center justify-end gap-2 sm:col-start-3 sm:row-start-1">
           {showEnablePill && installedFileState && (
-            <button
+            <Button
               type="button"
+              variant="warning"
+              icon={Power}
               onClick={() => onEnableFile!(installedFileState.modId)}
               disabled={isBusyThis}
               title={t('modDetails.actions.enableThisModTitle')}
-              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-yellow-500/40 bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-300 transition-colors hover:bg-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
-              <Power className="w-3.5 h-3.5" />
               {t('modDetails.actions.enable')}
-            </button>
+            </Button>
           )}
           {showDeleteButton && installedFileState && (
-            <button
-              type="button"
+            <IconButton
+              icon={Trash2}
+              label={`Delete ${file.fileName}`}
+              tone="danger"
               onClick={() => setDeleteCandidate({ modId: installedFileState.modId, fileName: file.fileName })}
               disabled={isBusyThis || deleteInProgress}
-              title={`Delete ${file.fileName}`}
-              aria-label={`Delete ${file.fileName}`}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-state-danger/35 bg-state-danger/10 text-state-danger transition-colors hover:border-state-danger/55 hover:bg-state-danger/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            />
           )}
-          <button
+          <Button
             type="button"
+            variant={isUpdate || !isInstalled ? 'primary' : 'secondary'}
             onClick={() => onDownload(file.id, file.fileName)}
             disabled={isBusyThis}
-            className={`flex min-w-[110px] max-w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
-              isUpdate || !isInstalled
-                ? 'border-accent/45 bg-accent/10 text-text-primary hover:border-accent/65 hover:bg-accent/20'
-                : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-primary'
-            }`}
+            className="min-w-[110px] max-w-full"
           >
             {isDownloadingThis ? (
               <>
@@ -580,7 +574,7 @@ function ModDetailsModal({
                 {actionLabel(file.id, archived)}
               </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -950,22 +944,17 @@ function ModDetailsModal({
             );
           })()}
           {onChangeView && (
-            <button
+            <IconButton
+              icon={isSidebar ? Maximize2 : PanelRight}
+              label={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
               onClick={() => onChangeView(isSidebar ? 'modal' : 'sidebar')}
-              aria-label={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
-              title={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
-              className="flex-shrink-0 p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
-            >
-              {isSidebar ? <Maximize2 className="w-[18px] h-[18px]" /> : <PanelRight className="w-5 h-5" />}
-            </button>
+            />
           )}
-          <button
+          <IconButton
+            icon={X}
+            label={t('common.actions.close')}
             onClick={onClose}
-            aria-label={t('common.actions.close')}
-            className="flex-shrink-0 p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         {deleteCandidate && (
@@ -994,16 +983,18 @@ function ModDetailsModal({
                 />
               </p>
               <div className="mt-5 flex justify-end gap-3">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => setDeleteCandidate(null)}
                   disabled={deleteInProgress}
-                  className="rounded-md border border-border bg-bg-tertiary px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                 >
                   {t('common.actions.cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="danger"
+                  isLoading={deleteInProgress}
                   onClick={async () => {
                     if (!onDeleteFile || !deleteCandidate) return;
                     setDeleteInProgress(true);
@@ -1014,12 +1005,9 @@ function ModDetailsModal({
                       setDeleteInProgress(false);
                     }
                   }}
-                  disabled={deleteInProgress}
-                  className="inline-flex items-center gap-2 rounded-md border border-state-danger/35 bg-state-danger/10 px-4 py-2 text-sm font-medium text-state-danger transition-colors hover:border-state-danger/55 hover:bg-state-danger/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                 >
-                  {deleteInProgress && <Loader2 className="w-4 h-4 animate-spin" />}
                   {t('common.actions.delete')}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1353,7 +1341,7 @@ function ModDetailsModal({
                         target="_blank"
                         rel="noopener noreferrer"
                         title={`Support ${submitter.name} on Ko-fi`}
-                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5E5B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-kofi/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
                       >
                         <Coffee className="h-4 w-4" />
                         {t('modDetails.meta.koFi')}
