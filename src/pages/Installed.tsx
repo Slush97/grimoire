@@ -87,7 +87,7 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
-import { Button, Tag } from '../components/common/ui';
+import { Button, IconButton, Tag } from '../components/common/ui';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -3431,17 +3431,19 @@ export default function Installed() {
               ? t('installed.empty.noSearchMatch', { query: search })
               : t('installed.empty.noFilterMatch')}
           </p>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
+            className="mt-1"
             onClick={() => {
               setSearch('');
               setSourceSel(['gamebanana', 'local']);
               setStatusSel(['enabled', 'disabled']);
               setTypeFilter([]);
             }}
-            className="mt-1 px-3 py-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer text-sm"
           >
             {searchNeedle ? t('installed.filters.clearSearch') : t('installed.filters.clearFilters')}
-          </button>
+          </Button>
         </div>
       )}
 
@@ -3705,7 +3707,7 @@ export default function Installed() {
             className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-red-400 mb-2">{t('installed.details.loadFailed')}</h3>
+            <h3 className="text-lg font-semibold text-state-danger mb-2">{t('installed.details.loadFailed')}</h3>
             <p className="text-sm text-text-secondary mb-4">{detailsError}</p>
             <div className="flex justify-end">
               <Button onClick={closeModDetails}>{t('common.actions.close')}</Button>
@@ -3934,21 +3936,13 @@ export default function Installed() {
                   : t('installed.select.countSelected', { count: selectedMods.length })}
               </span>
               <span className="h-5 w-px bg-border" />
-              <button
-                type="button"
-                onClick={selectAllVisible}
-                className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
-              >
+              <Button variant="ghost" size="sm" onClick={selectAllVisible}>
                 {t('installed.select.selectAll')}
-              </button>
+              </Button>
               {selectedMods.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedIds(new Set())}
-                  className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
-                >
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                   {t('common.actions.clear')}
-                </button>
+                </Button>
               )}
               <span className="h-5 w-px bg-border" />
               <Button
@@ -4057,15 +4051,12 @@ export default function Installed() {
                 {t('common.actions.delete')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
               </Button>
               <span className="h-5 w-px bg-border" />
-              <button
-                type="button"
+              <IconButton
+                icon={X}
+                label={t('installed.actions.exitSelectionMode')}
+                size="sm"
                 onClick={exitSelectMode}
-                className="p-1.5 text-text-secondary hover:text-text-primary rounded hover:bg-bg-tertiary cursor-pointer"
-                aria-label={t('installed.actions.exitSelectionMode')}
-                title={t('installed.actions.exitSelectionMode')}
-              >
-                <X className="w-4 h-4" />
-              </button>
+              />
             </>
           )}
         </div>
@@ -4189,14 +4180,11 @@ function UnknownFilterGuessModal({
               {mod.fileName}
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon={X}
+            label={t('common.actions.close')}
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         <UnknownMatchPanel
@@ -4320,14 +4308,11 @@ function BulkUnknownFixModal({
                 </Button>
               </>
             )}
-            <button
-              type="button"
+            <IconButton
+              icon={X}
+              label={t('common.actions.close')}
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-              aria-label={t('common.actions.close')}
-            >
-              <X className="w-5 h-5" />
-            </button>
+            />
           </div>
         </div>
 
@@ -4503,7 +4488,7 @@ function UnknownMatchPanel({
       />
 
       {applyError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{applyError}</span>
         </div>
@@ -4556,7 +4541,7 @@ function UnknownMatchPanel({
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -4866,7 +4851,7 @@ function UnknownManualSearch({
       </div>
 
       {searchError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span>{searchError}</span>
         </div>
@@ -5166,7 +5151,7 @@ function UnknownFileList({
             </div>
           )}
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -7066,19 +7051,17 @@ function ImportCustomModModal({
             <FilePlus className="w-5 h-5" />
             {title}
           </h3>
-          <button
+          <IconButton
+            icon={X}
+            label={t('common.actions.close')}
             onClick={onClose}
-            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         <div className="p-5 space-y-4">
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.vpkFile')} <span className="text-red-400">*</span>
+              {t('installed.import.vpkFile')} <span className="text-state-danger">*</span>
             </label>
             <div
               role="button"
@@ -7127,7 +7110,7 @@ function ImportCustomModModal({
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.modName')} <span className="text-red-400">*</span>
+              {t('installed.import.modName')} <span className="text-state-danger">*</span>
             </label>
             <input
               type="text"
@@ -7195,28 +7178,28 @@ function ImportCustomModModal({
           </label>
 
           {error && (
-            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
               {error}
             </div>
           )}
         </div>
 
         <div className="flex justify-end gap-3 p-5 border-t border-border">
-          <button
+          <Button
+            variant="secondary"
             onClick={onClose}
             disabled={submitting}
-            className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
           >
             {t('common.actions.cancel')}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="primary"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            isLoading={submitting}
           >
-            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {submitLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>,
