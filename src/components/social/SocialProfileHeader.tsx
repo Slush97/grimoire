@@ -231,7 +231,7 @@ export default function SocialProfileHeader({
       {/* Body */}
       <div className="px-4 py-3 space-y-3 text-sm">
         {error && !view && (
-          <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+          <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             <span>{error}</span>
           </div>
@@ -305,7 +305,7 @@ export default function SocialProfileHeader({
             </div>
 
             {likeError && (
-              <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2 text-xs text-red-400 flex items-start gap-2">
+              <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2 text-xs text-state-danger flex items-start gap-2">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <span>{likeError}</span>
               </div>
@@ -324,7 +324,7 @@ export default function SocialProfileHeader({
                   className="text-xs resize-none"
                 />
                 {reportError && (
-                  <div className="text-xs text-red-400 flex items-start gap-1.5">
+                  <div className="text-xs text-state-danger flex items-start gap-1.5">
                     <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                     <span>{reportError}</span>
                   </div>

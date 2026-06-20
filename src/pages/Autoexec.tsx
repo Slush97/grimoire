@@ -365,7 +365,7 @@ export default function Autoexec() {
                                     </div>
                                 )}
                                 {saveMessage && (
-                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessageTone === 'error' ? 'bg-red-500/10 border-red-500/20 text-red-400' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
+                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessageTone === 'error' ? 'bg-red-500/10 border-red-500/20 text-state-danger' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
                                         {saveMessageTone === 'error' ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
                                         {saveMessage}
                                     </div>
@@ -391,7 +391,7 @@ export default function Autoexec() {
                                         </div>
                                         <button
                                             onClick={() => handleRemoveCommand(i)}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-red-400 rounded transition-all cursor-pointer"
+                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-state-danger rounded transition-all cursor-pointer"
                                             title={t('common.actions.remove')}
                                         >
                                             <Trash2 className="w-4 h-4" />
@@ -449,7 +449,7 @@ export default function Autoexec() {
                                     aria-live="polite"
                                     className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${
                                         launchMessageTone === 'error'
-                                            ? 'bg-red-500/10 border-red-500/20 text-red-400'
+                                            ? 'bg-red-500/10 border-red-500/20 text-state-danger'
                                             : 'bg-green-500/10 border-green-500/20 text-green-400'
                                     }`}
                                 >

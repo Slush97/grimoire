@@ -477,7 +477,7 @@ export default function VariantPickerModal({
                             type="button"
                             onClick={() => handleDelete(v)}
                             disabled={overlay || !!pending}
-                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-red-400 hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
+                            className="flex-shrink-0 p-1.5 text-text-secondary hover:text-state-danger hover:bg-red-500/10 rounded transition-colors cursor-pointer disabled:cursor-default disabled:opacity-50"
                             title={`Delete ${primaryTitle}`}
                             aria-label={`Delete ${primaryTitle}`}
                         >

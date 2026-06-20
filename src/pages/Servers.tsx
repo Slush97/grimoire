@@ -33,7 +33,7 @@ function pingTone(ms: number): { color: string } {
   if (ms < 0) return { color: 'text-text-secondary/50' };
   if (ms < 60) return { color: 'text-green-400' };
   if (ms < 120) return { color: 'text-yellow-400' };
-  return { color: 'text-red-400' };
+  return { color: 'text-state-danger' };
 }
 
 export default function Servers() {

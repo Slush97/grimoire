@@ -360,7 +360,7 @@ export default function Discover() {
         </div>
       )}
       {!signedIn && signInError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start justify-between gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
             <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
             <span className="break-words">{signInError}</span>
@@ -588,8 +588,8 @@ export default function Discover() {
                         className={`flex-shrink-0 inline-flex items-center gap-1 text-xs px-2 py-1 -mr-1 rounded-md transition-colors ${
                           signedIn
                             ? liked
-                              ? 'text-red-400 hover:bg-red-500/10 cursor-pointer'
-                              : 'text-text-secondary hover:text-red-400 hover:bg-white/5 cursor-pointer'
+                              ? 'text-state-danger hover:bg-red-500/10 cursor-pointer'
+                              : 'text-text-secondary hover:text-state-danger hover:bg-white/5 cursor-pointer'
                             : 'text-text-tertiary cursor-help hover:bg-white/5'
                         } disabled:opacity-50`}
                         title={signedIn ? (liked ? 'Unlike' : 'Like') : 'Sign in to like'}

@@ -143,7 +143,7 @@ export default function PublishDialog({
           ) : (
             <>
               {exportError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{t('social.publish.couldNotBuildShareCode', { error: exportError })}</span>
                 </div>
@@ -174,7 +174,7 @@ export default function PublishDialog({
               )}
 
               {noShareableMods && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{t('social.publish.noGamebananaMods')}</span>
                 </div>
@@ -193,7 +193,7 @@ export default function PublishDialog({
                   />
                 </FormField>
                 <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
-                  <span className={titleTooLong ? 'text-red-400' : ''}>{trimmedTitle.length}/80</span>
+                  <span className={titleTooLong ? 'text-state-danger' : ''}>{trimmedTitle.length}/80</span>
                 </div>
               </div>
 
@@ -212,7 +212,7 @@ export default function PublishDialog({
                   />
                 </FormField>
                 <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
-                  <span className={descriptionTooLong ? 'text-red-400' : ''}>{trimmedDescription.length}/1000</span>
+                  <span className={descriptionTooLong ? 'text-state-danger' : ''}>{trimmedDescription.length}/1000</span>
                 </div>
               </div>
 
@@ -238,7 +238,7 @@ export default function PublishDialog({
               )}
 
               {submitError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{submitError}</span>
                 </div>

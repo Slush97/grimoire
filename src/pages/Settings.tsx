@@ -630,7 +630,7 @@ export default function Settings() {
                       </span>
                     )}
                     {isValidPath === false && (
-                      <span className="text-red-400 flex items-center gap-1">
+                      <span className="text-state-danger flex items-center gap-1">
                         <X className="w-3 h-3" />
                         <Tx k="common.status.invalid" fallback="Invalid" />
                       </span>
@@ -784,7 +784,7 @@ export default function Settings() {
                   </span>
                 )}
                 {updateStatus?.error && (
-                  <span className="text-xs text-red-400 basis-full">{updateStatus.error}</span>
+                  <span className="text-xs text-state-danger basis-full">{updateStatus.error}</span>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">

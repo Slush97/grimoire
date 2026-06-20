@@ -522,7 +522,7 @@ export default function Crosshair() {
                                                 </button>
                                                 <button
                                                     onClick={(e) => { e.stopPropagation(); handleDeletePreset(preset.id); }}
-                                                    className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-red-400 rounded-md cursor-pointer"
+                                                    className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-state-danger rounded-md cursor-pointer"
                                                     title={t('common.actions.delete')}
                                                 >
                                                     <Trash2 className="w-3 h-3" />
