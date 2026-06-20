@@ -84,6 +84,12 @@
   --color-bg-primary: #0f0f0f;
   --color-bg-secondary: #1a1a1a;
   --color-bg-tertiary: #242424;
+  /* Sunken/recessed surface, darker than the app bg. Sits behind cards and
+     backs inactive picker/segment chips. */
+  --color-bg-sunken: #141414;
+  /* Dark "glass" surface for floating popovers layered over imagery (e.g. the
+     Browse sound-card volume flyout). */
+  --color-bg-glass: #0a0c10;
   --color-accent: #f97316;
   --color-accent-hover: #ea580c;
   /* Foreground (text/icon) color for solid `bg-accent` surfaces. Flips between
@@ -95,6 +101,9 @@
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #8a8a94;
   --color-border: #2d2d2d;
+  /* Warm off-white for the Browse "readable" card title, deliberately softer
+     than pure white. */
+  --color-mod-title: #eee8df;
 
   /* Semantic state tokens. Use these for card states, toasts, badges —
      anything that communicates status. The raw Tailwind colors

@@ -332,7 +332,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
                 className={`group relative block w-full overflow-hidden rounded-[10px] border text-left backdrop-blur-sm transition-[border-color,background-color,box-shadow] duration-200 disabled:cursor-not-allowed ${
                   isApplied
                     ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)] hover:bg-accent/[0.12]'
-                    : 'border-white/[0.08] bg-[#141414]/55 hover:border-white/[0.16]'
+                    : 'border-white/[0.08] bg-bg-sunken/55 hover:border-white/[0.16]'
                 } ${busySource !== null && !isBusy ? 'opacity-60' : 'cursor-pointer'}`}
               >
                 <div className="flex items-center justify-between gap-2 border-b border-border/50 px-3 py-2">
@@ -386,7 +386,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
           className={`space-y-3 rounded-[10px] border p-3 backdrop-blur-sm transition-[border-color,box-shadow] duration-200 ${
             customApplied
               ? 'border-accent bg-accent/[0.08] shadow-[0_0_0_1px_var(--color-accent),0_0_18px_-6px_var(--color-accent)]'
-              : 'border-white/[0.08] bg-[#141414]/55'
+              : 'border-white/[0.08] bg-bg-sunken/55'
           }`}
         >
           <div className="flex items-center justify-between gap-2">
