@@ -192,14 +192,53 @@ but **not** the way "search by subtitle text" implies. What we actually ship and
   is essentially always `None` for swappable hero sounds. If a future use needs that dialogue,
   it has to come through a different token source (response rules / choreo), not this join.
 
+### Texture / icon index (built; the visual browse backbone)
+
+Shipped as `vpkmerge-core::texture_catalog` (`build_texture_index`, `classify_texture`,
+`thumbnail_png`, `cache_texture_thumbnails`, `TextureEntry`, `TextureCategory`), exposed as
+`vpkmerge catalog texture` and a worked example at `vpkmerge-core/examples/texture_index.rs`.
+This is the visual counterpart to the voice-line index: the browse grid for the Texture and
+Item tabs.
+
+- **Index (path-only, instant).** `build_texture_index(vpk)` returns one
+  `TextureEntry { path, category, hero, label }` per `.vtex_c`. Against the live pak that is
+  **12,540 textures**, classified purely from the entry path with no byte reads, so the whole
+  index builds in milliseconds. Categories (counts on live `pak01`): `ability-icon`
+  (`panorama/images/hud/abilities/<hero?>/`, 232), `item-icon`
+  (`panorama/images/items|upgrades/mods_*|shop/`, 447), `hero-image` (`panorama/images/heroes/`,
+  410), `hero-model` (`models/heroes_staging|heroes_wip|heroes/<hero>/`, 2193 -- the
+  skin/reskin/recolor targets), `ability-vfx` (`materials/particle/abilities/<hero>/`, 456),
+  `other` (8802). `hero` is the codename from the path segment that encodes it; `label` is the
+  filename as prose (content hash + format token + hero prefix stripped, e.g.
+  `archer_bow_color_png_<hash>` -> `"bow color"`), the search key. `path` is the verbatim
+  icon-swap / recolor target.
+- **Thumbnails (decode on demand).** `thumbnail_png(bytes, max_edge)` decodes the smallest mip
+  whose longer edge is still >= `max_edge` (the mip chain does most of the downscale for free)
+  then box-filters to the exact target via the same morphic decode path as the recolor preview;
+  a 4K BC7 thumbnails in tens of ms. `cache_texture_thumbnails` batches it to an on-disk PNG set
+  plus a `manifest.json`, returning a per-entry `ThumbnailOutcome` (a texture that fails to
+  decode is `Skipped`, never sinks the batch). HDR (f16) sources clamp to `[0,1]` as linear; the
+  browse icons are all LDR.
+- **CLI.** `vpkmerge catalog texture --vpk <VPK> [--category <CAT>] [--hero CODENAME]
+  [--search TEXT] [--limit N] [--json] [--thumbs DIR [--thumb-size N]]`. `--thumbs` writes the
+  PNG set + manifest for every matching entry (honors filters, ignores `--limit`).
+
+Still open on the catalog: a cached on-disk form keyed by game build (chunk-mtime invalidation),
+and nicer display labels for heroes/abilities/items from `scripts/heroes.vdata_c` /
+`scripts/abilities.vdata_c` (the `label` here is the asset filename, good enough to search but
+not the in-game display name).
+
 ## Phasing / recommendation
 
 1. **Catalog engine first.** Local pak scan -> cached manifest with thumbnails + sound
    metadata + the voice-line index. This unblocks every sub-tool and is the only genuinely new
    engineering. The voice-line half is **done**: `vpkmerge-core::catalog`
    (`build_voiceline_index`), exposed as `vpkmerge catalog voiceline` (filters: `--hero`,
-   `--search`, `--limit`; `--json`). Still to do: the texture/icon/item thumbnail manifest and
-   a cached on-disk form keyed by game build.
+   `--search`, `--limit`; `--json`). The texture/icon/item half is **done** too:
+   `vpkmerge-core::texture_catalog` (`build_texture_index` + `thumbnail_png` +
+   `cache_texture_thumbnails`), exposed as `vpkmerge catalog texture` (filters: `--category`,
+   `--hero`, `--search`, `--limit`; `--json`; `--thumbs DIR`). Still to do: a cached on-disk
+   form keyed by game build, and display labels from the hero/ability vdata.
 2. **Tier 1 in the Foundry tab.** Sound / Texture / Items with the build tray and output
    into the mod manager. This already ships a better-than-web-tool product.
 3. **Tier 2 as the headline.** Recolor / Prism / ability-music / material presets, lifted
@@ -212,8 +251,9 @@ lift from rather than rebuild; the end state folds that logic into this Grimoire
 
 ## Open questions
 
-- **Catalog home:** resolved for the voice-line index (shipped in `vpkmerge-core::catalog`,
-  with a `vpkmerge catalog voiceline` CLI). Remaining: decide the on-disk cache format.
+- **Catalog home:** resolved for the voice-line index (`vpkmerge-core::catalog`, `vpkmerge
+  catalog voiceline`) and the texture/icon index (`vpkmerge-core::texture_catalog`, `vpkmerge
+  catalog texture`). Remaining: decide the on-disk cache format keyed by game build.
 - **Sharing:** should a forged mod be one-click publishable via `grimoire-social`? Natural
   follow-on, out of scope for v1.
 - **Engine reuse:** Grimoire is Electron/TS; `vpkmerge-core` is Rust. Decide the bridge
@@ -231,5 +271,7 @@ lift from rather than rebuild; the end state folds that logic into this Grimoire
 - VFX recolor source of truth: `grimoire/docs/ability-vfx-recolor.md`
 - Voice-line index (built): `vpkmerge-core/src/catalog.rs` +
   `vpkmerge-core/examples/voiceline_index.rs`
+- Texture / icon index (built): `vpkmerge-core/src/texture_catalog.rs` +
+  `vpkmerge-core/examples/texture_index.rs`
 - Caption format: `citadel/pak01` -> `resource/localization/citadel_generated_vo/
   citadel_generated_vo_english.dat` (VCCD v2, CRC-32/ISO-HDLC keyed)
