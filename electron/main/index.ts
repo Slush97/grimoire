@@ -4,6 +4,7 @@ import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { SOUL_MODEL_SCHEME, registerSoulModelProtocol } from './services/soulContainerModels';
 import { HERO_POSE_SCHEME, registerHeroPoseProtocol, sweepHeroPoseCache } from './services/heroPoseModels';
+import { FOUNDRY_THUMB_SCHEME, registerFoundryThumbnailProtocol } from './services/foundryCatalog';
 
 // The `grimoire-soul:` and `grimoire-hero:` schemes serve GLBs (soul-container
 // models and posed hero stills) out of the user's library to the renderer's 3D
@@ -16,6 +17,11 @@ protocol.registerSchemesAsPrivileged([
     },
     {
         scheme: HERO_POSE_SCHEME,
+        privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+    {
+        // Serves Foundry's cached texture/icon thumbnails (PNG) to the browse grid.
+        scheme: FOUNDRY_THUMB_SCHEME,
         privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
     },
 ]);
@@ -87,6 +93,7 @@ import './ipc/previewCache';
 import './ipc/discord';
 import './ipc/saltIngest';
 import './ipc/servers';
+import './ipc/foundry';
 import './ipc/performanceConfig';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
@@ -305,6 +312,9 @@ if (!gotTheLock) {
         // Serve per-hero posed stills from the user's library.
         registerHeroPoseProtocol();
 
+        // Serve Foundry's cached texture/icon thumbnails to the browse grid.
+        registerFoundryThumbnailProtocol();
+
         // Reclaim disk from stale or least-recently-used pose entries; the
         // cache is also swept after each export.
         void sweepHeroPoseCache();
@@ -325,7 +335,10 @@ if (!gotTheLock) {
                             "script-src 'self'; " +
                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
                             "font-src 'self' https://fonts.gstatic.com; " +
-                            "img-src 'self' data: https: blob:; " +
+                            // `grimoire-foundry:` serves Foundry's cached texture
+                            // thumbnails, rendered as <img>, so they must be allowed
+                            // here or the browse grid is blank under the prod CSP.
+                            "img-src 'self' data: https: blob: grimoire-foundry:; " +
                             "media-src 'self' https:; " +
                             // Social fetches happen from the main process (fetch in Node),
                             // not the renderer, so they bypass CSP. The `https://*.workers.dev`

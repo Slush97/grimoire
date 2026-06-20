@@ -1079,3 +1079,24 @@ export function deadworksOnDownloadProgress(
 ): () => void {
   return window.electronAPI.onDeadworksDownloadProgress(callback);
 }
+
+// ── Foundry (asset catalog browse) ───────────────────────────────────────────
+export async function foundryHeroes(): Promise<import('../types/foundry').HeroInfo[]> {
+  return window.electronAPI.foundry.heroes();
+}
+
+export async function foundryTextures(
+  filters?: import('../types/foundry').TextureFilters
+): Promise<import('../types/foundry').TextureEntry[]> {
+  return window.electronAPI.foundry.textures(filters);
+}
+
+export async function foundryThumbnails(
+  category: import('../types/foundry').TextureCategory
+): Promise<import('../types/foundry').TextureGridItem[]> {
+  return window.electronAPI.foundry.ensureThumbnails(category);
+}
+
+export async function foundryWarmCache(): Promise<void> {
+  return window.electronAPI.foundry.warmCache();
+}

@@ -5,6 +5,7 @@ import type {
 } from '../../src/types/portableProfile';
 import type { SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
+import type { TextureCategory, TextureFilters } from '../../src/types/foundry';
 import type {
     AbilitySlot,
     AbilitySoundParams,
@@ -523,6 +524,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.on('social:session-changed', handler);
             return () => ipcRenderer.removeListener('social:session-changed', handler);
         },
+    },
+
+    // Foundry: catalog browse backed by the bundled vpkmerge sidecar.
+    foundry: {
+        heroes: () => ipcRenderer.invoke('foundry:heroes'),
+        textures: (filters?: TextureFilters) =>
+            ipcRenderer.invoke('foundry:textures', filters ?? {}),
+        ensureThumbnails: (category: TextureCategory) =>
+            ipcRenderer.invoke('foundry:ensureThumbnails', category),
+        warmCache: () => ipcRenderer.invoke('foundry:warmCache'),
     },
 
     // Language packs (downloaded on demand from GitHub)

@@ -852,6 +852,11 @@ export interface AppSettings {
   contributeMatchSalts: boolean;
   /** Deadworks custom-server browser: list + join community dedicated servers. */
   experimentalDeadworksServers?: boolean;
+  /** Foundry: in-app asset workshop. Browse the game's own asset catalog
+   *  (textures/icons, hero roster, voice lines) built offline from the user's
+   *  own pak via the bundled vpkmerge sidecar, and (later slices) swap/forge
+   *  edits into the mod list. */
+  experimentalFoundry?: boolean;
   /** Advanced override for the relay the server browser queries. No UI: defaults
    *  to the official Deadworks registry (api.deadworks.net) and can be repointed
    *  via settings.json at any deadworks-shaped relay (e.g. a future grimoire-relay). */
