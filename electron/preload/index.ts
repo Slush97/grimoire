@@ -572,6 +572,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('stats:getLocalMatchHistory', accountId, limit, offset),
         getLocalMatchCount: (accountId: number) =>
             ipcRenderer.invoke('stats:getLocalMatchCount', accountId),
+        recordMatches: (accountId: number, matches: unknown[]) =>
+            ipcRenderer.invoke('stats:recordMatches', accountId, matches),
         getLocalHeroStats: (accountId: number, heroId?: number) =>
             ipcRenderer.invoke('stats:getLocalHeroStats', accountId, heroId),
         getAggregatedStats: (accountId: number) =>
