@@ -19,6 +19,7 @@ import {
   Clock,
   Package,
   Music,
+  Construction,
   SlidersHorizontal,
   Power,
   Library,
@@ -107,7 +108,11 @@ type BrowseCardDesign = 'classic' | 'readable';
 // like the other Browse view preferences (card design/size).
 type BrowseDetailsView = 'modal' | 'sidebar';
 type ModDetailsNavigationDirection = 'previous' | 'next';
-const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
+// WiPs (Work in Progress) are real installable uploads on GameBanana (53 for
+// Deadlock at time of writing) served by the same /Wip/Index + /Wip/{id} API
+// shape as Mods, so they browse and install through the existing parameterized
+// section path. The section list is otherwise data-driven from CategoryTree.
+const SECTION_WHITELIST = new Set(['Mod', 'Sound', 'Wip']);
 const BROWSE_CARD_DESIGN_STORAGE_KEY = 'browseCardDesign';
 const BROWSE_DETAILS_VIEW_STORAGE_KEY = 'browseDetailsView';
 // Below this window width the docked sidebar would crush the grid, so we force
@@ -2851,7 +2856,7 @@ export default function Browse() {
               )}
             </div>
             <div className="hidden flex-shrink-0 items-center gap-1 rounded-lg border border-border bg-bg-secondary p-0.5 sm:flex">
-              {(['Mod', 'Sound'] as const).map((s) => (
+              {(['Mod', 'Sound', 'Wip'] as const).map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -2860,7 +2865,11 @@ export default function Browse() {
                     section === s ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  {s === 'Mod' ? t('profiles.mods.label') : t('browse.section.sounds')}
+                  {s === 'Mod'
+                    ? t('profiles.mods.label')
+                    : s === 'Sound'
+                      ? t('browse.section.sounds')
+                      : t('browse.section.wips')}
                 </button>
               ))}
             </div>
@@ -3074,7 +3083,12 @@ export default function Browse() {
             {sections.length > 1 && (
               <div className="flex items-center h-10 rounded-lg border border-border bg-bg-secondary p-1" role="tablist" aria-label={t('browse.section.label')}>
                 {sections.map((entry) => {
-                  const Icon = entry.modelName === 'Sound' ? Music : Package;
+                  const Icon =
+                    entry.modelName === 'Sound'
+                      ? Music
+                      : entry.modelName === 'Wip'
+                        ? Construction
+                        : Package;
                   const active = section === entry.modelName;
                   return (
                     <button
