@@ -700,6 +700,15 @@ export function summarizeNprScene(scene: THREE.Object3D): NprSceneSummary {
  * Cheap Source 2 material hints for shader families GLTFLoader cannot represent
  * fully. This deliberately mutates only standard/physical material properties
  * and returns a restore handle so it can be gated independently from the NPR CSM.
+ *
+ * This is the FLAG-GATED richer-material pass (glass transmission, opacity
+ * scaling, alpha masks, self-illum emissive, sheen, jitter). It also sets a
+ * draw-state subset (side / transparent / blending / depthWrite) that is
+ * intertwined with that work. The authoritative ALWAYS-ON owner of the same
+ * draw-state subset -- plus the mesh-level renderOrder this cannot set -- is
+ * `src/lib/source2Preview/` (`resolveSource2DrawState`); the two produce the
+ * same values and compose (this pass and the always-on pass each operate on the
+ * GLTF base material and restore it). Keep them in sync if either changes.
  */
 export function applySource2MaterialHints(
   scene: THREE.Object3D,

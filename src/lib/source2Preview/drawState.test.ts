@@ -153,3 +153,25 @@ describe('applySource2DrawState', () => {
     expect(mesh.renderOrder).toBe(ADDITIVE_OVERLAY_RENDER_ORDER);
   });
 });
+
+describe('real Deadlock overlay materials (vpkmerge round-trip fixtures)', () => {
+  // Captured from a local vpkmerge export against the shipped pak01 (the glow
+  // overlays the exporter now keeps). The notable nuance: these carry
+  // self_illum_valid=false (a placeholder self-illum mask) but blend_mode
+  // 'additive', so the additive rule must key on the blend mode, NOT on a valid
+  // self-illum mask, or the overlays would render opaque.
+  it.each([
+    ['inferno_armglow.vmat', { shader: 'pbr.vfx', blend_mode: 'additive', self_illum_valid: false, ints: { F_ADDITIVE_BLEND: 1, F_SELF_ILLUM: 1 } }],
+    ['inferno_headglow.vmat', { shader: 'pbr.vfx', blend_mode: 'additive', self_illum_valid: false, ints: { F_ADDITIVE_BLEND: 1, F_SELF_ILLUM: 1 } }],
+    ['vindicta_glow.vmat (hornet ghost_glow)', { shader: 'pbr.vfx', blend_mode: 'additive', self_illum_valid: false, ints: { F_ADDITIVE_BLEND: 1, F_SELF_ILLUM: 1 } }],
+  ] as const)('%s composites additively despite self_illum_valid=false', (_name, extras) => {
+    const { mesh, material } = meshWith(extras as MorphicExtras);
+    const app = applySource2DrawState(mesh, material);
+    expect(app!.plan.additive).toBe(true);
+    expect(material.transparent).toBe(true);
+    expect(material.blending).toBe(THREE.AdditiveBlending);
+    expect(material.depthTest).toBe(true);
+    expect(material.depthWrite).toBe(false);
+    expect(mesh.renderOrder).toBe(ADDITIVE_OVERLAY_RENDER_ORDER);
+  });
+});

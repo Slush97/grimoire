@@ -48,7 +48,7 @@ import {
   type MorphicDynamicExpr,
 } from '../../lib/source2NprMaterial';
 import { buildDeadlockMaterial, type DeadlockMaterialResult } from '../../lib/deadlockMaterial';
-import { compileSource2DrawState } from '../../lib/source2Preview';
+import { compileSource2DrawState, summarizeSource2Scene } from '../../lib/source2Preview';
 import { resolveHeroPoseRenderFeatures } from './heroPoseRenderFeatures';
 import type { HeroPoseSkinSource } from '../../types/portrait';
 import type { TrippySpriteResult } from '../../types/mod';
@@ -824,11 +824,17 @@ function NprMaterials({
  * than rendering an opaque white hull. Mesh-level `renderOrder` is the piece the
  * material builders cannot set and persists across the flag-gated material swaps.
  */
-function Source2DrawState({ scene }: { scene: THREE.Object3D }) {
+function Source2DrawState({ scene, debug }: { scene: THREE.Object3D; debug: boolean }) {
   useEffect(() => {
     const compiled = compileSource2DrawState(scene);
+    if (debug) {
+      // Phase 3 round-trip inspection: blend-mode + renderOrder distribution and
+      // the overlay mesh names, so a maintainer can confirm kept glow overlays
+      // composite additively. Logging only; the compile itself is always-on.
+      console.info('[source2drawstate]', compiled.stats, summarizeSource2Scene(scene));
+    }
     return () => compiled.restore();
-  }, [scene]);
+  }, [scene, debug]);
 
   return null;
 }
@@ -1139,7 +1145,7 @@ export default function HeroPoseViewer({
         ) : (
           <PosedModel scene={scene} interaction={interaction} effect={effect} />
         )}
-        {scene && <Source2DrawState scene={scene} />}
+        {scene && <Source2DrawState scene={scene} debug={features.nprDebugEnabled} />}
         {features.source2ShaderHintsEnabled && scene && (
           <Source2MaterialHints
             scene={scene}
