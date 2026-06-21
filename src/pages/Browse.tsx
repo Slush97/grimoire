@@ -119,6 +119,11 @@ const BROWSE_SIDEBAR_WIDTH_DEFAULT = 420;
 // The grid always keeps at least this much room; the sidebar's effective width
 // is capped so a wide drag (or a small window) can't starve the browse area.
 const BROWSE_SIDEBAR_GRID_RESERVE = 360;
+// Must match the browseDockPanelOut animation duration in index.css: we keep the
+// dock (as an absolute overlay) mounted for this long after a close so the
+// slide-out can play, then unmount it (no reflow: the grid already widened at
+// close-start).
+const BROWSE_DOCK_ANIM_MS = 220;
 
 // Filled brand glyphs (see common/BrandIcons). Platform keys come from
 // GameBanana's contact icon classes, lowercased by normalizeContactPlatform
@@ -1227,6 +1232,18 @@ export default function Browse() {
   }, []);
   // Drop a half-finished drag if Browse unmounts mid-gesture.
   useEffect(() => () => sidebarResizeCleanupRef.current?.(), []);
+
+  // Docked-sidebar close animation. Closing nulls selectedMod immediately (so the
+  // rest of the page sees the deselect at once), but we keep the aside mounted for
+  // one slide-out by freezing the last-rendered panel into a ref and flipping
+  // sidebarClosing. The timer then unmounts it, reflowing the grid wide once.
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const [sidebarClosing, setSidebarClosing] = useState(false);
+  const sidebarExitContentRef = useRef<React.ReactNode>(null);
+  const sidebarCloseTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (sidebarCloseTimerRef.current !== null) window.clearTimeout(sidebarCloseTimerRef.current);
+  }, []);
 
   // Load settings on mount (needed for hideNsfwPreviews)
   useEffect(() => {
@@ -2557,12 +2574,55 @@ export default function Browse() {
       : undefined;
   // These three (plus handleDownload above) feed the memoized ModDetailsModal,
   // so they get stable identities via useStableCallback.
-  const closeSelectedMod = useStableCallback(() => {
+  const teardownSelectedMod = useStableCallback(() => {
     modalNavigationRequestRef.current += 1;
     setModalNavigation(null);
     setSelectedMod(null);
     setSelectedModDates(null);
   });
+  const closeSelectedMod = useStableCallback(() => {
+    // Centered modal (and reduced motion) closes instantly. The docked sidebar
+    // fades out: freeze the current panel so it stays visible while selectedMod
+    // is already null, then in this same (batched) commit grow the grid metrics
+    // to full width and flip the closing flag. That single commit reflows the
+    // grid wide while the dock detaches to an absolute overlay over the vacated
+    // strip; the dock fades there and unmounts with no further reflow. Growing
+    // the metrics now (instead of relying on the ResizeObserver after unmount)
+    // is what kills the flicker: the grid never paints a stale narrow frame in a
+    // widened container. flex-1 reclaims exactly the aside's width.
+    if (
+      detailsSidebarActive &&
+      selectedMod &&
+      !prefersReducedMotion &&
+      sidebarCloseTimerRef.current === null
+    ) {
+      sidebarExitContentRef.current = renderModDetails('sidebar');
+      teardownSelectedMod();
+      setBrowseViewportMetrics((m) => ({
+        ...m,
+        containerWidth: m.containerWidth + effectiveSidebarWidth,
+      }));
+      setSidebarClosing(true);
+      sidebarCloseTimerRef.current = window.setTimeout(() => {
+        sidebarCloseTimerRef.current = null;
+        sidebarExitContentRef.current = null;
+        setSidebarClosing(false);
+      }, BROWSE_DOCK_ANIM_MS);
+      return;
+    }
+    teardownSelectedMod();
+  });
+
+  // Re-selecting a mod mid-slide-out aborts the close: cancel the pending unmount
+  // and drop the closing flag so the live panel (not the frozen one) shows.
+  useEffect(() => {
+    if (selectedMod && sidebarCloseTimerRef.current !== null) {
+      window.clearTimeout(sidebarCloseTimerRef.current);
+      sidebarCloseTimerRef.current = null;
+      sidebarExitContentRef.current = null;
+      setSidebarClosing(false);
+    }
+  }, [selectedMod]);
 
   const navigateToPreviousMod = useStableCallback(() => {
     if (previousSelectedMod) void handleNavigateMod(previousSelectedMod, 'previous');
@@ -2701,7 +2761,10 @@ export default function Browse() {
     ) : null;
 
   return (
-    <div className="flex h-full min-h-0">
+    // overflow-hidden clips the closing dock as it slides off the right edge so
+    // it never spills past the page into a horizontal scrollbar. The grid keeps
+    // its own vertical scroll (on the flex-1 child), so this only clips the slide.
+    <div className="relative flex h-full min-h-0 overflow-hidden">
       {/* The scroll listener toggles browse-is-scrolling on this element
           imperatively; keeping it out of the className prop means scroll
           start/stop never re-renders this (large) component. */}
@@ -3442,18 +3505,30 @@ export default function Browse() {
       )}
       </div>
 
-      {/* Docked details sidebar. Shrinking the flex-1 grid above triggers the
-          scroll container's ResizeObserver, which recomputes the virtualized
-          column count, so the grid reflows to fewer columns on its own. */}
-      {selectedMod && detailsSidebarActive && (
+      {/* Docked details sidebar. While OPEN it's an in-flow flex child, so the
+          flex-1 grid above shrinks to make room (its ResizeObserver recomputes
+          the virtualized column count). While CLOSING, selectedMod is already
+          null and the grid metrics have been pre-grown to full width in the same
+          commit, so the grid has already reflowed wide; the dock detaches to an
+          absolute overlay over the vacated strip and fades out there. Because it
+          leaves the flex flow at close-start, its later unmount triggers no
+          second reflow: the grid never flickers. The overlay renders the frozen
+          panel captured at close time. */}
+      {(selectedMod || (sidebarClosing && !selectedMod)) && detailsSidebarActive && (
         <aside
-          className="relative flex-shrink-0 h-full bg-bg-primary overflow-hidden"
+          className={
+            sidebarClosing && !selectedMod
+              ? 'browse-details-dock is-closing pointer-events-none absolute right-0 top-0 z-50 h-full bg-bg-primary overflow-hidden'
+              : 'browse-details-dock relative flex-shrink-0 h-full bg-bg-primary overflow-hidden'
+          }
           style={{ width: effectiveSidebarWidth }}
         >
           {/* The border and resize handle live on the sliding panel so the
               dock's left edge arrives with the content instead of popping in
               ahead of it. */}
-          <div className="browse-details-dock-panel relative h-full w-full border-l border-border bg-bg-secondary">
+          <div
+            className="browse-details-dock-panel relative h-full w-full border-l border-border bg-bg-secondary"
+          >
             {/* Drag the left edge to resize; the width is remembered. */}
             <div
               role="separator"
@@ -3464,7 +3539,7 @@ export default function Browse() {
             >
               <div className="absolute inset-y-0 left-1 w-0.5 bg-transparent transition-colors group-hover:bg-accent/60" />
             </div>
-            {renderModDetails('sidebar')}
+            {selectedMod ? renderModDetails('sidebar') : sidebarExitContentRef.current}
           </div>
         </aside>
       )}

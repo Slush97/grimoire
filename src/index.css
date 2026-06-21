@@ -735,6 +735,26 @@ body {
   animation: browseDockPanelIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
+/* Exit slides the whole dock out to the right, mirroring the entrance. By the
+   time this plays the dock is an absolute overlay (see Browse.tsx) and the grid
+   has already reflowed wide underneath it, so sliding the opaque dock off-screen
+   simply uncovers the final layout, and its unmount causes no reflow. Same
+   timing/easing as browseDockPanelIn so open and close read as one motion played
+   in reverse. `forwards` holds the off-screen frame for the unmount tick. */
+@keyframes browseDockPanelOut {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.browse-details-dock.is-closing {
+  animation: browseDockPanelOut 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
 /* Locker Hero animations */
 @keyframes slideInLeft {
   from {
