@@ -48,12 +48,81 @@
     "discover": "Discover",
     "servers": "Servers",
     "locker": "Locker",
+    "foundry": "Foundry",
     "conflicts": "Conflicts",
     "profiles": "Profiles",
     "crosshair": "Crosshair",
     "autoexec": "Autoexec",
     "stats": "Stats",
     "settings": "Settings"
+  },
+  "foundry": {
+    "header": {
+      "description": "Browse the game's own asset catalog, built offline from your installed files."
+    },
+    "subtools": {
+      "heading": "Workshop",
+      "library": "Library",
+      "sound": "Sound",
+      "texture": "Texture",
+      "items": "Items",
+      "recolor": "Recolor",
+      "soon": "soon"
+    },
+    "categories": {
+      "abilityIcon": "Ability icons",
+      "itemIcon": "Item icons",
+      "heroImage": "Hero images"
+    },
+    "filters": {
+      "allHeroes": "All heroes",
+      "searchPlaceholder": "Search assets..."
+    },
+    "loading": "Building catalog from your game files...",
+    "error": {
+      "title": "Couldn't read the catalog"
+    },
+    "empty": {
+      "noPath": {
+        "title": "Set your Deadlock path",
+        "description": "Foundry reads the asset catalog from your installed game. Set the Deadlock path in Settings to get started."
+      }
+    },
+    "lightbox": {
+      "unnamed": "(unnamed)",
+      "decoding": "Decoding full size...",
+      "nativeSize": "Native size"
+    },
+    "sound": {
+      "searchPlaceholder": "Search sounds...",
+      "muteToggle": "Mute / unmute auditions",
+      "loading": "Reading sounds from your game files...",
+      "play": "Audition",
+      "gameplayCount": "{{count}} gameplay sounds",
+      "noMatch": "No sounds match your search.",
+      "ult": "ULT",
+      "slot": "{{n}}",
+      "unsorted": "Other",
+      "category": {
+        "ability": "Abilities",
+        "weapon": "Weapon",
+        "movement": "Movement",
+        "melee": "Melee",
+        "other": "Other"
+      },
+      "empty": {
+        "title": "No gameplay sounds",
+        "description": "This hero has no gameplay sounds in your installed game files."
+      },
+      "voiceLines": {
+        "title": "Voice lines",
+        "hint": "optional, large list",
+        "loading": "Reading voice lines...",
+        "empty": "No voice lines match your search.",
+        "count": "{{shown}} of {{total}} voice lines",
+        "capped": "Showing the first {{cap}}. Refine your search to see more."
+      }
+    }
   },
   "autoexec": {
     "commands": {
@@ -563,7 +632,8 @@
       "socialDescription": "Sign in with Steam to publish profiles and browse uploads from other players in Discover.",
       "fixUnknownMods": "Fix Unknown Mods",
       "deadworksServers": "Deadworks Servers",
-      "performanceConfig": "Performance Config"
+      "performanceConfig": "Performance Config",
+      "foundry": "Foundry"
     },
     "support": {
       "reportBuildFailed": "Failed to build report: {{error}}",
@@ -632,7 +702,8 @@
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, and two download keys: no account id, no username, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
-      "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."
+      "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time.",
+      "foundry": "Browse the game's own asset catalog (textures, icons, heroes) built offline from your installed game files. Swap and forge tools coming soon."
     }
   },
   "crosshair": {
@@ -1799,6 +1870,7 @@
       "discoverNew_other": "{{count}} new published profiles.",
       "servers": "Browse and join Deadworks community servers.",
       "locker": "Active cosmetic skins, organized by hero.",
+      "foundry": "Browse the game's asset catalog: textures, icons, and heroes.",
       "crosshair": "Custom crosshair editor.",
       "autoexec": "Console commands that run at game launch.",
       "stats": "Match history and personal stats.",

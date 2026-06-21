@@ -1221,6 +1221,15 @@ export default function Settings() {
               label={<Tx k="settings.experimental.performanceConfig" fallback="Performance Config" />}
               description={<Tx k="settings.toggles.performanceConfig" fallback="One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time." />}
             />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.experimentalFoundry ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalFoundry: checked })}
+              label={<Tx k="settings.experimental.foundry" fallback="Foundry" />}
+              description={<Tx k="settings.toggles.foundry" fallback="Browse the game's own asset catalog (textures, icons, heroes) built offline from your installed game files. Swap and forge tools coming soon." />}
+            />
           </div>
         </Card>
 

@@ -6,6 +6,12 @@ import type {
 import type { SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
 import type {
+    HeroSoundFilters,
+    TextureCategory,
+    TextureFilters,
+    VoicelineFilters,
+} from '../../src/types/foundry';
+import type {
     AbilitySlot,
     AbilitySoundParams,
     ActiveTrippySkin,
@@ -535,6 +541,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.on('social:session-changed', handler);
             return () => ipcRenderer.removeListener('social:session-changed', handler);
         },
+    },
+
+    // Foundry: catalog browse backed by the bundled vpkmerge sidecar.
+    foundry: {
+        heroes: () => ipcRenderer.invoke('foundry:heroes'),
+        textures: (filters?: TextureFilters) =>
+            ipcRenderer.invoke('foundry:textures', filters ?? {}),
+        voicelines: (filters?: VoicelineFilters) =>
+            ipcRenderer.invoke('foundry:voicelines', filters ?? {}),
+        heroSounds: (filters?: HeroSoundFilters) =>
+            ipcRenderer.invoke('foundry:heroSounds', filters ?? {}),
+        ensureThumbnails: (category: TextureCategory) =>
+            ipcRenderer.invoke('foundry:ensureThumbnails', category),
+        fullImage: (category: TextureCategory, entryPath: string) =>
+            ipcRenderer.invoke('foundry:fullImage', category, entryPath),
+        voiceclip: (vsndPath: string) => ipcRenderer.invoke('foundry:voiceclip', vsndPath),
+        warmCache: () => ipcRenderer.invoke('foundry:warmCache'),
     },
 
     // Language packs (downloaded on demand from GitHub)

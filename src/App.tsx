@@ -6,6 +6,7 @@ import Browse from './pages/Browse';
 import Discover from './pages/Discover';
 import Servers from './pages/Servers';
 import Locker from './pages/Locker';
+import Foundry from './pages/Foundry';
 import Conflicts from './pages/Conflicts';
 import Profiles from './pages/Profiles';
 import Settings from './pages/Settings';
@@ -74,6 +75,7 @@ export default function App() {
             <Route path="discover" element={<Discover />} />
             <Route path="servers" element={<Servers />} />
             <Route path="locker/*" element={<Locker />} />
+            <Route path="foundry" element={<Foundry />} />
             <Route path="conflicts" element={<Conflicts />} />
             <Route path="profiles" element={<Profiles />} />
             <Route path="crosshair" element={<Crosshair />} />

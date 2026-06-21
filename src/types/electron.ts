@@ -915,6 +915,31 @@ export interface ElectronAPI {
         ) => () => void;
     };
 
+    // Foundry: in-app asset workshop. Catalog browse backed by the bundled
+    // `vpkmerge catalog *` sidecar (codename -> name, texture/icon index +
+    // thumbnails). Experimental, gated behind settings.experimentalFoundry.
+    foundry: {
+        heroes: () => Promise<import('./foundry').HeroInfo[]>;
+        textures: (
+            filters?: import('./foundry').TextureFilters
+        ) => Promise<import('./foundry').TextureEntry[]>;
+        voicelines: (
+            filters?: import('./foundry').VoicelineFilters
+        ) => Promise<import('./foundry').VoiceLine[]>;
+        heroSounds: (
+            filters?: import('./foundry').HeroSoundFilters
+        ) => Promise<import('./foundry').HeroSound[]>;
+        ensureThumbnails: (
+            category: import('./foundry').TextureCategory
+        ) => Promise<import('./foundry').TextureGridItem[]>;
+        fullImage: (
+            category: import('./foundry').TextureCategory,
+            entryPath: string
+        ) => Promise<string | null>;
+        voiceclip: (vsndPath: string) => Promise<string | null>;
+        warmCache: () => Promise<void>;
+    };
+
     // Language packs (downloaded on demand from GitHub)
     locales: {
         getManifest: () => Promise<import('./locales').LocaleManifest>;
