@@ -74,11 +74,19 @@ const MODEL_CODENAME_OVERRIDES: Readonly<Record<string, string[]>> = {
  * skin-path robustness. Rem is pinned to `familiar_wip`: the plain
  * `familiar.vmdl_c` exports a live skeleton/clip with every rendered vertex
  * weighted to pelvis, so the mixer advances while the mesh stays effectively
- * bind-posed. Deliberately NOT pinned: Infernus (its current
- * `heroes_wip/inferno` ships no menu/idle pose clip, so `--require-pose` would
- * drop it to a 2D portrait; `--hero inferno` already resolves to a poseable
- * same-size model) and Billy (`punkgoat` ships the rig but no pose clip and
- * already falls back to 2D).
+ * bind-posed.
+ *
+ * Infernus is pinned to `heroes_wip/inferno`: a modern skin (e.g. Bunnyfernus,
+ * GameBanana 677760) overrides that model and its materials in place, but
+ * `--hero inferno` discovery reads the model/materials from the base pak and so
+ * baked the vanilla look while `live-materials` (vdata-resolved, `--vpk`-priority)
+ * correctly surfaced the skin's renamed `bunfernus_clothes.vmat` + doubled-path
+ * texture overrides (#bugs "3D preview shows vanilla skin"). An explicit
+ * `--entry` reads the model from the skin VPK, so the override wins; verified that
+ * `--entry ... --pose --require-pose` poses (the earlier "no pose clip" reason for
+ * leaving Infernus on `--hero` is stale) and that the vanilla no-skin export is
+ * unaffected. Deliberately NOT pinned: Billy (`punkgoat` ships the rig but no pose
+ * clip and already falls back to 2D).
  */
 const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Abrams: 'models/heroes_wip/abrams/abrams.vmdl_c',
@@ -86,6 +94,7 @@ const MODEL_ENTRY_OVERRIDES: Readonly<Record<string, string>> = {
     Pocket: 'models/heroes_wip/pocket/pocket.vmdl_c',
     Ivy: 'models/heroes_wip/ivy/ivy.vmdl_c',
     'Lady Geist': 'models/heroes_wip/geist/geist.vmdl_c',
+    Infernus: 'models/heroes_wip/inferno/inferno.vmdl_c',
     Rem: 'models/heroes_wip/familiar/familiar_wip.vmdl_c',
     Viscous: 'models/heroes_staging/viscous/viscous.vmdl_c',
     Wraith: 'models/heroes_wip/wraith/wraith.vmdl_c'
@@ -230,13 +239,17 @@ function riggedModelFile(key: string): string {
  * pakNN slot filename alone, so different skins reusing a slot collided and served
  * each other's cached model. Retiring those dirs forces a clean re-export.
  *
+ * v14: Infernus is now pinned to an explicit `--entry` (see MODEL_ENTRY_OVERRIDES).
+ * Pre-v14 Infernus GLBs were baked via `--hero inferno`, which read the base pak
+ * and so cached the vanilla look over any active skin; force a re-export.
+ *
  * The Source 2 extras schema version (SOURCE2_EXTRAS_VERSION) is folded into the
  * effective key below, so a material-extras schema bump auto-busts this cache
  * with no manual edit here, and the cache version cannot drift from the parser's
  * expected schema. Bump POSE_PIPELINE_VERSION only for export changes unrelated
  * to the extras schema (model resolution, index offsets, ...).
  */
-const POSE_PIPELINE_VERSION = '13';
+const POSE_PIPELINE_VERSION = '14';
 const POSE_CACHE_VERSION = `${POSE_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const POSE_VERSION_FILENAME = '.cache-version';
@@ -265,9 +278,13 @@ function versionFile(key: string): string {
  * v6: content-addressed pose keys (same slot-collision fix as POSE_CACHE_VERSION
  * v13; the rigged path shares poseKey).
  *
+ * v7: Infernus pinned to an explicit `--entry` (same fix as POSE_CACHE_VERSION
+ * v14; the rigged path shares modelSelectorsForHero). Pre-v7 Infernus rigged GLBs
+ * baked the vanilla look over any active skin.
+ *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_PIPELINE_VERSION = '6';
+const RIGGED_PIPELINE_VERSION = '7';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
