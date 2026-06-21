@@ -94,15 +94,33 @@
       "nativeSize": "Native size"
     },
     "sound": {
-      "searchPlaceholder": "Search voice lines...",
+      "searchPlaceholder": "Search sounds...",
       "muteToggle": "Mute / unmute auditions",
-      "loading": "Reading voice lines from your game files...",
+      "loading": "Reading sounds from your game files...",
       "play": "Audition",
-      "count": "{{shown}} of {{total}} voice lines",
-      "capped": "Showing the first {{cap}}. Refine your search to see more.",
+      "gameplayCount": "{{count}} gameplay sounds",
+      "noMatch": "No sounds match your search.",
+      "ult": "ULT",
+      "slot": "{{n}}",
+      "unsorted": "Other",
+      "category": {
+        "ability": "Abilities",
+        "weapon": "Weapon",
+        "movement": "Movement",
+        "melee": "Melee",
+        "other": "Other"
+      },
       "empty": {
-        "title": "No voice lines",
-        "description": "This speaker has no voice lines matching your search."
+        "title": "No gameplay sounds",
+        "description": "This hero has no gameplay sounds in your installed game files."
+      },
+      "voiceLines": {
+        "title": "Voice lines",
+        "hint": "optional, large list",
+        "loading": "Reading voice lines...",
+        "empty": "No voice lines match your search.",
+        "count": "{{shown}} of {{total}} voice lines",
+        "capped": "Showing the first {{cap}}. Refine your search to see more."
       }
     }
   },

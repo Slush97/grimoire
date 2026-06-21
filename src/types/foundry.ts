@@ -79,6 +79,38 @@ export interface VoicelineFilters {
     limit?: number;
 }
 
+/** Which family a hero gameplay sound belongs to, from `catalog herosounds`
+ *  (derived engine-side from the soundevent name). The Sound tab leads with these
+ *  gameplay sounds (weapon + abilities + movement + melee), with VO supplementary. */
+export type HeroSoundCategory = 'weapon' | 'ability' | 'movement' | 'melee' | 'other';
+
+/** One playable hero gameplay sound from `catalog herosounds --json`: the non-VO
+ *  surface (abilities, gun, movement, melee). `hero` is the sound-path codename
+ *  (the `soundevents/hero/<code>` stem, e.g. `abrams`, which can differ from the
+ *  roster codename `atlas`). `ability` is the grouping name when `category` is
+ *  `ability` (else null); `slot` is 1..4 when recoverable (else null). `label` is
+ *  the event detail as prose (search key); `vsnd` lists the clip path(s) (>1 == a
+ *  randomizer pool); `event` is the verbatim soundevents swap target. */
+export interface HeroSound {
+    event: string;
+    hero: string;
+    category: HeroSoundCategory;
+    ability: string | null;
+    slot: number | null;
+    label: string;
+    vsnd: string[];
+    duration: number | null;
+}
+
+/** Filters accepted by `getHeroSounds`; all optional and AND-combined by the CLI.
+ *  `hero` is the sound-path codename (resolved main-side from a roster codename). */
+export interface HeroSoundFilters {
+    hero?: string;
+    category?: HeroSoundCategory;
+    search?: string;
+    limit?: number;
+}
+
 /** One record in the thumbnail batch's `manifest.json` (path -> PNG file + dims). */
 export interface ThumbManifestEntry {
     entry: string;

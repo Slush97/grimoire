@@ -22,8 +22,11 @@ import { pathToFileURL } from 'url';
 import { app, protocol, net } from 'electron';
 import { runVpkmerge, runVpkmergeStdout } from './modMerger';
 import { getCitadelPath } from './deadlock';
+import { soundCodenameForHero } from './heroSoundCodenames';
 import type {
     HeroInfo,
+    HeroSound,
+    HeroSoundFilters,
     TextureCategory,
     TextureEntry,
     TextureFilters,
@@ -101,6 +104,57 @@ export async function getVoicelines(
     if (filters.search) args.push('--search', filters.search);
     if (typeof filters.limit === 'number') args.push('--limit', String(filters.limit));
     return runCatalogJson<VoiceLine[]>(args);
+}
+
+/**
+ * Resolve a roster codename (the engine/script namespace the renderer's hero
+ * picker uses, e.g. `atlas`) to the sound-path codename the `soundevents/hero/`
+ * tree is keyed by (e.g. `abrams`). The two namespaces coincide for most heroes
+ * but diverge for a handful (Abrams, Mo & Krill, ...), so we bridge through the
+ * display name: roster `atlas` -> "Abrams" -> sound codename `abrams`.
+ *
+ * The roster (codename -> display name) is fetched once per game path and memoized
+ * (the engine caches the underlying scan anyway). A roster codename whose display
+ * name isn't in the sound-codename table falls back to itself, since the two
+ * namespaces are identical for the large majority of heroes.
+ */
+const soundCodenameMapCache = new Map<string, Promise<Map<string, string>>>();
+
+async function rosterToSoundCodename(deadlockPath: string, rosterCodename: string): Promise<string> {
+    let mapPromise = soundCodenameMapCache.get(deadlockPath);
+    if (!mapPromise) {
+        mapPromise = getHeroRoster(deadlockPath)
+            .then((roster) => {
+                const map = new Map<string, string>();
+                for (const h of roster) {
+                    const sound = soundCodenameForHero(h.name);
+                    if (sound) map.set(h.codename.toLowerCase(), sound);
+                }
+                return map;
+            })
+            .catch(() => new Map<string, string>());
+        soundCodenameMapCache.set(deadlockPath, mapPromise);
+    }
+    const map = await mapPromise;
+    return map.get(rosterCodename.toLowerCase()) ?? rosterCodename.toLowerCase();
+}
+
+/** The hero gameplay-sound index (weapon / ability / movement / melee), scoped by
+ *  `hero` (a roster codename, translated here to the sound-path codename the tree
+ *  is keyed by) and optionally `category` / `search`. All filters AND-combined. */
+export async function getHeroSounds(
+    deadlockPath: string,
+    filters: HeroSoundFilters = {}
+): Promise<HeroSound[]> {
+    const args = ['herosounds', '--vpk', pak01Path(deadlockPath)];
+    if (filters.hero) {
+        const soundCode = await rosterToSoundCodename(deadlockPath, filters.hero);
+        args.push('--hero', soundCode);
+    }
+    if (filters.category) args.push('--category', filters.category);
+    if (filters.search) args.push('--search', filters.search);
+    if (typeof filters.limit === 'number') args.push('--limit', String(filters.limit));
+    return runCatalogJson<HeroSound[]>(args);
 }
 
 /** The texture/icon index, optionally filtered (all filters AND-combined). */

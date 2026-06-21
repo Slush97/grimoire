@@ -7,7 +7,7 @@ for the full vision. This file is the "where we are / what's next" snippet.
 
 - **vpkmerge** `feat/foundry-catalog-voiceline` (rebased onto current main; the broken
   pre-rebase tip is preserved as `feat/foundry-catalog-voiceline-prerebase`).
-  Catalog engine is complete and CI-green: `vpkmerge catalog voiceline|texture|cache|heroes [--json]`.
+  Catalog engine is complete and CI-green: `vpkmerge catalog voiceline|herosounds|texture|cache|heroes [--json]`.
   Two texture-decode bugs fixed + committed (`d9a7a48`): non-power-of-two cropping
   and YCoCg DXT5 (both verified pixel-perfect vs the VRF oracle, regression fixture
   `morphic/fixtures/dxt5/radiant_regeneration_psd_ycocg`).
@@ -22,7 +22,17 @@ for the full vision. This file is the "where we are / what's next" snippet.
        bytes, MP3-sync gated) + `vpkmerge_core::extract_voiceclip_mp3` (also normalizes the
        index's `.vsnd` path to the packed `.vsnd_c`). Verified: real Abrams/bebop clips decode
        to valid MP3 with duration matching the index.
-    RELEASE GATE: both are new CLI affordances, so shipping the lightbox + Sound tab in a
+    3. `catalog herosounds --vpk <pak> [--hero <code>] [--category <cat>] [--search] [--json]`
+       indexes the **non-VO** hero gameplay sounds (abilities + gun + movement + melee) from
+       `soundevents/hero/<code>.vsndevts_c`. New `vpkmerge_core::build_hero_sound_index` +
+       `HeroSound`/`HeroSoundCategory` in `catalog.rs`. Each row carries `{ event, hero
+       (sound-path codename), category, ability, slot, label, vsnd[], duration }`; category +
+       ability/slot are derived from the event name's grouping segment (`Haze.Finesse.Dagger
+       .Cast` -> ability "Finesse"; `Abrams.A1.SiphonLife.Cast` -> slot 1) with the slot
+       backfilled from the clip path's `aN` folder when the event name doesn't carry it. The
+       clips audition through the same `catalog voiceclip` slicer (verified: weapon clips
+       decode to valid MP3). 5 new unit tests; clippy clean.
+    RELEASE GATE: all three are new CLI affordances, so shipping the lightbox + Sound tab in a
     packaged Grimoire build requires releasing vpkmerge once and bumping the pin in
     `scripts/fetch-vpkmerge.mjs` (the standing "release vpkmerge first, then bump the pin"
     rule). Dev works today via `$VPKMERGE_BINARY`.
@@ -50,24 +60,36 @@ for the full vision. This file is the "where we are / what's next" snippet.
 
 The catalog engine already backs all of these; this is mostly UI wiring mirroring `library`.
 
-- **Sound: BUILT (this session; pending the vpkmerge release gate above).** Hero-scoped
-  voice-line browse + lazy per-row MP3 audition. Live-verified end to end (Abrams showed
-  500/1678 rows; clicking play extracted + cached + played a real clip; idle stays flat, one
-  extraction per click). Architecture:
-  - `Foundry.tsx` is now a shell that switches sub-tools (`active` state, clickable rail);
-    `LibraryBrowse.tsx` holds the former texture flow, `SoundBrowse.tsx` is the new tab.
-  - Engine: `getVoicelines(hero)` -> `catalog voiceline --hero` (the 76K corpus is too large
-    unfiltered, so it's always hero-scoped; search/cap is client-side, ROW_CAP=500).
-  - Audition: `ensureVoiceclip(vsndPath)` runs `catalog voiceclip`, caches the MP3 under
+- **Sound: BUILT (gameplay-led rework this session; pending the vpkmerge release gate
+  above).** The Sound tab now leads with a hero's **gameplay sounds** (abilities + gun +
+  movement + melee) grouped by category, with the VO voice-line corpus demoted to a
+  supplementary collapsible section. Live-verified end to end via a throwaway CDP instance:
+  Abrams rendered 25 gameplay sounds across Abilities(11, sub-grouped Siphon Life #1 / Charge
+  #2 / Leap ULT) / Weapon(7) / Movement(3) / Melee(2) / Other(2); a Haze weapon clip
+  extracted to a valid `data:audio/mpeg` URL. Architecture:
+  - `Foundry.tsx` is the shell that switches sub-tools (`active` state, clickable rail);
+    `LibraryBrowse.tsx` holds the texture flow, `SoundBrowse.tsx` is the Sound tab.
+  - Engine (gameplay): `getHeroSounds({hero})` -> `catalog herosounds --hero <sound_code>`.
+    The renderer picks by **roster** codename (`atlas`), so `foundryCatalog.ts`'s
+    `rosterToSoundCodename` bridges roster -> sound-path codename (`atlas` -> "Abrams" ->
+    `abrams`) via the roster display name + `heroSoundCodenames.ts`, memoized per game path.
+    `SoundBrowse` groups rows by category (order: ability, weapon, movement, melee, other) and,
+    within abilities, by `ability` name ordered by `slot` (slot 4 shows "ULT").
+  - Engine (VO, supplementary): unchanged `getVoicelines(hero)` -> `catalog voiceline --hero`
+    (76K corpus, always hero-scoped; client search/cap, VO_ROW_CAP=500). `VoiceLinesSection` is
+    keyed by hero and lazy-fetches only on first expand.
+  - Audition (shared): `ensureVoiceclip(vsndPath)` runs `catalog voiceclip`, caches the MP3 under
     `userData/foundry-voiceclips/<fp>/<sha1>.mp3` (pruned on game update), returns a
-    `data:audio/mpeg` URL. One shared `<audio>` (via `new Audio()`) plays at most one line;
-    clips load lazily on first play. **CSP:** added `data:` to `media-src` in
-    `electron/main/index.ts` (prod-only CSP) or audition would break in packaged builds.
-  - i18n under `foundry.sound.*`.
-  - Still open: randomizer pools audition only `vsnd[0]`; announcer-only speakers depend on
-    the roster (`catalog heroes --all`) listing them; no swap/stage yet (that's the Sound
-    *swap* flow: drop audio -> mint/swap -> install as a local mod, mirroring the Locker
-    sound picker in `{abilitySounds,heroSounds}.ts`).
+    `data:audio/mpeg` URL. One shared `<audio>` (`useClipPlayer`) plays at most one clip across
+    BOTH gameplay and VO rows; clips load lazily on first play. **CSP:** `data:` is in
+    `media-src` (prod-only CSP, `electron/main/index.ts`) or audition breaks in packaged builds.
+  - i18n under `foundry.sound.*` (category labels, slot/ult chips, `voiceLines.*`).
+  - Still open: randomizer pools audition only `vsnd[0]`; events that only inherit a `base`
+    template (no own `vsnd_files`, e.g. `Abrams.Wpn.Whizby`) are skipped (not auditionable at
+    this layer); ability display names are the soundevent group codeword (`Finesse`), not the
+    in-game localized name (needs the vdata join, see catalog "still open"); no swap/stage yet
+    (that's the Sound *swap* flow: drop audio -> mint/swap -> install as a local mod, mirroring
+    the Locker sound picker in `{abilitySounds,heroSounds}.ts`).
 - **Texture / Items**: same `catalog texture` index, filtered by category
   (`ability-icon`, `item-icon`, `hero-image`, `hero-model`, `ability-vfx`, `other`). The
   Library tab already renders the bounded thumbnailable categories; Items is just the

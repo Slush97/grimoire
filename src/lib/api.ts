@@ -1103,6 +1103,12 @@ export async function foundryVoicelines(
   return window.electronAPI.foundry.voicelines(filters);
 }
 
+export async function foundryHeroSounds(
+  filters?: import('../types/foundry').HeroSoundFilters
+): Promise<import('../types/foundry').HeroSound[]> {
+  return window.electronAPI.foundry.heroSounds(filters);
+}
+
 export async function foundryFullImage(
   category: import('../types/foundry').TextureCategory,
   entryPath: string

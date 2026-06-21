@@ -5,7 +5,12 @@ import type {
 } from '../../src/types/portableProfile';
 import type { SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
-import type { TextureCategory, TextureFilters, VoicelineFilters } from '../../src/types/foundry';
+import type {
+    HeroSoundFilters,
+    TextureCategory,
+    TextureFilters,
+    VoicelineFilters,
+} from '../../src/types/foundry';
 import type {
     AbilitySlot,
     AbilitySoundParams,
@@ -533,6 +538,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('foundry:textures', filters ?? {}),
         voicelines: (filters?: VoicelineFilters) =>
             ipcRenderer.invoke('foundry:voicelines', filters ?? {}),
+        heroSounds: (filters?: HeroSoundFilters) =>
+            ipcRenderer.invoke('foundry:heroSounds', filters ?? {}),
         ensureThumbnails: (category: TextureCategory) =>
             ipcRenderer.invoke('foundry:ensureThumbnails', category),
         fullImage: (category: TextureCategory, entryPath: string) =>

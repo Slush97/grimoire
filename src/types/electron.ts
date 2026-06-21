@@ -872,6 +872,9 @@ export interface ElectronAPI {
         voicelines: (
             filters?: import('./foundry').VoicelineFilters
         ) => Promise<import('./foundry').VoiceLine[]>;
+        heroSounds: (
+            filters?: import('./foundry').HeroSoundFilters
+        ) => Promise<import('./foundry').HeroSound[]>;
         ensureThumbnails: (
             category: import('./foundry').TextureCategory
         ) => Promise<import('./foundry').TextureGridItem[]>;

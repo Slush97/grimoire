@@ -8,6 +8,7 @@ import { ipcMain } from 'electron';
 import { getActiveDeadlockPath } from '../services/settings';
 import {
     getHeroRoster,
+    getHeroSounds,
     getTextures,
     getVoicelines,
     ensureCategoryThumbnails,
@@ -17,6 +18,8 @@ import {
 } from '../services/foundryCatalog';
 import type {
     HeroInfo,
+    HeroSound,
+    HeroSoundFilters,
     TextureCategory,
     TextureEntry,
     TextureFilters,
@@ -55,6 +58,13 @@ ipcMain.handle(
     'foundry:voicelines',
     async (_e, filters: VoicelineFilters = {}): Promise<VoiceLine[]> => {
         return getVoicelines(requireDeadlockPath(), filters);
+    }
+);
+
+ipcMain.handle(
+    'foundry:heroSounds',
+    async (_e, filters: HeroSoundFilters = {}): Promise<HeroSound[]> => {
+        return getHeroSounds(requireDeadlockPath(), filters);
     }
 );
 
