@@ -511,14 +511,14 @@ export default function HeroSoundPicker({ heroName, soundList, onSelect }: HeroS
       )}
 
       {error && (
-        <div className="flex items-start gap-2 py-2 text-xs text-red-400">
+        <div className="flex items-start gap-2 py-2 text-xs text-state-danger">
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span className="break-words">{error}</span>
         </div>
       )}
 
       {actionError && (
-        <div className="flex items-start gap-2 py-2 text-xs text-red-400">
+        <div className="flex items-start gap-2 py-2 text-xs text-state-danger">
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span className="break-words">{actionError}</span>
         </div>

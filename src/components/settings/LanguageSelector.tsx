@@ -10,6 +10,7 @@ import {
 } from '../../i18n';
 import { downloadLocale, getLocaleManifest, listDownloadedLocales } from '../../lib/api';
 import type { LocaleManifest, LocaleManifestEntry } from '../../types/locales';
+import { Select } from '../common/forms';
 import Tx from '../translation/Tx';
 
 interface LanguageSelectorProps {
@@ -110,19 +111,20 @@ export default function LanguageSelector({ value, onChange }: LanguageSelectorPr
           fallback="Choose the app language, or follow your system preference. Percentages show how much of the app each community translation covers."
         />
       </p>
-      <select
-        value={value ?? ''}
-        onChange={(event) => void handleSelect(event.target.value)}
-        disabled={downloading !== null}
-        className="w-full max-w-xs rounded-md border border-border bg-bg-tertiary px-3 py-2 text-sm text-text-primary disabled:cursor-not-allowed disabled:opacity-60"
-      >
-        <option value="">{t('settings.language.systemDefault')}</option>
-        {languages.map((entry) => (
-          <option key={entry.code} value={entry.code}>
-            {optionLabel(entry)}
-          </option>
-        ))}
-      </select>
+      <div className="max-w-xs">
+        <Select
+          value={value ?? ''}
+          onChange={(event) => void handleSelect(event.target.value)}
+          disabled={downloading !== null}
+        >
+          <option value="">{t('settings.language.systemDefault')}</option>
+          {languages.map((entry) => (
+            <option key={entry.code} value={entry.code}>
+              {optionLabel(entry)}
+            </option>
+          ))}
+        </Select>
+      </div>
       {downloading && (
         <div className="mt-2 flex items-center gap-2 text-xs text-text-secondary">
           <Loader2 className="h-3.5 w-3.5 animate-spin" />

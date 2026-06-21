@@ -466,6 +466,10 @@ const HERO_PAYLOAD_PATTERNS: RegExp[] = [
  * panorama/images/heroes/ folder holds both global packs and single-hero art.
  */
 const SOUL_CONTAINER_PATTERN = /(?:^|\/)models\/props_gameplay\/soul_container\//i;
+const URN_CONTAINER_PATTERN = /(?:^|\/)models\/props_gameplay\/idol_urn\//i;
+// Compiled model file. Used to break a soul-container/urn tie by which prop's
+// MODEL (not just incidental materials) the mod actually overrides.
+const VMDL_PATTERN = /\.vmdl_c?$/i;
 const HIDEOUT_PATTERN = /(?:^|\/)models\/hideout\//i;
 const HUD_PATTERN = /(?:^|\/)panorama\/(?:layout|styles|images\/hud)\//i;
 const HERO_IMAGE_PREFIX = /(?:^|\/)panorama\/images\/heroes\//i;
@@ -516,7 +520,7 @@ function heroImageCodenames(paths: string[]): Set<string> {
  * an older version, so pattern improvements (e.g. new HUD paths) reach
  * already-installed mods without a manual retag or a metadata migration.
  */
-export const GLOBAL_CLASSIFIER_VERSION = 1;
+export const GLOBAL_CLASSIFIER_VERSION = 3;
 
 export function classifyGlobalModType(paths: string[]): GlobalModType | null {
     if (paths.length === 0) return null;
@@ -524,7 +528,22 @@ export function classifyGlobalModType(paths: string[]): GlobalModType | null {
     if (paths.some((p) => HERO_PAYLOAD_PATTERNS.some((re) => re.test(p)))) {
         return null;
     }
-    if (paths.some((p) => SOUL_CONTAINER_PATTERN.test(p))) return 'soul-container';
+    // Soul containers and spirit urns are sibling props under props_gameplay.
+    // A single VPK can touch BOTH folders (e.g. a urn reskin that ships a stray
+    // soul_container material, or vice versa), so a plain soul-before-urn order
+    // would mis-file it. When both match, break the tie by which prop's actual
+    // MODEL (.vmdl_c) is overridden: that's the prop the mod really reskins.
+    // Texture-only packs (a model in neither folder) keep the soul-first
+    // precedence, preserving the existing texture-only soul-container behavior.
+    const hasSoul = paths.some((p) => SOUL_CONTAINER_PATTERN.test(p));
+    const hasUrn = paths.some((p) => URN_CONTAINER_PATTERN.test(p));
+    if (hasSoul && hasUrn) {
+        const soulModel = paths.some((p) => SOUL_CONTAINER_PATTERN.test(p) && VMDL_PATTERN.test(p));
+        const urnModel = paths.some((p) => URN_CONTAINER_PATTERN.test(p) && VMDL_PATTERN.test(p));
+        return urnModel && !soulModel ? 'spirit-urn' : 'soul-container';
+    }
+    if (hasSoul) return 'soul-container';
+    if (hasUrn) return 'spirit-urn';
     if (paths.some((p) => HIDEOUT_PATTERN.test(p))) return 'hideout';
 
     const heroImages = heroImageCodenames(paths);

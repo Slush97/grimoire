@@ -84,6 +84,12 @@
   --color-bg-primary: #0f0f0f;
   --color-bg-secondary: #1a1a1a;
   --color-bg-tertiary: #242424;
+  /* Sunken/recessed surface, darker than the app bg. Sits behind cards and
+     backs inactive picker/segment chips. */
+  --color-bg-sunken: #141414;
+  /* Dark "glass" surface for floating popovers layered over imagery (e.g. the
+     Browse sound-card volume flyout). */
+  --color-bg-glass: #0a0c10;
   --color-accent: #f97316;
   --color-accent-hover: #ea580c;
   /* Foreground (text/icon) color for solid `bg-accent` surfaces. Flips between
@@ -95,6 +101,9 @@
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #8a8a94;
   --color-border: #2d2d2d;
+  /* Warm off-white for the Browse "readable" card title, deliberately softer
+     than pure white. */
+  --color-mod-title: #eee8df;
 
   /* Semantic state tokens. Use these for card states, toasts, badges —
      anything that communicates status. The raw Tailwind colors
@@ -107,6 +116,7 @@
   /* Third-party brand colors (buttons/links that represent the brand itself). */
   --color-brand-discord: #5865F2;
   --color-brand-kofi: #FF5E5B;
+  --color-brand-kofi-hover: #ff4542;
 
   --font-radiance: 'Radiance', system-ui, sans-serif;
   --font-reaver: 'Reaver', serif;
@@ -118,6 +128,18 @@
      distinctly from l. To switch to a cleaner neutral look, change this one line
      to: Tahoma, Verdana, system-ui, sans-serif (OS fonts, nothing bundled). */
   --font-mod-title: 'Reaver', serif;
+}
+
+/* Bottom-up dark scrim for art/thumbnail overlays so foreground chrome stays
+   legible over any underlying image. Pairs with `absolute inset-0`. Replaces
+   the gradient that was copy-pasted across the Locker/Installed surfaces. */
+@utility scrim-bottom {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(15 15 15 / 0.45),
+    rgb(15 15 15 / 0.65),
+    rgb(15 15 15 / 0.88)
+  );
 }
 
 /* Base styles */
@@ -711,6 +733,26 @@ body {
 
 .browse-details-dock-panel {
   animation: browseDockPanelIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Exit slides the whole dock out to the right, mirroring the entrance. By the
+   time this plays the dock is an absolute overlay (see Browse.tsx) and the grid
+   has already reflowed wide underneath it, so sliding the opaque dock off-screen
+   simply uncovers the final layout, and its unmount causes no reflow. Same
+   timing/easing as browseDockPanelIn so open and close read as one motion played
+   in reverse. `forwards` holds the off-screen frame for the unmount tick. */
+@keyframes browseDockPanelOut {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.browse-details-dock.is-closing {
+  animation: browseDockPanelOut 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* Locker Hero animations */

@@ -86,7 +86,8 @@ import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
-import { Button, Tag } from '../components/common/ui';
+import { Button, IconButton, SegmentedControl, Tag } from '../components/common/ui';
+import { Select } from '../components/common/forms';
 import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
@@ -118,6 +119,11 @@ const BROWSE_SIDEBAR_WIDTH_DEFAULT = 420;
 // The grid always keeps at least this much room; the sidebar's effective width
 // is capped so a wide drag (or a small window) can't starve the browse area.
 const BROWSE_SIDEBAR_GRID_RESERVE = 360;
+// Must match the browseDockPanelOut animation duration in index.css: we keep the
+// dock (as an absolute overlay) mounted for this long after a close so the
+// slide-out can play, then unmount it (no reflow: the grid already widened at
+// close-start).
+const BROWSE_DOCK_ANIM_MS = 220;
 
 // Filled brand glyphs (see common/BrandIcons). Platform keys come from
 // GameBanana's contact icon classes, lowercased by normalizeContactPlatform
@@ -1226,6 +1232,18 @@ export default function Browse() {
   }, []);
   // Drop a half-finished drag if Browse unmounts mid-gesture.
   useEffect(() => () => sidebarResizeCleanupRef.current?.(), []);
+
+  // Docked-sidebar close animation. Closing nulls selectedMod immediately (so the
+  // rest of the page sees the deselect at once), but we keep the aside mounted for
+  // one slide-out by freezing the last-rendered panel into a ref and flipping
+  // sidebarClosing. The timer then unmounts it, reflowing the grid wide once.
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const [sidebarClosing, setSidebarClosing] = useState(false);
+  const sidebarExitContentRef = useRef<React.ReactNode>(null);
+  const sidebarCloseTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (sidebarCloseTimerRef.current !== null) window.clearTimeout(sidebarCloseTimerRef.current);
+  }, []);
 
   // Load settings on mount (needed for hideNsfwPreviews)
   useEffect(() => {
@@ -2556,12 +2574,55 @@ export default function Browse() {
       : undefined;
   // These three (plus handleDownload above) feed the memoized ModDetailsModal,
   // so they get stable identities via useStableCallback.
-  const closeSelectedMod = useStableCallback(() => {
+  const teardownSelectedMod = useStableCallback(() => {
     modalNavigationRequestRef.current += 1;
     setModalNavigation(null);
     setSelectedMod(null);
     setSelectedModDates(null);
   });
+  const closeSelectedMod = useStableCallback(() => {
+    // Centered modal (and reduced motion) closes instantly. The docked sidebar
+    // fades out: freeze the current panel so it stays visible while selectedMod
+    // is already null, then in this same (batched) commit grow the grid metrics
+    // to full width and flip the closing flag. That single commit reflows the
+    // grid wide while the dock detaches to an absolute overlay over the vacated
+    // strip; the dock fades there and unmounts with no further reflow. Growing
+    // the metrics now (instead of relying on the ResizeObserver after unmount)
+    // is what kills the flicker: the grid never paints a stale narrow frame in a
+    // widened container. flex-1 reclaims exactly the aside's width.
+    if (
+      detailsSidebarActive &&
+      selectedMod &&
+      !prefersReducedMotion &&
+      sidebarCloseTimerRef.current === null
+    ) {
+      sidebarExitContentRef.current = renderModDetails('sidebar');
+      teardownSelectedMod();
+      setBrowseViewportMetrics((m) => ({
+        ...m,
+        containerWidth: m.containerWidth + effectiveSidebarWidth,
+      }));
+      setSidebarClosing(true);
+      sidebarCloseTimerRef.current = window.setTimeout(() => {
+        sidebarCloseTimerRef.current = null;
+        sidebarExitContentRef.current = null;
+        setSidebarClosing(false);
+      }, BROWSE_DOCK_ANIM_MS);
+      return;
+    }
+    teardownSelectedMod();
+  });
+
+  // Re-selecting a mod mid-slide-out aborts the close: cancel the pending unmount
+  // and drop the closing flag so the live panel (not the frozen one) shows.
+  useEffect(() => {
+    if (selectedMod && sidebarCloseTimerRef.current !== null) {
+      window.clearTimeout(sidebarCloseTimerRef.current);
+      sidebarCloseTimerRef.current = null;
+      sidebarExitContentRef.current = null;
+      setSidebarClosing(false);
+    }
+  }, [selectedMod]);
 
   const navigateToPreviousMod = useStableCallback(() => {
     if (previousSelectedMod) void handleNavigateMod(previousSelectedMod, 'previous');
@@ -2700,7 +2761,10 @@ export default function Browse() {
     ) : null;
 
   return (
-    <div className="flex h-full min-h-0">
+    // overflow-hidden clips the closing dock as it slides off the right edge so
+    // it never spills past the page into a horizontal scrollbar. The grid keeps
+    // its own vertical scroll (on the flex-1 child), so this only clips the slide.
+    <div className="relative flex h-full min-h-0 overflow-hidden">
       {/* The scroll listener toggles browse-is-scrolling on this element
           imperatively; keeping it out of the className prop means scroll
           start/stop never re-renders this (large) component. */}
@@ -2709,15 +2773,12 @@ export default function Browse() {
       <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
         {artistMode && submitter ? (
           <div className="flex items-center gap-3">
-            <button
-              type="button"
+            <IconButton
+              icon={ArrowLeft}
+              label={t('browse.artist.backToBrowse')}
               onClick={clearArtist}
-              aria-label={t('browse.artist.backToBrowse')}
-              title={t('browse.artist.backToBrowse')}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:text-text-primary cursor-pointer"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+              className="flex-shrink-0"
+            />
             {submitter.avatarUrl && !artistAvatarFailed ? (
               <img
                 src={submitter.avatarUrl}
@@ -2782,7 +2843,7 @@ export default function Browse() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title={`Support ${submitter.name} on Ko-fi`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542]"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover"
                 >
                   <KofiIcon className="h-4 w-4" />
                   {t('browse.artist.kofi')}
@@ -2937,32 +2998,16 @@ export default function Browse() {
                   <div className="space-y-4">
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setLayout('grid')}
-                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
-                            layout === 'grid'
-                              ? 'border-accent/50 bg-accent/10 text-accent'
-                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          <LayoutGrid className="h-4 w-4" />
-                          {t('browse.viewOptions.grid')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLayout('list')}
-                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
-                            layout === 'list'
-                              ? 'border-accent/50 bg-accent/10 text-accent'
-                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          <List className="h-4 w-4" />
-                          {t('browse.viewOptions.list')}
-                        </button>
-                      </div>
+                      <SegmentedControl<BrowseLayout>
+                        fill
+                        label={t('browse.viewOptions.layout')}
+                        value={layout}
+                        onChange={setLayout}
+                        options={[
+                          { value: 'grid', label: <><LayoutGrid className="h-4 w-4" />{t('browse.viewOptions.grid')}</> },
+                          { value: 'list', label: <><List className="h-4 w-4" />{t('browse.viewOptions.list')}</> },
+                        ]}
+                      />
                     </div>
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
@@ -2993,54 +3038,31 @@ export default function Browse() {
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.cardDesign')}>
-                        {(['readable', 'classic'] as const).map((design) => {
-                          const active = browseCardDesign === design;
-                          return (
-                            <button
-                              key={design}
-                              type="button"
-                              role="tab"
-                              aria-selected={active}
-                              disabled={layout === 'list'}
-                              onClick={() => setBrowseCardDesign(design)}
-                              className={`h-9 rounded-md border text-xs font-semibold transition-colors disabled:cursor-default ${
-                                active
-                                  ? 'border-accent/50 bg-accent/10 text-accent'
-                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {design === 'readable' ? t('browse.cardStyle.default') : t('browse.cardStyle.classic')}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <SegmentedControl<BrowseCardDesign>
+                        fill
+                        disabled={layout === 'list'}
+                        label={t('browse.viewOptions.cardDesign')}
+                        value={browseCardDesign}
+                        onChange={setBrowseCardDesign}
+                        options={[
+                          { value: 'readable', label: t('browse.cardStyle.default') },
+                          { value: 'classic', label: t('browse.cardStyle.classic') },
+                        ]}
+                      />
                     </div>
 
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.modDetailsView')}>
-                        {(['modal', 'sidebar'] as const).map((view) => {
-                          const active = browseDetailsView === view;
-                          return (
-                            <button
-                              key={view}
-                              type="button"
-                              role="tab"
-                              aria-selected={active}
-                              onClick={() => setBrowseDetailsView(view)}
-                              className={`flex h-9 items-center justify-center gap-1.5 rounded-md border text-xs font-semibold transition-colors ${
-                                active
-                                  ? 'border-accent/50 bg-accent/10 text-accent'
-                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {view === 'modal' ? <Maximize2 className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
-                              {view === 'modal' ? t('browse.detailsView.window') : t('browse.detailsView.sidebar')}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <SegmentedControl<BrowseDetailsView>
+                        fill
+                        label={t('browse.viewOptions.modDetailsView')}
+                        value={browseDetailsView}
+                        onChange={setBrowseDetailsView}
+                        options={[
+                          { value: 'modal', label: <><Maximize2 className="h-3.5 w-3.5" />{t('browse.detailsView.window')}</> },
+                          { value: 'sidebar', label: <><PanelRight className="h-3.5 w-3.5" />{t('browse.detailsView.sidebar')}</> },
+                        ]}
+                      />
                     </div>
 
                   </div>
@@ -3175,18 +3197,17 @@ export default function Browse() {
                         {categoryOptions.length > 0 && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.category')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByCategory')}
                               value={String(categoryId)}
                               onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                               disabled={heroCategoryId !== 'all'}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <option value="all">{t('browse.filters.allCategories')}</option>
                               {categoryOptions.map((cat) => (
                                 <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
                               ))}
-                            </select>
+                            </Select>
                             {heroCategoryId !== 'all' && (
                               <span className="block text-[11px] text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
                             )}
@@ -3198,34 +3219,32 @@ export default function Browse() {
                         {hasLocalCache && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByContentRating')}
                               value={nsfw}
                               onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">{t('browse.filters.contentAll')}</option>
                               <option value="sfw">{t('browse.filters.sfwOnly')}</option>
                               <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
-                            </select>
+                            </Select>
                           </div>
                         )}
 
                         {hasLocalCache && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByDateAdded')}
                               value={addedWithin}
                               onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">{t('browse.filters.anyTime')}</option>
                               <option value="today">{t('browse.filters.today')}</option>
                               <option value="week">{t('browse.filters.thisWeek')}</option>
                               <option value="month">{t('browse.filters.thisMonth')}</option>
                               <option value="custom">{t('browse.filters.customRange')}</option>
-                            </select>
+                            </Select>
                             {addedWithin === 'custom' && (
                               <div className="mt-2 grid grid-cols-2 gap-2">
                                 <label className="block">
@@ -3486,18 +3505,30 @@ export default function Browse() {
       )}
       </div>
 
-      {/* Docked details sidebar. Shrinking the flex-1 grid above triggers the
-          scroll container's ResizeObserver, which recomputes the virtualized
-          column count, so the grid reflows to fewer columns on its own. */}
-      {selectedMod && detailsSidebarActive && (
+      {/* Docked details sidebar. While OPEN it's an in-flow flex child, so the
+          flex-1 grid above shrinks to make room (its ResizeObserver recomputes
+          the virtualized column count). While CLOSING, selectedMod is already
+          null and the grid metrics have been pre-grown to full width in the same
+          commit, so the grid has already reflowed wide; the dock detaches to an
+          absolute overlay over the vacated strip and fades out there. Because it
+          leaves the flex flow at close-start, its later unmount triggers no
+          second reflow: the grid never flickers. The overlay renders the frozen
+          panel captured at close time. */}
+      {(selectedMod || (sidebarClosing && !selectedMod)) && detailsSidebarActive && (
         <aside
-          className="relative flex-shrink-0 h-full bg-bg-primary overflow-hidden"
+          className={
+            sidebarClosing && !selectedMod
+              ? 'browse-details-dock is-closing pointer-events-none absolute right-0 top-0 z-50 h-full bg-bg-primary overflow-hidden'
+              : 'browse-details-dock relative flex-shrink-0 h-full bg-bg-primary overflow-hidden'
+          }
           style={{ width: effectiveSidebarWidth }}
         >
           {/* The border and resize handle live on the sliding panel so the
               dock's left edge arrives with the content instead of popping in
               ahead of it. */}
-          <div className="browse-details-dock-panel relative h-full w-full border-l border-border bg-bg-secondary">
+          <div
+            className="browse-details-dock-panel relative h-full w-full border-l border-border bg-bg-secondary"
+          >
             {/* Drag the left edge to resize; the width is remembered. */}
             <div
               role="separator"
@@ -3508,7 +3539,7 @@ export default function Browse() {
             >
               <div className="absolute inset-y-0 left-1 w-0.5 bg-transparent transition-colors group-hover:bg-accent/60" />
             </div>
-            {renderModDetails('sidebar')}
+            {selectedMod ? renderModDetails('sidebar') : sidebarExitContentRef.current}
           </div>
         </aside>
       )}
@@ -3662,7 +3693,7 @@ function ReadableBrowseModCard({
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
       style={cardFrameStyle}
-      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-[#141414] text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-bg-sunken text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
@@ -3693,7 +3724,7 @@ function ReadableBrowseModCard({
           {/* font-semibold, not font-bold: Reaver ships only a 600 face, so
               bolder weights get synthetic (smeared, blurry) emboldening. */}
           <h3
-            className={`block truncate font-mod-title font-semibold text-[#eee8df] ${
+            className={`block truncate font-mod-title font-semibold text-mod-title ${
               isMicro
                 ? 'text-[13px] leading-4'
                 : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'
@@ -3743,7 +3774,7 @@ function ReadableBrowseModCard({
                     )}
                   </button>
                   {showVolumeSlider && (
-                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-[#0a0c10]/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
+                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-bg-glass/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
                       <input
                         type="range"
                         min={0}

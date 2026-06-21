@@ -313,7 +313,7 @@ export default function DownloadQueueIndicator({ className = '' }: DownloadQueue
                                                 e.stopPropagation();
                                                 void handleCancelQueued(item.modId);
                                             }}
-                                            className="rounded-md p-1 text-text-secondary opacity-0 transition-opacity hover:text-red-400 group-hover:opacity-100 cursor-pointer"
+                                            className="rounded-md p-1 text-text-secondary opacity-0 transition-opacity hover:text-state-danger group-hover:opacity-100 cursor-pointer"
                                             title={t('downloadQueue.removeFromQueue')}
                                         >
                                             <X className="h-3 w-3" />

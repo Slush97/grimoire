@@ -44,6 +44,8 @@ import type {
     ImportCustomModArgs,
     ImportSoulContainerGlbArgs,
     PreviewSoulContainerGlbArgs,
+    ImportSpiritUrnGlbArgs,
+    PreviewSpiritUrnGlbArgs,
     SearchLocalModsOptions,
     CrosshairSettings,
     VanillaRestoreResult,
@@ -148,8 +150,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-applied-custom-card', heroName),
     getSoulModelInfo: (key: string) =>
         ipcRenderer.invoke('get-soul-model-info', key),
-    exportSoulModel: (metaKey: string, cacheKey: string) =>
-        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey),
+    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) =>
+        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey, entry),
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
     exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
@@ -158,6 +160,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-rigged-hero-pose', heroName, skinSources),
     exportRiggedHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
         ipcRenderer.invoke('export-rigged-hero-pose', heroName, skinSources, fallbackSkinMetaKey),
+    getHeroClothModel: (heroName: string, skinSources?: unknown[]) =>
+        ipcRenderer.invoke('get-hero-cloth-model', heroName, skinSources),
+    getHeroEffectInfo: (heroName: string) =>
+        ipcRenderer.invoke('get-hero-effect-info', heroName),
+    exportHeroEffect: (heroName: string) =>
+        ipcRenderer.invoke('export-hero-effect', heroName),
     getPreviewCacheSize: () =>
         ipcRenderer.invoke('get-preview-cache-size'),
     clearPreviewCache: () =>
@@ -231,6 +239,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('import-soul-container-glb', args),
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) =>
         ipcRenderer.invoke('preview-soul-container-glb', args),
+    importSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) =>
+        ipcRenderer.invoke('import-spirit-urn-glb', args),
+    previewSpiritUrnGlb: (args: PreviewSpiritUrnGlbArgs) =>
+        ipcRenderer.invoke('preview-spirit-urn-glb', args),
     readGlbFile: (glbPath: string) =>
         ipcRenderer.invoke('read-glb-file', glbPath),
     readImageDataUrl: (imagePath: string) =>
@@ -595,6 +607,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('stats:getLocalMatchHistory', accountId, limit, offset),
         getLocalMatchCount: (accountId: number) =>
             ipcRenderer.invoke('stats:getLocalMatchCount', accountId),
+        recordMatches: (accountId: number, matches: unknown[]) =>
+            ipcRenderer.invoke('stats:recordMatches', accountId, matches),
         getLocalHeroStats: (accountId: number, heroId?: number) =>
             ipcRenderer.invoke('stats:getLocalHeroStats', accountId, heroId),
         getAggregatedStats: (accountId: number) =>

@@ -57,7 +57,7 @@ export default function SocialAccountSection() {
       </p>
 
       {error && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start justify-between gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start justify-between gap-2">
           <div className="flex items-start gap-2 min-w-0">
             <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
             <span className="break-words">{error}</span>

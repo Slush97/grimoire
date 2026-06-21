@@ -4,6 +4,7 @@ import type {
   CustomCardSlot,
   HeroPoseInfo,
   HeroPoseSkinSource,
+  HeroEffectInfo,
   SoulModelInfo,
 } from '../types/portrait';
 import type {
@@ -20,6 +21,7 @@ import type {
   GameBananaArtistLink,
 } from '../types/gamebanana';
 import type { DownloadedLocale, LocaleManifest } from '../types/locales';
+import { parseFeModel, type ClothModel } from './feModel';
 
 // Re-export types for convenience
 export type {
@@ -191,8 +193,8 @@ export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
  *  SOURCE VPK is located by `metaKey` (folder-qualified for overflow mods); the
  *  cache is keyed by `cacheKey` (the mod's content-stable sha256) so an
  *  enable/disable rename can't serve a different soul's stale export. */
-export async function exportSoulModel(metaKey: string, cacheKey: string): Promise<SoulModelInfo> {
-  return window.electronAPI.exportSoulModel(metaKey, cacheKey);
+export async function exportSoulModel(metaKey: string, cacheKey: string, entry?: string): Promise<SoulModelInfo> {
+  return window.electronAPI.exportSoulModel(metaKey, cacheKey, entry);
 }
 
 /** Whether a hero's posed 3D still exists for the given active skin stack (+ mtime, key). */
@@ -231,6 +233,35 @@ export async function exportRiggedHeroPose(
   fallbackSkinMetaKey?: string
 ): Promise<HeroPoseInfo> {
   return window.electronAPI.exportRiggedHeroPose(heroName, skinSources, fallbackSkinMetaKey);
+}
+
+/** The hero's cloth finite-element model (PHYS.m_pFeModel) as the verlet sidecar:
+ *  collision capsules/spheres + nodes the rigged preview's cloth sim reads to
+ *  stop the cloth bones clipping through the body. Returns null on a model with
+ *  no cloth (most heroes carry one; a few don't). */
+export async function getHeroClothModel(
+  heroName: string,
+  skinSources?: HeroPoseSkinSource[]
+): Promise<ClothModel | null> {
+  try {
+    const raw = await window.electronAPI.getHeroClothModel(heroName, skinSources);
+    if (raw == null) return null;
+    const parsed = parseFeModel(raw);
+    if (!parsed) console.warn('[cloth] failed to parse FeModel payload');
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a hero's ambient FX descriptor bundle is cached/current. */
+export async function getHeroEffectInfo(heroName: string): Promise<HeroEffectInfo> {
+  return window.electronAPI.getHeroEffectInfo(heroName);
+}
+
+/** Build (or refresh) a hero's ambient FX bundle via the bundled vpkmerge. */
+export async function exportHeroEffect(heroName: string): Promise<HeroEffectInfo> {
+  return window.electronAPI.exportHeroEffect(heroName);
 }
 
 export async function applyHeroSound(
@@ -407,6 +438,27 @@ export async function previewSoulContainerGlb(
   args: import('../types/electron').PreviewSoulContainerGlbArgs
 ): Promise<{ glb: ArrayBuffer; orient: string; fitScale?: number; sourceSpan?: number; targetSpan?: number }> {
   const res = await window.electronAPI.previewSoulContainerGlb(args);
+  const binary = atob(res.glbBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { glb: bytes.buffer, orient: res.orient, fitScale: res.fitScale, sourceSpan: res.sourceSpan, targetSpan: res.targetSpan };
+}
+
+/** Build a Spirit Urn override VPK from a user GLB and install it as a tracked
+ *  local mod. Returns the full enriched mod list after install. */
+export async function importSpiritUrnGlb(
+  args: import('../types/electron').ImportSpiritUrnGlbArgs
+): Promise<Mod[]> {
+  return window.electronAPI.importSpiritUrnGlb(args);
+}
+
+/** Build the urn for the given orientation/span and export its model to a GLB
+ *  for the import preview. Returns the GLB as an ArrayBuffer + the resolved
+ *  orientation label and fitted bounds. */
+export async function previewSpiritUrnGlb(
+  args: import('../types/electron').PreviewSpiritUrnGlbArgs
+): Promise<{ glb: ArrayBuffer; orient: string; fitScale?: number; sourceSpan?: number; targetSpan?: number }> {
+  const res = await window.electronAPI.previewSpiritUrnGlb(args);
   const binary = atob(res.glbBase64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);

@@ -18,7 +18,8 @@ import {
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
-import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
+import { Input, Textarea } from '../components/common/forms';
+import { PageHeader, ConfirmModal, PageLayout, LoadingState } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import LanguageSelector from '../components/settings/LanguageSelector';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
@@ -600,15 +601,11 @@ export default function Settings() {
     : 0;
 
   if (settingsLoading && !settings) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8 animate-fade-in">
+    <PageLayout maxWidth="5xl">
       <PageHeader
         title={<Tx k="nav.settings" fallback="Settings" />}
         description={<Tx k="settings.header.description" fallback="Game paths, preferences, and maintenance" />}
@@ -633,7 +630,7 @@ export default function Settings() {
                       </span>
                     )}
                     {isValidPath === false && (
-                      <span className="text-red-400 flex items-center gap-1">
+                      <span className="text-state-danger flex items-center gap-1">
                         <X className="w-3 h-3" />
                         <Tx k="common.status.invalid" fallback="Invalid" />
                       </span>
@@ -656,13 +653,13 @@ export default function Settings() {
 
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <input
+                  <Input
                     type="text"
                     value={displayPath}
                     onChange={(e) => handlePathChange(e.target.value)}
                     placeholder={t('settings.gamePath.pathPlaceholder')}
                     disabled={isDevMode}
-                    className="w-full bg-bg-tertiary border border-white/5 rounded-sm px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed font-mono text-sm"
+                    className="font-mono"
                   />
                 </div>
                 <Button
@@ -787,7 +784,7 @@ export default function Settings() {
                   </span>
                 )}
                 {updateStatus?.error && (
-                  <span className="text-xs text-red-400 basis-full">{updateStatus.error}</span>
+                  <span className="text-xs text-state-danger basis-full">{updateStatus.error}</span>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1292,12 +1289,11 @@ export default function Settings() {
                 </p>
               </div>
 
-              <textarea
+              <Textarea
                 value={bugDescription}
                 onChange={(e) => setBugDescription(e.target.value)}
                 placeholder={t('settings.support.bugPlaceholder')}
                 rows={3}
-                className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-white/5 rounded-sm text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-y"
               />
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -1329,7 +1325,7 @@ export default function Settings() {
               </div>
 
               {bugReportError && (
-                <p className="text-xs text-red-400 break-all">{bugReportError}</p>
+                <p className="text-xs text-state-danger break-all">{bugReportError}</p>
               )}
 
               {bugReportText && (
@@ -1658,7 +1654,7 @@ export default function Settings() {
         confirmLabel={<Tx k="common.actions.reset" fallback="Reset" />}
         variant="primary"
       />
-    </div>
+    </PageLayout>
   );
 }
 

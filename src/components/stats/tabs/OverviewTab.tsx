@@ -113,7 +113,7 @@ export function OverviewTab() {
                                     key={match.match_id}
                                     matchId={match.match_id}
                                     heroId={match.hero_id}
-                                    outcome={match.match_outcome ?? (match.match_result === 1 ? 'Win' : 'Loss')}
+                                    outcome={match.match_outcome ?? (match.match_result === match.player_team ? 'Win' : 'Loss')}
                                     kills={match.kills ?? match.player_kills}
                                     deaths={match.deaths ?? match.player_deaths}
                                     assists={match.assists ?? match.player_assists}

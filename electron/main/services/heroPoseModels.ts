@@ -27,7 +27,8 @@ import { join } from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import { app, protocol, net } from 'electron';
-import { runVpkmerge, verifyVpkOutput } from './modMerger';
+import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
+import { SOURCE2_EXTRAS_VERSION } from '../../../src/lib/source2ExtrasVersion';
 import { codenamesForHero } from './heroPortraits';
 import { getCitadelPath, getAddonsPath, getDisabledPath } from './deadlock';
 
@@ -185,8 +186,31 @@ function riggedModelFile(key: string): string {
  *
  * v9: same static-pose fabric fix, with old dev preview caches force-expired
  * after confirming one-frame menu poses can carry unsolved cloth state.
+ *
+ * v10: bundled vpkmerge now resolves `--hero` against `heroes.vdata_c`
+ * (m_strModelName), the authoritative live model, instead of a filename match
+ * that preferred non-`heroes_wip` dirs and so returned the stale staging body.
+ * Fixes every un-pinned hero (e.g. Wraith resolved to `heroes_staging/wraith`).
+ * The MODEL_ENTRY_OVERRIDES pins below remain as targeted fallbacks for any hero
+ * that live resolution still misses. Pre-v10 GLBs cached the outdated model.
+ *
+ * v11: morphic extras now embed broader Source 2 preview texture slots
+ * (`g_tGlass`, `g_tAltTranslucency`, `g_tJitterMask`, etc.) instead of only the
+ * NPR masks. Pre-v11 GLBs do not carry enough metadata for shader-rich previews
+ * such as Viscous.
+ *
+ * v12: bundled vpkmerge branch build with live material resolution fixes and
+ * updated morphic payloads for the unified material preview. Pre-v12 GLBs may
+ * carry stale material metadata and render eye/self-illum materials incorrectly.
+ *
+ * The Source 2 extras schema version (SOURCE2_EXTRAS_VERSION) is folded into the
+ * effective key below, so a material-extras schema bump auto-busts this cache
+ * with no manual edit here, and the cache version cannot drift from the parser's
+ * expected schema. Bump POSE_PIPELINE_VERSION only for export changes unrelated
+ * to the extras schema (model resolution, index offsets, ...).
  */
-const POSE_CACHE_VERSION = '9';
+const POSE_PIPELINE_VERSION = '12';
+const POSE_CACHE_VERSION = `${POSE_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const POSE_VERSION_FILENAME = '.cache-version';
 
@@ -202,8 +226,19 @@ function versionFile(key: string): string {
  * glTF animation.
  *
  * v2: same vpkmerge index-offset fix as POSE_CACHE_VERSION v7.
+ *
+ * v3: same vdata-authoritative `--hero` resolution as POSE_CACHE_VERSION v8
+ * (un-pinned heroes like Wraith were rigging the stale staging body).
+ *
+ * v4: same broader Source 2 preview texture slots as POSE_CACHE_VERSION v11.
+ *
+ * v5: rigged export selects one animated clip through `model clips --json`
+ * instead of hardcoding one idle name, and refuses clipless rigged GLBs.
+ *
+ * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_CACHE_VERSION = '2';
+const RIGGED_PIPELINE_VERSION = '5';
+const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
 
@@ -212,16 +247,151 @@ function riggedVersionFile(key: string): string {
 }
 
 /**
- * The single idle clip kept in a rigged export. Pass EXACTLY ONE `--clip`: the
- * CLI's `--clip` is ADDITIVE (retains EVERY matching clip), so a candidate LIST
- * would keep two competing idle loops on heroes that carry more than one
- * (verified: abrams with 4 candidates = 52 MB / 2 anims vs 50.7 MB / 1 anim for
- * the single clip). `primary_stand_idle` is the universal idle: present on every
- * resolvable hero tested (haze, abrams, astro, bebop, ...; 81-91 keyframes,
- * ~3.0s loop). A model lacking it exports a valid skinned BIND-POSE glb
- * (anims=0), which the viewer renders without a mixer (the graceful fallback).
+ * Curated per-hero ambient idle effect (`.vpcf_c`), keyed by display name. The
+ * effects-preview axis is a hand-validated roster, NOT auto-discovered (the raw
+ * "ambient candidate" metric over-counts ~20-56x); see
+ * `docs/3d-preview-effects-feasibility.md`. Sprint 1: the two effects that render
+ * correctly standalone -- Wraith's hand energy (sprite + CP2 driver) and
+ * Familiar's body aura (CP0 + LockToBone). More land as the renderer grows
+ * trail/rope + CP injection.
  */
-const RIGGED_IDLE_CLIP = 'primary_stand_idle';
+const AMBIENT_EFFECTS: Readonly<Record<string, string>> = {
+    Wraith: 'particles/abilities/wraith/wraith_ambient_hand_energy.vpcf_c',
+    Rem: 'particles/abilities/familiar/familiar_ambient_body.vpcf_c',
+};
+
+const EFFECT_DESCRIPTOR_FILENAME = 'effect.json';
+const EFFECT_TEX_DIRNAME = 'effect-tex';
+const EFFECT_VERSION_FILENAME = '.effect-cache-version';
+
+/** Bump when the FX descriptor schema or the bundled vpkmerge particle exporter
+ *  changes in a way that invalidates a cached `effect.json` + textures. v1:
+ *  initial sprite-layer descriptor (export_fx_descriptor + --textures-dir). */
+const EFFECT_CACHE_VERSION = '1';
+
+function effectFile(key: string): string {
+    return join(modelDir(key), EFFECT_DESCRIPTOR_FILENAME);
+}
+
+function effectTexDir(key: string): string {
+    return join(modelDir(key), EFFECT_TEX_DIRNAME);
+}
+
+function effectVersionFile(key: string): string {
+    return join(modelDir(key), EFFECT_VERSION_FILENAME);
+}
+
+interface ModelClipInfo {
+    name: string;
+    frameCount: number;
+    fps: number;
+    durationSeconds: number;
+    looping: boolean;
+    default: boolean;
+}
+
+function asRecord(value: unknown): Record<string, unknown> | null {
+    return value && typeof value === 'object' && !Array.isArray(value)
+        ? (value as Record<string, unknown>)
+        : null;
+}
+
+function numberField(row: Record<string, unknown>, field: string, index: number): number {
+    const value = row[field];
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+        throw new Error(`vpkmerge model clips JSON row ${index} has invalid ${field}.`);
+    }
+    return value;
+}
+
+function booleanField(row: Record<string, unknown>, field: string, index: number): boolean {
+    const value = row[field];
+    if (typeof value !== 'boolean') {
+        throw new Error(`vpkmerge model clips JSON row ${index} has invalid ${field}.`);
+    }
+    return value;
+}
+
+function parseModelClipsJson(json: string): ModelClipInfo[] {
+    const parsed: unknown = JSON.parse(json);
+    if (!Array.isArray(parsed)) {
+        throw new Error('vpkmerge model clips returned non-array JSON.');
+    }
+    return parsed.map((value, index) => {
+        const row = asRecord(value);
+        if (!row || typeof row.name !== 'string') {
+            throw new Error(`vpkmerge model clips JSON row ${index} has invalid name.`);
+        }
+        return {
+            name: row.name,
+            frameCount: numberField(row, 'frameCount', index),
+            fps: numberField(row, 'fps', index),
+            durationSeconds: numberField(row, 'durationSeconds', index),
+            looping: booleanField(row, 'looping', index),
+            default: booleanField(row, 'default', index),
+        };
+    });
+}
+
+function clipNameHas(name: string, token: string): boolean {
+    return name.split(/[^a-z0-9]+/).includes(token);
+}
+
+function isAnimatedClip(clip: ModelClipInfo): boolean {
+    return clip.name.trim().length > 0 && clip.frameCount > 1 && clip.durationSeconds > 0.001;
+}
+
+function riggedClipScore(clip: ModelClipInfo): number {
+    const name = clip.name.toLowerCase();
+    let score = 0;
+    if (clip.looping) score += 500;
+    if (clip.default) score += 80;
+    if (clipNameHas(name, 'idle')) score += 350;
+    if (clipNameHas(name, 'stand')) score += 160;
+    if (clipNameHas(name, 'primary')) score += 60;
+    if (clipNameHas(name, 'menu') || clipNameHas(name, 'select')) score += 40;
+    if (clip.durationSeconds >= 1 && clip.durationSeconds <= 8) score += 50;
+    if (
+        ['ability', 'attack', 'cast', 'death', 'dash', 'jump', 'reload', 'run', 'turn', 'walk'].some(
+            (token) => clipNameHas(name, token)
+        )
+    ) {
+        score -= 120;
+    }
+    return score;
+}
+
+function chooseRiggedClip(clips: ModelClipInfo[]): ModelClipInfo | null {
+    const candidates = clips.filter(isAnimatedClip);
+    if (candidates.length === 0) return null;
+    return candidates.sort((a, b) => {
+        const byScore = riggedClipScore(b) - riggedClipScore(a);
+        if (byScore !== 0) return byScore;
+        const byLoop = Number(b.looping) - Number(a.looping);
+        if (byLoop !== 0) return byLoop;
+        const byDuration = b.durationSeconds - a.durationSeconds;
+        if (byDuration !== 0) return byDuration;
+        return a.name.localeCompare(b.name);
+    })[0];
+}
+
+async function chooseRiggedClipForSelector(
+    vpk: string,
+    pak01: string,
+    selector: string[]
+): Promise<ModelClipInfo | null> {
+    const json = await runVpkmergeStdout([
+        'model',
+        'clips',
+        '--vpk',
+        vpk,
+        ...selector,
+        '--base',
+        pak01,
+        '--json',
+    ]);
+    return chooseRiggedClip(parseModelClipsJson(json));
+}
 
 /**
  * Cap on total bytes stored under hero-poses/. Each entry is a 50-95 MB GLB
@@ -606,10 +776,11 @@ const inFlightRiggedExports = new Map<string, Promise<HeroPoseInfo>>();
 
 /**
  * Generate a hero's RIGGED glb: identical model/skin selection to exportHeroPose
- * but WITHOUT `--pose`, filtered to the single RIGGED_IDLE_CLIP, so the output
- * keeps its skeleton, skin (JOINTS_0/WEIGHTS_0) and one glTF idle animation.
- * Writes the sibling `model-rigged.glb` + `.rigged-cache-version` next to the
- * static `model.glb`. The static export is untouched.
+ * but WITHOUT `--pose`, filtered to one ranked animated clip from `model clips
+ * --json`, so the output keeps its skeleton, skin (JOINTS_0/WEIGHTS_0) and one
+ * glTF animation. Writes the sibling `model-rigged.glb` +
+ * `.rigged-cache-version` next to the static `model.glb`. The static export is
+ * untouched.
  */
 export async function exportRiggedHeroPose(
     deadlockPath: string,
@@ -670,8 +841,22 @@ async function runRiggedHeroExportForSources(
         await fs.mkdir(dir, { recursive: true });
         const out = riggedModelFile(key);
 
+        let listedAny = false;
+        let foundUsableClip = false;
         let lastError: unknown;
         for (const selector of selectors) {
+            let clip: ModelClipInfo | null;
+            try {
+                clip = await chooseRiggedClipForSelector(source.vpk, pak01, selector);
+                listedAny = true;
+            } catch (err) {
+                lastError = err;
+                continue;
+            }
+
+            if (!clip) continue;
+            foundUsableClip = true;
+
             try {
                 await runVpkmerge([
                     'model',
@@ -682,11 +867,10 @@ async function runRiggedHeroExportForSources(
                     '--base',
                     pak01,
                     // NO --pose: keep the skeleton + skin + clip. Exactly ONE
-                    // --clip: --clip is additive, so a candidate LIST would keep
-                    // multiple competing idle loops on heroes carrying more than
-                    // one (verified abrams: 2 anims w/ a list vs 1 w/ one clip).
+                    // --clip: --clip is additive, so a list would keep multiple
+                    // competing loops on heroes carrying more than one.
                     '--clip',
-                    RIGGED_IDLE_CLIP,
+                    clip.name,
                     '--out',
                     out,
                 ]);
@@ -696,9 +880,134 @@ async function runRiggedHeroExportForSources(
                 lastError = err;
             }
         }
+        if (listedAny && !foundUsableClip) {
+            return { hasModel: false, mtimeMs: null, key };
+        }
         throw lastError instanceof Error
             ? lastError
             : new Error(`Failed to export rigged model for "${heroName}".`);
+    } finally {
+        if (source.tempDir) {
+            await fs.rm(source.tempDir, { recursive: true, force: true });
+        }
+    }
+}
+
+export interface HeroEffectInfo {
+    hasEffect: boolean;
+    /** Storage key (vanilla pose key: ambient FX is skin-independent). */
+    key: string;
+    /** The `.vpcf_c` entry the descriptor was built from, for diagnostics. */
+    entry: string | null;
+}
+
+/** Ambient FX is skin-independent (it comes from the base pak), so one bundle per
+ *  hero serves every skin: key it to the vanilla pose dir. */
+function effectKey(heroName: string): string {
+    return poseKey(heroName, []);
+}
+
+/** Whether a hero's ambient FX bundle (descriptor + textures) is cached and
+ *  current. Mirrors getHeroPoseInfo. */
+export async function getHeroEffectInfo(heroName: string): Promise<HeroEffectInfo> {
+    const entry = AMBIENT_EFFECTS[heroName] ?? null;
+    const key = effectKey(heroName);
+    if (!entry) return { hasEffect: false, key, entry: null };
+    try {
+        await fs.access(effectFile(key));
+        const version = await fs.readFile(effectVersionFile(key), 'utf8').catch(() => '');
+        if (version.trim() !== EFFECT_CACHE_VERSION) return { hasEffect: false, key, entry };
+        return { hasEffect: true, key, entry };
+    } catch {
+        return { hasEffect: false, key, entry };
+    }
+}
+
+const inFlightEffectExports = new Map<string, Promise<HeroEffectInfo>>();
+
+/**
+ * Generate a hero's ambient FX bundle by running the bundled `vpkmerge particle`:
+ * the normalized descriptor (`effect.json`) plus every referenced texture decoded
+ * to PNG (`effect-tex/`), both served over the `grimoire-hero:` scheme. Reads
+ * straight from the base pak (ambient VFX is not skin-specific). No-op result for
+ * a hero without a curated effect.
+ */
+export async function exportHeroEffect(
+    deadlockPath: string,
+    heroName: string
+): Promise<HeroEffectInfo> {
+    const entry = AMBIENT_EFFECTS[heroName];
+    const key = effectKey(heroName);
+    if (!entry) return { hasEffect: false, key, entry: null };
+
+    const existing = inFlightEffectExports.get(key);
+    if (existing) return existing;
+
+    const work = (async (): Promise<HeroEffectInfo> => {
+        const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+        const dir = modelDir(key);
+        await fs.mkdir(dir, { recursive: true });
+        await runVpkmerge([
+            'particle',
+            entry,
+            '--vpk',
+            pak01,
+            '--out',
+            effectFile(key),
+            '--textures-dir',
+            effectTexDir(key),
+        ]);
+        await fs.writeFile(effectVersionFile(key), EFFECT_CACHE_VERSION);
+        return { hasEffect: true, key, entry };
+    })();
+    inFlightEffectExports.set(key, work);
+    try {
+        return await work;
+    } finally {
+        inFlightEffectExports.delete(key);
+    }
+}
+
+/**
+ * The hero's cloth finite-element model (`PHYS.m_pFeModel`) as a parsed object:
+ * the engine's own cloth-sim definition (collision capsules/spheres, nodes,
+ * rods, integrator). The rigged preview's verlet reads it to drive the cloth
+ * bones and, crucially, to stop them clipping through the body. Returned inline
+ * (not cached to disk): it's derived from the same paks as the pose and fetched
+ * once when the rigged model loads. Throws if the model carries no cloth.
+ */
+export async function getHeroClothModel(
+    deadlockPath: string,
+    heroName: string,
+    skinSources?: HeroPoseSkinSource[]
+): Promise<unknown> {
+    const selectors = modelSelectorsForHero(heroName);
+    if (selectors.length === 0) throw new Error(`No known model codename for hero "${heroName}".`);
+
+    const normalized = normalizeSkinSources(skinSources);
+    const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+    const source = await resolvePoseSource(deadlockPath, pak01, normalized);
+    try {
+        let lastError: unknown;
+        for (const selector of selectors) {
+            try {
+                const json = await runVpkmergeStdout([
+                    'model',
+                    'femodel',
+                    '--vpk',
+                    source.vpk,
+                    ...selector,
+                    '--base',
+                    pak01,
+                ]);
+                return JSON.parse(json);
+            } catch (err) {
+                lastError = err;
+            }
+        }
+        throw lastError instanceof Error
+            ? lastError
+            : new Error(`No cloth model for "${heroName}".`);
     } finally {
         if (source.tempDir) {
             await fs.rm(source.tempDir, { recursive: true, force: true });
@@ -721,14 +1030,27 @@ export function registerHeroPoseProtocol(): void {
             const url = new URL(request.url);
             const parts = url.pathname.split('/').filter(Boolean);
             const key = decodeURIComponent(parts[0] ?? '');
-            // The trailing segment names which glb: the static `model.glb`
-            // (default; legacy URLs omit it) or the rigged `model-rigged.glb`.
-            // Allowlist the two known basenames so the key segment can never be
-            // used to escape the entry dir.
+            // The trailing segment(s) name what's served: the static `model.glb`
+            // (default; legacy URLs omit it), the rigged `model-rigged.glb`, the
+            // ambient FX descriptor `effect.json`, or a bundled effect texture
+            // `effect-tex/<name>.png`. Everything is resolved against a fixed
+            // allowlist / strict basename, so the key segment can never escape the
+            // entry dir.
             const requested = parts[1] ?? STATIC_MODEL_FILENAME;
-            const filename =
-                requested === RIGGED_MODEL_FILENAME ? RIGGED_MODEL_FILENAME : STATIC_MODEL_FILENAME;
-            const file = join(modelDir(key), filename);
+            let file: string;
+            if (requested === EFFECT_DESCRIPTOR_FILENAME) {
+                file = effectFile(key);
+            } else if (requested === EFFECT_TEX_DIRNAME) {
+                const png = parts[2] ?? '';
+                if (!/^[A-Za-z0-9_]+\.png$/.test(png)) {
+                    return new Response(null, { status: 404 });
+                }
+                file = join(effectTexDir(key), png);
+            } else if (requested === RIGGED_MODEL_FILENAME) {
+                file = riggedModelFile(key);
+            } else {
+                file = modelFile(key);
+            }
             await fs.access(file);
             // LRU touch for the cache sweep, which uses the newest file mtime
             // in the entry dir as last-used. Touch the tiny static sidecar, not

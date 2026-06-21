@@ -442,7 +442,7 @@ export interface ApplyTrippySkinResult {
  * here so the classifier (main) and the Locker grouping/UI (renderer) agree on
  * the union.
  */
-export type GlobalModType = 'soul-container' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music';
+export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 /** Deadlock ability slot. 1-3 are the signature abilities; 4 is the ultimate. */
@@ -536,6 +536,38 @@ export interface SoulContainerImportInfo {
   status: SoulImportStatus;
 }
 
+/**
+ * Set on a mod imported via the Spirit Urn GLB importer (the carryable Idol/urn
+ * objective, overriding `idol_urn.vmdl_c`). Mirrors SoulContainerImportInfo: it
+ * labels the mod as a local urn import and lets the user reproduce/rebuild the
+ * exact orientation later. Presence also identifies the slot for idempotent
+ * re-import. Distinct from SoulContainerImportInfo because the urn has no
+ * soul-glow particles (no `glow`), is not the spinning orb (no `yaw`/`upright`),
+ * and is sized by an explicit `span` instead of fitting the orb's bounds.
+ */
+export interface UrnImportInfo {
+  /** Original GLB filename (basename), for display. */
+  glbFileName: string;
+  /** Orientation mode chosen in the import UI. */
+  orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
+  /** Extra Euler rotation in degrees [X, Y, Z] applied after orient, if any. */
+  rotate?: [number, number, number];
+  /** Lift the mesh so its base sits at the origin instead of being centered. */
+  ground?: boolean;
+  /** Largest-axis size in Source units the mesh was fit to. */
+  span: number;
+  /** vpkmerge version that built the VPK. */
+  vpkmergeVersion?: string;
+  /** Uniform fit scale applied to match `span`. */
+  fitScale?: number;
+  /** Import's largest-axis span before fitting (Source units). */
+  sourceSpan?: number;
+  /** Target span the mesh was fit to (equals the requested `span`). */
+  targetSpan?: number;
+  /** User-tracked test status. */
+  status: SoulImportStatus;
+}
+
 export interface Mod {
   id: string;
   name: string;
@@ -596,6 +628,10 @@ export interface Mod {
    *  Carries the orientation/glow transform so the build is reproducible and the
    *  UI can label it as a local soul-container import. */
   soulImport?: SoulContainerImportInfo;
+  /** Set when this VPK was built from a user GLB via the Spirit Urn import.
+   *  Carries the orientation/span transform so the build is reproducible and the
+   *  UI can label it as a local urn import. */
+  urnImport?: UrnImportInfo;
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;

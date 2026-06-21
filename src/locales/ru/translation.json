@@ -1,0 +1,102 @@
+{
+  "common": {
+    "view": "Вид",
+    "actions": {
+      "cancel": "Отменить",
+      "clear": "Очистить",
+      "close": "Закрыть",
+      "confirm": "Подтвердить",
+      "copy": "Скопировать",
+      "delete": "Удалить",
+      "dismiss": "ОтменитьГ",
+      "done": "Готово",
+      "apply": "Применить",
+      "refresh": "Перезагрузить",
+      "retry": "Ещё раз",
+      "save": "Сохранить",
+      "collapseDetails": "Свернуть детали",
+      "expandDetails": "Развернуть детали",
+      "tryAgain": "Попробрвать снова"
+    },
+    "errorBoundary": {
+      "title": "Что-то пошло не так",
+      "description": "Произошла ошибка при отрисовке этого компонента. Это не повлияет на другиче части приложения",
+      "tryAgain": "Попробовать снова"
+    },
+    "status": {
+      "copied": "Скопировано"
+    },
+    "versus": "И",
+    "versusLower": "И"
+  },
+  "nav": {
+    "servers": "Сервера",
+    "locker": "Шкафчик",
+    "conflicts": "Конфликты",
+    "settings": "Настройки"
+  },
+  "autoexec": {
+    "commands": {
+      "title_other": "Ваши Команды ({{count}})"
+    },
+    "confirm": {
+      "clearTitle": "Удалить все команды?"
+    },
+    "launchOptions": {
+      "saved": "Сохранено! Изменения будут применены при следуущем запуске Deadlock через Grimoire.",
+      "steamConfigMissing": "Steam не найден. Запустите Deadlock через Steam, затем вернитесь."
+    },
+    "presets": {
+      "performance": {
+        "uncapFps": {
+          "description": "Убрать ограничение кадров в секунду (FPS)"
+        },
+        "lowLatencyNvidia": {
+          "name": "Низкая задержка (Nvidia)",
+          "description": "Включает низкую задержку \"Nvidia Reflex\""
+        }
+      },
+      "hud": {
+        "newHealthBars": {
+          "name": "Новый индикатор здоровья",
+          "description": "Включает новый стиль для индикатора здоровья"
+        },
+        "hideHud": {
+          "name": "Скрыть интерфейс"
+        }
+      },
+      "minimap": {
+        "category": "Миникарта",
+        "fasterMinimap": {
+          "name": "Быстрая миникарта",
+          "description": "Позволяет обновлять миникарту в 60Hz"
+        },
+        "largerClickRadius": {
+          "name": "Шире радиус клика",
+          "description": "Позволяет легче кликать на объекты на миникарте"
+        },
+        "largerPlayerIcons": {
+          "name": "Большие иконки игроков",
+          "description": "Делает иконки персонажей на миникарте шире"
+        },
+        "thickerZiplines": {
+          "name": "Толстые зиплайны",
+          "description": "Делает зиплайны более заметными"
+        }
+      }
+    }
+  },
+  "locker": {
+    "soulImport": {
+      "orient": {
+        "label": "Позицанирование"
+      },
+      "glow": {
+        "label": "Свечение контейнера",
+        "recolor": "Изменить цвет",
+        "base": "По умолчанию(золотой)",
+        "off": "Отключить"
+      }
+    }
+  }
+}

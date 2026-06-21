@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X, AlertTriangle, Loader2, CheckCircle2, Globe } from 'lucide-react';
 import { Button } from '../common/ui';
+import { Input, Textarea, FormField } from '../common/forms';
 import { Modal } from '../common/Modal';
 import {
   exportPortableProfile,
@@ -142,7 +143,7 @@ export default function PublishDialog({
           ) : (
             <>
               {exportError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{t('social.publish.couldNotBuildShareCode', { error: exportError })}</span>
                 </div>
@@ -173,47 +174,45 @@ export default function PublishDialog({
               )}
 
               {noShareableMods && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{t('social.publish.noGamebananaMods')}</span>
                 </div>
               )}
 
               <div>
-                <label htmlFor="publish-title" className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5">
-                  {t('social.publish.title')}
-                </label>
-                <input
-                  id="publish-title"
-                  type="text"
-                  value={title}
-                  onChange={(e) => setTitle(e.target.value)}
-                  maxLength={80}
-                  placeholder={t('social.publish.titlePlaceholder')}
-                  className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent"
-                />
-                <div className="text-[11px] text-text-secondary mt-1 flex justify-between">
-                  <span>{titleTooLong ? t('social.publish.max80Characters') : ' '}</span>
-                  <span className={titleTooLong ? 'text-red-400' : ''}>{trimmedTitle.length}/80</span>
+                <FormField
+                  label={t('social.publish.title')}
+                  error={titleTooLong ? t('social.publish.max80Characters') : undefined}
+                >
+                  <Input
+                    value={title}
+                    onChange={(e) => setTitle(e.target.value)}
+                    maxLength={80}
+                    placeholder={t('social.publish.titlePlaceholder')}
+                  />
+                </FormField>
+                <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
+                  <span className={titleTooLong ? 'text-state-danger' : ''}>{trimmedTitle.length}/80</span>
                 </div>
               </div>
 
               <div>
-                <label htmlFor="publish-description" className="block text-xs font-medium text-text-secondary uppercase tracking-wider mb-1.5">
-                  {t('social.publish.descriptionOptional')}
-                </label>
-                <textarea
-                  id="publish-description"
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
-                  maxLength={1000}
-                  rows={4}
-                  placeholder={t('social.publish.descriptionPlaceholder')}
-                  className="w-full px-3 py-2 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-none"
-                />
-                <div className="text-[11px] text-text-secondary mt-1 flex justify-between">
-                  <span>{descriptionTooLong ? t('social.publish.max1000Characters') : ' '}</span>
-                  <span className={descriptionTooLong ? 'text-red-400' : ''}>{trimmedDescription.length}/1000</span>
+                <FormField
+                  label={t('social.publish.descriptionOptional')}
+                  error={descriptionTooLong ? t('social.publish.max1000Characters') : undefined}
+                >
+                  <Textarea
+                    value={description}
+                    onChange={(e) => setDescription(e.target.value)}
+                    maxLength={1000}
+                    rows={4}
+                    placeholder={t('social.publish.descriptionPlaceholder')}
+                    className="resize-none"
+                  />
+                </FormField>
+                <div className="text-[11px] text-text-secondary mt-1 flex justify-end">
+                  <span className={descriptionTooLong ? 'text-state-danger' : ''}>{trimmedDescription.length}/1000</span>
                 </div>
               </div>
 
@@ -239,7 +238,7 @@ export default function PublishDialog({
               )}
 
               {submitError && (
-                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+                <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
                   <span>{submitError}</span>
                 </div>

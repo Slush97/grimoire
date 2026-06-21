@@ -46,7 +46,7 @@ import type {
     GameBananaCommentsResponse,
     GameBananaArtistLink,
 } from './gamebanana';
-import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource } from './portrait';
+import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource, HeroEffectInfo } from './portrait';
 import type {
     DeadworksServer,
     DeadworksContentItem,
@@ -198,6 +198,50 @@ export interface SoulContainerPreview {
     /** Import's largest-axis span before fitting (Source units). */
     sourceSpan?: number;
     /** Vanilla soul-container span the mesh was fit to (~12.65). */
+    targetSpan?: number;
+}
+
+export interface ImportSpiritUrnGlbArgs {
+    /** Path to the source `.glb` on disk. */
+    glbPath: string;
+    name: string;
+    orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
+    /** Extra Euler degrees [X, Y, Z] applied after orient. */
+    rotate?: [number, number, number];
+    /** Lift the mesh so its base sits at the origin instead of being centered. */
+    ground?: boolean;
+    /** Largest-axis size in Source units to fit the import to. */
+    span: number;
+    /** User-tracked test status; defaults to 'untested'. */
+    status?: SoulImportStatus;
+    /** Free-text label shown as the variant sublabel in Installed. */
+    notes?: string;
+    nsfw?: boolean;
+    /** Captured 3D preview as a data URL, used as the Installed thumbnail. */
+    thumbnailDataUrl?: string;
+    /** metaKey of an existing urn import to REPLACE in place (reuse its slot)
+     *  instead of allocating a new one. Avoids stacking two enabled urns. */
+    replaceMetaKey?: string;
+}
+
+export interface PreviewSpiritUrnGlbArgs {
+    glbPath: string;
+    orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
+    rotate?: [number, number, number];
+    ground?: boolean;
+    span: number;
+}
+
+export interface SpiritUrnPreview {
+    /** The built model exported back to a GLB, base64-encoded. */
+    glbBase64: string;
+    /** Resolved orientation label from the build (e.g. `y-up`, `auto:z-up`). */
+    orient: string;
+    /** Uniform fit scale applied to match the requested span. */
+    fitScale?: number;
+    /** Import's largest-axis span before fitting (Source units). */
+    sourceSpan?: number;
+    /** Span the mesh was fit to (equals the requested span). */
     targetSpan?: number;
 }
 
@@ -510,7 +554,9 @@ export interface ElectronAPI {
         heroName: string
     ) => Promise<{ variant: string; dataUrl: string }[]>;
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
-    exportSoulModel: (metaKey: string, cacheKey: string) => Promise<SoulModelInfo>;
+    /** `entry` selects which model entry to export (soul container vs urn);
+     *  defaults to the soul-container model when omitted. */
+    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) => Promise<SoulModelInfo>;
     getHeroPoseInfo: (
         heroName: string,
         skinSources?: HeroPoseSkinSource[]
@@ -529,6 +575,12 @@ export interface ElectronAPI {
         skinSources?: HeroPoseSkinSource[],
         fallbackSkinMetaKey?: string
     ) => Promise<HeroPoseInfo>;
+    getHeroClothModel: (
+        heroName: string,
+        skinSources?: HeroPoseSkinSource[]
+    ) => Promise<unknown>;
+    getHeroEffectInfo: (heroName: string) => Promise<HeroEffectInfo>;
+    exportHeroEffect: (heroName: string) => Promise<HeroEffectInfo>;
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
     applyHeroSound: (
@@ -588,6 +640,8 @@ export interface ElectronAPI {
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     importSoulContainerGlb: (args: ImportSoulContainerGlbArgs) => Promise<Mod[]>;
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) => Promise<SoulContainerPreview>;
+    importSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) => Promise<Mod[]>;
+    previewSpiritUrnGlb: (args: PreviewSpiritUrnGlbArgs) => Promise<SpiritUrnPreview>;
     readGlbFile: (glbPath: string) => Promise<string>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
     /** Read a bundled renderer asset (built-in art, hero render) as a data URL.
@@ -923,6 +977,7 @@ export interface ElectronAPI {
         getLocalMMRHistory: (accountId: number, limit?: number) => Promise<unknown[]>;
         getLocalMatchHistory: (accountId: number, limit?: number, offset?: number) => Promise<unknown[]>;
         getLocalMatchCount: (accountId: number) => Promise<number>;
+        recordMatches: (accountId: number, matches: unknown[]) => Promise<void>;
         getLocalHeroStats: (accountId: number, heroId?: number) => Promise<unknown[]>;
         getAggregatedStats: (accountId: number) => Promise<unknown | null>;
 

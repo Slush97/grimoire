@@ -57,3 +57,8 @@ docs/screenshots/locker-3d-ladygeist.png
 docs/screenshots/locker-cards.png
 docs/screenshots/locker-skins.png
 docs/screenshots/mod-details.png
+
+# vpkmerge / Rust build output
+target/
+# Cloth solver visual testbed (generated)
+.cloth-testbed/
