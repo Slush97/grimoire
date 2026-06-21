@@ -60,6 +60,13 @@ app.commandLine.appendSwitch(
     'HardwareMediaKeyHandling,MediaSessionService'
 );
 
+// Dev only: expose the Chrome DevTools Protocol so test/automation tooling
+// (scripts/pw-drive.mjs, Playwright connectOverCDP) can attach to the running
+// renderer. Never enabled in packaged builds. Port matches scripts/pw-drive.mjs.
+if (is.dev) {
+    app.commandLine.appendSwitch('remote-debugging-port', '9222');
+}
+
 // Import IPC handlers
 import './ipc/settings';
 import './ipc/mods';
