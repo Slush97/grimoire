@@ -113,10 +113,10 @@ ipcMain.handle(
 
 ipcMain.handle(
     'export-soul-model',
-    async (_, metaKey: string, cacheKey: string): Promise<SoulModelInfo> => {
+    async (_, metaKey: string, cacheKey: string, entry?: string): Promise<SoulModelInfo> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return exportSoulModel(deadlockPath, metaKey, cacheKey);
+        return exportSoulModel(deadlockPath, metaKey, cacheKey, entry);
     }
 );
 

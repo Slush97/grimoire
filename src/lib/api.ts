@@ -191,8 +191,8 @@ export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
  *  SOURCE VPK is located by `metaKey` (folder-qualified for overflow mods); the
  *  cache is keyed by `cacheKey` (the mod's content-stable sha256) so an
  *  enable/disable rename can't serve a different soul's stale export. */
-export async function exportSoulModel(metaKey: string, cacheKey: string): Promise<SoulModelInfo> {
-  return window.electronAPI.exportSoulModel(metaKey, cacheKey);
+export async function exportSoulModel(metaKey: string, cacheKey: string, entry?: string): Promise<SoulModelInfo> {
+  return window.electronAPI.exportSoulModel(metaKey, cacheKey, entry);
 }
 
 /** Whether a hero's posed 3D still exists for the given active skin stack (+ mtime, key). */
@@ -407,6 +407,27 @@ export async function previewSoulContainerGlb(
   args: import('../types/electron').PreviewSoulContainerGlbArgs
 ): Promise<{ glb: ArrayBuffer; orient: string; fitScale?: number; sourceSpan?: number; targetSpan?: number }> {
   const res = await window.electronAPI.previewSoulContainerGlb(args);
+  const binary = atob(res.glbBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { glb: bytes.buffer, orient: res.orient, fitScale: res.fitScale, sourceSpan: res.sourceSpan, targetSpan: res.targetSpan };
+}
+
+/** Build a Spirit Urn override VPK from a user GLB and install it as a tracked
+ *  local mod. Returns the full enriched mod list after install. */
+export async function importSpiritUrnGlb(
+  args: import('../types/electron').ImportSpiritUrnGlbArgs
+): Promise<Mod[]> {
+  return window.electronAPI.importSpiritUrnGlb(args);
+}
+
+/** Build the urn for the given orientation/span and export its model to a GLB
+ *  for the import preview. Returns the GLB as an ArrayBuffer + the resolved
+ *  orientation label and fitted bounds. */
+export async function previewSpiritUrnGlb(
+  args: import('../types/electron').PreviewSpiritUrnGlbArgs
+): Promise<{ glb: ArrayBuffer; orient: string; fitScale?: number; sourceSpan?: number; targetSpan?: number }> {
+  const res = await window.electronAPI.previewSpiritUrnGlb(args);
   const binary = atob(res.glbBase64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);

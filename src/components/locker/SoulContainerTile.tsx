@@ -29,6 +29,7 @@ import { useSoulRegistry } from './soulRegistry';
 export default function SoulContainerTile({
   tileId,
   modKey,
+  entry,
 }: {
   /** Content-stable id (sha256) used as the registry key, so the model survives
    *  the metaKey change that a toggle causes. */
@@ -37,6 +38,9 @@ export default function SoulContainerTile({
    *  Changes when the mod is enabled/disabled (the VPK is renamed); the export
    *  CACHE is keyed by the content-stable tileId instead, not this. */
   modKey: string;
+  /** Model entry to export. Defaults to the soul-container model; a spirit urn
+   *  passes its own entry (`idol_urn.vmdl_c`) so the tile shows the urn model. */
+  entry?: string;
 }) {
   const registry = useSoulRegistry();
   const trackRef = useRef<HTMLDivElement>(null);
@@ -66,7 +70,7 @@ export default function SoulContainerTile({
           // Spinner only when there's nothing to show yet; on a reload (toggle)
           // the existing model keeps rendering instead.
           if (!rootRef.current) setGenerating(true);
-          info = await exportSoulModel(modKey, tileId);
+          info = await exportSoulModel(modKey, tileId, entry);
           if (cancelled) return;
           setGenerating(false);
         }
@@ -100,7 +104,7 @@ export default function SoulContainerTile({
     return () => {
       cancelled = true;
     };
-  }, [tileId, modKey, registry]);
+  }, [tileId, modKey, entry, registry]);
 
   // Unregister and free the model only on true unmount (tileId is stable, so
   // this does not run on a toggle).

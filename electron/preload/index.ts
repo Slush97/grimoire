@@ -38,6 +38,8 @@ import type {
     ImportCustomModArgs,
     ImportSoulContainerGlbArgs,
     PreviewSoulContainerGlbArgs,
+    ImportSpiritUrnGlbArgs,
+    PreviewSpiritUrnGlbArgs,
     SearchLocalModsOptions,
     CrosshairSettings,
     VanillaRestoreResult,
@@ -142,8 +144,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-applied-custom-card', heroName),
     getSoulModelInfo: (key: string) =>
         ipcRenderer.invoke('get-soul-model-info', key),
-    exportSoulModel: (metaKey: string, cacheKey: string) =>
-        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey),
+    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) =>
+        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey, entry),
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
     exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
@@ -225,6 +227,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('import-soul-container-glb', args),
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) =>
         ipcRenderer.invoke('preview-soul-container-glb', args),
+    importSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) =>
+        ipcRenderer.invoke('import-spirit-urn-glb', args),
+    previewSpiritUrnGlb: (args: PreviewSpiritUrnGlbArgs) =>
+        ipcRenderer.invoke('preview-spirit-urn-glb', args),
     readGlbFile: (glbPath: string) =>
         ipcRenderer.invoke('read-glb-file', glbPath),
     readImageDataUrl: (imagePath: string) =>

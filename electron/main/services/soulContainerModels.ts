@@ -43,6 +43,13 @@ const SOUL_CACHE_VERSION = '2';
  */
 export const SOUL_CONTAINER_ENTRY = 'models/props_gameplay/soul_container/soul_container.vmdl_c';
 
+/**
+ * Canonical Idol/urn model entry. A Spirit Urn import overrides this slot (its
+ * VPK packs the cloned model here), so the Locker tile exports THIS entry for an
+ * urn mod instead of the soul-container entry. See exportSoulModel's `entry` arg.
+ */
+export const URN_CONTAINER_ENTRY = 'models/props_gameplay/idol_urn/idol_urn.vmdl_c';
+
 function sanitize(value: string): string {
     return value.replace(/[^a-zA-Z0-9_-]+/g, '_');
 }
@@ -195,11 +202,12 @@ export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
 export async function exportSoulModel(
     deadlockPath: string,
     metaKey: string,
-    cacheKey: string
+    cacheKey: string,
+    entry: string = SOUL_CONTAINER_ENTRY
 ): Promise<SoulModelInfo> {
     const vpk = await resolveModVpk(deadlockPath, metaKey);
     if (!vpk) {
-        throw new Error(`Soul-container VPK not found: ${metaKey}`);
+        throw new Error(`Prop-container VPK not found: ${metaKey}`);
     }
     const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
 
@@ -213,7 +221,7 @@ export async function exportSoulModel(
         '--vpk',
         vpk,
         '--entry',
-        SOUL_CONTAINER_ENTRY,
+        entry,
         '--base',
         pak01,
         '--out',

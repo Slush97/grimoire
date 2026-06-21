@@ -444,6 +444,7 @@ export function countLockerSkins(mods: Mod[]): number {
  */
 export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   'soul-container': 'Soul Containers',
+  'spirit-urn': 'Spirit Urns',
   hideout: 'Hideout',
   icons: 'Icon Packs',
   hud: 'HUD',
@@ -454,12 +455,28 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
 /** Carousel/section order for the global types. */
 export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'soul-container',
+  'spirit-urn',
   'hideout',
   'icons',
   'hud',
   'announcer',
   'killstreak-music',
 ];
+
+/**
+ * Global types that are a single imported static prop shown with a live 3D
+ * preview and treated as single-select (one in-game slot, so enabling one
+ * disables the others of the same type). Soul containers and spirit urns both
+ * override one prop model and share the GLB-import + 3D-tile treatment. Centralized
+ * so the Locker UI branches (single-select toggle, 3D tile, content-stable key,
+ * frosted glass, active badge) stay in sync across both types.
+ */
+export const PROP_CONTAINER_GLOBAL_TYPES: readonly GlobalModType[] = ['soul-container', 'spirit-urn'];
+
+/** Whether a global type is an imported-prop container (soul container or urn). */
+export function isPropContainerType(type: GlobalModType | undefined | null): boolean {
+  return type === 'soul-container' || type === 'spirit-urn';
+}
 
 export type GlobalModGroups = Record<GlobalModType, Mod[]>;
 
@@ -476,6 +493,7 @@ export type GlobalModGroups = Record<GlobalModType, Mod[]>;
 export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
   const groups: GlobalModGroups = {
     'soul-container': [],
+    'spirit-urn': [],
     hideout: [],
     icons: [],
     hud: [],
@@ -489,7 +507,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     }
   }
   for (const type of GLOBAL_MOD_TYPE_ORDER) {
-    if (type === 'soul-container') {
+    if (isPropContainerType(type)) {
       groups[type].sort((a, b) => a.name.localeCompare(b.name) || a.priority - b.priority);
     } else {
       groups[type].sort((a, b) => {
