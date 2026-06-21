@@ -5,6 +5,8 @@ interface TextureCardProps {
   item: TextureGridItem;
   /** Resolved hero display name for item.hero, when the codename maps to one. */
   heroName?: string;
+  /** Open the enlarge-on-click lightbox for this asset. */
+  onOpen?: () => void;
 }
 
 /**
@@ -12,11 +14,14 @@ interface TextureCardProps {
  * over the grimoire-foundry: scheme), the filename-derived label, and the hero
  * display name when the path encodes one. `content-visibility:auto` keeps a long
  * grid cheap to lay out (the same trick used on the Installed/Browse grids).
+ * Clicking the tile enlarges it (decoded at full size on demand).
  */
-export default function TextureCard({ item, heroName }: TextureCardProps) {
+export default function TextureCard({ item, heroName, onOpen }: TextureCardProps) {
   return (
-    <div
-      className="group flex flex-col overflow-hidden rounded-sm border border-border bg-bg-secondary"
+    <button
+      type="button"
+      onClick={onOpen}
+      className="group flex flex-col overflow-hidden rounded-sm border border-border bg-bg-secondary text-left transition-colors hover:border-accent/50 focus-visible:border-accent/50 focus-visible:outline-none"
       style={{ contentVisibility: 'auto', containIntrinsicSize: '160px 180px' }}
       title={item.path}
     >
@@ -39,6 +44,6 @@ export default function TextureCard({ item, heroName }: TextureCardProps) {
         </span>
         {heroName && <span className="truncate text-[11px] text-text-secondary">{heroName}</span>}
       </div>
-    </div>
+    </button>
   );
 }

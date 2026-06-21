@@ -9,7 +9,10 @@ import { getActiveDeadlockPath } from '../services/settings';
 import {
     getHeroRoster,
     getTextures,
+    getVoicelines,
     ensureCategoryThumbnails,
+    ensureFullImage,
+    ensureVoiceclip,
     warmCache,
 } from '../services/foundryCatalog';
 import type {
@@ -18,6 +21,8 @@ import type {
     TextureEntry,
     TextureFilters,
     TextureGridItem,
+    VoiceLine,
+    VoicelineFilters,
 } from '../../../src/types/foundry';
 
 function requireDeadlockPath(): string {
@@ -43,6 +48,27 @@ ipcMain.handle(
     'foundry:ensureThumbnails',
     async (_e, category: TextureCategory): Promise<TextureGridItem[]> => {
         return ensureCategoryThumbnails(requireDeadlockPath(), category);
+    }
+);
+
+ipcMain.handle(
+    'foundry:voicelines',
+    async (_e, filters: VoicelineFilters = {}): Promise<VoiceLine[]> => {
+        return getVoicelines(requireDeadlockPath(), filters);
+    }
+);
+
+ipcMain.handle(
+    'foundry:fullImage',
+    async (_e, category: TextureCategory, entryPath: string): Promise<string | null> => {
+        return ensureFullImage(requireDeadlockPath(), category, entryPath);
+    }
+);
+
+ipcMain.handle(
+    'foundry:voiceclip',
+    async (_e, vsndPath: string): Promise<string | null> => {
+        return ensureVoiceclip(requireDeadlockPath(), vsndPath);
     }
 );
 

@@ -58,6 +58,27 @@ export interface TextureGridItem extends TextureEntry {
     sourceHeight?: number;
 }
 
+/** One VO sound event from `catalog voiceline --json`. `label` is the event name
+ *  turned to prose (the search key); `vsnd` lists the clip path(s) (>1 == a
+ *  randomizer pool); `event` is the verbatim soundevents swap target. Deadlock
+ *  ships no English subtitles for hero VO, so `caption` is almost always null. */
+export interface VoiceLine {
+    event: string;
+    hero: string | null;
+    label: string;
+    vsnd: string[];
+    duration: number;
+    caption: string | null;
+}
+
+/** Filters accepted by `getVoicelines`; all optional and AND-combined by the CLI.
+ *  The VO corpus is ~76K events, so the Sound tab always scopes by `hero`. */
+export interface VoicelineFilters {
+    hero?: string;
+    search?: string;
+    limit?: number;
+}
+
 /** One record in the thumbnail batch's `manifest.json` (path -> PNG file + dims). */
 export interface ThumbManifestEntry {
     entry: string;

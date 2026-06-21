@@ -339,7 +339,12 @@ if (!gotTheLock) {
                             // thumbnails, rendered as <img>, so they must be allowed
                             // here or the browse grid is blank under the prod CSP.
                             "img-src 'self' data: https: blob: grimoire-foundry:; " +
-                            "media-src 'self' https:; " +
+                            // Foundry voice-line auditions are served as `data:audio/mpeg`
+                            // URLs into an <audio> element (the clip MP3 is sliced out of
+                            // the `.vsnd_c` in the main process), so `data:` must be allowed
+                            // here or audition is blocked under the prod CSP (works in dev,
+                            // which has no CSP).
+                            "media-src 'self' https: data:; " +
                             // Social fetches happen from the main process (fetch in Node),
                             // not the renderer, so they bypass CSP. The `https://*.workers.dev`
                             // entry is here so any future renderer-side asset (e.g. avatar URL

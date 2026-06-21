@@ -87,6 +87,23 @@
         "title": "Set your Deadlock path",
         "description": "Foundry reads the asset catalog from your installed game. Set the Deadlock path in Settings to get started."
       }
+    },
+    "lightbox": {
+      "unnamed": "(unnamed)",
+      "decoding": "Decoding full size...",
+      "nativeSize": "Native size"
+    },
+    "sound": {
+      "searchPlaceholder": "Search voice lines...",
+      "muteToggle": "Mute / unmute auditions",
+      "loading": "Reading voice lines from your game files...",
+      "play": "Audition",
+      "count": "{{shown}} of {{total}} voice lines",
+      "capped": "Showing the first {{cap}}. Refine your search to see more.",
+      "empty": {
+        "title": "No voice lines",
+        "description": "This speaker has no voice lines matching your search."
+      }
     }
   },
   "autoexec": {

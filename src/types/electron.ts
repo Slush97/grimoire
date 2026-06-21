@@ -869,9 +869,17 @@ export interface ElectronAPI {
         textures: (
             filters?: import('./foundry').TextureFilters
         ) => Promise<import('./foundry').TextureEntry[]>;
+        voicelines: (
+            filters?: import('./foundry').VoicelineFilters
+        ) => Promise<import('./foundry').VoiceLine[]>;
         ensureThumbnails: (
             category: import('./foundry').TextureCategory
         ) => Promise<import('./foundry').TextureGridItem[]>;
+        fullImage: (
+            category: import('./foundry').TextureCategory,
+            entryPath: string
+        ) => Promise<string | null>;
+        voiceclip: (vsndPath: string) => Promise<string | null>;
         warmCache: () => Promise<void>;
     };
 

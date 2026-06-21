@@ -5,7 +5,7 @@ import type {
 } from '../../src/types/portableProfile';
 import type { SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
-import type { TextureCategory, TextureFilters } from '../../src/types/foundry';
+import type { TextureCategory, TextureFilters, VoicelineFilters } from '../../src/types/foundry';
 import type {
     AbilitySlot,
     AbilitySoundParams,
@@ -531,8 +531,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
         heroes: () => ipcRenderer.invoke('foundry:heroes'),
         textures: (filters?: TextureFilters) =>
             ipcRenderer.invoke('foundry:textures', filters ?? {}),
+        voicelines: (filters?: VoicelineFilters) =>
+            ipcRenderer.invoke('foundry:voicelines', filters ?? {}),
         ensureThumbnails: (category: TextureCategory) =>
             ipcRenderer.invoke('foundry:ensureThumbnails', category),
+        fullImage: (category: TextureCategory, entryPath: string) =>
+            ipcRenderer.invoke('foundry:fullImage', category, entryPath),
+        voiceclip: (vsndPath: string) => ipcRenderer.invoke('foundry:voiceclip', vsndPath),
         warmCache: () => ipcRenderer.invoke('foundry:warmCache'),
     },
 

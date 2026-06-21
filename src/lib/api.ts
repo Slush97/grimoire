@@ -1097,6 +1097,23 @@ export async function foundryThumbnails(
   return window.electronAPI.foundry.ensureThumbnails(category);
 }
 
+export async function foundryVoicelines(
+  filters?: import('../types/foundry').VoicelineFilters
+): Promise<import('../types/foundry').VoiceLine[]> {
+  return window.electronAPI.foundry.voicelines(filters);
+}
+
+export async function foundryFullImage(
+  category: import('../types/foundry').TextureCategory,
+  entryPath: string
+): Promise<string | null> {
+  return window.electronAPI.foundry.fullImage(category, entryPath);
+}
+
+export async function foundryVoiceclip(vsndPath: string): Promise<string | null> {
+  return window.electronAPI.foundry.voiceclip(vsndPath);
+}
+
 export async function foundryWarmCache(): Promise<void> {
   return window.electronAPI.foundry.warmCache();
 }

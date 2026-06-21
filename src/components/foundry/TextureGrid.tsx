@@ -9,6 +9,8 @@ interface TextureGridProps {
   /** Client-side label/path filter applied on top of the catalog's results. */
   search: string;
   heroFilter: string;
+  /** Open the lightbox for an asset (enlarge-on-click). */
+  onOpen: (item: TextureGridItem) => void;
 }
 
 /**
@@ -17,7 +19,7 @@ interface TextureGridProps {
  * narrowing happen client-side here so typing is instant and does not re-spawn
  * the sidecar.
  */
-export default function TextureGrid({ items, heroNames, search, heroFilter }: TextureGridProps) {
+export default function TextureGrid({ items, heroNames, search, heroFilter, onOpen }: TextureGridProps) {
   const visible = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items.filter((it) => {
@@ -34,6 +36,7 @@ export default function TextureGrid({ items, heroNames, search, heroFilter }: Te
           key={it.path}
           item={it}
           heroName={it.hero ? heroNames.get(it.hero) : undefined}
+          onOpen={() => onOpen(it)}
         />
       ))}
     </div>
