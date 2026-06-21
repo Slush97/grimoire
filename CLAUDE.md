@@ -98,6 +98,7 @@ Design docs and references live in `docs/`:
 - `social-architecture.md` + `social-architecture-decisions.md` - Architecture and ADRs for the planned `grimoire-social` companion service (see below)
 - `ability-vfx-recolor.md` - Hero ability VFX layer extraction + in app recoloring. Read before touching `detectVfxLayer`/`extractVfxLayer` (in `vpk.ts`/`modMerger.ts`) or building the recolor/Locker surface. Covers why particle recolor must use an in place scalar patch, not a KV3 re-encode.
 - `deadworks-servers.md` - The Deadworks server browser: relay data flow, content provisioning, and (critically) how the deadworks content path is woven into grimoire's canonical `gameinfo.gi` block so Fix Configuration never erases it. Read before touching `deadworksServers.ts`, `ipc/servers.ts`, or the gameinfo handling in `system.ts`/`deadlock.ts`.
+- `3d-preview-automation.md` - How to launch and drive the running app (and the Locker's 3D hero preview) for automation/inspection. Read this before trying to script the UI: use `scripts/pw-drive.mjs` (Playwright over CDP on dev port 9222), NOT the electron MCP server (its draft-04 schemas 400 every API call once loaded). Covers the preview route, the `grimoire.preview.*` fidelity flags, and `docs/preview-baselines/`. The roadmap/status for the preview itself is in `3d-preview-fidelity-plan.md`.
 
 ## Companion Service: grimoire-social
 
