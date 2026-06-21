@@ -512,9 +512,43 @@ export async function allocateEnabledVpkPath(deadlockPath: string): Promise<stri
 }
 
 /**
+ * Serialize every mod-folder mutation (enable / disable / delete / reorder /
+ * priority) through one in-process queue.
+ *
+ * Each mutation scans the addons + .disabled folders, picks a free pakNN slot,
+ * and renames files. Running two at once (rapid Locker/Installed toggling) raced
+ * on slot allocation: both `scanMods` saw the same free slot, both `allocateSlot`
+ * returned it, and the second `fs.rename` clobbered the first, so a mod the UI
+ * still showed enabled had no VPK in addons (#bugs: toggling "disabled a lot of
+ * them without replacing them with the mods i turned on"; "addons folder does not
+ * reflect what is shown"). Also, a mod's id is derived from its filename, which a
+ * move changes, so concurrent ops worked off stale ids. The queue makes each op
+ * observe a consistent folder state and allocate non-colliding slots.
+ *
+ * Non-reentrant: a locked function must NOT call another locked one (it would
+ * wait on a queue slot it already holds). The one internal cross-call,
+ * swapModPriority -> reorder, goes through the unlocked reorderModsImpl.
+ */
+let modMutationQueue: Promise<unknown> = Promise.resolve();
+function withModMutationLock<T>(fn: () => Promise<T>): Promise<T> {
+    const run = modMutationQueue.then(fn, fn);
+    // Keep the chain alive regardless of this op's outcome, so one rejection
+    // doesn't poison every operation queued behind it.
+    modMutationQueue = run.then(
+        () => undefined,
+        () => undefined
+    );
+    return run;
+}
+
+/**
  * Enable a mod by moving it from disabled to addons folder (async)
  */
-export async function enableMod(deadlockPath: string, modId: string): Promise<Mod> {
+export function enableMod(deadlockPath: string, modId: string): Promise<Mod> {
+    return withModMutationLock(() => enableModImpl(deadlockPath, modId));
+}
+
+async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
     const targetMod = mods.find((m) => m.id === modId);
 
@@ -551,7 +585,11 @@ export async function enableMod(deadlockPath: string, modId: string): Promise<Mo
 /**
  * Disable a mod by moving it to the disabled folder (async)
  */
-export async function disableMod(deadlockPath: string, modId: string): Promise<Mod> {
+export function disableMod(deadlockPath: string, modId: string): Promise<Mod> {
+    return withModMutationLock(() => disableModImpl(deadlockPath, modId));
+}
+
+async function disableModImpl(deadlockPath: string, modId: string): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
     const targetMod = mods.find((m) => m.id === modId);
 
@@ -583,7 +621,11 @@ export async function disableMod(deadlockPath: string, modId: string): Promise<M
 /**
  * Delete a mod completely (async)
  */
-export async function deleteMod(deadlockPath: string, modId: string): Promise<void> {
+export function deleteMod(deadlockPath: string, modId: string): Promise<void> {
+    return withModMutationLock(() => deleteModImpl(deadlockPath, modId));
+}
+
+async function deleteModImpl(deadlockPath: string, modId: string): Promise<void> {
     const mods = await scanMods(deadlockPath);
     const targetMod = mods.find((m) => m.id === modId);
 
@@ -611,7 +653,15 @@ function renameWithPriority(fileName: string, priority: number): string {
  * Set the priority of a mod by renaming its VPK file (async).
  * Also migrates metadata to the new filename.
  */
-export async function setModPriority(
+export function setModPriority(
+    deadlockPath: string,
+    modId: string,
+    newPriority: number
+): Promise<Mod> {
+    return withModMutationLock(() => setModPriorityImpl(deadlockPath, modId, newPriority));
+}
+
+async function setModPriorityImpl(
     deadlockPath: string,
     modId: string,
     newPriority: number
@@ -682,10 +732,13 @@ export async function setModPriority(
  * two-phase rename (source -> temp in the target folder -> final) keeps
  * cross-folder moves and slot swaps collision-free; metadata migrates with each.
  */
-export async function reorderMods(
-    deadlockPath: string,
-    orderedIds: string[]
-): Promise<void> {
+export function reorderMods(deadlockPath: string, orderedIds: string[]): Promise<void> {
+    return withModMutationLock(() => reorderModsImpl(deadlockPath, orderedIds));
+}
+
+// Unlocked: callers that already hold the mutation queue (swapModPriority) call
+// this directly; the exported reorderMods wraps it in the lock.
+async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Promise<void> {
     const allMods = await scanMods(deadlockPath);
     const modById = new Map(allMods.map((m) => [m.id, m]));
 
@@ -810,7 +863,15 @@ export async function reorderMods(
 /**
  * Swap the priorities of two mods (async).
  */
-export async function swapModPriority(
+export function swapModPriority(
+    deadlockPath: string,
+    modIdA: string,
+    modIdB: string
+): Promise<void> {
+    return withModMutationLock(() => swapModPriorityImpl(deadlockPath, modIdA, modIdB));
+}
+
+async function swapModPriorityImpl(
     deadlockPath: string,
     modIdA: string,
     modIdB: string
@@ -842,7 +903,8 @@ export async function swapModPriority(
 
     const orderedIds = enabled.map((m) => m.id);
     [orderedIds[aIdx], orderedIds[bIdx]] = [orderedIds[bIdx], orderedIds[aIdx]];
-    await reorderMods(deadlockPath, orderedIds);
+    // reorderModsImpl (unlocked): we already hold the mutation queue here.
+    await reorderModsImpl(deadlockPath, orderedIds);
 }
 
 /**

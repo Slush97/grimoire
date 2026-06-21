@@ -23,6 +23,7 @@
  * (see registerHeroPoseProtocol).
  */
 import { promises as fs } from 'fs';
+import { createHash } from 'crypto';
 import { join } from 'path';
 import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
@@ -123,13 +124,33 @@ export interface HeroPoseSkinSource {
     priority: number;
 }
 
-function poseKey(heroName: string, skinSources: HeroPoseSkinSource[] = []): string {
-    if (skinSources.length === 0) return `${heroName}::vanilla`;
-    if (skinSources.length === 1) return `${heroName}::${skinSources[0].metaKey}`;
-    const stack = skinSources
-        .map((source) => `${source.priority}:${source.metaKey}`)
-        .join('+');
-    return `${heroName}::stack::${stack}`;
+/**
+ * Storage key for a hero's pose still.
+ *
+ * The skin half identifies WHICH skin(s), but a skin's metaKey is its enabled
+ * `pakNN_dir.vpk` filename, i.e. a load-order SLOT, not a stable identity:
+ * enabling one skin at a time makes each skin land in the lowest free slot
+ * (usually pak01), so distinct skins keep colliding on the same metaKey and so
+ * the same cache dir. That served a previously-cached (wrong) model for a freshly
+ * selected skin (#bugs "3D preview showing wrong model"). The `fingerprint` is a
+ * short hash of the resolved source VPKs' (size, mtime), folded in so the key is
+ * content-addressed: a different skin in the same slot maps to a different dir.
+ * Vanilla (no sources) and a fully-unresolvable stack carry no fingerprint.
+ */
+function poseKey(
+    heroName: string,
+    skinSources: HeroPoseSkinSource[] = [],
+    fingerprint = ''
+): string {
+    const base =
+        skinSources.length === 0
+            ? `${heroName}::vanilla`
+            : skinSources.length === 1
+              ? `${heroName}::${skinSources[0].metaKey}`
+              : `${heroName}::stack::${skinSources
+                    .map((source) => `${source.priority}:${source.metaKey}`)
+                    .join('+')}`;
+    return fingerprint ? `${base}::c${fingerprint}` : base;
 }
 
 function modelDir(key: string): string {
@@ -204,13 +225,18 @@ function riggedModelFile(key: string): string {
  * updated morphic payloads for the unified material preview. Pre-v12 GLBs may
  * carry stale material metadata and render eye/self-illum materials incorrectly.
  *
+ * v13: pose keys are now content-addressed (a fingerprint of the resolved source
+ * VPKs is folded into the key; see poseKey). Pre-v13 dirs were keyed by the skin's
+ * pakNN slot filename alone, so different skins reusing a slot collided and served
+ * each other's cached model. Retiring those dirs forces a clean re-export.
+ *
  * The Source 2 extras schema version (SOURCE2_EXTRAS_VERSION) is folded into the
  * effective key below, so a material-extras schema bump auto-busts this cache
  * with no manual edit here, and the cache version cannot drift from the parser's
  * expected schema. Bump POSE_PIPELINE_VERSION only for export changes unrelated
  * to the extras schema (model resolution, index offsets, ...).
  */
-const POSE_PIPELINE_VERSION = '12';
+const POSE_PIPELINE_VERSION = '13';
 const POSE_CACHE_VERSION = `${POSE_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const POSE_VERSION_FILENAME = '.cache-version';
@@ -236,9 +262,12 @@ function versionFile(key: string): string {
  * v5: rigged export selects one animated clip through `model clips --json`
  * instead of hardcoding one idle name, and refuses clipless rigged GLBs.
  *
+ * v6: content-addressed pose keys (same slot-collision fix as POSE_CACHE_VERSION
+ * v13; the rigged path shares poseKey).
+ *
  * Folds in SOURCE2_EXTRAS_VERSION on the same principle as POSE_CACHE_VERSION.
  */
-const RIGGED_PIPELINE_VERSION = '5';
+const RIGGED_PIPELINE_VERSION = '6';
 const RIGGED_CACHE_VERSION = `${RIGGED_PIPELINE_VERSION}.x${SOURCE2_EXTRAS_VERSION}`;
 
 const RIGGED_VERSION_FILENAME = '.rigged-cache-version';
@@ -550,9 +579,66 @@ function normalizeSkinSources(skinSources: HeroPoseSkinSource[] = []): HeroPoseS
     );
 }
 
+type ResolvedSource = HeroPoseSkinSource & { path: string };
+
+/** Resolve each skin source's metaKey to an on-disk VPK, dropping any that can't
+ *  be found (mirrors the old inline resolve in resolvePoseSource). */
+async function resolveSources(
+    deadlockPath: string,
+    skinSources: HeroPoseSkinSource[]
+): Promise<ResolvedSource[]> {
+    const resolved: ResolvedSource[] = [];
+    for (const source of skinSources) {
+        const path = await resolveSkinVpk(deadlockPath, source.metaKey);
+        if (path) resolved.push({ ...source, path });
+    }
+    return resolved;
+}
+
+/**
+ * Content fingerprint for a set of resolved source VPKs: a short hash of each
+ * file's (metaKey, size, mtime). This is what makes the pose cache key content-
+ * addressed rather than slot-addressed, so a different skin reusing the same
+ * `pakNN` slot cannot serve the previously-cached model. Order-independent
+ * (parts are sorted) so it cannot drift between the info and export paths.
+ * Empty string for an empty set (vanilla / nothing resolved).
+ */
+async function fingerprintResolved(resolved: ResolvedSource[]): Promise<string> {
+    if (resolved.length === 0) return '';
+    const parts: string[] = [];
+    for (const source of resolved) {
+        try {
+            const stat = await fs.stat(source.path);
+            parts.push(`${source.metaKey}:${stat.size}:${Math.round(stat.mtimeMs)}`);
+        } catch {
+            parts.push(`${source.metaKey}:missing`);
+        }
+    }
+    return createHash('md5').update(parts.sort().join('|')).digest('hex').slice(0, 12);
+}
+
+function strippedSources(resolved: ResolvedSource[]): HeroPoseSkinSource[] {
+    return resolved.map((source) => ({ metaKey: source.metaKey, priority: source.priority }));
+}
+
+/** The content-addressed storage key for a hero + requested skin stack, computed
+ *  the same way the export does (resolve sources, fingerprint, build poseKey) so
+ *  a cache lookup lands on the exact dir a prior export wrote. */
+async function resolvePoseKey(
+    deadlockPath: string,
+    heroName: string,
+    skinSources: HeroPoseSkinSource[]
+): Promise<string> {
+    const resolved = await resolveSources(deadlockPath, normalizeSkinSources(skinSources));
+    const fingerprint = await fingerprintResolved(resolved);
+    return poseKey(heroName, strippedSources(resolved), fingerprint);
+}
+
 interface PoseSource {
     vpk: string;
     sources: HeroPoseSkinSource[];
+    /** Content fingerprint of the resolved source VPKs; folded into the pose key. */
+    fingerprint: string;
     tempDir?: string;
 }
 
@@ -561,20 +647,18 @@ async function resolvePoseSource(
     pak01: string,
     skinSources: HeroPoseSkinSource[]
 ): Promise<PoseSource> {
-    const resolved: Array<HeroPoseSkinSource & { path: string }> = [];
-    for (const source of skinSources) {
-        const path = await resolveSkinVpk(deadlockPath, source.metaKey);
-        if (path) resolved.push({ ...source, path });
-    }
+    const resolved = await resolveSources(deadlockPath, skinSources);
+    const fingerprint = await fingerprintResolved(resolved);
 
     if (resolved.length === 0) {
-        return { vpk: pak01, sources: [] };
+        return { vpk: pak01, sources: [], fingerprint };
     }
 
     if (resolved.length === 1) {
         return {
             vpk: resolved[0].path,
-            sources: [{ metaKey: resolved[0].metaKey, priority: resolved[0].priority }],
+            sources: strippedSources(resolved),
+            fingerprint,
         };
     }
 
@@ -586,10 +670,8 @@ async function resolvePoseSource(
         return {
             vpk: merged,
             tempDir,
-            sources: resolved.map((source) => ({
-                metaKey: source.metaKey,
-                priority: source.priority,
-            })),
+            sources: strippedSources(resolved),
+            fingerprint,
         };
     } catch (err) {
         await fs.rm(tempDir, { recursive: true, force: true });
@@ -624,12 +706,14 @@ async function infoForKey(key: string): Promise<HeroPoseInfo> {
 }
 
 /** Whether a hero's pose still exists for the given active skin, plus its mtime
- *  and storage key. */
+ *  and storage key. The key is content-addressed (see poseKey / resolvePoseKey),
+ *  so resolving + fingerprinting the source VPKs is required to find the dir. */
 export async function getHeroPoseInfo(
+    deadlockPath: string,
     heroName: string,
     skinSources?: HeroPoseSkinSource[]
 ): Promise<HeroPoseInfo> {
-    return infoForKey(poseKey(heroName, normalizeSkinSources(skinSources)));
+    return infoForKey(await resolvePoseKey(deadlockPath, heroName, skinSources ?? []));
 }
 
 async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {
@@ -648,10 +732,11 @@ async function infoForRiggedKey(key: string): Promise<HeroPoseInfo> {
 /** Whether a hero's RIGGED (animated, skinned) glb exists for the given active
  *  skin stack, plus its mtime and storage key. Mirrors getHeroPoseInfo. */
 export async function getRiggedHeroPose(
+    deadlockPath: string,
     heroName: string,
     skinSources?: HeroPoseSkinSource[]
 ): Promise<HeroPoseInfo> {
-    return infoForRiggedKey(poseKey(heroName, normalizeSkinSources(skinSources)));
+    return infoForRiggedKey(await resolvePoseKey(deadlockPath, heroName, skinSources ?? []));
 }
 
 /**
@@ -731,7 +816,7 @@ async function runHeroPoseExportForSources(
     const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
     const source = await resolvePoseSource(deadlockPath, pak01, skinSources);
     try {
-        const key = poseKey(heroName, source.sources);
+        const key = poseKey(heroName, source.sources, source.fingerprint);
         const dir = modelDir(key);
         await fs.mkdir(dir, { recursive: true });
         const out = modelFile(key);
@@ -837,7 +922,7 @@ async function runRiggedHeroExportForSources(
     const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
     const source = await resolvePoseSource(deadlockPath, pak01, skinSources);
     try {
-        const key = poseKey(heroName, source.sources);
+        const key = poseKey(heroName, source.sources, source.fingerprint);
         const dir = modelDir(key);
         await fs.mkdir(dir, { recursive: true });
         const out = riggedModelFile(key);

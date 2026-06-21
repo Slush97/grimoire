@@ -127,7 +127,11 @@ ipcMain.handle(
 ipcMain.handle(
     'get-hero-pose-info',
     async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroPoseInfo> => {
-        return getHeroPoseInfo(heroName, skinSources);
+        const deadlockPath = getActiveDeadlockPath();
+        // No Deadlock path: nothing can be resolved or exported anyway. Report
+        // absent so the renderer's export attempt surfaces the real failure.
+        if (!deadlockPath) return { hasModel: false, mtimeMs: null, key: '' };
+        return getHeroPoseInfo(deadlockPath, heroName, skinSources);
     }
 );
 
@@ -148,7 +152,9 @@ ipcMain.handle(
 ipcMain.handle(
     'get-rigged-hero-pose',
     async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroPoseInfo> => {
-        return getRiggedHeroPose(heroName, skinSources);
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) return { hasModel: false, mtimeMs: null, key: '' };
+        return getRiggedHeroPose(deadlockPath, heroName, skinSources);
     }
 );
 
