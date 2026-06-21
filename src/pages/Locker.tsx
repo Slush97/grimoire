@@ -769,13 +769,14 @@ export default function Locker() {
         </div>
       ) : viewMode === 'gallery' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-          {globalCount > 0 && (
-            <GlobalGalleryCard
-              count={globalCount}
-              typeCount={globalTypeCount}
-              onNavigate={() => navigate('/locker/global')}
-            />
-          )}
+          {/* Always rendered: soul containers & spirit urns are imported from
+              inside this drill-in, so the card must stay reachable even with
+              nothing installed yet (otherwise the importer is unreachable). */}
+          <GlobalGalleryCard
+            count={globalCount}
+            typeCount={globalTypeCount}
+            onNavigate={() => navigate('/locker/global')}
+          />
           {displayedHeroList.map((hero) => (
             <HeroGalleryCard
               key={hero.id}
@@ -800,37 +801,38 @@ export default function Locker() {
         </div>
       ) : (
         <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {globalCount > 0 && (
-            <button
-              type="button"
-              onClick={() => navigate('/locker/global')}
-              className="group relative flex items-center gap-3 overflow-hidden rounded-lg border border-accent/40 bg-bg-secondary p-4 text-left transition-colors hover:border-accent/70"
-            >
-              {/* Environment art bleeds behind the card; the left-to-right
-                  gradient keeps the text side dark, mirroring the list-view
-                  hero cards. */}
-              <img
-                src={GLOBAL_BG}
-                alt=""
-                aria-hidden
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
-              />
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
-              />
-              <div className="relative z-10 min-w-0 flex-1">
-                <div className="font-semibold text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
-                  {t('locker.page.global')}
-                </div>
-                <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
-                  {t('locker.page.modCount', { count: globalCount })} ·{' '}
-                  {t('locker.page.categoryCount', { count: globalTypeCount })}
-                </div>
+          {/* Always rendered (see gallery-view note): the Global drill-in is the
+              only entry point to the soul-container / spirit-urn importer. */}
+          <button
+            type="button"
+            onClick={() => navigate('/locker/global')}
+            className="group relative flex items-center gap-3 overflow-hidden rounded-lg border border-accent/40 bg-bg-secondary p-4 text-left transition-colors hover:border-accent/70"
+          >
+            {/* Environment art bleeds behind the card; the left-to-right
+                gradient keeps the text side dark, mirroring the list-view
+                hero cards. */}
+            <img
+              src={GLOBAL_BG}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
+            />
+            <div className="relative z-10 min-w-0 flex-1">
+              <div className="font-semibold text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
+                {t('locker.page.global')}
               </div>
-              <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
-            </button>
-          )}
+              <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+                {globalCount > 0
+                  ? `${t('locker.page.modCount', { count: globalCount })} · ${t('locker.page.categoryCount', { count: globalTypeCount })}`
+                  : t('locker.page.globalEmptyHint')}
+              </div>
+            </div>
+            <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
+          </button>
           {displayedHeroList.map((hero) => (
             <HeroCard
               key={hero.id}
@@ -1086,6 +1088,7 @@ interface GlobalGalleryCardProps {
  */
 function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardProps) {
   const { t } = useTranslation();
+  const isEmpty = count === 0;
   return (
     <div
       onClick={onNavigate}
@@ -1100,16 +1103,22 @@ function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardPr
         />
         {/* Subtle top highlight for depth, matching the hero cards. */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
-        <div className="absolute left-2 top-2 z-20 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
-          {t('locker.page.modCount', { count })}
-        </div>
+        {/* The count badge only earns its spot once something is installed; an
+            empty Global card leans on the bottom import hint instead. */}
+        {!isEmpty && (
+          <div className="absolute left-2 top-2 z-20 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+            {t('locker.page.modCount', { count })}
+          </div>
+        )}
       </div>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-end bg-gradient-to-t from-black/70 to-transparent p-2 text-right sm:p-3">
         <div className="font-reaver text-lg leading-tight tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           {t('locker.page.global')}
         </div>
         <div className="text-[11px] text-white/70 drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-          {t('locker.page.categoryCount', { count: typeCount })}
+          {isEmpty
+            ? t('locker.page.globalEmptyHint')
+            : t('locker.page.categoryCount', { count: typeCount })}
         </div>
       </div>
     </div>
@@ -1139,17 +1148,20 @@ interface LockerGlobalViewProps {
 function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
-  // Prop-container types (soul container, spirit urn) are always selectable even
-  // when empty: their tab is the only entry point to the GLB importer, so
-  // disabling an empty one would make it impossible to import the first of its
-  // kind (the chicken-and-egg that blocked testing the urn import path). Every
-  // other type only appears once it has at least one mod.
-  const available = GLOBAL_MOD_TYPE_ORDER.filter(
+  // Every tab is selectable, empty or not. We still default the landing tab to
+  // the first populated type (or a prop container when nothing is installed),
+  // so the view opens on something meaningful rather than a blank pane.
+  const firstPopulated = GLOBAL_MOD_TYPE_ORDER.filter(
     (type) => groups[type].length > 0 || isPropContainerType(type)
   );
   const [selectedType, setSelectedType] = useState<GlobalModType>(
-    () => available[0] ?? 'soul-container'
+    () => firstPopulated[0] ?? 'soul-container'
   );
+  // Sliding active-tab highlight, mirroring the main sidebar's glide: one
+  // indicator element animates between the tab rows rather than each row
+  // toggling its own background (which snaps). Refs feed its measured position.
+  const tabRefs = useRef<Map<GlobalModType, HTMLButtonElement | null>>(new Map());
+  const [tabIndicator, setTabIndicator] = useState<{ top: number; height: number } | null>(null);
   // Open retag menu, anchored in viewport coords (fixed-positioned) so it never
   // clips against the scrolling card pane. Null when closed.
   const [retagMenu, setRetagMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -1170,14 +1182,16 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
       window.removeEventListener('keydown', onKey);
     };
   }, [retagMenu]);
-  // Guard against the selected type emptying out (e.g. last mod deleted) by
-  // falling back to the first available type at render time. Prop-container
-  // types stay selected even while empty so the importer remains reachable.
-  const activeType =
-    groups[selectedType]?.length || isPropContainerType(selectedType)
-      ? selectedType
-      : available[0];
-  const activeMods = activeType ? groups[activeType] : [];
+  // Any type is a valid selection now (empty tabs render their own empty
+  // state), so the active tab is simply whatever the user picked.
+  const activeType = selectedType;
+  const activeMods = groups[activeType] ?? [];
+  // Track the active row's box so the highlight can glide to it. Measured in a
+  // layout effect (pre-paint) to avoid a one-frame jump on first mount.
+  useLayoutEffect(() => {
+    const el = tabRefs.current.get(activeType);
+    if (el) setTabIndicator({ top: el.offsetTop, height: el.offsetHeight });
+  }, [activeType]);
   // Soul containers and spirit urns share the single-select + live-3D-tile
   // treatment (frosted glass, content-stable key, active badge, import button).
   const isPropContainer = isPropContainerType(activeType);
@@ -1269,29 +1283,39 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           </span>
         </div>
 
-        <nav className="flex flex-col gap-1.5">
+        <nav className="relative flex flex-col gap-1.5">
+          {/* The sliding highlight, glided between rows via a measured transform
+              (matches the main sidebar's active indicator). */}
+          {tabIndicator && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 z-0 rounded-lg border border-accent/60 bg-accent/15 transition-transform duration-300 ease-out motion-reduce:transition-none"
+              style={{
+                height: tabIndicator.height,
+                transform: `translateY(${tabIndicator.top}px)`,
+              }}
+            />
+          )}
           {GLOBAL_MOD_TYPE_ORDER.map((type) => {
             const items = groups[type];
             const isActive = type === activeType;
             const isEmpty = items.length === 0;
-            // An empty prop-container tab is still clickable (it opens the
-            // importer); only non-importable types are disabled when empty.
-            const isDisabled = isEmpty && !isPropContainerType(type);
+            // Every tab is clickable, empty or not: an empty tab opens its own
+            // empty state (the importer for prop containers, a Browse hint for
+            // the rest), which is more discoverable than a dead disabled row.
             return (
               <button
                 key={type}
+                ref={(el) => {
+                  tabRefs.current.set(type, el);
+                }}
                 type="button"
-                disabled={isDisabled}
                 onClick={() => setSelectedType(type)}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                  isDisabled
-                    ? 'cursor-default border-transparent opacity-40'
-                    : isActive
-                      ? 'border-accent/60 bg-accent/15'
-                      : 'cursor-pointer border-transparent hover:bg-white/10'
+                className={`relative z-10 flex cursor-pointer items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left transition-colors ${
+                  isActive ? '' : 'hover:bg-white/10'
                 }`}
               >
-                <span className="flex-1 truncate text-sm font-medium text-white">
+                <span className={`flex-1 truncate text-sm font-medium text-white ${isEmpty && !isActive ? 'opacity-50' : ''}`}>
                   {GLOBAL_MOD_TYPE_LABELS[type]}
                 </span>
                 <span className="text-xs text-white/50">{items.length}</span>
@@ -1301,9 +1325,11 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
         </nav>
       </div>
 
-      {/* Right pane: the selected type's mods as cards */}
+      {/* Right pane: the selected type's mods as cards. Keyed on the active type
+          so its content re-runs the fade on every tab switch (the tab-content
+          transition), which doubles as the drill-in entrance on first mount. */}
       <div ref={paneRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-glass">
-        <div className="space-y-4 p-6">
+        <div key={activeType} className="space-y-4 p-6 animate-fade-in">
           {activeType ? (
             <>
               <div className="flex items-baseline gap-2">
@@ -1346,9 +1372,20 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                     {activeType === 'spirit-urn' ? t('locker.urnImport.trigger.label') : t('locker.soulImport.trigger.label')}
                   </button>
                 </div>
+              ) : activeMods.length === 0 ? (
+                // Non-prop types can't be imported, so the empty state just
+                // points the user at Browse instead of an import button.
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                  <Layers className="h-8 w-8 text-white/40" />
+                  <p className="max-w-sm text-sm text-white/70">
+                    {t('locker.global.typeEmpty', {
+                      type: GLOBAL_MOD_TYPE_LABELS[activeType],
+                    })}
+                  </p>
+                </div>
               ) : (
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
-                {activeMods.map((mod) => {
+                {activeMods.map((mod, cardIndex) => {
                   // Skipped when NSFW previews are hidden so we never bleed
                   // hidden imagery into the glass tint, even blurred.
                   const glassBackdropUrl =
@@ -1362,7 +1399,27 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                       key={
                         isPropContainer ? mod.sha256 ?? mod.id : mod.id
                       }
+                      // Cards stagger in as the grid mounts; the delay is capped
+                      // so a large grid still finishes settling quickly. fill-mode
+                      // 'both' holds the hidden start frame through the delay so a
+                      // delayed card never flashes visible first.
+                      //
+                      // Skipped for prop containers: their model is painted by the
+                      // shared overlay canvas, which ignores the card's CSS
+                      // opacity, so an opacity entrance would briefly float the
+                      // model over an invisible card. The parent fade + the
+                      // model's own load-in cover their entrance instead.
+                      style={
+                        isPropContainer
+                          ? undefined
+                          : {
+                              animationDelay: `${Math.min(cardIndex, 12) * 35}ms`,
+                              animationFillMode: 'both',
+                            }
+                      }
                       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
+                        isPropContainer ? '' : 'animate-scale-in'
+                      } ${
                         mod.enabled
                           ? 'border-accent bg-accent/[0.06] shadow-[0_0_0_1px_var(--color-accent)] hover:bg-accent/[0.10]'
                           : 'border-white/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
@@ -1572,13 +1629,16 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             its on-screen rect), so the grid can't exhaust the browser's
             live-context cap. Mounted INSIDE the pane (not at the view root) so its
             z-[5] sits below each card's tags/kebab but above the card background,
-            keeping chrome on top of the model. Only mounted while a prop-container
-            type is selected. */}
-        {isPropContainer && (
-          <Suspense fallback={null}>
-            <SoulContainerCanvas paneRef={paneRef} />
-          </Suspense>
-        )}
+            keeping chrome on top of the model.
+
+            Kept mounted for the whole drill-in (not gated on the prop-container
+            tab): tearing the WebGL context down and back up when switching to a
+            non-prop tab and back was the main source of the model flicker. On a
+            non-prop tab the registry is empty, so it simply paints nothing (a
+            transparent, pointer-events-none overlay), which is cheap. */}
+        <Suspense fallback={null}>
+          <SoulContainerCanvas paneRef={paneRef} />
+        </Suspense>
       </div>
 
       {/* Retag menu (fixed-positioned, anchored at the kebab's viewport coords so

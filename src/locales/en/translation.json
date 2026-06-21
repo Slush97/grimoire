@@ -1070,7 +1070,8 @@
       "disabledBadge": "Disabled",
       "disabledBadgeTitle": "This mod is disabled and not loaded in-game",
       "deleteMod": "Delete {{name}}",
-      "propEmpty": "No {{type}} installed yet. Import one from a 3D model (.glb) to get started."
+      "propEmpty": "No {{type}} installed yet. Import one from a 3D model (.glb) to get started.",
+      "typeEmpty": "No {{type}} installed yet. Find some in Browse and they'll show up here."
     },
     "soulImport": {
       "trigger": {
@@ -1410,6 +1411,7 @@
       "list": "List",
       "noHeroCategoriesFound": "No hero categories found.",
       "global": "Global",
+      "globalEmptyHint": "Import soul containers & spirit urns",
       "unassigned": "Unassigned",
       "unassignedDescription": "These mods couldn't be matched to a hero automatically. Tag one to move it into that hero's locker pile.",
       "noPreview": "No preview",
