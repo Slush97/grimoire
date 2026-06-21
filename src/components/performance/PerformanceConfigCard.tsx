@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
 import { Gauge, ExternalLink, RefreshCw, RotateCcw, Settings2, SquarePen } from 'lucide-react';
 import { Card, Badge, Button } from '../common/ui';
@@ -27,6 +28,43 @@ const SQOOKY_ARTIST: BrowseArtistRef = {
   profileUrl: 'https://gamebanana.com/members/3826762',
   kofiUrl: SQOOKY_KOFI_URL,
 };
+
+/**
+ * Localized status sentence built from the structured status fields, so the
+ * line follows the UI language instead of the English prose the main process
+ * composes. Mirrors the message logic in performanceConfig.ts; falls back to
+ * the backend message for the error state (which carries a raw error detail).
+ */
+function performanceStatusMessage(status: PerformanceConfigStatus, t: TFunction): string {
+  const overrideCount = status.overrideCount ?? 0;
+  switch (status.state) {
+    case 'applied': {
+      const base =
+        status.appliedVersion === status.bundledVersion
+          ? t('performance.status.applied', { version: status.appliedVersion })
+          : t('performance.status.appliedOutdated', {
+              version: status.appliedVersion,
+              latest: status.bundledVersion,
+            });
+      const overrideNote = overrideCount
+        ? t('performance.status.overrideNote', { count: overrideCount })
+        : '';
+      const handEditedNote = status.handEdited ? t('performance.status.handEditedNote') : '';
+      return `${base}${overrideNote}${handEditedNote}`;
+    }
+    case 'wiped':
+      if (status.canRestoreBackup === true) return t('performance.status.wipedRestorable');
+      return (
+        t('performance.status.wiped') +
+        (overrideCount ? t('performance.status.wipedRestoreNote', { count: overrideCount }) : '')
+      );
+    case 'not-applied':
+      return t('performance.status.notApplied');
+    default:
+      // error: keep the backend message (carries the raw error detail).
+      return status.message;
+  }
+}
 
 // Settings card for the OptimizationLock performance preset (experimental).
 // Applies Sqooky's community fps config onto gameinfo.gi in place, shows
@@ -130,7 +168,7 @@ export default function PerformanceConfigCard() {
     >
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="min-w-0 space-y-1">
-          <p className="text-sm text-text-secondary">{status?.message ?? t('performance.checkingGameinfo')}</p>
+          <p className="text-sm text-text-secondary">{status ? performanceStatusMessage(status, t) : t('performance.checkingGameinfo')}</p>
           <p className="text-xs text-text-secondary">
             <Trans
               i18nKey="performance.credit"

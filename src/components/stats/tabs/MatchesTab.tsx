@@ -8,30 +8,32 @@ import type { StoredMatch } from '../../../types/deadlock-stats'
 import { MatchRow } from '../primitives'
 import { winRateClass } from '../format'
 
-function dayLabel(unixSeconds: number, t: TFunction): string {
+function dayLabel(unixSeconds: number, t: TFunction, locale: string): string {
     const d = new Date(unixSeconds * 1000)
     const today = new Date()
     const yesterday = new Date(today)
     yesterday.setDate(today.getDate() - 1)
     if (d.toDateString() === today.toDateString()) return t('stats.matches.today')
     if (d.toDateString() === yesterday.toDateString()) return t('stats.matches.yesterday')
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })
+    // Format weekday/month with the active UI language so the header matches the
+    // user's locale instead of falling back to the OS default.
+    return d.toLocaleDateString(locale || undefined, { weekday: 'short', month: 'short', day: 'numeric' })
 }
 
 export function MatchesTab() {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
     const localMatchHistory = usePlayerStore((s) => s.playerData.data.localMatchHistory)
 
     const groups = useMemo(() => {
         const byDay: { label: string; matches: StoredMatch[] }[] = []
         for (const match of localMatchHistory) {
-            const label = dayLabel(match.start_time, t)
+            const label = dayLabel(match.start_time, t, i18n.language)
             const last = byDay[byDay.length - 1]
             if (last && last.label === label) last.matches.push(match)
             else byDay.push({ label, matches: [match] })
         }
         return byDay
-    }, [localMatchHistory, t])
+    }, [localMatchHistory, t, i18n.language])
 
     const wins = localMatchHistory.filter((m) => m.match_outcome === 'Win').length
     const rate = localMatchHistory.length > 0 ? (wins / localMatchHistory.length) * 100 : 0

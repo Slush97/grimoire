@@ -37,10 +37,30 @@
       "missing": "Missing",
       "valid": "Valid"
     },
+    "relativeTime": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago",
+      "weeksAgo": "{{count}}w ago",
+      "monthsAgo": "{{count}} mo ago",
+      "yearsAgo": "{{count}} yr ago"
+    },
     "emptyValue": "(empty)",
     "none": "None",
     "versus": "VS",
     "versusLower": "vs"
+  },
+  "sync": {
+    "syncing": "Syncing {{section}}: {{percent}}%",
+    "error": "Sync error: {{section}}",
+    "sections": {
+      "Mod": "Mods",
+      "Sound": "Sounds",
+      "Gui": "GUI",
+      "Model": "Models",
+      "Wip": "WiPs"
+    }
   },
   "nav": {
     "installed": "Installed",
@@ -548,7 +568,11 @@
       "issuesFound": "Issues Found",
       "verifySteam": "In Steam: right-click Deadlock > Properties > Installed Files > Verify integrity of game files.",
       "foundNearby": "Found nearby: {{candidates}}. Rename one to gameinfo.gi to restore.",
-      "fixConfiguration": "Fix Configuration"
+      "fixConfiguration": "Fix Configuration",
+      "openFile": "Open gameinfo.gi",
+      "openConfirmTitle": "Open gameinfo.gi?",
+      "openConfirmMessage": "This opens Deadlock's gameinfo.gi in your text editor. It controls how the game loads mods. Editing it by hand can break mod loading or stop the game from launching. If something goes wrong, use Fix Configuration to repair it. Only proceed if you know what you're changing.",
+      "openFailed": "Could not open gameinfo.gi: {{error}}"
     },
     "updates": {
       "releaseNotesTitle": "View release notes for {{version}}",
@@ -819,6 +843,12 @@
       "status": "Status",
       "enabled": "Enabled",
       "modType": "Mod type"
+    },
+    "sections": {
+      "enabled_one": "Enabled",
+      "enabled_other": "Enabled",
+      "disabled_one": "Disabled",
+      "disabled_other": "Disabled"
     },
     "view": {
       "viewOptions": "View options",
@@ -1277,7 +1307,6 @@
       "pitch": "Pitch",
       "db": "dB",
       "saving": "Saving...",
-      "appliesOnRelease": "Applies on release",
       "alsoAbilities": "also {{slots}}",
       "applied": "Applied",
       "use": "Use",
@@ -2087,6 +2116,8 @@
       "previewHidden": "NSFW preview hidden"
     },
     "viewOnGamebanana": "View on GameBanana",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
     "outdatedWarning": "This mod was last updated on {{date}} and may not be compatible with the current Deadlock version.",
     "deleteFile": {
       "title": "Delete installed file?",
@@ -2229,6 +2260,18 @@
       "error": "Error",
       "notApplied": "Not applied"
     },
+    "status": {
+      "applied": "Performance config v{{version}} is applied.",
+      "appliedOutdated": "Performance config v{{version}} is applied; v{{latest}} is available (reapply to update).",
+      "overrideNote_one": " Keeping {{count}} of your override.",
+      "overrideNote_other": " Keeping {{count}} of your overrides.",
+      "handEditedNote": " The file has manual edits: Reapply folds them into your overrides.",
+      "wipedRestorable": "gameinfo.gi is empty or corrupt. Restore the Grimoire backup (or verify game files in Steam), then reapply.",
+      "wiped": "A game update reset gameinfo.gi and removed the performance config. Reapply to restore it.",
+      "wipedRestoreNote_one": " Your {{count}} saved override will be restored too.",
+      "wipedRestoreNote_other": " Your {{count}} saved overrides will be restored too.",
+      "notApplied": "Performance config is not applied."
+    },
     "credit": "Map looks dark? Set in-game shadows to Medium or Low. Game updates wipe the config; Grimoire spots that here so you can reapply. By <sqooky>Sqooky</sqooky> and <contributors>contributors<extlink></extlink></contributors>. If it helps, <kofi>buy them a coffee</kofi>.",
     "restoreBackup": "Restore Backup",
     "reapply": "Reapply",
@@ -2250,7 +2293,6 @@
     "pitch": "Pitch",
     "db": "{{value}} dB",
     "saving": "Saving...",
-    "appliesOnRelease": "Applies on release",
     "title": "Locker Overrides",
     "subtitle": "Always-on cosmetics, separate from your mod load order and the 99-slot cap.",
     "tabs": {

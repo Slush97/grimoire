@@ -52,8 +52,10 @@ function divisionForScore(v: number): { division: number; tier: number } {
     return { division, tier }
 }
 
-function formatDay(ms: number, withYear = false): string {
-    return new Date(ms).toLocaleDateString(undefined, {
+function formatDay(ms: number, locale: string, withYear = false): string {
+    // Format with the active UI language so axis/tooltip dates match the user's
+    // locale instead of the OS default.
+    return new Date(ms).toLocaleDateString(locale || undefined, {
         month: 'short',
         day: 'numeric',
         ...(withYear ? { year: '2-digit' as const } : {}),
@@ -109,7 +111,8 @@ function smoothPath(pts: { x: number; y: number }[]): string {
 }
 
 export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
-    const { t } = useTranslation()
+    const { t, i18n } = useTranslation()
+    const locale = i18n.language
     const svgRef = useRef<SVGSVGElement>(null)
     const [hovered, setHovered] = useState<number | null>(null)
     const ranks = useHeroStore((s) => s.ranks)
@@ -236,10 +239,10 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
         const withYear = tSpan > 320 * 86_400_000
         const ticks = [0, 0.25, 0.5, 0.75, 1].map((f) => ({
             f,
-            label: formatDay(t0 + f * tSpan, withYear),
+            label: formatDay(t0 + f * tSpan, locale, withYear),
         }))
         return { xy, line, area, vMin, vMax, t0, tSpan, boundaries, ticks }
-    }, [points, height])
+    }, [points, height, locale])
 
     const rangeButtons = (
         <div className="flex gap-1">
@@ -315,7 +318,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                         {delta.toFixed(1)}
                     </span>
                     <span className="ml-1.5">
-                        {formatDay(first.t)} to {formatDay(last.t)}
+                        {formatDay(first.t, locale)} to {formatDay(last.t, locale)}
                         {fromSnapshots ? ` ${t('stats.mmrChart.localDailySnapshots')}` : ''}
                     </span>
                 </div>
@@ -447,7 +450,7 @@ export function MmrChart({ history, snapshots, height = 220 }: MmrChartProps) {
                                     </span>
                                 </div>
                                 <div className="text-xs text-text-secondary leading-tight">
-                                    {formatDay(hoveredPoint.t)}
+                                    {formatDay(hoveredPoint.t, locale)}
                                 </div>
                             </div>
                         </div>

@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import type { TFunction } from 'i18next';
 import { RefreshCw } from 'lucide-react';
 import type { SyncProgressData } from '../types/electron';
 
@@ -6,7 +8,15 @@ interface SyncIndicatorProps {
     className?: string;
 }
 
+// The section names ('Mod', 'Sound', 'Gui', 'Model', 'Wip') arrive from the
+// main process as raw English identifiers; map them to localized labels, falling
+// back to the raw value for anything unmapped.
+function localizedSection(section: string, t: TFunction): string {
+    return t(`sync.sections.${section}`, { defaultValue: section });
+}
+
 export default function SyncIndicator({ className = '' }: SyncIndicatorProps) {
+    const { t } = useTranslation();
     const [syncProgress, setSyncProgress] = useState<SyncProgressData | null>(null);
 
     useEffect(() => {
@@ -32,8 +42,8 @@ export default function SyncIndicator({ className = '' }: SyncIndicatorProps) {
             <RefreshCw className="w-4 h-4 animate-spin text-accent" />
             <span className="text-text-secondary">
                 {syncProgress.phase === 'error'
-                    ? `Sync error: ${syncProgress.section}`
-                    : `Syncing ${syncProgress.section}: ${percent}%`}
+                    ? t('sync.error', { section: localizedSection(syncProgress.section, t) })
+                    : t('sync.syncing', { section: localizedSection(syncProgress.section, t), percent })}
             </span>
         </div>
     );

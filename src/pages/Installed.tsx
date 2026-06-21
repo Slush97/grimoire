@@ -3451,7 +3451,7 @@ export default function Installed() {
       {visibleEnabled.length > 0 && (
         <div className="mb-6">
           <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.filters.enabled')}</SectionHeader>
+            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.enabled', { count: visibleEnabled.length })}</SectionHeader>
           </div>
           {renderSortableSection('enabled')}
         </div>
@@ -3460,7 +3460,7 @@ export default function Installed() {
       {visibleDisabled.length > 0 && (
         <div>
           <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('locker.global.disabledBadge')}</SectionHeader>
+            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.disabled', { count: visibleDisabled.length })}</SectionHeader>
           </div>
           {renderSortableSection('disabled')}
         </div>
