@@ -3,17 +3,13 @@ import * as THREE from 'three';
 import {
   NPR_FRAGMENT,
   NPR_PATCH_MAP,
-  OUTLINE_DEFAULT_THICKNESS,
-  OUTLINE_MAX_THICKNESS,
-  OUTLINE_MIN_THICKNESS,
+  NPR_VERTEX,
   applySource2MaterialHints,
-  buildOutlineShell,
   detailLayer,
   glassTransmissionTexture,
   hasDynamicAlphaOverride,
   highlightLayer,
   isTrueGlassMaterial,
-  outlineParams,
   translucentAlphaTexture,
   wrapMaterialWithNpr,
 } from './source2NprMaterial';
@@ -244,6 +240,9 @@ describe('highlightLayer', () => {
     expect(typeof patch === 'object' ? patch.value : '').toContain('#include <displacementmap_vertex>');
     expect(typeof patch === 'object' ? patch.value : '').toContain('vNprSourcePosition = transformed;');
     expect(typeof patch === 'object' ? patch.value : '').not.toContain('modelMatrix');
+    expect(NPR_VERTEX).toContain('uniform float uHasJitter;');
+    expect(NPR_VERTEX).toContain('uniform sampler2D uJitterMap;');
+    expect(NPR_VERTEX).toContain('uniform float uJitterStrength;');
     expect(NPR_FRAGMENT).toContain('uniform float uHasHighlight;');
     expect(NPR_FRAGMENT).toContain('uniform vec3  uHighlightPositionSource;');
     expect(NPR_FRAGMENT).toContain('varying vec3 vNprSourcePosition;');
@@ -522,111 +521,6 @@ describe('applySource2MaterialHints glass and cloak state', () => {
   });
 });
 
-describe('outlineParams (F8)', () => {
-  function morphic(overrides: Partial<MorphicExtras> = {}): MorphicExtras {
-    return { shader: 'pbr.vfx', ...overrides };
-  }
-
-  it('disables when no g_vSolidOutlineTint is authored', () => {
-    const p = outlineParams(morphic());
-    expect(p.enabled).toBe(false);
-    expect(p.reason).toBe('no-outline-tint');
-  });
-
-  it('disables when F_DISABLE_NPR_OUTLINE is set, keeping the authored tint readable', () => {
-    const p = outlineParams(
-      morphic({
-        vectors: { g_vSolidOutlineTint: [0.1, 0.2, 0.3, 1] },
-        ints: { F_DISABLE_NPR_OUTLINE: 1 },
-      })
-    );
-    expect(p.enabled).toBe(false);
-    expect(p.reason).toBe('disabled-flag');
-    expect(p.tint.r).toBeCloseTo(0.1);
-  });
-
-  it('combines outline tint + additive when enabled', () => {
-    const p = outlineParams(
-      morphic({
-        vectors: {
-          g_vSolidOutlineTint: [0.1, 0.2, 0.3, 1],
-          g_vSolidOutlineAdditive: [0.05, 0, 0.1, 0],
-        },
-      })
-    );
-    expect(p.enabled).toBe(true);
-    expect(p.reason).toBe('');
-    expect(p.tint.r).toBeCloseTo(0.15);
-    expect(p.tint.b).toBeCloseTo(0.4);
-  });
-
-  it('defaults thickness when unauthored', () => {
-    const p = outlineParams(morphic({ vectors: { g_vSolidOutlineTint: [1, 1, 1, 1] } }));
-    expect(p.thickness).toBe(OUTLINE_DEFAULT_THICKNESS);
-  });
-
-  it('clamps a pathological large thickness to the safe max (no detached shell)', () => {
-    const p = outlineParams(
-      morphic({
-        vectors: { g_vSolidOutlineTint: [1, 1, 1, 1] },
-        floats: { g_flOverrideNprOutlineThickness: 5 },
-      })
-    );
-    expect(p.thickness).toBe(OUTLINE_MAX_THICKNESS);
-  });
-
-  it('clamps a sub-pixel thickness up to the safe min', () => {
-    const p = outlineParams(
-      morphic({
-        vectors: { g_vSolidOutlineTint: [1, 1, 1, 1] },
-        floats: { g_flOverrideNprOutlineThickness: 0.00001 },
-      })
-    );
-    expect(p.thickness).toBe(OUTLINE_MIN_THICKNESS);
-  });
-});
-
-describe('buildOutlineShell (F8)', () => {
-  function outlineMesh(morphic: MorphicExtras): THREE.Mesh {
-    const mat = new THREE.MeshStandardMaterial();
-    mat.userData = { morphic };
-    return new THREE.Mesh(new THREE.BoxGeometry(), mat);
-  }
-
-  it('returns null when the material is not outline-eligible', () => {
-    expect(buildOutlineShell(outlineMesh({ shader: 'pbr.vfx' }))).toBeNull();
-  });
-
-  it('returns null when F_DISABLE_NPR_OUTLINE opts out', () => {
-    const mesh = outlineMesh({
-      shader: 'pbr.vfx',
-      vectors: { g_vSolidOutlineTint: [1, 1, 1, 1] },
-      ints: { F_DISABLE_NPR_OUTLINE: 1 },
-    });
-    expect(buildOutlineShell(mesh)).toBeNull();
-  });
-
-  it('adds a shell child for an eligible mesh and removes it on teardown', () => {
-    const mesh = outlineMesh({ shader: 'pbr.vfx', vectors: { g_vSolidOutlineTint: [1, 1, 1, 1] } });
-    expect(mesh.children).toHaveLength(0);
-
-    const dispose = buildOutlineShell(mesh);
-    expect(dispose).toBeTypeOf('function');
-    expect(mesh.children).toHaveLength(1);
-
-    dispose!();
-    expect(mesh.children).toHaveLength(0);
-  });
-
-  it('shares the mesh geometry with the shell (disposes only its own material)', () => {
-    const mesh = outlineMesh({ shader: 'pbr.vfx', vectors: { g_vSolidOutlineTint: [1, 1, 1, 1] } });
-    const dispose = buildOutlineShell(mesh)!;
-    const shell = mesh.children[0] as THREE.Mesh;
-    expect(shell.geometry).toBe(mesh.geometry);
-    dispose();
-  });
-});
-
 describe('NPR rim mask (F8)', () => {
   it('drives the rim strength from the tint/rim mask GREEN channel', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
@@ -638,12 +532,41 @@ describe('NPR rim mask (F8)', () => {
 describe('NPR self-illum hue-preserving cap', () => {
   it('caps the self-illum additive by its peak channel so a bright tint keeps its hue', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+
     expect(patch).toContain('float siPeak = max(max(siAdd.r, siAdd.g), siAdd.b);');
     expect(patch).toContain('siAdd *= uSelfIllumCap / siPeak;');
   });
 
+  it('applies the dynamic self-illum pulse after the cap so the cap does not flatten it', () => {
+    const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+
+    expect(NPR_FRAGMENT).toContain('uniform float uSelfIllumPulse;');
+    expect(patch.indexOf('siAdd *= uSelfIllumCap / siPeak;')).toBeLessThan(
+      patch.indexOf('siAdd *= uSelfIllumPulse;')
+    );
+  });
+
   it('boosts self-illum tint chroma so a pale tint does not read white', () => {
     const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+
     expect(patch).toContain('mix(vec3(siLuma), siColor, uSelfIllumSat)');
+  });
+
+  it('routes self-illum through the post-opaque NPR output so it affects visible color', () => {
+    const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+
+    expect(NPR_FRAGMENT).not.toContain('csm_Emissive += siAdd;');
+    expect(patch).toContain('uHasSelfIllum');
+    expect(patch).toContain('nprOut += siAdd');
+  });
+
+  it('gates shaped self-illum to chromatic warm tattoo pixels, not the whole body mask', () => {
+    const patch = NPR_PATCH_MAP['*']['#include <opaque_fragment>'] as string;
+
+    expect(patch).toContain('float baseChroma = baseMax - baseMin;');
+    expect(patch).toContain('float baseWarmth = csm_DiffuseColor.r - max');
+    expect(patch).toContain('float detailGate = smoothstep');
+    expect(patch).toContain('float headRegion = smoothstep(70.0, 78.0, vNprSourcePosition.z)');
+    expect(patch).toContain('rawSiMask * rawSiMask * 8192.0 * inkGate');
   });
 });

@@ -652,6 +652,108 @@ describe('buildDeadlockMaterial self-illum placeholder gate (Yamato shogun_body 
     expect(head.uniforms.uHasSelfIllum.value).toBe(1);
     head.dispose();
   });
+
+  it('glows an additive placeholder-mask self-illum at authored scale 1 (vindicta_glow)', () => {
+    const glow = buildDeadlockMaterial(
+      materialWithMorphic({
+        shader: 'pbr.vfx',
+        blend_mode: 'additive',
+        ints: {
+          F_ADDITIVE_BLEND: 1,
+          F_SELF_ILLUM: 1,
+          F_TRANSLUCENT: 1,
+          F_USE_NPR_LIGHTING: 1,
+        },
+        floats: {
+          g_flOpacityScale1: 0.066,
+          g_flSelfIllumAlbedoFactor1: 0,
+          g_flSelfIllumScale1: 1,
+        },
+        vectors: {
+          g_vSelfIllumScrollSpeed1: [0.1, 0.1, 0, 0],
+          g_vSelfIllumTint1: [0.011765, 0.564706, 0.607843, 0],
+        },
+        resolvedTextures: { g_tSelfIllumMask: texture(4) },
+        self_illum_valid: false,
+      })
+    );
+
+    expect(glow.uniforms.uHasSelfIllum.value).toBe(1);
+    expect(glow.uniforms.uSelfIllumScale.value).toBe(1);
+    expect(glow.uniforms.uSelfIllumAlbedoFactor.value).toBe(0);
+    expect(glow.uniforms.uSelfIllumScroll.value).toMatchObject({ x: 0.1, y: 0.1 });
+    expect(glow.uniforms.uSelfIllumTint.value).toMatchObject({
+      r: 0.011765,
+      g: 0.564706,
+      b: 0.607843,
+    });
+    glow.dispose();
+  });
+
+  it('boosts and shapes a real dynamic self-illum mask (inferno_body tattoos)', () => {
+    const body = buildDeadlockMaterial(
+      materialWithMorphic({
+        shader: 'pbr.vfx',
+        ints: { F_USE_NPR_LIGHTING: 1, F_SELF_ILLUM: 1 },
+        floats: {
+          g_flSelfIllumScale1: 10,
+          g_flSelfIllumAlbedoFactor1: 0.739,
+        },
+        dynamic_params: {
+          g_flSelfIllumScale1: dynamicExpr('20 * sin(10 * time()) + 22'),
+        },
+        resolvedTextures: { g_tSelfIllumMask: texture(64) },
+        self_illum_valid: true,
+      })
+    );
+
+    expect(body.uniforms.uHasSelfIllum.value).toBe(1);
+    expect(body.uniforms.uSelfIllumScale.value).toBeCloseTo(10);
+    expect(body.uniforms.uSelfIllumPulse.value).toBeCloseTo(22 / 42);
+    expect(body.selfIllumPulseFn?.(Math.PI / 20)).toBeCloseTo(1);
+    expect(body.uniforms.uSelfIllumCap.value).toBe(DEFAULT_NPR_TUNING.selfIllumCap);
+    expect(body.uniforms.uSelfIllumMaskShaping.value).toBe(1);
+    expect(body.uniforms.uSelfIllumMaskLow.value).toBe(DEFAULT_NPR_TUNING.selfIllumMaskLow);
+    expect(body.uniforms.uSelfIllumMaskHigh.value).toBe(DEFAULT_NPR_TUNING.selfIllumMaskHigh);
+    body.dispose();
+  });
+});
+
+describe('buildDeadlockMaterial jitter uniforms (vindicta_glow breathing)', () => {
+  it('drives F_JITTER_VERTICES from VMAT speeds and amplitudes without requiring a real mask', () => {
+    const glow = buildDeadlockMaterial(
+      materialWithMorphic({
+        shader: 'pbr.vfx',
+        blend_mode: 'additive',
+        ints: { F_JITTER_VERTICES: 1, F_USE_NPR_LIGHTING: 1 },
+        floats: {
+          g_flJitterSpeedA1: 0.5,
+          g_flJitterSpeedB1: 0.25,
+        },
+        vectors: {
+          g_vJitterFrequenciesA1: [0.02, 0.02, 0, 0],
+          g_vJitterFrequenciesB1: [0.03, 0.04, 0.17, 0],
+          g_vJitterAmplitudesXA1: [0, 0, 0, 0],
+          g_vJitterAmplitudesXB1: [0, 0, 0.711, 0],
+          g_vJitterAmplitudesYA1: [1, 0, 0, 0],
+          g_vJitterAmplitudesYB1: [1, 0, 1, 0],
+          g_vJitterAmplitudesZA1: [1, 0, 0, 0],
+          g_vJitterAmplitudesZB1: [1, 0, 0, 0],
+        },
+        resolvedTextures: { g_tJitterMask: texture(4) },
+      })
+    );
+
+    expect(glow.uniforms.uHasJitter.value).toBe(1);
+    expect(glow.uniforms.uHasJitterMask.value).toBe(0);
+    expect(glow.uniforms.uJitterSpeedA.value).toBeCloseTo(0.5);
+    expect(glow.uniforms.uJitterSpeedB.value).toBeCloseTo(0.25);
+    expect(glow.uniforms.uJitterStrength.value).toBe(DEFAULT_NPR_TUNING.jitterStrength);
+    expect(glow.uniforms.uJitterFreqB.value).toMatchObject({ x: 0.03, y: 0.04, z: 0.17 });
+    expect(glow.uniforms.uJitterAmpXB.value).toMatchObject({ x: 0, y: 0, z: 0.711 });
+    expect(glow.uniforms.uJitterAmpYB.value).toMatchObject({ x: 1, y: 0, z: 1 });
+    glow.dispose();
+  });
 });
 
 describe('buildDeadlockMaterial vertex-color albedo gate (Celeste dress regression)', () => {
