@@ -40,7 +40,7 @@ import {
 const DEADLOCK_GAME_ID = 20948;
 
 // Item types Grimoire can install. Matches Browse.tsx SECTION_WHITELIST.
-const SUPPORTED_MODEL_NAMES = new Set(['Mod', 'Sound']);
+const SUPPORTED_MODEL_NAMES = new Set(['Mod', 'Sound', 'Wip']);
 
 interface ImportCollectionModalProps {
   hideNsfwPreviews: boolean;

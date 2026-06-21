@@ -4,7 +4,7 @@ import { upsertMods, getSyncState, updateSyncState, getModCount, type CachedMod 
 import type { GameBananaMod } from '../../../src/types/gamebanana';
 
 const SYNC_PER_PAGE = 50;
-const SECTIONS = ['Mod', 'Sound', 'Gui', 'Model'] as const;
+const SECTIONS = ['Mod', 'Sound', 'Gui', 'Model', 'Wip'] as const;
 type SectionType = typeof SECTIONS[number];
 
 export interface SyncProgress {

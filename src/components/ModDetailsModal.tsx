@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -23,6 +23,7 @@ import {
   Bell,
   Trash2,
   Coffee,
+  Link2,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type { GameBananaModDetails, GameBananaComment, GameBananaFile, GameBananaModUpdate } from '../types/gamebanana';
@@ -33,6 +34,8 @@ import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
 import { ArchivedTag, Button, IconButton } from './common/ui';
 import ImageContextMenu from './ImageContextMenu';
+import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
+import { showToast } from '../stores/toastStore';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
 
@@ -126,6 +129,33 @@ function ModDetailsModal({
   onViewArtist,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
+  // Canonical GameBanana page for this submission. WiPs live under /wips, Sounds
+  // under /sounds, etc., which section.toLowerCase()+'s' already yields.
+  const gbUrl = `https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`;
+  const copyGbLink = async () => {
+    try {
+      await navigator.clipboard.writeText(gbUrl);
+      showToast(t('modDetails.linkCopied'), { tone: 'success' });
+    } catch (err) {
+      console.error('[ModDetails] Failed to copy GameBanana link:', err);
+    }
+  };
+  // Wrap a GameBanana link in a right-click menu (Open / Copy link). A render
+  // helper, not a component, so the trigger keeps its element identity across
+  // re-renders (an inline component type would remount and close an open menu).
+  const withGbLinkMenu = (trigger: ReactNode) => (
+    <MenuRoot>
+      <MenuTrigger asChild>{trigger}</MenuTrigger>
+      <MenuContent>
+        <MenuItem icon={ExternalLink} onSelect={() => window.open(gbUrl, '_blank', 'noopener,noreferrer')}>
+          {t('modDetails.viewOnGamebanana')}
+        </MenuItem>
+        <MenuItem icon={Link2} onSelect={copyGbLink}>
+          {t('modDetails.copyLink')}
+        </MenuItem>
+      </MenuContent>
+    </MenuRoot>
+  );
   const isSidebar = variant === 'sidebar';
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
@@ -888,16 +918,18 @@ function ModDetailsModal({
                   <span className="sr-only">{t('modDetails.aria.loadingNamed', { label: navigationLabel ?? t('modDetails.meta.modDetails') })}</span>
                 </span>
               ) : (
-                <a
-                  href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={`View ${mod.name} on GameBanana`}
-                  className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
-                >
-                  <span className="min-w-0 truncate">{mod.name}</span>
-                  <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
-                </a>
+                withGbLinkMenu(
+                  <a
+                    href={gbUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`View ${mod.name} on GameBanana`}
+                    className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+                  >
+                    <span className="min-w-0 truncate">{mod.name}</span>
+                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                  </a>
+                )
               )}
             </h2>
           )}
@@ -1246,16 +1278,18 @@ function ModDetailsModal({
                   {isNavigating ? (
                     <Skeleton className="h-6 w-3/4" />
                   ) : (
-                    <a
-                      href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={`View ${mod.name} on GameBanana`}
-                      className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent"
-                    >
-                      <span className="min-w-0">{mod.name}</span>
-                      <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
-                    </a>
+                    withGbLinkMenu(
+                      <a
+                        href={gbUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`View ${mod.name} on GameBanana`}
+                        className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent"
+                      >
+                        <span className="min-w-0">{mod.name}</span>
+                        <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                      </a>
+                    )
                   )}
                   {(() => {
                     const addedStr = dateAdded && dateAdded > 0 ? formatDate(dateAdded) : null;
@@ -1564,15 +1598,17 @@ function ModDetailsModal({
                 )}
               </section>
 
-              <a
-                href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
-              >
-                <ExternalLink className="w-4 h-4" />
-                {t('modDetails.viewOnGamebanana')}
-              </a>
+              {withGbLinkMenu(
+                <a
+                  href={gbUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {t('modDetails.viewOnGamebanana')}
+                </a>
+              )}
             </div>
           </div>
           {isNavigating && navigationSkeleton}

@@ -14,7 +14,9 @@ import {
   openGameFolder,
   validateDeadlockPath,
   showOpenDialog,
+  openPerformanceConfigFile,
 } from '../lib/api';
+import { showToast } from '../stores/toastStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
@@ -76,6 +78,7 @@ export default function Settings() {
   const [gameinfoMissing, setGameinfoMissing] = useState(false);
   const [gameinfoCandidates, setGameinfoCandidates] = useState<string[]>([]);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
+  const [openGameinfoConfirm, setOpenGameinfoConfirm] = useState(false);
   const [syncStatus, setSyncStatus] = useState<Record<string, { lastSync: number; count: number } | null> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ section: string; modsProcessed: number; totalMods: number } | null>(null);
@@ -402,6 +405,23 @@ export default function Settings() {
       setGameinfoConfigured(false);
     } finally {
       setIsFixingGameinfo(false);
+    }
+  };
+
+  const handleOpenGameinfo = async () => {
+    setOpenGameinfoConfirm(false);
+    try {
+      // Reuses the performance-config opener: same gameinfo.gi, opened in the
+      // user's chosen editor (path read in the main process, never passed here).
+      await openPerformanceConfigFile();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      showToast(
+        t('settings.gameinfo.openFailed', {
+          error: detail.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''),
+        }),
+        { tone: 'error' }
+      );
     }
   };
 
@@ -740,15 +760,25 @@ export default function Settings() {
                   <Tx k="settings.gamePath.openGameFolder" fallback="Open Game Folder" />
                 </Button>
               ) : (
-                <Button
-                  onClick={handleFixGameinfo}
-                  disabled={isFixingGameinfo || !activeDeadlockPath}
-                  isLoading={isFixingGameinfo}
-                  variant={gameinfoConfigured ? 'secondary' : 'primary'}
-                  icon={Wrench}
-                >
-                  <Tx k="settings.gameinfo.fixConfiguration" fallback="Fix Configuration" />
-                </Button>
+                <div className="flex flex-shrink-0 gap-2">
+                  <Button
+                    onClick={() => setOpenGameinfoConfirm(true)}
+                    disabled={!activeDeadlockPath}
+                    variant="secondary"
+                    icon={FileText}
+                  >
+                    <Tx k="settings.gameinfo.openFile" fallback="Open gameinfo.gi" />
+                  </Button>
+                  <Button
+                    onClick={handleFixGameinfo}
+                    disabled={isFixingGameinfo || !activeDeadlockPath}
+                    isLoading={isFixingGameinfo}
+                    variant={gameinfoConfigured ? 'secondary' : 'primary'}
+                    icon={Wrench}
+                  >
+                    <Tx k="settings.gameinfo.fixConfiguration" fallback="Fix Configuration" />
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -1651,6 +1681,21 @@ export default function Settings() {
           />
         }
         confirmLabel={<Tx k="common.actions.reset" fallback="Reset" />}
+        variant="primary"
+      />
+
+      <ConfirmModal
+        isOpen={openGameinfoConfirm}
+        onCancel={() => setOpenGameinfoConfirm(false)}
+        onConfirm={handleOpenGameinfo}
+        title={<Tx k="settings.gameinfo.openConfirmTitle" fallback="Open gameinfo.gi?" />}
+        message={
+          <Tx
+            k="settings.gameinfo.openConfirmMessage"
+            fallback="This opens Deadlock's gameinfo.gi in your text editor. It controls how the game loads mods. Editing it by hand can break mod loading or stop the game from launching. If something goes wrong, use Fix Configuration to repair it. Only proceed if you know what you're changing."
+          />
+        }
+        confirmLabel={<Tx k="settings.gameinfo.openFile" fallback="Open gameinfo.gi" />}
         variant="primary"
       />
     </PageLayout>
