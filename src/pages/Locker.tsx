@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   getGamebananaCategories,
@@ -22,6 +22,11 @@ const SoulContainerCanvas = lazy(() => import('../components/locker/SoulContaine
 // Heavy (three.js): only pulled in when the user opens the soul-container GLB
 // import from the global Locker tab, mirroring the Installed-page trigger.
 const SoulContainerImportModal = lazy(() => import('../components/locker/SoulContainerImportModal'));
+const SpiritUrnImportModal = lazy(() => import('../components/locker/SpiritUrnImportModal'));
+// Idol/urn model entry a Spirit Urn mod overrides; the 3D tile exports this entry
+// for an urn (vs the soul-container entry, the tile's default). Mirrors
+// URN_CONTAINER_ENTRY in the main-process soulContainerModels service.
+const URN_MODEL_ENTRY = 'models/props_gameplay/idol_urn/idol_urn.vmdl_c';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { GlobalModType, Mod } from '../types/mod';
@@ -48,6 +53,7 @@ import {
   groupModsByCategory,
   isLockerManagedMod,
   isLockerManagedSound,
+  isPropContainerType,
   modLoadOrder,
   readStoredFavorites,
   type GlobalModGroups,
@@ -154,10 +160,18 @@ export default function Locker() {
   // Soul-container GLB import (lazy three.js modal), openable from the global
   // Locker tab. Mirrors the Installed-page trigger.
   const [soulImportOpen, setSoulImportOpen] = useState(false);
+  // Spirit Urn GLB import (lazy three.js modal), openable from the global Locker
+  // tab. Mirrors the soul-container trigger.
+  const [urnImportOpen, setUrnImportOpen] = useState(false);
   // Enabled soul-container imports (they override the same model), so the modal
   // can warn + offer to replace rather than silently stack two.
   const existingSoulImports = useMemo(
     () => mods.filter((m) => m.enabled && m.globalType === 'soul-container'),
+    [mods]
+  );
+  // Enabled spirit-urn imports (single in-game slot), same warn-or-replace flow.
+  const existingUrnImports = useMemo(
+    () => mods.filter((m) => m.enabled && m.globalType === 'spirit-urn'),
     [mods]
   );
   // List-view accordion state. The Settings preference decides the initial
@@ -590,14 +604,16 @@ export default function Locker() {
     }
   };
 
-  // Soul containers are single-select: there's one soul-container slot, so
-  // enabling one disables any other active soul container, and clicking the
-  // already-active card turns it back off (vanilla). Other global types keep
-  // normal multi-toggle (they don't all collapse to a single slot).
+  // Prop containers (soul containers + spirit urns) are single-select: each kind
+  // has one in-game slot, so enabling one disables any other active mod of the
+  // SAME kind, and clicking the already-active card turns it back off (vanilla).
+  // A soul container and an urn can both be enabled (different slots). Other
+  // global types keep normal multi-toggle.
   const selectGlobalMod = async (modId: string) => {
     const target = mods.find((m) => m.id === modId);
     if (!target) return;
-    if (getEffectiveGlobalType(target) !== 'soul-container') {
+    const targetType = getEffectiveGlobalType(target);
+    if (!isPropContainerType(targetType)) {
       await toggleMod(modId);
       return;
     }
@@ -607,7 +623,7 @@ export default function Locker() {
     }
     const active = mods.filter(
       (m) =>
-        m.id !== modId && m.enabled && getEffectiveGlobalType(m) === 'soul-container'
+        m.id !== modId && m.enabled && getEffectiveGlobalType(m) === targetType
     );
     for (const m of active) await toggleMod(m.id);
     await toggleMod(modId);
@@ -976,6 +992,7 @@ export default function Locker() {
             onSetGlobalType={tagModGlobalType}
             onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
             onImportSoul={() => setSoulImportOpen(true)}
+            onImportUrn={() => setUrnImportOpen(true)}
           />
         </div>
       )}
@@ -985,6 +1002,18 @@ export default function Locker() {
           <SoulContainerImportModal
             onClose={() => setSoulImportOpen(false)}
             existingSoulImports={existingSoulImports}
+            onImported={() => {
+              void loadMods();
+            }}
+          />
+        </Suspense>
+      )}
+
+      {urnImportOpen && (
+        <Suspense fallback={null}>
+          <SpiritUrnImportModal
+            onClose={() => setUrnImportOpen(false)}
+            existingUrnImports={existingUrnImports}
             onImported={() => {
               void loadMods();
             }}
@@ -1098,6 +1127,8 @@ interface LockerGlobalViewProps {
   onRequestDelete: (modIds: string[], name: string) => void;
   /** Open the soul-container GLB import modal (shown on the soul-container tab). */
   onImportSoul: () => void;
+  /** Open the Spirit Urn GLB import modal (shown on the spirit-urn tab). */
+  onImportUrn: () => void;
 }
 
 /**
@@ -1105,10 +1136,17 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
-  const available = GLOBAL_MOD_TYPE_ORDER.filter((type) => groups[type].length > 0);
+  // Prop-container types (soul container, spirit urn) are always selectable even
+  // when empty: their tab is the only entry point to the GLB importer, so
+  // disabling an empty one would make it impossible to import the first of its
+  // kind (the chicken-and-egg that blocked testing the urn import path). Every
+  // other type only appears once it has at least one mod.
+  const available = GLOBAL_MOD_TYPE_ORDER.filter(
+    (type) => groups[type].length > 0 || isPropContainerType(type)
+  );
   const [selectedType, setSelectedType] = useState<GlobalModType>(
     () => available[0] ?? 'soul-container'
   );
@@ -1133,9 +1171,16 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
     };
   }, [retagMenu]);
   // Guard against the selected type emptying out (e.g. last mod deleted) by
-  // falling back to the first non-empty type at render time.
-  const activeType = groups[selectedType]?.length ? selectedType : available[0];
+  // falling back to the first available type at render time. Prop-container
+  // types stay selected even while empty so the importer remains reachable.
+  const activeType =
+    groups[selectedType]?.length || isPropContainerType(selectedType)
+      ? selectedType
+      : available[0];
   const activeMods = activeType ? groups[activeType] : [];
+  // Soul containers and spirit urns share the single-select + live-3D-tile
+  // treatment (frosted glass, content-stable key, active badge, import button).
+  const isPropContainer = isPropContainerType(activeType);
   const total = GLOBAL_MOD_TYPE_ORDER.reduce((sum, type) => sum + groups[type].length, 0);
   // The scrollable card pane: the shared soul-container canvas clamps each
   // card's render rect to this element so models never bleed past the pane.
@@ -1229,18 +1274,21 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             const items = groups[type];
             const isActive = type === activeType;
             const isEmpty = items.length === 0;
+            // An empty prop-container tab is still clickable (it opens the
+            // importer); only non-importable types are disabled when empty.
+            const isDisabled = isEmpty && !isPropContainerType(type);
             return (
               <button
                 key={type}
                 type="button"
-                disabled={isEmpty}
+                disabled={isDisabled}
                 onClick={() => setSelectedType(type)}
                 className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                  isEmpty
+                  isDisabled
                     ? 'cursor-default border-transparent opacity-40'
                     : isActive
                       ? 'border-accent/60 bg-accent/15'
-                      : 'border-transparent hover:bg-white/10'
+                      : 'cursor-pointer border-transparent hover:bg-white/10'
                 }`}
               >
                 <span className="flex-1 truncate text-sm font-medium text-white">
@@ -1265,18 +1313,40 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 <span className="text-xs text-white/60">
                   {t('locker.page.modCount', { count: activeMods.length })}
                 </span>
-                {activeType === 'soul-container' && (
+                {isPropContainer && (
                   <button
                     type="button"
-                    onClick={onImportSoul}
+                    onClick={activeType === 'spirit-urn' ? onImportUrn : onImportSoul}
                     className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
-                    title={t('locker.soulImport.trigger.title')}
+                    title={activeType === 'spirit-urn' ? t('locker.urnImport.trigger.title') : t('locker.soulImport.trigger.title')}
                   >
-                    <Ghost className="h-3.5 w-3.5" />
-                    {t('locker.soulImport.trigger.label')}
+                    {activeType === 'spirit-urn' ? <Box className="h-3.5 w-3.5" /> : <Ghost className="h-3.5 w-3.5" />}
+                    {activeType === 'spirit-urn' ? t('locker.urnImport.trigger.label') : t('locker.soulImport.trigger.label')}
                   </button>
                 )}
               </div>
+              {activeMods.length === 0 && isPropContainer ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                  {activeType === 'spirit-urn' ? (
+                    <Box className="h-8 w-8 text-white/40" />
+                  ) : (
+                    <Ghost className="h-8 w-8 text-white/40" />
+                  )}
+                  <p className="max-w-sm text-sm text-white/70">
+                    {t('locker.global.propEmpty', {
+                      type: GLOBAL_MOD_TYPE_LABELS[activeType],
+                    })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={activeType === 'spirit-urn' ? onImportUrn : onImportSoul}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                  >
+                    {activeType === 'spirit-urn' ? <Box className="h-3.5 w-3.5" /> : <Ghost className="h-3.5 w-3.5" />}
+                    {activeType === 'spirit-urn' ? t('locker.urnImport.trigger.label') : t('locker.soulImport.trigger.label')}
+                  </button>
+                </div>
+              ) : (
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
                 {activeMods.map((mod) => {
                   // Skipped when NSFW previews are hidden so we never bleed
@@ -1285,12 +1355,12 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                     mod.thumbnailUrl && !(mod.nsfw && hideNsfw) ? mod.thumbnailUrl : null;
                   return (
                     <div
-                      // Soul containers key on the content-stable sha256: their
+                      // Prop containers key on the content-stable sha256: their
                       // id/metaKey change when toggled, which would otherwise
                       // remount the card and reload its 3D model on every select.
                       // Other types keep the plain id key (original behavior).
                       key={
-                        activeType === 'soul-container' ? mod.sha256 ?? mod.id : mod.id
+                        isPropContainer ? mod.sha256 ?? mod.id : mod.id
                       }
                       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
                         mod.enabled
@@ -1302,7 +1372,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           behind the card so it's tinted by its own thumbnail,
                           matching the Installed grid cards. Soul containers show
                           a 3D model on a clear window, so they skip it. */}
-                      {glassBackdropUrl && activeType !== 'soul-container' && (
+                      {glassBackdropUrl && !isPropContainer && (
                         <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
                           <img
                             src={glassBackdropUrl}
@@ -1322,7 +1392,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           background shows through; other types keep a solid bg. */}
                       <div
                         className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] ${
-                          activeType === 'soul-container' ? '' : 'bg-bg-tertiary'
+                          isPropContainer ? '' : 'bg-bg-tertiary'
                         }`}
                       >
                         {/* Frosted-glass panel for soul containers, kept as a
@@ -1331,17 +1401,19 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             stacking context, which would sink this subtree (and
                             the retag kebab below) under the z-10 full-card toggle
                             and swallow the kebab's clicks. */}
-                        {activeType === 'soul-container' && (
+                        {isPropContainer && (
                           <div className="pointer-events-none absolute inset-0 bg-white/[0.04] backdrop-blur-md" />
                         )}
-                        {/* Soul containers show a live 3D model on a clear window
+                        {/* Prop containers show a live 3D model on a clear window
                             (no 2D thumbnail behind it); other types show their
-                            GameBanana thumbnail. */}
-                        {activeType === 'soul-container' ? (
+                            GameBanana thumbnail. The urn exports its own model
+                            entry; the soul container is the tile's default. */}
+                        {isPropContainer ? (
                           <Suspense fallback={null}>
                             <SoulContainerTile
                               tileId={mod.sha256 ?? mod.id}
                               modKey={mod.metaKey}
+                              entry={activeType === 'spirit-urn' ? URN_MODEL_ENTRY : undefined}
                             />
                           </Suspense>
                         ) : (
@@ -1366,13 +1438,13 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           </div>
                         )}
                         <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover/card:bg-bg-primary/20" />
-                        {/* Soul containers are single-select, so mark the one
+                        {/* Prop containers are single-select, so mark the one
                             active pick with a positive "Active" badge (a disabled
                             card is simply unmarked) and fade it in so selecting
                             animates rather than snapping. Other global types
                             allow multiple enabled, so they keep tagging the
                             disabled ones. */}
-                        {activeType === 'soul-container'
+                        {isPropContainer
                           ? mod.enabled && (
                               <div className="pointer-events-none absolute left-2 top-2 z-10 flex h-5 items-start animate-fade-in">
                                 <Tag
@@ -1488,19 +1560,21 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   );
                 })}
               </div>
+              )}
             </>
           ) : (
             <p className="text-sm text-white/70">{t('locker.page.noGlobalNonHeroCosmeticsInstalledYet')}</p>
           )}
         </div>
 
-        {/* Shared 3D canvas for the Global soul-container grid: one WebGL context
-            renders every card (scissored into its on-screen rect), so the grid
-            can't exhaust the browser's live-context cap. Mounted INSIDE the pane
-            (not at the view root) so its z-[5] sits below each card's tags/kebab
-            but above the card background, keeping chrome on top of the model.
-            Only mounted while that type is selected. */}
-        {activeType === 'soul-container' && (
+        {/* Shared 3D canvas for the Global prop-container grid (soul containers
+            and spirit urns): one WebGL context renders every card (scissored into
+            its on-screen rect), so the grid can't exhaust the browser's
+            live-context cap. Mounted INSIDE the pane (not at the view root) so its
+            z-[5] sits below each card's tags/kebab but above the card background,
+            keeping chrome on top of the model. Only mounted while a prop-container
+            type is selected. */}
+        {isPropContainer && (
           <Suspense fallback={null}>
             <SoulContainerCanvas paneRef={paneRef} />
           </Suspense>

@@ -78,6 +78,10 @@ export interface ModMetadata {
      *  import. The orientation/glow transform + tracking status; presence marks
      *  the slot for idempotent re-import (replace the previous build). */
     soulImport?: import('../../../src/types/mod').SoulContainerImportInfo;
+    /** Set when this VPK was built from a user GLB via the Spirit Urn import.
+     *  The orientation/span transform + tracking status; presence marks the slot
+     *  for idempotent re-import (replace the previous build). */
+    urnImport?: import('../../../src/types/mod').UrnImportInfo;
     /** Load-order slot this mod last held while enabled. Disabled mods now
      *  get free-form filenames (no pakNN), so the priority is no longer encoded
      *  in the name; we stash it here on disable and try to restore it on enable

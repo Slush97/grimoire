@@ -31,10 +31,11 @@ import {
 import { downloadMod } from '../services/download';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
+import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
 import { getMainWindow } from '../index';
-import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview } from '../../../src/types/electron';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
+import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -204,6 +205,7 @@ function enrichMod(mod: Mod): WireMod {
             lockerSounds: metadata.lockerSounds,
             abilitySounds: abilitySounds ?? undefined,
             soulImport: metadata.soulImport,
+            urnImport: metadata.urnImport,
             ignoreUpdates: metadata.ignoreUpdates,
         };
     }
@@ -1026,6 +1028,125 @@ ipcMain.handle(
             // 4. Always remove the temp staging dir (the installed copy is
             //    byte-identical, so nothing is lost).
             await cleanupSoulContainerBuild(built.vpkPath);
+        }
+    }
+);
+
+// preview-spirit-urn-glb
+// Build the urn override VPK for the current orientation/span and export its
+// model back to a GLB so the import modal renders EXACTLY what loads in-game.
+// Mirrors preview-soul-container-glb.
+ipcMain.handle(
+    'preview-spirit-urn-glb',
+    async (_, args: PreviewSpiritUrnGlbArgs): Promise<SpiritUrnPreview> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const preview = await previewSpiritUrnGlb(deadlockPath, {
+            glbPath: args.glbPath,
+            name: 'preview',
+            orient: args.orient,
+            rotate: args.rotate,
+            ground: args.ground,
+            span: args.span,
+        });
+        return {
+            glbBase64: preview.glbBase64,
+            orient: preview.orient,
+            fitScale: preview.report.fitScale,
+            sourceSpan: preview.report.sourceSpan,
+            targetSpan: preview.report.targetSpan,
+        };
+    }
+);
+
+// import-spirit-urn-glb
+// Build a Spirit Urn override VPK from a user GLB (bundled `vpkmerge
+// soul-container import-urn`) and install it as a tracked local mod, mirroring
+// import-soul-container-glb. Urn imports all override the same model path
+// (idol_urn.vmdl_c), so two enabled at once would fight: when `replaceMetaKey`
+// is given we reuse that slot in place instead of allocating a new one.
+ipcMain.handle(
+    'import-spirit-urn-glb',
+    async (_, args: ImportSpiritUrnGlbArgs): Promise<Mod[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const { glbPath, name, orient, rotate, ground, span, status, notes, nsfw, thumbnailDataUrl, replaceMetaKey } = args;
+        if (!name?.trim()) {
+            throw new Error('A name is required');
+        }
+
+        // 1. Build the override VPK to a temp staging path.
+        const built = await buildSpiritUrnVpk(deadlockPath, {
+            glbPath,
+            name: name.trim(),
+            orient,
+            rotate,
+            ground,
+            span,
+        });
+
+        try {
+            // 2. Resolve the destination slot: reuse the previous import's slot
+            //    when replacing (never stack two urns), else allocate the next
+            //    free ENABLED slot the same way import-soul-container-glb does.
+            let destPath: string | null = null;
+            let destMetaKey: string | null = null;
+            if (replaceMetaKey) {
+                destPath = await resolveModVpk(deadlockPath, replaceMetaKey);
+                if (destPath) destMetaKey = replaceMetaKey;
+            }
+            if (!destPath) {
+                destPath = await allocateEnabledVpkPath(deadlockPath);
+                destMetaKey = metaKeyFor(destPath);
+            }
+
+            await fs.copyFile(built.vpkPath, destPath);
+            // A reused slot may have a stale exported-GLB cache; drop it so the
+            // Locker tile re-exports the new model.
+            await clearSoulModelCache(destMetaKey!);
+
+            const urnImport: UrnImportInfo = {
+                glbFileName: basename(glbPath),
+                orient,
+                ...(rotate && (rotate[0] || rotate[1] || rotate[2]) ? { rotate } : {}),
+                ...(ground ? { ground } : {}),
+                span,
+                vpkmergeVersion: built.report.version,
+                fitScale: built.report.fitScale,
+                sourceSpan: built.report.sourceSpan,
+                targetSpan: built.report.targetSpan,
+                status: status ?? 'untested',
+            };
+
+            // 3. Scrub orphan metadata, then write the local-import entry. We set
+            //    globalType explicitly (always 'spirit-urn') so it lands in the
+            //    Locker's Global spirit-urn group immediately.
+            removeModMetadata(destMetaKey!);
+            await setModMetadataWithHash(
+                destMetaKey!,
+                {
+                    modName: name.trim(),
+                    thumbnailUrl: thumbnailDataUrl,
+                    nsfw: !!nsfw,
+                    sourceSection: 'SpiritUrnImport',
+                    globalType: 'spirit-urn',
+                    globalTypeClassifierVersion: GLOBAL_CLASSIFIER_VERSION,
+                    urnImport,
+                    ...(notes?.trim() ? { variantLabel: notes.trim() } : {}),
+                },
+                destPath
+            );
+
+            const mods = await scanMods(deadlockPath);
+            return mods.map(enrichMod);
+        } finally {
+            // 4. Always remove the temp staging dir (the installed copy is
+            //    byte-identical, so nothing is lost).
+            await cleanupSpiritUrnBuild(built.vpkPath);
         }
     }
 );

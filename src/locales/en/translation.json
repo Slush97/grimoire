@@ -998,7 +998,8 @@
       "activeBadgeTitle": "This soul container is active and loaded in-game",
       "disabledBadge": "Disabled",
       "disabledBadgeTitle": "This mod is disabled and not loaded in-game",
-      "deleteMod": "Delete {{name}}"
+      "deleteMod": "Delete {{name}}",
+      "propEmpty": "No {{type}} installed yet. Import one from a 3D model (.glb) to get started."
     },
     "soulImport": {
       "trigger": {
@@ -1083,6 +1084,36 @@
       "dialog": {
         "title": "Select a GLB model",
         "filterName": "glTF binary"
+      }
+    },
+    "urnImport": {
+      "trigger": {
+        "label": "Import Spirit Urn (GLB)",
+        "ariaLabel": "Import spirit urn from GLB",
+        "title": "Import a Spirit Urn from a 3D model (.glb): orient it, size it, preview it, and build a tracked local mod that replaces the carryable Idol/urn"
+      },
+      "title": "Import Spirit Urn (GLB)",
+      "dropzone": {
+        "previewEmpty": "Drop a GLB to preview it fitted to the spirit urn."
+      },
+      "fields": {
+        "namePlaceholder": "My spirit urn"
+      },
+      "size": {
+        "label": "Size",
+        "units": "units",
+        "hint": "Largest-axis size in Source units. The urn is bigger than a soul orb; the default (28) is a good starting point. Confirm the real size in-game."
+      },
+      "ground": {
+        "label": "Sit base on the ground (instead of centering)"
+      },
+      "highPolyWarning": "This model has {{count}} triangles, well above the {{threshold}} an urn usually needs. It will still build, but a very heavy model can hurt in-game performance.",
+      "conflict": {
+        "heading": "A spirit urn is already enabled",
+        "body": "Only one spirit urn loads in-game at a time (they override the same model). Choose what to do with “{{name}}”:"
+      },
+      "errors": {
+        "previewFailed": "Spirit urn preview failed: {{error}}"
       }
     },
     "colors": {
