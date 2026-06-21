@@ -1227,8 +1227,7 @@ export default function Settings() {
             <Toggle
               checked={settings?.experimentalFoundry ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalFoundry: checked })}
-              label={<Tx k="settings.experimental.foundry" fallback="Foundry" />}
-              description={<Tx k="settings.toggles.foundry" fallback="Browse the game's own asset catalog (textures, icons, heroes) built offline from your installed game files. Swap and forge tools coming soon." />}
+              label={<Tx k="settings.experimental.foundry" fallback="Door Stuck" />}
             />
           </div>
         </Card>
