@@ -544,6 +544,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ modsNotice: ENABLE_CAP_NOTICE });
         return false;
       }
+      // Stale id: a mod's id is its filename, which an enable/disable changes.
+      // When toggles for the same card fire faster than the store resyncs (the
+      // main process now serializes mutations, so the second runs after the file
+      // already moved), the second carries a dead id and the move throws "Mod not
+      // found". The desired state is whatever the folder already reflects, so
+      // resync silently instead of dropping the whole page to the error screen.
+      if (/Mod not found/.test(String(err))) {
+        get().loadMods({ silent: true });
+        return false;
+      }
       set({ modsError: String(err) });
       return false;
     }
