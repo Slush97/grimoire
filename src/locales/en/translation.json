@@ -48,7 +48,7 @@
     "discover": "Discover",
     "servers": "Servers",
     "locker": "Locker",
-    "foundry": "Foundry",
+    "foundry": "Door Stuck",
     "conflicts": "Conflicts",
     "profiles": "Profiles",
     "crosshair": "Crosshair",
@@ -58,6 +58,7 @@
   },
   "foundry": {
     "header": {
+      "title": "your mom goes to college",
       "description": "Browse the game's own asset catalog, built offline from your installed files."
     },
     "subtools": {
@@ -633,7 +634,7 @@
       "fixUnknownMods": "Fix Unknown Mods",
       "deadworksServers": "Deadworks Servers",
       "performanceConfig": "Performance Config",
-      "foundry": "Foundry"
+      "foundry": "Door Stuck"
     },
     "support": {
       "reportBuildFailed": "Failed to build report: {{error}}",
@@ -702,8 +703,7 @@
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, and two download keys: no account id, no username, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
-      "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time.",
-      "foundry": "Browse the game's own asset catalog (textures, icons, heroes) built offline from your installed game files. Swap and forge tools coming soon."
+      "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."
     }
   },
   "crosshair": {
@@ -1070,7 +1070,8 @@
       "disabledBadge": "Disabled",
       "disabledBadgeTitle": "This mod is disabled and not loaded in-game",
       "deleteMod": "Delete {{name}}",
-      "propEmpty": "No {{type}} installed yet. Import one from a 3D model (.glb) to get started."
+      "propEmpty": "No {{type}} installed yet. Import one from a 3D model (.glb) to get started.",
+      "typeEmpty": "No {{type}} installed yet. Find some in Browse and they'll show up here."
     },
     "soulImport": {
       "trigger": {
@@ -1410,6 +1411,7 @@
       "list": "List",
       "noHeroCategoriesFound": "No hero categories found.",
       "global": "Global",
+      "globalEmptyHint": "Import soul containers & spirit urns",
       "unassigned": "Unassigned",
       "unassignedDescription": "These mods couldn't be matched to a hero automatically. Tag one to move it into that hero's locker pile.",
       "noPreview": "No preview",
