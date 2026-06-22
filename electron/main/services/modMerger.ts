@@ -1,11 +1,19 @@
 import { promises as fs, existsSync } from 'fs';
-import { join, dirname, resolve } from 'path';
+import { join, dirname, resolve, basename } from 'path';
 import { tmpdir } from 'os';
 import { spawn } from 'child_process';
 import { randomUUID, createHash } from 'crypto';
 import { app } from 'electron';
 import { metaKeyFor } from './deadlock';
-import { scanMods, disableMod, enableMod, allocateEnabledVpkPath, type Mod } from './mods';
+import { loadSettings } from './settings';
+import {
+    scanMods,
+    disableModUnlocked,
+    enableModUnlocked,
+    allocateEnabledVpkPath,
+    runExclusiveModMutation,
+    type Mod,
+} from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { encodeShareCode } from './portableProfile';
@@ -24,6 +32,38 @@ import type {
 
 const DEADLOCK_STEAM_APP_ID = 1422450;
 const DEADLOCK_GAMEBANANA_GAME_ID = 20948;
+
+/** Verbose merge-lifecycle trace, gated on the same `verboseModTrace` setting as
+ *  services/mods.ts. Merge/rebuild operations were previously silent, so an
+ *  interrupted rebuild left a half-written manifest with no record of how it got
+ *  that way. A `start` line with no matching `done` line localizes the crash. */
+function mergeTrace(message: string): void {
+    try {
+        if (loadSettings().verboseModTrace) console.log(`[modTrace] ${message}`);
+    } catch {
+        /* never let tracing break a merge */
+    }
+}
+
+/** Compact one-line render of a source list for the trace: each source's
+ *  recorded fileName plus whether we captured the stable identities (gb id /
+ *  sha) that the Installed-list hide logic needs to avoid a pakNN collision. */
+function describeSources(sources: MergedModSource[]): string {
+    return sources
+        .map(
+            (s) =>
+                `${s.fileName}(${s.gameBananaId ? `gb=${s.gameBananaId}` : 'local'},${s.sha256AtMergeTime ? 'sha' : 'NO-sha'})`
+        )
+        .join(', ');
+}
+
+/** Source filenames recorded as a bare enabled slot (pakNN_dir.vpk). A finished
+ *  merge rewrites these to the disabled free-form name; a leftover means the
+ *  disable/rebuild loop was interrupted, and that recyclable name can later
+ *  collide with an unrelated mod that lands in the slot. */
+function stalePakSources(sources: MergedModSource[]): MergedModSource[] {
+    return sources.filter((s) => /^pak\d+_dir\.vpk$/i.test(s.fileName));
+}
 
 type SupportedPlatform = 'linux-x64' | 'darwin-arm64' | 'win32-x64';
 
@@ -273,6 +313,15 @@ export async function mergeMods(
     if (!trimmedName) throw new Error('A name is required for the merged mod.');
     if (modIds.length < 2) throw new Error('Select at least two mods to merge.');
 
+    return runExclusiveModMutation(() => mergeModsLocked(deadlockPath, modIds, options, trimmedName));
+}
+
+async function mergeModsLocked(
+    deadlockPath: string,
+    modIds: string[],
+    options: MergeOptions,
+    trimmedName: string
+): Promise<MergeResult> {
     const installed = await scanMods(deadlockPath);
     const sources: Mod[] = [];
     for (const id of modIds) {
@@ -292,6 +341,12 @@ export async function mergeMods(
     // last-input-wins, so sort DESCENDING to put that highest-priority
     // (lowest-pakNN) source LAST in the argv and reproduce the in-game winner.
     sources.sort((a, b) => b.priority - a.priority);
+
+    mergeTrace(
+        `merge start "${trimmedName}": ${sources.length} sources -> ${sources
+            .map((s) => `${s.fileName}(pri ${s.priority}${s.enabled ? '' : ',disabled'})`)
+            .join(', ')}`
+    );
 
     // Hash every source BEFORE any filesystem mutation. sha256AtMergeTime
     // is the content-identity fallback unmerge uses when the manifest
@@ -368,8 +423,8 @@ export async function mergeMods(
     });
 
     // Disable each enabled source so its priority slot frees up and the
-    // engine stops loading the original. disableMod returns the post-move
-    // Mod so we record the actual on-disk filename (it may have been
+    // engine stops loading the original. The disable helper returns the
+    // post-move Mod so we record the actual on-disk filename (it may have been
     // renamed by reconcileEnabledDisabledCollisions). We re-stamp the
     // manifest after each successful disable so a mid-loop failure leaves
     // the manifest as up-to-date as it can be: sources processed already
@@ -378,7 +433,7 @@ export async function mergeMods(
     for (let i = 0; i < sources.length; i++) {
         const src = sources[i];
         if (src.enabled) {
-            const after = await disableMod(deadlockPath, src.id);
+            const after = await disableModUnlocked(deadlockPath, src.id);
             disabledSources.push(after);
             preDisableSnapshot[i].fileName = after.fileName;
             setModMetadata(mergedMetaKey, {
@@ -391,6 +446,16 @@ export async function mergeMods(
             disabledSources.push(src);
         }
     }
+
+    const stale = stalePakSources(preDisableSnapshot);
+    if (stale.length > 0) {
+        mergeTrace(
+            `merge WARNING "${trimmedName}": ${stale.length} source(s) still recorded under a recyclable pakNN name (${stale
+                .map((s) => s.fileName)
+                .join(', ')}) -> a future slot reuse can collide with merge-source reconciliation`
+        );
+    }
+    mergeTrace(`merge done "${trimmedName}" key=${mergedMetaKey} sources: ${describeSources(preDisableSnapshot)}`);
 
     const finalMods = await scanMods(deadlockPath);
     const newMod = finalMods.find((m) => m.metaKey === mergedMetaKey);
@@ -513,6 +578,13 @@ export async function unmergeMod(
     deadlockPath: string,
     mergedModId: string
 ): Promise<UnmergeModResult> {
+    return runExclusiveModMutation(() => unmergeModLocked(deadlockPath, mergedModId));
+}
+
+async function unmergeModLocked(
+    deadlockPath: string,
+    mergedModId: string
+): Promise<UnmergeModResult> {
     const installed = await scanMods(deadlockPath);
     const target = installed.find((m) => m.id === mergedModId);
     if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
@@ -537,7 +609,7 @@ export async function unmergeMod(
             continue;
         }
         if (src.enabledAtMergeTime && !onDisk.enabled) {
-            recovered.push(await enableMod(deadlockPath, onDisk.id));
+            recovered.push(await enableModUnlocked(deadlockPath, onDisk.id));
         } else {
             recovered.push(onDisk);
         }
@@ -564,6 +636,16 @@ export async function unmergeMod(
  * the merged VPK is deleted (a normal full unmerge for what's left).
  */
 export async function extractMergeSource(
+    deadlockPath: string,
+    mergedModId: string,
+    sourceFileName: string
+): Promise<ExtractMergeSourceResult> {
+    return runExclusiveModMutation(() =>
+        extractMergeSourceLocked(deadlockPath, mergedModId, sourceFileName)
+    );
+}
+
+async function extractMergeSourceLocked(
     deadlockPath: string,
     mergedModId: string,
     sourceFileName: string
@@ -599,7 +681,7 @@ export async function extractMergeSource(
     const restoreExtracted = async (): Promise<void> => {
         if (!removedOnDisk) return;
         if (removedSnapshot.enabledAtMergeTime && !removedOnDisk.enabled) {
-            restored.push(await enableMod(deadlockPath, removedOnDisk.id));
+            restored.push(await enableModUnlocked(deadlockPath, removedOnDisk.id));
         } else {
             restored.push(removedOnDisk);
         }
@@ -612,7 +694,7 @@ export async function extractMergeSource(
             const onDisk = await locator.locate(survivor);
             if (onDisk) {
                 if (survivor.enabledAtMergeTime && !onDisk.enabled) {
-                    restored.push(await enableMod(deadlockPath, onDisk.id));
+                    restored.push(await enableModUnlocked(deadlockPath, onDisk.id));
                 } else {
                     restored.push(onDisk);
                 }
@@ -659,11 +741,15 @@ export async function extractMergeSource(
     // move the merge to the base folder) for a merge that lives in an overflow folder.
     const targetDir = dirname(target.path);
     const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
+    mergeTrace(
+        `rebuild start merge=${manifest.id} key=${target.metaKey}: ${ordered.length} sources -> ${basename(buildPath)} (removed "${sourceFileName}")`
+    );
     try {
         await runVpkmerge([buildPath, ...ordered.map((m) => m.path)]);
         await verifyVpkOutput(buildPath);
     } catch (err) {
         try { await fs.unlink(buildPath); } catch { /* ignore partial-output cleanup */ }
+        mergeTrace(`rebuild FAILED merge=${manifest.id}: ${String(err)} (build temp removed)`);
         throw err;
     }
 
@@ -691,6 +777,7 @@ export async function extractMergeSource(
         sha256,
         merged: newManifest,
     });
+    mergeTrace(`rebuild done merge=${manifest.id} key=${target.metaKey}: ${describeSources(remainingSnapshots)}`);
 
     await restoreExtracted();
 

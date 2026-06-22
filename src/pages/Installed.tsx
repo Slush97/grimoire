@@ -647,9 +647,10 @@ export default function Installed() {
 
   // Source mods absorbed into a merged VPK still live on disk (disabled) so
   // unmerge can restore them, but the user shouldn't see them as separate
-  // cards: the merged mod is now the source of truth. Build the absorbed
-  // fileName set once and derive a filtered view; downstream rendering,
-  // reorder, and update checks all run off `visibleMods`.
+  // cards: the merged mod is now the source of truth. Match by identity instead
+  // of filename alone because recyclable pakNN slots can later hold unrelated
+  // enabled mods; downstream rendering, reorder, and update checks all run off
+  // `visibleMods`.
   // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
   // (applied per-ability sounds) are Locker-managed artifacts, not user-
   // installed mods, so they never show as cards here. They're managed entirely
@@ -657,14 +658,35 @@ export default function Installed() {
   // Memoized so the array identity (and the entry identities derived from it)
   // only changes when `mods` does; the memoized card grid depends on that.
   const visibleMods = useMemo(() => {
-    const absorbedFileNames = new Set<string>();
-    for (const m of mods) {
-      if (m.merged?.sources) {
-        for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
+    const absorbedSources: MergedModSource[] = [];
+    for (const m of mods) absorbedSources.push(...(m.merged?.sources ?? []));
+
+    const matchesAbsorbedSource = (mod: Mod, source: MergedModSource): boolean => {
+      if (mod.enabled || mod.fileName !== source.fileName) return false;
+
+      const sourceSha = source.sha256AtMergeTime?.toLowerCase();
+      const modSha = mod.sha256?.toLowerCase();
+      if (sourceSha && modSha) return sourceSha === modSha;
+
+      if (typeof source.gameBananaId === 'number' && typeof mod.gameBananaId === 'number') {
+        if (source.gameBananaId !== mod.gameBananaId) return false;
+        if (
+          typeof source.gameBananaFileId === 'number' &&
+          typeof mod.gameBananaFileId === 'number'
+        ) {
+          return source.gameBananaFileId === mod.gameBananaFileId;
+        }
+        return !sourceSha;
       }
-    }
+
+      return !sourceSha;
+    };
+
     return mods.filter(
-      (m) => !m.lockerCosmetics && !m.lockerSounds && !absorbedFileNames.has(m.fileName)
+      (m) =>
+        !m.lockerCosmetics &&
+        !m.lockerSounds &&
+        !absorbedSources.some((source) => matchesAbsorbedSource(m, source))
     );
   }, [mods]);
   // Layout = the user's structural choice (cards grid vs horizontal list).
