@@ -11,6 +11,8 @@ import TextureLightbox from './TextureLightbox';
 interface LibraryBrowseProps {
   /** codename -> display name, resolved once by the Foundry shell. */
   heroNames: Map<string, string>;
+  /** Category the grid opens on (the Items sub-tool lands on item icons). */
+  initialCategory?: TextureCategory;
 }
 
 // The bounded, thumbnailable categories the browse grid surfaces this pass.
@@ -25,9 +27,9 @@ const CATEGORIES: { value: TextureCategory; labelKey: string; fallback: string }
  * client-side hero/search narrowing and an enlarge-on-click lightbox. One IPC
  * call per category (thumbnails decoded once and cached); filtering is local.
  */
-export default function LibraryBrowse({ heroNames }: LibraryBrowseProps) {
+export default function LibraryBrowse({ heroNames, initialCategory = 'ability-icon' }: LibraryBrowseProps) {
   const { t } = useTranslation();
-  const [category, setCategory] = useState<TextureCategory>('ability-icon');
+  const [category, setCategory] = useState<TextureCategory>(initialCategory);
   const [items, setItems] = useState<TextureGridItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

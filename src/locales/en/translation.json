@@ -114,6 +114,30 @@
       "decoding": "Decoding full size...",
       "nativeSize": "Native size"
     },
+    "texture": {
+      "categories": {
+        "heroModel": "Hero models",
+        "abilityVfx": "Ability VFX"
+      },
+      "pickHero": "Select a hero",
+      "scope": {
+        "title": "Pick a hero to browse textures",
+        "description": "Hero model and VFX textures are a large set, so choose a hero (or type a search) to narrow the list."
+      },
+      "empty": {
+        "title": "No textures match",
+        "description": "No textures in this category for that hero or search. Try another category or hero."
+      },
+      "count": "{{count}} textures",
+      "countCapped": "Showing the first {{count}}. Refine your search to see more."
+    },
+    "recolor": {
+      "pickHero": "Select a hero",
+      "scope": {
+        "title": "Pick a hero to recolor",
+        "description": "Choose a hero to repaint their ability VFX (single color, rainbow, gradient, or trippy) and body/gun materials. The result is saved as a managed mod you can remove anytime."
+      }
+    },
     "sound": {
       "searchPlaceholder": "Search sounds...",
       "muteToggle": "Mute / unmute auditions",
