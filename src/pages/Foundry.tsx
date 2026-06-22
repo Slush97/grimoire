@@ -14,15 +14,17 @@ import { foundryHeroes, foundryWarmCache } from '../lib/api';
 import type { HeroInfo } from '../types/foundry';
 import LibraryBrowse from '../components/foundry/LibraryBrowse';
 import SoundBrowse from '../components/foundry/SoundBrowse';
+import TextureBrowse from '../components/foundry/TextureBrowse';
+import RecolorTool from '../components/foundry/RecolorTool';
 
-// Sub-tools shown in the left rail. Library + Sound are live; the rest are
-// placeholders that telegraph the planned Foundry surface.
+// Sub-tools shown in the left rail. Library / Sound / Texture / Recolor are
+// live; Items rides the Library grid (opened on item icons) for now.
 const SUBTOOLS = [
   { id: 'library', icon: Library, labelKey: 'foundry.subtools.library', enabled: true },
   { id: 'sound', icon: Volume2, labelKey: 'foundry.subtools.sound', enabled: true },
-  { id: 'texture', icon: ImageIcon, labelKey: 'foundry.subtools.texture', enabled: false },
-  { id: 'items', icon: ShoppingBag, labelKey: 'foundry.subtools.items', enabled: false },
-  { id: 'recolor', icon: Palette, labelKey: 'foundry.subtools.recolor', enabled: false },
+  { id: 'texture', icon: ImageIcon, labelKey: 'foundry.subtools.texture', enabled: true },
+  { id: 'items', icon: ShoppingBag, labelKey: 'foundry.subtools.items', enabled: true },
+  { id: 'recolor', icon: Palette, labelKey: 'foundry.subtools.recolor', enabled: true },
 ] as const;
 
 type SubtoolId = (typeof SUBTOOLS)[number]['id'];
@@ -120,6 +122,12 @@ export default function Foundry() {
             />
           ) : active === 'sound' ? (
             <SoundBrowse heroes={heroes} heroNames={heroNames} />
+          ) : active === 'texture' ? (
+            <TextureBrowse heroes={heroes} heroNames={heroNames} />
+          ) : active === 'recolor' ? (
+            <RecolorTool heroes={heroes} />
+          ) : active === 'items' ? (
+            <LibraryBrowse heroNames={heroNames} initialCategory="item-icon" />
           ) : (
             <LibraryBrowse heroNames={heroNames} />
           )}
