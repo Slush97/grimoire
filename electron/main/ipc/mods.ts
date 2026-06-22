@@ -276,10 +276,6 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     // the Installed list would only let the user disable or reorder them and
     // silently break their applied cosmetics.
     const visible = mods.filter((m) => !isLockerManaged(m.metaKey));
-    if (settings.verboseModTrace) {
-        const hidden = mods.length - visible.length;
-        console.log(`[modTrace] get-mods: scanned ${mods.length}, returning ${visible.length} to renderer (${hidden} locker-managed hidden)`);
-    }
     // Pre-warm the VPK parse cache across the worker pool for mods whose lazy
     // classifications will parse inside enrichMod below. enrichMod stays sync;
     // its parseVpkDirectoryCached calls hit the warmed cache instead of
@@ -289,7 +285,50 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     if (warmPaths.length > 0) {
         await parseVpkDirectoriesAsync(warmPaths);
     }
-    return visible.map(enrichMod);
+    const enriched = visible.map(enrichMod);
+    if (settings.verboseModTrace) {
+        const hidden = mods.length - visible.length;
+        // The renderer (Installed.tsx visibleMods) also hides disabled source
+        // VPKs that are folded into a merged mod. Replicate its identity checks
+        // here so the boundary line is honest about end-user visibility.
+        const absorbedSources = enriched.flatMap((m) => m.merged?.sources ?? []);
+        const matchesAbsorbedSource = (
+            mod: WireMod,
+            source: NonNullable<WireMod['merged']>['sources'][number]
+        ): boolean => {
+            if (mod.enabled || mod.fileName !== source.fileName) return false;
+
+            const sourceSha = source.sha256AtMergeTime?.toLowerCase();
+            const modSha = mod.sha256?.toLowerCase();
+            if (sourceSha && modSha) return sourceSha === modSha;
+
+            if (typeof source.gameBananaId === 'number' && typeof mod.gameBananaId === 'number') {
+                if (source.gameBananaId !== mod.gameBananaId) return false;
+                if (
+                    typeof source.gameBananaFileId === 'number' &&
+                    typeof mod.gameBananaFileId === 'number'
+                ) {
+                    return source.gameBananaFileId === mod.gameBananaFileId;
+                }
+                return !sourceSha;
+            }
+
+            return !sourceSha;
+        };
+        const rendererHidden = enriched.filter((m) =>
+            absorbedSources.some((source) => matchesAbsorbedSource(m, source))
+        );
+        console.log(
+            `[modTrace] get-mods: scanned ${mods.length}, returning ${visible.length} to renderer ` +
+                `(${hidden} locker-managed hidden; ${rendererHidden.length} more will be hidden by the renderer as merge sources)`
+        );
+        for (const m of rendererHidden) {
+            console.log(
+                `[modTrace]   RENDERER-HIDDEN disabled key=${m.metaKey} name="${m.name}" (identity matches a merged mod source -> absent from Installed list)`
+            );
+        }
+    }
+    return enriched;
 });
 
 // enable-mod

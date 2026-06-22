@@ -303,7 +303,15 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
                 // Grimoire (the scan only counts the dir VPK). The likeliest cause
                 // of a local mod "present in the folder but missing from the list".
                 if (trace && entry.toLowerCase().endsWith('.vpk')) {
-                    modTrace(`scanFolder ${basename(folder)}: SKIPPED "${entry}" (not *_dir.vpk -> never shown in Grimoire)`);
+                    if (entry.toLowerCase().includes('.merge-rebuild')) {
+                        // A finished mergeMods rebuild renames this temp into place and
+                        // deletes it. A leftover means an interrupted/failed rebuild, so
+                        // the merged mod's source list may need extra scrutiny in the
+                        // source reconciliation trace below.
+                        modTrace(`scanFolder ${basename(folder)}: STALE merge-rebuild artifact "${entry}" (interrupted mergeMods rebuild never cleaned up; merged source list may be half-updated)`);
+                    } else {
+                        modTrace(`scanFolder ${basename(folder)}: SKIPPED "${entry}" (not *_dir.vpk -> never shown in Grimoire)`);
+                    }
                 }
                 continue;
             }
@@ -349,6 +357,7 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
     // addons1, addons2, ...) and the single shared .disabled parking lot. Each
     // mod's metaKey is stamped in scanFolder from its folder location.
     const enabledFolders = getAddonFolderPaths(deadlockPath);
+    await cleanupStaleMergeRebuildArtifacts(enabledFolders);
     const scanned = await Promise.all([
         ...enabledFolders.map((folder) => scanFolder(folder, true)),
         scanFolder(disabledPath, false),
@@ -366,14 +375,114 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
     if (modTraceEnabled()) {
         const enabled = mods.filter((m) => m.enabled).length;
         modTrace(`scanMods: ${mods.length} VPKs on disk (${enabled} enabled, ${mods.length - enabled} disabled)`);
+        // fileName -> mod, so we can resolve a merge's recorded source filenames
+        // against what's actually on disk right now (see reconciliation below).
+        const byFileName = new Map(mods.map((m) => [m.fileName, m] as const));
         for (const m of mods) {
             const meta = getModMetadata(m.metaKey);
             const gb = meta?.gameBananaId ? `gb=${meta.gameBananaId}` : 'local';
-            modTrace(`  ${m.enabled ? 'ENABLED ' : 'disabled'} pri=${String(m.priority).padStart(2, '0')} ${gb} key=${m.metaKey} name="${meta?.modName ?? m.name}"`);
+            // Surface the flags that drive the renderer's own hide logic
+            // (Installed.tsx visibleMods): merge output + Locker-managed VPKs.
+            const flags: string[] = [];
+            if (meta?.merged) flags.push(`merged(${meta.merged.sources.length}src)`);
+            if (meta?.lockerCosmetics) flags.push('lockerCosmetics');
+            if (meta?.lockerSounds) flags.push('lockerSounds');
+            if (meta?.lockerColors) flags.push('lockerColors');
+            if (meta?.lockerTrippySkins) flags.push('lockerTrippySkins');
+            const flagStr = flags.length ? ` [${flags.join(',')}]` : '';
+            modTrace(`  ${m.enabled ? 'ENABLED ' : 'disabled'} pri=${String(m.priority).padStart(2, '0')} ${gb} key=${m.metaKey} name="${meta?.modName ?? m.name}"${flagStr}`);
+        }
+        // Absorbed-source reconciliation. The Installed list hides disabled VPKs
+        // that are folded into a merged mod, but it must not hide by filename
+        // alone: pakNN slots are recycled, so a stale source filename can point
+        // at an unrelated enabled mod. Log filename hits and classify whether
+        // the current identity-aware renderer will hide them or keep them visible.
+        const matchesAbsorbedSource = (
+            hit: Mod,
+            hitMeta: ReturnType<typeof getModMetadata>,
+            src: import('../../../src/types/mod').MergedModSource
+        ): boolean => {
+            if (hit.enabled || hit.fileName !== src.fileName) return false;
+
+            const sourceSha = src.sha256AtMergeTime?.toLowerCase();
+            const hitSha = hitMeta?.sha256?.toLowerCase();
+            if (sourceSha && hitSha) return sourceSha === hitSha;
+
+            if (typeof src.gameBananaId === 'number' && typeof hitMeta?.gameBananaId === 'number') {
+                if (src.gameBananaId !== hitMeta.gameBananaId) return false;
+                if (
+                    typeof src.gameBananaFileId === 'number' &&
+                    typeof hitMeta.gameBananaFileId === 'number'
+                ) {
+                    return src.gameBananaFileId === hitMeta.gameBananaFileId;
+                }
+                return !sourceSha;
+            }
+
+            return !sourceSha;
+        };
+        for (const m of mods) {
+            const merged = getModMetadata(m.metaKey)?.merged;
+            if (!merged) continue;
+            for (const src of merged.sources) {
+                const hit = byFileName.get(src.fileName);
+                if (!hit) continue;
+                const hitMeta = getModMetadata(hit.metaKey);
+                const hitGb = hitMeta?.gameBananaId;
+                const gbMismatch =
+                    src.gameBananaId !== undefined && hitGb !== undefined && src.gameBananaId !== hitGb;
+                const rendererHides = matchesAbsorbedSource(hit, hitMeta, src);
+                const collision = !rendererHides && (hit.enabled || gbMismatch);
+                modTrace(
+                    `  ${rendererHides ? 'absorbed' : collision ? 'COLLIDE ' : 'VISIBLE '} merge="${merged.id}" source fileName=${src.fileName} (gb=${src.gameBananaId ?? 'local'}) ` +
+                        `matches on-disk ${hit.enabled ? 'ENABLED' : 'disabled'} key=${hit.metaKey} (gb=${hitGb ?? 'local'}) -> renderer ${rendererHides ? 'hides it' : 'keeps it visible'}` +
+                        (collision ? ' [filename collision protected by identity check]' : '')
+                );
+            }
         }
     }
 
     return mods;
+}
+
+/** Remove orphaned `.merge-rebuild-*.vpk` temps. A finished rebuild renames its
+ *  temp into place and deletes it; a leftover means an interrupted rebuild (app
+ *  killed mid-swap), whose merged mod's manifest may be half-written. The temp
+ *  is harmless on disk (the scan skips non-`_dir.vpk`), but we clear it and log
+ *  it -- always on, NOT gated on verboseModTrace, so it surfaces in any
+ *  diagnostic. Age-gated so a temp from a rebuild still in flight is never
+ *  touched (a rebuild completes in well under the threshold). */
+async function cleanupStaleMergeRebuildArtifacts(folders: string[]): Promise<void> {
+    const STALE_MS = 2 * 60 * 1000;
+    const now = Date.now();
+    let removed = 0;
+    for (const folder of folders) {
+        if (!existsSync(folder)) continue;
+        let entries: string[];
+        try {
+            entries = await fs.readdir(folder);
+        } catch {
+            continue;
+        }
+        for (const entry of entries) {
+            const lower = entry.toLowerCase();
+            if (!lower.includes('.merge-rebuild') || !lower.endsWith('.vpk')) continue;
+            const full = join(folder, entry);
+            try {
+                const stats = await fs.stat(full);
+                if (now - stats.mtimeMs < STALE_MS) continue; // may be an in-flight rebuild
+                await fs.unlink(full);
+                removed++;
+            } catch {
+                /* best-effort: a concurrent rebuild may have renamed/removed it */
+            }
+        }
+    }
+    if (removed > 0) {
+        console.log(
+            `[merge] removed ${removed} stale .merge-rebuild artifact(s) (interrupted rebuild leftover)`
+        );
+    }
 }
 
 async function reconcileEnabledDisabledCollisions(
