@@ -316,6 +316,12 @@ export default function Settings() {
     }
   };
 
+  const handleVerboseModTraceChange = async (checked: boolean) => {
+    if (settings) {
+      await saveSettings({ ...settings, verboseModTrace: checked });
+    }
+  };
+
   const refreshSaltIngestStatus = useCallback(async () => {
     try {
       setSaltIngestStatus(await window.electronAPI.saltIngest.getStatus());
@@ -1349,6 +1355,18 @@ export default function Settings() {
                   <Tx
                     k="settings.support.includeFullLog"
                     fallback="Include full log (up to 5 MB; Discord auto-attaches as a file)"
+                  />
+                </label>
+                <label className="inline-flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={settings?.verboseModTrace ?? false}
+                    onChange={(e) => handleVerboseModTraceChange(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded-sm border border-white/20 bg-bg-tertiary accent-accent focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  <Tx
+                    k="settings.support.verboseModTrace"
+                    fallback="Verbose mod logging (traces enable/disable/scan to the log; turn off when done)"
                   />
                 </label>
               </div>

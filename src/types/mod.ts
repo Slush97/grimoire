@@ -806,6 +806,12 @@ export interface AppSettings {
   deadlockPath: string | null;
   devMode: boolean;
   devDeadlockPath: string | null;
+  /** Diagnostic switch: when true, the main process writes a detailed
+   *  [modTrace] line for every folder scan and enable/disable/reorder so a
+   *  desync (a mod that's enabled in the UI but missing on disk, or vice
+   *  versa) can be traced in the diagnostic report. Off by default; meant to
+   *  be flipped on temporarily to capture a repro. */
+  verboseModTrace?: boolean;
   hideNsfwPreviews: boolean;
   /** Hide GameBanana mods flagged as outdated in Browse. */
   hideOutdatedMods: boolean;

@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     discordRpcEnabled: false,
     contributeMatchSalts: false,
     unifiedLaunchButton: false,
+    verboseModTrace: false,
 };
 
 /**

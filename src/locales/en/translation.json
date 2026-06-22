@@ -721,6 +721,7 @@
       "regenerateReport": "Regenerate report",
       "generateReport": "Generate report",
       "includeFullLog": "Include full log (up to 5 MB; Discord auto-attaches as a file)",
+      "verboseModTrace": "Verbose mod logging (traces enable/disable/scan to the log; turn off when done)",
       "reviewBeforeSharing": "Review before sharing. Nothing is sent automatically.",
       "copyFailed": "Copy failed: select and Ctrl+C",
       "copyReport": "Copy report",

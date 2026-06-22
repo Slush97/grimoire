@@ -65,7 +65,7 @@ function timedUpsert(section: string, page: number, mods: CachedMod[]): void {
     upsertMods(mods);
     const tookMs = Date.now() - start;
     if (tookMs >= 20) {
-        console.log(`[SyncService] ${section} page ${page}: upsert of ${mods.length} rows took ${tookMs}ms`);
+        console.debug(`[SyncService] ${section} page ${page}: upsert of ${mods.length} rows took ${tookMs}ms`);
     }
 }
 
@@ -104,7 +104,7 @@ function mapToCache(mod: GameBananaMod, section: string): CachedMod {
  * Sync a single section
  */
 async function syncSection(section: SectionType): Promise<void> {
-    console.log(`[SyncService] Starting sync for section: ${section}`);
+    console.debug(`[SyncService] Starting sync for section: ${section}`);
 
     let page = 1;
     let totalCount = 0;
@@ -116,7 +116,7 @@ async function syncSection(section: SectionType): Promise<void> {
         totalCount = first.totalCount;
         const totalPages = Math.ceil(totalCount / SYNC_PER_PAGE);
 
-        console.log(`[SyncService] ${section}: Total ${totalCount} mods, ${totalPages} pages`);
+        console.debug(`[SyncService] ${section}: Total ${totalCount} mods, ${totalPages} pages`);
 
         // Process first page
         const cachedMods = first.records.map(mod => mapToCache(mod, section));
@@ -169,7 +169,7 @@ async function syncSection(section: SectionType): Promise<void> {
             phase: 'complete',
         });
 
-        console.log(`[SyncService] ${section}: Sync complete, ${modsProcessed} mods cached`);
+        console.debug(`[SyncService] ${section}: Sync complete, ${modsProcessed} mods cached`);
     } catch (error) {
         console.error(`[SyncService] ${section}: Sync error`, error);
         emitProgress({
@@ -190,12 +190,12 @@ async function syncSection(section: SectionType): Promise<void> {
  */
 export async function syncAllSections(): Promise<void> {
     if (isSyncing) {
-        console.log('[SyncService] Sync already in progress');
+        console.debug('[SyncService] Sync already in progress');
         return;
     }
 
     isSyncing = true;
-    console.log('[SyncService] Starting full sync for all sections');
+    console.debug('[SyncService] Starting full sync for all sections');
 
     try {
         for (const section of SECTIONS) {
@@ -206,7 +206,7 @@ export async function syncAllSections(): Promise<void> {
                 console.error(`[SyncService] Failed to sync ${section}, continuing with others:`, err);
             }
         }
-        console.log('[SyncService] Full sync complete');
+        console.debug('[SyncService] Full sync complete');
     } finally {
         isSyncing = false;
     }
@@ -217,7 +217,7 @@ export async function syncAllSections(): Promise<void> {
  */
 export async function syncSingleSection(section: string): Promise<void> {
     if (isSyncing) {
-        console.log('[SyncService] Sync already in progress');
+        console.debug('[SyncService] Sync already in progress');
         return;
     }
 

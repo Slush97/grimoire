@@ -6,6 +6,31 @@ import { getAddonsPath, getDisabledPath, getAddonFolderPaths, createNextOverflow
 import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
 import { compareFileContents, fingerprintFile } from './fileMatch';
+import { loadSettings } from './settings';
+
+/** Verbose mod-mutation trace, gated on the `verboseModTrace` setting. Lands in
+ *  main.log (captured by the diagnostic report) so a desync between the UI and
+ *  the addons folder can be reconstructed from a user's repro. No-op unless the
+ *  flag is on, so it costs one cached settings read per logged call. */
+function modTrace(message: string): void {
+    try {
+        if (loadSettings().verboseModTrace) {
+            console.log(`[modTrace] ${message}`);
+        }
+    } catch {
+        /* never let tracing break a mutation */
+    }
+}
+
+/** True when the trace flag is on; lets callers skip building expensive
+ *  per-mod log strings when tracing is off. */
+function modTraceEnabled(): boolean {
+    try {
+        return !!loadSettings().verboseModTrace;
+    } catch {
+        return false;
+    }
+}
 
 /** Minimum VPK priority number */
 const MIN_VPK_PRIORITY = 1;
@@ -264,6 +289,7 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
     }
 
     const entries = await fs.readdir(folder);
+    const trace = modTraceEnabled();
 
     for (const entry of entries) {
         const fullPath = join(folder, entry);
@@ -272,7 +298,15 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
             const stats = await fs.stat(fullPath);
             if (!stats.isFile()) continue;
 
-            if (!isDeadlockModVpk(entry)) continue;
+            if (!isDeadlockModVpk(entry)) {
+                // A .vpk that doesn't end in _dir.vpk is on disk but invisible to
+                // Grimoire (the scan only counts the dir VPK). The likeliest cause
+                // of a local mod "present in the folder but missing from the list".
+                if (trace && entry.toLowerCase().endsWith('.vpk')) {
+                    modTrace(`scanFolder ${basename(folder)}: SKIPPED "${entry}" (not *_dir.vpk -> never shown in Grimoire)`);
+                }
+                continue;
+            }
 
             const priority = parseVpkPriority(entry) ?? DEFAULT_MOD_PRIORITY;
             const metaKey = metaKeyFor(fullPath);
@@ -288,8 +322,10 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
                 size: stats.size,
                 installedAt: stats.mtime.toISOString(),
             });
-        } catch {
-            // Skip files we can't read
+        } catch (err) {
+            // Skip files we can't read (surfaced under trace: an unreadable VPK
+            // is another way a mod silently drops out of the list).
+            if (trace) modTrace(`scanFolder ${basename(folder)}: unreadable "${entry}": ${String(err)}`);
         }
     }
 
@@ -326,6 +362,16 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
         (a, b) =>
             addonFolderIndex(a.path) * 100 + a.priority - (addonFolderIndex(b.path) * 100 + b.priority)
     );
+
+    if (modTraceEnabled()) {
+        const enabled = mods.filter((m) => m.enabled).length;
+        modTrace(`scanMods: ${mods.length} VPKs on disk (${enabled} enabled, ${mods.length - enabled} disabled)`);
+        for (const m of mods) {
+            const meta = getModMetadata(m.metaKey);
+            const gb = meta?.gameBananaId ? `gb=${meta.gameBananaId}` : 'local';
+            modTrace(`  ${m.enabled ? 'ENABLED ' : 'disabled'} pri=${String(m.priority).padStart(2, '0')} ${gb} key=${m.metaKey} name="${meta?.modName ?? m.name}"`);
+        }
+    }
 
     return mods;
 }
@@ -637,7 +683,9 @@ async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> 
         disabledForbidden: disabledUsed,
         preferred: [meta?.lastPriority, ownNumber ?? undefined],
     });
-    return moveModToFolderAs(targetMod, folder, fileName, true);
+    const result = await moveModToFolderAs(targetMod, folder, fileName, true);
+    modTrace(`enable: "${meta?.modName ?? targetMod.name}" ${targetMod.metaKey} -> ${result.metaKey} (pri ${result.priority})`);
+    return result;
 }
 
 /**
@@ -673,7 +721,9 @@ async function disableModImpl(deadlockPath: string, modId: string): Promise<Mod>
     const preferredName = meta?.modName ?? meta?.sourceFileName ?? meta?.variantLabel;
     const destinationFileName = makeDisabledFileName(targetMod.fileName, taken, preferredName);
 
-    return moveModToFolderAs(targetMod, disabledPath, destinationFileName, false, targetMod.priority);
+    const result = await moveModToFolderAs(targetMod, disabledPath, destinationFileName, false, targetMod.priority);
+    modTrace(`disable: "${meta?.modName ?? targetMod.name}" ${targetMod.metaKey} -> ${result.metaKey}`);
+    return result;
 }
 
 /**
