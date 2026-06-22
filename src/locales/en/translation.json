@@ -78,8 +78,32 @@
   },
   "foundry": {
     "header": {
-      "title": "your mom goes to college",
+      "title": "Foundry",
       "description": "Browse the game's own asset catalog, built offline from your installed files."
+    },
+    "browseCatalog": "Browse full catalog",
+    "backToHeroes": "Heroes",
+    "heroes": {
+      "subtitle": "Pick a hero to edit their look, abilities, voice, and icons.",
+      "search": "Search heroes",
+      "noMatch": "No heroes match that search."
+    },
+    "workshop": {
+      "appearance": "Appearance",
+      "abilities": "Abilities",
+      "voice": "Voice",
+      "icons": "Icons & Textures",
+      "back": "All heroes",
+      "sections": "Workshop sections",
+      "abilityIcons": "Ability & item icons",
+      "buildTray": "Build tray",
+      "buildTrayEmpty": "Stage icon, texture, and sound swaps here, then forge them into one mod for {{hero}}. (Recolor saves directly to its own managed mod.)",
+      "removeStaged": "Remove",
+      "forge": "Forge mod",
+      "abilitiesSoon": {
+        "title": "Per-ability editing is coming next",
+        "body": "The Abilities view will group each ability into a row with its icon, VFX color, and sound in one place. For now, recolor all ability VFX at once under Appearance, browse ability icons under Icons & Textures, and ability sounds under Voice."
+      }
     },
     "subtools": {
       "heading": "Workshop",
