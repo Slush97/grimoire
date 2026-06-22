@@ -276,6 +276,10 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     // the Installed list would only let the user disable or reorder them and
     // silently break their applied cosmetics.
     const visible = mods.filter((m) => !isLockerManaged(m.metaKey));
+    if (settings.verboseModTrace) {
+        const hidden = mods.length - visible.length;
+        console.log(`[modTrace] get-mods: scanned ${mods.length}, returning ${visible.length} to renderer (${hidden} locker-managed hidden)`);
+    }
     // Pre-warm the VPK parse cache across the worker pool for mods whose lazy
     // classifications will parse inside enrichMod below. enrichMod stays sync;
     // its parseVpkDirectoryCached calls hit the warmed cache instead of

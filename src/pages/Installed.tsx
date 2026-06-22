@@ -260,6 +260,19 @@ function entryName(entry: ModEntry): string {
   return entry.kind === 'single' ? entry.mod.name : entry.primary.name;
 }
 
+/** Every string a search query may match this entry on. A group collapses many
+ *  files under one card that shows only the primary's name, so searching a
+ *  non-primary variant's name (e.g. "Bunny Ivy" when the card title is "Coat
+ *  Ivy") must still surface the card. Match against every variant's name plus
+ *  its user label / file header / original filename. */
+function entrySearchText(entry: ModEntry): string {
+  if (entry.kind === 'single') return entry.mod.name;
+  return entry.variants
+    .flatMap((v) => [v.name, v.variantLabel, v.fileDescription, v.sourceFileName])
+    .filter((s): s is string => !!s)
+    .join('\n');
+}
+
 /** The mod we read metadata from for filtering (matches the visual primary). */
 function entryPrimaryMod(entry: ModEntry): Mod {
   return entry.kind === 'single' ? entry.mod : entry.primary;
@@ -2656,7 +2669,7 @@ export default function Installed() {
   // enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
   const matchesSearchEntry = (entry: ModEntry) =>
-    !searchNeedle || entryName(entry).toLowerCase().includes(searchNeedle);
+    !searchNeedle || entrySearchText(entry).toLowerCase().includes(searchNeedle);
   const matchesSourceEntry = (entry: ModEntry) =>
     entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
   const matchesTypeEntry = (entry: ModEntry) =>
@@ -6586,6 +6599,16 @@ function ModCard({
                   className="border-white/20 text-white/90"
                 >
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
+                </Tag>
+              )}
+              {group && group.variantCount > 1 && (
+                <Tag
+                  variant="overlay"
+                  icon={Files}
+                  title={variantStatusTitle}
+                  className="border-white/20 text-white/90 tabular-nums"
+                >
+                  {variantStatusLabel}
                 </Tag>
               )}
             </div>
