@@ -1,7 +1,13 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, renameSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { getUserDataPath } from '../utils/paths';
-import { scanMods, enableMod, disableMod, reorderMods } from './mods';
+import {
+    scanMods,
+    runExclusiveModMutation,
+    enableModUnlocked,
+    disableModUnlocked,
+    reorderModsUnlocked,
+} from './mods';
 import { getModMetadata } from './metadata';
 import { isLockerManaged, pinLockerVpksToFront } from './lockerVpk';
 import { readAutoexec, writeAutoexec } from './autoexec';
@@ -82,6 +88,54 @@ function saveProfiles(profiles: Profile[]): void {
 }
 
 /**
+ * Drop duplicate physical VPKs that resolve to the SAME GameBanana file before
+ * they're written into a profile. A toggle/apply race can leave two copies of
+ * one mod enabled in different pakNN slots; without this dedup, createProfile /
+ * updateProfile would record both (same gameBananaId:fileId, different fileName/
+ * priority) and the saved profile carries a phantom entry forever - exactly the
+ * corrupt "Bunnydicta at priority 21 AND 31" a reporter's exported profile
+ * showed (#bugs: profile/mods desync, leftover/duplicate vpk). We keep the
+ * lower-priority-number copy (loads first / wins conflicts). Mods without a
+ * GameBanana file id are left untouched: those are genuinely distinct locals.
+ */
+function dedupeEnabledForProfile<T extends { metaKey: string; fileName: string; priority: number }>(
+    mods: T[]
+): T[] {
+    const byGbFile = new Map<string, T>();
+    const out: T[] = [];
+    for (const mod of mods) {
+        const meta = getModMetadata(mod.metaKey);
+        const gbId = meta?.gameBananaId;
+        const fileId = meta?.gameBananaFileId;
+        if (typeof gbId !== 'number' || typeof fileId !== 'number') {
+            out.push(mod);
+            continue;
+        }
+        const key = `${gbId}:${fileId}`;
+        const existing = byGbFile.get(key);
+        if (!existing) {
+            byGbFile.set(key, mod);
+            out.push(mod);
+        } else if (mod.priority < existing.priority) {
+            // Prefer the higher-load-order copy; swap it in place.
+            const idx = out.indexOf(existing);
+            if (idx !== -1) out[idx] = mod;
+            byGbFile.set(key, mod);
+            console.warn(
+                `[profiles] dedupe: dropping duplicate VPK ${existing.fileName} ` +
+                `(same GameBanana file ${key} as ${mod.fileName})`
+            );
+        } else {
+            console.warn(
+                `[profiles] dedupe: dropping duplicate VPK ${mod.fileName} ` +
+                `(same GameBanana file ${key} as ${existing.fileName})`
+            );
+        }
+    }
+    return out;
+}
+
+/**
  * Create a new profile from current mod state and provided crosshair settings
  */
 export async function createProfile(deadlockPath: string, name: string, crosshairSettings?: ProfileCrosshairSettings): Promise<Profile> {
@@ -89,7 +143,9 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
     // in a profile's mod list (and have no gameBananaId to re-resolve anyway).
-    const enabledMods = mods.filter(mod => mod.enabled && !isLockerManaged(mod.metaKey));
+    const enabledMods = dedupeEnabledForProfile(
+        mods.filter(mod => mod.enabled && !isLockerManaged(mod.metaKey))
+    );
 
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
@@ -195,7 +251,9 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
     // Only save enabled mods, and never the Locker-managed VPKs (cards/sounds):
     // they're owned by the Locker, hidden, and auto-pinned, so they don't belong
     // in a profile's mod list (and have no gameBananaId to re-resolve anyway).
-    const enabledMods = mods.filter(mod => mod.enabled && !isLockerManaged(mod.metaKey));
+    const enabledMods = dedupeEnabledForProfile(
+        mods.filter(mod => mod.enabled && !isLockerManaged(mod.metaKey))
+    );
 
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
@@ -347,142 +405,174 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         `${profile.mods.length} entries, ${profileStableCount} with stable ids`
     );
 
-    // 1. Apply Mods (enable/disable state).
+    // 1. Apply Mods (enable/disable state) as ONE atomic batch.
     //
-    // Resolve each profile mod against the current scan by stable id
-    // (gameBananaId + gameBananaFileId) first, then by fileName ONLY when
-    // both sides are stable-id-less (custom mods + truly-local current
-    // mods). See buildProfileModResolver for the cross-match refusal that
-    // landed in response to "Profile apply misrecognizing mods to turn on".
-    const currentMods = await scanMods(deadlockPath);
-    const resolveProfileMod = buildProfileModResolver(currentMods);
-
-    // currentMod.id → ProfileMod, when matched. Drives the enable/disable
-    // loop and the reorder pass below.
-    const profileModByCurrentId = new Map<string, ProfileMod>();
+    // The whole disable -> enable -> reorder sequence runs inside a single
+    // runExclusiveModMutation, so it holds the mod-mutation queue for its full
+    // duration. A Locker toggle (or a second apply) can no longer slip between
+    // sub-steps, rename files, and invalidate the scan ids this apply is driving
+    // off of - the interleave that used to throw "Mod not found" partway and drop
+    // every remaining mod (#bugs: profile apply "dropped like 5 mods").
+    //
+    // Per-mod enable/disable failures are caught and counted, not rethrown: a
+    // single locked VPK (game running, antivirus, our own VPK readers) must not
+    // abort the rest of the apply. renameWithRetry in mods.ts already clears the
+    // transient case; a genuinely stuck file is logged and skipped.
     let stableHits = 0;
     let fileNameHits = 0;
     let unmatched = 0;
     let refusedCrossmatches = 0;
-    for (const profileMod of profile.mods) {
-        const resolution = resolveProfileMod(profileMod);
-        if (resolution.mod !== undefined) {
-            profileModByCurrentId.set(resolution.mod.id, profileMod);
-            if (resolution.via === 'stable') {
-                stableHits++;
-                console.log(
-                    `[profiles] resolve stable: ${describeProfileMod(profileMod)} ` +
-                    `-> ${resolution.mod.fileName}`
-                );
-            } else {
-                fileNameHits++;
-                console.log(
-                    `[profiles] resolve fileName (local-to-local): ` +
-                    `${describeProfileMod(profileMod)} -> ${resolution.mod.fileName}`
-                );
-            }
-        } else if (resolution.via === 'refused-crossmatch') {
-            refusedCrossmatches++;
-            console.warn(
-                `[profiles] resolve refused: ${describeProfileMod(profileMod)} ` +
-                `would have cross-matched current mod ${resolution.candidateFileName} ` +
-                `(stable-id mismatch). Entry left unmatched to avoid enabling the wrong mod.`
-            );
-        } else {
-            unmatched++;
-            console.log(
-                `[profiles] resolve miss: ${describeProfileMod(profileMod)} ` +
-                `(mod not currently installed)`
-            );
-        }
-    }
-    console.log(
-        `[profiles] resolution summary: ${stableHits} stable, ${fileNameHits} fileName, ` +
-        `${refusedCrossmatches} refused, ${unmatched} unmatched`
-    );
-
     let enabledCount = 0;
     let disabledCount = 0;
     let orphanedDisabledCount = 0;
+    const failures: string[] = [];
 
-    // Two passes, disables BEFORE enables. The disabled library is uncapped now,
-    // so a profile that swaps a large enabled set for a large disabled one could,
-    // in a single interleaved pass, enable past the 99 active-slot ceiling before
-    // freeing the slots it's about to vacate - throwing mid-apply and leaving a
-    // half-applied profile. Freeing first guarantees every slot the profile needs
-    // is available, and the enable pass can never exceed 99 (a profile holds at
-    // most 99 enabled mods). The two passes act on disjoint sets of currentMods
-    // (was-enabled vs was-disabled), so the snapshot ids stay valid across both.
-    for (const mod of currentMods) {
-        if (!mod.enabled) continue;
-        // Locker-managed VPKs (hero cards + ability sounds) aren't part of any
-        // profile: they're hidden, auto-pinned, and owned by the Locker. Never
-        // disable them on a profile switch, or applied cosmetics would silently
-        // stop loading. They get re-pinned to the front after the reorder pass.
-        if (isLockerManaged(mod.metaKey)) continue;
-        const profileMod = profileModByCurrentId.get(mod.id);
-        if (profileMod && profileMod.enabled) continue; // keep it enabled
-        await disableMod(deadlockPath, mod.id);
-        if (profileMod) {
-            console.log(`[profiles] toggle disable: ${mod.fileName}`);
-            disabledCount++;
-        } else {
-            console.log(`[profiles] toggle disable (not in profile): ${mod.fileName}`);
-            orphanedDisabledCount++;
-        }
-    }
-    for (const mod of currentMods) {
-        if (mod.enabled) continue;
-        const profileMod = profileModByCurrentId.get(mod.id);
-        if (!profileMod || !profileMod.enabled) continue;
-        console.log(`[profiles] toggle enable: ${mod.fileName}`);
-        await enableMod(deadlockPath, mod.id);
-        enabledCount++;
-    }
-    console.log(
-        `[profiles] toggle summary: ${enabledCount} enabled, ${disabledCount} disabled, ` +
-        `${orphanedDisabledCount} disabled-not-in-profile`
-    );
+    await runExclusiveModMutation(async () => {
+        // Resolve each profile mod against the current scan by stable id
+        // (gameBananaId + gameBananaFileId) first, then by fileName ONLY when
+        // both sides are stable-id-less (custom mods + truly-local current
+        // mods). See buildProfileModResolver for the cross-match refusal that
+        // landed in response to "Profile apply misrecognizing mods to turn on".
+        const currentMods = await scanMods(deadlockPath);
+        const resolveProfileMod = buildProfileModResolver(currentMods);
 
-    // 1b. Apply priority order in a single two-phase pass via reorderMods.
-    // The previous implementation called setModPriority per mod and swallowed
-    // "Priority X is already in use" errors. Common when switching between
-    // profiles, since the OTHER profile's mods still occupy the target slots
-    // until later iterations move them. reorderMods stages every rename via
-    // a tmp prefix first, so transient mid-loop collisions can't happen.
-    //
-    // Re-resolve after enable/disable: enableMod assigns a fresh pakNN slot and
-    // disableMod renames to a free-form name, so the previous resolver's
-    // id-to-mod (and fileName) mapping is stale.
-    const refreshedMods = await scanMods(deadlockPath);
-    const resolveAgainstRefreshed = buildProfileModResolver(refreshedMods);
-    const orderedIds: string[] = [];
-    const seen = new Set<string>();
-    let reorderSkippedDisabled = 0;
-    let reorderSkippedUnmatched = 0;
-    for (const pm of [...profile.mods].sort((a, b) => a.priority - b.priority)) {
-        if (!pm.enabled) continue;
-        const resolution = resolveAgainstRefreshed(pm);
-        if (resolution.mod === undefined) {
-            reorderSkippedUnmatched++;
-            continue;
+        // currentMod.id → ProfileMod, when matched. Drives the enable/disable
+        // loop and the reorder pass below.
+        const profileModByCurrentId = new Map<string, ProfileMod>();
+        for (const profileMod of profile.mods) {
+            const resolution = resolveProfileMod(profileMod);
+            if (resolution.mod !== undefined) {
+                profileModByCurrentId.set(resolution.mod.id, profileMod);
+                if (resolution.via === 'stable') {
+                    stableHits++;
+                    console.log(
+                        `[profiles] resolve stable: ${describeProfileMod(profileMod)} ` +
+                        `-> ${resolution.mod.fileName}`
+                    );
+                } else {
+                    fileNameHits++;
+                    console.log(
+                        `[profiles] resolve fileName (local-to-local): ` +
+                        `${describeProfileMod(profileMod)} -> ${resolution.mod.fileName}`
+                    );
+                }
+            } else if (resolution.via === 'refused-crossmatch') {
+                refusedCrossmatches++;
+                console.warn(
+                    `[profiles] resolve refused: ${describeProfileMod(profileMod)} ` +
+                    `would have cross-matched current mod ${resolution.candidateFileName} ` +
+                    `(stable-id mismatch). Entry left unmatched to avoid enabling the wrong mod.`
+                );
+            } else {
+                unmatched++;
+                console.log(
+                    `[profiles] resolve miss: ${describeProfileMod(profileMod)} ` +
+                    `(mod not currently installed)`
+                );
+            }
         }
-        if (!resolution.mod.enabled) {
-            reorderSkippedDisabled++;
-            continue;
-        }
-        if (seen.has(resolution.mod.id)) continue;
-        seen.add(resolution.mod.id);
-        orderedIds.push(resolution.mod.id);
-    }
-    if (orderedIds.length > 0) {
         console.log(
-            `[profiles] reorder: ${orderedIds.length} mods laid out densely across addon folders ` +
-            `(skipped ${reorderSkippedUnmatched} unmatched, ${reorderSkippedDisabled} disabled)`
+            `[profiles] resolution summary: ${stableHits} stable, ${fileNameHits} fileName, ` +
+            `${refusedCrossmatches} refused, ${unmatched} unmatched`
         );
-        await reorderMods(deadlockPath, orderedIds);
-    } else {
-        console.log(`[profiles] reorder: nothing to reorder`);
+
+        // Two passes, disables BEFORE enables. The disabled library is uncapped now,
+        // so a profile that swaps a large enabled set for a large disabled one could,
+        // in a single interleaved pass, enable past the 99 active-slot ceiling before
+        // freeing the slots it's about to vacate - throwing mid-apply and leaving a
+        // half-applied profile. Freeing first guarantees every slot the profile needs
+        // is available, and the enable pass can never exceed 99 (a profile holds at
+        // most 99 enabled mods). The two passes act on disjoint sets of currentMods
+        // (was-enabled vs was-disabled), so the snapshot ids stay valid across both.
+        for (const mod of currentMods) {
+            if (!mod.enabled) continue;
+            // Locker-managed VPKs (hero cards + ability sounds) aren't part of any
+            // profile: they're hidden, auto-pinned, and owned by the Locker. Never
+            // disable them on a profile switch, or applied cosmetics would silently
+            // stop loading. They get re-pinned to the front after the reorder pass.
+            if (isLockerManaged(mod.metaKey)) continue;
+            const profileMod = profileModByCurrentId.get(mod.id);
+            if (profileMod && profileMod.enabled) continue; // keep it enabled
+            try {
+                await disableModUnlocked(deadlockPath, mod.id);
+            } catch (err) {
+                failures.push(`disable ${mod.fileName}: ${String(err)}`);
+                console.warn(`[profiles] disable failed (continuing): ${mod.fileName}: ${String(err)}`);
+                continue;
+            }
+            if (profileMod) {
+                console.log(`[profiles] toggle disable: ${mod.fileName}`);
+                disabledCount++;
+            } else {
+                console.log(`[profiles] toggle disable (not in profile): ${mod.fileName}`);
+                orphanedDisabledCount++;
+            }
+        }
+        for (const mod of currentMods) {
+            if (mod.enabled) continue;
+            const profileMod = profileModByCurrentId.get(mod.id);
+            if (!profileMod || !profileMod.enabled) continue;
+            console.log(`[profiles] toggle enable: ${mod.fileName}`);
+            try {
+                await enableModUnlocked(deadlockPath, mod.id);
+                enabledCount++;
+            } catch (err) {
+                failures.push(`enable ${mod.fileName}: ${String(err)}`);
+                console.warn(`[profiles] enable failed (continuing): ${mod.fileName}: ${String(err)}`);
+            }
+        }
+        console.log(
+            `[profiles] toggle summary: ${enabledCount} enabled, ${disabledCount} disabled, ` +
+            `${orphanedDisabledCount} disabled-not-in-profile`
+        );
+
+        // 1b. Apply priority order in a single two-phase pass via reorderMods.
+        // The previous implementation called setModPriority per mod and swallowed
+        // "Priority X is already in use" errors. Common when switching between
+        // profiles, since the OTHER profile's mods still occupy the target slots
+        // until later iterations move them. reorderMods stages every rename via
+        // a tmp prefix first, so transient mid-loop collisions can't happen.
+        //
+        // Re-resolve after enable/disable: enableMod assigns a fresh pakNN slot and
+        // disableMod renames to a free-form name, so the previous resolver's
+        // id-to-mod (and fileName) mapping is stale.
+        const refreshedMods = await scanMods(deadlockPath);
+        const resolveAgainstRefreshed = buildProfileModResolver(refreshedMods);
+        const orderedIds: string[] = [];
+        const seen = new Set<string>();
+        let reorderSkippedDisabled = 0;
+        let reorderSkippedUnmatched = 0;
+        for (const pm of [...profile.mods].sort((a, b) => a.priority - b.priority)) {
+            if (!pm.enabled) continue;
+            const resolution = resolveAgainstRefreshed(pm);
+            if (resolution.mod === undefined) {
+                reorderSkippedUnmatched++;
+                continue;
+            }
+            if (!resolution.mod.enabled) {
+                reorderSkippedDisabled++;
+                continue;
+            }
+            if (seen.has(resolution.mod.id)) continue;
+            seen.add(resolution.mod.id);
+            orderedIds.push(resolution.mod.id);
+        }
+        if (orderedIds.length > 0) {
+            console.log(
+                `[profiles] reorder: ${orderedIds.length} mods laid out densely across addon folders ` +
+                `(skipped ${reorderSkippedUnmatched} unmatched, ${reorderSkippedDisabled} disabled)`
+            );
+            await reorderModsUnlocked(deadlockPath, orderedIds);
+        } else {
+            console.log(`[profiles] reorder: nothing to reorder`);
+        }
+    });
+
+    if (failures.length > 0) {
+        console.warn(
+            `[profiles] apply '${profile.name}' completed with ${failures.length} ` +
+            `mod op failure(s) (file likely locked by the running game): ${failures.join('; ')}`
+        );
     }
 
     // Re-assert the Locker-managed VPKs at the front: the profile reorder only

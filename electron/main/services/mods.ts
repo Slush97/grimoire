@@ -24,6 +24,31 @@ export const ENABLE_LIMIT_MESSAGE =
 
 type CollisionMetadataOwner = 'enabled' | 'disabled';
 
+/**
+ * `fs.rename` that retries on transient Windows file locks. A VPK in `addons/`
+ * can be briefly held open by the running game, an antivirus scan, or one of
+ * grimoire's own readers (the 3D pose export and the conflict scanner both read
+ * VPK bytes), and the OS reports that as EBUSY / EPERM / EACCES on the rename.
+ * Left unretried, a single transient lock aborts a whole profile apply and
+ * leaves the file enabled on disk while the UI believes it moved (#bugs:
+ * "addons folder does not reflect what is shown"; "disabled in the Locker but
+ * the vpk stayed"). A short backoff clears the common case; a genuinely locked
+ * file (game actually running on it) still throws after the last attempt.
+ */
+async function renameWithRetry(from: string, to: string, attempts = 5): Promise<void> {
+    for (let i = 0; ; i++) {
+        try {
+            await fs.rename(from, to);
+            return;
+        } catch (err) {
+            const code = (err as NodeJS.ErrnoException)?.code;
+            const transient = code === 'EBUSY' || code === 'EPERM' || code === 'EACCES';
+            if (!transient || i >= attempts - 1) throw err;
+            await new Promise((resolve) => setTimeout(resolve, 80 * (i + 1)));
+        }
+    }
+}
+
 /** Filesystem-level mod record produced by scanMods. NOT the renderer-facing
  *  Mod from src/types/mod.ts: that wire type is a superset that the ipc
  *  layer's enrichMod builds from this plus the metadata sidecar (globalType,
@@ -421,7 +446,7 @@ async function moveModToFolderAs(
 
     await fs.mkdir(destinationFolder, { recursive: true });
     const destinationPath = join(destinationFolder, destinationFileName);
-    await fs.rename(targetMod.path, destinationPath);
+    await renameWithRetry(targetMod.path, destinationPath);
     const destMetaKey = metaKeyFor(destinationPath);
 
     if (destMetaKey !== targetMod.metaKey) {
@@ -546,6 +571,39 @@ function withModMutationLock<T>(fn: () => Promise<T>): Promise<T> {
  */
 export function enableMod(deadlockPath: string, modId: string): Promise<Mod> {
     return withModMutationLock(() => enableModImpl(deadlockPath, modId));
+}
+
+/**
+ * Run `fn` as ONE exclusive mod-folder mutation: it holds the mutation queue for
+ * its whole duration, so a multi-step batch (notably applyProfile's disable ->
+ * enable -> reorder sequence) executes atomically and cannot interleave with a
+ * Locker toggle that would rename files mid-batch and invalidate the batch's
+ * scan ids. Before this, applyProfile took the lock per sub-call, so a toggle
+ * landing in a gap left it operating on stale ids -> "Mod not found" aborted the
+ * apply partway and dropped every mod after it (#bugs: profile apply "dropped
+ * like 5 mods", "reapplying bugged it again").
+ *
+ * `fn` MUST call the *Unlocked variants below, never the exported locked
+ * enableMod/disableMod/reorderMods: those would re-enter the queue this batch
+ * already holds and deadlock.
+ */
+export function runExclusiveModMutation<T>(fn: () => Promise<T>): Promise<T> {
+    return withModMutationLock(fn);
+}
+
+/** Unlocked enable, for use only inside a runExclusiveModMutation batch. */
+export function enableModUnlocked(deadlockPath: string, modId: string): Promise<Mod> {
+    return enableModImpl(deadlockPath, modId);
+}
+
+/** Unlocked disable, for use only inside a runExclusiveModMutation batch. */
+export function disableModUnlocked(deadlockPath: string, modId: string): Promise<Mod> {
+    return disableModImpl(deadlockPath, modId);
+}
+
+/** Unlocked reorder, for use only inside a runExclusiveModMutation batch. */
+export function reorderModsUnlocked(deadlockPath: string, orderedIds: string[]): Promise<void> {
+    return reorderModsImpl(deadlockPath, orderedIds);
 }
 
 async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> {
@@ -823,7 +881,7 @@ async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Prom
     const phase1Done: RenameStep[] = [];
     try {
         for (const step of steps) {
-            await fs.rename(step.fromPath, step.tmpPath);
+            await renameWithRetry(step.fromPath, step.tmpPath);
             phase1Done.push(step);
         }
     } catch (err) {
@@ -838,7 +896,7 @@ async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Prom
     const phase2Done: RenameStep[] = [];
     try {
         for (const step of steps) {
-            await fs.rename(step.tmpPath, step.finalPath);
+            await renameWithRetry(step.tmpPath, step.finalPath);
             phase2Done.push(step);
         }
     } catch (err) {

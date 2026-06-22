@@ -22,6 +22,25 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // (the "added a custom mod but can't act on it until I refresh" bug).
 let modsGeneration = 0;
 
+// Serialize mod enable/disable toggles. A mod's id is its filename, which the
+// main process renames on every enable/disable, so two toggles fired in the same
+// tick (rapid Locker clicking, the exact repro in #bugs "disabled a lot of them
+// without replacing them with the mods i turned on") would race: the second
+// reads a now-stale id and either no-ops or hits "Mod not found", silently
+// dropping the click the user expected to take effect. The main process already
+// serializes the file ops; chaining here makes the SECOND toggle observe the
+// store state the first one wrote, so it dispatches a live id. Toggles still
+// queue instantly from the UI's view; they just resolve in order.
+let toggleChain: Promise<unknown> = Promise.resolve();
+function enqueueToggle<T>(fn: () => Promise<T>): Promise<T> {
+  const run = toggleChain.then(fn, fn);
+  toggleChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
+
 // Reuse existing Mod object (and array) identities when a rescan returns
 // unchanged data. Silent refreshes fire on every Installed mount and on
 // window focus; without this each one replaced the whole list, and every
@@ -523,8 +542,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Toggle mod enabled/disabled
-  toggleMod: async (modId: string) => {
+  // Toggle mod enabled/disabled. Runs through enqueueToggle so concurrent
+  // clicks resolve in order and each sees the previous one's renamed id.
+  toggleMod: (modId: string) => enqueueToggle(async () => {
     const mod = get().mods.find((m) => m.id === modId);
     if (!mod) return false;
 
@@ -557,7 +577,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ modsError: String(err) });
       return false;
     }
-  },
+  }),
 
   clearModsNotice: () => set({ modsNotice: null }),
 
