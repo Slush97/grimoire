@@ -783,7 +783,12 @@ export default function Locker() {
               hero={hero}
               skinCount={countLockerSkins(heroMods.map.get(hero.id) ?? [])}
               soundCount={countLockerSkins(heroSounds.map.get(hero.id) ?? [])}
-              hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
+              isActive={Boolean(
+                activeLockerSkin([
+                  ...(heroMods.map.get(hero.id) ?? []),
+                  ...(heroSounds.map.get(hero.id) ?? []),
+                ])
+              )}
               cardImage={heroCardImage(hero.id)}
               hideHeroName={heroHideName(hero.id)}
               isFavorite={favoriteHeroes.includes(hero.id)}
@@ -1060,7 +1065,9 @@ interface HeroGalleryCardProps {
   hero: HeroCategory;
   skinCount: number;
   soundCount: number;
-  hasAbilityRecolor: boolean;
+  /** Whether a skin or sound mod is currently enabled for this hero. Drives the
+   *  indicator color: accent when active, muted when installed-but-disabled. */
+  isActive: boolean;
   /** Issue #208: the active skin's chosen Locker image (data URL), shown as the
    *  card backdrop in place of the hero render. Undefined = use the render. */
   cardImage?: string;
@@ -1719,7 +1726,7 @@ function HeroGalleryCard({
   hero,
   skinCount,
   soundCount,
-  hasAbilityRecolor,
+  isActive,
   cardImage,
   hideHeroName,
   isFavorite,
@@ -1849,37 +1856,32 @@ function HeroGalleryCard({
       >
         <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
       </button>
-      {(skinCount > 0 || soundCount > 0 || hasAbilityRecolor) && (
-        <div className="absolute left-2 top-2 z-20 flex items-center gap-2 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
-          {hasAbilityRecolor && (
-            <span
-              className="flex items-center gap-1"
-              title={t('locker.page.abilityColorRecoloringAvailable')}
-              aria-label={t('locker.page.abilityColorRecoloringAvailable')}
-            >
-              <RainbowPaletteIcon className="h-3 w-3" />
-            </span>
+      {/* Modification indicator (top-left). The whole pill changes state so it
+          reads at a glance: a solid accent pill with a check = a skin/sound is
+          currently enabled; a dark pill with a hollow ring = mods are installed
+          but none active. No pill = no mods. Count = installed skin + sound. */}
+      {skinCount + soundCount > 0 && (
+        <div
+          className={`absolute left-2 top-2 z-20 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm ${
+            isActive ? 'text-accent' : 'text-white/65'
+          }`}
+          title={
+            isActive
+              ? t('locker.page.modsActive', { count: skinCount + soundCount })
+              : t('locker.page.modsInstalled', { count: skinCount + soundCount })
+          }
+          aria-label={
+            isActive
+              ? t('locker.page.modsActive', { count: skinCount + soundCount })
+              : t('locker.page.modsInstalled', { count: skinCount + soundCount })
+          }
+        >
+          {isActive ? (
+            <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
+          ) : (
+            <span className="h-1.5 w-1.5 rounded-full border border-white/45" aria-hidden />
           )}
-          {skinCount > 0 && (
-            <span
-              className="flex items-center gap-1"
-              title={t('locker.page.skinCount', { count: skinCount })}
-              aria-label={t('locker.page.skinCount', { count: skinCount })}
-            >
-              <Shirt className="w-3 h-3" />
-              {skinCount}
-            </span>
-          )}
-          {soundCount > 0 && (
-            <span
-              className="flex items-center gap-1"
-              title={t('locker.page.soundCount', { count: soundCount })}
-              aria-label={t('locker.page.soundCount', { count: soundCount })}
-            >
-              <Music className="w-3 h-3" />
-              {soundCount}
-            </span>
-          )}
+          {skinCount + soundCount}
         </div>
       )}
       {/* Issue #208: hide the name label when the active skin's image already
