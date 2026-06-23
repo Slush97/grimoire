@@ -26,7 +26,6 @@ import Tx from '../components/translation/Tx';
 import LanguageSelector from '../components/settings/LanguageSelector';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
 import AppearanceArtSection from '../components/settings/AppearanceArtSection';
-import DmmMigrateSection from '../components/settings/DmmMigrateSection';
 import SocialAccountSection from '../components/social/SocialAccountSection';
 import PerformanceConfigCard from '../components/performance/PerformanceConfigCard';
 import KofiSupportButton from '../components/KofiSupportButton';
@@ -1429,9 +1428,6 @@ export default function Settings() {
             </div>
           </div>
         </Card>
-
-        {/* Migrate from DMM */}
-        <DmmMigrateSection />
 
         {/* Maintenance */}
         <Card title={<Tx k="settings.sections.maintenance" fallback="Maintenance" />} icon={Wrench} className="lg:col-span-2">

@@ -273,11 +273,14 @@ export interface DmmMigrationRequest {
 }
 
 /**
- * - `in-place`: DMM shares Grimoire's addons folder (the default install).
- *   Enabled mods are adopted by writing metadata onto the VPK already on disk
- *   (no copy); disabled mods are relocated into Grimoire's .disabled.
- * - `copy`: DMM's folder is separate (a profile subfolder or a copy). Every
- *   VPK is copied into Grimoire's layout, leaving DMM's files untouched.
+ * Reported on the migration result for context. Adoption is always
+ * non-destructive (DMM's files are never moved or deleted); the mode just notes
+ * the dominant strategy:
+ * - `in-place`: DMM shares Grimoire's addons folder (the default install), so
+ *   both enabled mods (citadel/addons) and disabled mods (.disabled) are adopted
+ *   by writing metadata onto the VPK already on disk, with no file op.
+ * - `copy`: DMM's folder is separate (a profile subfolder or a copy). VPKs are
+ *   copied into Grimoire's layout, leaving DMM's originals untouched.
  */
 export type DmmMigrationMode = 'in-place' | 'copy';
 

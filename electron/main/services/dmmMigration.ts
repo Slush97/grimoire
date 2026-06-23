@@ -168,6 +168,17 @@ function isLiveEnabledSlot(src: string, addonRoots: string[]): boolean {
   return addonRoots.some((root) => resolve(root) === parent);
 }
 
+/** Whether `src` is already a valid disabled slot Grimoire scans: a `*_dir.vpk`
+ *  sitting directly in Grimoire's `.disabled` folder. DMM (at least the current
+ *  Linux build) shares this exact folder and deploys its disabled mods into it
+ *  with the same `*_dir.vpk` naming, so such a file is already a fully-formed
+ *  Grimoire disabled slot. It is adopted by metadata only, with no move, so
+ *  DMM's recorded absolute path stays valid and nothing on disk shifts. */
+function isLiveDisabledSlot(src: string, disabledPath: string): boolean {
+  if (!basename(src).toLowerCase().endsWith('_dir.vpk')) return false;
+  return resolve(dirname(src)) === resolve(disabledPath);
+}
+
 /** Whether a metadata entry shows Grimoire already manages this VPK: a prior
  *  GameBanana install/import, a merged build, a Locker-managed surface, or a
  *  user-assigned hero. Adopting over such an entry in place would hijack a real
@@ -203,12 +214,15 @@ function metadataFor(entry: DmmAdoptionEntry): ModMetadata {
 }
 
 /**
- * Migrate (or, with planOnly, preview) a DMM install. Auto-detects the mode:
- *  - in-place when DMM shares Grimoire's addons folder (the default install):
- *    enabled mods are adopted by writing metadata onto the VPK already on disk
- *    (no copy); disabled mods are relocated into Grimoire's .disabled.
- *  - copy when DMM's folder is separate (profile subfolder / a copy): every VPK
- *    is copied into Grimoire's layout, leaving DMM's files untouched.
+ * Migrate (or, with planOnly, preview) a DMM install. Non-destructive: DMM's
+ * files are never moved or deleted, so its install keeps working after import.
+ * Adoption is decided per file by where it already lives:
+ *  - in place (metadata only, no file op) when the VPK is already a `*_dir.vpk`
+ *    in a folder Grimoire scans: enabled mods in citadel/addons, disabled mods
+ *    in citadel/addons/.disabled (DMM shares both). This is the common case.
+ *  - copy when DMM's file is outside those folders (a separate profile subfolder
+ *    or a copy): a duplicate is brought into Grimoire's layout, leaving DMM's
+ *    original untouched.
  * Returns a report; throws only when no DMM data is found at all.
  */
 export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmMigrationReport> {
@@ -323,19 +337,31 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
             destPath = await allocateEnabledVpkPath(opts.deadlockPath);
             await fs.copyFile(src, destPath, fsConstants.COPYFILE_EXCL);
           }
+        } else if (isLiveDisabledSlot(src, disabledPath)) {
+          // Already a valid disabled slot in Grimoire's .disabled folder (DMM
+          // shares it): adopt by metadata only, no move. Non-destructive, so
+          // DMM's recorded path keeps working and the file never shifts.
+          destPath = src;
+          const existing = getModMetadata(metaKeyFor(destPath));
+          // Don't re-tag a file Grimoire already manages (a prior import or a
+          // Locker/local surface parked here): that would hijack its identity.
+          if (existing && isGrimoireManaged(existing)) {
+            report.skipped.push({
+              submissionId: entry.submissionId,
+              reason: `Already managed by Grimoire (${metaKeyFor(destPath)})`,
+            });
+            continue;
+          }
         } else {
-          // Disabled -> Grimoire's .disabled under a free-form name. In-place
-          // relocates (same install, no duplicate); copy mode leaves DMM's file.
+          // DMM's file lives outside Grimoire's scanned folders (a separate
+          // profile subfolder or copy): bring a COPY into .disabled under a
+          // free-form name. Always copy, never move, so DMM stays intact.
           const nameHint = entry.modName ?? entry.sourceFileName ?? basename(src);
           const disabledName = makeDisabledFileName(basename(src), disabledTaken, nameHint);
           disabledTaken.add(disabledName.toLowerCase());
           if (!existsSync(disabledPath)) await fs.mkdir(disabledPath, { recursive: true });
           destPath = join(disabledPath, disabledName);
-          if (mode === 'in-place') {
-            await fs.rename(src, destPath);
-          } else {
-            await fs.copyFile(src, destPath, fsConstants.COPYFILE_EXCL);
-          }
+          await fs.copyFile(src, destPath, fsConstants.COPYFILE_EXCL);
         }
 
         const metaKey = metaKeyFor(destPath);
