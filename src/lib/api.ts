@@ -441,6 +441,15 @@ export async function importSoulContainerGlb(
   return window.electronAPI.importSoulContainerGlb(args);
 }
 
+/** Build the same soul-container override VPK as importSoulContainerGlb, but save
+ *  it to disk via a native dialog instead of installing it. Resolves with
+ *  `{ exported: false }` if the save dialog is cancelled. */
+export async function exportSoulContainerGlb(
+  args: import('../types/electron').ImportSoulContainerGlbArgs
+): Promise<import('../types/foundry').VpkExportResult> {
+  return window.electronAPI.exportSoulContainerGlb(args);
+}
+
 /** Build the soul-container for the given orientation and export its model to a
  *  GLB for the import preview. Returns the GLB as an ArrayBuffer + the resolved
  *  orientation label and fitted bounds. */
@@ -460,6 +469,15 @@ export async function importSpiritUrnGlb(
   args: import('../types/electron').ImportSpiritUrnGlbArgs
 ): Promise<Mod[]> {
   return window.electronAPI.importSpiritUrnGlb(args);
+}
+
+/** Build the same Spirit Urn override VPK as importSpiritUrnGlb, but save it to
+ *  disk via a native dialog instead of installing it. Resolves with
+ *  `{ exported: false }` if the save dialog is cancelled. */
+export async function exportSpiritUrnGlb(
+  args: import('../types/electron').ImportSpiritUrnGlbArgs
+): Promise<import('../types/foundry').VpkExportResult> {
+  return window.electronAPI.exportSpiritUrnGlb(args);
 }
 
 /** Build the urn for the given orientation/span and export its model to a GLB
@@ -1184,4 +1202,13 @@ export async function foundryVoiceclip(vsndPath: string): Promise<string | null>
 
 export async function foundryWarmCache(): Promise<void> {
   return window.electronAPI.foundry.warmCache();
+}
+
+/** Bake the given hero ability-VFX effect into a standalone addon VPK and prompt
+ *  the user to save it to disk (instead of applying it into the mod manager).
+ *  Resolves with `{ exported: false }` if the save dialog is cancelled. */
+export async function foundryExportHeroEffect(
+  req: import('../types/foundry').HeroEffectExportRequest
+): Promise<import('../types/foundry').VpkExportResult> {
+  return window.electronAPI.foundry.exportHeroEffect(req);
 }

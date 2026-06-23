@@ -33,8 +33,10 @@ import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
 import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
+import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
 import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
+import type { VpkExportResult } from '../../../src/types/foundry';
 import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
@@ -1077,6 +1079,40 @@ ipcMain.handle(
     }
 );
 
+// export-soul-container-glb
+// Build the same soul-container override VPK import-soul-container-glb builds, but
+// save it to disk via a native dialog instead of installing it into the mod list
+// (the export half of the Foundry output layer). Returns { exported: false } if
+// the user cancels the save dialog.
+ipcMain.handle(
+    'export-soul-container-glb',
+    async (_, args: ImportSoulContainerGlbArgs): Promise<VpkExportResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const { glbPath, name, orient, rotate, yaw, upright, glow } = args;
+        if (!name?.trim()) {
+            throw new Error('A name is required');
+        }
+
+        const built = await buildSoulContainerVpk(deadlockPath, {
+            glbPath,
+            name: name.trim(),
+            orient,
+            rotate,
+            yaw,
+            upright,
+            glow,
+        });
+        try {
+            return await exportVpkViaDialog(built.vpkPath, exportVpkFileName(name));
+        } finally {
+            await cleanupSoulContainerBuild(built.vpkPath);
+        }
+    }
+);
+
 // preview-spirit-urn-glb
 // Build the urn override VPK for the current orientation/span and export its
 // model back to a GLB so the import modal renders EXACTLY what loads in-game.
@@ -1191,6 +1227,37 @@ ipcMain.handle(
         } finally {
             // 4. Always remove the temp staging dir (the installed copy is
             //    byte-identical, so nothing is lost).
+            await cleanupSpiritUrnBuild(built.vpkPath);
+        }
+    }
+);
+
+// export-spirit-urn-glb
+// Disk-export counterpart of import-spirit-urn-glb: build the same urn override
+// VPK, then save it to disk via a native dialog instead of installing it.
+ipcMain.handle(
+    'export-spirit-urn-glb',
+    async (_, args: ImportSpiritUrnGlbArgs): Promise<VpkExportResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const { glbPath, name, orient, rotate, ground, span } = args;
+        if (!name?.trim()) {
+            throw new Error('A name is required');
+        }
+
+        const built = await buildSpiritUrnVpk(deadlockPath, {
+            glbPath,
+            name: name.trim(),
+            orient,
+            rotate,
+            ground,
+            span,
+        });
+        try {
+            return await exportVpkViaDialog(built.vpkPath, exportVpkFileName(name));
+        } finally {
             await cleanupSpiritUrnBuild(built.vpkPath);
         }
     }

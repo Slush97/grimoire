@@ -121,3 +121,30 @@ export interface ThumbManifestEntry {
     sourceHeight: number;
     format: string;
 }
+
+/**
+ * Request to bake a hero ability-VFX effect (recolor / prism / gradient / trippy)
+ * into a standalone addon VPK and let the user save it to disk, instead of (or as
+ * well as) applying it into the managed mod list. Mirrors the params the picker's
+ * "Apply" path passes; the main process builds the same per-hero cache VPK the
+ * apply flow uses, then opens a save dialog. `hue`/`saturation`/`brightness` are
+ * ignored in `trippy` mode (kept neutral); `gradient` only applies in `gradient`
+ * mode; `trippy` carries the procedural-paint choice for `trippy` mode.
+ */
+export interface HeroEffectExportRequest {
+    heroName: string;
+    mode: 'hue' | 'prism' | 'gradient' | 'trippy';
+    hue: number;
+    saturation: number;
+    brightness: number;
+    animated?: boolean;
+    gradient?: string | null;
+    trippy?: import('./mod').TrippyVfxChoice;
+}
+
+/** Outcome of a save-to-disk export: `exported` false means the user cancelled
+ *  the save dialog; `path` is the file written when `exported` is true. */
+export interface VpkExportResult {
+    exported: boolean;
+    path?: string;
+}

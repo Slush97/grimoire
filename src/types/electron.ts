@@ -646,8 +646,14 @@ export interface ElectronAPI {
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     importSoulContainerGlb: (args: ImportSoulContainerGlbArgs) => Promise<Mod[]>;
+    exportSoulContainerGlb: (
+        args: ImportSoulContainerGlbArgs
+    ) => Promise<import('./foundry').VpkExportResult>;
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) => Promise<SoulContainerPreview>;
     importSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) => Promise<Mod[]>;
+    exportSpiritUrnGlb: (
+        args: ImportSpiritUrnGlbArgs
+    ) => Promise<import('./foundry').VpkExportResult>;
     previewSpiritUrnGlb: (args: PreviewSpiritUrnGlbArgs) => Promise<SpiritUrnPreview>;
     readGlbFile: (glbPath: string) => Promise<string>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
@@ -945,6 +951,9 @@ export interface ElectronAPI {
         ) => Promise<string | null>;
         voiceclip: (vsndPath: string) => Promise<string | null>;
         warmCache: () => Promise<void>;
+        exportHeroEffect: (
+            req: import('./foundry').HeroEffectExportRequest
+        ) => Promise<import('./foundry').VpkExportResult>;
     };
 
     // Language packs (downloaded on demand from GitHub)

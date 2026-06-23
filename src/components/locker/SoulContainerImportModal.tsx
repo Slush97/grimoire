@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Download,
   Ghost,
   Loader2,
   Pause,
@@ -20,7 +21,7 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { exportHeroPose, getHeroPoseInfo, importSoulContainerGlb, previewSoulContainerGlb, showOpenDialog } from '../../lib/api';
+import { exportHeroPose, exportSoulContainerGlb, getHeroPoseInfo, importSoulContainerGlb, previewSoulContainerGlb, showOpenDialog } from '../../lib/api';
 import { loadGltfPreview, parseGltfPreview } from '../../lib/loadGltfPreview';
 import { computeSceneStats, deriveNameFromPath, norm360, TRIANGLE_WARN_THRESHOLD } from '../../lib/soulImport';
 import { useAppStore } from '../../stores/appStore';
@@ -130,6 +131,7 @@ export default function SoulContainerImportModal({
     Math.floor(Math.random() * SOUL_BACKDROP_COUNT)
   );
   const [building, setBuilding] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -314,7 +316,7 @@ export default function SoulContainerImportModal({
       : t('locker.soulImport.orient.customRotation')
     : (resolvedOrient ?? orientMode);
 
-  const canSubmit = !!glbPath && !!scene && !!name.trim() && !submitting && !building;
+  const canSubmit = !!glbPath && !!scene && !!name.trim() && !submitting && !building && !exporting;
   const highPoly = triangleCount > TRIANGLE_WARN_THRESHOLD;
 
   const handleSubmit = async () => {
@@ -349,6 +351,31 @@ export default function SoulContainerImportModal({
     } catch (err) {
       setError(String(err));
       setSubmitting(false);
+    }
+  };
+
+  // Build the same override VPK and save it to disk instead of installing it.
+  // Closes the modal once a file is written; a cancelled save dialog leaves the
+  // modal open so the user can still import or retry.
+  const handleExport = async () => {
+    if (!canSubmit) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const result = await exportSoulContainerGlb({
+        glbPath,
+        name: name.trim(),
+        orient: orientMode,
+        rotate: hasRotation ? rotate : undefined,
+        yaw: yaw || undefined,
+        upright,
+        glow,
+      });
+      if (result.exported) onClose();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -782,10 +809,19 @@ export default function SoulContainerImportModal({
           <div className="flex justify-end gap-3 ml-auto shrink-0">
             <button
               onClick={onClose}
-              disabled={submitting}
+              disabled={submitting || exporting}
               className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
             >
               {t('common.actions.cancel')}
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={!canSubmit}
+              title={t('locker.soulImport.exportTitle')}
+              className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {t('locker.soulImport.export')}
             </button>
             <button
               onClick={handleSubmit}
