@@ -15,12 +15,25 @@ import {
     Swords,
     AudioLines,
     MessageSquare,
+    Wand2,
+    Upload,
+    X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../common/PageComponents';
 import Tx from '../translation/Tx';
-import { foundryHeroSounds, foundryVoicelines, foundryVoiceclip } from '../../lib/api';
+import { SoundImportEditor, type SoundImportEdits } from './SoundImportEditor';
+import { foundryHeroSounds, foundryVoicelines, foundryVoiceclip, foundrySwapSound } from '../../lib/api';
+import { showToast } from '../../stores/toastStore';
+import { useAppStore } from '../../stores/appStore';
 import type { HeroInfo, HeroSound, HeroSoundCategory, VoiceLine } from '../../types/foundry';
+
+/** Hero context threaded to the gameplay rows so each can offer an inline
+ *  sound-swap (drop your own MP3 onto the event). VO rows don't get this. */
+interface SwapContext {
+    hero: string;
+    heroName: string;
+}
 
 interface SoundBrowseProps {
     heroes: HeroInfo[];
@@ -82,6 +95,8 @@ export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProp
     const [picked, setPicked] = useState('');
     const [search, setSearch] = useState('');
     const hero = picked || heroOptions[0]?.code || '';
+    const heroName = heroOptions.find((h) => h.code === hero)?.name ?? hero;
+    const swapContext = useMemo<SwapContext>(() => ({ hero, heroName }), [hero, heroName]);
 
     // Gameplay-sound fetch, tagged with the hero it belongs to so loading/error
     // derive from whether it matches the current hero (the effect only sets state
@@ -201,7 +216,12 @@ export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProp
                                     })}
                                 </p>
                                 {sections.map((section) => (
-                                    <CategorySection key={section.category} section={section} player={player} />
+                                    <CategorySection
+                                        key={section.category}
+                                        section={section}
+                                        player={player}
+                                        swap={swapContext}
+                                    />
                                 ))}
                             </>
                         )}
@@ -290,9 +310,11 @@ function abilityOrder(a: AbilityGroup, b: AbilityGroup): number {
 function CategorySection({
     section,
     player,
+    swap,
 }: {
     section: CategorySectionData;
     player: ClipPlayer;
+    swap: SwapContext;
 }) {
     const { t } = useTranslation();
     const Icon = CATEGORY_ICON[section.category];
@@ -330,6 +352,8 @@ function CategorySection({
                                 duration={row.duration}
                                 state={player.stateFor(row.event)}
                                 onToggle={() => player.toggle(row)}
+                                swap={swap}
+                                targetClip={row.vsnd[0]}
                             />
                         ))}
                     </div>
@@ -490,42 +514,268 @@ interface SoundRowProps {
     duration: number | null;
     state: RowState;
     onToggle: () => void;
+    /** When present, the row offers an inline sound-swap (gameplay rows only). */
+    swap?: SwapContext;
+    /** First clip path of this row, used as the swap normalizer's volume target. */
+    targetClip?: string;
 }
 
-function SoundRow({ label, event, clips, duration, state, onToggle }: SoundRowProps) {
+function SoundRow({ label, event, clips, duration, state, onToggle, swap, targetClip }: SoundRowProps) {
     const { t } = useTranslation();
+    const [swapOpen, setSwapOpen] = useState(false);
     const seconds = duration && duration > 0 ? `${duration.toFixed(1)}s` : null;
     return (
-        <div
-            className="flex items-center gap-3 rounded-sm border border-border bg-bg-secondary px-3 py-2"
-            style={{ contentVisibility: 'auto', containIntrinsicSize: '0 44px' }}
-        >
+        <div style={{ contentVisibility: 'auto', containIntrinsicSize: '0 44px' }}>
+            <div className="flex items-center gap-3 rounded-sm border border-border bg-bg-secondary px-3 py-2">
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    title={t('foundry.sound.play', 'Audition')}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent transition-colors hover:bg-accent/15"
+                >
+                    {state === 'loading' ? (
+                        <Loader2 size={15} className="animate-spin" />
+                    ) : state === 'playing' ? (
+                        <Pause size={15} />
+                    ) : (
+                        <Play size={15} className="translate-x-px" />
+                    )}
+                </button>
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-text-primary" title={label}>
+                        {label || event}
+                    </p>
+                    <p className="truncate text-[11px] text-text-secondary" title={event}>
+                        {event}
+                        {clips > 1 ? ` · ${clips} clips` : ''}
+                    </p>
+                </div>
+                {seconds && (
+                    <span className="shrink-0 text-[11px] tabular-nums text-text-secondary">
+                        {seconds}
+                    </span>
+                )}
+                {swap && (
+                    <button
+                        type="button"
+                        onClick={() => setSwapOpen((o) => !o)}
+                        title={t('foundry.sound.swap.button', 'Swap this sound for your own audio')}
+                        className={`flex h-8 shrink-0 items-center gap-1.5 rounded-sm border px-2 text-xs transition-colors ${
+                            swapOpen
+                                ? 'border-accent/50 bg-accent/15 text-accent'
+                                : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                        }`}
+                    >
+                        <Wand2 size={14} />
+                        <Tx k="foundry.sound.swap.buttonLabel" fallback="Swap" />
+                    </button>
+                )}
+            </div>
+            {swap && swapOpen && (
+                <SwapPanel
+                    hero={swap.hero}
+                    heroName={swap.heroName}
+                    event={event}
+                    label={label}
+                    clips={clips}
+                    targetClip={targetClip}
+                    onClose={() => setSwapOpen(false)}
+                />
+            )}
+        </div>
+    );
+}
+
+// ----- Sound-swap panel (drop your own MP3 onto an event) ------------------
+
+/**
+ * Inline forge for one sound event: drop or pick an MP3, name it, and build +
+ * install a managed local mod that overrides every clip in the event's
+ * randomizer pool (`soundswap --event --pool all`). The donor template comes
+ * from the live pak, so loop/format are preserved. v1 takes MP3 only (the mint
+ * path parses rate/channels from MP3 frame headers, no ffmpeg).
+ */
+function SwapPanel({
+    hero,
+    heroName,
+    event,
+    label,
+    clips,
+    targetClip,
+    onClose,
+}: {
+    hero: string;
+    heroName: string;
+    event: string;
+    label: string;
+    clips: number;
+    /** A clip of the sound being replaced, decoded as the normalizer's loudness
+     *  target in the import editor. */
+    targetClip?: string;
+    onClose: () => void;
+}) {
+    const { t } = useTranslation();
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const [audioPath, setAudioPath] = useState<string | null>(null);
+    const [audioName, setAudioName] = useState('');
+    const [audioFile, setAudioFile] = useState<File | null>(null);
+    const [edits, setEdits] = useState<SoundImportEdits>({});
+    const [name, setName] = useState(`${heroName} ${label}`.trim());
+    const [loop, setLoop] = useState<'auto' | 'on' | 'off'>('auto');
+    const [busy, setBusy] = useState(false);
+    const [dragOver, setDragOver] = useState(false);
+
+    const accept = useCallback(
+        (file: File | undefined | null) => {
+            if (!file) return;
+            if (!file.name.toLowerCase().endsWith('.mp3')) {
+                showToast(t('foundry.sound.swap.mp3only', 'Audio must be an MP3 file.'), {
+                    tone: 'error',
+                });
+                return;
+            }
+            const path = window.electronAPI.getDroppedFilePath(file);
+            setAudioPath(path);
+            setAudioName(file.name);
+            setAudioFile(file);
+            setEdits({});
+        },
+        [t]
+    );
+
+    const forge = useCallback(async () => {
+        if (!audioPath || busy) return;
+        const finalName = name.trim() || `${heroName} ${label}`.trim();
+        setBusy(true);
+        try {
+            await foundrySwapSound({
+                heroCodename: hero,
+                heroName,
+                event,
+                audioPath,
+                name: finalName,
+                loop,
+                trimStartMs: edits.trimStartMs,
+                trimEndMs: edits.trimEndMs,
+                gainDb: edits.gainDb,
+            });
+            await useAppStore.getState().loadMods({ silent: true });
+            showToast(
+                t('foundry.sound.swap.done', 'Installed "{{name}}" - enable it in the Installed tab', {
+                    name: finalName,
+                }),
+                { tone: 'success', duration: 6000 }
+            );
+            onClose();
+        } catch (e) {
+            showToast(e instanceof Error ? e.message : String(e), { tone: 'error', duration: 8000 });
+        } finally {
+            setBusy(false);
+        }
+    }, [audioPath, busy, name, heroName, label, hero, event, loop, edits, t, onClose]);
+
+    return (
+        <div className="mt-1.5 rounded-sm border border-accent/30 bg-bg-tertiary/40 p-3">
+            <div className="mb-2 flex items-center justify-between">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-accent">
+                    <Tx k="foundry.sound.swap.title" fallback="Swap with your own audio" />
+                </p>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="text-text-secondary transition-colors hover:text-text-primary"
+                    title={t('common.close', 'Close')}
+                >
+                    <X size={14} />
+                </button>
+            </div>
+
+            {/* Drop / pick zone */}
             <button
                 type="button"
-                onClick={onToggle}
-                title={t('foundry.sound.play', 'Audition')}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent transition-colors hover:bg-accent/15"
+                onClick={() => inputRef.current?.click()}
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    accept(e.dataTransfer.files?.[0]);
+                }}
+                className={`flex w-full items-center justify-center gap-2 rounded-sm border border-dashed px-3 py-3 text-xs transition-colors ${
+                    dragOver
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-border text-text-secondary hover:border-accent/50 hover:text-text-primary'
+                }`}
             >
-                {state === 'loading' ? (
-                    <Loader2 size={15} className="animate-spin" />
-                ) : state === 'playing' ? (
-                    <Pause size={15} />
+                <Upload size={14} />
+                {audioName ? (
+                    <span className="truncate text-text-primary" title={audioName}>
+                        {audioName}
+                    </span>
                 ) : (
-                    <Play size={15} className="translate-x-px" />
+                    <Tx k="foundry.sound.swap.drop" fallback="Drop an MP3 here, or click to pick" />
                 )}
             </button>
-            <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-text-primary" title={label}>
-                    {label || event}
-                </p>
-                <p className="truncate text-[11px] text-text-secondary" title={event}>
-                    {event}
-                    {clips > 1 ? ` · ${clips} clips` : ''}
-                </p>
-            </div>
-            {seconds && (
-                <span className="shrink-0 text-[11px] tabular-nums text-text-secondary">{seconds}</span>
+            <input
+                ref={inputRef}
+                type="file"
+                accept=".mp3,audio/mpeg"
+                className="hidden"
+                onChange={(e) => {
+                    accept(e.target.files?.[0]);
+                    e.target.value = '';
+                }}
+            />
+
+            {/* Trim + normalize the imported clip before forging */}
+            {audioFile && (
+                <SoundImportEditor
+                    file={audioFile}
+                    targetClipPath={targetClip}
+                    onChange={setEdits}
+                />
             )}
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t('foundry.sound.swap.namePlaceholder', 'Mod name')}
+                    className="min-w-[160px] flex-1 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm text-text-primary placeholder:text-text-secondary/60 focus:border-accent/50 focus:outline-none"
+                />
+                <select
+                    value={loop}
+                    onChange={(e) => setLoop(e.target.value as 'auto' | 'on' | 'off')}
+                    title={t('foundry.sound.swap.loop', 'Loop the swapped clip')}
+                    className="rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm text-text-primary focus:outline-none"
+                >
+                    <option value="auto">{t('foundry.sound.swap.loopAuto', 'Loop: auto')}</option>
+                    <option value="on">{t('foundry.sound.swap.loopOn', 'Loop: on')}</option>
+                    <option value="off">{t('foundry.sound.swap.loopOff', 'Loop: off')}</option>
+                </select>
+                <button
+                    type="button"
+                    disabled={!audioPath || busy}
+                    onClick={forge}
+                    className="flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-sm font-medium text-bg-primary transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                    <Tx k="foundry.sound.swap.forge" fallback="Forge & install" />
+                </button>
+            </div>
+
+            <p className="mt-2 text-[11px] text-text-secondary">
+                {clips > 1
+                    ? t(
+                          'foundry.sound.swap.poolNote',
+                          'Replaces all {{count}} clips in this sound so it always plays your audio.',
+                          { count: clips }
+                      )
+                    : t('foundry.sound.swap.singleNote', 'Replaces this sound with your audio.')}
+            </p>
         </div>
     );
 }
