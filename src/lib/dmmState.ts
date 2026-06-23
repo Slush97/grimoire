@@ -69,7 +69,9 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
  *  `/dl/<n>` integer is the file `_idRow`. Returns undefined if not present. */
 export function fileIdFromDownloadUrl(url: unknown): number | undefined {
   if (typeof url !== 'string') return undefined;
-  const m = url.match(/\/dl\/(\d+)/);
+  // Anchor to the GameBanana host so an unrelated mirror/CDN link that merely
+  // contains a `/dl/<n>` segment can't masquerade as a file id.
+  const m = url.match(/gamebanana\.com\/dl\/(\d+)/i);
   if (!m) return undefined;
   const id = Number(m[1]);
   return Number.isInteger(id) && id > 0 ? id : undefined;
@@ -95,7 +97,13 @@ function normalizeMod(raw: unknown): DmmStateMod | null {
     : isObject(raw.selectedDownload)
       ? [raw.selectedDownload]
       : [];
-  const firstDownload = downloads.find(isObject) as Record<string, unknown> | undefined;
+  const downloadObjs = downloads.filter(isObject) as Record<string, unknown>[];
+  // Prefer the first download whose URL actually yields a GameBanana file id;
+  // some DMM entries list a non-/dl link (readme, external) before the real
+  // file, so taking only downloads[0] would drop a recoverable id. The label
+  // (filename) follows the id'd download when there is one, else the first.
+  const idDownload = downloadObjs.find((d) => fileIdFromDownloadUrl(d.url) !== undefined);
+  const labelDownload = idDownload ?? downloadObjs[0];
 
   const images = Array.isArray(raw.images) ? raw.images : [];
   const thumbnailUrl = images.find((i): i is string => typeof i === 'string' && !!i);
@@ -111,9 +119,9 @@ function normalizeMod(raw: unknown): DmmStateMod | null {
     category: typeof raw.category === 'string' ? raw.category : undefined,
     hero: pickHero(raw),
     thumbnailUrl,
-    fileId: firstDownload ? fileIdFromDownloadUrl(firstDownload.url) : undefined,
+    fileId: idDownload ? fileIdFromDownloadUrl(idDownload.url) : undefined,
     downloadFileName:
-      firstDownload && typeof firstDownload.name === 'string' ? firstDownload.name : undefined,
+      labelDownload && typeof labelDownload.name === 'string' ? labelDownload.name : undefined,
     installOrder: typeof raw.installOrder === 'number' ? raw.installOrder : undefined,
     installedVpks,
   };

@@ -17,7 +17,7 @@
  */
 
 import { homedir } from 'os';
-import { join, basename, resolve, isAbsolute } from 'path';
+import { join, basename, dirname, resolve, isAbsolute } from 'path';
 import { promises as fs, constants as fsConstants, existsSync } from 'fs';
 
 import { getAddonsPath, getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
@@ -26,7 +26,12 @@ import {
   makeDisabledFileName,
   runExclusiveModMutation,
 } from './mods';
-import { setModMetadataWithHash, getModMetadata, type ModMetadata } from './metadata';
+import {
+  setModMetadataWithHash,
+  getModMetadata,
+  removeModMetadata,
+  type ModMetadata,
+} from './metadata';
 import {
   composeDmmAdoptionPlan,
   planToPreview,
@@ -150,6 +155,37 @@ async function scanIdPrefixedVpks(dirs: string[]): Promise<Map<number, string[]>
   return map;
 }
 
+/** Whether `src` is already a live, engine-loadable enabled slot: a `*_dir.vpk`
+ *  sitting directly in one of Grimoire's addon roots (NOT `.disabled`, NOT a
+ *  parked `<id>_name.vpk`). Only such a file can be adopted in place. Anything
+ *  else (a parked name, a file the fallback found in `.disabled`) must be
+ *  promoted into a real pakNN slot, or the mod would be reported enabled yet
+ *  stay invisible to scanMods (which requires `_dir.vpk`) and unloaded by the
+ *  game. */
+function isLiveEnabledSlot(src: string, addonRoots: string[]): boolean {
+  if (!basename(src).toLowerCase().endsWith('_dir.vpk')) return false;
+  const parent = resolve(dirname(src));
+  return addonRoots.some((root) => resolve(root) === parent);
+}
+
+/** Whether a metadata entry shows Grimoire already manages this VPK: a prior
+ *  GameBanana install/import, a merged build, a Locker-managed surface, or a
+ *  user-assigned hero. Adopting over such an entry in place would hijack a real
+ *  mod's identity, so we skip it instead. */
+function isGrimoireManaged(meta: ModMetadata): boolean {
+  return (
+    meta.gameBananaId !== undefined ||
+    meta.merged !== undefined ||
+    meta.lockerCosmetics !== undefined ||
+    meta.lockerSounds !== undefined ||
+    meta.lockerColors !== undefined ||
+    meta.lockerTrippySkins !== undefined ||
+    meta.soulImport !== undefined ||
+    meta.urnImport !== undefined ||
+    meta.lockerHero !== undefined
+  );
+}
+
 function metadataFor(entry: DmmAdoptionEntry): ModMetadata {
   return {
     modName: entry.modName,
@@ -195,8 +231,9 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
 
   // Discover DMM's actively-loaded `<id>_*.vpk` files so mods whose path DMM
   // didn't record can still be adopted by their filename id prefix.
+  const addonRoots = getAddonFolderPaths(opts.deadlockPath);
   const extraVpkBySubmission = await scanIdPrefixedVpks([
-    ...getAddonFolderPaths(opts.deadlockPath),
+    ...addonRoots,
     getDisabledPath(opts.deadlockPath),
   ]);
 
@@ -263,11 +300,15 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
       try {
         let destPath: string;
         if (entry.enabled) {
-          if (mode === 'in-place') {
-            // Already in a slot Grimoire scans: adopt by metadata only.
+          if (mode === 'in-place' && isLiveEnabledSlot(src, addonRoots)) {
+            // Already a live pakNN_dir.vpk slot Grimoire scans: adopt by
+            // metadata only, no copy.
             destPath = src;
             const existing = getModMetadata(metaKeyFor(destPath));
-            if (existing?.gameBananaId) {
+            // Skip anything Grimoire already manages (a prior import, or a
+            // local/Locker VPK that happens to occupy this slot): re-tagging it
+            // would hijack its identity. Only a truly unmanaged file is adopted.
+            if (existing && isGrimoireManaged(existing)) {
               report.skipped.push({
                 submissionId: entry.submissionId,
                 reason: `Already managed by Grimoire (${metaKeyFor(destPath)})`,
@@ -275,8 +316,10 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
               continue;
             }
           } else {
-            // Copy mode: a real pakNN slot (overflow-aware). Must write before
-            // the next allocation so the slot scan sees it taken.
+            // Not a live slot (copy mode, a parked `<id>_name.vpk`, or a file the
+            // fallback found in .disabled): promote into a real pakNN slot so it
+            // actually loads. Must write before the next allocation so the slot
+            // scan sees it taken.
             destPath = await allocateEnabledVpkPath(opts.deadlockPath);
             await fs.copyFile(src, destPath, fsConstants.COPYFILE_EXCL);
           }
@@ -296,6 +339,11 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
         }
 
         const metaKey = metaKeyFor(destPath);
+        // Clear any orphaned sidecar entry at this key first: an allocated slot
+        // is only guaranteed free on disk, so a stale entry from a deleted mod
+        // could otherwise bleed its fields (lockerHero, merged, thumbnail) into
+        // this one via setModMetadata's shallow merge.
+        removeModMetadata(metaKey);
         await setModMetadataWithHash(metaKey, metadataFor(entry), destPath);
 
         report.adopted.push({

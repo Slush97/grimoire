@@ -85,6 +85,9 @@ describe('fileIdFromDownloadUrl', () => {
     expect(fileIdFromDownloadUrl(undefined)).toBeUndefined();
     expect(fileIdFromDownloadUrl('https://gamebanana.com/dl/0')).toBeUndefined();
   });
+  it('ignores a /dl/<n> segment on an unrelated host', () => {
+    expect(fileIdFromDownloadUrl('https://cdn.example.com/files/dl/55555.zip')).toBeUndefined();
+  });
 });
 
 describe('unwrapDmmStateEnvelope', () => {
@@ -128,6 +131,31 @@ describe('parseDmmState', () => {
     const quiet = pvp.mods.find((m) => m.remoteId === '777')!;
     expect(quiet.downloadFileName).toBe('quiet.7z');
     expect(quiet.fileId).toBeUndefined();
+  });
+
+  it('recovers fileId from a later download when the first lacks a /dl/ url', () => {
+    const file = JSON.stringify({
+      'local-config': {
+        state: {
+          localMods: [
+            {
+              remoteId: '8001',
+              name: 'Readme First Mod',
+              selectedDownloads: [
+                { url: 'https://gamebanana.com/mods/8001', name: 'readme.txt' },
+                { url: 'https://gamebanana.com/dl/246810', name: 'skin.zip' },
+              ],
+            },
+          ],
+          profiles: {},
+        },
+        version: 0,
+      },
+    });
+    const mod = parseDmmState(file).localMods[0];
+    // The id'd download wins for both the file id and the label.
+    expect(mod.fileId).toBe(246810);
+    expect(mod.downloadFileName).toBe('skin.zip');
   });
 });
 
