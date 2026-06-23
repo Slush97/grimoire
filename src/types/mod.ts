@@ -907,4 +907,17 @@ export interface AppSettings {
    *  (.gi maps to text/plain, which often resolves to a word processor, so
    *  "default" alone makes a bad Edit File experience.) */
   externalEditorPath?: string | null;
+  /** Last main-window position and size, persisted so the app reopens where
+   *  the user left it instead of letting the OS/compositor place it (on some
+   *  multi-monitor Linux setups that meant the secondary screen at a wrong
+   *  size). Restored only when the saved rectangle still intersects a
+   *  currently-connected display; otherwise we fall back to a centered default.
+   *  Undefined until the first move/resize is recorded. */
+  windowBounds?: {
+    x?: number;
+    y?: number;
+    width: number;
+    height: number;
+    isMaximized?: boolean;
+  };
 }

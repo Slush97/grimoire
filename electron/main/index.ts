@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell, session, protocol, nativeTheme } from 'electron';
+import { app, BrowserWindow, shell, session, protocol, nativeTheme, screen } from 'electron';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
@@ -146,12 +146,67 @@ async function backfillStartupMetadataHashes(): Promise<void> {
     }
 }
 
+const DEFAULT_WINDOW_WIDTH = 1280;
+const DEFAULT_WINDOW_HEIGHT = 800;
+const MIN_WINDOW_WIDTH = 900;
+const MIN_WINDOW_HEIGHT = 600;
+
+/**
+ * Resolve the saved window rectangle into safe constructor bounds. We only
+ * honour a saved position when it still lands on a connected display: on some
+ * multi-monitor Linux/Wayland setups the OS otherwise placed the window on the
+ * wrong screen at the wrong size, and a stale x/y from an unplugged monitor
+ * would strand the window offscreen. When the saved spot is gone (or nothing
+ * was saved yet) we omit x/y so Electron centers on the primary display.
+ */
+function resolveInitialBounds(): {
+    width: number;
+    height: number;
+    x?: number;
+    y?: number;
+    isMaximized: boolean;
+} {
+    const saved = loadSettings().windowBounds;
+    if (!saved) {
+        return { width: DEFAULT_WINDOW_WIDTH, height: DEFAULT_WINDOW_HEIGHT, isMaximized: false };
+    }
+
+    const width = Math.max(MIN_WINDOW_WIDTH, Math.round(saved.width) || DEFAULT_WINDOW_WIDTH);
+    const height = Math.max(MIN_WINDOW_HEIGHT, Math.round(saved.height) || DEFAULT_WINDOW_HEIGHT);
+
+    // Only restore the position if the saved rectangle visibly overlaps some
+    // display's work area; otherwise the monitor it was on is gone.
+    let x: number | undefined;
+    let y: number | undefined;
+    if (typeof saved.x === 'number' && typeof saved.y === 'number') {
+        const onScreen = screen.getAllDisplays().some((display) => {
+            const wa = display.workArea;
+            return (
+                saved.x! < wa.x + wa.width &&
+                saved.x! + width > wa.x &&
+                saved.y! < wa.y + wa.height &&
+                saved.y! + height > wa.y
+            );
+        });
+        if (onScreen) {
+            x = Math.round(saved.x);
+            y = Math.round(saved.y);
+        }
+    }
+
+    return { width, height, x, y, isMaximized: !!saved.isMaximized };
+}
+
 function createWindow(): void {
+    const initial = resolveInitialBounds();
     mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        minWidth: 900,
-        minHeight: 600,
+        width: initial.width,
+        height: initial.height,
+        ...(initial.x !== undefined && initial.y !== undefined
+            ? { x: initial.x, y: initial.y }
+            : {}),
+        minWidth: MIN_WINDOW_WIDTH,
+        minHeight: MIN_WINDOW_HEIGHT,
         title: 'Grimoire',
         show: false, // Don't show until ready to prevent white flash
         backgroundColor: '#0f0f0f', // Dark background matching app theme
@@ -171,7 +226,53 @@ function createWindow(): void {
 
     // Show window when ready to prevent white screen flash
     mainWindow.once('ready-to-show', () => {
+        if (initial.isMaximized) mainWindow?.maximize();
         mainWindow?.show();
+    });
+
+    // Persist position and size so the app reopens where the user left it.
+    // We record the *normal* (non-maximized) bounds via getNormalBounds so a
+    // maximized session still restores to a sensible windowed rectangle, plus
+    // the maximized flag itself. Debounced because move/resize fire rapidly
+    // during a drag.
+    let saveBoundsTimer: NodeJS.Timeout | null = null;
+    const writeBounds = () => {
+        if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+        try {
+            const bounds = mainWindow.getNormalBounds();
+            saveSettings({
+                ...loadSettings(),
+                windowBounds: {
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    isMaximized: mainWindow.isMaximized(),
+                },
+            });
+        } catch (err) {
+            console.warn('[Main] Failed to persist window bounds:', err);
+        }
+    };
+    const persistBounds = () => {
+        if (saveBoundsTimer) clearTimeout(saveBoundsTimer);
+        saveBoundsTimer = setTimeout(() => {
+            saveBoundsTimer = null;
+            writeBounds();
+        }, 400);
+    };
+    mainWindow.on('resize', persistBounds);
+    mainWindow.on('move', persistBounds);
+    mainWindow.on('maximize', persistBounds);
+    mainWindow.on('unmaximize', persistBounds);
+    // Flush the final rectangle synchronously: a move/resize immediately before
+    // quitting would otherwise be swallowed by the debounce.
+    mainWindow.on('close', () => {
+        if (saveBoundsTimer) {
+            clearTimeout(saveBoundsTimer);
+            saveBoundsTimer = null;
+        }
+        writeBounds();
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
