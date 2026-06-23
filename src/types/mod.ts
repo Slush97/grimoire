@@ -568,6 +568,26 @@ export interface UrnImportInfo {
   status: SoulImportStatus;
 }
 
+/**
+ * Set on a mod built via the Foundry hero sound-swap (drop your own MP3 onto a
+ * hero gameplay sound event). Labels the mod as a local sound swap and records
+ * what was swapped, so the UI can show it and a later pass can reproduce it.
+ * One addon per swap; v1 uses `--pool all`, overriding every clip in the event's
+ * randomizer pool so the swapped sound always plays.
+ */
+export interface SoundSwapInfo {
+  /** Sound-path codename whose soundevents tree was edited (e.g. `gigawatt`). */
+  heroCodename: string;
+  /** The soundevent that was swapped (e.g. `Gigawatt.LightningBall.Damage`). */
+  event: string;
+  /** Original audio filename (basename), for display. */
+  audioFileName: string;
+  /** Loop handling chosen in the swap UI. */
+  loop: 'auto' | 'on' | 'off';
+  /** How the event's randomizer pool was handled. v1 always 'all'. */
+  pool: 'all' | 'collapse';
+}
+
 export interface Mod {
   id: string;
   name: string;

@@ -30,14 +30,15 @@ import {
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
+import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
 import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
 import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
 import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
-import type { VpkExportResult } from '../../../src/types/foundry';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
+import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -950,6 +951,109 @@ ipcMain.handle(
 
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
+    }
+);
+
+// foundry:swapSound
+// Build a hero sound-swap addon VPK (drop your own MP3 onto a hero gameplay
+// sound event) and install it as a tracked local mod, mirroring
+// import-soul-container-glb's build -> allocate -> copy -> metadata flow. Event
+// mode with --pool all: every clip in the event's randomizer pool is overridden
+// with the user audio, so the swapped sound always plays. Tagged with lockerHero
+// so it groups under the hero in the Locker. v1 takes MP3 only (the mint path
+// parses the rate/channels from MP3 frame headers, no ffmpeg).
+ipcMain.handle(
+    'foundry:swapSound',
+    async (_, args: HeroSoundSwapRequest): Promise<WireMod[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const {
+            heroCodename,
+            heroName,
+            event,
+            audioPath,
+            name,
+            loop,
+            thumbnailDataUrl,
+            nsfw,
+            trimStartMs,
+            trimEndMs,
+            gainDb,
+        } = args;
+        if (!name?.trim()) {
+            throw new Error('A name is required');
+        }
+        if (!event?.trim()) {
+            throw new Error('A sound event is required');
+        }
+        if (!audioPath || !existsSync(audioPath)) {
+            throw new Error('Audio file not found');
+        }
+        if (!audioPath.toLowerCase().endsWith('.mp3')) {
+            throw new Error('Audio must be an MP3 file (other formats are not supported yet).');
+        }
+
+        // 1. Build the swap VPK to a temp staging path.
+        const built = await buildHeroSoundSwapVpk(deadlockPath, {
+            heroCodename,
+            event: event.trim(),
+            audioPath,
+            loop: loop ?? 'auto',
+            trimStartMs,
+            trimEndMs,
+            gainDb,
+        });
+
+        try {
+            // 2. Allocate the next free ENABLED slot (same as import-custom-mod).
+            const destPath = await allocateEnabledVpkPath(deadlockPath);
+            const destMetaKey = metaKeyFor(destPath);
+
+            await fs.copyFile(built.vpkPath, destPath);
+
+            const soundSwap: SoundSwapInfo = {
+                heroCodename: built.soundCodename,
+                event: event.trim(),
+                audioFileName: basename(audioPath),
+                loop: loop ?? 'auto',
+                pool: 'all',
+            };
+
+            // 3. Scrub orphan metadata, then write the local-import entry. Tag it
+            //    with lockerHero (display name) so it groups under the hero in the
+            //    Locker; sourceSection marks it a Foundry sound swap.
+            removeModMetadata(destMetaKey);
+            await setModMetadataWithHash(
+                destMetaKey,
+                {
+                    modName: name.trim(),
+                    thumbnailUrl: thumbnailDataUrl,
+                    nsfw: !!nsfw,
+                    // 'Sound' routes the mod through the Locker's Sounds bucket
+                    // (isLockerManagedSound) instead of the hero-skin pile
+                    // (isLockerManagedMod treats any non-'Sound' + lockerHero mod
+                    // as a skin card). The lockerHero tag makes it hero-specific,
+                    // which short-circuits the global-sound-category drop. The
+                    // Foundry-swap provenance lives in `soundSwap`, not the section.
+                    sourceSection: 'Sound',
+                    categoryName: 'Sounds',
+                    ...(heroName?.trim()
+                        ? { lockerHero: heroName.trim(), lockerHeroSource: 'manual' as LockerHeroSource }
+                        : {}),
+                    soundSwap,
+                },
+                destPath
+            );
+
+            const mods = await scanMods(deadlockPath);
+            return mods.map(enrichMod);
+        } finally {
+            // 4. Always remove the temp staging dir (the installed copy is
+            //    byte-identical, so nothing is lost).
+            await cleanupHeroSoundSwapBuild(built.vpkPath);
+        }
     }
 );
 

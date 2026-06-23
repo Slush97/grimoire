@@ -954,6 +954,9 @@ export interface ElectronAPI {
         exportHeroEffect: (
             req: import('./foundry').HeroEffectExportRequest
         ) => Promise<import('./foundry').VpkExportResult>;
+        swapSound: (
+            req: import('./foundry').HeroSoundSwapRequest
+        ) => Promise<import('./mod').Mod[]>;
     };
 
     // Language packs (downloaded on demand from GitHub)

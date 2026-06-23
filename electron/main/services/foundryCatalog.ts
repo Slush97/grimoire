@@ -16,11 +16,12 @@
  *   userData/foundry-catalog-cache/                    (the engine's own index cache)
  */
 import { promises as fs } from 'fs';
-import { createHash } from 'crypto';
-import { join } from 'path';
+import { createHash, randomUUID } from 'crypto';
+import { join, dirname } from 'path';
+import { tmpdir } from 'os';
 import { pathToFileURL } from 'url';
 import { app, protocol, net } from 'electron';
-import { runVpkmerge, runVpkmergeStdout } from './modMerger';
+import { runVpkmerge, runVpkmergeStdout, verifyVpkOutput } from './modMerger';
 import { getCitadelPath } from './deadlock';
 import { soundCodenameForHero } from './heroSoundCodenames';
 import type {
@@ -155,6 +156,95 @@ export async function getHeroSounds(
     if (filters.search) args.push('--search', filters.search);
     if (typeof filters.limit === 'number') args.push('--limit', String(filters.limit));
     return runCatalogJson<HeroSound[]>(args);
+}
+
+// ----- Hero sound-swap build (drop your own audio onto a sound event) --------
+
+export type SoundSwapLoop = 'auto' | 'on' | 'off';
+
+export interface BuildHeroSoundSwapOptions {
+    /** Roster codename from the Foundry hero picker (e.g. `atlas`); resolved here
+     *  to the sound-path codename the `soundevents/hero/` tree is keyed by. */
+    heroCodename: string;
+    /** The soundevent to swap, verbatim from the catalog (a `HeroSound.event`,
+     *  e.g. `Gigawatt.LightningBall.Damage`). */
+    event: string;
+    /** Absolute path to the user's MP3 (validated by the caller). */
+    audioPath: string;
+    /** Loop handling for the minted clip. */
+    loop: SoundSwapLoop;
+    /** Optional trim window in milliseconds (frame-snapped, ~26 ms). Both ends
+     *  must be set together; omitted = use the whole clip. */
+    trimStartMs?: number;
+    trimEndMs?: number;
+    /** Optional loudness gain in decibels applied losslessly before minting (the
+     *  "match volume" normalizer). Omitted / 0 = no gain. */
+    gainDb?: number;
+}
+
+export interface HeroSoundSwapBuild {
+    /** The built addon VPK on disk (temp staging path; the caller installs the
+     *  copy into the managed mod list and then cleans this up). */
+    vpkPath: string;
+    /** The sound-path codename the event was resolved under (e.g. `gigawatt`),
+     *  recorded in the installed mod's metadata. */
+    soundCodename: string;
+}
+
+/**
+ * Build a hero sound-swap addon VPK via `vpkmerge soundswap --event --pool all`:
+ * every clip in the event's randomizer pool is overridden with the user's MP3,
+ * each minted around that clip's own donor container so loop/format/GUID are
+ * preserved. Returns a temp staging VPK the caller installs into the managed mod
+ * list (mirrors buildSoulContainerVpk's build-to-temp contract). The audio must
+ * be an MP3 (the mint path parses rate/channels/duration from the MP3 frame
+ * headers, no ffmpeg); transcoding other formats is a caller concern.
+ */
+export async function buildHeroSoundSwapVpk(
+    deadlockPath: string,
+    opts: BuildHeroSoundSwapOptions
+): Promise<HeroSoundSwapBuild> {
+    const soundCodename = await rosterToSoundCodename(deadlockPath, opts.heroCodename);
+    const dir = join(tmpdir(), `grimoire-soundswap-${randomUUID()}`);
+    await fs.mkdir(dir, { recursive: true });
+    const vpkPath = join(dir, 'soundswap_dir.vpk');
+    try {
+        const swapArgs = [
+            'soundswap',
+            '--from-vpk', pak01Path(deadlockPath),
+            '--event', opts.event,
+            '--hero', soundCodename,
+            '--pool', 'all',
+            '--audio', opts.audioPath,
+            '--loop', opts.loop,
+            '--encode-vpk', vpkPath,
+        ];
+        // Optional pre-mint edits: trim (both ends required together) then gain.
+        if (
+            typeof opts.trimStartMs === 'number' &&
+            typeof opts.trimEndMs === 'number' &&
+            opts.trimEndMs > opts.trimStartMs
+        ) {
+            swapArgs.push(
+                '--trim-start', String(Math.round(opts.trimStartMs)),
+                '--trim-end', String(Math.round(opts.trimEndMs))
+            );
+        }
+        if (typeof opts.gainDb === 'number' && Number.isFinite(opts.gainDb) && opts.gainDb !== 0) {
+            swapArgs.push('--gain-db', opts.gainDb.toFixed(2));
+        }
+        await runVpkmerge(swapArgs);
+        await verifyVpkOutput(vpkPath);
+    } catch (err) {
+        await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+        throw err;
+    }
+    return { vpkPath, soundCodename };
+}
+
+/** Remove a sound-swap build's temp staging dir (call after installing the copy). */
+export async function cleanupHeroSoundSwapBuild(vpkPath: string): Promise<void> {
+    await fs.rm(dirname(vpkPath), { recursive: true, force: true }).catch(() => {});
 }
 
 /** The texture/icon index, optionally filtered (all filters AND-combined). */

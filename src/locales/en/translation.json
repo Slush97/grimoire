@@ -49,7 +49,8 @@
     "emptyValue": "(empty)",
     "none": "None",
     "versus": "VS",
-    "versusLower": "vs"
+    "versusLower": "vs",
+    "close": "Close"
   },
   "sync": {
     "syncing": "Syncing {{section}}: {{percent}}%",
@@ -190,6 +191,33 @@
         "empty": "No voice lines match your search.",
         "count": "{{shown}} of {{total}} voice lines",
         "capped": "Showing the first {{cap}}. Refine your search to see more."
+      },
+      "swap": {
+        "button": "Swap this sound for your own audio",
+        "buttonLabel": "Swap",
+        "title": "Swap with your own audio",
+        "drop": "Drop an MP3 here, or click to pick",
+        "namePlaceholder": "Mod name",
+        "loop": "Loop the swapped clip",
+        "loopAuto": "Loop: auto",
+        "loopOn": "Loop: on",
+        "loopOff": "Loop: off",
+        "forge": "Forge & install",
+        "mp3only": "Audio must be an MP3 file.",
+        "done": "Installed \"{{name}}\" - enable it in the Installed tab",
+        "poolNote": "Replaces all {{count}} clips in this sound so it always plays your audio.",
+        "singleNote": "Replaces this sound with your audio."
+      },
+      "import": {
+        "decoding": "Reading audio...",
+        "decodeError": "Could not read this MP3 for preview.",
+        "trimStart": "Trim start",
+        "trimEnd": "Trim end",
+        "playSelection": "Play selection",
+        "resetTrim": "Use the whole clip",
+        "reset": "Reset",
+        "matchVolume": "Match the original volume",
+        "matchUnavailable": "original unavailable"
       }
     }
   },
