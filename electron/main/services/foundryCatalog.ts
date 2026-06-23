@@ -167,8 +167,13 @@ export interface BuildHeroSoundSwapOptions {
      *  to the sound-path codename the `soundevents/hero/` tree is keyed by. */
     heroCodename: string;
     /** The soundevent to swap, verbatim from the catalog (a `HeroSound.event`,
-     *  e.g. `Gigawatt.LightningBall.Damage`). */
-    event: string;
+     *  e.g. `Gigawatt.LightningBall.Damage`). Event mode (gameplay). Omit when
+     *  using `clipPaths` (VO / single-clip mode). */
+    event?: string;
+    /** Clip mode (voice lines): explicit clip entries to override in place.
+     *  `.vsnd` paths are normalized to `.vsnd_c`. VO has no per-hero soundevents
+     *  file, so event mode does not apply. When set, `event` is ignored. */
+    clipPaths?: string[];
     /** Absolute path to the user's MP3 (validated by the caller). */
     audioPath: string;
     /** Loop handling for the minted clip. */
@@ -191,6 +196,15 @@ export interface HeroSoundSwapBuild {
     soundCodename: string;
 }
 
+/** Normalize a clip path to its compiled `.vsnd_c` entry (the catalog hands out
+ *  `.vsnd` source paths; the pak entry + soundswap `--clip` target is `.vsnd_c`). */
+function toVsndcEntry(p: string): string {
+    const s = p.trim();
+    if (!s) return '';
+    if (s.endsWith('.vsnd_c')) return s;
+    return s.endsWith('.vsnd') ? `${s}_c` : s;
+}
+
 /**
  * Build a hero sound-swap addon VPK via `vpkmerge soundswap --event --pool all`:
  * every clip in the event's randomizer pool is overridden with the user's MP3,
@@ -208,32 +222,57 @@ export async function buildHeroSoundSwapVpk(
     const dir = join(tmpdir(), `grimoire-soundswap-${randomUUID()}`);
     await fs.mkdir(dir, { recursive: true });
     const vpkPath = join(dir, 'soundswap_dir.vpk');
+
+    // Shared mint options for either mode: the source audio, loop handling, and
+    // the optional pre-mint trim (both ends together) + loudness gain.
+    const mintArgs: string[] = ['--audio', opts.audioPath, '--loop', opts.loop];
+    if (
+        typeof opts.trimStartMs === 'number' &&
+        typeof opts.trimEndMs === 'number' &&
+        opts.trimEndMs > opts.trimStartMs
+    ) {
+        mintArgs.push(
+            '--trim-start', String(Math.round(opts.trimStartMs)),
+            '--trim-end', String(Math.round(opts.trimEndMs))
+        );
+    }
+    if (typeof opts.gainDb === 'number' && Number.isFinite(opts.gainDb) && opts.gainDb !== 0) {
+        mintArgs.push('--gain-db', opts.gainDb.toFixed(2));
+    }
+
+    const clips = (opts.clipPaths ?? []).map(toVsndcEntry).filter(Boolean);
     try {
-        const swapArgs = [
-            'soundswap',
-            '--from-vpk', pak01Path(deadlockPath),
-            '--event', opts.event,
-            '--hero', soundCodename,
-            '--pool', 'all',
-            '--audio', opts.audioPath,
-            '--loop', opts.loop,
-            '--encode-vpk', vpkPath,
-        ];
-        // Optional pre-mint edits: trim (both ends required together) then gain.
-        if (
-            typeof opts.trimStartMs === 'number' &&
-            typeof opts.trimEndMs === 'number' &&
-            opts.trimEndMs > opts.trimStartMs
-        ) {
-            swapArgs.push(
-                '--trim-start', String(Math.round(opts.trimStartMs)),
-                '--trim-end', String(Math.round(opts.trimEndMs))
-            );
+        if (clips.length > 0) {
+            // Clip mode (voice lines): override each clip `.vsnd_c` in place. One
+            // soundswap per clip; merge the per-clip override VPKs (disjoint entry
+            // paths) when a line carries a multi-clip randomizer pool.
+            if (clips.length === 1) {
+                await runVpkmerge([
+                    'soundswap', '--from-vpk', pak01Path(deadlockPath),
+                    '--clip', clips[0], ...mintArgs, '--encode-vpk', vpkPath,
+                ]);
+            } else {
+                const parts: string[] = [];
+                for (let i = 0; i < clips.length; i++) {
+                    const part = join(dir, `part-${i}_dir.vpk`);
+                    await runVpkmerge([
+                        'soundswap', '--from-vpk', pak01Path(deadlockPath),
+                        '--clip', clips[i], ...mintArgs, '--encode-vpk', part,
+                    ]);
+                    parts.push(part);
+                }
+                await runVpkmerge([vpkPath, ...parts]);
+            }
+        } else if (opts.event) {
+            // Event mode (gameplay): override every clip in the event's pool.
+            await runVpkmerge([
+                'soundswap', '--from-vpk', pak01Path(deadlockPath),
+                '--event', opts.event, '--hero', soundCodename, '--pool', 'all',
+                ...mintArgs, '--encode-vpk', vpkPath,
+            ]);
+        } else {
+            throw new Error('Sound swap needs either an event (gameplay) or clip paths (voice lines)');
         }
-        if (typeof opts.gainDb === 'number' && Number.isFinite(opts.gainDb) && opts.gainDb !== 0) {
-            swapArgs.push('--gain-db', opts.gainDb.toFixed(2));
-        }
-        await runVpkmerge(swapArgs);
         await verifyVpkOutput(vpkPath);
     } catch (err) {
         await fs.rm(dir, { recursive: true, force: true }).catch(() => {});

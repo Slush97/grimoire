@@ -161,7 +161,12 @@ export interface VpkExportResult {
 export interface HeroSoundSwapRequest {
     heroCodename: string;
     heroName: string;
-    event: string;
+    /** Gameplay swap: the soundevent name (event mode). Omit when using
+     *  `clipPaths`. */
+    event?: string;
+    /** Voice-line swap: explicit clip entries to override in place (clip mode).
+     *  VO has no per-hero soundevents file, so event mode does not apply. */
+    clipPaths?: string[];
     audioPath: string;
     name: string;
     loop?: 'auto' | 'on' | 'off';

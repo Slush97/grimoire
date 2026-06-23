@@ -973,6 +973,7 @@ ipcMain.handle(
             heroCodename,
             heroName,
             event,
+            clipPaths,
             audioPath,
             name,
             loop,
@@ -982,11 +983,12 @@ ipcMain.handle(
             trimEndMs,
             gainDb,
         } = args;
+        const hasClips = Array.isArray(clipPaths) && clipPaths.length > 0;
         if (!name?.trim()) {
             throw new Error('A name is required');
         }
-        if (!event?.trim()) {
-            throw new Error('A sound event is required');
+        if (!event?.trim() && !hasClips) {
+            throw new Error('A sound event or clip is required');
         }
         if (!audioPath || !existsSync(audioPath)) {
             throw new Error('Audio file not found');
@@ -995,10 +997,13 @@ ipcMain.handle(
             throw new Error('Audio must be an MP3 file (other formats are not supported yet).');
         }
 
-        // 1. Build the swap VPK to a temp staging path.
+        // 1. Build the swap VPK to a temp staging path. Gameplay rows pass an
+        //    event (event mode); voice lines pass clipPaths (clip mode), which
+        //    win when both are present.
         const built = await buildHeroSoundSwapVpk(deadlockPath, {
             heroCodename,
-            event: event.trim(),
+            event: event?.trim(),
+            clipPaths: hasClips ? clipPaths : undefined,
             audioPath,
             loop: loop ?? 'auto',
             trimStartMs,
@@ -1015,7 +1020,7 @@ ipcMain.handle(
 
             const soundSwap: SoundSwapInfo = {
                 heroCodename: built.soundCodename,
-                event: event.trim(),
+                event: event?.trim() || clipPaths?.[0] || '',
                 audioFileName: basename(audioPath),
                 loop: loop ?? 'auto',
                 pool: 'all',

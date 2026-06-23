@@ -97,7 +97,6 @@
       "back": "All heroes",
       "sections": "Workshop sections",
       "abilityIcons": "Ability & item icons",
-      "browseGameplay": "Browse all of {{hero}}'s gameplay sounds",
       "abilitiesSoon": {
         "title": "More per-ability editing coming",
         "body": "Per-ability icon and VFX color editing will land here next, one row per ability. For now, recolor all ability VFX at once under Appearance, and browse ability icons under Icons & Textures."

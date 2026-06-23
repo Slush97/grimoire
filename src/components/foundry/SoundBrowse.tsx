@@ -23,10 +23,17 @@ import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../common/PageComponents';
 import Tx from '../translation/Tx';
 import { SoundImportEditor, type SoundImportEdits } from './SoundImportEditor';
-import { foundryHeroSounds, foundryVoicelines, foundryVoiceclip, foundrySwapSound } from '../../lib/api';
+import {
+    foundryHeroSounds,
+    foundryVoicelines,
+    foundryVoiceclip,
+    foundrySwapSound,
+    getHeroAbilitySlots,
+} from '../../lib/api';
 import { showToast } from '../../stores/toastStore';
 import { useAppStore } from '../../stores/appStore';
 import type { HeroInfo, HeroSound, HeroSoundCategory, VoiceLine } from '../../types/foundry';
+import type { HeroAbilitySlot } from '../../types/mod';
 
 /** Hero context threaded to the gameplay rows so each can offer an inline
  *  sound-swap (drop your own MP3 onto the event). VO rows don't get this. */
@@ -53,6 +60,7 @@ const VO_ROW_CAP = 500;
 // Stable empty references so memo deps don't churn every render.
 const NO_SOUNDS: HeroSound[] = [];
 const NO_LINES: VoiceLine[] = [];
+const NO_SLOT_META = new Map<number, HeroAbilitySlot>();
 
 // Gameplay categories in display order: abilities and gun lead (what players
 // reach for), then locomotion, melee, and the odds-and-ends bucket.
@@ -127,6 +135,31 @@ export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProp
     const loading = !!hero && !ready;
     const error = ready?.error ?? null;
     const sounds = ready?.sounds ?? NO_SOUNDS;
+
+    // Ability slot metadata (icon + display name per slot 1-4) so the gameplay
+    // view can render each ability sound group as a proper per-ability card.
+    // Tagged with its hero so the effect never sets state synchronously and a
+    // hero switch falls back to empty until the new fetch lands (same shape as
+    // the gameplay-sound fetch above).
+    const [slotData, setSlotData] = useState<{
+        heroName: string;
+        map: Map<number, HeroAbilitySlot>;
+    } | null>(null);
+    useEffect(() => {
+        if (!heroName || !showGameplay) return;
+        let cancelled = false;
+        getHeroAbilitySlots(heroName)
+            .then((slots) => {
+                if (!cancelled) setSlotData({ heroName, map: new Map(slots.map((s) => [s.slot, s])) });
+            })
+            .catch(() => {
+                if (!cancelled) setSlotData({ heroName, map: new Map() });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [heroName, showGameplay]);
+    const slotMeta = slotData?.heroName === heroName ? slotData.map : NO_SLOT_META;
 
     const player = useClipPlayer();
 
@@ -221,6 +254,7 @@ export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProp
                                         section={section}
                                         player={player}
                                         swap={swapContext}
+                                        slotMeta={slotMeta}
                                     />
                                 ))}
                             </>
@@ -235,6 +269,7 @@ export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProp
                     search={search}
                     player={player}
                     standalone={!showGameplay}
+                    swap={swapContext}
                 />
             )}
         </>
@@ -307,14 +342,36 @@ function abilityOrder(a: AbilityGroup, b: AbilityGroup): number {
     return a.ability.localeCompare(b.ability);
 }
 
+/** Per-ability card icon: the deadlock-api ability art, or a slot-number chip. */
+function AbilitySlotIcon({ meta, slot }: { meta?: HeroAbilitySlot; slot: number | null }) {
+    const [failed, setFailed] = useState(false);
+    if (meta?.image && !failed) {
+        return (
+            <img
+                src={meta.image}
+                alt={meta.display}
+                className="h-7 w-7 flex-shrink-0 rounded object-contain"
+                onError={() => setFailed(true)}
+            />
+        );
+    }
+    return (
+        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded bg-bg-tertiary text-[11px] font-semibold text-text-secondary">
+            {slot ?? '?'}
+        </span>
+    );
+}
+
 function CategorySection({
     section,
     player,
     swap,
+    slotMeta,
 }: {
     section: CategorySectionData;
     player: ClipPlayer;
     swap: SwapContext;
+    slotMeta: Map<number, HeroAbilitySlot>;
 }) {
     const { t } = useTranslation();
     const Icon = CATEGORY_ICON[section.category];
@@ -332,16 +389,24 @@ function CategorySection({
                 {section.groups.map((group) => (
                     <div key={group.ability || section.category} className="space-y-1.5">
                         {isAbility && (
-                            <p className="px-0.5 text-[11px] font-medium text-text-primary/80">
+                            <div className="flex items-center gap-2 px-0.5 pt-1">
+                                <AbilitySlotIcon
+                                    meta={group.slot != null ? slotMeta.get(group.slot) : undefined}
+                                    slot={group.slot}
+                                />
                                 {group.slot != null && (
-                                    <span className="mr-1.5 rounded-sm bg-bg-tertiary px-1 py-0.5 text-[10px] tabular-nums text-accent">
+                                    <span className="rounded-sm bg-bg-tertiary px-1 py-0.5 text-[10px] tabular-nums text-accent">
                                         {group.slot === 4
                                             ? t('foundry.sound.ult', 'ULT')
                                             : t('foundry.sound.slot', '{{n}}', { n: group.slot })}
                                     </span>
                                 )}
-                                {group.ability || t('foundry.sound.unsorted', 'Other')}
-                            </p>
+                                <span className="text-sm font-medium text-text-primary">
+                                    {(group.slot != null ? slotMeta.get(group.slot)?.display : undefined) ||
+                                        group.ability ||
+                                        t('foundry.sound.unsorted', 'Other')}
+                                </span>
+                            </div>
                         )}
                         {group.rows.map((row) => (
                             <SoundRow
@@ -384,6 +449,7 @@ function VoiceLinesSection({
     search,
     player,
     standalone = false,
+    swap,
 }: {
     hero: string;
     search: string;
@@ -391,6 +457,8 @@ function VoiceLinesSection({
     /** When this is the only corpus shown (the Voice tab), open by default and
      *  drop the supplementary chrome (top border + "optional" hint). */
     standalone?: boolean;
+    /** Hero context so each voice line offers a Swap (clip mode). */
+    swap?: SwapContext;
 }) {
     const { t } = useTranslation();
     const [open, setOpen] = useState(standalone);
@@ -484,6 +552,9 @@ function VoiceLinesSection({
                                     duration={line.duration}
                                     state={player.stateFor(line.event)}
                                     onToggle={() => player.toggle(line)}
+                                    swap={swap}
+                                    clipPaths={line.vsnd}
+                                    targetClip={line.vsnd[0]}
                                 />
                             ))}
                             {visible.length > VO_ROW_CAP && (
@@ -514,13 +585,16 @@ interface SoundRowProps {
     duration: number | null;
     state: RowState;
     onToggle: () => void;
-    /** When present, the row offers an inline sound-swap (gameplay rows only). */
+    /** When present, the row offers an inline sound-swap. */
     swap?: SwapContext;
     /** First clip path of this row, used as the swap normalizer's volume target. */
     targetClip?: string;
+    /** Voice-line rows pass their clip entries so the swap uses clip mode (VO has
+     *  no per-hero soundevents file). Gameplay rows omit this and use event mode. */
+    clipPaths?: string[];
 }
 
-function SoundRow({ label, event, clips, duration, state, onToggle, swap, targetClip }: SoundRowProps) {
+function SoundRow({ label, event, clips, duration, state, onToggle, swap, targetClip, clipPaths }: SoundRowProps) {
     const { t } = useTranslation();
     const [swapOpen, setSwapOpen] = useState(false);
     const seconds = duration && duration > 0 ? `${duration.toFixed(1)}s` : null;
@@ -576,6 +650,7 @@ function SoundRow({ label, event, clips, duration, state, onToggle, swap, target
                     hero={swap.hero}
                     heroName={swap.heroName}
                     event={event}
+                    clipPaths={clipPaths}
                     label={label}
                     clips={clips}
                     targetClip={targetClip}
@@ -599,6 +674,7 @@ function SwapPanel({
     hero,
     heroName,
     event,
+    clipPaths,
     label,
     clips,
     targetClip,
@@ -607,6 +683,9 @@ function SwapPanel({
     hero: string;
     heroName: string;
     event: string;
+    /** Voice-line swap: the clip entries to override in place (clip mode). When
+     *  set, the swap targets these clips instead of the soundevents tree. */
+    clipPaths?: string[];
     label: string;
     clips: number;
     /** A clip of the sound being replaced, decoded as the normalizer's loudness
@@ -652,6 +731,7 @@ function SwapPanel({
                 heroCodename: hero,
                 heroName,
                 event,
+                clipPaths,
                 audioPath,
                 name: finalName,
                 loop,
@@ -672,7 +752,7 @@ function SwapPanel({
         } finally {
             setBusy(false);
         }
-    }, [audioPath, busy, name, heroName, label, hero, event, loop, edits, t, onClose]);
+    }, [audioPath, busy, name, heroName, label, hero, event, clipPaths, loop, edits, t, onClose]);
 
     return (
         <div className="mt-1.5 rounded-sm border border-accent/30 bg-bg-tertiary/40 p-3">

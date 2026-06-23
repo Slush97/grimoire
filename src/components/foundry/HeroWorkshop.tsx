@@ -9,17 +9,12 @@ import {
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { HeroInfo } from '../../types/foundry';
-import type { Mod } from '../../types/mod';
 import {
   getHeroRenderPath,
   getHeroNamePath,
   getHeroWikiUrl,
-  isLockerManagedSound,
-  getEffectiveGlobalType,
 } from '../../lib/lockerUtils';
-import { useAppStore } from '../../stores/appStore';
 import HeroEffectsPanel from '../locker/HeroEffectsPanel';
-import HeroSoundPicker from '../locker/HeroSoundPicker';
 import SoundBrowse from './SoundBrowse';
 import TextureBrowse from './TextureBrowse';
 import LibraryBrowse from './LibraryBrowse';
@@ -58,23 +53,6 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
   const scopedRoster = useMemo<HeroInfo[]>(() => [hero], [hero]);
-
-  // This hero's installed sound mods, scoped by name the same way the Locker's
-  // dominant path does (manual lockerHero tag, else a fuzzy name match). The
-  // Voice section reuses the Locker's HeroSoundPicker over this list so sound
-  // assignment + volume/pitch retune run through the one engine, not a parallel
-  // one. (We skip the GameBanana categoryId branch the Locker also uses; sound
-  // mods rarely carry a hero categoryId, so name scoping covers the vast bulk.)
-  const mods = useAppStore((s) => s.mods);
-  const heroSoundList = useMemo<Mod[]>(() => {
-    const hn = hero.name.toLowerCase();
-    return mods.filter(
-      (m) =>
-        isLockerManagedSound(m) &&
-        !getEffectiveGlobalType(m) &&
-        (m.lockerHero?.toLowerCase() === hn || (m.name?.toLowerCase().includes(hn) ?? false)),
-    );
-  }, [mods, hero.name]);
 
   const sections: Array<{ id: SectionId; label: string; icon: LucideIcon }> = [
     { id: 'appearance', label: t('foundry.workshop.appearance', 'Appearance'), icon: Sparkles },
@@ -183,24 +161,10 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
             <HeroEffectsPanel key={hero.name} heroName={hero.name} />
           ) : section === 'abilities' ? (
             <div className="space-y-6">
-              {/* Per-ability SOUND editing: assign installed sound mods to ability
-                  slots + retune volume/pitch, through the Locker's one engine. The
-                  ability axis lives here (not under Voice); Voice is VO only. */}
-              <HeroSoundPicker
-                key={hero.name}
-                heroName={hero.name}
-                soundList={heroSoundList}
-                onSelect={() => {}}
-              />
-              {/* Discovery: every gameplay sound this hero makes (no VO). */}
-              <div className="space-y-2 border-t border-border/60 pt-5">
-                <h4 className="text-sm font-semibold text-white/90">
-                  {t('foundry.workshop.browseGameplay', "Browse all of {{hero}}'s gameplay sounds", {
-                    hero: hero.name,
-                  })}
-                </h4>
-                <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />
-              </div>
+              {/* Each ability card lists its gameplay sounds with play + Swap (drop
+                  your own MP3), forged through the soundswap engine. The ability
+                  axis lives here (not under Voice); Voice is VO only. */}
+              <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />
               <AbilitiesComingNote />
             </div>
           ) : section === 'voice' ? (
