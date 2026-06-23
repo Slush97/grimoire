@@ -96,13 +96,10 @@
       "back": "All heroes",
       "sections": "Workshop sections",
       "abilityIcons": "Ability & item icons",
-      "buildTray": "Build tray",
-      "buildTrayEmpty": "Stage icon, texture, and sound swaps here, then forge them into one mod for {{hero}}. (Recolor saves directly to its own managed mod.)",
-      "removeStaged": "Remove",
-      "forge": "Forge mod",
+      "browseGameplay": "Browse all of {{hero}}'s gameplay sounds",
       "abilitiesSoon": {
-        "title": "Per-ability editing is coming next",
-        "body": "The Abilities view will group each ability into a row with its icon, VFX color, and sound in one place. For now, recolor all ability VFX at once under Appearance, browse ability icons under Icons & Textures, and ability sounds under Voice."
+        "title": "More per-ability editing coming",
+        "body": "Per-ability icon and VFX color editing will land here next, one row per ability. For now, recolor all ability VFX at once under Appearance, and browse ability icons under Icons & Textures."
       }
     },
     "subtools": {

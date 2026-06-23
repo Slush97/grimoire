@@ -25,6 +25,11 @@ import type { HeroInfo, HeroSound, HeroSoundCategory, VoiceLine } from '../../ty
 interface SoundBrowseProps {
     heroes: HeroInfo[];
     heroNames: Map<string, string>;
+    /** Restrict the browse to one corpus. `gameplay` = ability/weapon/movement/
+     *  melee sounds; `voice` = the VO voice-line list. Omitted shows both (the
+     *  catalog tool-first rail). The hero-first workshop splits them across its
+     *  Abilities (gameplay) and Voice (VO) sections. */
+    only?: 'gameplay' | 'voice';
 }
 
 // Cap on rendered VO rows: a hero has ~1600 voice-line events, so the
@@ -59,8 +64,10 @@ const CATEGORY_ICON: Record<HeroSoundCategory, typeof Sparkles> = {
  * demand (cached), and a single shared <audio> element plays at most one clip at
  * a time. The same extractor backs both gameplay clips and voice lines.
  */
-export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
+export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProps) {
     const { t } = useTranslation();
+    const showGameplay = only !== 'voice';
+    const showVoice = only !== 'gameplay';
 
     const heroOptions = useMemo(
         () =>
@@ -86,7 +93,7 @@ export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
     } | null>(null);
 
     useEffect(() => {
-        if (!hero) return;
+        if (!hero || !showGameplay) return;
         let cancelled = false;
         foundryHeroSounds({ hero })
             .then((rows) => {
@@ -99,7 +106,7 @@ export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
         return () => {
             cancelled = true;
         };
-    }, [hero]);
+    }, [hero, showGameplay]);
 
     const ready = data?.hero === hero ? data : null;
     const loading = !!hero && !ready;
@@ -154,52 +161,61 @@ export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
                 </button>
             </div>
 
-            {loading ? (
-                <div className="flex items-center justify-center gap-2 py-20 text-text-secondary">
-                    <Loader2 size={18} className="animate-spin" />
-                    <Tx k="foundry.sound.loading" fallback="Reading sounds from your game files..." />
-                </div>
-            ) : error ? (
-                <EmptyState
-                    icon={AlertTriangle}
-                    variant="error"
-                    title={<Tx k="foundry.error.title" fallback="Couldn't read the catalog" />}
-                    description={error}
-                />
-            ) : (
-                <div className="space-y-5">
-                    {sections.length === 0 ? (
-                        sounds.length === 0 ? (
-                            <EmptyState
-                                icon={AudioLines}
-                                title={<Tx k="foundry.sound.empty.title" fallback="No gameplay sounds" />}
-                                description={
-                                    <Tx
-                                        k="foundry.sound.empty.description"
-                                        fallback="This hero has no gameplay sounds in your installed game files."
-                                    />
-                                }
-                            />
+            {showGameplay &&
+                (loading ? (
+                    <div className="flex items-center justify-center gap-2 py-20 text-text-secondary">
+                        <Loader2 size={18} className="animate-spin" />
+                        <Tx k="foundry.sound.loading" fallback="Reading sounds from your game files..." />
+                    </div>
+                ) : error ? (
+                    <EmptyState
+                        icon={AlertTriangle}
+                        variant="error"
+                        title={<Tx k="foundry.error.title" fallback="Couldn't read the catalog" />}
+                        description={error}
+                    />
+                ) : (
+                    <div className="space-y-5">
+                        {sections.length === 0 ? (
+                            sounds.length === 0 ? (
+                                <EmptyState
+                                    icon={AudioLines}
+                                    title={<Tx k="foundry.sound.empty.title" fallback="No gameplay sounds" />}
+                                    description={
+                                        <Tx
+                                            k="foundry.sound.empty.description"
+                                            fallback="This hero has no gameplay sounds in your installed game files."
+                                        />
+                                    }
+                                />
+                            ) : (
+                                <p className="py-10 text-center text-sm text-text-secondary">
+                                    {t('foundry.sound.noMatch', 'No sounds match your search.')}
+                                </p>
+                            )
                         ) : (
-                            <p className="py-10 text-center text-sm text-text-secondary">
-                                {t('foundry.sound.noMatch', 'No sounds match your search.')}
-                            </p>
-                        )
-                    ) : (
-                        <>
-                            <p className="text-xs text-text-secondary">
-                                {t('foundry.sound.gameplayCount', '{{count}} gameplay sounds', {
-                                    count: totalShown,
-                                })}
-                            </p>
-                            {sections.map((section) => (
-                                <CategorySection key={section.category} section={section} player={player} />
-                            ))}
-                        </>
-                    )}
+                            <>
+                                <p className="text-xs text-text-secondary">
+                                    {t('foundry.sound.gameplayCount', '{{count}} gameplay sounds', {
+                                        count: totalShown,
+                                    })}
+                                </p>
+                                {sections.map((section) => (
+                                    <CategorySection key={section.category} section={section} player={player} />
+                                ))}
+                            </>
+                        )}
+                    </div>
+                ))}
 
-                    <VoiceLinesSection key={hero} hero={hero} search={search} player={player} />
-                </div>
+            {showVoice && (
+                <VoiceLinesSection
+                    key={hero}
+                    hero={hero}
+                    search={search}
+                    player={player}
+                    standalone={!showGameplay}
+                />
             )}
         </>
     );
@@ -343,13 +359,17 @@ function VoiceLinesSection({
     hero,
     search,
     player,
+    standalone = false,
 }: {
     hero: string;
     search: string;
     player: ClipPlayer;
+    /** When this is the only corpus shown (the Voice tab), open by default and
+     *  drop the supplementary chrome (top border + "optional" hint). */
+    standalone?: boolean;
 }) {
     const { t } = useTranslation();
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(standalone);
     const [data, setData] = useState<{ lines: VoiceLine[]; error: string | null } | null>(null);
 
     useEffect(() => {
@@ -383,7 +403,7 @@ function VoiceLinesSection({
     const shown = visible.slice(0, VO_ROW_CAP);
 
     return (
-        <section className="border-t border-border pt-4">
+        <section className={standalone ? '' : 'border-t border-border pt-4'}>
             <button
                 type="button"
                 onClick={() => setOpen((o) => !o)}
@@ -395,9 +415,11 @@ function VoiceLinesSection({
                 />
                 <MessageSquare size={14} className="text-accent" />
                 <Tx k="foundry.sound.voiceLines.title" fallback="Voice lines" />
-                <span className="font-normal normal-case text-text-secondary/60">
-                    {t('foundry.sound.voiceLines.hint', 'optional, large list')}
-                </span>
+                {!standalone && (
+                    <span className="font-normal normal-case text-text-secondary/60">
+                        {t('foundry.sound.voiceLines.hint', 'optional, large list')}
+                    </span>
+                )}
             </button>
 
             {open && (
