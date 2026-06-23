@@ -1160,6 +1160,8 @@
       },
       "title": "Import Soul Container (GLB)",
       "submit": "Build & Import",
+      "export": "Export .vpk",
+      "exportTitle": "Build the override VPK and save it to disk instead of installing it into the mod manager.",
       "dropzone": {
         "ariaBrowse": "Drop a GLB here or press Enter to browse",
         "ariaSelected": "GLB selected: {{path}}. Press Enter to change.",
@@ -1337,7 +1339,10 @@
       },
       "bakingHint": "Baking the recolor. The first time for a given pick can take up to a minute (it re-encodes every effect texture); the same pick is instant after that.",
       "restartHint": "Restart Deadlock for this change to take effect (addons mount at game start).",
-      "savedHint": "Saved. This pick mounts the next time you Launch Modded."
+      "savedHint": "Saved. This pick mounts the next time you Launch Modded.",
+      "exportVpk": "Export .vpk",
+      "exportVpkTitle": "Bake this look into a standalone addon VPK and save it to disk (instead of applying it in the mod manager).",
+      "exportSaved": "Exported to {{path}}"
     },
     "sounds": {
       "soundsByAbility": "Sounds by Ability",

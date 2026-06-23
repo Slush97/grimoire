@@ -6,6 +6,7 @@ import type {
 import type { SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
 import type {
+    HeroEffectExportRequest,
     HeroSoundFilters,
     TextureCategory,
     TextureFilters,
@@ -237,10 +238,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('import-custom-mod', args),
     importSoulContainerGlb: (args: ImportSoulContainerGlbArgs) =>
         ipcRenderer.invoke('import-soul-container-glb', args),
+    exportSoulContainerGlb: (args: ImportSoulContainerGlbArgs) =>
+        ipcRenderer.invoke('export-soul-container-glb', args),
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) =>
         ipcRenderer.invoke('preview-soul-container-glb', args),
     importSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) =>
         ipcRenderer.invoke('import-spirit-urn-glb', args),
+    exportSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) =>
+        ipcRenderer.invoke('export-spirit-urn-glb', args),
     previewSpiritUrnGlb: (args: PreviewSpiritUrnGlbArgs) =>
         ipcRenderer.invoke('preview-spirit-urn-glb', args),
     readGlbFile: (glbPath: string) =>
@@ -558,6 +563,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('foundry:fullImage', category, entryPath),
         voiceclip: (vsndPath: string) => ipcRenderer.invoke('foundry:voiceclip', vsndPath),
         warmCache: () => ipcRenderer.invoke('foundry:warmCache'),
+        exportHeroEffect: (req: HeroEffectExportRequest) =>
+            ipcRenderer.invoke('foundry:exportHeroEffect', req),
     },
 
     // Language packs (downloaded on demand from GitHub)
