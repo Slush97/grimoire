@@ -5,10 +5,11 @@
 
   [![Website](https://img.shields.io/badge/grimoiremods.com-f97316)](https://grimoiremods.com)
   [![Release](https://img.shields.io/github/v/release/Slush97/grimoire?label=release)](../../releases/latest)
-  [![Downloads](https://img.shields.io/github/downloads/Slush97/grimoire/total?label=downloads)](../../releases)
+  [![GitHub downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fgrimoiremods.com%2Fapi%2Fdownloads-badge.json)](../../releases)
+  [![GameBanana downloads](https://img.shields.io/endpoint?url=https%3A%2F%2Fgrimoiremods.com%2Fapi%2Fgamebanana-badge.json)](https://gamebanana.com/tools/22583)
+  [![apt installs](https://img.shields.io/endpoint?url=https%3A%2F%2Fgrimoiremods.com%2Fapi%2Fapt-badge.json)](https://apt.grimoiremods.com)
   [![AUR](https://img.shields.io/aur/version/grimoire-bin?label=aur)](https://aur.archlinux.org/packages/grimoire-bin)
   [![CI](https://img.shields.io/github/actions/workflow/status/Slush97/grimoire/ci.yml?branch=main&label=ci)](../../actions/workflows/ci.yml)
-  [![Translation status](https://translate.grimoiremods.com/widget/grimoire/svg-badge.svg)](https://translate.grimoiremods.com/engage/grimoire/)
   [![GameBanana](https://img.shields.io/badge/GameBanana-FCDC2A)](https://gamebanana.com/tools/22583)
   [![Discord](https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/KgYGHEMq2P)
   [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
