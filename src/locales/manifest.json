@@ -1,6 +1,6 @@
 {
   "sourceLanguage": "en",
-  "totalKeys": 1831,
+  "totalKeys": 1830,
   "languages": [
     {
       "code": "bg",
@@ -11,13 +11,13 @@
     {
       "code": "en",
       "name": "English",
-      "translatedKeys": 1831,
+      "translatedKeys": 1830,
       "pct": 100
     },
     {
       "code": "fr",
       "name": "français",
-      "translatedKeys": 1798,
+      "translatedKeys": 1797,
       "pct": 98
     },
     {

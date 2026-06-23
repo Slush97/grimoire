@@ -161,7 +161,6 @@
     },
     "sound": {
       "searchPlaceholder": "Search sounds...",
-      "muteToggle": "Mute / unmute auditions",
       "loading": "Reading sounds from your game files...",
       "play": "Audition",
       "gameplayCount": "{{count}} gameplay sounds",

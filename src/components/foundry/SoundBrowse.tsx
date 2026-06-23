@@ -6,8 +6,6 @@ import {
     Users,
     Play,
     Pause,
-    Volume2,
-    VolumeX,
     ChevronRight,
     Crosshair,
     Sparkles,
@@ -198,15 +196,6 @@ export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProp
                         className="w-full rounded-sm border border-border bg-bg-tertiary py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-secondary/60 focus:border-accent/50 focus:outline-none"
                     />
                 </div>
-
-                <button
-                    type="button"
-                    onClick={player.toggleMute}
-                    title={t('foundry.sound.muteToggle', 'Mute / unmute auditions')}
-                    className="flex items-center gap-1.5 rounded-sm border border-border bg-bg-tertiary px-2.5 py-2 text-text-secondary transition-colors hover:text-text-primary"
-                >
-                    {player.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                </button>
             </div>
 
             {showGameplay &&
@@ -869,30 +858,38 @@ interface PlayableClip {
 
 interface ClipPlayer {
     toggle: (clip: PlayableClip) => void;
-    toggleMute: () => void;
-    muted: boolean;
     stateFor: (event: string) => RowState;
 }
 
 /**
  * One shared <audio> element across the whole tab: at most one clip plays at a
  * time, and each clip's MP3 (a data URL from the main process) is cached so a
- * replay is instant. Auditions the first clip of a randomizer pool. Returns
- * per-row state plus a toggle.
+ * replay is instant. Auditions the first clip of a randomizer pool. Routes
+ * through the global preview-audio controller (the sidebar volume widget) like
+ * AudioPreviewPlayer does: it flips `previewAudioPlaying` so the sidebar control
+ * surfaces, and tracks the shared `soundVolume`. Returns per-row state + toggle.
  */
 function useClipPlayer(): ClipPlayer {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const srcCache = useRef<Map<string, string | null>>(new Map());
     const [playing, setPlaying] = useState<string | null>(null);
     const [loadingKey, setLoadingKey] = useState<string | null>(null);
-    const [muted, setMuted] = useState(false);
+    const soundVolume = useAppStore((s) => s.soundVolume);
+    const setPreviewAudioPlaying = useAppStore((s) => s.setPreviewAudioPlaying);
 
+    // Keep the live element in sync with the sidebar's preview-volume slider.
+    useEffect(() => {
+        if (audioRef.current) audioRef.current.volume = soundVolume;
+    }, [soundVolume]);
+
+    // Stop the shared element + clear the sidebar widget when the tab unmounts.
     useEffect(
         () => () => {
             audioRef.current?.pause();
             audioRef.current = null;
+            setPreviewAudioPlaying(false);
         },
-        []
+        [setPreviewAudioPlaying]
     );
 
     const toggle = useCallback(
@@ -905,6 +902,7 @@ function useClipPlayer(): ClipPlayer {
             if (playing === key) {
                 audio.pause();
                 setPlaying(null);
+                setPreviewAudioPlaying(false);
                 return;
             }
             audio.pause();
@@ -919,25 +917,22 @@ function useClipPlayer(): ClipPlayer {
             if (!src) return; // not auditionable (missing entry / unsupported codec)
 
             audio.src = src;
-            audio.muted = muted;
-            audio.onended = () => setPlaying((p) => (p === key ? null : p));
+            audio.volume = soundVolume;
+            audio.onended = () => {
+                setPlaying((p) => (p === key ? null : p));
+                setPreviewAudioPlaying(false);
+            };
             try {
                 await audio.play();
                 setPlaying(key);
+                setPreviewAudioPlaying(true);
             } catch {
                 setPlaying(null);
+                setPreviewAudioPlaying(false);
             }
         },
-        [playing, muted]
+        [playing, soundVolume, setPreviewAudioPlaying]
     );
-
-    const toggleMute = useCallback(() => {
-        setMuted((m) => {
-            const next = !m;
-            if (audioRef.current) audioRef.current.muted = next;
-            return next;
-        });
-    }, []);
 
     const stateFor = useCallback(
         (key: string): RowState =>
@@ -945,5 +940,5 @@ function useClipPlayer(): ClipPlayer {
         [loadingKey, playing]
     );
 
-    return { toggle, toggleMute, muted, stateFor };
+    return { toggle, stateFor };
 }
