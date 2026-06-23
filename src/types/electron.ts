@@ -54,6 +54,7 @@ import type {
     DeadworksConnectProgress,
     DeadworksRelayStats,
 } from './deadworks';
+import type { DmmMigrationRequest, DmmMigrationReport } from '../lib/dmmMigration';
 
 export interface BrowseModsArgs {
     page: number;
@@ -503,6 +504,12 @@ export interface ElectronAPI {
     createDevDeadlockPath: () => Promise<string>;
     getSettings: () => Promise<AppSettings>;
     setSettings: (settings: AppSettings) => Promise<void>;
+
+    // Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
+    dmmMigrate: {
+        scan: (req: DmmMigrationRequest) => Promise<DmmMigrationReport>;
+        execute: (req: DmmMigrationRequest) => Promise<DmmMigrationReport>;
+    };
 
     // Discord Rich Presence (opt-in; talks only to the local Discord client)
     discord: {

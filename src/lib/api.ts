@@ -1,4 +1,5 @@
 import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
+import type { DmmMigrationRequest, DmmMigrationReport } from './dmmMigration';
 import type {
   HeroPortrait,
   CustomCardSlot,
@@ -55,6 +56,15 @@ export async function getSettings(): Promise<AppSettings> {
 
 export async function setSettings(settings: AppSettings): Promise<void> {
   return window.electronAPI.setSettings(settings);
+}
+
+// Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
+export async function dmmMigrateScan(req: DmmMigrationRequest): Promise<DmmMigrationReport> {
+  return window.electronAPI.dmmMigrate.scan(req);
+}
+
+export async function dmmMigrateExecute(req: DmmMigrationRequest): Promise<DmmMigrationReport> {
+  return window.electronAPI.dmmMigrate.execute(req);
 }
 
 // Mods
