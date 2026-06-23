@@ -65,6 +65,7 @@ import type {
 } from '../../src/types/electron';
 import type { AppearanceSurface } from '../../src/types/mod';
 import type { DeadworksConnectProgress } from '../../src/types/deadworks';
+import type { DmmMigrationRequest } from '../../src/lib/dmmMigration';
 import type {
     ProfileSort,
     PublishRequest,
@@ -82,6 +83,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createDevDeadlockPath: () => ipcRenderer.invoke('create-dev-deadlock-path'),
     getSettings: () => ipcRenderer.invoke('get-settings'),
     setSettings: (settings: AppSettings) => ipcRenderer.invoke('set-settings', settings),
+
+    // Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
+    dmmMigrate: {
+        scan: (req: DmmMigrationRequest) => ipcRenderer.invoke('dmm-migrate:scan', req),
+        execute: (req: DmmMigrationRequest) => ipcRenderer.invoke('dmm-migrate:execute', req),
+    },
 
     // Discord Rich Presence (opt-in; talks only to the local Discord client)
     discord: {
