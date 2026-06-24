@@ -6,8 +6,6 @@ import {
     Users,
     Play,
     Pause,
-    Volume2,
-    VolumeX,
     ChevronRight,
     Crosshair,
     Sparkles,
@@ -15,16 +13,41 @@ import {
     Swords,
     AudioLines,
     MessageSquare,
+    Wand2,
+    Upload,
+    X,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { EmptyState } from '../common/PageComponents';
 import Tx from '../translation/Tx';
-import { foundryHeroSounds, foundryVoicelines, foundryVoiceclip } from '../../lib/api';
+import { SoundImportEditor, type SoundImportEdits } from './SoundImportEditor';
+import {
+    foundryHeroSounds,
+    foundryVoicelines,
+    foundryVoiceclip,
+    foundrySwapSound,
+    getHeroAbilitySlots,
+} from '../../lib/api';
+import { showToast } from '../../stores/toastStore';
+import { useAppStore } from '../../stores/appStore';
 import type { HeroInfo, HeroSound, HeroSoundCategory, VoiceLine } from '../../types/foundry';
+import type { HeroAbilitySlot } from '../../types/mod';
+
+/** Hero context threaded to the gameplay rows so each can offer an inline
+ *  sound-swap (drop your own MP3 onto the event). VO rows don't get this. */
+interface SwapContext {
+    hero: string;
+    heroName: string;
+}
 
 interface SoundBrowseProps {
     heroes: HeroInfo[];
     heroNames: Map<string, string>;
+    /** Restrict the browse to one corpus. `gameplay` = ability/weapon/movement/
+     *  melee sounds; `voice` = the VO voice-line list. Omitted shows both (the
+     *  catalog tool-first rail). The hero-first workshop splits them across its
+     *  Abilities (gameplay) and Voice (VO) sections. */
+    only?: 'gameplay' | 'voice';
 }
 
 // Cap on rendered VO rows: a hero has ~1600 voice-line events, so the
@@ -35,6 +58,7 @@ const VO_ROW_CAP = 500;
 // Stable empty references so memo deps don't churn every render.
 const NO_SOUNDS: HeroSound[] = [];
 const NO_LINES: VoiceLine[] = [];
+const NO_SLOT_META = new Map<number, HeroAbilitySlot>();
 
 // Gameplay categories in display order: abilities and gun lead (what players
 // reach for), then locomotion, melee, and the odds-and-ends bucket.
@@ -59,8 +83,10 @@ const CATEGORY_ICON: Record<HeroSoundCategory, typeof Sparkles> = {
  * demand (cached), and a single shared <audio> element plays at most one clip at
  * a time. The same extractor backs both gameplay clips and voice lines.
  */
-export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
+export default function SoundBrowse({ heroes, heroNames, only }: SoundBrowseProps) {
     const { t } = useTranslation();
+    const showGameplay = only !== 'voice';
+    const showVoice = only !== 'gameplay';
 
     const heroOptions = useMemo(
         () =>
@@ -75,6 +101,8 @@ export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
     const [picked, setPicked] = useState('');
     const [search, setSearch] = useState('');
     const hero = picked || heroOptions[0]?.code || '';
+    const heroName = heroOptions.find((h) => h.code === hero)?.name ?? hero;
+    const swapContext = useMemo<SwapContext>(() => ({ hero, heroName }), [hero, heroName]);
 
     // Gameplay-sound fetch, tagged with the hero it belongs to so loading/error
     // derive from whether it matches the current hero (the effect only sets state
@@ -86,7 +114,7 @@ export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
     } | null>(null);
 
     useEffect(() => {
-        if (!hero) return;
+        if (!hero || !showGameplay) return;
         let cancelled = false;
         foundryHeroSounds({ hero })
             .then((rows) => {
@@ -99,12 +127,37 @@ export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
         return () => {
             cancelled = true;
         };
-    }, [hero]);
+    }, [hero, showGameplay]);
 
     const ready = data?.hero === hero ? data : null;
     const loading = !!hero && !ready;
     const error = ready?.error ?? null;
     const sounds = ready?.sounds ?? NO_SOUNDS;
+
+    // Ability slot metadata (icon + display name per slot 1-4) so the gameplay
+    // view can render each ability sound group as a proper per-ability card.
+    // Tagged with its hero so the effect never sets state synchronously and a
+    // hero switch falls back to empty until the new fetch lands (same shape as
+    // the gameplay-sound fetch above).
+    const [slotData, setSlotData] = useState<{
+        heroName: string;
+        map: Map<number, HeroAbilitySlot>;
+    } | null>(null);
+    useEffect(() => {
+        if (!heroName || !showGameplay) return;
+        let cancelled = false;
+        getHeroAbilitySlots(heroName)
+            .then((slots) => {
+                if (!cancelled) setSlotData({ heroName, map: new Map(slots.map((s) => [s.slot, s])) });
+            })
+            .catch(() => {
+                if (!cancelled) setSlotData({ heroName, map: new Map() });
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, [heroName, showGameplay]);
+    const slotMeta = slotData?.heroName === heroName ? slotData.map : NO_SLOT_META;
 
     const player = useClipPlayer();
 
@@ -143,63 +196,70 @@ export default function SoundBrowse({ heroes, heroNames }: SoundBrowseProps) {
                         className="w-full rounded-sm border border-border bg-bg-tertiary py-2 pl-9 pr-3 text-sm text-text-primary placeholder:text-text-secondary/60 focus:border-accent/50 focus:outline-none"
                     />
                 </div>
-
-                <button
-                    type="button"
-                    onClick={player.toggleMute}
-                    title={t('foundry.sound.muteToggle', 'Mute / unmute auditions')}
-                    className="flex items-center gap-1.5 rounded-sm border border-border bg-bg-tertiary px-2.5 py-2 text-text-secondary transition-colors hover:text-text-primary"
-                >
-                    {player.muted ? <VolumeX size={16} /> : <Volume2 size={16} />}
-                </button>
             </div>
 
-            {loading ? (
-                <div className="flex items-center justify-center gap-2 py-20 text-text-secondary">
-                    <Loader2 size={18} className="animate-spin" />
-                    <Tx k="foundry.sound.loading" fallback="Reading sounds from your game files..." />
-                </div>
-            ) : error ? (
-                <EmptyState
-                    icon={AlertTriangle}
-                    variant="error"
-                    title={<Tx k="foundry.error.title" fallback="Couldn't read the catalog" />}
-                    description={error}
-                />
-            ) : (
-                <div className="space-y-5">
-                    {sections.length === 0 ? (
-                        sounds.length === 0 ? (
-                            <EmptyState
-                                icon={AudioLines}
-                                title={<Tx k="foundry.sound.empty.title" fallback="No gameplay sounds" />}
-                                description={
-                                    <Tx
-                                        k="foundry.sound.empty.description"
-                                        fallback="This hero has no gameplay sounds in your installed game files."
-                                    />
-                                }
-                            />
+            {showGameplay &&
+                (loading ? (
+                    <div className="flex items-center justify-center gap-2 py-20 text-text-secondary">
+                        <Loader2 size={18} className="animate-spin" />
+                        <Tx k="foundry.sound.loading" fallback="Reading sounds from your game files..." />
+                    </div>
+                ) : error ? (
+                    <EmptyState
+                        icon={AlertTriangle}
+                        variant="error"
+                        title={<Tx k="foundry.error.title" fallback="Couldn't read the catalog" />}
+                        description={error}
+                    />
+                ) : (
+                    <div className="space-y-5">
+                        {sections.length === 0 ? (
+                            sounds.length === 0 ? (
+                                <EmptyState
+                                    icon={AudioLines}
+                                    title={<Tx k="foundry.sound.empty.title" fallback="No gameplay sounds" />}
+                                    description={
+                                        <Tx
+                                            k="foundry.sound.empty.description"
+                                            fallback="This hero has no gameplay sounds in your installed game files."
+                                        />
+                                    }
+                                />
+                            ) : (
+                                <p className="py-10 text-center text-sm text-text-secondary">
+                                    {t('foundry.sound.noMatch', 'No sounds match your search.')}
+                                </p>
+                            )
                         ) : (
-                            <p className="py-10 text-center text-sm text-text-secondary">
-                                {t('foundry.sound.noMatch', 'No sounds match your search.')}
-                            </p>
-                        )
-                    ) : (
-                        <>
-                            <p className="text-xs text-text-secondary">
-                                {t('foundry.sound.gameplayCount', '{{count}} gameplay sounds', {
-                                    count: totalShown,
-                                })}
-                            </p>
-                            {sections.map((section) => (
-                                <CategorySection key={section.category} section={section} player={player} />
-                            ))}
-                        </>
-                    )}
+                            <>
+                                <p className="text-xs text-text-secondary">
+                                    {t('foundry.sound.gameplayCount', '{{count}} gameplay sounds', {
+                                        count: totalShown,
+                                    })}
+                                </p>
+                                {sections.map((section) => (
+                                    <CategorySection
+                                        key={section.category}
+                                        section={section}
+                                        player={player}
+                                        swap={swapContext}
+                                        slotMeta={slotMeta}
+                                    />
+                                ))}
+                            </>
+                        )}
+                    </div>
+                ))}
 
-                    <VoiceLinesSection key={hero} hero={hero} search={search} player={player} />
-                </div>
+            {showVoice && (
+                <VoiceLinesSection
+                    key={hero}
+                    hero={hero}
+                    search={search}
+                    player={player}
+                    standalone={!showGameplay}
+                    swap={swapContext}
+                />
             )}
         </>
     );
@@ -271,12 +331,36 @@ function abilityOrder(a: AbilityGroup, b: AbilityGroup): number {
     return a.ability.localeCompare(b.ability);
 }
 
+/** Per-ability card icon: the deadlock-api ability art, or a slot-number chip. */
+function AbilitySlotIcon({ meta, slot }: { meta?: HeroAbilitySlot; slot: number | null }) {
+    const [failed, setFailed] = useState(false);
+    if (meta?.image && !failed) {
+        return (
+            <img
+                src={meta.image}
+                alt={meta.display}
+                className="h-7 w-7 flex-shrink-0 rounded object-contain"
+                onError={() => setFailed(true)}
+            />
+        );
+    }
+    return (
+        <span className="flex h-7 w-7 flex-shrink-0 items-center justify-center rounded bg-bg-tertiary text-[11px] font-semibold text-text-secondary">
+            {slot ?? '?'}
+        </span>
+    );
+}
+
 function CategorySection({
     section,
     player,
+    swap,
+    slotMeta,
 }: {
     section: CategorySectionData;
     player: ClipPlayer;
+    swap: SwapContext;
+    slotMeta: Map<number, HeroAbilitySlot>;
 }) {
     const { t } = useTranslation();
     const Icon = CATEGORY_ICON[section.category];
@@ -294,16 +378,24 @@ function CategorySection({
                 {section.groups.map((group) => (
                     <div key={group.ability || section.category} className="space-y-1.5">
                         {isAbility && (
-                            <p className="px-0.5 text-[11px] font-medium text-text-primary/80">
+                            <div className="flex items-center gap-2 px-0.5 pt-1">
+                                <AbilitySlotIcon
+                                    meta={group.slot != null ? slotMeta.get(group.slot) : undefined}
+                                    slot={group.slot}
+                                />
                                 {group.slot != null && (
-                                    <span className="mr-1.5 rounded-sm bg-bg-tertiary px-1 py-0.5 text-[10px] tabular-nums text-accent">
+                                    <span className="rounded-sm bg-bg-tertiary px-1 py-0.5 text-[10px] tabular-nums text-accent">
                                         {group.slot === 4
                                             ? t('foundry.sound.ult', 'ULT')
                                             : t('foundry.sound.slot', '{{n}}', { n: group.slot })}
                                     </span>
                                 )}
-                                {group.ability || t('foundry.sound.unsorted', 'Other')}
-                            </p>
+                                <span className="text-sm font-medium text-text-primary">
+                                    {(group.slot != null ? slotMeta.get(group.slot)?.display : undefined) ||
+                                        group.ability ||
+                                        t('foundry.sound.unsorted', 'Other')}
+                                </span>
+                            </div>
                         )}
                         {group.rows.map((row) => (
                             <SoundRow
@@ -314,6 +406,8 @@ function CategorySection({
                                 duration={row.duration}
                                 state={player.stateFor(row.event)}
                                 onToggle={() => player.toggle(row)}
+                                swap={swap}
+                                targetClip={row.vsnd[0]}
                             />
                         ))}
                     </div>
@@ -343,13 +437,20 @@ function VoiceLinesSection({
     hero,
     search,
     player,
+    standalone = false,
+    swap,
 }: {
     hero: string;
     search: string;
     player: ClipPlayer;
+    /** When this is the only corpus shown (the Voice tab), open by default and
+     *  drop the supplementary chrome (top border + "optional" hint). */
+    standalone?: boolean;
+    /** Hero context so each voice line offers a Swap (clip mode). */
+    swap?: SwapContext;
 }) {
     const { t } = useTranslation();
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(standalone);
     const [data, setData] = useState<{ lines: VoiceLine[]; error: string | null } | null>(null);
 
     useEffect(() => {
@@ -383,7 +484,7 @@ function VoiceLinesSection({
     const shown = visible.slice(0, VO_ROW_CAP);
 
     return (
-        <section className="border-t border-border pt-4">
+        <section className={standalone ? '' : 'border-t border-border pt-4'}>
             <button
                 type="button"
                 onClick={() => setOpen((o) => !o)}
@@ -395,9 +496,11 @@ function VoiceLinesSection({
                 />
                 <MessageSquare size={14} className="text-accent" />
                 <Tx k="foundry.sound.voiceLines.title" fallback="Voice lines" />
-                <span className="font-normal normal-case text-text-secondary/60">
-                    {t('foundry.sound.voiceLines.hint', 'optional, large list')}
-                </span>
+                {!standalone && (
+                    <span className="font-normal normal-case text-text-secondary/60">
+                        {t('foundry.sound.voiceLines.hint', 'optional, large list')}
+                    </span>
+                )}
             </button>
 
             {open && (
@@ -438,6 +541,9 @@ function VoiceLinesSection({
                                     duration={line.duration}
                                     state={player.stateFor(line.event)}
                                     onToggle={() => player.toggle(line)}
+                                    swap={swap}
+                                    clipPaths={line.vsnd}
+                                    targetClip={line.vsnd[0]}
                                 />
                             ))}
                             {visible.length > VO_ROW_CAP && (
@@ -468,42 +574,277 @@ interface SoundRowProps {
     duration: number | null;
     state: RowState;
     onToggle: () => void;
+    /** When present, the row offers an inline sound-swap. */
+    swap?: SwapContext;
+    /** First clip path of this row, used as the swap normalizer's volume target. */
+    targetClip?: string;
+    /** Voice-line rows pass their clip entries so the swap uses clip mode (VO has
+     *  no per-hero soundevents file). Gameplay rows omit this and use event mode. */
+    clipPaths?: string[];
 }
 
-function SoundRow({ label, event, clips, duration, state, onToggle }: SoundRowProps) {
+function SoundRow({ label, event, clips, duration, state, onToggle, swap, targetClip, clipPaths }: SoundRowProps) {
     const { t } = useTranslation();
+    const [swapOpen, setSwapOpen] = useState(false);
     const seconds = duration && duration > 0 ? `${duration.toFixed(1)}s` : null;
     return (
-        <div
-            className="flex items-center gap-3 rounded-sm border border-border bg-bg-secondary px-3 py-2"
-            style={{ contentVisibility: 'auto', containIntrinsicSize: '0 44px' }}
-        >
+        <div style={{ contentVisibility: 'auto', containIntrinsicSize: '0 44px' }}>
+            <div className="flex items-center gap-3 rounded-sm border border-border bg-bg-secondary px-3 py-2">
+                <button
+                    type="button"
+                    onClick={onToggle}
+                    title={t('foundry.sound.play', 'Audition')}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent transition-colors hover:bg-accent/15"
+                >
+                    {state === 'loading' ? (
+                        <Loader2 size={15} className="animate-spin" />
+                    ) : state === 'playing' ? (
+                        <Pause size={15} />
+                    ) : (
+                        <Play size={15} className="translate-x-px" />
+                    )}
+                </button>
+                <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm text-text-primary" title={label}>
+                        {label || event}
+                    </p>
+                    <p className="truncate text-[11px] text-text-secondary" title={event}>
+                        {event}
+                        {clips > 1 ? ` · ${clips} clips` : ''}
+                    </p>
+                </div>
+                {seconds && (
+                    <span className="shrink-0 text-[11px] tabular-nums text-text-secondary">
+                        {seconds}
+                    </span>
+                )}
+                {swap && (
+                    <button
+                        type="button"
+                        onClick={() => setSwapOpen((o) => !o)}
+                        title={t('foundry.sound.swap.button', 'Swap this sound for your own audio')}
+                        className={`flex h-8 shrink-0 items-center gap-1.5 rounded-sm border px-2 text-xs transition-colors ${
+                            swapOpen
+                                ? 'border-accent/50 bg-accent/15 text-accent'
+                                : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
+                        }`}
+                    >
+                        <Wand2 size={14} />
+                        <Tx k="foundry.sound.swap.buttonLabel" fallback="Swap" />
+                    </button>
+                )}
+            </div>
+            {swap && swapOpen && (
+                <SwapPanel
+                    hero={swap.hero}
+                    heroName={swap.heroName}
+                    event={event}
+                    clipPaths={clipPaths}
+                    label={label}
+                    clips={clips}
+                    targetClip={targetClip}
+                    onClose={() => setSwapOpen(false)}
+                />
+            )}
+        </div>
+    );
+}
+
+// ----- Sound-swap panel (drop your own MP3 onto an event) ------------------
+
+/**
+ * Inline forge for one sound event: drop or pick an MP3, name it, and build +
+ * install a managed local mod that overrides every clip in the event's
+ * randomizer pool (`soundswap --event --pool all`). The donor template comes
+ * from the live pak, so loop/format are preserved. v1 takes MP3 only (the mint
+ * path parses rate/channels from MP3 frame headers, no ffmpeg).
+ */
+function SwapPanel({
+    hero,
+    heroName,
+    event,
+    clipPaths,
+    label,
+    clips,
+    targetClip,
+    onClose,
+}: {
+    hero: string;
+    heroName: string;
+    event: string;
+    /** Voice-line swap: the clip entries to override in place (clip mode). When
+     *  set, the swap targets these clips instead of the soundevents tree. */
+    clipPaths?: string[];
+    label: string;
+    clips: number;
+    /** A clip of the sound being replaced, decoded as the normalizer's loudness
+     *  target in the import editor. */
+    targetClip?: string;
+    onClose: () => void;
+}) {
+    const { t } = useTranslation();
+    const inputRef = useRef<HTMLInputElement | null>(null);
+    const [audioPath, setAudioPath] = useState<string | null>(null);
+    const [audioName, setAudioName] = useState('');
+    const [audioFile, setAudioFile] = useState<File | null>(null);
+    const [edits, setEdits] = useState<SoundImportEdits>({});
+    const [name, setName] = useState(`${heroName} ${label}`.trim());
+    const [loop, setLoop] = useState<'auto' | 'on' | 'off'>('auto');
+    const [busy, setBusy] = useState(false);
+    const [dragOver, setDragOver] = useState(false);
+
+    const accept = useCallback(
+        (file: File | undefined | null) => {
+            if (!file) return;
+            if (!file.name.toLowerCase().endsWith('.mp3')) {
+                showToast(t('foundry.sound.swap.mp3only', 'Audio must be an MP3 file.'), {
+                    tone: 'error',
+                });
+                return;
+            }
+            const path = window.electronAPI.getDroppedFilePath(file);
+            setAudioPath(path);
+            setAudioName(file.name);
+            setAudioFile(file);
+            setEdits({});
+        },
+        [t]
+    );
+
+    const forge = useCallback(async () => {
+        if (!audioPath || busy) return;
+        const finalName = name.trim() || `${heroName} ${label}`.trim();
+        setBusy(true);
+        try {
+            await foundrySwapSound({
+                heroCodename: hero,
+                heroName,
+                event,
+                clipPaths,
+                audioPath,
+                name: finalName,
+                loop,
+                trimStartMs: edits.trimStartMs,
+                trimEndMs: edits.trimEndMs,
+                gainDb: edits.gainDb,
+            });
+            await useAppStore.getState().loadMods({ silent: true });
+            showToast(
+                t('foundry.sound.swap.done', 'Installed "{{name}}" - enable it in the Installed tab', {
+                    name: finalName,
+                }),
+                { tone: 'success', duration: 6000 }
+            );
+            onClose();
+        } catch (e) {
+            showToast(e instanceof Error ? e.message : String(e), { tone: 'error', duration: 8000 });
+        } finally {
+            setBusy(false);
+        }
+    }, [audioPath, busy, name, heroName, label, hero, event, clipPaths, loop, edits, t, onClose]);
+
+    return (
+        <div className="mt-1.5 rounded-sm border border-accent/30 bg-bg-tertiary/40 p-3">
+            <div className="mb-2 flex items-center justify-between">
+                <p className="text-[11px] font-medium uppercase tracking-wide text-accent">
+                    <Tx k="foundry.sound.swap.title" fallback="Swap with your own audio" />
+                </p>
+                <button
+                    type="button"
+                    onClick={onClose}
+                    className="text-text-secondary transition-colors hover:text-text-primary"
+                    title={t('common.close', 'Close')}
+                >
+                    <X size={14} />
+                </button>
+            </div>
+
+            {/* Drop / pick zone */}
             <button
                 type="button"
-                onClick={onToggle}
-                title={t('foundry.sound.play', 'Audition')}
-                className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-bg-tertiary text-accent transition-colors hover:bg-accent/15"
+                onClick={() => inputRef.current?.click()}
+                onDragOver={(e) => {
+                    e.preventDefault();
+                    setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                    e.preventDefault();
+                    setDragOver(false);
+                    accept(e.dataTransfer.files?.[0]);
+                }}
+                className={`flex w-full items-center justify-center gap-2 rounded-sm border border-dashed px-3 py-3 text-xs transition-colors ${
+                    dragOver
+                        ? 'border-accent bg-accent/10 text-accent'
+                        : 'border-border text-text-secondary hover:border-accent/50 hover:text-text-primary'
+                }`}
             >
-                {state === 'loading' ? (
-                    <Loader2 size={15} className="animate-spin" />
-                ) : state === 'playing' ? (
-                    <Pause size={15} />
+                <Upload size={14} />
+                {audioName ? (
+                    <span className="truncate text-text-primary" title={audioName}>
+                        {audioName}
+                    </span>
                 ) : (
-                    <Play size={15} className="translate-x-px" />
+                    <Tx k="foundry.sound.swap.drop" fallback="Drop an MP3 here, or click to pick" />
                 )}
             </button>
-            <div className="min-w-0 flex-1">
-                <p className="truncate text-sm text-text-primary" title={label}>
-                    {label || event}
-                </p>
-                <p className="truncate text-[11px] text-text-secondary" title={event}>
-                    {event}
-                    {clips > 1 ? ` · ${clips} clips` : ''}
-                </p>
-            </div>
-            {seconds && (
-                <span className="shrink-0 text-[11px] tabular-nums text-text-secondary">{seconds}</span>
+            <input
+                ref={inputRef}
+                type="file"
+                accept=".mp3,audio/mpeg"
+                className="hidden"
+                onChange={(e) => {
+                    accept(e.target.files?.[0]);
+                    e.target.value = '';
+                }}
+            />
+
+            {/* Trim + normalize the imported clip before forging */}
+            {audioFile && (
+                <SoundImportEditor
+                    file={audioFile}
+                    targetClipPath={targetClip}
+                    onChange={setEdits}
+                />
             )}
+
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+                <input
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder={t('foundry.sound.swap.namePlaceholder', 'Mod name')}
+                    className="min-w-[160px] flex-1 rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm text-text-primary placeholder:text-text-secondary/60 focus:border-accent/50 focus:outline-none"
+                />
+                <select
+                    value={loop}
+                    onChange={(e) => setLoop(e.target.value as 'auto' | 'on' | 'off')}
+                    title={t('foundry.sound.swap.loop', 'Loop the swapped clip')}
+                    className="rounded-sm border border-border bg-bg-secondary px-2 py-1.5 text-sm text-text-primary focus:outline-none"
+                >
+                    <option value="auto">{t('foundry.sound.swap.loopAuto', 'Loop: auto')}</option>
+                    <option value="on">{t('foundry.sound.swap.loopOn', 'Loop: on')}</option>
+                    <option value="off">{t('foundry.sound.swap.loopOff', 'Loop: off')}</option>
+                </select>
+                <button
+                    type="button"
+                    disabled={!audioPath || busy}
+                    onClick={forge}
+                    className="flex items-center gap-1.5 rounded-sm bg-accent px-3 py-1.5 text-sm font-medium text-bg-primary transition-opacity disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                    {busy ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
+                    <Tx k="foundry.sound.swap.forge" fallback="Forge & install" />
+                </button>
+            </div>
+
+            <p className="mt-2 text-[11px] text-text-secondary">
+                {clips > 1
+                    ? t(
+                          'foundry.sound.swap.poolNote',
+                          'Replaces all {{count}} clips in this sound so it always plays your audio.',
+                          { count: clips }
+                      )
+                    : t('foundry.sound.swap.singleNote', 'Replaces this sound with your audio.')}
+            </p>
         </div>
     );
 }
@@ -517,30 +858,38 @@ interface PlayableClip {
 
 interface ClipPlayer {
     toggle: (clip: PlayableClip) => void;
-    toggleMute: () => void;
-    muted: boolean;
     stateFor: (event: string) => RowState;
 }
 
 /**
  * One shared <audio> element across the whole tab: at most one clip plays at a
  * time, and each clip's MP3 (a data URL from the main process) is cached so a
- * replay is instant. Auditions the first clip of a randomizer pool. Returns
- * per-row state plus a toggle.
+ * replay is instant. Auditions the first clip of a randomizer pool. Routes
+ * through the global preview-audio controller (the sidebar volume widget) like
+ * AudioPreviewPlayer does: it flips `previewAudioPlaying` so the sidebar control
+ * surfaces, and tracks the shared `soundVolume`. Returns per-row state + toggle.
  */
 function useClipPlayer(): ClipPlayer {
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const srcCache = useRef<Map<string, string | null>>(new Map());
     const [playing, setPlaying] = useState<string | null>(null);
     const [loadingKey, setLoadingKey] = useState<string | null>(null);
-    const [muted, setMuted] = useState(false);
+    const soundVolume = useAppStore((s) => s.soundVolume);
+    const setPreviewAudioPlaying = useAppStore((s) => s.setPreviewAudioPlaying);
 
+    // Keep the live element in sync with the sidebar's preview-volume slider.
+    useEffect(() => {
+        if (audioRef.current) audioRef.current.volume = soundVolume;
+    }, [soundVolume]);
+
+    // Stop the shared element + clear the sidebar widget when the tab unmounts.
     useEffect(
         () => () => {
             audioRef.current?.pause();
             audioRef.current = null;
+            setPreviewAudioPlaying(false);
         },
-        []
+        [setPreviewAudioPlaying]
     );
 
     const toggle = useCallback(
@@ -553,6 +902,7 @@ function useClipPlayer(): ClipPlayer {
             if (playing === key) {
                 audio.pause();
                 setPlaying(null);
+                setPreviewAudioPlaying(false);
                 return;
             }
             audio.pause();
@@ -567,25 +917,22 @@ function useClipPlayer(): ClipPlayer {
             if (!src) return; // not auditionable (missing entry / unsupported codec)
 
             audio.src = src;
-            audio.muted = muted;
-            audio.onended = () => setPlaying((p) => (p === key ? null : p));
+            audio.volume = soundVolume;
+            audio.onended = () => {
+                setPlaying((p) => (p === key ? null : p));
+                setPreviewAudioPlaying(false);
+            };
             try {
                 await audio.play();
                 setPlaying(key);
+                setPreviewAudioPlaying(true);
             } catch {
                 setPlaying(null);
+                setPreviewAudioPlaying(false);
             }
         },
-        [playing, muted]
+        [playing, soundVolume, setPreviewAudioPlaying]
     );
-
-    const toggleMute = useCallback(() => {
-        setMuted((m) => {
-            const next = !m;
-            if (audioRef.current) audioRef.current.muted = next;
-            return next;
-        });
-    }, []);
 
     const stateFor = useCallback(
         (key: string): RowState =>
@@ -593,5 +940,5 @@ function useClipPlayer(): ClipPlayer {
         [loadingKey, playing]
     );
 
-    return { toggle, toggleMute, muted, stateFor };
+    return { toggle, stateFor };
 }

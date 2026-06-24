@@ -148,3 +148,35 @@ export interface VpkExportResult {
     exported: boolean;
     path?: string;
 }
+
+/**
+ * Request to swap a hero gameplay sound event's audio with a user-supplied MP3
+ * and install the result as a managed local mod. `heroCodename` is the roster
+ * codename from the Foundry hero picker (resolved main-side to the sound-path
+ * codename); `heroName` is the display name (tagged as the mod's Locker hero);
+ * `event` is the verbatim soundevent (a `HeroSound.event`); `audioPath` is the
+ * dropped/picked MP3 on disk. v1 replaces every clip in the event's randomizer
+ * pool (`--pool all`). `loop` defaults to `auto` (inherit the donor clip's flag).
+ */
+export interface HeroSoundSwapRequest {
+    heroCodename: string;
+    heroName: string;
+    /** Gameplay swap: the soundevent name (event mode). Omit when using
+     *  `clipPaths`. */
+    event?: string;
+    /** Voice-line swap: explicit clip entries to override in place (clip mode).
+     *  VO has no per-hero soundevents file, so event mode does not apply. */
+    clipPaths?: string[];
+    audioPath: string;
+    name: string;
+    loop?: 'auto' | 'on' | 'off';
+    thumbnailDataUrl?: string;
+    nsfw?: boolean;
+    /** Optional trim window (ms) authored in the import editor; both ends set
+     *  together, frame-snapped (~26 ms) by the minter. Omitted = whole clip. */
+    trimStartMs?: number;
+    trimEndMs?: number;
+    /** Optional loudness gain (dB) from the "match volume" normalizer, applied
+     *  losslessly before minting. Omitted / 0 = no change. */
+    gainDb?: number;
+}

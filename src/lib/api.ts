@@ -1212,3 +1212,12 @@ export async function foundryExportHeroEffect(
 ): Promise<import('../types/foundry').VpkExportResult> {
   return window.electronAPI.foundry.exportHeroEffect(req);
 }
+
+/** Swap a hero gameplay sound event's audio with a user MP3 and install the
+ *  result as a managed local mod. Resolves with the refreshed installed mod list
+ *  (the new swap appears under the hero, tagged as a Foundry sound swap). */
+export async function foundrySwapSound(
+  req: import('../types/foundry').HeroSoundSwapRequest
+): Promise<import('../types/mod').Mod[]> {
+  return window.electronAPI.foundry.swapSound(req);
+}

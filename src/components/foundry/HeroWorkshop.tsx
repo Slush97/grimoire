@@ -5,8 +5,6 @@ import {
   Swords,
   Volume2,
   Image as ImageIcon,
-  Hammer,
-  Trash2,
   type LucideIcon,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
@@ -16,7 +14,6 @@ import {
   getHeroNamePath,
   getHeroWikiUrl,
 } from '../../lib/lockerUtils';
-import { useFoundryStagingStore } from '../../stores/foundryStagingStore';
 import HeroEffectsPanel from '../locker/HeroEffectsPanel';
 import SoundBrowse from './SoundBrowse';
 import TextureBrowse from './TextureBrowse';
@@ -38,13 +35,14 @@ type SectionId = 'appearance' | 'abilities' | 'voice' | 'icons';
  * + section nav) but the sections are creation surfaces over the asset catalog:
  *
  *   Appearance  recolor / prism / body+gun materials  (HeroEffectsPanel, live)
- *   Abilities   per-ability icon + VFX + SFX           (next phase)
- *   Voice       hero VO browse + preview               (SoundBrowse, live browse)
+ *   Abilities   per-ability SFX (HeroSoundPicker, live) + gameplay-sound browse;
+ *               per-ability icon + VFX editing is the next phase
+ *   Voice       hero VO voice-line browse + audition   (SoundBrowse only=voice)
  *   Icons       ability icons + model textures         (Texture/LibraryBrowse, live browse)
  *
- * Edits accumulate in the Build Tray (rail, bottom) and forge into one addon VPK.
- * Recolor (Appearance) currently bakes straight into its managed Locker slot and
- * is not routed through the tray; swap staging + forge is the follow-on backend.
+ * Each section applies directly to its own managed mod (the model recolor already
+ * uses): there is no separate compose-and-forge step. The per-section apply paths
+ * run through the existing Locker engines (e.g. sound via `applyHeroSound`).
  */
 export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopProps) {
   const { t } = useTranslation();
@@ -55,11 +53,6 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
   // A single-hero roster so the reused browse panels are pre-scoped to this hero
   // (they each carry their own hero filter; handing them one hero pins it).
   const scopedRoster = useMemo<HeroInfo[]>(() => [hero], [hero]);
-
-  const staged = useFoundryStagingStore((s) => s.edits).filter(
-    (e) => e.heroCodename === hero.codename,
-  );
-  const unstage = useFoundryStagingStore((s) => s.unstage);
 
   const sections: Array<{ id: SectionId; label: string; icon: LucideIcon }> = [
     { id: 'appearance', label: t('foundry.workshop.appearance', 'Appearance'), icon: Sparkles },
@@ -159,9 +152,6 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
             );
           })}
         </nav>
-
-        {/* Build Tray: the staged edits for this hero, forged into one mod. */}
-        <BuildTray heroName={hero.name} staged={staged} onRemove={unstage} />
       </div>
 
       {/* Content pane: the active section. */}
@@ -169,8 +159,16 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
         <div className="space-y-4 p-6">
           {section === 'appearance' ? (
             <HeroEffectsPanel key={hero.name} heroName={hero.name} />
+          ) : section === 'abilities' ? (
+            <div className="space-y-6">
+              {/* Each ability card lists its gameplay sounds with play + Swap (drop
+                  your own MP3), forged through the soundswap engine. The ability
+                  axis lives here (not under Voice); Voice is VO only. */}
+              <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="gameplay" />
+              <AbilitiesComingNote />
+            </div>
           ) : section === 'voice' ? (
-            <SoundBrowse heroes={scopedRoster} heroNames={heroNames} />
+            <SoundBrowse heroes={scopedRoster} heroNames={heroNames} only="voice" />
           ) : section === 'icons' ? (
             <div className="space-y-8">
               <TextureBrowse heroes={scopedRoster} heroNames={heroNames} />
@@ -181,90 +179,22 @@ export default function HeroWorkshop({ hero, heroNames, onBack }: HeroWorkshopPr
                 <LibraryBrowse heroNames={heroNames} initialCategory="ability-icon" />
               </div>
             </div>
-          ) : (
-            <AbilitiesPlaceholder heroName={hero.name} />
-          )}
+          ) : null}
         </div>
       </div>
     </div>
   );
 }
 
-function BuildTray({
-  heroName,
-  staged,
-  onRemove,
-}: {
-  heroName: string;
-  staged: ReturnType<typeof useFoundryStagingStore.getState>['edits'];
-  onRemove: (id: string) => void;
-}) {
-  const { t } = useTranslation();
+function AbilitiesComingNote() {
   return (
-    <div className="mt-auto rounded-lg border border-border/70 bg-bg-secondary/70 p-3 backdrop-blur">
-      <div className="mb-2 flex items-center gap-2">
-        <Hammer className="h-4 w-4 text-accent" />
-        <span className="flex-1 text-sm font-semibold text-white">
-          {t('foundry.workshop.buildTray', 'Build tray')}
-        </span>
-        <span className="text-xs text-white/50">{staged.length}</span>
-      </div>
-
-      {staged.length === 0 ? (
-        <p className="text-xs leading-relaxed text-text-secondary">
-          {t(
-            'foundry.workshop.buildTrayEmpty',
-            'Stage icon, texture, and sound swaps here, then forge them into one mod for {{hero}}. (Recolor saves directly to its own managed mod.)',
-            { hero: heroName },
-          )}
-        </p>
-      ) : (
-        <ul className="space-y-1.5">
-          {staged.map((edit) => (
-            <li
-              key={edit.id}
-              className="flex items-center gap-2 rounded-sm bg-bg-tertiary/60 px-2 py-1.5 text-xs text-text-primary"
-            >
-              <span className="flex-1 truncate" title={edit.targetPath}>
-                {edit.label}
-              </span>
-              <button
-                type="button"
-                onClick={() => onRemove(edit.id)}
-                title={t('foundry.workshop.removeStaged', 'Remove')}
-                className="text-text-secondary transition-colors hover:text-red-400 cursor-pointer"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      <button
-        type="button"
-        disabled={staged.length === 0}
-        className={`mt-3 w-full rounded-md px-3 py-2 text-sm font-semibold transition-colors ${
-          staged.length === 0
-            ? 'cursor-not-allowed bg-bg-tertiary/50 text-text-secondary/50'
-            : 'cursor-pointer bg-accent text-black hover:bg-accent-hover'
-        }`}
-      >
-        {t('foundry.workshop.forge', 'Forge mod')}
-      </button>
-    </div>
-  );
-}
-
-function AbilitiesPlaceholder({ heroName }: { heroName: string }) {
-  return (
-    <div className="rounded-lg border border-dashed border-border bg-bg-secondary/50 p-6 text-sm leading-relaxed text-text-secondary">
+    <div className="rounded-lg border border-dashed border-border bg-bg-secondary/50 p-4 text-sm leading-relaxed text-text-secondary">
       <p className="mb-1 font-medium text-text-primary">
-        <Tx k="foundry.workshop.abilitiesSoon.title" fallback="Per-ability editing is coming next" />
+        <Tx k="foundry.workshop.abilitiesSoon.title" fallback="More per-ability editing coming" />
       </p>
       <Tx
         k="foundry.workshop.abilitiesSoon.body"
-        fallback={`The Abilities view will group ${heroName}'s four abilities into rows — each with its icon, VFX color, and sound in one place. For now, recolor all ability VFX at once under Appearance, browse ability icons under Icons & Textures, and ability sounds under Voice.`}
+        fallback="Per-ability icon and VFX color editing will land here next, one row per ability. For now, recolor all ability VFX at once under Appearance, and browse ability icons under Icons & Textures."
       />
     </div>
   );

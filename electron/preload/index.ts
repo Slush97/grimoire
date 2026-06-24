@@ -8,6 +8,7 @@ import type { SocialSessionStatus } from '../../src/types/social';
 import type {
     HeroEffectExportRequest,
     HeroSoundFilters,
+    HeroSoundSwapRequest,
     TextureCategory,
     TextureFilters,
     VoicelineFilters,
@@ -572,6 +573,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         warmCache: () => ipcRenderer.invoke('foundry:warmCache'),
         exportHeroEffect: (req: HeroEffectExportRequest) =>
             ipcRenderer.invoke('foundry:exportHeroEffect', req),
+        swapSound: (req: HeroSoundSwapRequest) =>
+            ipcRenderer.invoke('foundry:swapSound', req),
     },
 
     // Language packs (downloaded on demand from GitHub)
