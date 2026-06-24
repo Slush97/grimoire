@@ -43,9 +43,11 @@ export interface DmmAdoptionEntry {
   enabled: boolean;
   /** Grimoire load-order priority (lower loads first). */
   priority: number;
-  /** On-disk VPK basenames in DMM's addons folder to locate + copy. The first
-   *  that exists is adopted; the rest are alternates (enable/disable variants). */
-  vpkCandidates: string[];
+  /** On-disk VPK basenames belonging to this mod, ALL of which are adopted and
+   *  tagged with this submission id (a DMM mod may ship several VPKs). Contested
+   *  files (also listed by another mod through stale DMM bookkeeping) are removed
+   *  here and awarded to a single owner, so two mods never fight over one slot. */
+  vpkFiles: string[];
 }
 
 export interface DmmAdoptionPlan {
@@ -86,10 +88,10 @@ export function planDmmAdoption(
   options: DmmAdoptionOptions = {}
 ): DmmAdoptionPlan {
   const warnings: string[] = [];
-  const entries: DmmAdoptionEntry[] = [];
   let resolvedFileIdCount = 0;
 
   const manifestEntries = Object.entries(manifest.mods ?? {});
+  const isStr = (v: unknown): v is string => typeof v === 'string' && !!v;
 
   // Compute the trailing priority for order-less mods over kept (numeric) keys
   // only, so a skipped local mod doesn't reserve an empty slot.
@@ -102,6 +104,19 @@ export function planDmmAdoption(
   }
   let trailing = maxOrder + 1;
 
+  // First pass: resolve each mod's full set of live on-disk VPK files. A DMM mod
+  // can ship several VPKs (its `currentVpks`/`disabledVpks` list has >1 entry),
+  // and ALL of them belong to that one mod, so the whole set is carried (not just
+  // the first) to be adopted together under one submission id.
+  interface Draft {
+    submissionId: number;
+    enabled: boolean;
+    priority: number;
+    files: string[];
+    info?: DmmStateMod;
+    sourceFileName?: string;
+  }
+  const drafts: Draft[] = [];
   for (const [key, rawEntry] of manifestEntries) {
     const submissionId = Number(key);
     if (!Number.isInteger(submissionId) || submissionId <= 0) {
@@ -112,20 +127,18 @@ export function planDmmAdoption(
     const enabled = e.enabled === true;
     const priority = typeof e.order === 'number' ? e.order : trailing++;
 
-    // Enabled mods carry live pakNN_dir.vpk names; disabled mods carry the
-    // "<modId>_<orig>.vpk" parked names. Either is a basename to locate on disk.
-    const vpkCandidates = [
-      ...(e.currentVpks ?? []),
-      ...(e.disabledVpks ?? []),
-    ].filter((v): v is string => typeof v === 'string' && !!v);
+    // The mod's live files: its `currentVpks` live pakNN slots when enabled, its
+    // `disabledVpks` parked "<modId>_<orig>.vpk" names when disabled. Fall back to
+    // the cross list if DMM left the expected one empty (inconsistent state), then
+    // to the disk-scanned `<submissionId>_*.vpk` files for mods DMM recorded no
+    // filename for.
+    const current = (e.currentVpks ?? []).filter(isStr);
+    const disabled = (e.disabledVpks ?? []).filter(isStr);
+    let files = enabled ? current : disabled;
+    if (files.length === 0) files = enabled ? disabled : current;
+    if (files.length === 0) files = (options.extraVpkBySubmission?.get(submissionId) ?? []).slice();
 
-    // Fallback: DMM sometimes records no filename for actively-loaded mods. If
-    // the addons folder has a `<submissionId>_*.vpk` for this mod, adopt that.
-    if (vpkCandidates.length === 0) {
-      vpkCandidates.push(...(options.extraVpkBySubmission?.get(submissionId) ?? []));
-    }
-
-    if (vpkCandidates.length === 0) {
+    if (files.length === 0) {
       warnings.push(`Skipped mod ${submissionId}: no VPK filename recorded on disk`);
       continue;
     }
@@ -134,18 +147,47 @@ export function planDmmAdoption(
     const sourceFileNameRaw = info?.downloadFileName ?? (e.originalVpkNames ?? [])[0];
     const sourceFileName = sourceFileNameRaw ? stripArchiveExt(sourceFileNameRaw) : undefined;
 
-    if (info?.fileId !== undefined) resolvedFileIdCount++;
+    drafts.push({ submissionId, enabled, priority, files, info, sourceFileName: sourceFileName || undefined });
+  }
 
+  // Resolve contested files: the same on-disk VPK is sometimes listed by more
+  // than one mod when DMM's manifest carries stale bookkeeping (a slot reused
+  // after a reorder/reinstall but never cleared off the old owner). Award each
+  // file to a single owner so two mods never get tagged onto one VPK. A single-
+  // VPK mod almost always reflects the slot's current truth over a multi-VPK
+  // pack's stale claim, so rank by fewest files first, then load order, then id
+  // for determinism.
+  const ranked = [...drafts].sort(
+    (a, b) => a.files.length - b.files.length || a.priority - b.priority || a.submissionId - b.submissionId
+  );
+  const owner = new Map<string, number>();
+  for (const d of ranked) {
+    for (const f of d.files) {
+      const k = f.toLowerCase();
+      if (!owner.has(k)) owner.set(k, d.submissionId);
+    }
+  }
+
+  const entries: DmmAdoptionEntry[] = [];
+  for (const d of drafts) {
+    const vpkFiles = d.files.filter((f) => owner.get(f.toLowerCase()) === d.submissionId);
+    if (vpkFiles.length === 0) {
+      warnings.push(
+        `Skipped mod ${d.submissionId}: its VPK(s) are already claimed by another mod (stale DMM data)`
+      );
+      continue;
+    }
+    if (d.info?.fileId !== undefined) resolvedFileIdCount++;
     entries.push({
-      submissionId,
-      fileId: info?.fileId,
-      modName: info?.name,
-      categoryName: info?.category,
-      thumbnailUrl: info?.thumbnailUrl,
-      sourceFileName: sourceFileName || undefined,
-      enabled,
-      priority,
-      vpkCandidates,
+      submissionId: d.submissionId,
+      fileId: d.info?.fileId,
+      modName: d.info?.name,
+      categoryName: d.info?.category,
+      thumbnailUrl: d.info?.thumbnailUrl,
+      sourceFileName: d.sourceFileName,
+      enabled: d.enabled,
+      priority: d.priority,
+      vpkFiles,
     });
   }
 

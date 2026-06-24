@@ -107,8 +107,8 @@ describe('planDmmAdoption', () => {
   });
 
   it('locates the on-disk VPK from currentVpks (enabled) or disabledVpks (disabled)', () => {
-    expect(byId(549810).vpkCandidates).toEqual(['pak01_dir.vpk']);
-    expect(byId(777).vpkCandidates).toEqual(['777_quiet.vpk']);
+    expect(byId(549810).vpkFiles).toEqual(['pak01_dir.vpk']);
+    expect(byId(777).vpkFiles).toEqual(['777_quiet.vpk']);
   });
 
   it('warns about the count of mods without a resolved file id', () => {
@@ -165,10 +165,10 @@ describe('manifestFromDmmProfile (state.json without .dmm.json)', () => {
     const b = plan.entries.find((e) => e.submissionId === 222)!;
     expect(a.enabled).toBe(true);
     expect(a.fileId).toBe(900);
-    expect(a.vpkCandidates).toEqual(['pak01_dir.vpk']);
+    expect(a.vpkFiles).toEqual(['pak01_dir.vpk']);
     expect(b.enabled).toBe(false);
     expect(b.fileId).toBe(901);
-    expect(b.vpkCandidates).toEqual(['222_b.vpk']);
+    expect(b.vpkFiles).toEqual(['222_b.vpk']);
     expect(plan.resolvedFileIdCount).toBe(2);
   });
 });
@@ -276,9 +276,89 @@ describe('extraVpkBySubmission fallback', () => {
     expect(without.entries.length).toBe(0); // skipped: no filename
     const withFallback = planDmmAdoption(manifest, null, { extraVpkBySubmission: extra });
     expect(withFallback.entries.length).toBe(1);
-    expect(withFallback.entries[0].vpkCandidates).toEqual([
+    expect(withFallback.entries[0].vpkFiles).toEqual([
       '/abs/addons/90548_WarWithoutLastStand.vpk',
     ]);
+  });
+});
+
+describe('multi-VPK mods and contested slots', () => {
+  it('adopts every VPK of a multi-VPK mod under one submission id', () => {
+    const manifest: DmmManifest = {
+      version: 1,
+      mods: {
+        '650634': {
+          enabled: true,
+          order: 0,
+          currentVpks: ['pak02_dir.vpk', 'pak03_dir.vpk', '650634_pak47_dir.vpk'],
+          disabledVpks: [],
+          originalVpkNames: [],
+        },
+      },
+    };
+    const plan = planDmmAdoption(manifest, null);
+    expect(plan.entries).toHaveLength(1);
+    expect(plan.entries[0].vpkFiles).toEqual([
+      'pak02_dir.vpk',
+      'pak03_dir.vpk',
+      '650634_pak47_dir.vpk',
+    ]);
+  });
+
+  it('awards a contested slot to the single-VPK mod, not the stale pack claim', () => {
+    // 650634 (a pack) still lists pak33, but pak33 now belongs to single-VPK mod
+    // 675582. The single-VPK mod wins; the pack keeps only its uncontested files.
+    const manifest: DmmManifest = {
+      version: 1,
+      mods: {
+        '650634': {
+          enabled: true,
+          order: 0,
+          currentVpks: ['pak02_dir.vpk', 'pak33_dir.vpk'],
+          disabledVpks: [],
+          originalVpkNames: [],
+        },
+        '675582': {
+          enabled: true,
+          order: 1,
+          currentVpks: ['pak33_dir.vpk'],
+          disabledVpks: [],
+          originalVpkNames: [],
+        },
+      },
+    };
+    const plan = planDmmAdoption(manifest, null);
+    const pack = plan.entries.find((e) => e.submissionId === 650634)!;
+    const solo = plan.entries.find((e) => e.submissionId === 675582)!;
+    expect(solo.vpkFiles).toEqual(['pak33_dir.vpk']);
+    expect(pack.vpkFiles).toEqual(['pak02_dir.vpk']);
+  });
+
+  it('drops a mod whose only VPK is claimed by an earlier duplicate, with a warning', () => {
+    // Two single-VPK mods both list pak34 (stale DMM bookkeeping). The lower load
+    // order wins; the loser is skipped rather than fighting over the same slot.
+    const manifest: DmmManifest = {
+      version: 1,
+      mods: {
+        '659625': {
+          enabled: true,
+          order: 0,
+          currentVpks: ['pak34_dir.vpk'],
+          disabledVpks: [],
+          originalVpkNames: [],
+        },
+        '659672': {
+          enabled: true,
+          order: 1,
+          currentVpks: ['pak34_dir.vpk'],
+          disabledVpks: [],
+          originalVpkNames: [],
+        },
+      },
+    };
+    const plan = planDmmAdoption(manifest, null);
+    expect(plan.entries.map((e) => e.submissionId)).toEqual([659625]);
+    expect(plan.warnings.some((w) => /659672.*claimed by another mod/.test(w))).toBe(true);
   });
 });
 

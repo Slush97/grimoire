@@ -302,92 +302,106 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
     );
 
     for (const entry of ordered) {
-      const src = await locateVpk(dmmAddonsDir, entry.vpkCandidates);
-      if (!src) {
-        report.skipped.push({
-          submissionId: entry.submissionId,
-          reason: `VPK not found on disk (looked for ${entry.vpkCandidates.join(', ')})`,
-        });
-        continue;
-      }
+      // A DMM mod may own several VPKs; adopt each one, tagging all with the
+      // same submission id so the Installed page groups them into one card.
+      const meta = metadataFor(entry);
+      const adoptedKeys: string[] = [];
+      const fileSkips: string[] = [];
 
-      try {
-        let destPath: string;
-        if (entry.enabled) {
-          if (mode === 'in-place' && isLiveEnabledSlot(src, addonRoots)) {
-            // Already a live pakNN_dir.vpk slot Grimoire scans: adopt by
-            // metadata only, no copy.
+      for (const vpkName of entry.vpkFiles) {
+        const src = await locateVpk(dmmAddonsDir, [vpkName]);
+        if (!src) {
+          fileSkips.push(`${vpkName} (not found on disk)`);
+          continue;
+        }
+
+        try {
+          let destPath: string;
+          if (entry.enabled) {
+            if (mode === 'in-place' && isLiveEnabledSlot(src, addonRoots)) {
+              // Already a live pakNN_dir.vpk slot Grimoire scans: adopt by
+              // metadata only, no copy.
+              destPath = src;
+              const existing = getModMetadata(metaKeyFor(destPath));
+              // Skip anything Grimoire already manages (a prior import, or a
+              // local/Locker VPK that happens to occupy this slot): re-tagging it
+              // would hijack its identity. Only a truly unmanaged file is adopted.
+              if (existing && isGrimoireManaged(existing)) {
+                fileSkips.push(`${vpkName} (already managed by Grimoire)`);
+                continue;
+              }
+            } else {
+              // Not a live slot (copy mode, a parked `<id>_name.vpk`, or a file the
+              // fallback found in .disabled): promote into a real pakNN slot so it
+              // actually loads. Must write before the next allocation so the slot
+              // scan sees it taken.
+              destPath = await allocateEnabledVpkPath(opts.deadlockPath);
+              await fs.copyFile(src, destPath, fsConstants.COPYFILE_EXCL);
+            }
+          } else if (isLiveDisabledSlot(src, disabledPath)) {
+            // Already a valid disabled slot in Grimoire's .disabled folder (DMM
+            // shares it): adopt by metadata only, no move. Non-destructive, so
+            // DMM's recorded path keeps working and the file never shifts.
             destPath = src;
             const existing = getModMetadata(metaKeyFor(destPath));
-            // Skip anything Grimoire already manages (a prior import, or a
-            // local/Locker VPK that happens to occupy this slot): re-tagging it
-            // would hijack its identity. Only a truly unmanaged file is adopted.
+            // Don't re-tag a file Grimoire already manages (a prior import or a
+            // Locker/local surface parked here): that would hijack its identity.
             if (existing && isGrimoireManaged(existing)) {
-              report.skipped.push({
-                submissionId: entry.submissionId,
-                reason: `Already managed by Grimoire (${metaKeyFor(destPath)})`,
-              });
+              fileSkips.push(`${vpkName} (already managed by Grimoire)`);
               continue;
             }
           } else {
-            // Not a live slot (copy mode, a parked `<id>_name.vpk`, or a file the
-            // fallback found in .disabled): promote into a real pakNN slot so it
-            // actually loads. Must write before the next allocation so the slot
-            // scan sees it taken.
-            destPath = await allocateEnabledVpkPath(opts.deadlockPath);
+            // DMM's file lives outside Grimoire's scanned folders (a separate
+            // profile subfolder or copy): bring a COPY into .disabled under a
+            // free-form name. Always copy, never move, so DMM stays intact.
+            const nameHint = entry.modName ?? entry.sourceFileName ?? basename(src);
+            const disabledName = makeDisabledFileName(basename(src), disabledTaken, nameHint);
+            disabledTaken.add(disabledName.toLowerCase());
+            if (!existsSync(disabledPath)) await fs.mkdir(disabledPath, { recursive: true });
+            destPath = join(disabledPath, disabledName);
             await fs.copyFile(src, destPath, fsConstants.COPYFILE_EXCL);
           }
-        } else if (isLiveDisabledSlot(src, disabledPath)) {
-          // Already a valid disabled slot in Grimoire's .disabled folder (DMM
-          // shares it): adopt by metadata only, no move. Non-destructive, so
-          // DMM's recorded path keeps working and the file never shifts.
-          destPath = src;
-          const existing = getModMetadata(metaKeyFor(destPath));
-          // Don't re-tag a file Grimoire already manages (a prior import or a
-          // Locker/local surface parked here): that would hijack its identity.
-          if (existing && isGrimoireManaged(existing)) {
-            report.skipped.push({
-              submissionId: entry.submissionId,
-              reason: `Already managed by Grimoire (${metaKeyFor(destPath)})`,
-            });
-            continue;
-          }
-        } else {
-          // DMM's file lives outside Grimoire's scanned folders (a separate
-          // profile subfolder or copy): bring a COPY into .disabled under a
-          // free-form name. Always copy, never move, so DMM stays intact.
-          const nameHint = entry.modName ?? entry.sourceFileName ?? basename(src);
-          const disabledName = makeDisabledFileName(basename(src), disabledTaken, nameHint);
-          disabledTaken.add(disabledName.toLowerCase());
-          if (!existsSync(disabledPath)) await fs.mkdir(disabledPath, { recursive: true });
-          destPath = join(disabledPath, disabledName);
-          await fs.copyFile(src, destPath, fsConstants.COPYFILE_EXCL);
+
+          const metaKey = metaKeyFor(destPath);
+          // Clear any orphaned sidecar entry at this key first: an allocated slot
+          // is only guaranteed free on disk, so a stale entry from a deleted mod
+          // could otherwise bleed its fields (lockerHero, merged, thumbnail) into
+          // this one via setModMetadata's shallow merge.
+          removeModMetadata(metaKey);
+          await setModMetadataWithHash(metaKey, meta, destPath);
+          adoptedKeys.push(metaKey);
+        } catch (err) {
+          fileSkips.push(`${vpkName} (${err instanceof Error ? err.message : String(err)})`);
         }
+      }
 
-        const metaKey = metaKeyFor(destPath);
-        // Clear any orphaned sidecar entry at this key first: an allocated slot
-        // is only guaranteed free on disk, so a stale entry from a deleted mod
-        // could otherwise bleed its fields (lockerHero, merged, thumbnail) into
-        // this one via setModMetadata's shallow merge.
-        removeModMetadata(metaKey);
-        await setModMetadataWithHash(metaKey, metadataFor(entry), destPath);
-
+      if (adoptedKeys.length > 0) {
         report.adopted.push({
           submissionId: entry.submissionId,
           fileId: entry.fileId,
           modName: entry.modName,
-          installedAs: metaKey,
+          installedAs: adoptedKeys[0],
           enabled: entry.enabled,
           priority: entry.priority,
         });
-      } catch (err) {
+      } else {
         report.skipped.push({
           submissionId: entry.submissionId,
-          reason: err instanceof Error ? err.message : String(err),
+          reason: fileSkips.length > 0 ? fileSkips.join('; ') : 'no VPK files to adopt',
         });
       }
     }
   });
+
+  // Diagnostic summary (main-process log): the renderer only surfaces a count, so
+  // this is where a "only N imported" report can be traced to its real cause.
+  console.log(
+    `[DMM] migrate: adopted ${report.adopted.length} mod(s), skipped ${report.skipped.length} ` +
+      `(mode=${report.mode}, enrichment=${report.enrichment})`
+  );
+  for (const s of report.skipped) {
+    console.log(`[DMM]   skipped ${s.submissionId}: ${s.reason}`);
+  }
 
   return report;
 }
