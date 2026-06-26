@@ -62,3 +62,10 @@ docs/screenshots/mod-details.png
 target/
 # Cloth solver visual testbed (generated)
 .cloth-testbed/
+
+# Local scratch from manual testing (exported profiles, lookups, prompts).
+# Root-anchored so real fixtures elsewhere are never caught.
+/*.modprofile.json
+/*.sharecode.txt
+/gb-deadlock-lookup.tsv
+/grimoire-import-prompt.md
