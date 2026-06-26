@@ -1,6 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import { promises as fs, existsSync } from 'fs';
 import { extname, basename, join, resolve, sep } from 'path';
+import { tmpdir } from 'os';
 import { loadSettings, saveSettings, getActiveDeadlockPath } from '../services/settings';
 import {
     scanMods,
@@ -29,6 +30,7 @@ import {
     type UnknownModFilterGuess,
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
+import { extractArchive, isArchive } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
@@ -908,6 +910,12 @@ ipcMain.handle('read-renderer-asset', async (_, relPath: string): Promise<string
 // The Deadlock engine requires strict `pakXX_dir.vpk` naming (see apply-mina-variant),
 // so custom imports always get a naked `pakNN_dir.vpk` filename - no slug. The
 // human-readable name lives in metadata.modName and is shown in the UI instead.
+//
+// The source can be a bare `.vpk` or an archive (`.zip`/`.7z`/`.rar`). Archives are
+// extracted to a temp dir and every contained `.vpk` is imported as its own slot.
+// This lets users drag the whole zip in (the reliable path) instead of dragging a
+// `.vpk` out of Windows' built-in zip viewer, which hands over a virtual shell file
+// with no on-disk path and locks the window while the OS materializes it.
 ipcMain.handle(
     'import-custom-mod',
     async (_, args: ImportCustomModArgs): Promise<Mod[]> => {
@@ -919,35 +927,71 @@ ipcMain.handle(
         const { vpkPath, name, thumbnailDataUrl, nsfw } = args;
 
         if (!vpkPath || !existsSync(vpkPath)) {
-            throw new Error('VPK file not found');
-        }
-        if (!vpkPath.toLowerCase().endsWith('.vpk')) {
-            throw new Error('Selected file is not a .vpk');
+            throw new Error('File not found');
         }
         if (!name?.trim()) {
             throw new Error('A name is required');
         }
+        const trimmedName = name.trim();
 
-        // Imports install ENABLED, so reserve a slot via the overflow-aware
-        // allocator: it fills base addons first and spills into an overflow
-        // folder (creating one + patching gameinfo) when base is full, instead of
-        // failing once a >99 user has filled citadel/addons. Metadata is keyed by
-        // the destination's metaKey (folder-prefixed for an overflow slot).
-        const destPath = await allocateEnabledVpkPath(deadlockPath);
-        const destMetaKey = metaKeyFor(destPath);
+        const lower = vpkPath.toLowerCase();
+        const isVpk = lower.endsWith('.vpk');
+        if (!isVpk && !isArchive(vpkPath)) {
+            throw new Error('Selected file is not a .vpk or supported archive (.zip, .7z, .rar)');
+        }
 
-        await fs.copyFile(vpkPath, destPath);
+        // Resolve the list of source VPKs to import. A bare .vpk is a single
+        // source; an archive is extracted to a temp dir first and every VPK it
+        // contains becomes its own import (extractArchive already filters to .vpk).
+        let sourceVpks: string[];
+        let tempDir: string | undefined;
+        if (isVpk) {
+            sourceVpks = [vpkPath];
+        } else {
+            tempDir = await fs.mkdtemp(join(tmpdir(), 'grimoire-import-'));
+            try {
+                sourceVpks = await extractArchive(vpkPath, tempDir);
+            } catch (err) {
+                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+                throw err;
+            }
+            if (sourceVpks.length === 0) {
+                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+                throw new Error('No .vpk file was found inside the archive.');
+            }
+        }
 
-        // Scrub any orphan metadata at this slot before writing. setModMetadata
-        // merges into the existing entry, so stale fields (gameBananaId,
-        // categoryName, etc.) from a prior occupant would otherwise stick to
-        // the new local mod and visually merge it with unrelated mods.
-        removeModMetadata(destMetaKey);
-        await setModMetadataWithHash(destMetaKey, {
-            modName: name.trim(),
-            thumbnailUrl: thumbnailDataUrl,
-            nsfw: !!nsfw,
-        }, destPath);
+        try {
+            // Imports install ENABLED, so reserve a slot via the overflow-aware
+            // allocator: it fills base addons first and spills into an overflow
+            // folder (creating one + patching gameinfo) when base is full, instead
+            // of failing once a >99 user has filled citadel/addons. Metadata is
+            // keyed by the destination's metaKey (folder-prefixed for an overflow
+            // slot). Copying before the next allocate marks the slot taken, so a
+            // multi-VPK archive lands in distinct slots.
+            for (let i = 0; i < sourceVpks.length; i++) {
+                const destPath = await allocateEnabledVpkPath(deadlockPath);
+                const destMetaKey = metaKeyFor(destPath);
+
+                await fs.copyFile(sourceVpks[i], destPath);
+
+                // Scrub any orphan metadata at this slot before writing.
+                // setModMetadata merges into the existing entry, so stale fields
+                // (gameBananaId, categoryName, etc.) from a prior occupant would
+                // otherwise stick to the new local mod and visually merge it with
+                // unrelated mods.
+                removeModMetadata(destMetaKey);
+                await setModMetadataWithHash(destMetaKey, {
+                    modName: sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName,
+                    thumbnailUrl: thumbnailDataUrl,
+                    nsfw: !!nsfw,
+                }, destPath);
+            }
+        } finally {
+            if (tempDir) {
+                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            }
+        }
 
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);

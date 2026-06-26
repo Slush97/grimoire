@@ -7039,10 +7039,14 @@ interface ImportCustomModModalProps {
 }
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+// Local mod import accepts a bare VPK or an archive we extract on the main side.
+const VPK_IMPORT_EXTS = ['vpk', 'zip', '7z', 'rar'];
+const VPK_IMPORT_RE = /\.(vpk|zip|7z|rar)$/i;
 
 function deriveModNameFromPath(p: string): string {
   const base = p.split(/[\\/]/).pop() ?? '';
   return base
+    .replace(/\.(zip|7z|rar)$/i, '')
     .replace(/_dir\.vpk$/i, '')
     .replace(/\.vpk$/i, '')
     .replace(/^pak\d{2}_/, '')
@@ -7096,7 +7100,7 @@ function ImportCustomModModal({
     if (lockVpk) return;
     const picked = await showOpenDialog({
       title: t('installed.import.selectVpk'),
-      filters: [{ name: 'VPK files', extensions: ['vpk'] }],
+      filters: [{ name: 'VPK or archive', extensions: VPK_IMPORT_EXTS }],
     });
     if (picked) acceptVpkPath(picked);
   };
@@ -7116,13 +7120,15 @@ function ImportCustomModModal({
     if (lockVpk) return;
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-    if (!/\.vpk$/i.test(file.name)) {
+    if (!VPK_IMPORT_RE.test(file.name)) {
       setError(t('installed.import.expectedVpk', { name: file.name }));
       return;
     }
     const path = window.electronAPI.getDroppedFilePath(file);
     if (!path) {
-      setError(t('locker.soulImport.errors.dropPathUnresolved'));
+      // No real on-disk path: almost always a file dragged out of Windows'
+      // built-in zip viewer (a virtual shell file). Point them at the zip itself.
+      setError(t('installed.import.dropUnresolved'));
       return;
     }
     acceptVpkPath(path);
