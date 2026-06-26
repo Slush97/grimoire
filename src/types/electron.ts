@@ -822,6 +822,9 @@ export interface ElectronAPI {
     getIgnoredConflictFilesGlobal: () => Promise<string[]>;
     ignoreConflictFileGlobal: (filePath: string) => Promise<string[]>;
     unignoreConflictFileGlobal: (filePath: string) => Promise<string[]>;
+    getIgnoredConflictMods: () => Promise<string[]>;
+    ignoreConflictMod: (identity: string) => Promise<string[]>;
+    unignoreConflictMod: (identity: string) => Promise<string[]>;
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;

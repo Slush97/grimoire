@@ -314,12 +314,15 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
         return [];
     }
     const ignored = new Set(settings.ignoredConflicts ?? []);
-    const filtered = ignored.size === 0
-        ? conflicts
-        : conflicts.filter((c) =>
-            !ignored.has(c.ignoreKey) &&
-            !ignored.has(conflictPairKey(c.modA, c.modB))
-        );
+    // Mods the user has dismissed wholesale: drop every conflict that involves
+    // one, against any other mod. Matched on the stable per-mod identity.
+    const ignoredMods = new Set(settings.ignoredConflictMods ?? []);
+    const filtered = conflicts.filter((c) =>
+        !ignored.has(c.ignoreKey) &&
+        !ignored.has(conflictPairKey(c.modA, c.modB)) &&
+        !ignoredMods.has(c.modAIdentity) &&
+        !ignoredMods.has(c.modBIdentity)
+    );
 
     console.log(
         `[detectConflicts] enabled=${enabledMods.length} ` +

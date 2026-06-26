@@ -170,3 +170,35 @@ ipcMain.handle('unignore-conflict-file-global', async (_, filePath: string): Pro
     }
     return next;
 });
+
+// --- Whole-mod ignores --------------------------------------------------
+// Suppress every conflict that involves a given mod, against any other mod.
+// Keyed by the stable per-mod identity the detector already stamps onto each
+// conflict (modAIdentity/modBIdentity), so the renderer passes that back.
+
+ipcMain.handle('get-ignored-conflict-mods', async (): Promise<string[]> => {
+    return loadSettings().ignoredConflictMods ?? [];
+});
+
+// ignore-conflict-mod — add a mod identity to the ignore list. Idempotent.
+ipcMain.handle('ignore-conflict-mod', async (_, identity: string): Promise<string[]> => {
+    const settings = loadSettings();
+    const current = settings.ignoredConflictMods ?? [];
+    if (current.includes(identity)) {
+        return current;
+    }
+    const next = [...current, identity];
+    saveSettings({ ...settings, ignoredConflictMods: next });
+    return next;
+});
+
+// unignore-conflict-mod — drop a mod identity from the ignore list.
+ipcMain.handle('unignore-conflict-mod', async (_, identity: string): Promise<string[]> => {
+    const settings = loadSettings();
+    const current = settings.ignoredConflictMods ?? [];
+    const next = current.filter((id) => id !== identity);
+    if (next.length !== current.length) {
+        saveSettings({ ...settings, ignoredConflictMods: next });
+    }
+    return next;
+});

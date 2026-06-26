@@ -541,6 +541,7 @@
       "ignoreAllTitle": "Move every active conflict pair to the Ignored section. Reversible per-pair via Unignore.",
       "ignoreCount_one": "Ignore {{count}}",
       "ignoreCount_other": "Ignore {{count}}",
+      "ignoreModEverywhere": "Ignore this mod everywhere",
       "ignoreTitle": "Stop flagging this pair as a conflict",
       "ignoring": "Ignoring…",
       "unignore": "Unignore"
@@ -601,6 +602,11 @@
     "ignoredFilesGlobal": {
       "title": "Ignored in all mods",
       "unignoreTitle": "Flag this file as a conflict again (across all mods)"
+    },
+    "ignoredMods": {
+      "tag": "Ignored",
+      "title": "Ignored mods",
+      "unignoreTitle": "Flag this mod's conflicts again"
     },
     "noPreview": "No Preview",
     "removedMod": "(removed mod)",

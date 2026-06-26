@@ -887,6 +887,11 @@ export interface AppSettings {
    *  compiler-artifact filter). For files that are never a real conflict no
    *  matter which mods ship them, e.g. a shared build artifact. */
   ignoredConflictFilesGlobal?: string[];
+  /** Stable mod identities (same scheme as the halves of an ignoredConflicts
+   *  pair key) the user has dismissed wholesale: any conflict involving the
+   *  mod, against any other mod, is suppressed. Right-click a mod in a
+   *  conflict -> "ignore this mod everywhere". */
+  ignoredConflictMods?: string[];
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;

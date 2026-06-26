@@ -928,6 +928,22 @@ export async function unignoreConflictFileGlobal(filePath: string): Promise<stri
   return window.electronAPI.unignoreConflictFileGlobal(filePath);
 }
 
+/** Stable mod identities suppressed across all their conflicts. */
+export async function getIgnoredConflictMods(): Promise<string[]> {
+  return window.electronAPI.getIgnoredConflictMods();
+}
+
+/** Suppress every conflict involving a mod (right-click "ignore this mod
+ *  everywhere"). `identity` is the conflict's modAIdentity/modBIdentity. */
+export async function ignoreConflictMod(identity: string): Promise<string[]> {
+  return window.electronAPI.ignoreConflictMod(identity);
+}
+
+/** Drop a mod identity from the ignore list so its conflicts flag again. */
+export async function unignoreConflictMod(identity: string): Promise<string[]> {
+  return window.electronAPI.unignoreConflictMod(identity);
+}
+
 /** Build the ignored-list key for a pair of mod ids or stable identities.
  *  Mirrors the backend helper so the renderer can match locally without an
  *  extra IPC roundtrip. */
