@@ -574,6 +574,12 @@
       "ignoreFailed_other": "Failed to ignore {{count}} pairs. See console for details."
     },
     "errorTitle": "Error Loading Conflicts",
+    "files": {
+      "heading_one": "Shared file ({{count}})",
+      "heading_other": "Shared files ({{count}})",
+      "ignoreFile": "Ignore",
+      "ignoreFileTitle": "Stop flagging just this file for these two mods (reversible below)"
+    },
     "header": {
       "description": "Resolve conflicts between installed mods",
       "noActiveDescription": "No active conflicts — review or restore your ignored pairs below."
@@ -583,6 +589,12 @@
       "title_one": "Ignored ({{count}})",
       "title_other": "Ignored ({{count}})",
       "unignoreTitle": "Restore conflict detection for this pair"
+    },
+    "ignoredFiles": {
+      "restoreAll": "Restore all",
+      "restoreAllTitle": "Restore conflict detection for every ignored file in this pair",
+      "title": "Ignored files",
+      "unignoreFileTitle": "Restore this file to conflict detection"
     },
     "noPreview": "No Preview",
     "removedMod": "(removed mod)",
@@ -1029,14 +1041,15 @@
       "saveCustom": "Save Custom Mod",
       "alreadyInstalledHint": "This VPK is already installed. Saving will only add custom metadata to it.",
       "title": "Import Custom Mod",
-      "vpkHelp": "The file will be copied into your addons folder and renamed with the next available pak## priority.",
-      "selectVpk": "Select VPK file",
-      "expectedVpk": "Expected a .vpk file - got \"{{name}}\".",
-      "vpkFile": "VPK file",
-      "vpkSelected": "VPK selected: {{path}}. Press Enter to change.",
-      "vpkSelectedLocked": "VPK selected: {{path}}",
-      "vpkAriaBrowse": "Drop a VPK file here or press Enter to browse",
-      "dropVpkHere": "Drop a <code>.vpk</code> here",
+      "vpkHelp": "Drop a .vpk or an archive (.zip, .7z, .rar) and it will be copied into your addons folder with the next available pak## priority. Tip: drag the .zip file itself, not a file dragged out of an opened zip window.",
+      "selectVpk": "Select VPK or archive",
+      "expectedVpk": "Expected a .vpk or archive (.zip, .7z, .rar) - got \"{{name}}\".",
+      "dropUnresolved": "Could not read that file. If you dragged it out of an opened zip window, drag the .zip file itself here instead.",
+      "vpkFile": "VPK or archive",
+      "vpkSelected": "File selected: {{path}}. Press Enter to change.",
+      "vpkSelectedLocked": "File selected: {{path}}",
+      "vpkAriaBrowse": "Drop a .vpk or archive here or press Enter to browse",
+      "dropVpkHere": "Drop a <code>.vpk</code> or <code>.zip</code> here",
       "orClickToBrowse": "or click to browse",
       "modName": "Mod name",
       "modNamePlaceholder": "My awesome skin",

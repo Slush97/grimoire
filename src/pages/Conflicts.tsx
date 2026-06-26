@@ -8,6 +8,9 @@ import {
   getIgnoredConflicts,
   ignoreConflict,
   unignoreConflict,
+  getIgnoredConflictFiles,
+  ignoreConflictFile,
+  unignoreConflictFile,
   conflictPairKey,
   reorderMods,
 } from '../lib/api';
@@ -17,6 +20,7 @@ import { useAppStore } from '../stores/appStore';
 import { Button } from '../components/common/ui';
 import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, PageLayout, type ViewMode } from '../components/common/PageComponents';
 import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
+import ConflictFileList from '../components/conflicts/ConflictFileList';
 import Tx from '../components/translation/Tx';
 
 const CONFLICTS_VIEW_MODE_KEY = 'grimoire:conflicts-view-mode';
@@ -124,6 +128,10 @@ export default function Conflicts() {
   // filter detected conflicts (defense-in-depth — backend already filters)
   // and to render the "Ignored" panel.
   const [ignored, setIgnored] = useState<Set<string>>(new Set());
+  // Map of stable pair key -> individually ignored overlapping file paths.
+  // Drives the "Ignored files" management panel; the detector already filters
+  // these out of the active list.
+  const [ignoredFiles, setIgnoredFiles] = useState<Record<string, string[]>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [disableTarget, setDisableTarget] = useState<ModWithThumbnail | null>(null);
@@ -151,10 +159,11 @@ export default function Conflicts() {
     setLoading(true);
     setError(null);
     try {
-      const [conflictResult, modsResult, ignoredResult] = await Promise.all([
+      const [conflictResult, modsResult, ignoredResult, ignoredFilesResult] = await Promise.all([
         getConflicts(),
         getMods(),
         getIgnoredConflicts(),
+        getIgnoredConflictFiles(),
       ]);
 
       const map = new Map<string, ModWithThumbnail>();
@@ -196,6 +205,7 @@ export default function Conflicts() {
       );
       setConflicts(conflictResult);
       setIgnored(new Set(ignoredResult));
+      setIgnoredFiles(ignoredFilesResult);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -218,6 +228,43 @@ export default function Conflicts() {
       // Sidebar's badge count is derived from getConflicts() and only refreshes
       // on mods-list changes. Ignore/unignore don't touch mods, so notify the
       // Sidebar explicitly — otherwise the badge stays stale until restart.
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  // Dismiss a single overlapping file for this pair forever. Re-detects after
+  // persisting: the detector recomputes `details`/`files` from what's left and
+  // drops the pair if that was the last shared file (no skeleton flash, same
+  // as handleUnignore).
+  const handleIgnoreFile = async (conflict: ModConflict, filePath: string) => {
+    const key = getConflictIgnoreKey(conflict);
+    setPendingPair(key);
+    try {
+      const map = await ignoreConflictFile(key, filePath);
+      setIgnoredFiles(map);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  // Restore an ignored file (filePath) or every ignored file for a pair
+  // (filePath === null). Re-detects so a still-overlapping file resurfaces.
+  const handleUnignoreFile = async (key: string, filePath: string | null) => {
+    setPendingPair(key);
+    try {
+      const map = await unignoreConflictFile(key, filePath);
+      setIgnoredFiles(map);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
       window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
     } catch (err) {
       setError(String(err));
@@ -395,7 +442,9 @@ export default function Conflicts() {
     );
   }
 
-  if (conflicts.length === 0 && ignored.size === 0) {
+  const ignoredFilePairCount = Object.keys(ignoredFiles).length;
+
+  if (conflicts.length === 0 && ignored.size === 0 && ignoredFilePairCount === 0) {
     return (
       <div className="h-full flex items-center justify-center p-6">
         <EmptyState
@@ -563,6 +612,13 @@ export default function Conflicts() {
                   </span>
                   {renderListSide(modB, variantB)}
                 </div>
+                {conflict.conflictType === 'file' && conflict.files && conflict.files.length > 0 && (
+                  <ConflictFileList
+                    files={conflict.files}
+                    busy={pendingPair === getConflictIgnoreKey(conflict)}
+                    onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
+                  />
+                )}
                 <ConflictReorderActions
                   conflict={conflict}
                   modA={{ id: modA.id, name: modA.name }}
@@ -696,6 +752,14 @@ export default function Conflicts() {
                   </div>
                 </div>
 
+                {conflict.conflictType === 'file' && conflict.files && conflict.files.length > 0 && (
+                  <ConflictFileList
+                    files={conflict.files}
+                    busy={pendingPair === getConflictIgnoreKey(conflict)}
+                    onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
+                  />
+                )}
+
                 <ConflictReorderActions
                   conflict={conflict}
                   modA={{ id: modA.id, name: modA.name }}
@@ -771,6 +835,70 @@ export default function Conflicts() {
                     <Eye className="w-3.5 h-3.5" />
                     <Tx k="conflicts.actions.unignore" fallback="Unignore" />
                   </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Ignored files panel — finer-grained companion to the ignored-pairs
+          panel above. Each group is one mod pair; restoring a file (or the
+          whole group) re-runs detection so a still-overlapping path reappears
+          as an active conflict. */}
+      {ignoredFilePairCount > 0 && (
+        <div className="mt-10">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-text-secondary">
+            <EyeOff className="w-4 h-4" />
+            <Tx k="conflicts.ignoredFiles.title" fallback="Ignored files" />
+          </h3>
+          <div className="space-y-3">
+            {Object.entries(ignoredFiles).map(([key, paths]) => {
+              const [idA, idB] = key.split('::');
+              const a = modsMap.get(idA);
+              const b = modsMap.get(idB);
+              const aName = a?.name ?? t('conflicts.removedMod');
+              const bName = b?.name ?? t('conflicts.removedMod');
+              return (
+                <div key={key} className="rounded-xl border border-border bg-bg-secondary">
+                  <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
+                    <div className="min-w-0 flex-1 flex items-center gap-2 text-sm">
+                      <span className="truncate text-text-primary" title={aName}>{aName}</span>
+                      <span className="flex-shrink-0 text-xs text-text-tertiary">
+                        <Tx k="common.versusLower" fallback="vs" />
+                      </span>
+                      <span className="truncate text-text-primary" title={bName}>{bName}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnignoreFile(key, null)}
+                      disabled={pendingPair === key}
+                      title={t('conflicts.ignoredFiles.restoreAllTitle')}
+                      className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <Tx k="conflicts.ignoredFiles.restoreAll" fallback="Restore all" />
+                    </button>
+                  </div>
+                  <ul className="divide-y divide-border/60">
+                    {paths.map((p) => (
+                      <li key={p} className="flex items-center gap-2 px-4 py-2">
+                        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary" title={p}>
+                          {p}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUnignoreFile(key, p)}
+                          disabled={pendingPair === key}
+                          title={t('conflicts.ignoredFiles.unignoreFileTitle')}
+                          className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                        >
+                          <Eye className="h-3 w-3" />
+                          <Tx k="conflicts.actions.unignore" fallback="Unignore" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               );
             })}

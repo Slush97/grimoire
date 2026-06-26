@@ -55,6 +55,10 @@ export interface ModConflict {
     ignoreKey: string;    // stable sorted pair key
     conflictType: 'priority' | 'file';
     details: string;
+    /** For `file` conflicts: every overlapping path still flagged for this pair
+     *  (after subtracting any individually ignored files). Drives the per-file
+     *  ignore UI. Undefined for `priority` conflicts. */
+    files?: string[];
 }
 
 function normalizeIdentityPart(value: string): string {
@@ -76,6 +80,13 @@ function priorityConflictDetail(mod: Mod): string {
     const folder = folderOf(mod);
     const pak = `pak${String(mod.priority).padStart(2, '0')}`;
     return folder === 'addons' ? `Both use ${pak}` : `Both use ${folder}/${pak}`;
+}
+
+/** Header line for a file (overlapping-path) conflict. Caps the inline preview
+ *  at three names; the full list rides along on ModConflict.files for the
+ *  per-file ignore UI. */
+function fileConflictDetail(files: string[]): string {
+    return `${files.length} shared file(s): ${files.slice(0, 3).join(', ')}${files.length > 3 ? '...' : ''}`;
 }
 
 export function modConflictIdentity(mod: Mod): string {
@@ -120,7 +131,8 @@ function createConflict(
     modA: Mod,
     modB: Mod,
     conflictType: ModConflict['conflictType'],
-    details: string
+    details: string,
+    files?: string[]
 ): ModConflict {
     const modAIdentity = modConflictIdentity(modA);
     const modBIdentity = modConflictIdentity(modB);
@@ -134,6 +146,7 @@ function createConflict(
         ignoreKey: conflictPairKey(modAIdentity, modBIdentity),
         conflictType,
         details,
+        files,
     };
 }
 
@@ -213,6 +226,22 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
         }
     }
 
+    // Load settings once for both per-file (in-loop) and whole-pair (end)
+    // filtering. Per-file ignores are keyed by the same stable identity pair
+    // key as whole-pair ignores, so resolve each enabled mod's identity up
+    // front and reuse it.
+    const settings = loadSettings();
+    const ignoredFilesByKey = new Map<string, Set<string>>();
+    for (const [key, files] of Object.entries(settings.ignoredConflictFiles ?? {})) {
+        if (Array.isArray(files) && files.length > 0) {
+            ignoredFilesByKey.set(key, new Set(files));
+        }
+    }
+    const identityById = new Map<string, string>();
+    for (const mod of enabledMods) {
+        identityById.set(mod.id, modConflictIdentity(mod));
+    }
+
     // Find file conflicts (overlapping files between mods)
     const modsWithFiles = enabledMods.filter(m => modFileLists.has(m.id));
 
@@ -234,13 +263,29 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
             }
 
             if (overlapping.length > 0) {
-                conflicts.push(createConflict(
-                    modA,
-                    modB,
-                    'file',
-                    `${overlapping.length} shared file(s): ${overlapping.slice(0, 3).join(', ')}${overlapping.length > 3 ? '...' : ''}`
-                ));
-                markReported(modA, modB);
+                // Subtract any individually ignored files for this pair. If
+                // every overlapping file has been dismissed the pair is no
+                // longer a conflict at all, so it drops out like a whole-pair
+                // ignore.
+                const ignoreKey = conflictPairKey(
+                    identityById.get(modA.id)!,
+                    identityById.get(modB.id)!
+                );
+                const ignoredForPair = ignoredFilesByKey.get(ignoreKey);
+                const remaining = ignoredForPair
+                    ? overlapping.filter((file) => !ignoredForPair.has(file))
+                    : overlapping;
+
+                if (remaining.length > 0) {
+                    conflicts.push(createConflict(
+                        modA,
+                        modB,
+                        'file',
+                        fileConflictDetail(remaining),
+                        remaining
+                    ));
+                    markReported(modA, modB);
+                }
             }
         }
     }
@@ -248,7 +293,6 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
     // Strip out any pairs the user has explicitly dismissed. We do this at
     // the end rather than inside the loops so the ignored list stays a clean
     // post-filter: easy to reason about and easy to disable later.
-    const settings = loadSettings();
     if (settings.ignoreConflictsByDefault) {
         return [];
     }

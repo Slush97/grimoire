@@ -27,6 +27,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,
+    ignoredConflictFiles: {},
     accentColor: '#f97316',
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',

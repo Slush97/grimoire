@@ -855,6 +855,10 @@ export interface ModConflict {
   ignoreKey: string;
   conflictType: 'priority' | 'file';
   details: string;
+  /** For `file` conflicts: every overlapping path still flagged for this pair
+   *  (after subtracting any individually ignored files). Undefined for
+   *  `priority` conflicts. */
+  files?: string[];
 }
 
 // Conflict detection re-parses every enabled VPK on the main process, so
@@ -884,6 +888,29 @@ export async function ignoreConflict(modA: string, modB: string): Promise<string
 
 export async function unignoreConflict(modA: string, modB: string): Promise<string[]> {
   return window.electronAPI.unignoreConflict(modA, modB);
+}
+
+/** Map of stable pair key -> individually ignored overlapping file paths. */
+export async function getIgnoredConflictFiles(): Promise<Record<string, string[]>> {
+  return window.electronAPI.getIgnoredConflictFiles();
+}
+
+/** Dismiss a single overlapping file for a conflict pair. `ignoreKey` is the
+ *  conflict's stable identity key (ModConflict.ignoreKey). */
+export async function ignoreConflictFile(
+  ignoreKey: string,
+  filePath: string
+): Promise<Record<string, string[]>> {
+  return window.electronAPI.ignoreConflictFile(ignoreKey, filePath);
+}
+
+/** Restore an ignored file (or the whole pair entry when filePath is null) to
+ *  conflict detection. */
+export async function unignoreConflictFile(
+  ignoreKey: string,
+  filePath: string | null
+): Promise<Record<string, string[]>> {
+  return window.electronAPI.unignoreConflictFile(ignoreKey, filePath);
 }
 
 /** Build the ignored-list key for a pair of mod ids or stable identities.

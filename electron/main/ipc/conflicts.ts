@@ -81,3 +81,59 @@ ipcMain.handle('unignore-conflict', async (_, modA: string, modB: string): Promi
     }
     return next;
 });
+
+// --- Per-file ignores ---------------------------------------------------
+// Finer-grained than whole-pair ignores: dismiss individual overlapping file
+// paths while keeping the pair flagged for any files that still overlap. Keyed
+// by the same stable identity pair key (ignoreKey) the detector emits, so the
+// renderer passes that key straight back rather than re-resolving mod ids.
+
+// get-ignored-conflict-files — the full pairKey -> ignored-paths map, used to
+// render the "Ignored files" management panel.
+ipcMain.handle('get-ignored-conflict-files', async (): Promise<Record<string, string[]>> => {
+    return loadSettings().ignoredConflictFiles ?? {};
+});
+
+// ignore-conflict-file — add one overlapping path to a pair's ignore list.
+// Idempotent. Returns the updated map.
+ipcMain.handle(
+    'ignore-conflict-file',
+    async (_, ignoreKey: string, filePath: string): Promise<Record<string, string[]>> => {
+        const settings = loadSettings();
+        const map = { ...(settings.ignoredConflictFiles ?? {}) };
+        const existing = map[ignoreKey] ?? [];
+        if (!existing.includes(filePath)) {
+            map[ignoreKey] = [...existing, filePath];
+            saveSettings({ ...settings, ignoredConflictFiles: map });
+        }
+        return map;
+    }
+);
+
+// unignore-conflict-file — remove a single path, or the whole pair entry when
+// filePath is null. Empties prune themselves so the map stays clean. Accepts
+// the stable key directly so the panel can clear entries even after a mod was
+// uninstalled.
+ipcMain.handle(
+    'unignore-conflict-file',
+    async (_, ignoreKey: string, filePath: string | null): Promise<Record<string, string[]>> => {
+        const settings = loadSettings();
+        const current = settings.ignoredConflictFiles ?? {};
+        if (!(ignoreKey in current)) {
+            return current;
+        }
+        const map = { ...current };
+        if (filePath === null) {
+            delete map[ignoreKey];
+        } else {
+            const next = (map[ignoreKey] ?? []).filter((f) => f !== filePath);
+            if (next.length === 0) {
+                delete map[ignoreKey];
+            } else {
+                map[ignoreKey] = next;
+            }
+        }
+        saveSettings({ ...settings, ignoredConflictFiles: map });
+        return map;
+    }
+);
