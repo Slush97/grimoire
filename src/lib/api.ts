@@ -890,13 +890,10 @@ export async function unignoreConflict(modA: string, modB: string): Promise<stri
   return window.electronAPI.unignoreConflict(modA, modB);
 }
 
-/** Map of stable pair key -> individually ignored overlapping file paths. */
 export async function getIgnoredConflictFiles(): Promise<Record<string, string[]>> {
   return window.electronAPI.getIgnoredConflictFiles();
 }
 
-/** Dismiss a single overlapping file for a conflict pair. `ignoreKey` is the
- *  conflict's stable identity key (ModConflict.ignoreKey). */
 export async function ignoreConflictFile(
   ignoreKey: string,
   filePath: string
@@ -904,8 +901,7 @@ export async function ignoreConflictFile(
   return window.electronAPI.ignoreConflictFile(ignoreKey, filePath);
 }
 
-/** Restore an ignored file (or the whole pair entry when filePath is null) to
- *  conflict detection. */
+// filePath === null clears the whole pair entry, not just one path.
 export async function unignoreConflictFile(
   ignoreKey: string,
   filePath: string | null
@@ -913,33 +909,26 @@ export async function unignoreConflictFile(
   return window.electronAPI.unignoreConflictFile(ignoreKey, filePath);
 }
 
-/** Paths globally silenced: never flagged as a conflict for any mod pair. */
 export async function getIgnoredConflictFilesGlobal(): Promise<string[]> {
   return window.electronAPI.getIgnoredConflictFilesGlobal();
 }
 
-/** Silence a path for every pair (right-click "ignore this file everywhere"). */
 export async function ignoreConflictFileGlobal(filePath: string): Promise<string[]> {
   return window.electronAPI.ignoreConflictFileGlobal(filePath);
 }
 
-/** Drop a path from the global ignore list so it can flag conflicts again. */
 export async function unignoreConflictFileGlobal(filePath: string): Promise<string[]> {
   return window.electronAPI.unignoreConflictFileGlobal(filePath);
 }
 
-/** Stable mod identities suppressed across all their conflicts. */
 export async function getIgnoredConflictMods(): Promise<string[]> {
   return window.electronAPI.getIgnoredConflictMods();
 }
 
-/** Suppress every conflict involving a mod (right-click "ignore this mod
- *  everywhere"). `identity` is the conflict's modAIdentity/modBIdentity. */
 export async function ignoreConflictMod(identity: string): Promise<string[]> {
   return window.electronAPI.ignoreConflictMod(identity);
 }
 
-/** Drop a mod identity from the ignore list so its conflicts flag again. */
 export async function unignoreConflictMod(identity: string): Promise<string[]> {
   return window.electronAPI.unignoreConflictMod(identity);
 }

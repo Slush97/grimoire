@@ -291,10 +291,8 @@ export default function Conflicts() {
     }
   };
 
-  // Dismiss a single overlapping file for this pair forever. Re-detects after
-  // persisting: the detector recomputes `details`/`files` from what's left and
-  // drops the pair if that was the last shared file (no skeleton flash, same
-  // as handleUnignore).
+  // Dismiss one overlapping file for this pair; re-detect drops the pair if it
+  // was the last shared file.
   const handleIgnoreFile = async (conflict: ModConflict, filePath: string) => {
     const key = getConflictIgnoreKey(conflict);
     setPendingPair(key);
@@ -311,9 +309,8 @@ export default function Conflicts() {
     }
   };
 
-  // Silence a file for EVERY pair (right-click "ignore in all mods"). Pass the
-  // conflict so we can disable that card during the round-trip; re-detects
-  // because every pair sharing this file is affected.
+  // Silence a file for every pair (right-click "ignore in all mods"); pass the
+  // conflict so its card disables during the round-trip.
   const handleIgnoreFileEverywhere = async (conflict: ModConflict, filePath: string) => {
     const key = getConflictIgnoreKey(conflict);
     setPendingPair(key);
@@ -330,10 +327,8 @@ export default function Conflicts() {
     }
   };
 
-  // Ignore a whole mod everywhere (right-click a conflict thumbnail). `identity`
-  // is the conflict's modAIdentity/modBIdentity; pass the conflict so its card
-  // disables during the round-trip. Re-detects because every conflict the mod
-  // is in is now suppressed.
+  // Ignore a whole mod everywhere (right-click a conflict thumbnail); `identity`
+  // is the conflict's modAIdentity/modBIdentity.
   const handleIgnoreMod = async (conflict: ModConflict, identity: string) => {
     const key = getConflictIgnoreKey(conflict);
     setPendingPair(key);

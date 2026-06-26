@@ -16,11 +16,9 @@ interface ConflictFileListProps {
 }
 
 /**
- * Collapsible list of the files a `file` conflict shares. Left-clicking a row's
- * Ignore button dismisses it for this pair; right-clicking the row opens a menu
- * with both scopes, including "ignore in all mods" for shared build artifacts
- * that are never a real conflict. Collapsed by default so the card stays
- * compact; the count is always visible in the toggle.
+ * Collapsible list of the files a `file` conflict shares. A row's Ignore button
+ * dismisses that file for this pair; right-clicking opens a menu that adds the
+ * "ignore in all mods" scope. Collapsed by default.
  */
 export default function ConflictFileList({
   files,
