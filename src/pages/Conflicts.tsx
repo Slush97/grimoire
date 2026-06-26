@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2, Globe } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   getConflicts,
@@ -11,6 +11,9 @@ import {
   getIgnoredConflictFiles,
   ignoreConflictFile,
   unignoreConflictFile,
+  getIgnoredConflictFilesGlobal,
+  ignoreConflictFileGlobal,
+  unignoreConflictFileGlobal,
   conflictPairKey,
   reorderMods,
 } from '../lib/api';
@@ -132,6 +135,11 @@ export default function Conflicts() {
   // Drives the "Ignored files" management panel; the detector already filters
   // these out of the active list.
   const [ignoredFiles, setIgnoredFiles] = useState<Record<string, string[]>>({});
+  // Paths silenced for every pair (right-click "ignore in all mods").
+  const [ignoredFilesGlobal, setIgnoredFilesGlobal] = useState<string[]>([]);
+  // The global path currently being unignored from its panel, so just that
+  // row's button disables during the round-trip.
+  const [pendingGlobalFile, setPendingGlobalFile] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [disableTarget, setDisableTarget] = useState<ModWithThumbnail | null>(null);
@@ -159,12 +167,14 @@ export default function Conflicts() {
     setLoading(true);
     setError(null);
     try {
-      const [conflictResult, modsResult, ignoredResult, ignoredFilesResult] = await Promise.all([
-        getConflicts(),
-        getMods(),
-        getIgnoredConflicts(),
-        getIgnoredConflictFiles(),
-      ]);
+      const [conflictResult, modsResult, ignoredResult, ignoredFilesResult, ignoredFilesGlobalResult] =
+        await Promise.all([
+          getConflicts(),
+          getMods(),
+          getIgnoredConflicts(),
+          getIgnoredConflictFiles(),
+          getIgnoredConflictFilesGlobal(),
+        ]);
 
       const map = new Map<string, ModWithThumbnail>();
       const gameBananaCounts = new Map<number, number>();
@@ -206,6 +216,7 @@ export default function Conflicts() {
       setConflicts(conflictResult);
       setIgnored(new Set(ignoredResult));
       setIgnoredFiles(ignoredFilesResult);
+      setIgnoredFilesGlobal(ignoredFilesGlobalResult);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -253,6 +264,41 @@ export default function Conflicts() {
       setError(String(err));
     } finally {
       setPendingPair(null);
+    }
+  };
+
+  // Silence a file for EVERY pair (right-click "ignore in all mods"). Pass the
+  // conflict so we can disable that card during the round-trip; re-detects
+  // because every pair sharing this file is affected.
+  const handleIgnoreFileEverywhere = async (conflict: ModConflict, filePath: string) => {
+    const key = getConflictIgnoreKey(conflict);
+    setPendingPair(key);
+    try {
+      const next = await ignoreConflictFileGlobal(filePath);
+      setIgnoredFilesGlobal(next);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  // Drop a path from the global ignore list so it can flag conflicts again.
+  const handleUnignoreFileGlobal = async (filePath: string) => {
+    setPendingGlobalFile(filePath);
+    try {
+      const next = await unignoreConflictFileGlobal(filePath);
+      setIgnoredFilesGlobal(next);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingGlobalFile(null);
     }
   };
 
@@ -444,7 +490,12 @@ export default function Conflicts() {
 
   const ignoredFilePairCount = Object.keys(ignoredFiles).length;
 
-  if (conflicts.length === 0 && ignored.size === 0 && ignoredFilePairCount === 0) {
+  if (
+    conflicts.length === 0 &&
+    ignored.size === 0 &&
+    ignoredFilePairCount === 0 &&
+    ignoredFilesGlobal.length === 0
+  ) {
     return (
       <div className="h-full flex items-center justify-center p-6">
         <EmptyState
@@ -617,6 +668,7 @@ export default function Conflicts() {
                     files={conflict.files}
                     busy={pendingPair === getConflictIgnoreKey(conflict)}
                     onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
+                    onIgnoreFileEverywhere={(filePath) => handleIgnoreFileEverywhere(conflict, filePath)}
                   />
                 )}
                 <ConflictReorderActions
@@ -757,6 +809,7 @@ export default function Conflicts() {
                     files={conflict.files}
                     busy={pendingPair === getConflictIgnoreKey(conflict)}
                     onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
+                    onIgnoreFileEverywhere={(filePath) => handleIgnoreFileEverywhere(conflict, filePath)}
                   />
                 )}
 
@@ -902,6 +955,37 @@ export default function Conflicts() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* Globally ignored files panel: paths silenced for every pair via the
+          right-click "ignore in all mods" action. Unignoring re-runs detection
+          so any pair that genuinely overlaps on the path reappears. */}
+      {ignoredFilesGlobal.length > 0 && (
+        <div className="mt-10">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-text-secondary">
+            <Globe className="w-4 h-4" />
+            <Tx k="conflicts.ignoredFilesGlobal.title" fallback="Ignored in all mods" />
+          </h3>
+          <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
+            {ignoredFilesGlobal.map((file) => (
+              <div key={file} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary" title={file}>
+                  {file}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleUnignoreFileGlobal(file)}
+                  disabled={pendingGlobalFile === file}
+                  title={t('conflicts.ignoredFilesGlobal.unignoreTitle')}
+                  className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <Tx k="conflicts.actions.unignore" fallback="Unignore" />
+                </button>
+              </div>
+            ))}
           </div>
         </div>
       )}

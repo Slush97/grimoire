@@ -577,8 +577,10 @@
     "files": {
       "heading_one": "Shared file ({{count}})",
       "heading_other": "Shared files ({{count}})",
+      "ignoreEverywhere": "Ignore in all mods",
       "ignoreFile": "Ignore",
-      "ignoreFileTitle": "Stop flagging just this file for these two mods (reversible below)"
+      "ignoreFileTitle": "Stop flagging just this file for these two mods (reversible below)",
+      "ignoreForPair": "Ignore for this pair"
     },
     "header": {
       "description": "Resolve conflicts between installed mods",
@@ -595,6 +597,10 @@
       "restoreAllTitle": "Restore conflict detection for every ignored file in this pair",
       "title": "Ignored files",
       "unignoreFileTitle": "Restore this file to conflict detection"
+    },
+    "ignoredFilesGlobal": {
+      "title": "Ignored in all mods",
+      "unignoreTitle": "Flag this file as a conflict again (across all mods)"
     },
     "noPreview": "No Preview",
     "removedMod": "(removed mod)",

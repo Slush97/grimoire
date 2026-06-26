@@ -882,6 +882,11 @@ export interface AppSettings {
    *  only hidden entirely when every overlapping path lands here. Lets users
    *  silence one shared file forever while still being warned about others. */
   ignoredConflictFiles?: Record<string, string[]>;
+  /** Overlapping file paths the user has globally silenced: never counted as a
+   *  conflict for ANY mod pair (the user-curated companion to the built-in
+   *  compiler-artifact filter). For files that are never a real conflict no
+   *  matter which mods ship them, e.g. a shared build artifact. */
+  ignoredConflictFilesGlobal?: string[];
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;

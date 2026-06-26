@@ -449,6 +449,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('ignore-conflict-file', ignoreKey, filePath),
     unignoreConflictFile: (ignoreKey: string, filePath: string | null) =>
         ipcRenderer.invoke('unignore-conflict-file', ignoreKey, filePath),
+    getIgnoredConflictFilesGlobal: () => ipcRenderer.invoke('get-ignored-conflict-files-global'),
+    ignoreConflictFileGlobal: (filePath: string) =>
+        ipcRenderer.invoke('ignore-conflict-file-global', filePath),
+    unignoreConflictFileGlobal: (filePath: string) =>
+        ipcRenderer.invoke('unignore-conflict-file-global', filePath),
 
     // Profiles
     getProfiles: () => ipcRenderer.invoke('get-profiles'),

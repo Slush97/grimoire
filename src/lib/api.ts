@@ -913,6 +913,21 @@ export async function unignoreConflictFile(
   return window.electronAPI.unignoreConflictFile(ignoreKey, filePath);
 }
 
+/** Paths globally silenced: never flagged as a conflict for any mod pair. */
+export async function getIgnoredConflictFilesGlobal(): Promise<string[]> {
+  return window.electronAPI.getIgnoredConflictFilesGlobal();
+}
+
+/** Silence a path for every pair (right-click "ignore this file everywhere"). */
+export async function ignoreConflictFileGlobal(filePath: string): Promise<string[]> {
+  return window.electronAPI.ignoreConflictFileGlobal(filePath);
+}
+
+/** Drop a path from the global ignore list so it can flag conflicts again. */
+export async function unignoreConflictFileGlobal(filePath: string): Promise<string[]> {
+  return window.electronAPI.unignoreConflictFileGlobal(filePath);
+}
+
 /** Build the ignored-list key for a pair of mod ids or stable identities.
  *  Mirrors the backend helper so the renderer can match locally without an
  *  extra IPC roundtrip. */

@@ -137,3 +137,36 @@ ipcMain.handle(
         return map;
     }
 );
+
+// --- Global file ignores ------------------------------------------------
+// Silence a path for EVERY pair, not just one (the user-curated companion to
+// the built-in compiler-artifact filter). For files that are never a real
+// conflict no matter which mods ship them.
+
+ipcMain.handle('get-ignored-conflict-files-global', async (): Promise<string[]> => {
+    return loadSettings().ignoredConflictFilesGlobal ?? [];
+});
+
+// ignore-conflict-file-global — add a path to the global ignore list.
+// Idempotent. Returns the updated list.
+ipcMain.handle('ignore-conflict-file-global', async (_, filePath: string): Promise<string[]> => {
+    const settings = loadSettings();
+    const current = settings.ignoredConflictFilesGlobal ?? [];
+    if (current.includes(filePath)) {
+        return current;
+    }
+    const next = [...current, filePath];
+    saveSettings({ ...settings, ignoredConflictFilesGlobal: next });
+    return next;
+});
+
+// unignore-conflict-file-global — drop a path from the global ignore list.
+ipcMain.handle('unignore-conflict-file-global', async (_, filePath: string): Promise<string[]> => {
+    const settings = loadSettings();
+    const current = settings.ignoredConflictFilesGlobal ?? [];
+    const next = current.filter((f) => f !== filePath);
+    if (next.length !== current.length) {
+        saveSettings({ ...settings, ignoredConflictFilesGlobal: next });
+    }
+    return next;
+});

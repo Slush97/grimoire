@@ -22,6 +22,18 @@ const IGNORED_CONFLICT_FILES = new Set([
     'info.txt',
 ]);
 
+// Exact paths of Source 2 compiler artifacts that any mod touching a given
+// subsystem co-ships, regardless of what it actually changes. The panorama
+// image compiler writes panorama/image_compiler.vdata_c (an atlas/manifest)
+// into every mod that includes any panorama image, so two unrelated mods that
+// each touched panorama collide on it even though the real assets they edit
+// don't overlap (those are still detected on their own paths). Same class of
+// false positive as the default fallback textures below; matched by full path
+// so a legitimately-named file elsewhere isn't swept up.
+const IGNORED_CONFLICT_PATHS = new Set([
+    'panorama/image_compiler.vdata_c',
+]);
+
 // Path prefixes for files the VPK packer commonly bundles even when the mod
 // doesn't really touch them. Two mods both shipping a copy of the engine's
 // default fallback textures isn't a real conflict between them — it's just
@@ -37,6 +49,7 @@ const IGNORED_CONFLICT_PREFIXES = [
  */
 function shouldIgnoreFile(filePath: string): boolean {
     const normalizedPath = filePath.toLowerCase();
+    if (IGNORED_CONFLICT_PATHS.has(normalizedPath)) return true;
     const fileName = normalizedPath.split('/').pop() || normalizedPath;
     if (IGNORED_CONFLICT_FILES.has(fileName)) return true;
     for (const prefix of IGNORED_CONFLICT_PREFIXES) {
@@ -237,6 +250,9 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
             ignoredFilesByKey.set(key, new Set(files));
         }
     }
+    // Globally ignored paths: never count as a conflict for any pair (the
+    // user-curated companion to the built-in IGNORED_CONFLICT_PATHS filter).
+    const globalIgnored = new Set(settings.ignoredConflictFilesGlobal ?? []);
     const identityById = new Map<string, string>();
     for (const mod of enabledMods) {
         identityById.set(mod.id, modConflictIdentity(mod));
@@ -254,10 +270,11 @@ export async function detectConflicts(deadlockPath: string): Promise<ModConflict
             const filesA = modFileLists.get(modA.id)!;
             const filesB = modFileLists.get(modB.id)!;
 
-            // Find overlapping files (excluding metadata files)
+            // Find overlapping files (excluding metadata files and any path
+            // the user has globally silenced)
             const overlapping: string[] = [];
             for (const file of filesA) {
-                if (filesB.has(file) && !shouldIgnoreFile(file)) {
+                if (filesB.has(file) && !shouldIgnoreFile(file) && !globalIgnored.has(file)) {
                     overlapping.push(file);
                 }
             }
