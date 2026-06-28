@@ -35,7 +35,7 @@ nativeTheme.themeSource = 'dark';
 // and service modules (imported below) flow into the rolling log file from
 // the very first line. The "Save diagnostic report" button in Settings hands
 // the user that file to attach to bug reports.
-import { initLogger } from './services/diagnostics';
+import { initLogger, logStartupGpuDiagnostics } from './services/diagnostics';
 initLogger();
 
 // Start the event-loop lag monitor right after the logger so its periodic
@@ -407,6 +407,12 @@ if (!gotTheLock) {
     app.whenReady().then(() => {
         // Set app user model id for windows
         electronApp.setAppUserModelId('com.grimoire.modmanager');
+
+        // Record the GPU / driver / hardware-acceleration snapshot once so it's
+        // in main.log even when the user never builds a diagnostic report. This
+        // is the signal that disambiguates "black screen on a page" reports
+        // (a transparent WebGL overlay compositing as opaque black).
+        void logStartupGpuDiagnostics();
 
         // Serve per-mod soul-container GLBs from the user's library.
         registerSoulModelProtocol();

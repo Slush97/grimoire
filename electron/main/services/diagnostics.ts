@@ -47,6 +47,104 @@ function getLogFilePath(): string {
     return log.transports.file.getFile().path;
 }
 
+// GPU + driver snapshot. This exists because a class of "black screen on a
+// page" bugs (a transparent WebGL overlay compositing as opaque black) is
+// driven entirely by the user's GPU / driver / hardware-acceleration path,
+// which the rest of the report can't see. getGPUFeatureStatus() tells us
+// whether gpu_compositing / webgl are accelerated, software, or disabled (the
+// single most diagnostic signal for those reports); getGPUInfo('complete')
+// adds the GPU name + driver version. None of this is PII.
+
+/** Resolve a promise but give up after `ms`, so a wedged GPU process can never
+ *  hang the whole report build. */
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+    let timer: NodeJS.Timeout | undefined;
+    const timeout = new Promise<null>((resolve) => {
+        timer = setTimeout(() => resolve(null), ms);
+    });
+    try {
+        return await Promise.race([p, timeout]);
+    } catch {
+        return null;
+    } finally {
+        if (timer) clearTimeout(timer);
+    }
+}
+
+/** Build the GPU/driver report lines. Always returns at least the feature
+ *  status (synchronous); the device/driver detail is best-effort. Must be
+ *  called after `app` is ready. */
+export async function getGpuDiagnosticLines(): Promise<string[]> {
+    const lines: string[] = [];
+
+    // Feature status is synchronous and the most useful single signal: e.g.
+    // `gpu_compositing: disabled_software` strongly implicates the black-screen
+    // path. Surface the keys that bear on canvas compositing first.
+    try {
+        const status = app.getGPUFeatureStatus() as unknown as Record<string, string>;
+        const keysOfInterest = ['gpu_compositing', 'webgl', 'webgl2', '2d_canvas'];
+        const picked = keysOfInterest
+            .filter((k) => k in status)
+            .map((k) => `${k}=${status[k]}`);
+        // Append any remaining keys so nothing is silently dropped.
+        const rest = Object.keys(status)
+            .filter((k) => !keysOfInterest.includes(k))
+            .map((k) => `${k}=${status[k]}`);
+        const all = [...picked, ...rest];
+        if (all.length > 0) lines.push(`GPU features: ${all.join(', ')}`);
+    } catch (err) {
+        lines.push(`GPU features: <unavailable: ${err instanceof Error ? err.message : String(err)}>`);
+    }
+
+    // Device + driver detail. getGPUInfo can stall before the GPU process is
+    // up, so cap it; a null result just omits these lines.
+    try {
+        const info = (await withTimeout(app.getGPUInfo('complete'), 2000)) as
+            | {
+                  gpuDevice?: Array<{
+                      active?: boolean;
+                      vendorId?: number;
+                      deviceId?: number;
+                      driverVendor?: string;
+                      driverVersion?: string;
+                  }>;
+                  auxAttributes?: Record<string, unknown>;
+              }
+            | null;
+        if (info) {
+            const devices = info.gpuDevice ?? [];
+            const primary = devices.find((d) => d.active) ?? devices[0];
+            if (primary) {
+                const vendor = primary.vendorId != null ? `0x${primary.vendorId.toString(16)}` : '?';
+                const device = primary.deviceId != null ? `0x${primary.deviceId.toString(16)}` : '?';
+                const driver = [primary.driverVendor, primary.driverVersion].filter(Boolean).join(' ');
+                lines.push(`GPU device:   vendor=${vendor} device=${device}${driver ? ` driver=${driver}` : ''}`);
+            }
+            const aux = info.auxAttributes ?? {};
+            const glRenderer = aux['glRenderer'];
+            const glVendor = aux['glVendor'];
+            if (typeof glRenderer === 'string' && glRenderer) {
+                lines.push(`GPU renderer: ${typeof glVendor === 'string' && glVendor ? `${glVendor} ` : ''}${glRenderer}`);
+            }
+        }
+    } catch (err) {
+        lines.push(`GPU device:   <unavailable: ${err instanceof Error ? err.message : String(err)}>`);
+    }
+
+    return lines;
+}
+
+/** Log the GPU/driver snapshot to main.log once, so it's present even when a
+ *  user never builds a report. Safe to call right after app ready. */
+export async function logStartupGpuDiagnostics(): Promise<void> {
+    try {
+        const lines = await getGpuDiagnosticLines();
+        if (lines.length > 0) log.info(`[diagnostics] ${lines.join(' | ')}`);
+    } catch {
+        // Diagnostics must never break startup.
+    }
+}
+
 // Redaction rules applied to every report body and to the saved .txt file.
 // Order matters: more-specific patterns (Authorization headers) run before
 // generic ones (bearer tokens). All replacements use opaque placeholders so a
@@ -112,6 +210,8 @@ export async function buildReportText(
     const sanitizedLog = sanitize(rawLog);
     const sanitizedDesc = sanitize((description ?? '').trim());
 
+    const gpuLines = await getGpuDiagnosticLines();
+
     const headerLines = [
         '=== Grimoire diagnostic report ===',
         `Generated:    ${new Date().toISOString()}`,
@@ -122,6 +222,7 @@ export async function buildReportText(
         `Electron:     ${process.versions.electron}`,
         `Chrome:       ${process.versions.chrome}`,
         `Node:         ${process.versions.node}`,
+        ...gpuLines,
     ];
 
     const parts = [headerLines.join('\n')];
