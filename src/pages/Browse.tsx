@@ -335,7 +335,9 @@ function clampBrowseCardSizeMultiplier(value: number): number {
 }
 
 function readBrowseCardSizeMultiplier(): number {
-  const stored = Number(localStorage.getItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY));
+  const raw = localStorage.getItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY);
+  if (raw == null || raw === '') return BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
+  const stored = Number(raw);
   return Number.isFinite(stored) ? clampBrowseCardSizeMultiplier(stored) : BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
 }
 

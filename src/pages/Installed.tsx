@@ -603,7 +603,9 @@ function clampCardSizeMultiplier(value: number): number {
 }
 
 function readInstalledCardSizeMultiplier(): number {
-  const stored = Number(localStorage.getItem(INSTALLED_CARD_SIZE_MULTIPLIER_KEY));
+  const raw = localStorage.getItem(INSTALLED_CARD_SIZE_MULTIPLIER_KEY);
+  if (raw == null || raw === '') return CARD_SIZE_MULTIPLIER_DEFAULT;
+  const stored = Number(raw);
   return Number.isFinite(stored) ? clampCardSizeMultiplier(stored) : CARD_SIZE_MULTIPLIER_DEFAULT;
 }
 
