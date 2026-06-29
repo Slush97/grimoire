@@ -23,6 +23,24 @@ import type {
 } from '../types/gamebanana';
 import type { DownloadedLocale, LocaleManifest } from '../types/locales';
 import { parseFeModel, type ClothModel } from './feModel';
+import { showToast } from '../stores/toastStore';
+
+const GAME_RUNNING_NOTICE = 'Game is running';
+
+function isGameRunningModLockError(err: unknown): boolean {
+  return String(err).includes(GAME_RUNNING_NOTICE);
+}
+
+async function withGameRunningWarning<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (err) {
+    if (isGameRunningModLockError(err)) {
+      showToast(GAME_RUNNING_NOTICE, { tone: 'warning' });
+    }
+    throw err;
+  }
+}
 
 // Re-export types for convenience
 export type {
@@ -77,11 +95,11 @@ export async function enableMod(modId: string): Promise<Mod> {
 }
 
 export async function disableMod(modId: string): Promise<Mod> {
-  return window.electronAPI.disableMod(modId);
+  return withGameRunningWarning(() => window.electronAPI.disableMod(modId));
 }
 
 export async function deleteMod(modId: string): Promise<void> {
-  return window.electronAPI.deleteMod(modId);
+  return withGameRunningWarning(() => window.electronAPI.deleteMod(modId));
 }
 
 export async function revealModInFolder(modId: string): Promise<void> {
@@ -413,15 +431,15 @@ export async function backfillGameBananaFileId(
 }
 
 export async function setModPriority(modId: string, priority: number): Promise<Mod> {
-  return window.electronAPI.setModPriority(modId, priority);
+  return withGameRunningWarning(() => window.electronAPI.setModPriority(modId, priority));
 }
 
 export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
-  return window.electronAPI.reorderMods(orderedIds);
+  return withGameRunningWarning(() => window.electronAPI.reorderMods(orderedIds));
 }
 
 export async function swapModPriority(modIdA: string, modIdB: string): Promise<Mod[]> {
-  return window.electronAPI.swapModPriority(modIdA, modIdB);
+  return withGameRunningWarning(() => window.electronAPI.swapModPriority(modIdA, modIdB));
 }
 
 export async function importCustomMod(args: {
@@ -620,18 +638,18 @@ export async function getAppearanceImageEdit(
 }
 
 export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
-  return window.electronAPI.mergeMods(args);
+  return withGameRunningWarning(() => window.electronAPI.mergeMods(args));
 }
 
 export async function unmergeMod(mergedModId: string): Promise<UnmergeModResult> {
-  return window.electronAPI.unmergeMod(mergedModId);
+  return withGameRunningWarning(() => window.electronAPI.unmergeMod(mergedModId));
 }
 
 export async function extractMergeSource(
   mergedModId: string,
   sourceFileName: string,
 ): Promise<ExtractMergeSourceResult> {
-  return window.electronAPI.extractMergeSource(mergedModId, sourceFileName);
+  return withGameRunningWarning(() => window.electronAPI.extractMergeSource(mergedModId, sourceFileName));
 }
 
 export type { UnmergeModResult, ExtractMergeSourceResult };
@@ -737,7 +755,7 @@ export async function downloadMod(
   categoryId?: number,
   modName?: string
 ): Promise<void> {
-  return window.electronAPI.downloadMod({ modId, fileId, fileName, section, categoryId, modName });
+  return withGameRunningWarning(() => window.electronAPI.downloadMod({ modId, fileId, fileName, section, categoryId, modName }));
 }
 
 export async function getGamebananaSections(): Promise<GameBananaSection[]> {
@@ -969,7 +987,7 @@ export async function updateProfile(profileId: string, crosshairSettings?: Profi
 }
 
 export async function applyProfile(profileId: string): Promise<Profile> {
-  return window.electronAPI.applyProfile(profileId);
+  return withGameRunningWarning(() => window.electronAPI.applyProfile(profileId));
 }
 
 export async function deleteProfile(profileId: string): Promise<void> {

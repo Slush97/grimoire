@@ -7,6 +7,11 @@ import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
 import { compareFileContents, fingerprintFile } from './fileMatch';
 import { loadSettings } from './settings';
+import {
+    assertCanMoveLoadedGameMod,
+    assertCanMoveLoadedGameMods,
+    syncRunningGameModSnapshotFromMods,
+} from './gameSessionMods';
 
 /** Verbose mod-mutation trace, gated on the `verboseModTrace` setting. Lands in
  *  main.log (captured by the diagnostic report) so a desync between the UI and
@@ -688,6 +693,7 @@ async function allocateSlot(
  * metaKeyFor(path), since an overflow destination uses a folder-prefixed key.
  */
 export async function allocateEnabledVpkPath(deadlockPath: string): Promise<string> {
+    await syncRunningGameModSnapshotFromMods(await scanMods(deadlockPath));
     const disabledForbidden = await folderPakNumbers(getDisabledPath(deadlockPath));
     const { folder, fileName } = await allocateSlot(deadlockPath, { disabledForbidden, preferred: [] });
     return join(folder, fileName);
@@ -765,6 +771,7 @@ export function reorderModsUnlocked(deadlockPath: string, orderedIds: string[]):
 
 async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
@@ -808,6 +815,7 @@ export function disableMod(deadlockPath: string, modId: string): Promise<Mod> {
 
 async function disableModImpl(deadlockPath: string, modId: string): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
@@ -817,6 +825,7 @@ async function disableModImpl(deadlockPath: string, modId: string): Promise<Mod>
     if (!targetMod.enabled) {
         return targetMod;
     }
+    assertCanMoveLoadedGameMod(targetMod);
 
     const disabledPath = getDisabledPath(deadlockPath);
 
@@ -846,11 +855,13 @@ export function deleteMod(deadlockPath: string, modId: string): Promise<void> {
 
 async function deleteModImpl(deadlockPath: string, modId: string): Promise<void> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
         throw new Error(`Mod not found: ${modId}`);
     }
+    assertCanMoveLoadedGameMod(targetMod);
 
     await fs.unlink(targetMod.path);
 
@@ -886,11 +897,13 @@ async function setModPriorityImpl(
     newPriority: number
 ): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
         throw new Error(`Mod not found: ${modId}`);
     }
+    assertCanMoveLoadedGameMod(targetMod);
 
     const parentDir = dirname(targetMod.path);
     const newFileName = renameWithPriority(targetMod.fileName, newPriority);
@@ -959,6 +972,7 @@ export function reorderMods(deadlockPath: string, orderedIds: string[]): Promise
 // this directly; the exported reorderMods wraps it in the lock.
 async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Promise<void> {
     const allMods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(allMods);
     const modById = new Map(allMods.map((m) => [m.id, m]));
 
     const targets: Mod[] = [];
@@ -1028,6 +1042,7 @@ async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Prom
         }
     }
     if (assignments.length === 0) return;
+    assertCanMoveLoadedGameMods(assignments.map(({ mod }) => mod));
 
     // Two-phase rename: source -> temp (in the TARGET folder) -> final. Unique
     // temp names make cross-folder moves and same-folder slot swaps collision-free.
@@ -1096,12 +1111,14 @@ async function swapModPriorityImpl(
     modIdB: string
 ): Promise<void> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const a = mods.find((m) => m.id === modIdA);
     const b = mods.find((m) => m.id === modIdB);
 
     if (!a || !b) {
         throw new Error('Mod not found for swap');
     }
+    assertCanMoveLoadedGameMods([a, b]);
     if (a.priority === b.priority) {
         throw new Error('Cannot swap mods with identical priorities');
     }

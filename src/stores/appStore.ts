@@ -325,6 +325,8 @@ interface AppState {
 const ENABLE_CAP_NOTICE =
   'You can have at most 990 mods enabled at once. Disable one to make room.';
 const isEnableCapError = (err: unknown): boolean => /mods enabled at once/.test(String(err));
+const GAME_RUNNING_NOTICE = 'Game is running';
+const isGameRunningModLockError = (err: unknown): boolean => String(err).includes(GAME_RUNNING_NOTICE);
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
@@ -564,6 +566,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ modsNotice: ENABLE_CAP_NOTICE });
         return false;
       }
+      if (isGameRunningModLockError(err)) {
+        return false;
+      }
       // Stale id: a mod's id is its filename, which an enable/disable changes.
       // When toggles for the same card fire faster than the store resyncs (the
       // main process now serializes mutations, so the second runs after the file
@@ -597,6 +602,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ mods: get().mods.filter((m) => m.id !== modId) });
         return;
       }
+      if (isGameRunningModLockError(err)) {
+        return;
+      }
       set({ modsError: String(err) });
     }
   },
@@ -611,6 +619,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           .sort((a, b) => a.priority - b.priority),
       });
     } catch (err) {
+      if (isGameRunningModLockError(err)) return;
       set({ modsError: String(err) });
     }
   },
@@ -622,6 +631,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ mods: updated });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); return; }
+      if (isGameRunningModLockError(err)) return;
       set({ modsError: String(err) });
     }
   },
@@ -634,7 +644,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ mods: updated });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
-      else { set({ modsError: String(err) }); }
+      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods();
     }
   },

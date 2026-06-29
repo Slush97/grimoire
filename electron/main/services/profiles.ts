@@ -11,6 +11,10 @@ import {
 import { getModMetadata, normalizeSha256 } from './metadata';
 import { isLockerManaged, pinLockerVpksToFront } from './lockerVpk';
 import { readAutoexec, writeAutoexec } from './autoexec';
+import {
+    assertCanMoveLoadedGameMods,
+    syncRunningGameModSnapshotFromMods,
+} from './gameSessionMods';
 import { generateCrosshairCommands, normalizeCrosshairSettings } from '../../../src/lib/crosshair';
 
 // The Profile wire types are single-sourced in src/types/electron.ts
@@ -438,6 +442,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
         // Resolve by archive id first, using hash for multi-VPK siblings.
         // FileName fallback is only for stable-id-less local mods.
         const currentMods = await scanMods(deadlockPath);
+        await syncRunningGameModSnapshotFromMods(currentMods);
         const resolveProfileMod = buildProfileModResolver(currentMods);
 
         // currentMod.id -> ProfileMod, when matched. Drives the enable/disable
@@ -480,6 +485,12 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
             `[profiles] resolution summary: ${stableHits} stable, ${fileNameHits} fileName, ` +
             `${refusedCrossmatches} refused, ${unmatched} unmatched`
         );
+
+        assertCanMoveLoadedGameMods(currentMods.filter((mod) => {
+            if (!mod.enabled || isLockerManaged(mod.metaKey)) return false;
+            const profileMod = profileModByCurrentId.get(mod.id);
+            return !profileMod || !profileMod.enabled || profileMod.priority !== mod.priority;
+        }));
 
         // Two passes, disables BEFORE enables. The disabled library is uncapped now,
         // so a profile that swaps a large enabled set for a large disabled one could,

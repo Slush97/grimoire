@@ -2143,8 +2143,9 @@ export default function Installed() {
     }
     setBulkProgress({ verb: 'Disabling', done: 0, total: targets.length });
     for (let i = 0; i < targets.length; i++) {
-      await toggleMod(targets[i].id);
+      const ok = await toggleMod(targets[i].id);
       setBulkProgress({ verb: 'Disabling', done: i + 1, total: targets.length });
+      if (!ok) break;
     }
     setBulkProgress(null);
     exitSelectMode();
@@ -2345,12 +2346,15 @@ export default function Installed() {
     await toggleMod(target.id);
   };
 
-  const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean) => {
-    for (const v of group.variants) {
-      if (v.enabled !== enabled) {
-        await toggleMod(v.id);
+  const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean): Promise<boolean> => {
+    const targets = group.variants.filter((v) => v.enabled !== enabled);
+    for (const v of targets) {
+      const ok = await toggleMod(v.id);
+      if (!ok) {
+        return false;
       }
     }
+    return true;
   };
 
   const disableEntireGroup = async (group: Extract<ModEntry, { kind: 'group' }>) => {
