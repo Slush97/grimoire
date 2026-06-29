@@ -243,6 +243,8 @@
       "title": "Launch Options"
     },
     "presets": {
+      "title": "Premade Commands",
+      "toggle": "Toggle premade commands",
       "performance": {
         "category": "Performance",
         "uncapFps": {
@@ -290,6 +292,10 @@
         "disablePostMatchSurvey": {
           "name": "Disable Post-Match Survey",
           "description": "Skip the survey after matches"
+        },
+        "offscreenDamageIndicator": {
+          "name": "Offscreen Damage Indicators",
+          "description": "Show minion indicators through walls when a teammate sees a droid"
         }
       },
       "minimap": {
@@ -305,6 +311,10 @@
         "largerPlayerIcons": {
           "name": "Larger Player Icons",
           "description": "Bigger player icons on minimap"
+        },
+        "largerLocalPlayerIcon": {
+          "name": "Larger Local Player Icon",
+          "description": "Make your own minimap icon larger"
         },
         "thickerZiplines": {
           "name": "Thicker Ziplines",

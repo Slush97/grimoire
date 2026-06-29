@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle, Rocket } from 'lucide-react';
+import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle, Rocket, ChevronDown } from 'lucide-react';
 import { getSettings, setSettings } from '../lib/api';
 import { Card, Badge, Button } from '../components/common/ui';
 import { Input } from '../components/common/forms';
@@ -41,6 +41,7 @@ const COMMAND_PRESETS = [
             { nameKey: 'autoexec.presets.hud.hideHud.name', nameFallback: 'Hide HUD', command: 'citadel_hud_visible false', descriptionKey: 'autoexec.presets.hud.hideHud.description', descriptionFallback: 'Hide the entire HUD' },
             { nameKey: 'autoexec.presets.hud.showHud.name', nameFallback: 'Show HUD', command: 'citadel_hud_visible true', descriptionKey: 'autoexec.presets.hud.showHud.description', descriptionFallback: 'Show the HUD' },
             { nameKey: 'autoexec.presets.hud.disablePostMatchSurvey.name', nameFallback: 'Disable Post-Match Survey', command: 'deadlock_post_match_survey_disabled true', descriptionKey: 'autoexec.presets.hud.disablePostMatchSurvey.description', descriptionFallback: 'Skip the survey after matches' },
+            { nameKey: 'autoexec.presets.hud.offscreenDamageIndicator.name', nameFallback: 'Offscreen Damage Indicators', command: 'citadel_damage_offscreen_indicator_disabled false', descriptionKey: 'autoexec.presets.hud.offscreenDamageIndicator.description', descriptionFallback: 'Show minion indicators through walls when a teammate sees a droid' },
         ],
     },
     {
@@ -51,6 +52,7 @@ const COMMAND_PRESETS = [
             { nameKey: 'autoexec.presets.minimap.fasterMinimap.name', nameFallback: 'Faster Minimap', command: 'minimap_update_rate_hz 60', descriptionKey: 'autoexec.presets.minimap.fasterMinimap.description', descriptionFallback: 'Update minimap at 60Hz' },
             { nameKey: 'autoexec.presets.minimap.largerClickRadius.name', nameFallback: 'Larger Click Radius', command: 'citadel_minimap_unit_click_radius 200', descriptionKey: 'autoexec.presets.minimap.largerClickRadius.description', descriptionFallback: 'Easier to click units on minimap' },
             { nameKey: 'autoexec.presets.minimap.largerPlayerIcons.name', nameFallback: 'Larger Player Icons', command: 'citadel_minimap_player_width 6.5', descriptionKey: 'autoexec.presets.minimap.largerPlayerIcons.description', descriptionFallback: 'Bigger player icons on minimap' },
+            { nameKey: 'autoexec.presets.minimap.largerLocalPlayerIcon.name', nameFallback: 'Larger Local Player Icon', command: 'citadel_minimap_local_player_width 10.0', descriptionKey: 'autoexec.presets.minimap.largerLocalPlayerIcon.description', descriptionFallback: 'Make your own minimap icon larger' },
             { nameKey: 'autoexec.presets.minimap.thickerZiplines.name', nameFallback: 'Thicker Ziplines', command: 'citadel_minimap_zip_line_thickness 2', descriptionKey: 'autoexec.presets.minimap.thickerZiplines.description', descriptionFallback: 'More visible ziplines' },
         ],
     },
@@ -90,6 +92,7 @@ export default function Autoexec() {
     const [manualCommands, setManualCommands] = useState<string[]>([]);
     const [customCommand, setCustomCommand] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
+    const [presetsExpanded, setPresetsExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -241,75 +244,106 @@ export default function Autoexec() {
     return (
         <div className="flex flex-col min-h-0 flex-1 p-6 space-y-6 overflow-auto">
             <div className="flex flex-col lg:flex-row flex-1 gap-6 min-h-0 overflow-auto">
-                {/* Left Panel - Command Presets */}
+                {/* Left Panel - Command Builder */}
                 <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-hidden order-2 lg:order-1">
-                    <div className="shrink-0">
-                        <Input
-                            icon={Search}
-                            type="text"
-                            value={searchTerm}
-                            onChange={(e) => setSearchTerm(e.target.value)}
-                            placeholder={t('autoexec.search.placeholder')}
-                        />
-                    </div>
-
                     <div className="flex-1 overflow-y-auto space-y-4 pr-2">
                         {/* Custom Command Input */}
                         <Card title={<Tx k="autoexec.customCommand.title" fallback="Custom Command" />}>
-                            <div className="flex gap-2">
-                                <Input
-                                    type="text"
-                                    value={customCommand}
-                                    onChange={(e) => setCustomCommand(e.target.value)}
-                                    placeholder={t('autoexec.customCommand.placeholder')}
-                                    className="flex-1 font-mono"
-                                    onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
-                                />
-                                <Button
-                                    onClick={handleAddCustomCommand}
-                                    disabled={!customCommand.trim() || commandAlreadyPresent(customCommand.trim())}
-                                    icon={Plus}
-                                />
+                            <div className="space-y-4">
+                                <div className="flex gap-2">
+                                    <Input
+                                        type="text"
+                                        value={customCommand}
+                                        onChange={(e) => setCustomCommand(e.target.value)}
+                                        placeholder={t('autoexec.customCommand.placeholder')}
+                                        className="flex-1 font-mono"
+                                        onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
+                                    />
+                                    <Button
+                                        onClick={handleAddCustomCommand}
+                                        disabled={!customCommand.trim() || commandAlreadyPresent(customCommand.trim())}
+                                        icon={Plus}
+                                    />
+                                </div>
+
+                                <button
+                                    type="button"
+                                    onClick={() => setPresetsExpanded((expanded) => !expanded)}
+                                    aria-expanded={presetsExpanded}
+                                    aria-label={t('autoexec.presets.toggle')}
+                                    className="flex w-full items-center justify-between border-t border-white/5 pt-4 text-left text-sm font-semibold text-text-primary transition-colors hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                >
+                                    <span className="flex items-center gap-2">
+                                        <Terminal className="h-4 w-4 text-accent" />
+                                        <Tx k="autoexec.presets.title" fallback="Premade Commands" />
+                                    </span>
+                                    <ChevronDown className={`h-4 w-4 text-text-secondary transition-transform ${presetsExpanded ? 'rotate-180' : ''}`} />
+                                </button>
+
+                                {presetsExpanded && (
+                                    <div className="space-y-3">
+                                        <Input
+                                            icon={Search}
+                                            type="text"
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            placeholder={t('autoexec.search.placeholder')}
+                                        />
+
+                                        <div className="max-h-[min(52vh,calc(100vh-20rem))] space-y-4 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+                                            {filteredPresets.map((category) => {
+                                                const CategoryIcon = category.icon;
+                                                return (
+                                                    <section
+                                                        key={category.categoryKey}
+                                                        className="rounded-sm border border-white/5 bg-bg-tertiary/25 p-2.5"
+                                                    >
+                                                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-primary">
+                                                            <CategoryIcon className="h-4 w-4 text-accent" />
+                                                            <Tx k={category.categoryKey} fallback={category.categoryFallback} />
+                                                        </div>
+
+                                                        <div className="space-y-1">
+                                                            {category.commands.map((cmd) => {
+                                                                const isAdded = commandAlreadyPresent(cmd.command);
+                                                                const commandName = t(cmd.nameKey);
+                                                                const commandDescription = t(cmd.descriptionKey);
+                                                                return (
+                                                                    <button
+                                                                        key={cmd.command}
+                                                                        onClick={() => handleAddCommand(cmd.command)}
+                                                                        disabled={isAdded}
+                                                                        title={commandDescription}
+                                                                        aria-label={`${commandName}: ${commandDescription}. ${cmd.command}`}
+                                                                        className={`w-full p-2 rounded-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isAdded
+                                                                            ? 'bg-accent/10 border border-accent/20 cursor-default opacity-60'
+                                                                            : 'bg-bg-tertiary/50 hover:bg-bg-tertiary border border-transparent hover:border-white/5 cursor-pointer'
+                                                                            }`}
+                                                                    >
+                                                                        <div className="flex items-center justify-between gap-3">
+                                                                            <span className={`min-w-0 truncate text-left text-sm font-medium ${isAdded ? 'text-accent' : 'text-text-primary'}`}>
+                                                                                <Tx k={cmd.nameKey} fallback={cmd.nameFallback} />
+                                                                            </span>
+                                                                            <span className="flex min-w-0 shrink-0 items-center gap-2">
+                                                                                <code className="max-w-64 truncate rounded-sm bg-black/30 px-1.5 py-0.5 font-mono text-xs text-text-primary/80">
+                                                                                    {cmd.command}
+                                                                                </code>
+                                                                                {isAdded && <Check className="h-3 w-3 shrink-0 text-accent" />}
+                                                                            </span>
+                                                                        </div>
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                    </section>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </Card>
 
-                        {filteredPresets.map((category) => (
-                            <Card
-                                key={category.categoryKey}
-                                title={<Tx k={category.categoryKey} fallback={category.categoryFallback} />}
-                                icon={category.icon}
-                            >
-                                <div className="space-y-1">
-                                    {category.commands.map((cmd) => {
-                                        const isAdded = commandAlreadyPresent(cmd.command);
-                                        return (
-                                            <button
-                                                key={cmd.command}
-                                                onClick={() => handleAddCommand(cmd.command)}
-                                                disabled={isAdded}
-                                                className={`w-full text-left p-3 rounded-lg transition-all group focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isAdded
-                                                    ? 'bg-accent/10 border border-accent/20 cursor-default opacity-60'
-                                                    : 'bg-bg-tertiary/50 hover:bg-bg-tertiary border border-transparent hover:border-white/5 cursor-pointer'
-                                                    }`}
-                                            >
-                                                <div className="flex items-center justify-between mb-1">
-                                                    <span className={`text-sm font-medium ${isAdded ? 'text-accent' : 'text-text-primary'}`}>
-                                                        <Tx k={cmd.nameKey} fallback={cmd.nameFallback} />
-                                                    </span>
-                                                    {isAdded && <Check className="w-3 h-3 text-accent" />}
-                                                </div>
-                                                <div className="flex items-center justify-between text-xs text-text-secondary">
-                                                    <span><Tx k={cmd.descriptionKey} fallback={cmd.descriptionFallback} /></span>
-                                                    <code className="bg-black/30 px-1.5 py-0.5 rounded font-mono text-text-primary/80">
-                                                        {cmd.command}
-                                                    </code>
-                                                </div>
-                                            </button>
-                                        );
-                                    })}
-                                </div>
-                            </Card>
-                        ))}
                     </div>
                 </div>
 
