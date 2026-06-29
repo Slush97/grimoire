@@ -220,6 +220,7 @@
     "commands": {
       "emptyTitle": "No commands added",
       "emptyDescription": "Select from presets on the left",
+      "manualTooltip": "This command was already in autoexec.cfg and is shown read-only.",
       "title_one": "Your Commands ({{count}})",
       "title_other": "Your Commands ({{count}})"
     },

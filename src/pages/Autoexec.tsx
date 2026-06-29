@@ -87,6 +87,7 @@ export default function Autoexec() {
     const [gamePath, setGamePath] = useState<string | null>(null);
     const [status, setStatus] = useState<AutoexecStatus | null>(null);
     const [commands, setCommands] = useState<string[]>([]);
+    const [manualCommands, setManualCommands] = useState<string[]>([]);
     const [customCommand, setCustomCommand] = useState('');
     const [searchTerm, setSearchTerm] = useState('');
     const [copied, setCopied] = useState(false);
@@ -118,9 +119,8 @@ export default function Autoexec() {
                 setStatus(s);
 
                 const result = await window.electronAPI.getAutoexecCommands(settings.deadlockPath);
-                if (result.commands.length > 0) {
-                    setCommands(result.commands);
-                }
+                setCommands(result.commands);
+                setManualCommands(result.manualCommands);
             }
             try {
                 const status = await window.electronAPI.getSteamLaunchOptionsStatus();
@@ -176,8 +176,12 @@ export default function Autoexec() {
         })).filter(cat => cat.commands.length > 0);
     }, [searchTerm, t]);
 
+    const visibleCommandCount = commands.length + manualCommands.length;
+    const copiedCommands = useMemo(() => [...commands, ...manualCommands], [commands, manualCommands]);
+    const commandAlreadyPresent = (command: string) => commands.includes(command) || manualCommands.includes(command);
+
     const handleAddCommand = (command: string) => {
-        if (commands.includes(command)) return;
+        if (commandAlreadyPresent(command)) return;
         setCommands(prev => [...prev, command]);
         setHasUnsaved(true);
     };
@@ -194,7 +198,7 @@ export default function Autoexec() {
     };
 
     const handleCopy = async () => {
-        await navigator.clipboard.writeText(commands.join('\n'));
+        await navigator.clipboard.writeText(copiedCommands.join('\n'));
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
     };
@@ -216,6 +220,9 @@ export default function Autoexec() {
             // Refresh status
             const s = await window.electronAPI.getAutoexecStatus(gamePath);
             setStatus(s);
+            const result = await window.electronAPI.getAutoexecCommands(gamePath);
+            setCommands(result.commands);
+            setManualCommands(result.manualCommands);
             setTimeout(() => setSaveMessage(null), 3000);
         } catch (err) {
             setSaveMessage(t('autoexec.status.error', { error: String(err) }) + memeToastSuffix('error'));
@@ -258,7 +265,11 @@ export default function Autoexec() {
                                     className="flex-1 font-mono"
                                     onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
                                 />
-                                <Button onClick={handleAddCustomCommand} disabled={!customCommand.trim()} icon={Plus} />
+                                <Button
+                                    onClick={handleAddCustomCommand}
+                                    disabled={!customCommand.trim() || commandAlreadyPresent(customCommand.trim())}
+                                    icon={Plus}
+                                />
                             </div>
                         </Card>
 
@@ -270,7 +281,7 @@ export default function Autoexec() {
                             >
                                 <div className="space-y-1">
                                     {category.commands.map((cmd) => {
-                                        const isAdded = commands.includes(cmd.command);
+                                        const isAdded = commandAlreadyPresent(cmd.command);
                                         return (
                                             <button
                                                 key={cmd.command}
@@ -311,8 +322,8 @@ export default function Autoexec() {
                                 <span className="truncate">
                                     <Tx
                                         k="autoexec.commands.title"
-                                        values={{ count: commands.length }}
-                                        fallback={`Your Commands (${commands.length})`}
+                                        values={{ count: visibleCommandCount }}
+                                        fallback={`Your Commands (${visibleCommandCount})`}
                                     />
                                 </span>
                                 {status ? (
@@ -334,7 +345,7 @@ export default function Autoexec() {
                                 <Button size="sm" variant="secondary" onClick={() => setClearConfirmOpen(true)} disabled={commands.length === 0} icon={RefreshCw}>
                                     <Tx k="common.actions.clear" fallback="Clear" />
                                 </Button>
-                                <Button size="sm" variant="secondary" onClick={handleCopy} disabled={commands.length === 0} icon={copied ? Check : Copy}>
+                                <Button size="sm" variant="secondary" onClick={handleCopy} disabled={copiedCommands.length === 0} icon={copied ? Check : Copy}>
                                     {copied ? (
                                         <Tx k="common.status.copied" fallback="Copied" />
                                     ) : (
@@ -380,24 +391,37 @@ export default function Autoexec() {
                         )}
 
                         <div className="overflow-y-auto space-y-2 pr-1 flex-1 min-h-0">
-                            {commands.length > 0 ? (
-                                commands.map((cmd, i) => (
-                                    <div
-                                        key={i}
-                                        className="flex items-center gap-3 p-3 bg-bg-tertiary/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors animate-fade-in"
-                                    >
-                                        <div className="flex-1 font-mono text-sm text-text-primary truncate">
-                                            {cmd}
-                                        </div>
-                                        <button
-                                            onClick={() => handleRemoveCommand(i)}
-                                            className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-state-danger rounded transition-all cursor-pointer"
-                                            title={t('common.actions.remove')}
+                            {visibleCommandCount > 0 ? (
+                                <>
+                                    {commands.map((cmd, i) => (
+                                        <div
+                                            key={`managed-${i}-${cmd}`}
+                                            className="flex items-center gap-3 p-3 bg-bg-tertiary/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors animate-fade-in"
                                         >
-                                            <Trash2 className="w-4 h-4" />
-                                        </button>
-                                    </div>
-                                ))
+                                            <div className="flex-1 font-mono text-sm text-text-primary truncate">
+                                                {cmd}
+                                            </div>
+                                            <button
+                                                onClick={() => handleRemoveCommand(i)}
+                                                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-state-danger rounded transition-all cursor-pointer"
+                                                title={t('common.actions.remove')}
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {manualCommands.map((cmd, i) => (
+                                        <div
+                                            key={`manual-${i}-${cmd}`}
+                                            className="flex items-center gap-3 p-3 bg-bg-tertiary/20 border border-white/5 rounded-lg opacity-60 cursor-help animate-fade-in"
+                                            title={t('autoexec.commands.manualTooltip')}
+                                        >
+                                            <div className="flex-1 font-mono text-sm text-text-secondary truncate">
+                                                {cmd}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </>
                             ) : (
                                 <div className="flex items-center gap-3 py-6 text-text-secondary opacity-50">
                                     <Terminal className="w-6 h-6" />
