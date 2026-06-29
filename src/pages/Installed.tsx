@@ -1705,7 +1705,19 @@ export default function Installed() {
         !detailsInstalledFileIds.has(fileId) &&
         !pickedIsArchived;
       const replacing = isReinstall || isUpdate;
-      const restoreEnabled = replacing && !!sourceMod?.enabled;
+      let replacementTargets: typeof mods = [];
+      if (replacing && sourceMod) {
+        replacementTargets = mods.filter(
+          (mod) =>
+            mod.gameBananaId === sourceMod.gameBananaId &&
+            mod.gameBananaFileId === sourceMod.gameBananaFileId,
+        );
+      } else if (detailsInstalledFileIds.has(fileId)) {
+        replacementTargets = mods.filter(
+          (mod) => mod.gameBananaId === detailsMod.id && mod.gameBananaFileId === fileId,
+        );
+      }
+      const restoreEnabled = replacementTargets.some((mod) => mod.enabled);
 
       if (replacing && sourceMod) {
         // Snapshot before the destructive delete so the user can roll back,
@@ -1716,22 +1728,22 @@ export default function Installed() {
         } catch (err) {
           console.warn('[Update] failed to capture pre-update snapshot:', err);
         }
-        await deleteMod(sourceMod.id);
+      }
+      for (const mod of replacementTargets) {
+        await deleteMod(mod.id);
       }
 
       await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
 
-      // Deleting the source removes the only enabled sibling, so the backend's
-      // auto-disable promotion never fires and the freshly downloaded file stays
-      // in /disabled. Re-enable it so an update/reinstall preserves the source's
-      // enabled state instead of silently turning the mod off. (Match by GB ids;
-      // the local mod id changes on reinstall.)
+      // Replacement downloads land disabled, so restore the enabled state after
+      // reloading. Match by GB ids because local ids change on reinstall.
       if (restoreEnabled) {
         await loadMods();
-        const newMod = useAppStore
+        const newMods = useAppStore
           .getState()
-          .mods.find((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
-        if (newMod && !newMod.enabled) {
+          .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
+        for (const newMod of newMods) {
+          if (newMod.enabled) continue;
           try {
             await toggleMod(newMod.id);
           } catch (err) {
@@ -1835,6 +1847,7 @@ export default function Installed() {
         | { ok: true; snapshot: (typeof snapshots)[number]; fileId: number; fileName: string }
         | { ok: false; snapshot: (typeof snapshots)[number]; reason: string };
       const resolutions: Resolution[] = [];
+      const resolvedByOldFileId = new Map<number, { fileId: number; fileName: string }>();
       // Seed claims with live files already installed as siblings outside this
       // run, so neither the fuzzy match nor the single-file fallback
       // re-downloads a variant the user already has.
@@ -1854,6 +1867,16 @@ export default function Installed() {
       }
       for (const s of group) {
         if (liveFileIds.has(s.gameBananaFileId)) continue;
+        const existingResolution = resolvedByOldFileId.get(s.gameBananaFileId);
+        if (existingResolution) {
+          resolutions.push({
+            ok: true,
+            snapshot: s,
+            fileId: existingResolution.fileId,
+            fileName: existingResolution.fileName,
+          });
+          continue;
+        }
         const match = resolveUpdateTarget(
           {
             installedFileId: s.gameBananaFileId,
@@ -1865,9 +1888,11 @@ export default function Installed() {
         );
         if (match) {
           resolutions.push({ ok: true, snapshot: s, fileId: match.id, fileName: match.fileName });
+          resolvedByOldFileId.set(s.gameBananaFileId, { fileId: match.id, fileName: match.fileName });
           claimedIds.add(match.id);
         } else if (liveFiles.length === 1 && !claimedIds.has(liveFiles[0].id)) {
           resolutions.push({ ok: true, snapshot: s, fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
+          resolvedByOldFileId.set(s.gameBananaFileId, { fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
           claimedIds.add(liveFiles[0].id);
         } else {
           resolutions.push({
@@ -1892,32 +1917,68 @@ export default function Installed() {
         }
       }
 
+      const okBatches = new Map<
+        string,
+        {
+          gameBananaId: number;
+          fileId: number;
+          fileName: string;
+          section: string;
+          categoryId: number;
+          snapshots: Array<(typeof snapshots)[number]>;
+        }
+      >();
+
       for (const r of resolutions) {
         if (!r.ok) {
           needsPick.push({ id: r.snapshot.oldId, name: r.snapshot.modName });
           console.warn(`[Update] ${r.snapshot.fileName}: ${r.reason}`);
         } else {
-          try {
-            await deleteMod(r.snapshot.oldId);
-            await downloadMod(
-              r.snapshot.gameBananaId,
-              r.fileId,
-              r.fileName,
-              r.snapshot.section,
-              r.snapshot.categoryId,
-            );
-            completed.push({
+          const batchKey = `${r.snapshot.gameBananaId}:${r.fileId}`;
+          const batch =
+            okBatches.get(batchKey) ??
+            {
               gameBananaId: r.snapshot.gameBananaId,
-              gameBananaFileId: r.fileId,
-              wasEnabled: r.snapshot.wasEnabled,
+              fileId: r.fileId,
               fileName: r.fileName,
-            });
-          } catch (err) {
-            failures.push(`${r.snapshot.fileName}: ${String(err)}`);
-          }
+              section: r.snapshot.section,
+              categoryId: r.snapshot.categoryId,
+              snapshots: [],
+            };
+          batch.snapshots.push(r.snapshot);
+          okBatches.set(batchKey, batch);
+          continue;
         }
         progress += 1;
         setUpdateAllProgress({ done: progress, total: snapshots.length });
+      }
+
+      for (const batch of okBatches.values()) {
+        try {
+          for (const snapshot of batch.snapshots) {
+            await deleteMod(snapshot.oldId);
+          }
+          await downloadMod(
+            batch.gameBananaId,
+            batch.fileId,
+            batch.fileName,
+            batch.section,
+            batch.categoryId,
+          );
+          completed.push({
+            gameBananaId: batch.gameBananaId,
+            gameBananaFileId: batch.fileId,
+            wasEnabled: batch.snapshots.some((snapshot) => snapshot.wasEnabled),
+            fileName: batch.fileName,
+          });
+        } catch (err) {
+          for (const snapshot of batch.snapshots) {
+            failures.push(`${snapshot.fileName}: ${String(err)}`);
+          }
+        } finally {
+          progress += batch.snapshots.length;
+          setUpdateAllProgress({ done: progress, total: snapshots.length });
+        }
       }
     }
 
@@ -1938,10 +1999,11 @@ export default function Installed() {
     const refreshed = useAppStore.getState().mods;
     for (const c of completed) {
       if (!c.wasEnabled) continue;
-      const newMod = refreshed.find(
+      const newMods = refreshed.filter(
         (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
       );
-      if (newMod && !newMod.enabled) {
+      for (const newMod of newMods) {
+        if (newMod.enabled) continue;
         try {
           await toggleMod(newMod.id);
         } catch (err) {

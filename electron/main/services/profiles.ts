@@ -8,7 +8,7 @@ import {
     disableModUnlocked,
     reorderModsUnlocked,
 } from './mods';
-import { getModMetadata } from './metadata';
+import { getModMetadata, normalizeSha256 } from './metadata';
 import { isLockerManaged, pinLockerVpksToFront } from './lockerVpk';
 import { readAutoexec, writeAutoexec } from './autoexec';
 import { generateCrosshairCommands, normalizeCrosshairSettings } from '../../../src/lib/crosshair';
@@ -87,48 +87,39 @@ function saveProfiles(profiles: Profile[]): void {
     }
 }
 
-/**
- * Drop duplicate physical VPKs that resolve to the SAME GameBanana file before
- * they're written into a profile. A toggle/apply race can leave two copies of
- * one mod enabled in different pakNN slots; without this dedup, createProfile /
- * updateProfile would record both (same gameBananaId:fileId, different fileName/
- * priority) and the saved profile carries a phantom entry forever - exactly the
- * corrupt "Bunnydicta at priority 21 AND 31" a reporter's exported profile
- * showed (#bugs: profile/mods desync, leftover/duplicate vpk). We keep the
- * lower-priority-number copy (loads first / wins conflicts). Mods without a
- * GameBanana file id are left untouched: those are genuinely distinct locals.
- */
+/** Drop duplicate physical VPKs before they're written into a profile. */
 function dedupeEnabledForProfile<T extends { metaKey: string; fileName: string; priority: number }>(
     mods: T[]
 ): T[] {
-    const byGbFile = new Map<string, T>();
+    const byGbFileAndHash = new Map<string, T>();
     const out: T[] = [];
     for (const mod of mods) {
         const meta = getModMetadata(mod.metaKey);
         const gbId = meta?.gameBananaId;
         const fileId = meta?.gameBananaFileId;
-        if (typeof gbId !== 'number' || typeof fileId !== 'number') {
+        const sha256 = normalizeSha256(meta?.sha256);
+        if (typeof gbId !== 'number' || typeof fileId !== 'number' || sha256 === null) {
             out.push(mod);
             continue;
         }
-        const key = `${gbId}:${fileId}`;
-        const existing = byGbFile.get(key);
+        const key = `${gbId}:${fileId}:${sha256}`;
+        const existing = byGbFileAndHash.get(key);
         if (!existing) {
-            byGbFile.set(key, mod);
+            byGbFileAndHash.set(key, mod);
             out.push(mod);
         } else if (mod.priority < existing.priority) {
             // Prefer the higher-load-order copy; swap it in place.
             const idx = out.indexOf(existing);
             if (idx !== -1) out[idx] = mod;
-            byGbFile.set(key, mod);
+            byGbFileAndHash.set(key, mod);
             console.warn(
                 `[profiles] dedupe: dropping duplicate VPK ${existing.fileName} ` +
-                `(same GameBanana file ${key} as ${mod.fileName})`
+                `(same GameBanana file/hash as ${mod.fileName})`
             );
         } else {
             console.warn(
                 `[profiles] dedupe: dropping duplicate VPK ${mod.fileName} ` +
-                `(same GameBanana file ${key} as ${existing.fileName})`
+                `(same GameBanana file/hash as ${existing.fileName})`
             );
         }
     }
@@ -285,8 +276,9 @@ type ResolvedMatch =
  * Build a resolver that maps a ProfileMod to one of the current scanned mods.
  *
  * Tries stable id first (`gameBananaId` + `gameBananaFileId`) so a mod can be
- * found after a fileName change. Falls back to fileName ONLY when neither the
- * profile entry nor the candidate currentMod carry GameBanana ids: this keeps
+ * found after a fileName change. If several installed VPKs came from that same
+ * GameBanana file, SHA-256 picks the exact sibling. Falls back to fileName ONLY
+ * when neither the profile entry nor the candidate currentMod carry ids: this keeps
  * local-to-local fileName matching working for custom mods, while refusing to
  * cross-match a legacy stable-id-less profile entry to an unrelated
  * GameBanana mod that just happens to occupy the same pakNN_ slot today. The
@@ -294,17 +286,16 @@ type ResolvedMatch =
  * any reorder rotated pakNN_ prefixes (Discord #bugs:
  * "Profile apply misrecognizing mods to turn on", 1.11.2).
  *
- * Stable-id matches that resolve to the same current mod are deduped on a
- * first-come basis so a profile with two entries pointing at the same
- * archive (shouldn't happen but possible after manual edits) can't double-
- * assign the same file.
+ * Matches are deduped on a first-come basis so duplicate profile entries can't
+ * double-assign the same file.
  */
 function buildProfileModResolver(
     currentMods: Array<import('../../../src/types/mod').Mod>
 ): (pm: ProfileMod) => ResolvedMatch {
     const byFileName = new Map<string, typeof currentMods[number]>();
-    const byGbFile = new Map<string, typeof currentMods[number]>();
+    const byGbFile = new Map<string, Array<typeof currentMods[number]>>();
     const bySha256 = new Map<string, typeof currentMods[number]>();
+    const shaByModId = new Map<string, string>();
     const metaByFileName = new Map<string, ReturnType<typeof getModMetadata>>();
     for (const mod of currentMods) {
         byFileName.set(mod.fileName, mod);
@@ -314,10 +305,19 @@ function buildProfileModResolver(
         const fileId = meta?.gameBananaFileId;
         if (typeof gbId === 'number' && typeof fileId === 'number') {
             const key = `${gbId}:${fileId}`;
-            if (!byGbFile.has(key)) byGbFile.set(key, mod);
+            const matches = byGbFile.get(key);
+            if (matches) {
+                matches.push(mod);
+            } else {
+                byGbFile.set(key, [mod]);
+            }
         }
-        if (typeof meta?.sha256 === 'string' && !bySha256.has(meta.sha256)) {
-            bySha256.set(meta.sha256, mod);
+        const sha256 = normalizeSha256(meta?.sha256);
+        if (sha256 !== null) {
+            shaByModId.set(mod.id, sha256);
+            if (!bySha256.has(sha256)) {
+                bySha256.set(sha256, mod);
+            }
         }
     }
     const claimed = new Set<string>();
@@ -326,20 +326,27 @@ function buildProfileModResolver(
             typeof pm.gameBananaId === 'number' &&
             typeof pm.gameBananaFileId === 'number';
 
+        const profileSha = normalizeSha256(pm.sha256);
+        const stableCandidates = profileHasStableIds
+            ? byGbFile.get(`${pm.gameBananaId}:${pm.gameBananaFileId}`) ?? []
+            : [];
         if (profileHasStableIds) {
-            const stable = byGbFile.get(`${pm.gameBananaId}:${pm.gameBananaFileId}`);
+            const stable =
+                (profileSha !== null
+                    ? stableCandidates.find(
+                        (mod) => shaByModId.get(mod.id) === profileSha && !claimed.has(mod.id)
+                    )
+                    : undefined) ??
+                stableCandidates.find((mod) => mod.fileName === pm.fileName && !claimed.has(mod.id)) ??
+                stableCandidates.find((mod) => !claimed.has(mod.id));
             if (stable && !claimed.has(stable.id)) {
                 claimed.add(stable.id);
                 return { mod: stable, via: 'stable' };
             }
         }
 
-        // Content fingerprint: a reliable identity that survives a fileName
-        // change, so it's tried before the (slot-reuse-prone) fileName fallback.
-        // Mainly rescues custom/local mods after they've been renamed free-form
-        // by a disable, which no plain-fileName lookup could match.
-        if (typeof pm.sha256 === 'string') {
-            const byHash = bySha256.get(pm.sha256);
+        if (profileSha !== null && (!profileHasStableIds || stableCandidates.length === 0)) {
+            const byHash = bySha256.get(profileSha);
             if (byHash && !claimed.has(byHash.id)) {
                 claimed.add(byHash.id);
                 return { mod: byHash, via: 'stable' };
@@ -428,15 +435,12 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     const failures: string[] = [];
 
     await runExclusiveModMutation(async () => {
-        // Resolve each profile mod against the current scan by stable id
-        // (gameBananaId + gameBananaFileId) first, then by fileName ONLY when
-        // both sides are stable-id-less (custom mods + truly-local current
-        // mods). See buildProfileModResolver for the cross-match refusal that
-        // landed in response to "Profile apply misrecognizing mods to turn on".
+        // Resolve by archive id first, using hash for multi-VPK siblings.
+        // FileName fallback is only for stable-id-less local mods.
         const currentMods = await scanMods(deadlockPath);
         const resolveProfileMod = buildProfileModResolver(currentMods);
 
-        // currentMod.id → ProfileMod, when matched. Drives the enable/disable
+        // currentMod.id -> ProfileMod, when matched. Drives the enable/disable
         // loop and the reorder pass below.
         const profileModByCurrentId = new Map<string, ProfileMod>();
         for (const profileMod of profile.mods) {
@@ -471,6 +475,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
                 );
             }
         }
+
         console.log(
             `[profiles] resolution summary: ${stableHits} stable, ${fileNameHits} fileName, ` +
             `${refusedCrossmatches} refused, ${unmatched} unmatched`
