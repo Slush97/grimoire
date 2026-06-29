@@ -819,6 +819,7 @@ export type AppearanceSurface = 'launchModded' | 'launchVanilla' | 'activeTab' |
  *    service and keyed by the surface id.
  *  - `none`: no art (hidden). */
 export type AppearanceBgKind = 'default' | 'hero' | 'custom' | 'none';
+export type BrowseNsfwContentMode = 'show' | 'blur' | 'hide';
 
 export interface AppearanceBg {
   kind: AppearanceBgKind;
@@ -836,7 +837,12 @@ export interface AppSettings {
    *  versa) can be traced in the diagnostic report. Off by default; meant to
    *  be flipped on temporarily to capture a repro. */
   verboseModTrace?: boolean;
+  /** Shared/legacy NSFW thumbnail blur preference for non-Installed surfaces. */
   hideNsfwPreviews: boolean;
+  /** Browser-specific handling for GameBanana mods marked as NSFW. */
+  browseNsfwContentMode: BrowseNsfwContentMode;
+  /** Blur thumbnail images for installed mods marked as NSFW. */
+  installedHideNsfwPreviews: boolean;
   /** Hide GameBanana mods flagged as outdated in Browse. */
   hideOutdatedMods: boolean;
   /** Open Locker list-view hero cards expanded on first load. */
