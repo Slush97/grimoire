@@ -48,6 +48,10 @@ function TiledRenderer({ paneRef }: { paneRef: RefObject<HTMLElement | null> }) 
       cam.position.set(0, 0.35, 3);
       cam.lookAt(0, 0, 0);
       cameraRef.current = cam;
+      // Force a fully transparent clear so this full-window overlay can never
+      // composite an opaque (black) buffer over the card grid, regardless of the
+      // driver's default clearAlpha for an alpha:true context.
+      gl.setClearColor(0x000000, 0);
     }
     if (!sceneRef.current) {
       // One lit scene reused for every tile, with a dedicated holder group the

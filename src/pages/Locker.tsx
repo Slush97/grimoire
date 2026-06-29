@@ -14,6 +14,7 @@ import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 
 // Heavy (three.js): only pulled in when the soul-container type is viewed.
 import { SoulRegistryProvider } from '../components/locker/SoulRegistryProvider';
@@ -1478,6 +1479,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                               tileId={mod.sha256 ?? mod.id}
                               modKey={mod.metaKey}
                               entry={activeType === 'spirit-urn' ? URN_MODEL_ENTRY : undefined}
+                              thumbnailUrl={mod.thumbnailUrl}
+                              name={mod.name}
+                              nsfw={mod.nsfw}
+                              hideNsfw={hideNsfw}
                             />
                           </Suspense>
                         ) : (
@@ -1643,9 +1648,14 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             non-prop tab and back was the main source of the model flicker. On a
             non-prop tab the registry is empty, so it simply paints nothing (a
             transparent, pointer-events-none overlay), which is cheap. */}
-        <Suspense fallback={null}>
-          <SoulContainerCanvas paneRef={paneRef} />
-        </Suspense>
+        {/* Local boundary: a WebGL context-creation / r3f failure degrades to no
+            live canvas (tiles fall back to 2D thumbnails) instead of bubbling to
+            the app-level boundary, which would replace the whole app shell. */}
+        <ErrorBoundary fallback={null}>
+          <Suspense fallback={null}>
+            <SoulContainerCanvas paneRef={paneRef} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
 
       {/* Retag menu (fixed-positioned, anchored at the kebab's viewport coords so
