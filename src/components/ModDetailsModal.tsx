@@ -493,7 +493,7 @@ function ModDetailsModal({
     return (
       <div
         key={file.id}
-        className={`grid grid-cols-[auto,minmax(0,1fr)] items-center gap-x-3 gap-y-2 p-3 rounded-lg border transition-colors sm:grid-cols-[auto,minmax(0,1fr),auto] ${
+        className={`flex flex-wrap items-center gap-3 p-3 rounded-lg border transition-colors sm:flex-nowrap ${
           isUpdate
             ? 'border-accent/40 bg-accent/5'
             : isActive
@@ -518,15 +518,10 @@ function ModDetailsModal({
         }`}>
           <FileArchive className="w-5 h-5" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1 text-left">
           <div className="flex min-w-0 max-w-full items-center gap-2">
             <p className="min-w-0 flex-1 truncate text-sm font-medium" title={file.fileName}>{file.fileName}</p>
             {archived && <ArchivedTag />}
-            {isActive && (
-              <span className="flex-shrink-0 text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5">
-                {t('common.status.active')}
-              </span>
-            )}
           </div>
           {file.description && (
             <p className="text-xs text-text-secondary/90 mt-0.5 truncate" title={file.description}>
@@ -559,7 +554,12 @@ function ModDetailsModal({
             </div>
           )}
         </div>
-        <div className="col-start-2 flex min-w-0 flex-wrap items-center justify-end gap-2 sm:col-start-3 sm:row-start-1">
+        <div className="ml-[52px] flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:ml-0 sm:flex-none">
+          {isActive && (
+            <span className="flex-shrink-0 self-center rounded bg-accent/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+              {t('common.status.active')}
+            </span>
+          )}
           {showEnablePill && installedFileState && (
             <Button
               type="button"
