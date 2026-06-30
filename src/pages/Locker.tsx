@@ -1,11 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type SVGProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Images, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   getGamebananaCategories,
   getHeroColorSupport,
+  getLockerOverview,
   setModGlobalType,
   setModLockerHero,
 } from '../lib/api';
@@ -30,9 +31,9 @@ const SpiritUrnImportModal = lazy(() => import('../components/locker/SpiritUrnIm
 const URN_MODEL_ENTRY = 'models/props_gameplay/idol_urn/idol_urn.vmdl_c';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import type { GlobalModType, Mod } from '../types/mod';
+import type { GlobalModType, LockerOverview, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader, ConfirmModal } from '../components/common/PageComponents';
-import { Tag } from '../components/common/ui';
+import { Tag, ToggleIndicator } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
 import { HeroSelect } from '../components/common/HeroSelect';
 import {
@@ -41,6 +42,7 @@ import {
   GLOBAL_MOD_TYPE_ORDER,
   activeLockerSkin,
   buildHeroList,
+  canonicalHeroName,
   countGlobalMods,
   countLockerSkins,
   getLockerSkinKey,
@@ -60,6 +62,7 @@ import {
   type GlobalModGroups,
   type HeroCategory,
 } from '../lib/lockerUtils';
+import { shuffleSkinKey } from '../lib/lockerRandomizer';
 
 // Route changes flip the overlay state instantly, which unmounts the hero or
 // global panel on the next frame with no exit transition. Retain the last
@@ -137,9 +140,82 @@ function RainbowPaletteIcon({ className = '', title }: { className?: string; tit
   );
 }
 
+// The per-hero customization axes surfaced as gallery-card indicator icons,
+// mirroring the hero detail view's section nav (Skins/Sounds/Cards/Effects) so
+// the icon language is the same in both places. 'skin'/'sound' come from the
+// hero's enabled mods; 'card'/'effect' come from the Locker-managed override
+// manifests (applied hero card art, ability recolors / trippy paints).
+type HeroFacetKey = 'skin' | 'sound' | 'card' | 'effect';
+// 'active' = something is applied in-game right now (enabled mod or an applied
+// override). 'installed' = mods exist for this axis but none are enabled.
+type HeroFacetState = 'active' | 'installed';
+type HeroFacets = Partial<Record<HeroFacetKey, HeroFacetState>>;
+
+// Narrow icon contract shared by the lucide glyphs and the custom solid note
+// below, so both can live in HERO_FACET_ICONS. We only ever pass these props.
+type FacetIcon = ComponentType<{
+  className?: string;
+  fill?: string;
+  strokeWidth?: number;
+  'aria-hidden'?: boolean;
+}>;
+
+// Solid eighth-note glyph (Material's `music_note`): a single closed path that
+// fills cleanly with the sheen gradient. lucide's `Music` is an open
+// note-bar-plus-two-heads outline that turns into an unreadable blob when
+// filled, so the Sounds axis uses this instead. 24x24 viewBox to size with the
+// lucide icons; stroke=currentColor so it picks up the same hardening rim.
+function SolidMusicIcon({ className, fill, strokeWidth, ...rest }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={fill}
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      {...rest}
+    >
+      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+    </svg>
+  );
+}
+
+const HERO_FACET_ORDER: readonly HeroFacetKey[] = ['skin', 'sound', 'card', 'effect'];
+const HERO_FACET_ICONS: Record<HeroFacetKey, FacetIcon> = {
+  skin: Shirt,
+  sound: SolidMusicIcon,
+  card: Images,
+  effect: Sparkles,
+};
+
+// Vertical sheen gradient used to fill the *active* customization-indicator
+// glyphs so they read as polished chips rather than flat white. Defined once as
+// a shared <defs> (FacetSheenDefs) and referenced by id from every gallery card,
+// the same url(#id) technique as RainbowPaletteIcon.
+const FACET_SHEEN_ID = 'locker-facet-sheen';
+
+function FacetSheenDefs() {
+  return (
+    <svg width="0" height="0" aria-hidden focusable="false" className="absolute">
+      <defs>
+        <linearGradient id={FACET_SHEEN_ID} x1="0" y1="0" x2="0" y2="1">
+          {/* Bright crown, a crisp highlight break across the middle, then a
+              cool steel falloff: a subtle gloss without looking garish. */}
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="46%" stopColor="#f1f4f8" />
+          <stop offset="54%" stopColor="#d7dde7" />
+          <stop offset="100%" stopColor="#aab3c2" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -197,6 +273,17 @@ export default function Locker() {
   const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>(() =>
     readStoredFavorites()
   );
+  // Applied Locker overrides (hero card art + ability sounds + ability recolors
+  // + trippy paints), keyed by hero name. Lives off the mod list, so it's
+  // fetched separately and feeds the per-hero card/effect indicator icons.
+  const [lockerOverview, setLockerOverview] = useState<LockerOverview | null>(null);
+  const refreshLockerOverview = useCallback(async () => {
+    try {
+      setLockerOverview(await getLockerOverview());
+    } catch {
+      setLockerOverview(null);
+    }
+  }, []);
   const lockerScrollRef = useRef<HTMLDivElement | null>(null);
   const latestLockerScrollTopRef = useRef(lockerPageScrollTop);
 
@@ -303,6 +390,13 @@ export default function Locker() {
     [location.pathname]
   );
 
+  // Hero cards and ability effects can only be applied from inside a hero
+  // drill-in, so the override overview is fresh enough if we (re)load it on
+  // mount and whenever the user returns to the grid (no overlay open).
+  useEffect(() => {
+    if (selectedHeroId === null && !globalSelected) void refreshLockerOverview();
+  }, [selectedHeroId, globalSelected, refreshLockerOverview]);
+
   // Build basic hero list first (needed for mod categorization)
   const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
   const heroNamesForColorSupport = useMemo(
@@ -408,6 +502,60 @@ export default function Locker() {
     [heroSounds]
   );
 
+  // Canonical hero names that currently have an applied card / ability sound /
+  // effect (recolor or trippy paint), derived from the override overview. Keyed
+  // by canonicalHeroName so "The Doorman" and "Doorman" resolve to one hero.
+  const overrideHeroNames = useMemo(() => {
+    const cards = new Set<string>();
+    const sounds = new Set<string>();
+    const effects = new Set<string>();
+    if (lockerOverview) {
+      for (const c of lockerOverview.cards) cards.add(canonicalHeroName(c.heroName));
+      for (const s of lockerOverview.sounds) sounds.add(canonicalHeroName(s.heroName));
+      for (const c of lockerOverview.colors) effects.add(canonicalHeroName(c.heroName));
+      for (const ts of lockerOverview.trippySkins) effects.add(canonicalHeroName(ts.heroName));
+    }
+    return { cards, sounds, effects };
+  }, [lockerOverview]);
+
+  // True when the hero has any applied customization: an enabled skin or sound,
+  // or an applied card / ability sound / effect override. Drives the auto-sort
+  // tier that floats customized heroes up, matching the indicator icons below.
+  const heroHasActive = useCallback(
+    (heroId: number, heroName: string) => {
+      const canon = canonicalHeroName(heroName);
+      return (
+        (heroMods.map.get(heroId) ?? []).some((m) => m.enabled) ||
+        (heroSounds.map.get(heroId) ?? []).some((m) => m.enabled) ||
+        overrideHeroNames.cards.has(canon) ||
+        overrideHeroNames.sounds.has(canon) ||
+        overrideHeroNames.effects.has(canon)
+      );
+    },
+    [heroMods, heroSounds, overrideHeroNames]
+  );
+
+  // The active/installed customization facets for one hero, driving the gallery
+  // card's indicator icons. Skins/sounds reflect the hero's mods; cards/effects
+  // reflect the applied overrides. Card and effect have no "installed" state
+  // (an override is either applied or absent).
+  const heroFacets = useCallback(
+    (heroId: number, heroName: string): HeroFacets => {
+      const skins = heroMods.map.get(heroId) ?? [];
+      const sounds = heroSounds.map.get(heroId) ?? [];
+      const canon = canonicalHeroName(heroName);
+      const facets: HeroFacets = {};
+      if (skins.some((m) => m.enabled)) facets.skin = 'active';
+      else if (skins.length > 0) facets.skin = 'installed';
+      if (sounds.some((m) => m.enabled) || overrideHeroNames.sounds.has(canon)) facets.sound = 'active';
+      else if (sounds.length > 0) facets.sound = 'installed';
+      if (overrideHeroNames.cards.has(canon)) facets.card = 'active';
+      if (overrideHeroNames.effects.has(canon)) facets.effect = 'active';
+      return facets;
+    },
+    [heroMods, heroSounds, overrideHeroNames]
+  );
+
   // Sorted hero list for display
   const heroList = useMemo(() => {
     return [...baseHeroList].sort((a, b) => {
@@ -415,7 +563,12 @@ export default function Locker() {
       const bFav = favoriteHeroes.includes(b.id);
       // Favorites first
       if (aFav !== bFav) return aFav ? -1 : 1;
-      // Then heroes with any locker content (skins or sounds)
+      // Then heroes with any applied customization: anything active in-game floats
+      // above heroes that only have disabled skins/sounds sitting in their pile.
+      const aActive = heroHasActive(a.id, a.name);
+      const bActive = heroHasActive(b.id, b.name);
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      // Then heroes with any locker content (skins or sounds), enabled or not
       const aHasContent =
         countLockerSkins(heroMods.map.get(a.id) ?? []) > 0 ||
         countLockerSkins(heroSounds.map.get(a.id) ?? []) > 0;
@@ -426,7 +579,7 @@ export default function Locker() {
       // Then alphabetically
       return a.name.localeCompare(b.name);
     });
-  }, [baseHeroList, favoriteHeroes, heroMods, heroSounds]);
+  }, [baseHeroList, favoriteHeroes, heroMods, heroSounds, heroHasActive]);
 
   // When "hide empty" is on, drop heroes with no assigned skins/sounds. Favorites
   // are kept so an intentional pin never disappears. Uses the same content test
@@ -555,6 +708,22 @@ export default function Locker() {
     if (!skins.some((m) => m.id === modId) && !sounds.some((m) => m.id === modId)) return;
     await toggleMod(modId);
   };
+
+  // Heroes that have at least one installed skin; gates the shuffle toggle.
+  const heroesWithSkins = heroMods.map.size;
+
+  // Hero ids with at least one skin in the launch-shuffle pool. Drives the
+  // gallery card's shuffle badge (only shown while the master switch is armed).
+  const shufflePoolHeroes = useMemo(() => {
+    const set = new Set<number>();
+    if (shuffleIncluded.size === 0) return set;
+    for (const [heroId, heroSkinMods] of heroMods.map) {
+      if (groupLockerSkins(heroSkinMods).some((g) => shuffleIncluded.has(shuffleSkinKey(g.primary)))) {
+        set.add(heroId);
+      }
+    }
+    return set;
+  }, [heroMods, shuffleIncluded]);
 
   // Reorder the load order of a hero's enabled skins. `orderedModIds` is the
   // new desired order of THIS hero's enabled skin VPK ids (lower index = loads
@@ -698,6 +867,8 @@ export default function Locker() {
 
   return (
     <div ref={lockerScrollRef} className="h-full overflow-y-auto">
+      {/* Shared gradient def for the active hero-card customization glyphs. */}
+      <FacetSheenDefs />
       <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-text-secondary">
@@ -712,6 +883,29 @@ export default function Locker() {
             .join(' • ')}
         </div>
         <div className="flex items-center gap-3">
+          {heroesWithSkins > 0 && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={shuffleOnLaunch}
+              onClick={() => setShuffleOnLaunch(!shuffleOnLaunch)}
+              className="group/toggle flex items-center gap-2 self-stretch rounded-sm border border-border bg-bg-secondary px-3 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
+              title={t('locker.randomize.onLaunchHint')}
+            >
+              <Shuffle className="w-4 h-4" />
+              <span>{t('locker.randomize.onLaunch')}</span>
+              {shuffleOnLaunch && (
+                <span
+                  className={`rounded-full px-1.5 text-xs tabular-nums ${
+                    shuffleIncluded.size > 0 ? 'bg-accent/15 text-accent' : 'bg-yellow-500/15 text-yellow-400'
+                  }`}
+                >
+                  {shuffleIncluded.size}
+                </span>
+              )}
+              <ToggleIndicator checked={shuffleOnLaunch} className="ml-0.5 scale-90" />
+            </button>
+          )}
           {viewMode === 'gallery' &&
             unassignedSkins.length + unassignedSounds.length > 0 && (
               <button
@@ -782,14 +976,8 @@ export default function Locker() {
             <HeroGalleryCard
               key={hero.id}
               hero={hero}
-              skinCount={countLockerSkins(heroMods.map.get(hero.id) ?? [])}
-              soundCount={countLockerSkins(heroSounds.map.get(hero.id) ?? [])}
-              isActive={Boolean(
-                activeLockerSkin([
-                  ...(heroMods.map.get(hero.id) ?? []),
-                  ...(heroSounds.map.get(hero.id) ?? []),
-                ])
-              )}
+              facets={heroFacets(hero.id, hero.name)}
+              inShufflePool={shuffleOnLaunch && shufflePoolHeroes.has(hero.id)}
               cardImage={heroCardImage(hero.id)}
               hideHeroName={heroHideName(hero.id)}
               isFavorite={favoriteHeroes.includes(hero.id)}
@@ -853,6 +1041,9 @@ export default function Locker() {
               onSelect={(modId) => setActiveSkin(hero.id, modId)}
               onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
               onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
+              includedSkinKeys={shuffleIncluded}
+              onToggleShuffleIncluded={toggleShuffleIncluded}
+              shuffleArmed={shuffleOnLaunch}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onToggleFavorite={() =>
                 setFavoriteHeroes((prev) =>
@@ -961,6 +1152,9 @@ export default function Locker() {
             onReorderSkins={(orderedModIds) => reorderHeroSkins(overlayHero.id, orderedModIds)}
             onRequestDeleteSkin={(ids, name) => setDeletePrompt({ ids, name })}
             hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+            includedSkinKeys={shuffleIncluded}
+            onToggleShuffleIncluded={toggleShuffleIncluded}
+            shuffleArmed={shuffleOnLaunch}
           />
         </div>
       )}
@@ -1057,6 +1251,9 @@ interface HeroCardProps {
   onSelect: (modId: string) => void;
   onToggleVariant: (modId: string) => void;
   onRequestDelete: (modIds: string[], name: string) => void;
+  includedSkinKeys: Set<string>;
+  onToggleShuffleIncluded: (skinKey: string) => void;
+  shuffleArmed: boolean;
   isFavorite: boolean;
   onToggleFavorite: () => void;
   hideNsfwPreviews: boolean;
@@ -1064,11 +1261,13 @@ interface HeroCardProps {
 
 interface HeroGalleryCardProps {
   hero: HeroCategory;
-  skinCount: number;
-  soundCount: number;
-  /** Whether a skin or sound mod is currently enabled for this hero. Drives the
-   *  indicator color: accent when active, muted when installed-but-disabled. */
-  isActive: boolean;
+  /** Per-axis customization state (skin/sound/card/effect) rendered as the
+   *  top-left indicator icons: accent when active, muted when installed but not
+   *  enabled. Absent keys render no icon. */
+  facets: HeroFacets;
+  /** True when the shuffle switch is armed AND this hero has a skin in the pool;
+   *  surfaces a shuffle badge so the rotation is visible at a glance. */
+  inShufflePool?: boolean;
   /** Issue #208: the active skin's chosen Locker image (data URL), shown as the
    *  card backdrop in place of the hero render. Undefined = use the render. */
   cardImage?: string;
@@ -1736,9 +1935,8 @@ function HeroGallerySkeleton() {
 
 function HeroGalleryCard({
   hero,
-  skinCount,
-  soundCount,
-  isActive,
+  facets,
+  inShufflePool,
   cardImage,
   hideHeroName,
   isFavorite,
@@ -1747,6 +1945,24 @@ function HeroGalleryCard({
   onToggleFavorite,
 }: HeroGalleryCardProps) {
   const { t } = useTranslation();
+  // The customization axes this hero actually has, in display order. Drives the
+  // top-left indicator icons. Empty = no pill.
+  const facetKeys = HERO_FACET_ORDER.filter((key) => facets[key]);
+  const facetLabel = (key: HeroFacetKey): string =>
+    key === 'skin'
+      ? t('locker.page.facetSkin')
+      : key === 'sound'
+        ? t('locker.page.facetSound')
+        : key === 'card'
+          ? t('locker.page.facetCard')
+          : t('locker.page.facetEffects');
+  const facetTitle = facetKeys
+    .map((key) =>
+      facets[key] === 'installed'
+        ? t('locker.page.facetInstalled', { label: facetLabel(key) })
+        : facetLabel(key)
+    )
+    .join(' • ');
   const renderLocal = getHeroRenderPath(hero.name);
   const wikiUrl = getHeroWikiUrl(hero.name);
   const namePath = getHeroNamePath(hero.name);
@@ -1868,32 +2084,41 @@ function HeroGalleryCard({
       >
         <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
       </button>
-      {/* Modification indicator (top-left). The whole pill changes state so it
-          reads at a glance: a solid accent pill with a check = a skin/sound is
-          currently enabled; a dark pill with a hollow ring = mods are installed
-          but none active. No pill = no mods. Count = installed skin + sound. */}
-      {skinCount + soundCount > 0 && (
+      {/* Customization indicators (top-left): one icon per axis the hero has
+          something on (skin / sound / card art / ability effect). Active glyphs
+          are filled with a vertical sheen gradient and hardened with a thin dark
+          rim so they read as polished chips; installed-but-off stays a faint
+          outline. Filled vs outline reads at a glance without the accent color. */}
+      {(facetKeys.length > 0 || inShufflePool) && (
         <div
-          className={`absolute left-2 top-2 z-20 flex items-center gap-1 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium backdrop-blur-sm ${
-            isActive ? 'text-accent' : 'text-white/65'
-          }`}
-          title={
-            isActive
-              ? t('locker.page.modsActive', { count: skinCount + soundCount })
-              : t('locker.page.modsInstalled', { count: skinCount + soundCount })
-          }
-          aria-label={
-            isActive
-              ? t('locker.page.modsActive', { count: skinCount + soundCount })
-              : t('locker.page.modsInstalled', { count: skinCount + soundCount })
-          }
+          className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 ring-1 ring-inset ring-white/10 backdrop-blur-sm"
+          title={[facetTitle, inShufflePool ? t('locker.randomize.inPool') : ''].filter(Boolean).join(' • ')}
+          aria-label={[facetTitle, inShufflePool ? t('locker.randomize.inPool') : ''].filter(Boolean).join(' • ')}
         >
-          {isActive ? (
-            <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
-          ) : (
-            <span className="h-1.5 w-1.5 rounded-full border border-white/45" aria-hidden />
+          {facetKeys.map((key) => {
+            const Icon = HERO_FACET_ICONS[key];
+            const active = facets[key] === 'active';
+            return (
+              <Icon
+                key={key}
+                className={`h-3.5 w-3.5 ${
+                  active
+                    ? 'text-[#3b4250] drop-shadow-[0_1px_1px_rgba(0,0,0,0.85)]'
+                    : 'fill-none text-white/40 drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]'
+                }`}
+                fill={active ? `url(#${FACET_SHEEN_ID})` : 'none'}
+                strokeWidth={active ? 1.5 : 2}
+                aria-hidden
+              />
+            );
+          })}
+          {inShufflePool && (
+            <Shuffle
+              className="h-3.5 w-3.5 text-accent drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]"
+              strokeWidth={2.25}
+              aria-hidden
+            />
           )}
-          {skinCount + soundCount}
         </div>
       )}
       {/* Issue #208: hide the name label when the active skin's image already
@@ -1934,6 +2159,9 @@ function HeroCard({
   onSelect,
   onToggleVariant,
   onRequestDelete,
+  includedSkinKeys,
+  onToggleShuffleIncluded,
+  shuffleArmed,
   isFavorite,
   onToggleFavorite,
   hideNsfwPreviews,
@@ -2099,6 +2327,9 @@ function HeroCard({
           onSelect={onSelect}
           onToggleVariant={onToggleVariant}
           onRequestDelete={onRequestDelete}
+          includedSkinKeys={activeSection === 'skins' ? includedSkinKeys : undefined}
+          onToggleShuffleIncluded={activeSection === 'skins' ? onToggleShuffleIncluded : undefined}
+          shuffleArmed={shuffleArmed}
           hideNsfwPreviews={hideNsfwPreviews}
           showDownloadable={activeSection === 'skins'}
           browseAction={

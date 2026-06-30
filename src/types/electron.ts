@@ -643,6 +643,7 @@ export interface ElectronAPI {
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
+    applyModToggleBatch: (enableIds: string[], disableIds: string[]) => Promise<Mod[]>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     importSoulContainerGlb: (args: ImportSoulContainerGlbArgs) => Promise<Mod[]>;

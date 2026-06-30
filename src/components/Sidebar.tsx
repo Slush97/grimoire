@@ -131,6 +131,7 @@ export default function Sidebar() {
   const appearanceImages = useAppStore((state) => state.appearanceImages);
   const mods = useAppStore((state) => state.mods);
   const loadMods = useAppStore((state) => state.loadMods);
+  const runLaunchShuffle = useAppStore((state) => state.runLaunchShuffle);
   const soundVolume = useAppStore((state) => state.soundVolume);
   const setSoundVolume = useAppStore((state) => state.setSoundVolume);
   const previewAudioPlaying = useAppStore((state) => state.previewAudioPlaying);
@@ -618,6 +619,18 @@ export default function Sidebar() {
     setLaunchPending('modded');
     setToast(null);
     try {
+      // Re-roll the shuffled skins (no-op unless "Shuffle on launch" is armed)
+      // before the game mounts addons. Skipped when a vanilla stash is pending:
+      // launchModded restores that stash first, so a shuffle here would operate
+      // on the stashed-out files and get overwritten by the restore. Guarded so
+      // a failed shuffle never blocks the launch.
+      if (!stashStatus.active) {
+        try {
+          await runLaunchShuffle();
+        } catch (err) {
+          console.warn('[launch] shuffle skipped:', err);
+        }
+      }
       await launchModded();
       if (stashStatus.active) {
         // Modded path did an auto-restore as part of the launch.

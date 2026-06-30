@@ -54,6 +54,11 @@ interface LockerHeroViewProps {
    *  confirmation dialog and the actual delete. */
   onRequestDeleteSkin?: (modIds: string[], name: string) => void;
   hideNsfwPreviews?: boolean;
+  /** Launch-shuffle pool set + toggle, threaded to the skins panel cards. */
+  includedSkinKeys?: Set<string>;
+  onToggleShuffleIncluded?: (skinKey: string) => void;
+  /** Whether the master shuffle switch is armed (keeps per-skin toggles visible). */
+  shuffleArmed?: boolean;
 }
 
 type SectionId = 'skins' | 'sounds' | 'cards' | 'effects';
@@ -84,6 +89,9 @@ export function LockerHeroView({
   onReorderSkins,
   onRequestDeleteSkin,
   hideNsfwPreviews = false,
+  includedSkinKeys,
+  onToggleShuffleIncluded,
+  shuffleArmed,
 }: LockerHeroViewProps) {
   const { t } = useTranslation();
   // Issue #208: the backdrop reflects the active skin's chosen Locker image, if
@@ -248,6 +256,9 @@ export function LockerHeroView({
         heroName={hero.name}
         emptyMessage={t('locker.hero.downloadASkinForThisHero')}
         layout="cards"
+        includedSkinKeys={includedSkinKeys}
+        onToggleShuffleIncluded={onToggleShuffleIncluded}
+        shuffleArmed={shuffleArmed}
       />
     );
 

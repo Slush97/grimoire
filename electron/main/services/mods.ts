@@ -786,6 +786,68 @@ export function reorderModsUnlocked(deadlockPath: string, orderedIds: string[]):
     return reorderModsImpl(deadlockPath, orderedIds);
 }
 
+/**
+ * Apply a set of disables and enables as ONE atomic batch (the Locker skin
+ * randomizer's apply step). Disables run BEFORE enables, on disjoint id sets, so
+ * the snapshot ids stay valid across both passes - the same ordering and
+ * reasoning as applyProfile (which also frees slots before claiming them). The
+ * whole sequence holds the mutation queue, so a stray Locker toggle can't slip
+ * in, rename files, and invalidate the ids mid-batch.
+ *
+ * Per-mod failures are caught and counted, never rethrown: one locked VPK (game
+ * running, antivirus, our own readers) must not abort the rest of the batch. Ids
+ * not present in the current scan are skipped (the caller's renderer view may be
+ * a beat stale). No reorder pass: the randomizer enables exactly one skin per
+ * hero, and different heroes write different files, so the result has no
+ * file-collision load-order to resolve.
+ */
+export function setModsEnabledBatch(
+    deadlockPath: string,
+    payload: { enable: string[]; disable: string[] }
+): Promise<{ enabled: number; disabled: number; failures: string[] }> {
+    return runExclusiveModMutation(async () => {
+        const enable = new Set(payload.enable);
+        const disable = new Set(payload.disable);
+        let enabled = 0;
+        let disabled = 0;
+        const failures: string[] = [];
+
+        // Fail fast when the game is running and a mod we'd disable is loaded:
+        // the per-mod catch below swallows lock errors (so one stuck file can't
+        // abort the batch), which would otherwise turn a game-running shuffle
+        // into a silent no-op reported as success. Assert upfront so the
+        // standard game-running warning surfaces instead. Mirrors applyProfile.
+        const current = await scanMods(deadlockPath);
+        await syncRunningGameModSnapshotFromMods(current);
+        assertCanMoveLoadedGameMods(current.filter((m) => m.enabled && disable.has(m.id)));
+
+        for (const modId of disable) {
+            try {
+                await disableModUnlocked(deadlockPath, modId);
+                disabled++;
+            } catch (err) {
+                failures.push(`disable ${modId}: ${String(err)}`);
+                console.warn(`[randomize] disable failed (continuing): ${modId}: ${String(err)}`);
+            }
+        }
+        for (const modId of enable) {
+            try {
+                await enableModUnlocked(deadlockPath, modId);
+                enabled++;
+            } catch (err) {
+                failures.push(`enable ${modId}: ${String(err)}`);
+                console.warn(`[randomize] enable failed (continuing): ${modId}: ${String(err)}`);
+            }
+        }
+        if (failures.length > 0) {
+            console.warn(
+                `[randomize] batch completed with ${failures.length} failure(s): ${failures.join('; ')}`
+            );
+        }
+        return { enabled, disabled, failures };
+    });
+}
+
 async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
     await syncRunningGameModSnapshotFromMods(mods);

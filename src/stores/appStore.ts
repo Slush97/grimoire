@@ -4,6 +4,14 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
+import { buildHeroList } from '../lib/lockerUtils';
+import {
+  SHUFFLE_INCLUDED_KEY,
+  SHUFFLE_ON_LAUNCH_KEY,
+  planLaunchShuffle,
+  readStoredShuffleIncluded,
+  readStoredShuffleOnLaunch,
+} from '../lib/lockerRandomizer';
 
 // Cache entry with timestamp for TTL support
 interface CacheEntry<T> {
@@ -204,6 +212,14 @@ interface AppState {
   soundVolume: number;
   previewAudioPlaying: boolean;
 
+  // Skin shuffle: the user opts skins into a per-hero pool, then on each launch
+  // (via Grimoire) one chosen skin per hero is equipped at random. Master switch
+  // + the opted-in skin keys (shuffleSkinKey), both mirrored to localStorage so
+  // the Locker and the launch path share one source of truth. See
+  // src/lib/lockerRandomizer.ts.
+  shuffleOnLaunch: boolean;
+  shuffleIncluded: Set<string>;
+
   // Browse-page UI state (preserved across page nav)
   browseUi: BrowseUiState;
 
@@ -272,6 +288,10 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
+  applyModToggleBatch: (enableIds: string[], disableIds: string[]) => Promise<boolean>;
+  setShuffleOnLaunch: (enabled: boolean) => void;
+  toggleShuffleIncluded: (skinKey: string) => void;
+  runLaunchShuffle: () => Promise<void>;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
@@ -341,6 +361,8 @@ export const useAppStore = create<AppState>((set, get) => ({
   downloadCountsCache: new Map(),
   soundVolume: readPersistedSoundVolume(),
   previewAudioPlaying: false,
+  shuffleOnLaunch: readStoredShuffleOnLaunch(),
+  shuffleIncluded: readStoredShuffleIncluded(),
   browseUi: { ...DEFAULT_BROWSE_UI },
   browseSession: null,
   installedScrollTop: 0,
@@ -647,6 +669,60 @@ export const useAppStore = create<AppState>((set, get) => ({
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods();
     }
+  },
+
+  // Apply a batch of disables + enables as one atomic mutation (the launch skin
+  // shuffle). Serialized through enqueueToggle so it can't interleave with a
+  // manual toggle and operate on renamed ids. Returns false on failure so the
+  // caller can react (e.g. skip launch follow-up). Mirrors reorderMods' error
+  // handling + fresh-scan rollback.
+  applyModToggleBatch: (enableIds: string[], disableIds: string[]) => enqueueToggle(async () => {
+    if (enableIds.length === 0 && disableIds.length === 0) return true;
+    try {
+      const updated = await api.applyModToggleBatch(enableIds, disableIds);
+      set({ mods: updated });
+      return true;
+    } catch (err) {
+      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+      get().loadMods();
+      return false;
+    }
+  }),
+
+  setShuffleOnLaunch: (enabled: boolean) => {
+    try { localStorage.setItem(SHUFFLE_ON_LAUNCH_KEY, enabled ? 'true' : 'false'); } catch { /* ignore */ }
+    set({ shuffleOnLaunch: enabled });
+  },
+
+  // Add/remove a skin from the launch-shuffle pool, keyed by shuffleSkinKey so
+  // the opt-in survives the id churn enable/disable causes for local imports.
+  toggleShuffleIncluded: (skinKey: string) => {
+    const next = new Set(get().shuffleIncluded);
+    if (next.has(skinKey)) next.delete(skinKey);
+    else next.add(skinKey);
+    try { localStorage.setItem(SHUFFLE_INCLUDED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+    set({ shuffleIncluded: next });
+  },
+
+  // Re-roll skins for the launch. No-op unless the master switch is on and at
+  // least one skin is in the pool. Groups the live mod list by hero (cached
+  // categories, the same grouping the Locker shows), picks one opted-in skin per
+  // hero, and applies the whole swap as one atomic batch. Called from the
+  // Sidebar just before launchModded; failures are swallowed by
+  // applyModToggleBatch so a stuck shuffle never blocks the launch.
+  runLaunchShuffle: async () => {
+    const { shuffleOnLaunch, shuffleIncluded, mods } = get();
+    if (!shuffleOnLaunch || shuffleIncluded.size === 0) return;
+    let heroList: { id: number; name: string }[] = [];
+    try {
+      heroList = buildHeroList(await api.getGamebananaCategories('ModCategory'));
+    } catch {
+      // Offline / cache miss: grouping degrades to lockerHero + title inference.
+    }
+    const plan = planLaunchShuffle({ mods, heroList, included: shuffleIncluded });
+    if (plan.enableIds.length === 0 && plan.disableIds.length === 0) return;
+    await get().applyModToggleBatch(plan.enableIds, plan.disableIds);
   },
 
   editLocalMod: async (modId: string, args: EditLocalModArgs) => {

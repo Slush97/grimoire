@@ -11,6 +11,7 @@ import {
     setModPriority,
     reorderMods,
     swapModPriority,
+    setModsEnabledBatch,
     allocateEnabledVpkPath,
     type Mod,
 } from '../services/mods';
@@ -820,6 +821,21 @@ ipcMain.handle(
         }
         migrateIgnoredConflictKeysBeforeRenames(await scanMods(deadlockPath));
         await reorderMods(deadlockPath, orderedIds);
+        const mods = await scanMods(deadlockPath);
+        return mods.map(enrichMod);
+    }
+);
+
+// apply-mod-toggle-batch: disable a set then enable a set as one atomic
+// mutation, returning the fresh mod list. Backs the Locker skin randomizer.
+ipcMain.handle(
+    'apply-mod-toggle-batch',
+    async (_, enableIds: string[], disableIds: string[]): Promise<Mod[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        await setModsEnabledBatch(deadlockPath, { enable: enableIds, disable: disableIds });
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
     }
