@@ -30,7 +30,7 @@ import {
     type UnknownModFilterGuess,
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
-import { extractArchive, isArchive } from '../services/extract';
+import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
@@ -943,10 +943,10 @@ ipcMain.handle(
         // Resolve the list of source VPKs to import. A bare .vpk is a single
         // source; an archive is extracted to a temp dir first and every VPK it
         // contains becomes its own import (extractArchive already filters to .vpk).
-        let sourceVpks: string[];
+        let sourceVpks: ExtractedVpk[];
         let tempDir: string | undefined;
         if (isVpk) {
-            sourceVpks = [vpkPath];
+            sourceVpks = [{ path: vpkPath, fileName: basename(vpkPath) }];
         } else {
             tempDir = await fs.mkdtemp(join(tmpdir(), 'grimoire-import-'));
             try {
@@ -973,7 +973,7 @@ ipcMain.handle(
                 const destPath = await allocateEnabledVpkPath(deadlockPath);
                 const destMetaKey = metaKeyFor(destPath);
 
-                await fs.copyFile(sourceVpks[i], destPath);
+                await fs.copyFile(sourceVpks[i].path, destPath);
 
                 // Scrub any orphan metadata at this slot before writing.
                 // setModMetadata merges into the existing entry, so stale fields

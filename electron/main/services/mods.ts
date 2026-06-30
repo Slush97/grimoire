@@ -196,14 +196,18 @@ function extractModName(filename: string): string {
 export function makeDisabledFileName(
     sourceFileName: string,
     taken: Set<string>,
-    preferredName?: string
+    preferredName?: string,
+    variantHint?: string
 ): string {
     // The file's own stem, minus any pak## load-order prefix (disabled files
     // carry no slot). Empty for bare pakNN names, which is the disable case.
     let stem = sourceFileName.replace(/_dir\.vpk$/i, '').replace(/\.vpk$/i, '');
     stem = stem.replace(/^pak\d{2}_?/i, '').trim();
 
-    let base = slugify(stem) || slugify(preferredName ?? '') || 'mod';
+    // variantHint (an archive's variant folder) sits between the file's own stem
+    // and the mod name: it disambiguates sibling variants that share a bare pakNN
+    // name and a single mod name, which would otherwise collide on one slug.
+    let base = slugify(stem) || slugify(variantHint ?? '') || slugify(preferredName ?? '') || 'mod';
     // Guard against a base that still starts with "pak<digit>": parseVpkPriority
     // is lenient (it reads chars 3-4 and parseInts them), so "pak1_foo" would be
     // read back as slot 1 and loop forever below. Prefix it out of that shape.
