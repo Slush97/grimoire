@@ -2316,10 +2316,7 @@
     "renameFile": "Rename file",
     "saving": "Saving...",
     "filesEnabled": "{{enabled}} of {{total}} files enabled",
-    "openModPage": "Open the GameBanana mod page",
-    "modPage": "Mod page",
-    "disableAll": "Disable all",
-    "noFilesEnabled": "No files enabled"
+    "openModPage": "Open the GameBanana mod page"
   },
   "imageContextMenu": {
     "image": "Image",

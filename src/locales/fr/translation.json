@@ -2272,10 +2272,7 @@
     "renameFile": "Renommer le fichier",
     "saving": "Enregistrement...",
     "filesEnabled": "{{enabled}} sur {{total}} fichiers activés",
-    "openModPage": "Ouvrir la page du mod GameBanana",
-    "modPage": "Page du mod",
-    "disableAll": "Tout désactiver",
-    "noFilesEnabled": "Aucun fichier activé"
+    "openModPage": "Ouvrir la page du mod GameBanana"
   },
   "imageContextMenu": {
     "image": "Image",

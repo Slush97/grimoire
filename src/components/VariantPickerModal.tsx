@@ -23,14 +23,13 @@ import {
     X,
     Check,
     Trash2,
-    Power,
-    PowerOff,
-    Info,
     Pencil,
     ChevronUp,
     ChevronDown,
     AlertTriangle,
     Download,
+    ExternalLink,
+    Files,
 } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import { ArchivedTag, Button, CheckboxMark, Tag } from './common/ui';
@@ -53,8 +52,6 @@ interface Props {
     onMoveVariant: (target: Mod, direction: 'up' | 'down') => Promise<void> | void;
     /** Drag-drop reorder. Drops source before or after neighbor in load order. */
     onReorderVariantTo: (source: Mod, neighbor: Mod, position: DropPosition) => Promise<void> | void;
-    /** Called when the user disables every currently-enabled variant. */
-    onDisableAll: () => Promise<void> | void;
     /** Conflicts keyed by local mod id. Only in-group conflicts are passed in. */
     conflictsByVariantId?: Record<string, string[]>;
     /** Called when the user requests deletion of a single variant. */
@@ -131,7 +128,6 @@ export default function VariantPickerModal({
     onToggle,
     onMoveVariant,
     onReorderVariantTo,
-    onDisableAll,
     conflictsByVariantId = {},
     onDeleteVariant,
     onRenameVariant,
@@ -180,7 +176,6 @@ export default function VariantPickerModal({
     }, [editingId]);
 
     const enabledCount = variants.filter((v) => v.enabled).length;
-    const anyActive = enabledCount > 0;
 
     const variantDisplayName = (v: Mod) =>
         v.variantLabel ??
@@ -215,16 +210,6 @@ export default function VariantPickerModal({
         setPending(target.id);
         try {
             await onToggle(target);
-        } finally {
-            setPending(null);
-        }
-    };
-
-    const disableActive = async () => {
-        if (pending || !anyActive) return;
-        setPending('__disable__');
-        try {
-            await onDisableAll();
         } finally {
             setPending(null);
         }
@@ -554,14 +539,30 @@ export default function VariantPickerModal({
             size="none"
             panelClassName="max-w-xl"
         >
-                <div className="flex items-center justify-between p-5 border-b border-border gap-3">
-                    <div className="min-w-0">
-                        <h3 id="variant-picker-title" className="text-lg font-semibold text-text-primary truncate">
-                            {modName}
-                        </h3>
-                        <p className="text-xs text-text-secondary mt-0.5">
-                            {t('variantPicker.filesEnabled', { enabled: enabledCount, total: variants.length })}
-                        </p>
+                <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+                    <div className="flex min-w-0 items-center gap-2.5">
+                        <Files className="h-5 w-5 flex-shrink-0 text-accent" aria-hidden="true" />
+                        <div className="min-w-0">
+                            <h3 id="variant-picker-title" className="text-base font-semibold text-text-primary truncate">
+                                {onOpenModDetails ? (
+                                    <button
+                                        type="button"
+                                        onClick={onOpenModDetails}
+                                        disabled={isUpdating}
+                                        title={t('variantPicker.openModPage')}
+                                        className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-left text-text-primary transition-colors hover:text-accent disabled:cursor-default disabled:opacity-60"
+                                    >
+                                        <span className="min-w-0 truncate">{modName}</span>
+                                        <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                                    </button>
+                                ) : (
+                                    modName
+                                )}
+                            </h3>
+                            <p className="text-xs text-text-secondary">
+                                {t('variantPicker.filesEnabled', { enabled: enabledCount, total: variants.length })}
+                            </p>
+                        </div>
                     </div>
                     <div className="flex items-center gap-2 flex-shrink-0">
                         {onUpdateGroup && variantsWithUpdate && variantsWithUpdate.size > 0 && (
@@ -582,20 +583,9 @@ export default function VariantPickerModal({
                                     : `Update ${variantsWithUpdate.size}`}
                             </Button>
                         )}
-                        {onOpenModDetails && (
-                            <button
-                                onClick={onOpenModDetails}
-                                disabled={isUpdating}
-                                className="flex items-center gap-1.5 px-2.5 py-1.5 text-xs text-text-secondary hover:text-text-primary border border-border hover:border-accent/40 rounded cursor-pointer transition-colors disabled:cursor-default disabled:opacity-50"
-                                title={t('variantPicker.openModPage')}
-                            >
-                                <Info className="w-3.5 h-3.5" />
-                                {t('variantPicker.modPage')}
-                            </button>
-                        )}
                         <button
                             onClick={onClose}
-                            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
+                            className="rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
                             aria-label={t('common.actions.close')}
                         >
                             <X className="w-5 h-5" />
@@ -606,28 +596,6 @@ export default function VariantPickerModal({
                 <div className="p-3 max-h-[60vh] overflow-y-auto space-y-1.5">
                     {renderSortableVariantSection('enabled')}
                     {renderSortableVariantSection('disabled')}
-                </div>
-                <div className="flex items-center justify-between gap-3 p-5 border-t border-border">
-                    {anyActive ? (
-                        <Button
-                            variant="secondary"
-                            size="sm"
-                            icon={PowerOff}
-                            onClick={disableActive}
-                            disabled={!!pending || !!editing}
-                            isLoading={pending === '__disable__'}
-                        >
-                            {t('variantPicker.disableAll')}
-                        </Button>
-                    ) : (
-                        <span className="text-xs text-text-secondary inline-flex items-center gap-1.5">
-                            <Power className="w-3 h-3" />
-                            {t('variantPicker.noFilesEnabled')}
-                        </span>
-                    )}
-                    <Button variant="secondary" size="sm" onClick={onClose}>
-                        {t('common.actions.done')}
-                    </Button>
                 </div>
         </Modal>
     );

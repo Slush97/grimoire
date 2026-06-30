@@ -2463,10 +2463,6 @@ export default function Installed() {
     return true;
   };
 
-  const disableEntireGroup = async (group: Extract<ModEntry, { kind: 'group' }>) => {
-    await setGroupEnabled(group, false);
-  };
-
   /** Top-level toggle on a grouped card. If anything is enabled, disable the
    *  whole group; otherwise open the picker so the user can choose the files. */
   const handleGroupToggle = async (group: Extract<ModEntry, { kind: 'group' }>) => {
@@ -3987,7 +3983,6 @@ export default function Installed() {
             onReorderVariantTo={(source, neighbor, position) =>
               reorderVariantTo(source, neighbor, position)
             }
-            onDisableAll={() => disableEntireGroup(liveEntry)}
             onDeleteVariant={(variant) => deleteMod(variant.id)}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
             onOpenModDetails={
