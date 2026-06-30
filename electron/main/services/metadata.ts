@@ -205,6 +205,12 @@ export async function setModMetadataWithHash(
     });
 }
 
+export function normalizeSha256(value: string | undefined): string | null {
+    return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value)
+        ? value.toLowerCase()
+        : null;
+}
+
 /**
  * Backfill SHA-256 values for metadata written before hashes existed.
  * This runs without renaming/moving files; entries whose VPK no longer exists
@@ -257,7 +263,7 @@ async function collectInstalledVpkPaths(deadlockPath: string): Promise<Map<strin
 }
 
 function isValidSha256(value: string | undefined): boolean {
-    return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
+    return normalizeSha256(value) !== null;
 }
 
 async function hashFileSha256(filePath: string): Promise<string> {

@@ -7,6 +7,8 @@ import {
   Loader2,
   Download,
   Eye,
+  EyeClosed,
+  EyeOff,
   ThumbsUp,
   X,
   Volume2,
@@ -81,13 +83,14 @@ import {
   useAppStore,
 } from '../stores/appStore';
 import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
+import type { BrowseNsfwContentMode } from '../types/mod';
 import ModThumbnail from '../components/ModThumbnail';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
-import { Button, IconButton, SegmentedControl, Tag } from '../components/common/ui';
+import { Button, IconButton, Tag } from '../components/common/ui';
 import { Select } from '../components/common/forms';
 import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
@@ -332,7 +335,9 @@ function clampBrowseCardSizeMultiplier(value: number): number {
 }
 
 function readBrowseCardSizeMultiplier(): number {
-  const stored = Number(localStorage.getItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY));
+  const raw = localStorage.getItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY);
+  if (raw == null || raw === '') return BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
+  const stored = Number(raw);
   return Number.isFinite(stored) ? clampBrowseCardSizeMultiplier(stored) : BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
 }
 
@@ -1007,10 +1012,72 @@ function renderErrorWithLinks(text: string): React.ReactNode {
   });
 }
 
+function BrowseViewOptionControl<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  value: T;
+  options: readonly { value: T; label: React.ReactNode; icon?: LucideIcon }[];
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const move = (from: number, dir: -1 | 1) => {
+    if (disabled) return;
+    const next = (from + dir + options.length) % options.length;
+    onChange(options[next].value);
+    refs.current[next]?.focus();
+  };
+
+  return (
+    <div className="flex items-center rounded-lg border border-border bg-bg-secondary p-[3px]" role="tablist" aria-label={label}>
+      {options.map((option, i) => {
+        const Icon = option.icon;
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            ref={(el) => { refs.current[i] = el; }}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            disabled={disabled}
+            onClick={() => !disabled && onChange(option.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                move(i, 1);
+              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                move(i, -1);
+              }
+            }}
+            className={`flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${
+              active
+                ? 'bg-bg-tertiary text-text-primary'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
+            <span className="min-w-0 translate-y-px truncate">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Browse() {
   const { t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
   const loadSettings = useAppStore((s) => s.loadSettings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
   const loadMods = useAppStore((s) => s.loadMods);
   const deleteMod = useAppStore((s) => s.deleteMod);
   const installedMods = useAppStore((s) => s.mods);
@@ -1052,6 +1119,18 @@ export default function Browse() {
     setBrowseCardSizeMultiplierState(clampedMultiplier);
     localStorage.setItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY, String(clampedMultiplier));
   }, []);
+  const browseNsfwContentMode: BrowseNsfwContentMode =
+    settings?.browseNsfwContentMode ??
+    (settings?.hideNsfwPreviews === false ? 'show' : 'blur');
+  const browseBlurNsfwPreviews = browseNsfwContentMode === 'blur';
+  const setBrowseNsfwContentMode = useCallback((mode: BrowseNsfwContentMode) => {
+    if (!settings) return;
+    void saveSettings({ ...settings, browseNsfwContentMode: mode });
+  }, [saveSettings, settings]);
+  const setBrowseHideOutdated = useCallback((checked: boolean) => {
+    if (!settings) return;
+    void saveSettings({ ...settings, hideOutdatedMods: checked });
+  }, [saveSettings, settings]);
   // Hydrate from session cache on mount so navigating away + back doesn't
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
@@ -1250,7 +1329,7 @@ export default function Browse() {
     if (sidebarCloseTimerRef.current !== null) window.clearTimeout(sidebarCloseTimerRef.current);
   }, []);
 
-  // Load settings on mount (needed for hideNsfwPreviews)
+  // Load settings on mount for Browse content preferences.
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
@@ -2557,6 +2636,9 @@ export default function Browse() {
     if (section === 'Sound' && heroCategoryId === 'none') {
       nextMods = nextMods.filter((m) => inferHeroFromTitle(m.name) === null);
     }
+    if (browseNsfwContentMode === 'hide') {
+      nextMods = nextMods.filter((m) => !m.nsfw);
+    }
     // The NSFW filter is only enforced server-side by the local-search path.
     // The remote paths (artist mode, and the no-local-cache fallback) return
     // unfiltered records, so enforce it here too. Local results already match,
@@ -2568,7 +2650,7 @@ export default function Browse() {
     }
 
     return nextMods;
-  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, nsfw]);
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, browseNsfwContentMode, nsfw]);
   const selectedModIndex = selectedMod
     ? displayMods.findIndex((mod) => mod.id === selectedMod.id)
     : -1;
@@ -2748,7 +2830,7 @@ export default function Browse() {
         queuedFileIds={selectedQueuedFileIds}
         extracting={extracting}
         progress={downloadProgress}
-        hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+        hideNsfwPreviews={browseBlurNsfwPreviews}
         dateAdded={selectedModDates?.dateAdded}
         dateModified={selectedModDates?.dateModified}
         isNavigating={!!modalNavigation}
@@ -3007,14 +3089,13 @@ export default function Browse() {
                   <div className="space-y-4">
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                      <SegmentedControl<BrowseLayout>
-                        fill
+                      <BrowseViewOptionControl<BrowseLayout>
                         label={t('browse.viewOptions.layout')}
                         value={layout}
                         onChange={setLayout}
                         options={[
-                          { value: 'grid', label: <><LayoutGrid className="h-4 w-4" />{t('browse.viewOptions.grid')}</> },
-                          { value: 'list', label: <><List className="h-4 w-4" />{t('browse.viewOptions.list')}</> },
+                          { value: 'grid', label: t('browse.viewOptions.grid'), icon: LayoutGrid },
+                          { value: 'list', label: t('browse.viewOptions.list'), icon: List },
                         ]}
                       />
                     </div>
@@ -3047,8 +3128,7 @@ export default function Browse() {
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
-                      <SegmentedControl<BrowseCardDesign>
-                        fill
+                      <BrowseViewOptionControl<BrowseCardDesign>
                         disabled={layout === 'list'}
                         label={t('browse.viewOptions.cardDesign')}
                         value={browseCardDesign}
@@ -3062,14 +3142,40 @@ export default function Browse() {
 
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
-                      <SegmentedControl<BrowseDetailsView>
-                        fill
+                      <BrowseViewOptionControl<BrowseDetailsView>
                         label={t('browse.viewOptions.modDetailsView')}
                         value={browseDetailsView}
                         onChange={setBrowseDetailsView}
                         options={[
-                          { value: 'modal', label: <><Maximize2 className="h-3.5 w-3.5" />{t('browse.detailsView.window')}</> },
-                          { value: 'sidebar', label: <><PanelRight className="h-3.5 w-3.5" />{t('browse.detailsView.sidebar')}</> },
+                          { value: 'modal', label: t('browse.detailsView.window'), icon: Maximize2 },
+                          { value: 'sidebar', label: t('browse.detailsView.sidebar'), icon: PanelRight },
+                        ]}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.nsfwContent')}</div>
+                      <BrowseViewOptionControl<BrowseNsfwContentMode>
+                        label={t('browse.viewOptions.nsfwContent')}
+                        value={browseNsfwContentMode}
+                        onChange={setBrowseNsfwContentMode}
+                        options={[
+                          { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                          { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
+                          { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                        ]}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.outdatedContent')}</div>
+                      <BrowseViewOptionControl<'show' | 'hide'>
+                        label={t('browse.viewOptions.outdatedContent')}
+                        value={(settings?.hideOutdatedMods ?? false) ? 'hide' : 'show'}
+                        onChange={(mode) => setBrowseHideOutdated(mode === 'hide')}
+                        options={[
+                          { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                          { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
                         ]}
                       />
                     </div>
@@ -3426,7 +3532,7 @@ export default function Browse() {
                             section={section}
                             volume={soundVolume}
                             onVolumeChange={setSoundVolume}
-                            hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+                            hideNsfwPreviews={browseBlurNsfwPreviews}
                             isPlaying={playingModId === mod.id}
                             suppressHoverIntentRef={isBrowseScrollingRef}
                             enableModId={installedLocal && !installedLocal.enabled ? installedLocal.id : undefined}
@@ -3501,7 +3607,7 @@ export default function Browse() {
 
       {collectionModalOpen && (
         <ImportCollectionModal
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={browseBlurNsfwPreviews}
           installedIds={installedIds}
           queuedIds={queuedModIds}
           activeDeadlockPath={activeDeadlockPath}
@@ -3512,7 +3618,7 @@ export default function Browse() {
       {importProfileOpen && (
         <ImportProfileDialog
           activeDeadlockPath={activeDeadlockPath}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={browseBlurNsfwPreviews}
           onClose={() => setImportProfileOpen(false)}
           onImported={() => { void loadMods(); }}
         />

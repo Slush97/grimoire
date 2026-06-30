@@ -182,8 +182,14 @@ export default function VariantPickerModal({
     const enabledCount = variants.filter((v) => v.enabled).length;
     const anyActive = enabledCount > 0;
 
+    const variantDisplayName = (v: Mod) =>
+        v.variantLabel ??
+        v.fileDescription ??
+        v.sourceFileName ??
+        v.fileName;
+
     const startRename = (v: Mod) => {
-        setEditing({ id: v.id, draft: v.variantLabel ?? '' });
+        setEditing({ id: v.id, draft: variantDisplayName(v) });
     };
 
     const cancelRename = () => setEditing(null);
@@ -191,7 +197,7 @@ export default function VariantPickerModal({
     const commitRename = async (v: Mod) => {
         if (!editing || editing.id !== v.id || pending) return;
         const next = editing.draft.trim();
-        if (next === (v.variantLabel ?? '')) {
+        if (next === variantDisplayName(v)) {
             setEditing(null);
             return;
         }
@@ -301,11 +307,7 @@ export default function VariantPickerModal({
         const isMoveDownPending = pending === `move:${v.id}:down`;
         const hasUpdate = variantsWithUpdate?.has(v.id) ?? false;
         const conflictDetails = conflictsByVariantId[v.id] ?? [];
-        const primaryTitle =
-            v.variantLabel ??
-            v.fileDescription ??
-            v.sourceFileName ??
-            v.fileName;
+        const primaryTitle = variantDisplayName(v);
         const showSecondaryFileName =
             !!v.variantLabel || !!v.fileDescription || !!v.sourceFileName;
 

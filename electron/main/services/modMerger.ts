@@ -18,6 +18,11 @@ import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { fingerprintFile } from './fileMatch';
 import { encodeShareCode } from './portableProfile';
 import {
+    assertCanMoveLoadedGameMod,
+    assertCanMoveLoadedGameMods,
+    syncRunningGameModSnapshotFromMods,
+} from './gameSessionMods';
+import {
     PORTABLE_PROFILE_FORMAT,
     PORTABLE_PROFILE_SCHEMA_VERSION,
     type PortableProfile,
@@ -323,6 +328,7 @@ async function mergeModsLocked(
     trimmedName: string
 ): Promise<MergeResult> {
     const installed = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(installed);
     const sources: Mod[] = [];
     for (const id of modIds) {
         const found = installed.find((m) => m.id === id);
@@ -335,6 +341,7 @@ async function mergeModsLocked(
         }
         sources.push(found);
     }
+    assertCanMoveLoadedGameMods(sources.filter((source) => source.enabled));
 
     // In Deadlock a LOWER pakNN wins a file collision (pak09 overrides pak10),
     // so the lowest-pakNN source is the highest priority. vpkmerge is
@@ -586,6 +593,7 @@ async function unmergeModLocked(
     mergedModId: string
 ): Promise<UnmergeModResult> {
     const installed = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(installed);
     const target = installed.find((m) => m.id === mergedModId);
     if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
 
@@ -593,6 +601,7 @@ async function unmergeModLocked(
     if (!meta?.merged) {
         throw new Error(`"${meta?.modName || target.name}" is not a merged mod.`);
     }
+    assertCanMoveLoadedGameMod(target);
     const manifest = meta.merged;
 
     // Recover each source from disk via the shared locator (disabled folder by
@@ -651,6 +660,7 @@ async function extractMergeSourceLocked(
     sourceFileName: string
 ): Promise<ExtractMergeSourceResult> {
     const installed = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(installed);
     const target = installed.find((m) => m.id === mergedModId);
     if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
 
@@ -658,6 +668,7 @@ async function extractMergeSourceLocked(
     if (!meta?.merged) {
         throw new Error(`"${meta?.modName || target.name}" is not a merged mod.`);
     }
+    assertCanMoveLoadedGameMod(target);
     const manifest = meta.merged;
 
     const removedSnapshot = manifest.sources.find((s) => s.fileName === sourceFileName);

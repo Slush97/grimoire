@@ -274,21 +274,15 @@ export default function Settings() {
     return () => document.removeEventListener('keydown', onKey);
   }, [customPickerOpen, commitCustomDraft]);
 
-  const handleHideNsfwChange = async (checked: boolean) => {
-    if (settings) {
-      await saveSettings({ ...settings, hideNsfwPreviews: checked });
-    }
-  };
-
-  const handleHideOutdatedChange = async (checked: boolean) => {
-    if (settings) {
-      await saveSettings({ ...settings, hideOutdatedMods: checked });
-    }
-  };
-
   const handleLockerCardsExpandedByDefaultChange = async (checked: boolean) => {
     if (settings) {
       await saveSettings({ ...settings, lockerCardsExpandedByDefault: checked });
+    }
+  };
+
+  const handleInstalledHideNsfwChange = async (checked: boolean) => {
+    if (settings) {
+      await saveSettings({ ...settings, installedHideNsfwPreviews: checked });
     }
   };
 
@@ -1047,19 +1041,10 @@ export default function Settings() {
         <Card title={<Tx k="settings.sections.preferences" fallback="Preferences" />} icon={Shield}>
           <div className="space-y-6">
             <Toggle
-              checked={settings?.hideNsfwPreviews ?? true}
-              onChange={handleHideNsfwChange}
-              label={<Tx k="settings.preferences.hideNsfw" fallback="Hide NSFW Content" />}
-              description={<Tx k="settings.preferences.hideNsfwDescription" fallback="Blur thumbnail images for mods marked as NSFW." />}
-            />
-
-            <div className="h-px bg-white/5" />
-
-            <Toggle
-              checked={settings?.hideOutdatedMods ?? false}
-              onChange={handleHideOutdatedChange}
-              label={<Tx k="settings.preferences.hideOutdated" fallback="Hide Outdated Mods" />}
-              description={<Tx k="settings.toggles.hideOutdated" fallback="Hide Browse mods older than the current game version." />}
+              checked={settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true}
+              onChange={handleInstalledHideNsfwChange}
+              label={<Tx k="settings.preferences.blurInstalledNsfw" fallback="Blur Installed NSFW Content" />}
+              description={<Tx k="settings.preferences.blurInstalledNsfwDescription" fallback="Blur thumbnail images for installed mods marked as NSFW." />}
             />
 
             <div className="h-px bg-white/5" />

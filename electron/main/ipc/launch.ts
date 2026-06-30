@@ -14,6 +14,14 @@ import {
 import { readLaunchOptions, isSteamRunning } from '../services/launchOptions';
 import { healLockerVpks } from '../services/lockerVpk';
 import { getMainWindow } from '../index';
+import { scanMods } from '../services/mods';
+import {
+    captureEmptyGameMods,
+    captureLoadedGameMods,
+    clearLoadedGameMods,
+    hasRunningGameModSnapshot,
+    syncKnownRunningGameModSnapshot,
+} from '../services/gameSessionMods';
 
 function emitRestore(result: RestoreResult): void {
     const win = getMainWindow();
@@ -25,7 +33,16 @@ ipcMain.handle('launch-modded', async (): Promise<void> => {
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    await launchModded({ deadlockPath, onRestoreComplete: emitRestore });
+    try {
+        await launchModded({
+            deadlockPath,
+            onRestoreComplete: emitRestore,
+            beforeLaunch: async () => captureLoadedGameMods(await scanMods(deadlockPath)),
+        });
+    } catch (err) {
+        clearLoadedGameMods();
+        throw err;
+    }
 });
 
 ipcMain.handle('launch-vanilla', async (): Promise<void> => {
@@ -33,17 +50,40 @@ ipcMain.handle('launch-vanilla', async (): Promise<void> => {
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    await launchVanilla({ deadlockPath, onRestoreComplete: emitRestore });
+    try {
+        await launchVanilla({
+            deadlockPath,
+            onRestoreComplete: emitRestore,
+            beforeLaunch: captureEmptyGameMods,
+        });
+    } catch (err) {
+        clearLoadedGameMods();
+        throw err;
+    }
 });
 
 ipcMain.handle('get-game-running-status', async (): Promise<{ running: boolean }> => {
-    return { running: await isDeadlockRunning() };
+    const running = await isDeadlockRunning();
+    if (!running) {
+        clearLoadedGameMods();
+        return { running: false };
+    }
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        return { running: true };
+    }
+    const mods = hasRunningGameModSnapshot() ? [] : await scanMods(deadlockPath);
+    syncKnownRunningGameModSnapshot(true, mods);
+    return { running: true };
 });
 
 ipcMain.handle('stop-game', async (): Promise<StopDeadlockResult & {
     restoreResult?: RestoreResult;
 }> => {
     const stopResult = await stopDeadlockGame();
+    if (stopResult.stopped) {
+        clearLoadedGameMods();
+    }
     const deadlockPath = getActiveDeadlockPath();
     const stash = await readStash();
 

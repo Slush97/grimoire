@@ -884,7 +884,7 @@ export interface ElectronAPI {
     /** Read the player's live in-game crosshair from machine_convars.vcfg.
      *  settings is null when the file is missing or has no crosshair convars. */
     importCrosshairFromGame: (gamePath: string) => Promise<{ found: boolean; settings: CrosshairSettings | null }>;
-    getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
+    getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; manualCommands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 
     // Updater

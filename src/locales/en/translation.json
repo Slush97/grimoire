@@ -220,6 +220,7 @@
     "commands": {
       "emptyTitle": "No commands added",
       "emptyDescription": "Select from presets on the left",
+      "manualTooltip": "This command was already in autoexec.cfg and is shown read-only.",
       "title_one": "Your Commands ({{count}})",
       "title_other": "Your Commands ({{count}})"
     },
@@ -242,6 +243,8 @@
       "title": "Launch Options"
     },
     "presets": {
+      "title": "Premade Commands",
+      "toggle": "Toggle premade commands",
       "performance": {
         "category": "Performance",
         "uncapFps": {
@@ -289,6 +292,10 @@
         "disablePostMatchSurvey": {
           "name": "Disable Post-Match Survey",
           "description": "Skip the survey after matches"
+        },
+        "offscreenDamageIndicator": {
+          "name": "Offscreen Damage Indicators",
+          "description": "Show minion indicators through walls when a teammate sees a droid"
         }
       },
       "minimap": {
@@ -304,6 +311,10 @@
         "largerPlayerIcons": {
           "name": "Larger Player Icons",
           "description": "Bigger player icons on minimap"
+        },
+        "largerLocalPlayerIcon": {
+          "name": "Larger Local Player Icon",
+          "description": "Make your own minimap icon larger"
         },
         "thickerZiplines": {
           "name": "Thicker Ziplines",
@@ -727,6 +738,8 @@
       "hideNsfw": "Hide NSFW Content",
       "hideNsfwDescription": "Blur thumbnail images for mods marked as NSFW.",
       "hideOutdated": "Hide Outdated Mods",
+      "blurInstalledNsfw": "Blur Installed NSFW Content",
+      "blurInstalledNsfwDescription": "Blur thumbnail images for installed mods marked as NSFW.",
       "expandLocker": "Expand Locker cards by default",
       "switchVariants": "Switch variants instead of stacking them",
       "enableAfterDownload": "Enable mods after download",
@@ -2110,7 +2123,12 @@
       "cardStyle": "Card style",
       "cardDesign": "Browse card design",
       "detailsView": "Details view",
-      "modDetailsView": "Mod details view"
+      "modDetailsView": "Mod details view",
+      "nsfwContent": "NSFW Content",
+      "outdatedContent": "Outdated Content",
+      "show": "Show",
+      "blur": "Blur",
+      "hide": "Hide"
     },
     "cardStyle": {
       "default": "Default",
