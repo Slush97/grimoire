@@ -914,7 +914,8 @@
       "local": "Local",
       "status": "Statut",
       "enabled": "Activé",
-      "modType": "Type de mod"
+      "hero": "Héros",
+      "tags": "Tags"
     },
     "sections": {
       "enabled_one": "Activé",

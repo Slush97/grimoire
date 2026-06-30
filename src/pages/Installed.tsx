@@ -89,6 +89,7 @@ import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { Button, IconButton, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
+import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -342,28 +343,40 @@ function entryIsLocal(entry: ModEntry): boolean {
   return entry.kind === 'single' && typeof entry.mod.gameBananaId !== 'number';
 }
 
-const OTHER_TYPE_KEY = 'other';
+const OTHER_TAG_KEY = 'other';
 
-/** Coarse "mod type" bucket for the Installed type filter, derived entirely
- *  from already-classified metadata. Precedence: a global cosmetic type, then
- *  sounds, then the GameBanana category/section, then a catch-all. The key is
- *  opaque; typeKeyLabel turns it into display text. */
-function entryTypeKey(entry: ModEntry): string {
-  const mod = entryPrimaryMod(entry);
-  const global = getEffectiveGlobalType(mod);
-  if (global) return `global:${global}`;
-  const section = (mod.sourceSection ?? '').toLowerCase();
-  if (section.includes('sound')) return 'sound';
-  const category = mod.categoryName?.trim();
-  if (category) return `cat:${category}`;
-  const rawSection = mod.sourceSection?.trim();
-  if (rawSection) return `section:${rawSection}`;
-  return OTHER_TYPE_KEY;
+function heroNameFromTag(label?: string): string | null {
+  if (!label) return null;
+  const direct = heroNameForLabel(label);
+  if (direct) return canonicalHeroName(direct);
+  for (const part of label.split(/[/>]/).map((p) => p.trim()).filter(Boolean).reverse()) {
+    const match = heroNameForLabel(part);
+    if (match) return canonicalHeroName(match);
+  }
+  return null;
 }
 
-function typeKeyLabel(key: string): string {
-  if (key === OTHER_TYPE_KEY) return 'Other';
-  if (key === 'sound') return 'Sounds';
+function modHeroName(mod: Mod): string | null {
+  const tagged = canonicalHeroName(mod.lockerHero);
+  if (tagged) return tagged;
+  const categoryHero = heroNameFromTag(mod.categoryName);
+  if (categoryHero) return categoryHero;
+  const section = (mod.sourceSection ?? '').toLowerCase();
+  if (section.includes('sound')) {
+    const inferred = inferHeroFromTitle(mod.name);
+    return inferred ? canonicalHeroName(inferred) : null;
+  }
+  return null;
+}
+
+function entryHeroNames(entry: ModEntry): string[] {
+  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
+  return Array.from(new Set(mods.map(modHeroName).filter((name): name is string => !!name)));
+}
+
+function tagKeyLabel(key: string): string {
+  if (key === OTHER_TAG_KEY) return 'Other';
+  if (key === 'section:sound') return 'Sounds';
   if (key.startsWith('global:')) {
     const gt = key.slice('global:'.length) as GlobalModType;
     return GLOBAL_MOD_TYPE_LABELS[gt] ?? gt;
@@ -371,6 +384,35 @@ function typeKeyLabel(key: string): string {
   if (key.startsWith('cat:')) return key.slice('cat:'.length);
   if (key.startsWith('section:')) return key.slice('section:'.length);
   return key;
+}
+
+function modTagKeys(mod: Mod): string[] {
+  const keys: string[] = [];
+  const labels = new Set<string>();
+  const add = (key: string) => {
+    const labelKey = tagKeyLabel(key).trim().toLowerCase();
+    if (!labelKey || labels.has(labelKey)) return;
+    labels.add(labelKey);
+    keys.push(key);
+  };
+
+  const global = getEffectiveGlobalType(mod);
+  if (global) add(`global:${global}`);
+
+  const section = (mod.sourceSection ?? '').trim();
+  if (section.toLowerCase().includes('sound')) add('section:sound');
+
+  const category = mod.categoryName?.trim();
+  if (category && !heroNameFromTag(category)) add(`cat:${category}`);
+
+  if (keys.length === 0 && section && section !== 'Mod') add(`section:${section}`);
+  if (keys.length === 0) add(OTHER_TAG_KEY);
+  return keys;
+}
+
+function entryTagKeys(entry: ModEntry): string[] {
+  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
+  return Array.from(new Set(mods.flatMap(modTagKeys)));
 }
 
 function flattenEntries(entries: ModEntry[]): Mod[] {
@@ -818,8 +860,8 @@ export default function Installed() {
   }, [refreshLockerOverrideCount]);
   const [search, setSearch] = useState('');
   // Sort + filter popover (the SlidersHorizontal button in the top bar). Sort
-  // and source persist across launches; the type selection is library-specific
-  // so it resets per session. A non-default sort or any active filter turns the
+  // and source persist across launches; hero/tag selections are library-specific
+  // so they reset per session. A non-default sort or any active filter turns the
   // list into a read-only view (see viewIsReorderable) because the displayed
   // order no longer maps to load-order priority.
   const [filterOpen, setFilterOpen] = useState(false);
@@ -845,7 +887,8 @@ export default function Installed() {
     return ['gamebanana', 'local'];
   });
   const [statusSel, setStatusSel] = useState<('enabled' | 'disabled')[]>(['enabled', 'disabled']);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [heroFilter, setHeroFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const installedHideNsfwPreviews =
     settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true;
   useEffect(() => {
@@ -2866,19 +2909,26 @@ export default function Installed() {
         progress: unknownDetectionProgress[unknownFilterGuess.mod.id],
       }
     : null;
-  // Mod-type buckets present across every installed entry, with counts. Built
-  // from allEntries (not the filtered view) so the option list stays stable as
-  // selections change.
-  const typeOptionMap = new Map<string, number>();
+  // Hero and tag buckets are built from allEntries (not the filtered view) so
+  // the option lists stay stable as selections change.
+  const heroOptionMap = new Map<string, number>();
+  const tagOptionMap = new Map<string, number>();
   for (const entry of allEntries) {
-    const key = entryTypeKey(entry);
-    typeOptionMap.set(key, (typeOptionMap.get(key) ?? 0) + 1);
+    for (const heroName of entryHeroNames(entry)) {
+      heroOptionMap.set(heroName, (heroOptionMap.get(heroName) ?? 0) + 1);
+    }
+    for (const key of entryTagKeys(entry)) {
+      tagOptionMap.set(key, (tagOptionMap.get(key) ?? 0) + 1);
+    }
   }
-  const typeOptions = Array.from(typeOptionMap.entries())
-    .map(([key, count]) => ({ key, label: typeKeyLabel(key), count }))
+  const heroOptions = HERO_NAMES_SORTED
+    .filter((name) => heroOptionMap.has(name))
+    .map((name) => ({ name, count: heroOptionMap.get(name) ?? 0 }));
+  const tagOptions = Array.from(tagOptionMap.entries())
+    .map(([key, count]) => ({ key, label: tagKeyLabel(key), count }))
     .sort((a, b) => {
-      if (a.key === OTHER_TYPE_KEY) return 1;
-      if (b.key === OTHER_TYPE_KEY) return -1;
+      if (a.key === OTHER_TAG_KEY) return 1;
+      if (b.key === OTHER_TAG_KEY) return -1;
       return a.label.localeCompare(b.label);
     });
   const localCount = allEntries.filter(entryIsLocal).length;
@@ -2898,20 +2948,22 @@ export default function Installed() {
   const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
 
   // Filter by search query (substring on name), source (GameBanana vs local
-  // import), and mod type, then optionally re-sort. Status (enabled/disabled) is
-  // applied per-section below. Drag-and-drop reorder is disabled whenever any of
-  // these is active (see viewIsReorderable) because the displayed order no longer
-  // maps to load-order priority; the canonical priority order lives on
+  // import), hero, and tags, then optionally re-sort. Status (enabled/disabled)
+  // is applied per-section below. Drag-and-drop reorder is disabled whenever any
+  // of these is active (see viewIsReorderable) because the displayed order no
+  // longer maps to load-order priority; the canonical priority order lives on
   // enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
   const matchesSearchEntry = (entry: ModEntry) =>
     !searchNeedle || entrySearchText(entry).toLowerCase().includes(searchNeedle);
   const matchesSourceEntry = (entry: ModEntry) =>
     entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
-  const matchesTypeEntry = (entry: ModEntry) =>
-    typeFilter.length === 0 || typeFilter.includes(entryTypeKey(entry));
+  const matchesHeroEntry = (entry: ModEntry) =>
+    heroFilter === 'all' || entryHeroNames(entry).includes(heroFilter);
+  const matchesTagEntry = (entry: ModEntry) =>
+    tagFilter.length === 0 || entryTagKeys(entry).some((key) => tagFilter.includes(key));
   const matchesAllFilters = (entry: ModEntry) =>
-    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesTypeEntry(entry);
+    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesHeroEntry(entry) && matchesTagEntry(entry);
   const sortEntries = (entries: ModEntry[]): ModEntry[] => {
     if (sortMode === 'name') {
       return [...entries].sort((a, b) =>
@@ -2926,11 +2978,12 @@ export default function Installed() {
   // Both toggles on (length 2) = no filtering on that axis.
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
-  const filtersActive = sourceActive || statusActive || typeFilter.length > 0;
+  const heroActive = heroFilter !== 'all';
+  const filtersActive = sourceActive || statusActive || heroActive || tagFilter.length > 0;
   const sortActive = sortMode !== 'priority';
   const viewIsReorderable = !searchNeedle && !filtersActive && !sortActive;
   const activeAdjustmentCount =
-    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + typeFilter.length + (sortActive ? 1 : 0);
+    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + (heroActive ? 1 : 0) + tagFilter.length + (sortActive ? 1 : 0);
   const visibleEnabled = statusSel.includes('enabled')
     ? sortEntries(enabledEntries.filter(matchesAllFilters))
     : [];
@@ -3367,7 +3420,7 @@ export default function Installed() {
                 claiming a second strip below the search. */}
             {topStatusActions}
             {/* Sort + filter: load order / recent / name, GameBanana vs local
-                import, and mod-type buckets. The badge counts active
+                import, hero, and metadata tags. The badge counts active
                 adjustments; while any are on, the list is read-only (no drag
                 reorder) so it can't be mistaken for load order. order-last keeps
                 it grouped with card size and layout controls at the row end. */}
@@ -3480,16 +3533,49 @@ export default function Installed() {
                     </div>
                   </div>
 
-                  {typeOptions.length > 1 && (
+                  {heroOptions.length > 0 && (
                     <div className="mt-3 border-t border-border pt-3">
                       <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                          {t('installed.filters.modType')}
+                          {t('installed.filters.hero')}
                         </span>
-                        {typeFilter.length > 0 && (
+                        {heroFilter !== 'all' && (
                           <button
                             type="button"
-                            onClick={() => setTypeFilter([])}
+                            onClick={() => setHeroFilter('all')}
+                            className="text-[11px] text-accent hover:underline cursor-pointer"
+                          >
+                            {t('common.actions.clear')}
+                          </button>
+                        )}
+                      </div>
+                      <HeroSelect
+                        ariaLabel="Filter by hero"
+                        value={heroFilter}
+                        onChange={setHeroFilter}
+                        size="sm"
+                        options={[
+                          { value: 'all', label: t('browse.filters.allHeroes'), muted: true },
+                          ...heroOptions.map((hero) => ({
+                            value: hero.name,
+                            label: `${hero.name} (${hero.count})`,
+                            heroName: hero.name,
+                          })),
+                        ]}
+                      />
+                    </div>
+                  )}
+
+                  {tagOptions.length > 1 && (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                          {t('installed.filters.tags')}
+                        </span>
+                        {tagFilter.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setTagFilter([])}
                             className="text-[11px] text-accent hover:underline cursor-pointer"
                           >
                             {t('common.actions.clear')}
@@ -3497,15 +3583,14 @@ export default function Installed() {
                         )}
                       </div>
                       <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                        {typeOptions.map((opt) => {
-                          const checked = typeFilter.includes(opt.key);
-                          const hero = heroNameForLabel(opt.label);
+                        {tagOptions.map((opt) => {
+                          const checked = tagFilter.includes(opt.key);
                           return (
                             <button
                               key={opt.key}
                               type="button"
                               onClick={() =>
-                                setTypeFilter((prev) =>
+                                setTagFilter((prev) =>
                                   checked ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
                                 )
                               }
@@ -3518,15 +3603,6 @@ export default function Installed() {
                               >
                                 {checked && <Check className="h-3 w-3" />}
                               </span>
-                              {hero && (
-                                <img
-                                  src={getHeroChipIconPath(hero)}
-                                  alt=""
-                                  aria-hidden="true"
-                                  className="h-4 w-4 flex-shrink-0 rounded-full object-cover"
-                                  loading="lazy"
-                                />
-                              )}
                               <span className="flex-1 truncate">{opt.label}</span>
                               <span className="text-[11px] opacity-60">{opt.count}</span>
                             </button>
@@ -3543,7 +3619,8 @@ export default function Installed() {
                         setSortMode('priority');
                         setSourceSel(['gamebanana', 'local']);
                         setStatusSel(['enabled', 'disabled']);
-                        setTypeFilter([]);
+                        setHeroFilter('all');
+                        setTagFilter([]);
                       }}
                       className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
                     >
@@ -3691,7 +3768,8 @@ export default function Installed() {
               setSearch('');
               setSourceSel(['gamebanana', 'local']);
               setStatusSel(['enabled', 'disabled']);
-              setTypeFilter([]);
+              setHeroFilter('all');
+              setTagFilter([]);
             }}
           >
             {searchNeedle ? t('installed.filters.clearSearch') : t('installed.filters.clearFilters')}
