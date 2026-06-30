@@ -15,8 +15,13 @@ export interface AutoexecData {
 }
 
 function getExecutableAutoexecLine(line: string): string {
-    const commentIndex = line.indexOf('//');
-    return (commentIndex >= 0 ? line.slice(0, commentIndex) : line).trim();
+    // A line comment starts at the first // that begins the line or follows
+    // whitespace. A // inside a token (e.g. a URL in an echo) is left intact.
+    const match = /(^|\s)\/\//.exec(line);
+    if (match) {
+        return line.slice(0, match.index + match[1].length).trim();
+    }
+    return line.trim();
 }
 
 export function getManualAutoexecCommands(data: AutoexecData): string[] {

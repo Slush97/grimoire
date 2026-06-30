@@ -102,11 +102,15 @@ function dedupeEnabledForProfile<T extends { metaKey: string; fileName: string; 
         const gbId = meta?.gameBananaId;
         const fileId = meta?.gameBananaFileId;
         const sha256 = normalizeSha256(meta?.sha256);
-        if (typeof gbId !== 'number' || typeof fileId !== 'number' || sha256 === null) {
+        if (typeof gbId !== 'number' || typeof fileId !== 'number') {
             out.push(mod);
             continue;
         }
-        const key = `${gbId}:${fileId}:${sha256}`;
+        // sha256 is only a tiebreaker. When it's missing (legacy or not-yet
+        // backfilled metadata) we must still dedupe on gbId:fileId, or the same
+        // physical mod can land in a profile at two priorities (the duplicate
+        // load-order corruption this guard exists to prevent).
+        const key = sha256 !== null ? `${gbId}:${fileId}:${sha256}` : `${gbId}:${fileId}`;
         const existing = byGbFileAndHash.get(key);
         if (!existing) {
             byGbFileAndHash.set(key, mod);
