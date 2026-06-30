@@ -170,6 +170,53 @@ function modEntryKey(mod: Mod): string {
   return `single:local:${mod.name}:${mod.size}`;
 }
 
+type EnabledVpkRestoreSnapshot = {
+  hadEnabled: boolean;
+  enabledIndexes: Set<number>;
+  enabledUnindexed: boolean;
+};
+
+function getVpkIndex(mod: Pick<Mod, 'vpkIndex'>): number | undefined {
+  return typeof mod.vpkIndex === 'number' && Number.isInteger(mod.vpkIndex) && mod.vpkIndex >= 0
+    ? mod.vpkIndex
+    : undefined;
+}
+
+function createEnabledVpkRestoreSnapshot(
+  targets: Array<{ enabled: boolean; vpkIndex?: number }>
+): EnabledVpkRestoreSnapshot {
+  const enabledIndexes = new Set<number>();
+  let enabledUnindexed = false;
+  for (const target of targets) {
+    if (!target.enabled) continue;
+    const index = getVpkIndex(target);
+    if (index === undefined) {
+      enabledUnindexed = true;
+    } else {
+      enabledIndexes.add(index);
+    }
+  }
+  return {
+    hadEnabled: enabledUnindexed || enabledIndexes.size > 0,
+    enabledIndexes,
+    enabledUnindexed,
+  };
+}
+
+function shouldRestoreVpkEnabled(
+  mod: Mod,
+  candidates: Mod[],
+  snapshot: EnabledVpkRestoreSnapshot
+): boolean {
+  if (!snapshot.hadEnabled) return false;
+  const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
+  const index = getVpkIndex(mod);
+  if (hasIndexedCandidates) {
+    return index === undefined ? snapshot.enabledUnindexed : snapshot.enabledIndexes.has(index);
+  }
+  return snapshot.enabledIndexes.size === 0 && snapshot.enabledUnindexed;
+}
+
 
 function buildModEntries(mods: Mod[]): ModEntry[] {
   const byGb = new Map<number, Mod[]>();
@@ -1721,7 +1768,7 @@ export default function Installed() {
           (mod) => mod.gameBananaId === detailsMod.id && mod.gameBananaFileId === fileId,
         );
       }
-      const restoreEnabled = replacementTargets.some((mod) => mod.enabled);
+      const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
 
       if (replacing && sourceMod) {
         // Snapshot before the destructive delete so the user can roll back,
@@ -1741,12 +1788,13 @@ export default function Installed() {
 
       // Replacement downloads land disabled, so restore the enabled state after
       // reloading. Match by GB ids because local ids change on reinstall.
-      if (restoreEnabled) {
+      if (restoreEnabled.hadEnabled) {
         await loadMods();
         const newMods = useAppStore
           .getState()
           .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
         for (const newMod of newMods) {
+          if (!shouldRestoreVpkEnabled(newMod, newMods, restoreEnabled)) continue;
           if (newMod.enabled) continue;
           try {
             await toggleMod(newMod.id);
@@ -1781,6 +1829,7 @@ export default function Installed() {
         gameBananaId: m.gameBananaId!,
         gameBananaFileId: m.gameBananaFileId!,
         fileName: m.fileName,
+        vpkIndex: m.vpkIndex,
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
@@ -1807,7 +1856,12 @@ export default function Installed() {
     const needsPick: { id: string; name: string }[] = [];
     // Track the (gameBananaId, fileId) actually downloaded so re-enable can
     // still find the new install even when we redirected a stale snapshot.
-    const completed: { gameBananaId: number; gameBananaFileId: number; wasEnabled: boolean; fileName: string }[] = [];
+    const completed: {
+      gameBananaId: number;
+      gameBananaFileId: number;
+      restoreEnabled: EnabledVpkRestoreSnapshot;
+      fileName: string;
+    }[] = [];
     let progress = 0;
     // Guard so a multi-group update writes exactly one recovery snapshot, not
     // one per group.
@@ -1972,7 +2026,12 @@ export default function Installed() {
           completed.push({
             gameBananaId: batch.gameBananaId,
             gameBananaFileId: batch.fileId,
-            wasEnabled: batch.snapshots.some((snapshot) => snapshot.wasEnabled),
+            restoreEnabled: createEnabledVpkRestoreSnapshot(
+              batch.snapshots.map((snapshot) => ({
+                enabled: snapshot.wasEnabled,
+                vpkIndex: snapshot.vpkIndex,
+              })),
+            ),
             fileName: batch.fileName,
           });
         } catch (err) {
@@ -2002,11 +2061,12 @@ export default function Installed() {
     await loadMods();
     const refreshed = useAppStore.getState().mods;
     for (const c of completed) {
-      if (!c.wasEnabled) continue;
+      if (!c.restoreEnabled.hadEnabled) continue;
       const newMods = refreshed.filter(
         (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
       );
       for (const newMod of newMods) {
+        if (!shouldRestoreVpkEnabled(newMod, newMods, c.restoreEnabled)) continue;
         if (newMod.enabled) continue;
         try {
           await toggleMod(newMod.id);

@@ -591,6 +591,32 @@ async function renameVpksToAvoidConflicts(
     return renamedFiles;
 }
 
+async function collectVpkFileSizes(
+    targetPath: string,
+    installedVpks: string[]
+): Promise<Record<string, number>> {
+    return Object.fromEntries(
+        await Promise.all(
+            installedVpks.map(async (vpk) => {
+                const stat = await fs.stat(join(targetPath, vpk));
+                return [vpk, stat.size] as const;
+            })
+        )
+    );
+}
+
+function buildVpkIndexBySize(
+    vpkFileSizes: Record<string, number>,
+    installedVpks: string[]
+): Map<string, number> {
+    if (installedVpks.length <= 1) return new Map();
+    return new Map(
+        [...installedVpks]
+            .sort((a, b) => (vpkFileSizes[a] ?? 0) - (vpkFileSizes[b] ?? 0) || a.localeCompare(b))
+            .map((fileName, index) => [fileName, index])
+    );
+}
+
 async function enableInstalledVpks(
     deadlockPath: string,
     installedVpks: string[],
@@ -754,6 +780,7 @@ async function executeDownload(
     };
 
     let installedVpks: string[] = [];
+    let vpkIndexByFile = new Map<string, number>();
     // Final disabled filename -> prettified variant folder, for multi-variant
     // archives (e.g. Tailed_mod vs Tailed_mod_Beard). Drives the picker label
     // and the persisted variantLabel.
@@ -811,6 +838,8 @@ async function executeDownload(
         // when there's more than one and let the user pick which to keep.
         installedVpks.sort((a, b) => a.localeCompare(b));
         if (installedVpks.length > 1) {
+            const vpkFileSizes = await collectVpkFileSizes(targetPath, installedVpks);
+            vpkIndexByFile = buildVpkIndexBySize(vpkFileSizes, installedVpks);
             const pickRequestId = randomUUID();
             const vpkLabels = getVpkLabels(
                 installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
@@ -819,15 +848,6 @@ async function executeDownload(
             // the heuristic VPK content summary, which returns the same hero for
             // every variant of a skin.
             for (const [vpk, label] of variantByFile) vpkLabels[vpk] = label;
-            const vpkFileSizes = Object.fromEntries(
-                await Promise.all(
-                    installedVpks.map(async (vpk) => {
-                        const absPath = join(targetPath, vpk);
-                        const stat = await fs.stat(absPath);
-                        return [vpk, stat.size] as const;
-                    })
-                )
-            );
             const pick = await awaitMultiVpkPick(
                 pickRequestId,
                 details.name ?? fileName,
@@ -891,7 +911,8 @@ async function executeDownload(
         const vpkPath = join(targetPath, vpkFileName);
         const base = stampVpkLockerHero(metadata, section, vpkPath);
         const variantLabel = variantByFile.get(vpkFileName);
-        const perVpkMetadata = variantLabel ? { ...base, variantLabel } : base;
+        const vpkIndex = vpkIndexByFile.get(vpkFileName);
+        const perVpkMetadata = { ...base, variantLabel, vpkIndex };
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
@@ -1271,6 +1292,7 @@ async function executeOneClickDownload(
     };
 
     let installedVpks: string[] = [];
+    let vpkIndexByFile = new Map<string, number>();
     const variantByFile = new Map<string, string>();
 
     if (isArchive(downloadPath)) {
@@ -1316,20 +1338,13 @@ async function executeOneClickDownload(
         // download path so behavior is consistent across install entry points.
         installedVpks.sort((a, b) => a.localeCompare(b));
         if (installedVpks.length > 1) {
+            const vpkFileSizes = await collectVpkFileSizes(targetPath, installedVpks);
+            vpkIndexByFile = buildVpkIndexBySize(vpkFileSizes, installedVpks);
             const pickRequestId = randomUUID();
             const vpkLabels = getVpkLabels(
                 installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
             );
             for (const [vpk, label] of variantByFile) vpkLabels[vpk] = label;
-            const vpkFileSizes = Object.fromEntries(
-                await Promise.all(
-                    installedVpks.map(async (vpk) => {
-                        const absPath = join(targetPath, vpk);
-                        const stat = await fs.stat(absPath);
-                        return [vpk, stat.size] as const;
-                    })
-                )
-            );
             const pick = await awaitMultiVpkPick(
                 pickRequestId,
                 enriched?.name ?? fileName,
@@ -1386,7 +1401,8 @@ async function executeOneClickDownload(
         const vpkPath = join(targetPath, vpkFileName);
         const base = stampVpkLockerHero(metadata, section, vpkPath);
         const variantLabel = variantByFile.get(vpkFileName);
-        const perVpkMetadata = variantLabel ? { ...base, variantLabel } : base;
+        const vpkIndex = vpkIndexByFile.get(vpkFileName);
+        const perVpkMetadata = { ...base, variantLabel, vpkIndex };
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 

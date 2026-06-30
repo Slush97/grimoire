@@ -105,6 +105,7 @@ export interface Mod {
     audioUrl?: string;
     gameBananaId?: number;
     gameBananaFileId?: number;
+    vpkIndex?: number;
     categoryId?: number;
     categoryName?: string;
     sourceSection?: string;

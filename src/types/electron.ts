@@ -1087,9 +1087,10 @@ export interface ElectronAPI {
 
 export interface ProfileMod {
     /** Filename when the profile was saved. NOT stable across reorders or
-     *  collision-renames; use `gameBananaId` + `gameBananaFileId` as the
-     *  primary identifier when present, and fall back to `fileName` only for
-     *  pre-stable-id profiles or custom mods that lack GameBanana ids. */
+     *  collision-renames; use `gameBananaId` + `gameBananaFileId` +
+     *  `vpkIndex` as the primary identifier when present, and fall back to
+     *  `fileName` only for pre-stable-id profiles or custom mods that lack
+     *  GameBanana ids. */
     fileName: string;
     enabled: boolean;
     priority: number;
@@ -1097,11 +1098,9 @@ export interface ProfileMod {
      *  can find the mod even if its fileName has changed since. */
     gameBananaId?: number;
     gameBananaFileId?: number;
-    /** Content fingerprint, populated from metadata at save time. The identity
-     *  of last resort for custom/local mods that carry no GameBanana ids: it
-     *  survives a fileName change (reorder, or the free-form rename a mod gets
-     *  when disabled), so apply can still re-enable the right local mod. */
-    sha256?: string;
+    /** Zero-based VPK index within a multi-VPK GameBanana file, assigned by
+     *  ascending VPK size at install time. Omitted for normal single-VPK files. */
+    vpkIndex?: number;
 }
 
 /** Profiles embed the same crosshair model the Crosshair tab edits. Saved
