@@ -443,6 +443,15 @@ export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
   return withGameRunningWarning(() => window.electronAPI.reorderMods(orderedIds));
 }
 
+export async function applyModToggleBatch(
+  enableIds: string[],
+  disableIds: string[]
+): Promise<{ mods: Mod[]; failures: string[] }> {
+  return withGameRunningWarning(() =>
+    window.electronAPI.applyModToggleBatch(enableIds, disableIds)
+  );
+}
+
 export async function swapModPriority(modIdA: string, modIdB: string): Promise<Mod[]> {
   return withGameRunningWarning(() => window.electronAPI.swapModPriority(modIdA, modIdB));
 }

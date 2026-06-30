@@ -240,6 +240,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-mod-priority', modId, priority),
     reorderMods: (orderedIds: string[]) =>
         ipcRenderer.invoke('reorder-mods', orderedIds),
+    applyModToggleBatch: (enableIds: string[], disableIds: string[]) =>
+        ipcRenderer.invoke('apply-mod-toggle-batch', enableIds, disableIds),
     swapModPriority: (modIdA: string, modIdB: string) =>
         ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
     importCustomMod: (args: ImportCustomModArgs) =>

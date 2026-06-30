@@ -1188,6 +1188,13 @@
     "empty": {
       "noGamePath": "Set your Deadlock path or enable dev mode."
     },
+    "randomize": {
+      "onLaunch": "Shuffle on launch",
+      "onLaunchHint": "When on, each time you launch from Grimoire one of your chosen skins is equipped per hero. Add skins to the pool with the shuffle button on each skin.",
+      "addToShuffle": "Add {{name}} to the shuffle",
+      "removeFromShuffle": "Remove {{name}} from the shuffle",
+      "inPool": "In shuffle"
+    },
     "modImage": {
       "set": "Set Locker image for {{name}}",
       "title": "Choose a Locker image",
@@ -1541,10 +1548,11 @@
       "soundCount_other": "{{count}} sounds",
       "modCount_one": "{{count}} mod",
       "modCount_other": "{{count}} mods",
-      "modsActive_one": "{{count}} mod installed (active)",
-      "modsActive_other": "{{count}} mods installed (1 active)",
-      "modsInstalled_one": "{{count}} mod installed (none active)",
-      "modsInstalled_other": "{{count}} mods installed (none active)",
+      "facetSkin": "Skin",
+      "facetSound": "Sound",
+      "facetCard": "Card",
+      "facetEffects": "Effects",
+      "facetInstalled": "{{label}} (installed, off)",
       "categoryCount_one": "{{count}} category",
       "categoryCount_other": "{{count}} categories",
       "fileCount_one": "{{count}} file",
@@ -2066,7 +2074,9 @@
       "stoppedRestoreFailed_one": "Stopped Deadlock, but couldn't restore {{count}} mod.",
       "stoppedRestoreFailed_other": "Stopped Deadlock, but couldn't restore {{count}} mods.",
       "restoredStashed_one": "Restored {{count}} stashed mod.",
-      "restoredStashed_other": "Restored {{count}} stashed mods."
+      "restoredStashed_other": "Restored {{count}} stashed mods.",
+      "shufflePartial_one": "1 skin couldn't be shuffled this launch.",
+      "shufflePartial_other": "{{count}} skins couldn't be shuffled this launch."
     },
     "brand": "Grimoire",
     "previewVolume": {

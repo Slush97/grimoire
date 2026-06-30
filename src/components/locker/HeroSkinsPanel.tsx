@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ChevronDown, ExternalLink, GripVertical, ImagePlus, Trash2 } from 'lucide-react';
+import { ChevronDown, ExternalLink, GripVertical, ImagePlus, Shuffle, Trash2 } from 'lucide-react';
 import {
   DndContext,
   KeyboardSensor,
@@ -20,6 +20,7 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
+import { shuffleSkinKey } from '../../lib/lockerRandomizer';
 import { useAppStore } from '../../stores/appStore';
 import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
@@ -110,6 +111,14 @@ interface HeroSkinsPanelProps {
     label: string;
     onClick: () => void;
   };
+  /** Skin keys (shuffleSkinKey) currently opted INTO the launch shuffle pool.
+   *  When onToggleShuffleIncluded is also set, each skin card shows an add-to-
+   *  shuffle toggle. Skins-only; the Sounds panel leaves both undefined. */
+  includedSkinKeys?: Set<string>;
+  onToggleShuffleIncluded?: (skinKey: string) => void;
+  /** When the master "shuffle on launch" switch is armed, the per-skin toggles
+   *  are always visible (not hover-only) so the pool is easy to curate. */
+  shuffleArmed?: boolean;
   /** 'list' (default): compact thumbnail rows, used by the Locker list view's
    *  narrow inline expansion. 'cards': the 2-up media-card grid used by the
    *  hero detail view, sharing the Global view's card language (glass backdrop
@@ -296,6 +305,9 @@ function SkinGroupCard({
   loadOrderPosition,
   overrideSrc,
   onPickImage,
+  isIncluded,
+  onToggleIncluded,
+  shuffleArmed,
 }: {
   group: SkinGroup;
   onSelect: (modId: string) => void;
@@ -312,6 +324,12 @@ function SkinGroupCard({
   overrideSrc?: string;
   /** Open the image picker for this skin. Omitted for sound mods. */
   onPickImage?: () => void;
+  /** Whether this skin is in the launch-shuffle pool. */
+  isIncluded?: boolean;
+  /** Toggle this skin's launch-shuffle membership. When omitted, no toggle is shown. */
+  onToggleIncluded?: () => void;
+  /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
+  shuffleArmed?: boolean;
 }) {
   const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
@@ -345,7 +363,7 @@ function SkinGroupCard({
         groupActive
           ? 'border-accent bg-white/[0.02] hover:bg-white/[0.04]'
           : 'border-white/[0.08] bg-bg-secondary/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
-      } ${variantsOpen ? 'z-20' : ''}`}
+      } ${isIncluded ? 'ring-2 ring-accent/45' : ''} ${variantsOpen ? 'z-20' : ''}`}
     >
       {/* Glass backdrop: a blurred copy of the cover art bleeds behind the
           card so it's tinted by its own thumbnail, matching the Global view
@@ -451,7 +469,9 @@ function SkinGroupCard({
           }}
           aria-label={t('locker.modImage.set', { name: primary.name })}
           title={t('locker.modImage.set', { name: primary.name })}
-          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100 ${onRequestDelete ? 'right-9' : 'right-1.5'}`}
+          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/card:opacity-100 ${
+            onToggleIncluded && onRequestDelete ? 'right-[4.125rem]' : onToggleIncluded || onRequestDelete ? 'right-9' : 'right-1.5'
+          }`}
         >
           <ImagePlus className="h-3.5 w-3.5" />
         </button>
@@ -471,9 +491,43 @@ function SkinGroupCard({
           }}
           aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
           title={t('locker.skins.deleteSkin', { name: primary.name })}
-          className="absolute right-1.5 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/card:opacity-100"
+          className={`absolute top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full bg-black/65 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/card:opacity-100 ${
+            onToggleIncluded ? 'right-9' : 'right-1.5'
+          }`}
         >
           <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+
+      {/* Add to shuffle: opt this skin into the launch-shuffle pool. Anchors the
+          top-right corner because it's the only always-visible control here (lit
+          when included, shown on every card while the shuffle switch is armed) -
+          the hover-only image/delete buttons extend leftward from it. */}
+      {onToggleIncluded && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleIncluded();
+          }}
+          aria-pressed={isIncluded}
+          aria-label={
+            isIncluded
+              ? t('locker.randomize.removeFromShuffle', { name: primary.name })
+              : t('locker.randomize.addToShuffle', { name: primary.name })
+          }
+          title={
+            isIncluded
+              ? t('locker.randomize.removeFromShuffle', { name: primary.name })
+              : t('locker.randomize.addToShuffle', { name: primary.name })
+          }
+          className={`absolute right-1.5 top-1.5 z-30 flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-sm transition-[opacity,background-color,color] duration-150 focus-visible:opacity-100 group-hover/card:opacity-100 ${
+            isIncluded
+              ? 'opacity-100 bg-accent text-accent-foreground hover:bg-accent/80'
+              : `${shuffleArmed ? 'opacity-100' : 'opacity-0'} bg-black/65 text-white/90 hover:bg-accent/70 hover:text-accent-foreground`
+          }`}
+        >
+          <Shuffle className="h-3.5 w-3.5" />
         </button>
       )}
 
@@ -558,6 +612,9 @@ function SkinGroupRow({
   soundVolume,
   overrideSrc,
   onPickImage,
+  isIncluded,
+  onToggleIncluded,
+  shuffleArmed,
 }: {
   group: SkinGroup;
   onSelect: (modId: string) => void;
@@ -571,6 +628,12 @@ function SkinGroupRow({
   overrideSrc?: string;
   /** Open the image picker for this skin. Omitted for sound mods. */
   onPickImage?: () => void;
+  /** Whether this skin is in the launch-shuffle pool. */
+  isIncluded?: boolean;
+  /** Toggle this skin's launch-shuffle membership. When omitted, no toggle is shown. */
+  onToggleIncluded?: () => void;
+  /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
+  shuffleArmed?: boolean;
 }) {
   const { t } = useTranslation();
   const isMulti = group.variants.length > 1;
@@ -585,7 +648,7 @@ function SkinGroupRow({
         groupActive
           ? 'border-accent/60 bg-white/[0.04] backdrop-blur-sm'
           : 'border-border bg-bg-secondary/70 hover:border-accent/60 hover:bg-bg-secondary/85'
-      }`}
+      } ${isIncluded ? 'ring-2 ring-accent/45' : ''}`}
     >
       {onPickImage && (
         <button
@@ -596,7 +659,9 @@ function SkinGroupRow({
           }}
           aria-label={t('locker.modImage.set', { name: primary.name })}
           title={t('locker.modImage.set', { name: primary.name })}
-          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100 ${onRequestDelete ? 'right-10' : 'right-2'}`}
+          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-accent hover:text-accent-foreground focus-visible:opacity-100 group-hover/row:opacity-100 ${
+            onToggleIncluded && onRequestDelete ? 'right-[4.5rem]' : onToggleIncluded || onRequestDelete ? 'right-10' : 'right-2'
+          }`}
         >
           <ImagePlus className="h-3.5 w-3.5" />
         </button>
@@ -613,9 +678,40 @@ function SkinGroupRow({
           }}
           aria-label={t('locker.skins.deleteSkin', { name: primary.name })}
           title={t('locker.skins.deleteSkin', { name: primary.name })}
-          className="absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/row:opacity-100"
+          className={`absolute top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full bg-black/55 text-white/90 opacity-0 backdrop-blur-sm transition-[opacity,background-color,color] duration-150 hover:bg-state-danger/80 hover:text-white focus-visible:opacity-100 group-hover/row:opacity-100 ${
+            onToggleIncluded ? 'right-10' : 'right-2'
+          }`}
         >
           <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      )}
+      {/* Add to shuffle (see SkinGroupCard). Anchors the top-right corner; the
+          hover-only image/delete buttons extend leftward from it. */}
+      {onToggleIncluded && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleIncluded();
+          }}
+          aria-pressed={isIncluded}
+          aria-label={
+            isIncluded
+              ? t('locker.randomize.removeFromShuffle', { name: primary.name })
+              : t('locker.randomize.addToShuffle', { name: primary.name })
+          }
+          title={
+            isIncluded
+              ? t('locker.randomize.removeFromShuffle', { name: primary.name })
+              : t('locker.randomize.addToShuffle', { name: primary.name })
+          }
+          className={`absolute right-2 top-2 z-10 flex h-7 w-7 items-center justify-center rounded-full backdrop-blur-sm transition-[opacity,background-color,color] duration-150 focus-visible:opacity-100 group-hover/row:opacity-100 ${
+            isIncluded
+              ? 'opacity-100 bg-accent text-accent-foreground hover:bg-accent/80'
+              : `${shuffleArmed ? 'opacity-100' : 'opacity-0'} bg-black/55 text-white/90 hover:bg-accent/70 hover:text-accent-foreground`
+          }`}
+        >
+          <Shuffle className="h-3.5 w-3.5" />
         </button>
       )}
       <button
@@ -739,6 +835,9 @@ export default function HeroSkinsPanel({
   emptyMessage = 'Download a skin for this hero to manage it here.',
   browseAction,
   layout = 'list',
+  includedSkinKeys,
+  onToggleShuffleIncluded,
+  shuffleArmed,
 }: HeroSkinsPanelProps) {
   const hasMods = mods.length > 0;
   const soundVolume = useAppStore((s) => s.soundVolume);
@@ -803,6 +902,13 @@ export default function HeroSkinsPanel({
                   loadOrderPosition={loadOrderByKey.get(group.key)}
                   overrideSrc={lockerModImages[group.key]}
                   onPickImage={pickImageFor(group)}
+                  isIncluded={includedSkinKeys?.has(shuffleSkinKey(group.primary))}
+                  onToggleIncluded={
+                    onToggleShuffleIncluded
+                      ? () => onToggleShuffleIncluded(shuffleSkinKey(group.primary))
+                      : undefined
+                  }
+                  shuffleArmed={shuffleArmed}
                   {...groupProps}
                 />
               ))}
@@ -814,6 +920,13 @@ export default function HeroSkinsPanel({
                 group={group}
                 overrideSrc={lockerModImages[group.key]}
                 onPickImage={pickImageFor(group)}
+                isIncluded={includedSkinKeys?.has(shuffleSkinKey(group.primary))}
+                onToggleIncluded={
+                  onToggleShuffleIncluded
+                    ? () => onToggleShuffleIncluded(shuffleSkinKey(group.primary))
+                    : undefined
+                }
+                shuffleArmed={shuffleArmed}
                 {...groupProps}
               />
             ))
