@@ -153,7 +153,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
               </div>
               {groups.some((g) => g.kind === 'variants') && (
                 <div className="text-xs text-text-secondary">
-                  Pick one or more variants per mod
+                  {t('mergeMods.oneVariant')}
                 </div>
               )}
             </div>

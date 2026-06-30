@@ -24,7 +24,12 @@ import type {
 import type { DownloadedLocale, LocaleManifest } from '../types/locales';
 import { parseFeModel, type ClothModel } from './feModel';
 import { showToast } from '../stores/toastStore';
+import i18n from '../i18n';
 
+// Sentinel that matches the Error thrown by the main process
+// (GAME_RUNNING_MOD_LOCK_MESSAGE in gameSessionMods.ts). It crosses the IPC
+// boundary as a raw string, so it must NOT be translated. The user-facing
+// toast is translated separately.
 const GAME_RUNNING_NOTICE = 'Game is running';
 
 function isGameRunningModLockError(err: unknown): boolean {
@@ -36,7 +41,7 @@ async function withGameRunningWarning<T>(operation: () => Promise<T>): Promise<T
     return await operation();
   } catch (err) {
     if (isGameRunningModLockError(err)) {
-      showToast(GAME_RUNNING_NOTICE, { tone: 'warning' });
+      showToast(i18n.t('common.gameRunningWarning'), { tone: 'warning' });
     }
     throw err;
   }

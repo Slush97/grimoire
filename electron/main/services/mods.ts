@@ -11,6 +11,8 @@ import {
     assertCanMoveLoadedGameMod,
     assertCanMoveLoadedGameMods,
     syncRunningGameModSnapshotFromMods,
+    beginModMutationRunningScope,
+    endModMutationRunningScope,
 } from './gameSessionMods';
 
 /** Verbose mod-mutation trace, gated on the `verboseModTrace` setting. Lands in
@@ -723,7 +725,18 @@ export async function allocateEnabledVpkPath(deadlockPath: string): Promise<stri
  */
 let modMutationQueue: Promise<unknown> = Promise.resolve();
 function withModMutationLock<T>(fn: () => Promise<T>): Promise<T> {
-    const run = modMutationQueue.then(fn, fn);
+    // Compute the game-running state once per locked batch and park it for the
+    // duration, so applyProfile's per-mod snapshot syncs don't each spawn a
+    // pgrep/tasklist (turning N+M+2 spawns into 1).
+    const scoped = async (): Promise<T> => {
+        await beginModMutationRunningScope();
+        try {
+            return await fn();
+        } finally {
+            endModMutationRunningScope();
+        }
+    };
+    const run = modMutationQueue.then(scoped, scoped);
     // Keep the chain alive regardless of this op's outcome, so one rejection
     // doesn't poison every operation queued behind it.
     modMutationQueue = run.then(

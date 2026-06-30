@@ -20,6 +20,7 @@ import {
     captureLoadedGameMods,
     clearLoadedGameMods,
     hasRunningGameModSnapshot,
+    markLaunchGrace,
     syncKnownRunningGameModSnapshot,
 } from '../services/gameSessionMods';
 
@@ -37,7 +38,10 @@ ipcMain.handle('launch-modded', async (): Promise<void> => {
         await launchModded({
             deadlockPath,
             onRestoreComplete: emitRestore,
-            beforeLaunch: async () => captureLoadedGameMods(await scanMods(deadlockPath)),
+            beforeLaunch: async () => {
+                captureLoadedGameMods(await scanMods(deadlockPath));
+                markLaunchGrace();
+            },
         });
     } catch (err) {
         clearLoadedGameMods();

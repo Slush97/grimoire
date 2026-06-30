@@ -1,6 +1,7 @@
 {
   "common": {
     "view": "View",
+    "gameRunningWarning": "Game is running. Close Deadlock to change loaded mods.",
     "actions": {
       "cancel": "Cancel",
       "clear": "Clear",
@@ -1941,7 +1942,7 @@
     "selectedSummary": "{{selected}} of {{total}} selected"
   },
   "mergeMods": {
-    "oneVariant": "One variant per mod",
+    "oneVariant": "Pick one or more variants per mod",
     "strictDescription": "Stop if two mods touch the same file. Off lets the higher-priority mod win.",
     "localNote": "Local mods merge fine but aren't in the share code. Delete the disabled originals and they can't be recovered on unmerge.",
     "title": "Merge {{count}} mods",
