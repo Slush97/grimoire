@@ -626,7 +626,13 @@ export default function Sidebar() {
       // a failed shuffle never blocks the launch.
       if (!stashStatus.active) {
         try {
-          await runLaunchShuffle();
+          const { failures } = await runLaunchShuffle();
+          if (failures > 0) {
+            // The shuffle half-applied (a locked VPK, antivirus, the enable
+            // cap). Warn so a hero that silently fell back to vanilla isn't a
+            // mystery; the launch still proceeds.
+            setToast({ kind: 'error', text: t('sidebar.toast.shufflePartial', { count: failures }) });
+          }
         } catch (err) {
           console.warn('[launch] shuffle skipped:', err);
         }

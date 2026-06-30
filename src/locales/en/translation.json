@@ -2074,7 +2074,9 @@
       "stoppedRestoreFailed_one": "Stopped Deadlock, but couldn't restore {{count}} mod.",
       "stoppedRestoreFailed_other": "Stopped Deadlock, but couldn't restore {{count}} mods.",
       "restoredStashed_one": "Restored {{count}} stashed mod.",
-      "restoredStashed_other": "Restored {{count}} stashed mods."
+      "restoredStashed_other": "Restored {{count}} stashed mods.",
+      "shufflePartial_one": "1 skin couldn't be shuffled this launch.",
+      "shufflePartial_other": "{{count}} skins couldn't be shuffled this launch."
     },
     "brand": "Grimoire",
     "previewVolume": {

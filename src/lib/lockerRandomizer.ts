@@ -85,11 +85,12 @@ export interface RandomizePlan {
 /**
  * Compute the enable/disable set for a skin shuffle. For each in-scope hero,
  * picks one of the skins the user opted into the pool at random and makes it the
- * single active skin: enable its primary variant, disable every other
- * currently-enabled skin VPK for that hero (non-chosen skins and the chosen
- * skin's non-primary variants), leaving exactly one VPK active. Heroes with no
- * opted-in skins (or no installed skins) are left untouched - that is the
- * per-hero opt-out: don't add any of a hero's skins and it never shuffles.
+ * hero's single active skin: enable its primary variant and disable every other
+ * currently-enabled skin VPK for that hero, sparing only the chosen skin's own
+ * variant VPKs so a multi-file submission loads whole. Heroes with no opted-in
+ * skins (or no installed skins) are left untouched - that is the per-hero
+ * opt-out: don't add any of a hero's skins and it never shuffles. Sounds, cards
+ * and ability effects are separate axes and are never touched.
  *
  * Pure and deterministic given a fixed rng, so it's unit-tested directly. The
  * returned ids are renderer-current; they stay valid because the apply runs them
@@ -128,8 +129,14 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
       enableIds.push(chosenPrimaryId);
       heroChanged = true;
     }
+    // Make the chosen skin the hero's single active skin: disable every other
+    // enabled skin VPK for this hero. We spare ONLY the chosen skin's own
+    // variant VPKs (same submission) so a skin that ships several required files
+    // isn't left half-loaded. Sounds, cards and ability effects live on other
+    // Locker axes and are never in this list, so they stay exactly as set.
+    const chosenVariantIds = new Set(chosen.variants.map((v) => v.id));
     for (const mod of mods) {
-      if (mod.enabled && mod.id !== chosenPrimaryId) {
+      if (mod.enabled && !chosenVariantIds.has(mod.id)) {
         disableIds.push(mod.id);
         heroChanged = true;
       }

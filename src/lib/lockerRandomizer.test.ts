@@ -134,8 +134,9 @@ describe('planRandomization', () => {
         mod({ id: 'b', gameBananaId: 2, enabled: false, priority: 2 }),
       ]],
     ]);
-    // Only B is in the pool; A is the live skin but not included. The lone pick
-    // is B, so A is swapped out for it.
+    // Only B is in the pool; A is the live skin but not included. The shuffle
+    // makes the picked skin the hero's single active skin, so A is swapped out
+    // for B even though A was never opted in.
     const plan = planRandomization({
       heroSkins,
       heroIds: [1],
@@ -145,6 +146,47 @@ describe('planRandomization', () => {
     expect(plan.enableIds).toEqual(['b']);
     expect(plan.disableIds).toEqual(['a']);
     expect(plan.changedHeroes).toEqual([1]);
+  });
+
+  it('disables a non-pooled companion mod so exactly one skin is active', () => {
+    // Hero has a pooled skin A plus a separate enabled mod W the user never
+    // opted in. Grimoire files both under "Skins", so the shuffle resets the
+    // hero's skin slot: A is the lone pick and W is disabled, leaving one skin.
+    const heroSkins = new Map<number, Mod[]>([
+      [1, [
+        mod({ id: 'a', gameBananaId: 1, enabled: false, priority: 1 }),
+        mod({ id: 'w', gameBananaId: 2, enabled: true, priority: 2 }),
+      ]],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1']),
+      rng: fixedRng(0),
+    });
+    expect(plan.enableIds).toEqual(['a']);
+    expect(plan.disableIds).toEqual(['w']);
+    expect(plan.changedHeroes).toEqual([1]);
+  });
+
+  it("leaves the chosen skin's own enabled variant VPK loaded (multi-VPK skin)", () => {
+    // One pooled submission ships two co-required VPKs (same gameBananaId), both
+    // enabled. When it's the pick, neither of its own variants may be disabled.
+    const heroSkins = new Map<number, Mod[]>([
+      [1, [
+        mod({ id: 'a1', gameBananaId: 1, enabled: true, priority: 1 }),
+        mod({ id: 'a2', gameBananaId: 1, enabled: true, priority: 2 }),
+      ]],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1']),
+      rng: fixedRng(0),
+    });
+    expect(plan.enableIds).toEqual([]);
+    expect(plan.disableIds).toEqual([]);
+    expect(plan.changedHeroes).toEqual([]);
   });
 
   it('never re-picks the current skin across the whole rng range when >=2 eligible', () => {

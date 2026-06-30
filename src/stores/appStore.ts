@@ -288,10 +288,9 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
-  applyModToggleBatch: (enableIds: string[], disableIds: string[]) => Promise<boolean>;
   setShuffleOnLaunch: (enabled: boolean) => void;
   toggleShuffleIncluded: (skinKey: string) => void;
-  runLaunchShuffle: () => Promise<void>;
+  runLaunchShuffle: () => Promise<{ failures: number }>;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
@@ -671,25 +670,6 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Apply a batch of disables + enables as one atomic mutation (the launch skin
-  // shuffle). Serialized through enqueueToggle so it can't interleave with a
-  // manual toggle and operate on renamed ids. Returns false on failure so the
-  // caller can react (e.g. skip launch follow-up). Mirrors reorderMods' error
-  // handling + fresh-scan rollback.
-  applyModToggleBatch: (enableIds: string[], disableIds: string[]) => enqueueToggle(async () => {
-    if (enableIds.length === 0 && disableIds.length === 0) return true;
-    try {
-      const updated = await api.applyModToggleBatch(enableIds, disableIds);
-      set({ mods: updated });
-      return true;
-    } catch (err) {
-      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
-      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
-      get().loadMods();
-      return false;
-    }
-  }),
-
   setShuffleOnLaunch: (enabled: boolean) => {
     try { localStorage.setItem(SHUFFLE_ON_LAUNCH_KEY, enabled ? 'true' : 'false'); } catch { /* ignore */ }
     set({ shuffleOnLaunch: enabled });
@@ -709,20 +689,42 @@ export const useAppStore = create<AppState>((set, get) => ({
   // least one skin is in the pool. Groups the live mod list by hero (cached
   // categories, the same grouping the Locker shows), picks one opted-in skin per
   // hero, and applies the whole swap as one atomic batch. Called from the
-  // Sidebar just before launchModded; failures are swallowed by
-  // applyModToggleBatch so a stuck shuffle never blocks the launch.
-  runLaunchShuffle: async () => {
-    const { shuffleOnLaunch, shuffleIncluded, mods } = get();
-    if (!shuffleOnLaunch || shuffleIncluded.size === 0) return;
+  // Sidebar just before launchModded. Returns the count of per-mod failures so
+  // the caller can warn that the shuffle only half-applied; a stuck shuffle
+  // never blocks the launch (the Sidebar swallows a thrown error).
+  runLaunchShuffle: async (): Promise<{ failures: number }> => {
+    const { shuffleOnLaunch, shuffleIncluded } = get();
+    if (!shuffleOnLaunch || shuffleIncluded.size === 0) return { failures: 0 };
     let heroList: { id: number; name: string }[] = [];
     try {
       heroList = buildHeroList(await api.getGamebananaCategories('ModCategory'));
     } catch {
-      // Offline / cache miss: grouping degrades to lockerHero + title inference.
+      // Cold category cache only (a fresh install that never opened Browse or
+      // the Locker): getGamebananaCategories is SQLite-backed, so it serves the
+      // warm cache even offline. With heroList=[] groupModsByCategory can route
+      // only mods carrying an author categoryId; lockerHero- and title-matched
+      // skins fall to `unassigned` and won't shuffle. Near-unreachable in
+      // practice since pooling a skin requires the Locker to have already
+      // grouped it from this same cache.
     }
-    const plan = planLaunchShuffle({ mods, heroList, included: shuffleIncluded });
-    if (plan.enableIds.length === 0 && plan.disableIds.length === 0) return;
-    await get().applyModToggleBatch(plan.enableIds, plan.disableIds);
+    // Build AND apply the plan inside the mutation queue so the plan's ids are
+    // derived from the mods state after any in-flight manual toggle has settled,
+    // not from a pre-launch snapshot that a concurrent rename could invalidate.
+    return enqueueToggle(async () => {
+      const { mods, shuffleIncluded: included } = get();
+      const plan = planLaunchShuffle({ mods, heroList, included });
+      if (plan.enableIds.length === 0 && plan.disableIds.length === 0) return { failures: 0 };
+      try {
+        const { mods: updated, failures } = await api.applyModToggleBatch(plan.enableIds, plan.disableIds);
+        set({ mods: updated });
+        return { failures: failures.length };
+      } catch (err) {
+        if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+        else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+        get().loadMods();
+        return { failures: plan.enableIds.length + plan.disableIds.length };
+      }
+    });
   },
 
   editLocalMod: async (modId: string, args: EditLocalModArgs) => {

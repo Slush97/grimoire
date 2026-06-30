@@ -827,17 +827,21 @@ ipcMain.handle(
 );
 
 // apply-mod-toggle-batch: disable a set then enable a set as one atomic
-// mutation, returning the fresh mod list. Backs the Locker skin randomizer.
+// mutation, returning the fresh mod list AND the per-mod failures. Backs the
+// Locker skin randomizer. setModsEnabledBatch never rethrows a per-mod lock so
+// one stuck VPK can't abort the batch; we surface the failure count instead of
+// dropping it, so the renderer can warn that the shuffle only half-applied
+// (otherwise a hero silently launches skinless and the call still looks green).
 ipcMain.handle(
     'apply-mod-toggle-batch',
-    async (_, enableIds: string[], disableIds: string[]): Promise<Mod[]> => {
+    async (_, enableIds: string[], disableIds: string[]): Promise<{ mods: Mod[]; failures: string[] }> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
-        await setModsEnabledBatch(deadlockPath, { enable: enableIds, disable: disableIds });
+        const result = await setModsEnabledBatch(deadlockPath, { enable: enableIds, disable: disableIds });
         const mods = await scanMods(deadlockPath);
-        return mods.map(enrichMod);
+        return { mods: mods.map(enrichMod), failures: result.failures };
     }
 );
 

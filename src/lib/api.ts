@@ -446,7 +446,7 @@ export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
 export async function applyModToggleBatch(
   enableIds: string[],
   disableIds: string[]
-): Promise<Mod[]> {
+): Promise<{ mods: Mod[]; failures: string[] }> {
   return withGameRunningWarning(() =>
     window.electronAPI.applyModToggleBatch(enableIds, disableIds)
   );
