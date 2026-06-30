@@ -93,6 +93,12 @@ export interface ModMetadata {
      *  when that slot is still free, so re-enabling returns the mod to roughly
      *  where it was in load order. */
     lastPriority?: number;
+    /** Set once this VPK has been re-packed in place with a self-identifying
+     *  `addoninfo.txt` embed (path B tagging, see tagMods.ts). A UI / idempotency
+     *  hint only: it does NOT affect canonical identity (metadata.sha256 stays the
+     *  original) and the authoritative tagged-state is the embed itself, read via
+     *  resolveVpkIdentity. */
+    tagged?: boolean;
     /** Manual opt-out from update detection. When true, the renderer
      *  excludes this mod from the "update available" check even if the
      *  installed gameBananaFileId is gone from the live file list. Useful

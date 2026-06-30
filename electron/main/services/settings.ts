@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalCrosshair: false,
     experimentalSocial: false,
     experimentalUnknownModMatching: false,
+    experimentalVpkTagging: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,

@@ -33,6 +33,7 @@ import {
 import { downloadMod } from '../services/download';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
+import { tagOneMod, tagAllInstalled } from '../services/tagMods';
 import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
 import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
@@ -1495,3 +1496,28 @@ ipcMain.handle(
         };
     }
 );
+
+// tag-one-mod: re-pack a single installed VPK in place with a self-identifying
+// addoninfo.txt embed (path B). Refuses if the running game has the mod loaded.
+// Canonical identity (metadata.sha256) is unchanged; the embed carries it.
+ipcMain.handle('tag-one-mod', async (_, modId: string): Promise<Mod> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const tagged = await tagOneMod(deadlockPath, modId);
+    return enrichMod(tagged);
+});
+
+// tag-all-installed: retroactively tag the whole installed library in place.
+// Loaded mods are skipped and reported; per-mod failures are collected. Streams
+// progress to the requesting renderer via 'tag-all-installed-progress'.
+ipcMain.handle('tag-all-installed', async (event) => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    return tagAllInstalled(deadlockPath, (progress) =>
+        event.sender.send('tag-all-installed-progress', progress)
+    );
+});

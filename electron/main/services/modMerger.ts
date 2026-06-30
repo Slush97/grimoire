@@ -15,7 +15,16 @@ import {
     type Mod,
 } from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
-import { fingerprintFile } from './fileMatch';
+import { resolveVpkIdentity } from './vpkIdentity';
+import {
+    computeOriginalIdentity,
+    serializeAddonInfo,
+    serializeGrimoireMeta,
+    ADDONINFO_ENTRY,
+    GRIMOIRE_META_ENTRY,
+    type OriginalIdentity,
+    type GrimoireMergeSourceInput,
+} from './embeddedMetadata';
 import { encodeShareCode } from './portableProfile';
 import {
     assertCanMoveLoadedGameMod,
@@ -240,6 +249,96 @@ export async function verifyVpkOutput(path: string): Promise<void> {
     }
 }
 
+/** Author string stamped into a merged VPK's embedded addoninfo.txt (a merge
+ *  has many real authors, so there is no single one). */
+const MERGE_ADDON_AUTHOR = 'Multiple (merged via Grimoire)';
+
+/**
+ * Embed the self-identifying metadata into an already-merged VPK (path A,
+ * see docs/vpk-metadata-embed-integration.md). Serializes `addoninfo.txt`
+ * (carrying the merge's canonical-identity triple) and `grimoire_meta.json`
+ * (the versioned source-list projection), writes both to temp files, and runs a
+ * vpkmerge `--extra-file` pass that re-packs the merged VPK with the two blobs
+ * embedded at its root, then atomically swaps it into place.
+ *
+ * The embed pass is a merge of the merged VPK with itself (vpkmerge needs >= 2
+ * inputs and refuses output == input): identical inputs preserve every entry
+ * (last-input-wins is a no-op), and the two serialized files ride in via
+ * `--extra-file`, never the typed `metadata` path, so there is no double-write
+ * of addoninfo.txt. `--strict` is deliberately NOT passed: every path collides
+ * with its twin, which strict mode would reject.
+ *
+ * `original` is the merged output's identity captured from the PRE-EMBED bytes
+ * (the spec's option (a)): it is the stable self-identity stored in metadata,
+ * addoninfo, and grimoire_meta alike, and is never re-derived from the post-embed
+ * file.
+ */
+async function embedMergeIdentity(
+    mergedPath: string,
+    title: string,
+    createdAt: string,
+    original: OriginalIdentity,
+    sources: GrimoireMergeSourceInput[]
+): Promise<void> {
+    const addonText = serializeAddonInfo({
+        title,
+        author: MERGE_ADDON_AUTHOR,
+        buildDate: createdAt,
+        grimoireOriginalSha256: original.sha256,
+        grimoireOriginalCrc32: original.crc32,
+        grimoireOriginalSize: original.size,
+        grimoireMeta: GRIMOIRE_META_ENTRY,
+    });
+    const metaText = serializeGrimoireMeta({
+        title,
+        originalSha256: original.sha256,
+        createdAt,
+        appVersion: app.getVersion(),
+        game: {
+            name: 'Deadlock',
+            steamAppId: DEADLOCK_STEAM_APP_ID,
+            gameBananaGameId: DEADLOCK_GAMEBANANA_GAME_ID,
+        },
+        sources,
+    });
+
+    const addonTmp = join(tmpdir(), `grimoire-addoninfo-${randomUUID()}.txt`);
+    const metaTmp = join(tmpdir(), `grimoire-meta-${randomUUID()}.json`);
+    // Build the embed output as a dotfile in the merged mod's OWN folder (a
+    // non-`_dir.vpk` name, so it is neither scanned as a mod nor counted as a
+    // slot), then swap it over the original. Same-folder keeps the rename on one
+    // volume (no cross-device EXDEV), exactly like extractMergeSource's rebuild.
+    const embedOut = join(dirname(mergedPath), `.merge-embed-${randomUUID()}.vpk`);
+
+    try {
+        await fs.writeFile(addonTmp, addonText);
+        await fs.writeFile(metaTmp, metaText);
+        await runVpkmerge([
+            'metadata',
+            '--vpk',
+            mergedPath,
+            '--output',
+            embedOut,
+            '--extra-file',
+            `${ADDONINFO_ENTRY}=${addonTmp}`,
+            '--extra-file',
+            `${GRIMOIRE_META_ENTRY}=${metaTmp}`,
+        ]);
+        await verifyVpkOutput(embedOut);
+        // Atomic replace (rename over the existing file, the metadata.ts write
+        // idiom): either the embedded VPK fully takes the slot or, if the rename
+        // fails, the original un-embedded merged VPK is left untouched. Avoids a
+        // window where the merged slot is missing on disk.
+        await fs.rename(embedOut, mergedPath);
+    } catch (err) {
+        try { await fs.unlink(embedOut); } catch { /* ignore partial-output cleanup */ }
+        throw err;
+    } finally {
+        try { await fs.unlink(addonTmp); } catch { /* best-effort temp cleanup */ }
+        try { await fs.unlink(metaTmp); } catch { /* best-effort temp cleanup */ }
+    }
+}
+
 /**
  * Extract a hero's ability-VFX layer from a skin VPK into a standalone addon
  * VPK via `vpkmerge split`, routing only the ability/weapon_fx particle dirs
@@ -360,7 +459,7 @@ async function mergeModsLocked(
     // fileName lookup misses (file renamed by reconcile, partial-disable
     // recovery, etc). Parallel because the files are independent.
     const sourceHashes = await Promise.all(
-        sources.map((src) => fingerprintFile(src.path).then((fp) => fp.sha256))
+        sources.map((src) => resolveVpkIdentity(src.path).then((id) => id.sha256))
     );
 
     const portable = buildPortableForSources(sources, trimmedName);
@@ -392,6 +491,17 @@ async function mergeModsLocked(
         throw err;
     }
 
+    // Capture the merged output's canonical identity from its PRE-EMBED bytes.
+    // A merged VPK never existed before, so its "original" is the hash of the
+    // freshly-merged-but-not-yet-embedded output. This is the spec's option (a)
+    // (two passes: merge -> hash -> embed) chosen for a stable self-identity
+    // that does not depend on re-deriving a hash from the post-embed file. The
+    // same value is stored as metadata.sha256 AND inside addoninfo.txt /
+    // grimoire_meta.json, so resolveVpkIdentity returns it whether or not the
+    // embed pass below succeeds (the un-embedded file's live hash equals it too).
+    const mergedOriginal = await computeOriginalIdentity(mergedPath);
+    const sha256 = mergedOriginal.sha256;
+
     const preDisableSnapshot: MergedModSource[] = sources.map((src, i) => {
         const meta = getModMetadata(src.metaKey);
         return {
@@ -414,7 +524,6 @@ async function mergeModsLocked(
         sources: preDisableSnapshot,
     };
 
-    const sha256 = await hashFile(mergedPath);
     // Stamp the metadata BEFORE the disable loop. If disable fails partway
     // through, the manifest still points at every source by sha256 and
     // unmerge can find them whether they're enabled or disabled. The
@@ -463,6 +572,37 @@ async function mergeModsLocked(
         );
     }
     mergeTrace(`merge done "${trimmedName}" key=${mergedMetaKey} sources: ${describeSources(preDisableSnapshot)}`);
+
+    // Pass 2: embed the self-identifying addoninfo.txt + grimoire_meta.json into
+    // the merged VPK. Done AFTER the disable loop so the grimoire_meta source
+    // fileNames match the metadata manifest's final (post-disable) names. The
+    // merge itself already succeeded; a failed embed only costs the self-
+    // describing metadata, never the merged mod, and metadata.sha256 stays
+    // correct (it equals the un-embedded file's live hash), so on failure we
+    // log and keep the un-embedded merged VPK rather than unwinding the merge.
+    try {
+        await embedMergeIdentity(
+            mergedPath,
+            trimmedName,
+            merged.createdAt,
+            mergedOriginal,
+            preDisableSnapshot.map((s) => ({
+                modName: s.modName,
+                originalSha256: s.sha256AtMergeTime,
+                gameBananaId: s.gameBananaId,
+                gameBananaFileId: s.gameBananaFileId,
+                section: s.section,
+                priorityAtMergeTime: s.priorityAtMergeTime,
+                enabledAtMergeTime: s.enabledAtMergeTime,
+                fileNameAtMergeTime: s.fileName,
+            }))
+        );
+        await verifyVpkOutput(mergedPath);
+        mergeTrace(`merge embed done "${trimmedName}" key=${mergedMetaKey}`);
+    } catch (err) {
+        mergeTrace(`merge WARNING "${trimmedName}": embed pass failed: ${String(err)} (merged mod left un-embedded)`);
+        console.warn(`[modMerger] Failed to embed identity into merged VPK ${mergedPath}:`, err);
+    }
 
     const finalMods = await scanMods(deadlockPath);
     const newMod = finalMods.find((m) => m.metaKey === mergedMetaKey);
@@ -543,8 +683,8 @@ function makeSourceLocator(candidates: Mod[]): SourceLocator {
             hashCache.set(mod.metaKey, lower);
             return lower;
         }
-        const fp = await fingerprintFile(mod.path);
-        const lower = fp.sha256.toLowerCase();
+        const id = await resolveVpkIdentity(mod.path);
+        const lower = id.sha256.toLowerCase();
         hashCache.set(mod.metaKey, lower);
         return lower;
     };

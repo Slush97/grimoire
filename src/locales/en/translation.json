@@ -765,6 +765,7 @@
       "crosshairDesignerDescription": "Create custom crosshairs with a live preview.",
       "socialDescription": "Sign in with Steam to publish profiles and browse uploads from other players in Discover.",
       "fixUnknownMods": "Fix Unknown Mods",
+      "vpkTagging": "Tag Installed Mods",
       "deadworksServers": "Deadworks Servers",
       "performanceConfig": "Performance Config",
       "foundry": "Door Stuck"
@@ -836,6 +837,7 @@
       "discordRpc": "Show your current Grimoire activity on your Discord profile. Talks only to your local Discord app and sends nothing to Grimoire.",
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, and two download keys: no account id, no username, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
+      "vpkTagging": "Embed a small identity tag inside each newly installed mod so an orphaned file can be recognized offline. Adds a Tag Installed Mods button on the Installed page to tag mods you already have.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
       "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."
     }
@@ -936,7 +938,21 @@
       "selectMultipleHint": "Select multiple mods for bulk delete, enable, or disable",
       "lockerOverrides": "Locker overrides",
       "lockerOverridesHint": "Locker overrides: review and remove applied hero cards, ability sounds, and ability colors",
-      "authorPageNotFound": "Couldn't find this mod's author page"
+      "authorPageNotFound": "Couldn't find this mod's author page",
+      "tagInstalledMods": "Tag installed mods",
+      "tagInstalledModsHint": "Tag installed mods: embed a self-identifying tag into each installed mod so orphaned files can be recognized offline"
+    },
+    "tagAll": {
+      "title": "Tag Installed Mods",
+      "description": "Embed a self-identifying tag into each installed mod so an orphaned file can be recognized offline, with no network. Mods the running game has loaded are skipped.",
+      "start": "Start tagging",
+      "progress": "Tagging {{done}} of {{total}}...",
+      "taggedSummary": "{{n}} mod(s) tagged",
+      "skippedTitle": "Skipped ({{n}})",
+      "failedTitle": "Failed ({{n}})",
+      "skipReasonLoaded": "In use by the running game",
+      "empty": "No mods to tag.",
+      "error": "Tagging failed: {{error}}"
     },
     "filters": {
       "searchPlaceholder": "Search installed...",
@@ -1041,7 +1057,14 @@
       "crcMatch": "CRC Match",
       "modIdTag": "Mod #{{id}}",
       "fileIdTag": "File #{{id}}",
-      "viewMod": "View Mod"
+      "viewMod": "View Mod",
+      "embeddedBadge": "Embedded metadata",
+      "embeddedMetadataBadge": "Identified via embedded Grimoire metadata",
+      "embeddedMetadataDesc": "This VPK carries embedded Grimoire metadata identifying it. No network needed.",
+      "embeddedMergeBadge": "Grimoire merge (embedded metadata)",
+      "embeddedMergeDesc_one": "This is a Grimoire merge of {{count}} mod, reconstructed from embedded metadata.",
+      "embeddedMergeDesc_other": "This is a Grimoire merge of {{count}} mods, reconstructed from embedded metadata.",
+      "linkInPlace": "Link in place"
     },
     "updateAll": {
       "description": "Re-download every mod flagged with an available update. Each one's enabled state will be restored after the install finishes. Downloads run one at a time and may take a while.",

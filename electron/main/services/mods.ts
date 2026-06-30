@@ -5,7 +5,8 @@ import { createHash, randomBytes } from 'crypto';
 import { getAddonsPath, getDisabledPath, getAddonFolderPaths, createNextOverflowFolder, overflowAddonsPath, MAX_ADDON_FOLDERS, metaKeyFor } from './deadlock';
 import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
-import { compareFileContents, fingerprintFile } from './fileMatch';
+import { compareFileContents } from './fileMatch';
+import { resolveVpkIdentity } from './vpkIdentity';
 import { loadSettings } from './settings';
 import {
     assertCanMoveLoadedGameMod,
@@ -589,7 +590,10 @@ async function getCollisionMetadataOwner(
 ): Promise<CollisionMetadataOwner> {
     if (!sha256) return 'enabled';
 
-    const disabledHash = await fingerprintFile(disabledPath);
+    // Resolve to the canonical (original) hash so a tagged disabled VPK still
+    // matches the stored original sha256; untagged files resolve to their live
+    // hash, exactly as before embeds existed.
+    const disabledHash = await resolveVpkIdentity(disabledPath);
     return disabledHash.sha256.toLowerCase() === sha256.toLowerCase() ? 'disabled' : 'enabled';
 }
 

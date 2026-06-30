@@ -8,6 +8,8 @@ import {
     type GameBananaModsResponse,
 } from './gamebanana';
 import { parseVpkDirectory, parseVpkDirectoryCached } from './vpk';
+import { resolveVpkIdentity } from './vpkIdentity';
+import { readEmbeddedGrimoireMeta } from './embeddedMetadata';
 import { fingerprintFilesInWorkers, type FileFingerprintResult } from './workers';
 import {
     getUnknownCrcEntryCount,
@@ -26,6 +28,7 @@ import type {
     UnknownModCrcMatchResult,
     UnknownModDetectionProgress,
     UnknownModFilterGuess,
+    UnknownModMergeSource,
 } from '../../../src/types/mod';
 
 export type { UnknownModFilterGuess };
@@ -276,6 +279,80 @@ function isTransientProbeError(err: unknown): boolean {
     return /Archive range request failed: (?:429|5\d\d)\b/.test(errorMessage(err));
 }
 
+/**
+ * Consult-order step 1 (always on, ungated, offline): read the VPK's embedded
+ * Grimoire metadata and, when present, build an identified result with zero
+ * network and no GameBanana rate-limit cost. A tagged single mod (an
+ * addoninfo.txt carrying a gamebananaId) yields a 'found' match with provenance
+ * 'embedded-metadata'; a Grimoire merge (a grimoire_meta.json companion) yields
+ * a 'found' result with provenance 'embedded-merge' carrying the reconstructed
+ * source list. Returns null when the file carries no usable embed, so the caller
+ * falls through to the CRC cache and the (gated) network matcher. Never throws.
+ */
+async function detectFromEmbed(
+    base: UnknownModFilterBase,
+    fileName: string,
+    vpkPath: string,
+    signal?: AbortSignal
+): Promise<UnknownModFilterGuess | null> {
+    let embedded;
+    try {
+        const identity = await resolveVpkIdentity(vpkPath, signal);
+        if (identity.source !== 'embed' || !identity.embedded) return null;
+        embedded = identity.embedded;
+    } catch {
+        return null;
+    }
+
+    // A Grimoire merge: reconstruct the source list from grimoire_meta.json.
+    if (embedded.grimoireMeta) {
+        const meta = readEmbeddedGrimoireMeta(vpkPath);
+        if (meta && meta.sources.length > 0) {
+            const mergeSources: UnknownModMergeSource[] = meta.sources.map((source) => ({
+                modName: source.modName ?? source.fileNameAtMergeTime ?? 'Unknown source',
+                gameBananaId: typeof source.gameBananaId === 'number' ? source.gameBananaId : undefined,
+                gameBananaFileId: typeof source.gameBananaFileId === 'number' ? source.gameBananaFileId : undefined,
+                section: source.section ?? undefined,
+                fileName: source.fileNameAtMergeTime,
+            }));
+            return {
+                ...base,
+                crcMatch: {
+                    ...emptyCrcMatch('found'),
+                    status: 'found',
+                    provenance: 'embedded-merge',
+                    modName: meta.merge?.title ?? embedded.title,
+                    confidence: 'exact',
+                    mergeSources,
+                    reason: `Grimoire merge of ${mergeSources.length} mod${mergeSources.length === 1 ? '' : 's'}, read from embedded metadata.`,
+                },
+            };
+        }
+    }
+
+    // A single tagged mod carrying its GameBanana submission id.
+    if (embedded.gamebananaId) {
+        const gbId = Number(embedded.gamebananaId);
+        if (Number.isFinite(gbId) && gbId > 0) {
+            return {
+                ...base,
+                crcMatch: {
+                    ...emptyCrcMatch('found'),
+                    status: 'found',
+                    provenance: 'embedded-metadata',
+                    modId: gbId,
+                    modName: embedded.title ?? base.search ?? undefined,
+                    fileName,
+                    confidence: 'exact',
+                    reason: 'Identified from embedded Grimoire metadata (no network).',
+                },
+            };
+        }
+    }
+
+    return null;
+}
+
 export async function detectUnknownModFilters(
     modId: string,
     fileName: string,
@@ -299,6 +376,19 @@ export async function detectUnknownModFilters(
     let bestMatch: UnknownModCrcMatchResult | null = null;
 
     try {
+        // Consult order step 1: embedded Grimoire metadata (always on, offline,
+        // ungated). A self-identifying VPK answers here before the CRC cache or
+        // the gated network matcher, with zero network and no rate-limit cost.
+        const embedResult = await detectFromEmbed(base, fileName, vpkPath, options.signal);
+        if (embedResult) {
+            emit({
+                phase: 'complete',
+                message: 'Identified from embedded Grimoire metadata.',
+                result: embedResult,
+            });
+            return embedResult;
+        }
+
         emit({ phase: 'fingerprinting', message: 'Reading local VPK fingerprint...' });
         const localFile = await getLocalVpkFingerprint(vpkPath, options.signal);
         if (!localFile) {
@@ -565,7 +655,31 @@ export async function detectUnknownModCacheMatches(
         .filter((input) => !input.vpkPath.toLowerCase().endsWith('.vpk'))
         .map((input) => cacheMiss(input, 'No local VPK file was found.'));
 
+    const results: UnknownModFilterGuess[] = [];
+
+    // Consult order step 1: embedded Grimoire metadata (always on, offline,
+    // ungated). Resolve any self-identifying VPK before the CRC-cache fingerprint
+    // pass, so a tagged file or a Grimoire merge is recognized without even
+    // hashing it. Only the rest fall through to the local-CRC-cache lookup.
+    const needFingerprint: UnknownModCacheMatchInput[] = [];
     for (const input of vpkInputs) {
+        const base = buildUnknownGuessBase(input.modId, input.fileName, []);
+        const embedResult = await detectFromEmbed(base, input.fileName, input.vpkPath);
+        if (embedResult) {
+            options.onProgress?.({
+                modId: input.modId,
+                requestId: input.requestId,
+                phase: 'complete',
+                message: 'Identified from embedded Grimoire metadata.',
+                result: embedResult,
+            });
+            results.push(embedResult);
+        } else {
+            needFingerprint.push(input);
+        }
+    }
+
+    for (const input of needFingerprint) {
         options.onProgress?.({
             modId: input.modId,
             requestId: input.requestId,
@@ -575,11 +689,10 @@ export async function detectUnknownModCacheMatches(
     }
 
     const fingerprints = await fingerprintFilesInWorkers(
-        vpkInputs.map((input) => ({ id: input.modId, filePath: input.vpkPath })),
+        needFingerprint.map((input) => ({ id: input.modId, filePath: input.vpkPath })),
         { concurrency: CACHE_FINGERPRINT_CONCURRENCY }
     );
-    const inputById = new Map(vpkInputs.map((input) => [input.modId, input]));
-    const results: UnknownModFilterGuess[] = [];
+    const inputById = new Map(needFingerprint.map((input) => [input.modId, input]));
     const fingerprintResults: Array<{ input: UnknownModCacheMatchInput; fingerprint: FileFingerprintResult }> = [];
 
     for (const fingerprint of fingerprints) {
@@ -985,6 +1098,7 @@ function toFoundMatch(
         section: match.section === 'Mod' || match.section === 'Sound' ? match.section : undefined,
         categoryName: match.categoryName ?? undefined,
         confidence: 'exact',
+        provenance: 'crc-32',
         reason,
         searchedBuckets: [],
         checkedMods: 0,

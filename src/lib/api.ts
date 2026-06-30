@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, TagAllInstalledResult, TagInstalledProgress, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
 import type { DmmMigrationRequest, DmmMigrationReport } from './dmmMigration';
 import type {
   HeroPortrait,
@@ -667,6 +667,28 @@ export async function extractMergeSource(
 }
 
 export type { UnmergeModResult, ExtractMergeSourceResult };
+
+/** Tag a single installed VPK in place with a self-identifying addoninfo.txt
+ *  embed (path B). Surfaces the game-running warning toast on a loaded-mod
+ *  refusal, like the other in-place mutations. */
+export async function tagOneMod(modId: string): Promise<Mod> {
+  return withGameRunningWarning(() => window.electronAPI.tagOneMod(modId));
+}
+
+/** Retroactively tag the whole installed library in place. Loaded mods are
+ *  skipped and reported; per-mod failures are collected (never thrown). */
+export async function tagAllInstalled(): Promise<TagAllInstalledResult> {
+  return window.electronAPI.tagAllInstalled();
+}
+
+/** Subscribe to bulk-tag progress ticks; returns an unsubscribe function. */
+export function onTagAllInstalledProgress(
+  callback: (progress: TagInstalledProgress) => void
+): () => void {
+  return window.electronAPI.onTagAllInstalledProgress(callback);
+}
+
+export type { TagAllInstalledResult, TagInstalledProgress };
 
 // =====================
 // Launch API

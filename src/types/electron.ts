@@ -13,6 +13,8 @@ import type {
     MergeModsArgs,
     UnmergeModResult,
     ExtractMergeSourceResult,
+    TagAllInstalledResult,
+    TagInstalledProgress,
     ApplyHeroCardResult,
     HeroAbilitySlot,
     AbilitySlot,
@@ -734,6 +736,9 @@ export interface ElectronAPI {
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
+    tagOneMod: (modId: string) => Promise<Mod>;
+    tagAllInstalled: () => Promise<TagAllInstalledResult>;
+    onTagAllInstalledProgress: (callback: (progress: TagInstalledProgress) => void) => () => void;
 
     // Launch
     launchModded: () => Promise<void>;

@@ -729,6 +729,15 @@ export interface UnknownModDetectionProgress {
   result?: UnknownModFilterGuess;
 }
 
+/** One source reconstructed from a merged VPK's embedded grimoire_meta.json. */
+export interface UnknownModMergeSource {
+  modName: string;
+  gameBananaId?: number;
+  gameBananaFileId?: number;
+  section?: string;
+  fileName?: string;
+}
+
 export interface UnknownModCrcMatchResult {
   status: 'found' | 'not-found' | 'error';
   modId?: number;
@@ -741,6 +750,18 @@ export interface UnknownModCrcMatchResult {
   categoryName?: string;
   confidence?: 'exact';
   reason?: string;
+  /** How a 'found' result was identified, so the UI can distinguish a self-
+   *  reported embed from a verified upstream CRC hit:
+   *  - 'crc-32': matched a GameBanana archive's CRC-32 (cached or live network).
+   *  - 'embedded-metadata': read from the VPK's embedded Grimoire addoninfo.txt
+   *    (offline, ungated). The file says which GameBanana mod it is.
+   *  - 'embedded-merge': the VPK is a Grimoire merge carrying a grimoire_meta.json
+   *    source list (offline, ungated); see `mergeSources`.
+   *  Absent on legacy results (treat as 'crc-32'). */
+  provenance?: 'crc-32' | 'embedded-metadata' | 'embedded-merge';
+  /** For an 'embedded-merge' result: the source list reconstructed from the
+   *  embedded grimoire_meta.json (no network). */
+  mergeSources?: UnknownModMergeSource[];
   searchedBuckets: string[];
   checkedMods: number;
   checkedFiles: number;
@@ -790,6 +811,42 @@ export interface EditLocalModArgs {
   name: string;
   thumbnailDataUrl?: string;
   nsfw?: boolean;
+}
+
+// One mod the bulk "Tag installed mods" action skipped because the running game
+// has it loaded. Surfaced in the report rather than silently dropped (tagging a
+// loaded VPK in place is a hard refusal, same as merge/reorder).
+export interface TagSkippedMod {
+  fileName: string;
+  modName: string;
+  reason: 'loaded';
+}
+
+// One mod the bulk tag action could not tag (embed / repack / swap error). The
+// installed VPK is left untouched on failure.
+export interface TagFailedMod {
+  fileName: string;
+  modName: string;
+  reason: string;
+}
+
+// Result of the retroactive bulk "Tag installed mods" action.
+export interface TagAllInstalledResult {
+  // Count of mods now carrying a self-identifying embed: newly tagged plus any
+  // that were already tagged (those skip the repack but still count).
+  tagged: number;
+  // Mods skipped because the running game has them loaded.
+  skipped: TagSkippedMod[];
+  // Mods that errored during tagging.
+  failed: TagFailedMod[];
+}
+
+// Progress tick emitted while the bulk "Tag installed mods" action runs.
+export interface TagInstalledProgress {
+  done: number;
+  total: number;
+  fileName: string;
+  modName: string;
 }
 
 export interface ModConflict {
@@ -873,6 +930,13 @@ export interface AppSettings {
    *  but the search/find buttons and bulk auto-find are hidden, leaving
    *  only the manual "Make Custom Mod" path. */
   experimentalUnknownModMatching: boolean;
+  /** Opt-in install-time VPK tagging. When on, each newly installed single-mod
+   *  VPK is re-packed in place with a self-identifying `addoninfo.txt` embed (its
+   *  canonical original hash plus GameBanana id when known) so an orphaned file
+   *  can be identified offline (see docs/vpk-metadata-embed-integration.md). Off
+   *  by default. Also surfaces the retroactive "Tag installed mods" bulk action
+   *  on the Installed page. */
+  experimentalVpkTagging: boolean;
   /** First-run setup completed. */
   hasCompletedSetup: boolean;
   /** Mod pairs the user has dismissed in the Conflicts page. New entries use

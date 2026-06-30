@@ -36,7 +36,7 @@ import {
     migrateManagedVpksToGrimoire,
 } from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
-import { fingerprintFile } from './fileMatch';
+import { resolveVpkIdentity } from './vpkIdentity';
 import { codenamesForHero } from './heroPortraits';
 import type {
     ApplyHeroCardResult,
@@ -147,8 +147,8 @@ async function locateSource(
     const wanted = sha256.toLowerCase();
     for (const v of vpks) {
         try {
-            const fp = await fingerprintFile(v.path);
-            if (fp.sha256.toLowerCase() === wanted) return v;
+            const id = await resolveVpkIdentity(v.path);
+            if (id.sha256.toLowerCase() === wanted) return v;
         } catch {
             // unreadable VPK; keep looking
         }
@@ -331,7 +331,7 @@ export async function applyHeroCard(
         throw new Error(`${basename(src.fileName)} has no card art for ${heroName}.`);
     }
 
-    const fp = await fingerprintFile(src.path);
+    const id = await resolveVpkIdentity(src.path);
     const srcMeta = getModMetadata(src.metaKey);
     const selection: LockerCardSelection = {
         heroCodename: primaryCodename,
@@ -341,7 +341,7 @@ export async function applyHeroCard(
             fileName: src.metaKey,
             modName: srcMeta?.modName,
             gameBananaId: srcMeta?.gameBananaId,
-            sha256AtApplyTime: fp.sha256,
+            sha256AtApplyTime: id.sha256,
         },
         addedAt: new Date().toISOString(),
     };
