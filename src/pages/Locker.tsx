@@ -1649,8 +1649,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             non-prop tab the registry is empty, so it simply paints nothing (a
             transparent, pointer-events-none overlay), which is cheap. */}
         {/* Local boundary: a WebGL context-creation / r3f failure degrades to no
-            live canvas (tiles fall back to 2D thumbnails) instead of bubbling to
-            the app-level boundary, which would replace the whole app shell. */}
+            live canvas instead of bubbling to the app-level boundary, which would
+            replace the whole app shell. Tiles that already failed to export keep
+            showing their 2D thumbnails; tiles that exported fine just lose the live
+            3D preview (the card chrome stays). */}
         <ErrorBoundary fallback={null}>
           <Suspense fallback={null}>
             <SoulContainerCanvas paneRef={paneRef} />
