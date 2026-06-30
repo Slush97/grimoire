@@ -914,7 +914,8 @@
       "local": "Local",
       "status": "Statut",
       "enabled": "Activé",
-      "modType": "Type de mod"
+      "hero": "Héros",
+      "tags": "Tags"
     },
     "sections": {
       "enabled_one": "Activé",
@@ -2271,10 +2272,7 @@
     "renameFile": "Renommer le fichier",
     "saving": "Enregistrement...",
     "filesEnabled": "{{enabled}} sur {{total}} fichiers activés",
-    "openModPage": "Ouvrir la page du mod GameBanana",
-    "modPage": "Page du mod",
-    "disableAll": "Tout désactiver",
-    "noFilesEnabled": "Aucun fichier activé"
+    "openModPage": "Ouvrir la page du mod GameBanana"
   },
   "imageContextMenu": {
     "image": "Image",

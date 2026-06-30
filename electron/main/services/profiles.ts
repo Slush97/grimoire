@@ -8,7 +8,7 @@ import {
     disableModUnlocked,
     reorderModsUnlocked,
 } from './mods';
-import { getModMetadata, normalizeSha256 } from './metadata';
+import { getModMetadata } from './metadata';
 import { isLockerManaged, pinLockerVpksToFront } from './lockerVpk';
 import { readAutoexec, writeAutoexec } from './autoexec';
 import {
@@ -91,43 +91,76 @@ function saveProfiles(profiles: Profile[]): void {
     }
 }
 
+function normalizeVpkIndex(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
+function inferMissingVpkIndexes<T extends { metaKey: string; fileName: string; size: number }>(
+    mods: T[]
+): Map<string, number> {
+    const groups = new Map<string, T[]>();
+    for (const mod of mods) {
+        const meta = getModMetadata(mod.metaKey);
+        if (typeof meta?.gameBananaId !== 'number' || typeof meta?.gameBananaFileId !== 'number') continue;
+        const key = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
+        const group = groups.get(key) ?? [];
+        group.push(mod);
+        groups.set(key, group);
+    }
+
+    const inferred = new Map<string, number>();
+    for (const group of groups.values()) {
+        if (group.length <= 1) continue;
+        if (new Set(group.map((mod) => mod.size)).size <= 1) continue;
+        [...group]
+            .sort((a, b) => a.size - b.size || a.fileName.localeCompare(b.fileName))
+            .forEach((mod, index) => {
+                if (normalizeVpkIndex(getModMetadata(mod.metaKey)?.vpkIndex) === undefined) {
+                    inferred.set(mod.metaKey, index);
+                }
+            });
+    }
+    return inferred;
+}
+
+function profileStableKey(gbId: number, fileId: number, vpkIndex: number | undefined): string {
+    return vpkIndex === undefined ? `${gbId}:${fileId}` : `${gbId}:${fileId}:${vpkIndex}`;
+}
+
 /** Drop duplicate physical VPKs before they're written into a profile. */
-function dedupeEnabledForProfile<T extends { metaKey: string; fileName: string; priority: number }>(
+function dedupeEnabledForProfile<T extends { metaKey: string; fileName: string; priority: number; size: number }>(
     mods: T[]
 ): T[] {
-    const byGbFileAndHash = new Map<string, T>();
+    const inferredVpkIndexes = inferMissingVpkIndexes(mods);
+    const byStableKey = new Map<string, T>();
     const out: T[] = [];
     for (const mod of mods) {
         const meta = getModMetadata(mod.metaKey);
         const gbId = meta?.gameBananaId;
         const fileId = meta?.gameBananaFileId;
-        const sha256 = normalizeSha256(meta?.sha256);
         if (typeof gbId !== 'number' || typeof fileId !== 'number') {
             out.push(mod);
             continue;
         }
-        // sha256 is only a tiebreaker. When it's missing (legacy or not-yet
-        // backfilled metadata) we must still dedupe on gbId:fileId, or the same
-        // physical mod can land in a profile at two priorities (the duplicate
-        // load-order corruption this guard exists to prevent).
-        const key = sha256 !== null ? `${gbId}:${fileId}:${sha256}` : `${gbId}:${fileId}`;
-        const existing = byGbFileAndHash.get(key);
+        const vpkIndex = normalizeVpkIndex(meta?.vpkIndex) ?? inferredVpkIndexes.get(mod.metaKey);
+        const key = profileStableKey(gbId, fileId, vpkIndex);
+        const existing = byStableKey.get(key);
         if (!existing) {
-            byGbFileAndHash.set(key, mod);
+            byStableKey.set(key, mod);
             out.push(mod);
         } else if (mod.priority < existing.priority) {
             // Prefer the higher-load-order copy; swap it in place.
             const idx = out.indexOf(existing);
             if (idx !== -1) out[idx] = mod;
-            byGbFileAndHash.set(key, mod);
+            byStableKey.set(key, mod);
             console.warn(
                 `[profiles] dedupe: dropping duplicate VPK ${existing.fileName} ` +
-                `(same GameBanana file/hash as ${mod.fileName})`
+                `(same GameBanana file/index as ${mod.fileName})`
             );
         } else {
             console.warn(
                 `[profiles] dedupe: dropping duplicate VPK ${mod.fileName} ` +
-                `(same GameBanana file/hash as ${existing.fileName})`
+                `(same GameBanana file/index as ${existing.fileName})`
             );
         }
     }
@@ -151,10 +184,11 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
 
     const now = new Date().toISOString();
 
+    const inferredVpkIndexes = inferMissingVpkIndexes(enabledMods);
     const profile: Profile = {
         id: generateProfileId(),
         name,
-        mods: enabledMods.map(mod => toProfileMod(mod, true)),
+        mods: enabledMods.map(mod => toProfileMod(mod, true, inferredVpkIndexes)),
         crosshair: crosshairSettings ? normalizeCrosshairSettings(crosshairSettings) : undefined,
         autoexecCommands: autoexecData.commands,
         createdAt: now,
@@ -174,8 +208,13 @@ export async function createProfile(deadlockPath: string, name: string, crosshai
  * ids are what `applyProfile` resolves against so a mod can still be found
  * after its fileName has changed (reorder, collision-rename, multi-vpk pick).
  */
-function toProfileMod(mod: { fileName: string; metaKey: string; priority: number }, enabled: boolean): ProfileMod {
+function toProfileMod(
+    mod: { fileName: string; metaKey: string; priority: number },
+    enabled: boolean,
+    inferredVpkIndexes?: Map<string, number>
+): ProfileMod {
     const meta = getModMetadata(mod.metaKey);
+    const vpkIndex = normalizeVpkIndex(meta?.vpkIndex) ?? inferredVpkIndexes?.get(mod.metaKey);
     const out: ProfileMod = {
         fileName: mod.fileName,
         enabled,
@@ -183,7 +222,7 @@ function toProfileMod(mod: { fileName: string; metaKey: string; priority: number
     };
     if (typeof meta?.gameBananaId === 'number') out.gameBananaId = meta.gameBananaId;
     if (typeof meta?.gameBananaFileId === 'number') out.gameBananaFileId = meta.gameBananaFileId;
-    if (typeof meta?.sha256 === 'string') out.sha256 = meta.sha256;
+    if (vpkIndex !== undefined) out.vpkIndex = vpkIndex;
     return out;
 }
 
@@ -218,10 +257,11 @@ export async function createProfileFromGameBananaIds(
     const autoexecData = readAutoexec(deadlockPath);
     const now = new Date().toISOString();
 
+    const inferredVpkIndexes = inferMissingVpkIndexes(matching);
     const profile: Profile = {
         id: generateProfileId(),
         name,
-        mods: matching.map((mod) => toProfileMod(mod, true)),
+        mods: matching.map((mod) => toProfileMod(mod, true, inferredVpkIndexes)),
         autoexecCommands: autoexecData.commands,
         createdAt: now,
         updatedAt: now,
@@ -257,9 +297,10 @@ export async function updateProfile(deadlockPath: string, profileId: string, cro
     // Read current autoexec commands
     const autoexecData = readAutoexec(deadlockPath);
 
+    const inferredVpkIndexes = inferMissingVpkIndexes(enabledMods);
     profiles[index] = {
         ...profiles[index],
-        mods: enabledMods.map(mod => toProfileMod(mod, true)),
+        mods: enabledMods.map(mod => toProfileMod(mod, true, inferredVpkIndexes)),
         // If crosshairSettings is passed, use it. If undefined/null, remove crosshair from profile.
         // This allows the frontend to explicitly control whether crosshair is included based on feature toggle.
         crosshair: crosshairSettings ? normalizeCrosshairSettings(crosshairSettings) : undefined,
@@ -283,10 +324,12 @@ type ResolvedMatch =
 /**
  * Build a resolver that maps a ProfileMod to one of the current scanned mods.
  *
- * Tries stable id first (`gameBananaId` + `gameBananaFileId`) so a mod can be
- * found after a fileName change. If several installed VPKs came from that same
- * GameBanana file, SHA-256 picks the exact sibling. Falls back to fileName ONLY
- * when neither the profile entry nor the candidate currentMod carry ids: this keeps
+ * Tries stable id first (`gameBananaId` + `gameBananaFileId` + optional
+ * `vpkIndex`) so a mod can be found after a fileName change. Multi-VPK
+ * siblings use the size-sorted index assigned at download time instead of a
+ * content hash, so profile apply can still survive a redownload/update that
+ * changes the VPK bytes but keeps the archive's relative VPK shape. Falls back
+ * to fileName ONLY when neither the profile entry nor the candidate currentMod carry ids: this keeps
  * local-to-local fileName matching working for custom mods, while refusing to
  * cross-match a legacy stable-id-less profile entry to an unrelated
  * GameBanana mod that just happens to occupy the same pakNN_ slot today. The
@@ -302,15 +345,26 @@ function buildProfileModResolver(
 ): (pm: ProfileMod) => ResolvedMatch {
     const byFileName = new Map<string, typeof currentMods[number]>();
     const byGbFile = new Map<string, Array<typeof currentMods[number]>>();
-    const bySha256 = new Map<string, typeof currentMods[number]>();
-    const shaByModId = new Map<string, string>();
+    const byGbMod = new Map<number, Array<typeof currentMods[number]>>();
+    const vpkIndexByModId = new Map<string, number | undefined>();
     const metaByFileName = new Map<string, ReturnType<typeof getModMetadata>>();
+    const inferredVpkIndexes = inferMissingVpkIndexes(currentMods);
     for (const mod of currentMods) {
         byFileName.set(mod.fileName, mod);
         const meta = getModMetadata(mod.metaKey);
         metaByFileName.set(mod.fileName, meta);
         const gbId = meta?.gameBananaId;
         const fileId = meta?.gameBananaFileId;
+        const vpkIndex = normalizeVpkIndex(meta?.vpkIndex) ?? inferredVpkIndexes.get(mod.metaKey);
+        vpkIndexByModId.set(mod.id, vpkIndex);
+        if (typeof gbId === 'number') {
+            const modMatches = byGbMod.get(gbId);
+            if (modMatches) {
+                modMatches.push(mod);
+            } else {
+                byGbMod.set(gbId, [mod]);
+            }
+        }
         if (typeof gbId === 'number' && typeof fileId === 'number') {
             const key = `${gbId}:${fileId}`;
             const matches = byGbFile.get(key);
@@ -320,44 +374,65 @@ function buildProfileModResolver(
                 byGbFile.set(key, [mod]);
             }
         }
-        const sha256 = normalizeSha256(meta?.sha256);
-        if (sha256 !== null) {
-            shaByModId.set(mod.id, sha256);
-            if (!bySha256.has(sha256)) {
-                bySha256.set(sha256, mod);
-            }
-        }
     }
     const claimed = new Set<string>();
+    const take = (
+        mod: typeof currentMods[number] | undefined,
+        via: 'stable' | 'fileName'
+    ): ResolvedMatch | undefined => {
+        if (!mod || claimed.has(mod.id)) return undefined;
+        claimed.add(mod.id);
+        return { mod, via };
+    };
     return (pm: ProfileMod): ResolvedMatch => {
-        const profileHasStableIds =
-            typeof pm.gameBananaId === 'number' &&
-            typeof pm.gameBananaFileId === 'number';
-
-        const profileSha = normalizeSha256(pm.sha256);
+        const profileGameBananaId = typeof pm.gameBananaId === 'number' ? pm.gameBananaId : undefined;
+        const profileFileId = typeof pm.gameBananaFileId === 'number' ? pm.gameBananaFileId : undefined;
+        const profileHasStableIds = profileGameBananaId !== undefined && profileFileId !== undefined;
+        const profileVpkIndex = normalizeVpkIndex(pm.vpkIndex);
         const stableCandidates = profileHasStableIds
-            ? byGbFile.get(`${pm.gameBananaId}:${pm.gameBananaFileId}`) ?? []
+            ? byGbFile.get(`${profileGameBananaId}:${profileFileId}`) ?? []
             : [];
         if (profileHasStableIds) {
             const stable =
-                (profileSha !== null
+                profileVpkIndex !== undefined
                     ? stableCandidates.find(
-                        (mod) => shaByModId.get(mod.id) === profileSha && !claimed.has(mod.id)
+                        (mod) => vpkIndexByModId.get(mod.id) === profileVpkIndex && !claimed.has(mod.id)
+                    ) ??
+                    stableCandidates.find(
+                        (mod) =>
+                            mod.fileName === pm.fileName &&
+                            vpkIndexByModId.get(mod.id) === undefined &&
+                            !claimed.has(mod.id)
                     )
-                    : undefined) ??
-                stableCandidates.find((mod) => mod.fileName === pm.fileName && !claimed.has(mod.id)) ??
-                stableCandidates.find((mod) => !claimed.has(mod.id));
-            if (stable && !claimed.has(stable.id)) {
-                claimed.add(stable.id);
-                return { mod: stable, via: 'stable' };
-            }
-        }
+                    : stableCandidates.find((mod) => mod.fileName === pm.fileName && !claimed.has(mod.id)) ??
+                    stableCandidates.find(
+                        (mod) => vpkIndexByModId.get(mod.id) === undefined && !claimed.has(mod.id)
+                    ) ??
+                    stableCandidates.find((mod) => !claimed.has(mod.id));
+            const stableMatch = take(stable, 'stable');
+            if (stableMatch) return stableMatch;
 
-        if (profileSha !== null && (!profileHasStableIds || stableCandidates.length === 0)) {
-            const byHash = bySha256.get(profileSha);
-            if (byHash && !claimed.has(byHash.id)) {
-                claimed.add(byHash.id);
-                return { mod: byHash, via: 'stable' };
+            // Update-tolerant fallback: the GameBanana file id may change when
+            // an author replaces an upload. Use the VPK index only when it
+            // points to one unclaimed installed candidate; otherwise a single
+            // installed mod from the same page is safe for one-VPK archives.
+            const modCandidates = profileGameBananaId !== undefined
+                ? byGbMod.get(profileGameBananaId) ?? []
+                : [];
+            if (profileVpkIndex !== undefined) {
+                const indexedCandidates = modCandidates.filter(
+                    (mod) => vpkIndexByModId.get(mod.id) === profileVpkIndex && !claimed.has(mod.id)
+                );
+                if (indexedCandidates.length === 1) {
+                    const indexedMatch = take(indexedCandidates[0], 'stable');
+                    if (indexedMatch) return indexedMatch;
+                }
+            } else if (stableCandidates.length === 0) {
+                const unclaimedCandidates = modCandidates.filter((mod) => !claimed.has(mod.id));
+                if (unclaimedCandidates.length === 1) {
+                    const modMatch = take(unclaimedCandidates[0], 'stable');
+                    if (modMatch) return modMatch;
+                }
             }
         }
 
@@ -384,8 +459,7 @@ function buildProfileModResolver(
             };
         }
 
-        claimed.add(fallback.id);
-        return { mod: fallback, via: 'fileName' };
+        return take(fallback, 'fileName') ?? { mod: undefined, via: 'miss' };
     };
 }
 
@@ -394,7 +468,8 @@ function buildProfileModResolver(
  *  correlate with the metadata sidecar and the user's GameBanana page. */
 function describeProfileMod(pm: ProfileMod): string {
     if (typeof pm.gameBananaId === 'number' && typeof pm.gameBananaFileId === 'number') {
-        return `gb=${pm.gameBananaId}:${pm.gameBananaFileId} (${pm.fileName})`;
+        const indexPart = normalizeVpkIndex(pm.vpkIndex) === undefined ? '' : `:${pm.vpkIndex}`;
+        return `gb=${pm.gameBananaId}:${pm.gameBananaFileId}${indexPart} (${pm.fileName})`;
     }
     return `local (${pm.fileName})`;
 }
@@ -443,7 +518,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     const failures: string[] = [];
 
     await runExclusiveModMutation(async () => {
-        // Resolve by archive id first, using hash for multi-VPK siblings.
+        // Resolve by archive id first, using vpkIndex for multi-VPK siblings.
         // FileName fallback is only for stable-id-less local mods.
         const currentMods = await scanMods(deadlockPath);
         await syncRunningGameModSnapshotFromMods(currentMods);

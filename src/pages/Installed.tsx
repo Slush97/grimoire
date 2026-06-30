@@ -82,13 +82,15 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
+import { Modal } from '../components/common/Modal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
-import { Button, IconButton, Tag } from '../components/common/ui';
+import { Button, CheckboxMark, IconButton, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
+import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -168,6 +170,59 @@ function modEntryKey(mod: Mod): string {
     return `single:sha:${mod.sha256}`;
   }
   return `single:local:${mod.name}:${mod.size}`;
+}
+
+type EnabledVpkRestoreSnapshot = {
+  hadEnabled: boolean;
+  enabledIndexes: Set<number>;
+  enabledUnindexed: boolean;
+};
+
+function getVpkIndex(mod: Pick<Mod, 'vpkIndex'>): number | undefined {
+  return typeof mod.vpkIndex === 'number' && Number.isInteger(mod.vpkIndex) && mod.vpkIndex >= 0
+    ? mod.vpkIndex
+    : undefined;
+}
+
+function createEnabledVpkRestoreSnapshot(
+  targets: Array<{ enabled: boolean; vpkIndex?: number }>
+): EnabledVpkRestoreSnapshot {
+  const enabledIndexes = new Set<number>();
+  let enabledUnindexed = false;
+  for (const target of targets) {
+    if (!target.enabled) continue;
+    const index = getVpkIndex(target);
+    if (index === undefined) {
+      enabledUnindexed = true;
+    } else {
+      enabledIndexes.add(index);
+    }
+  }
+  return {
+    hadEnabled: enabledUnindexed || enabledIndexes.size > 0,
+    enabledIndexes,
+    enabledUnindexed,
+  };
+}
+
+function shouldRestoreVpkEnabled(
+  mod: Mod,
+  candidates: Mod[],
+  snapshot: EnabledVpkRestoreSnapshot
+): boolean {
+  if (!snapshot.hadEnabled) return false;
+  const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
+  const index = getVpkIndex(mod);
+  if (hasIndexedCandidates) {
+    // Snapshot carries no per-VPK index (the old install predates vpkIndex), but
+    // the redownload assigned indexes. We can't map which sibling was on, so
+    // honor the coarse "something was enabled" and restore every VPK, matching
+    // the pre-index behavior. Without this, a multi-VPK mod installed before
+    // vpkIndex existed silently lands fully disabled after an update.
+    if (snapshot.enabledIndexes.size === 0) return snapshot.enabledUnindexed;
+    return index === undefined ? snapshot.enabledUnindexed : snapshot.enabledIndexes.has(index);
+  }
+  return snapshot.enabledIndexes.size === 0 && snapshot.enabledUnindexed;
 }
 
 
@@ -295,28 +350,40 @@ function entryIsLocal(entry: ModEntry): boolean {
   return entry.kind === 'single' && typeof entry.mod.gameBananaId !== 'number';
 }
 
-const OTHER_TYPE_KEY = 'other';
+const OTHER_TAG_KEY = 'other';
 
-/** Coarse "mod type" bucket for the Installed type filter, derived entirely
- *  from already-classified metadata. Precedence: a global cosmetic type, then
- *  sounds, then the GameBanana category/section, then a catch-all. The key is
- *  opaque; typeKeyLabel turns it into display text. */
-function entryTypeKey(entry: ModEntry): string {
-  const mod = entryPrimaryMod(entry);
-  const global = getEffectiveGlobalType(mod);
-  if (global) return `global:${global}`;
-  const section = (mod.sourceSection ?? '').toLowerCase();
-  if (section.includes('sound')) return 'sound';
-  const category = mod.categoryName?.trim();
-  if (category) return `cat:${category}`;
-  const rawSection = mod.sourceSection?.trim();
-  if (rawSection) return `section:${rawSection}`;
-  return OTHER_TYPE_KEY;
+function heroNameFromTag(label?: string): string | null {
+  if (!label) return null;
+  const direct = heroNameForLabel(label);
+  if (direct) return canonicalHeroName(direct);
+  for (const part of label.split(/[/>]/).map((p) => p.trim()).filter(Boolean).reverse()) {
+    const match = heroNameForLabel(part);
+    if (match) return canonicalHeroName(match);
+  }
+  return null;
 }
 
-function typeKeyLabel(key: string): string {
-  if (key === OTHER_TYPE_KEY) return 'Other';
-  if (key === 'sound') return 'Sounds';
+function modHeroName(mod: Mod): string | null {
+  const tagged = canonicalHeroName(mod.lockerHero);
+  if (tagged) return tagged;
+  const categoryHero = heroNameFromTag(mod.categoryName);
+  if (categoryHero) return categoryHero;
+  const section = (mod.sourceSection ?? '').toLowerCase();
+  if (section.includes('sound')) {
+    const inferred = inferHeroFromTitle(mod.name);
+    return inferred ? canonicalHeroName(inferred) : null;
+  }
+  return null;
+}
+
+function entryHeroNames(entry: ModEntry): string[] {
+  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
+  return Array.from(new Set(mods.map(modHeroName).filter((name): name is string => !!name)));
+}
+
+function tagKeyLabel(key: string): string {
+  if (key === OTHER_TAG_KEY) return 'Other';
+  if (key === 'section:sound') return 'Sounds';
   if (key.startsWith('global:')) {
     const gt = key.slice('global:'.length) as GlobalModType;
     return GLOBAL_MOD_TYPE_LABELS[gt] ?? gt;
@@ -324,6 +391,35 @@ function typeKeyLabel(key: string): string {
   if (key.startsWith('cat:')) return key.slice('cat:'.length);
   if (key.startsWith('section:')) return key.slice('section:'.length);
   return key;
+}
+
+function modTagKeys(mod: Mod): string[] {
+  const keys: string[] = [];
+  const labels = new Set<string>();
+  const add = (key: string) => {
+    const labelKey = tagKeyLabel(key).trim().toLowerCase();
+    if (!labelKey || labels.has(labelKey)) return;
+    labels.add(labelKey);
+    keys.push(key);
+  };
+
+  const global = getEffectiveGlobalType(mod);
+  if (global) add(`global:${global}`);
+
+  const section = (mod.sourceSection ?? '').trim();
+  if (section.toLowerCase().includes('sound')) add('section:sound');
+
+  const category = mod.categoryName?.trim();
+  if (category && !heroNameFromTag(category)) add(`cat:${category}`);
+
+  if (keys.length === 0 && section && section !== 'Mod') add(`section:${section}`);
+  if (keys.length === 0) add(OTHER_TAG_KEY);
+  return keys;
+}
+
+function entryTagKeys(entry: ModEntry): string[] {
+  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
+  return Array.from(new Set(mods.flatMap(modTagKeys)));
 }
 
 function flattenEntries(entries: ModEntry[]): Mod[] {
@@ -771,8 +867,8 @@ export default function Installed() {
   }, [refreshLockerOverrideCount]);
   const [search, setSearch] = useState('');
   // Sort + filter popover (the SlidersHorizontal button in the top bar). Sort
-  // and source persist across launches; the type selection is library-specific
-  // so it resets per session. A non-default sort or any active filter turns the
+  // and source persist across launches; hero/tag selections are library-specific
+  // so they reset per session. A non-default sort or any active filter turns the
   // list into a read-only view (see viewIsReorderable) because the displayed
   // order no longer maps to load-order priority.
   const [filterOpen, setFilterOpen] = useState(false);
@@ -798,7 +894,8 @@ export default function Installed() {
     return ['gamebanana', 'local'];
   });
   const [statusSel, setStatusSel] = useState<('enabled' | 'disabled')[]>(['enabled', 'disabled']);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [heroFilter, setHeroFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
   const installedHideNsfwPreviews =
     settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true;
   useEffect(() => {
@@ -1721,7 +1818,7 @@ export default function Installed() {
           (mod) => mod.gameBananaId === detailsMod.id && mod.gameBananaFileId === fileId,
         );
       }
-      const restoreEnabled = replacementTargets.some((mod) => mod.enabled);
+      const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
 
       if (replacing && sourceMod) {
         // Snapshot before the destructive delete so the user can roll back,
@@ -1741,12 +1838,13 @@ export default function Installed() {
 
       // Replacement downloads land disabled, so restore the enabled state after
       // reloading. Match by GB ids because local ids change on reinstall.
-      if (restoreEnabled) {
+      if (restoreEnabled.hadEnabled) {
         await loadMods();
         const newMods = useAppStore
           .getState()
           .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
         for (const newMod of newMods) {
+          if (!shouldRestoreVpkEnabled(newMod, newMods, restoreEnabled)) continue;
           if (newMod.enabled) continue;
           try {
             await toggleMod(newMod.id);
@@ -1781,6 +1879,7 @@ export default function Installed() {
         gameBananaId: m.gameBananaId!,
         gameBananaFileId: m.gameBananaFileId!,
         fileName: m.fileName,
+        vpkIndex: m.vpkIndex,
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
@@ -1807,7 +1906,12 @@ export default function Installed() {
     const needsPick: { id: string; name: string }[] = [];
     // Track the (gameBananaId, fileId) actually downloaded so re-enable can
     // still find the new install even when we redirected a stale snapshot.
-    const completed: { gameBananaId: number; gameBananaFileId: number; wasEnabled: boolean; fileName: string }[] = [];
+    const completed: {
+      gameBananaId: number;
+      gameBananaFileId: number;
+      restoreEnabled: EnabledVpkRestoreSnapshot;
+      fileName: string;
+    }[] = [];
     let progress = 0;
     // Guard so a multi-group update writes exactly one recovery snapshot, not
     // one per group.
@@ -1972,7 +2076,12 @@ export default function Installed() {
           completed.push({
             gameBananaId: batch.gameBananaId,
             gameBananaFileId: batch.fileId,
-            wasEnabled: batch.snapshots.some((snapshot) => snapshot.wasEnabled),
+            restoreEnabled: createEnabledVpkRestoreSnapshot(
+              batch.snapshots.map((snapshot) => ({
+                enabled: snapshot.wasEnabled,
+                vpkIndex: snapshot.vpkIndex,
+              })),
+            ),
             fileName: batch.fileName,
           });
         } catch (err) {
@@ -2002,11 +2111,12 @@ export default function Installed() {
     await loadMods();
     const refreshed = useAppStore.getState().mods;
     for (const c of completed) {
-      if (!c.wasEnabled) continue;
+      if (!c.restoreEnabled.hadEnabled) continue;
       const newMods = refreshed.filter(
         (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
       );
       for (const newMod of newMods) {
+        if (!shouldRestoreVpkEnabled(newMod, newMods, c.restoreEnabled)) continue;
         if (newMod.enabled) continue;
         try {
           await toggleMod(newMod.id);
@@ -2359,10 +2469,6 @@ export default function Installed() {
     return true;
   };
 
-  const disableEntireGroup = async (group: Extract<ModEntry, { kind: 'group' }>) => {
-    await setGroupEnabled(group, false);
-  };
-
   /** Top-level toggle on a grouped card. If anything is enabled, disable the
    *  whole group; otherwise open the picker so the user can choose the files. */
   const handleGroupToggle = async (group: Extract<ModEntry, { kind: 'group' }>) => {
@@ -2620,6 +2726,21 @@ export default function Installed() {
     [allEntries]
   );
 
+  // Per-entry hero/tag metadata, keyed by entry.key. entryHeroNames/entryTagKeys
+  // do real work per mod (canonicalHeroName, tag-label regex splits,
+  // inferHeroFromTitle for sounds), and the option-bucket + filter passes below
+  // hit them for every entry on every render - including drag-start renders that
+  // only flip draggingKey. Caching them here (rebuilt only when allEntries
+  // changes) keeps those passes to cheap Map lookups, so a drag pickup paints the
+  // overlay without rescanning the whole library. Mirrors entryConflicts.
+  const entryFacetMeta = useMemo(() => {
+    const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
+    for (const entry of allEntries) {
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry), tagKeys: entryTagKeys(entry) });
+    }
+    return byKey;
+  }, [allEntries]);
+
   // Conflict arrays per entry key, with identities that persist across
   // renders (plus the module-level EMPTY_CONFLICTS fallback) so memoized
   // cards only re-render when their own conflicts change.
@@ -2806,19 +2927,33 @@ export default function Installed() {
         progress: unknownDetectionProgress[unknownFilterGuess.mod.id],
       }
     : null;
-  // Mod-type buckets present across every installed entry, with counts. Built
-  // from allEntries (not the filtered view) so the option list stays stable as
-  // selections change.
-  const typeOptionMap = new Map<string, number>();
+  // Cached per-entry hero/tag lookups (see entryFacetMeta); fall back to a live
+  // compute if an entry somehow isn't in the cache.
+  const heroNamesOf = (entry: ModEntry): string[] =>
+    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry);
+  const tagKeysOf = (entry: ModEntry): string[] =>
+    entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
+
+  // Hero and tag buckets are built from allEntries (not the filtered view) so
+  // the option lists stay stable as selections change.
+  const heroOptionMap = new Map<string, number>();
+  const tagOptionMap = new Map<string, number>();
   for (const entry of allEntries) {
-    const key = entryTypeKey(entry);
-    typeOptionMap.set(key, (typeOptionMap.get(key) ?? 0) + 1);
+    for (const heroName of heroNamesOf(entry)) {
+      heroOptionMap.set(heroName, (heroOptionMap.get(heroName) ?? 0) + 1);
+    }
+    for (const key of tagKeysOf(entry)) {
+      tagOptionMap.set(key, (tagOptionMap.get(key) ?? 0) + 1);
+    }
   }
-  const typeOptions = Array.from(typeOptionMap.entries())
-    .map(([key, count]) => ({ key, label: typeKeyLabel(key), count }))
+  const heroOptions = HERO_NAMES_SORTED
+    .filter((name) => heroOptionMap.has(name))
+    .map((name) => ({ name, count: heroOptionMap.get(name) ?? 0 }));
+  const tagOptions = Array.from(tagOptionMap.entries())
+    .map(([key, count]) => ({ key, label: tagKeyLabel(key), count }))
     .sort((a, b) => {
-      if (a.key === OTHER_TYPE_KEY) return 1;
-      if (b.key === OTHER_TYPE_KEY) return -1;
+      if (a.key === OTHER_TAG_KEY) return 1;
+      if (b.key === OTHER_TAG_KEY) return -1;
       return a.label.localeCompare(b.label);
     });
   const localCount = allEntries.filter(entryIsLocal).length;
@@ -2838,20 +2973,22 @@ export default function Installed() {
   const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
 
   // Filter by search query (substring on name), source (GameBanana vs local
-  // import), and mod type, then optionally re-sort. Status (enabled/disabled) is
-  // applied per-section below. Drag-and-drop reorder is disabled whenever any of
-  // these is active (see viewIsReorderable) because the displayed order no longer
-  // maps to load-order priority; the canonical priority order lives on
+  // import), hero, and tags, then optionally re-sort. Status (enabled/disabled)
+  // is applied per-section below. Drag-and-drop reorder is disabled whenever any
+  // of these is active (see viewIsReorderable) because the displayed order no
+  // longer maps to load-order priority; the canonical priority order lives on
   // enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
   const matchesSearchEntry = (entry: ModEntry) =>
     !searchNeedle || entrySearchText(entry).toLowerCase().includes(searchNeedle);
   const matchesSourceEntry = (entry: ModEntry) =>
     entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
-  const matchesTypeEntry = (entry: ModEntry) =>
-    typeFilter.length === 0 || typeFilter.includes(entryTypeKey(entry));
+  const matchesHeroEntry = (entry: ModEntry) =>
+    heroFilter === 'all' || heroNamesOf(entry).includes(heroFilter);
+  const matchesTagEntry = (entry: ModEntry) =>
+    tagFilter.length === 0 || tagKeysOf(entry).some((key) => tagFilter.includes(key));
   const matchesAllFilters = (entry: ModEntry) =>
-    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesTypeEntry(entry);
+    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesHeroEntry(entry) && matchesTagEntry(entry);
   const sortEntries = (entries: ModEntry[]): ModEntry[] => {
     if (sortMode === 'name') {
       return [...entries].sort((a, b) =>
@@ -2866,11 +3003,12 @@ export default function Installed() {
   // Both toggles on (length 2) = no filtering on that axis.
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
-  const filtersActive = sourceActive || statusActive || typeFilter.length > 0;
+  const heroActive = heroFilter !== 'all';
+  const filtersActive = sourceActive || statusActive || heroActive || tagFilter.length > 0;
   const sortActive = sortMode !== 'priority';
   const viewIsReorderable = !searchNeedle && !filtersActive && !sortActive;
   const activeAdjustmentCount =
-    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + typeFilter.length + (sortActive ? 1 : 0);
+    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + (heroActive ? 1 : 0) + tagFilter.length + (sortActive ? 1 : 0);
   const visibleEnabled = statusSel.includes('enabled')
     ? sortEntries(enabledEntries.filter(matchesAllFilters))
     : [];
@@ -3307,7 +3445,7 @@ export default function Installed() {
                 claiming a second strip below the search. */}
             {topStatusActions}
             {/* Sort + filter: load order / recent / name, GameBanana vs local
-                import, and mod-type buckets. The badge counts active
+                import, hero, and metadata tags. The badge counts active
                 adjustments; while any are on, the list is read-only (no drag
                 reorder) so it can't be mistaken for load order. order-last keeps
                 it grouped with card size and layout controls at the row end. */}
@@ -3420,16 +3558,49 @@ export default function Installed() {
                     </div>
                   </div>
 
-                  {typeOptions.length > 1 && (
+                  {heroOptions.length > 0 && (
                     <div className="mt-3 border-t border-border pt-3">
                       <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                          {t('installed.filters.modType')}
+                          {t('installed.filters.hero')}
                         </span>
-                        {typeFilter.length > 0 && (
+                        {heroFilter !== 'all' && (
                           <button
                             type="button"
-                            onClick={() => setTypeFilter([])}
+                            onClick={() => setHeroFilter('all')}
+                            className="text-[11px] text-accent hover:underline cursor-pointer"
+                          >
+                            {t('common.actions.clear')}
+                          </button>
+                        )}
+                      </div>
+                      <HeroSelect
+                        ariaLabel="Filter by hero"
+                        value={heroFilter}
+                        onChange={setHeroFilter}
+                        size="sm"
+                        options={[
+                          { value: 'all', label: t('browse.filters.allHeroes'), muted: true },
+                          ...heroOptions.map((hero) => ({
+                            value: hero.name,
+                            label: `${hero.name} (${hero.count})`,
+                            heroName: hero.name,
+                          })),
+                        ]}
+                      />
+                    </div>
+                  )}
+
+                  {tagOptions.length > 1 && (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                          {t('installed.filters.tags')}
+                        </span>
+                        {tagFilter.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setTagFilter([])}
                             className="text-[11px] text-accent hover:underline cursor-pointer"
                           >
                             {t('common.actions.clear')}
@@ -3437,15 +3608,14 @@ export default function Installed() {
                         )}
                       </div>
                       <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                        {typeOptions.map((opt) => {
-                          const checked = typeFilter.includes(opt.key);
-                          const hero = heroNameForLabel(opt.label);
+                        {tagOptions.map((opt) => {
+                          const checked = tagFilter.includes(opt.key);
                           return (
                             <button
                               key={opt.key}
                               type="button"
                               onClick={() =>
-                                setTypeFilter((prev) =>
+                                setTagFilter((prev) =>
                                   checked ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
                                 )
                               }
@@ -3458,15 +3628,6 @@ export default function Installed() {
                               >
                                 {checked && <Check className="h-3 w-3" />}
                               </span>
-                              {hero && (
-                                <img
-                                  src={getHeroChipIconPath(hero)}
-                                  alt=""
-                                  aria-hidden="true"
-                                  className="h-4 w-4 flex-shrink-0 rounded-full object-cover"
-                                  loading="lazy"
-                                />
-                              )}
                               <span className="flex-1 truncate">{opt.label}</span>
                               <span className="text-[11px] opacity-60">{opt.count}</span>
                             </button>
@@ -3483,7 +3644,8 @@ export default function Installed() {
                         setSortMode('priority');
                         setSourceSel(['gamebanana', 'local']);
                         setStatusSel(['enabled', 'disabled']);
-                        setTypeFilter([]);
+                        setHeroFilter('all');
+                        setTagFilter([]);
                       }}
                       className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
                     >
@@ -3631,7 +3793,8 @@ export default function Installed() {
               setSearch('');
               setSourceSel(['gamebanana', 'local']);
               setStatusSel(['enabled', 'disabled']);
-              setTypeFilter([]);
+              setHeroFilter('all');
+              setTagFilter([]);
             }}
           >
             {searchNeedle ? t('installed.filters.clearSearch') : t('installed.filters.clearFilters')}
@@ -3848,7 +4011,6 @@ export default function Installed() {
             onReorderVariantTo={(source, neighbor, position) =>
               reorderVariantTo(source, neighbor, position)
             }
-            onDisableAll={() => disableEntireGroup(liveEntry)}
             onDeleteVariant={(variant) => deleteMod(variant.id)}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
             onOpenModDetails={
@@ -7250,22 +7412,37 @@ function ImportCustomModModal({
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-            <FilePlus className="w-5 h-5" />
-            {title}
-          </h3>
-          <IconButton
-            icon={X}
-            label={t('common.actions.close')}
-            onClick={onClose}
-          />
+  return (
+    <Modal
+      onClose={onClose}
+      labelledBy="import-custom-mod-title"
+      size="lg"
+      dismissable={!submitting}
+      panelClassName="flex max-h-[80vh] flex-col overflow-hidden"
+    >
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <FilePlus className="h-5 w-5 text-accent" />
+            <h2 id="import-custom-mod-title" className="text-base font-semibold text-text-primary">
+              {title}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => !submitting && onClose()}
+            disabled={submitting}
+            aria-label={t('common.actions.close')}
+            className="rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3.5">
+          <p className="text-xs leading-5 text-text-secondary">
+            {vpkHelpText}
+          </p>
+
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
               {t('installed.import.vpkFile')} <span className="text-state-danger">*</span>
@@ -7280,7 +7457,7 @@ function ImportCustomModModal({
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = lockVpk ? 'none' : 'copy'; if (!lockVpk) setVpkDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(false); }}
               onDrop={handleVpkDrop}
-              className={`relative flex flex-col items-center justify-center gap-1.5 px-4 py-5 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`relative flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 vpkDragActive
                   ? 'border-accent bg-accent/10'
                   : vpkPath
@@ -7310,9 +7487,6 @@ function ImportCustomModModal({
                 </>
               )}
             </div>
-            <p className="mt-1 text-xs text-text-secondary">
-              {vpkHelpText}
-            </p>
           </div>
 
           <FormField label={t('installed.import.modName')} required>
@@ -7337,7 +7511,7 @@ function ImportCustomModModal({
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
               onDrop={handleImageDrop}
-              className={`flex items-center gap-3 p-3 rounded-lg border border-dashed cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-2.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 imgDragActive
                   ? 'border-accent bg-accent/10'
                   : thumbnailDataUrl
@@ -7369,13 +7543,14 @@ function ImportCustomModModal({
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
+          <label className="group flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer select-none">
             <input
               type="checkbox"
               checked={nsfw}
               onChange={(e) => setNsfw(e.target.checked)}
-              className="w-4 h-4 accent-accent cursor-pointer"
+              className="peer sr-only"
             />
+            <CheckboxMark checked={nsfw} />
             {t('locker.soulImport.fields.nsfw')}
           </label>
 
@@ -7386,25 +7561,17 @@ function ImportCustomModModal({
           )}
         </div>
 
-        <div className="flex justify-end gap-3 p-5 border-t border-border">
-          <Button
-            variant="secondary"
-            onClick={onClose}
-            disabled={submitting}
-          >
-            {t('common.actions.cancel')}
-          </Button>
+        <div className="flex justify-center border-t border-border px-5 py-3">
           <Button
             variant="primary"
             onClick={handleSubmit}
             disabled={!canSubmit}
             isLoading={submitting}
+            className="!px-10 !py-1.5"
           >
             {submitLabel}
           </Button>
         </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }

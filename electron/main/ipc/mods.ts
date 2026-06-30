@@ -145,7 +145,7 @@ function enrichMod(mod: Mod): WireMod {
             // VPK if the title gave us nothing. The VPK path is authoritative
             // (parses real Source 2 codenames like `ghost` → Lady Geist) but
             // costs a disk read + directory tree parse per call.
-            let inferred = inferHeroFromTitle(metadata.modName || mod.name);
+            let inferred: string | null = inferHeroFromTitle(metadata.modName || mod.name);
             let inferredSource: typeof lockerHeroSource = inferred ? 'title' : undefined;
             if (!inferred) {
                 try {
@@ -193,6 +193,7 @@ function enrichMod(mod: Mod): WireMod {
             audioUrl: metadata.audioUrl,
             gameBananaId: metadata.gameBananaId,
             gameBananaFileId: metadata.gameBananaFileId,
+            vpkIndex: metadata.vpkIndex,
             categoryId: metadata.categoryId,
             categoryName: metadata.categoryName,
             sourceSection: metadata.sourceSection,

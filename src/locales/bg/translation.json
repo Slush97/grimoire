@@ -734,7 +734,8 @@
       "local": "Локален",
       "status": "Състояние",
       "enabled": "Активини",
-      "modType": "Тип мод"
+      "hero": "Герой",
+      "tags": "Тагове"
     },
     "view": {
       "viewOptions": "Опции за изглед",
@@ -1997,10 +1998,7 @@
     "renameFile": "Преименуване на файла",
     "saving": "Запазване...",
     "filesEnabled": "{{enabled}} от {{total}} файла активирани",
-    "openModPage": "Отваряне на страницата на мода в GameBanana",
-    "modPage": "Страница на мода",
-    "disableAll": "Деактивиране на всички",
-    "noFilesEnabled": "Няма активирани файлове"
+    "openModPage": "Отваряне на страницата на мода в GameBanana"
   },
   "imageContextMenu": {
     "image": "Изображение",
