@@ -3813,15 +3813,17 @@ function ReadableBrowseModCard({
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
       style={cardFrameStyle}
-      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-bg-sunken text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+      className={`browse-card-hover-surface browse-readable-card premium-card-glow group flex w-full flex-col overflow-hidden rounded-xl border bg-bg-sunken text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
             ? 'border-accent/40'
-            : 'border-white/[0.07]'
+            : installed && !installedDisabled
+              ? 'border-white/[0.07] premium-card-glow-active'
+              : 'border-white/[0.07]'
       }`}
     >
-      <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-md bg-bg-tertiary`}>
+      <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-xl bg-bg-tertiary`}>
         {media}
         {showChips && chips.length > 0 && (
           <div className="browse-readable-card-chips pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end bg-gradient-to-t from-black/75 via-black/30 to-transparent px-[clamp(8px,4cqw,12px)] pb-[clamp(7px,3.5cqw,10px)] pt-8">
@@ -4053,13 +4055,13 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
-        className={`browse-card-hover-surface relative bg-bg-secondary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
+        className={`browse-card-hover-surface relative bg-bg-secondary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
             : 'border-border hover:border-accent/50'
         }`}
       >
-        <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-md overflow-hidden">
+        <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-lg overflow-hidden">
           {isSoundSection ? (
             heroRenderUrl ? (
               <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
@@ -4224,13 +4226,13 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
-        className={`browse-card-hover-surface relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+        className={`browse-card-hover-surface premium-card-glow relative isolate bg-bg-tertiary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
             : downloading
               ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
               : installed
-                ? 'border-state-success/40 hover:border-state-success/70'
+                ? `border-state-success/40 hover:border-state-success/70 ${!installedDisabled ? 'premium-card-glow-active' : ''}`
                 : 'border-border hover:border-accent/50'
         }`}
       >
