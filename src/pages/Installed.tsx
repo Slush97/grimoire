@@ -398,29 +398,33 @@ const SortableEntryCard = memo(function SortableEntryCard({
     isDragging,
   } = useSortable({ id: cardProps.entry.key, disabled: sortableDisabled });
 
+  const isList = cardProps.viewMode === 'list';
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.32 : undefined,
     position: 'relative',
     zIndex: isDragging ? 1 : undefined,
-    // Skip layout + paint for offscreen cards. This is most of the cost of
-    // mounting a large library: only the ~15 visible cards pay full price up
-    // front. The `auto` keyword keeps the real size once a card has been
-    // rendered; the estimate only stands in before first view. dnd-kit drag
-    // measurement is unaffected: offscreen items still have placeholder boxes.
-    contentVisibility: 'auto',
-    containIntrinsicSize: cardProps.viewMode === 'list' ? 'auto 72px' : 'auto 280px',
+    // Sizing estimate for the content-visibility skip. The property itself lives
+    // in className (not here) so a :hover variant can lift it, see below. The
+    // `auto` keyword keeps the real size once a card has been rendered; the
+    // estimate only stands in before first view. dnd-kit drag measurement is
+    // unaffected: offscreen items still have placeholder boxes.
+    containIntrinsicSize: isList ? 'auto 72px' : 'auto 280px',
   };
 
   return (
     <div
       ref={setNodeRef}
-      // Each card carries a transform (its own stacking context), so a card's
-      // open action menu can only paint within that card. When the menu opens
-      // downward it would land behind the next card; lift this wrapper above its
-      // siblings whenever it contains an open menu so the dropdown stays on top.
-      className={`flex flex-col has-[[data-card-menu-open]]:z-20 ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+      // content-visibility:auto skips layout + paint for offscreen cards (most of
+      // the cost of mounting a large library) but implies contain:paint, which
+      // clips whatever the card paints outside its box AND traps it in its own
+      // stacking context. On grid/compact the enabled-card :hover lifts + scales
+      // the card: that expansion would be cropped and stuck behind neighbors. So
+      // on hover we lift containment (-> visible) and raise z so the expanded card
+      // renders whole and on top. The has-menu-open lift does the same for an open
+      // action menu that would otherwise paint behind the next card.
+      className={`flex flex-col has-[[data-card-menu-open]]:z-20 [content-visibility:auto] ${isList ? '' : 'hover:[content-visibility:visible] hover:z-10'} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
       {...attributes}
       {...listeners}
@@ -6056,7 +6060,7 @@ function EditableModTitle({
       }}
       onBlur={() => void commit()}
       data-card-action="true"
-      className={`${className} w-full rounded-[4px] border border-accent/70 bg-bg-primary/90 px-1 outline-none focus:border-accent disabled:opacity-60`}
+      className={`${className} premium-inline-rename-input disabled:opacity-60`}
     />
   );
 }
@@ -6119,7 +6123,7 @@ function ModListRowContent({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
+        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
         aria-label={canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
@@ -6376,10 +6380,10 @@ function ModCard({
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
   // is tinted by its own thumbnail. List view keeps the solid stateClasses.
   const glassStateClasses = hasConflicts
-    ? 'border-state-warning/45 bg-state-warning/[0.07]'
+    ? 'border-state-warning/45 bg-state-warning/[0.07] premium-card-glow premium-card-glow-warning'
     : mod.enabled
-      ? 'border-white/[0.12] bg-bg-sunken/65 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] hover:border-white/[0.2]'
-      : 'border-white/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary';
+      ? 'premium-glass-card premium-card-glow-active'
+      : 'premium-glass-card opacity-85';
 
   // Merged mods get a "stacked card" silhouette via two offset box-shadows
   // that read as cards-behind-the-card. Uses only neutral surface/border
@@ -6759,7 +6763,7 @@ function ModCard({
       <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
-      className={`group/card relative rounded-[10px] border transform-gpu transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ${isList ? stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
+      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {selectMode && (
@@ -6812,7 +6816,7 @@ function ModCard({
         ) : (
         <>
         {glassBackdropUrl && (
-          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
+          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-xl">
             <img
               src={glassBackdropUrl}
               alt=""
