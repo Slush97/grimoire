@@ -11,7 +11,7 @@ import { setModMetadataWithHash, getModMetadata } from './metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
 import { fetchModDetails, type GameBananaModDetails } from './gamebanana';
 import { makeDisabledFileName, scanMods, disableMod, enableMod } from './mods';
-import { tagFreshlyInstalled } from './tagMods';
+import { imprintFreshlyInstalled } from './imprintMods';
 import { validateDownloadUrl, validateFileSize } from './security';
 import { loadSettings } from './settings';
 import { getVpkLabels, inferHeroFromVpk } from './vpk';
@@ -923,14 +923,14 @@ async function executeDownload(
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
-    // Opt-in self-identifying embed (path B). Tag each freshly installed VPK in
+    // Opt-in self-identifying embed (path B). Imprint each freshly installed VPK in
     // place now, while it is still disabled under its known fileName and its bytes
-    // are pristine: the metadata.sha256 just stored IS the pre-tag original, which
-    // tagging carries forward (never re-stamping it). Done BEFORE the sibling /
-    // auto-enable logic below renames the file. Best-effort: a tag failure must
-    // not fail the install (tagFreshlyInstalled swallows + logs per file).
-    if (loadSettings().experimentalVpkTagging) {
-        await tagFreshlyInstalled(deadlockPath, installedVpks);
+    // are pristine: the metadata.sha256 just stored IS the pre-imprint original, which
+    // imprinting carries forward (never re-stamping it). Done BEFORE the sibling /
+    // auto-enable logic below renames the file. Best-effort: an imprint failure must
+    // not fail the install (imprintFreshlyInstalled swallows + logs per file).
+    if (loadSettings().experimentalVpkImprinting) {
+        await imprintFreshlyInstalled(deadlockPath, installedVpks);
     }
 
     // Switching variants: when the user installs a different file of a mod they
@@ -1437,11 +1437,11 @@ async function executeOneClickDownload(
 
     const settings = loadSettings();
 
-    // Opt-in self-identifying embed (path B). Same as executeDownload: tag each
+    // Opt-in self-identifying embed (path B). Same as executeDownload: imprint each
     // freshly installed VPK in place while it is still disabled and pristine,
     // before the sibling / auto-enable logic renames it. Best-effort.
-    if (settings.experimentalVpkTagging) {
-        await tagFreshlyInstalled(deadlockPath, installedVpks);
+    if (settings.experimentalVpkImprinting) {
+        await imprintFreshlyInstalled(deadlockPath, installedVpks);
     }
 
     let enabledInstalledVpks = false;

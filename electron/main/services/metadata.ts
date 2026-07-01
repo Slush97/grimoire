@@ -94,11 +94,11 @@ export interface ModMetadata {
      *  where it was in load order. */
     lastPriority?: number;
     /** Set once this VPK has been re-packed in place with a self-identifying
-     *  `addoninfo.txt` embed (path B tagging, see tagMods.ts). A UI / idempotency
+     *  `addoninfo.txt` embed (path B imprinting, see imprintMods.ts). A UI / idempotency
      *  hint only: it does NOT affect canonical identity (metadata.sha256 stays the
-     *  original) and the authoritative tagged-state is the embed itself, read via
+     *  original) and the authoritative imprinted-state is the embed itself, read via
      *  resolveVpkIdentity. */
-    tagged?: boolean;
+    imprinted?: boolean;
     /** Manual opt-out from update detection. When true, the renderer
      *  excludes this mod from the "update available" check even if the
      *  installed gameBananaFileId is gone from the live file list. Useful

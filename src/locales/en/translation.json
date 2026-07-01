@@ -765,7 +765,7 @@
       "crosshairDesignerDescription": "Create custom crosshairs with a live preview.",
       "socialDescription": "Sign in with Steam to publish profiles and browse uploads from other players in Discover.",
       "fixUnknownMods": "Fix Unknown Mods",
-      "vpkTagging": "Tag Installed Mods",
+      "vpkImprint": "Imprint installed mods",
       "deadworksServers": "Deadworks Servers",
       "performanceConfig": "Performance Config",
       "foundry": "Door Stuck"
@@ -837,7 +837,7 @@
       "discordRpc": "Show your current Grimoire activity on your Discord profile. Talks only to your local Discord app and sends nothing to Grimoire.",
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, and two download keys: no account id, no username, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
-      "vpkTagging": "Embed a small identity tag inside each newly installed mod so an orphaned file can be recognized offline. Adds a Tag Installed Mods button on the Installed page to tag mods you already have.",
+      "vpkImprint": "Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
       "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."
     }
@@ -939,20 +939,44 @@
       "lockerOverrides": "Locker overrides",
       "lockerOverridesHint": "Locker overrides: review and remove applied hero cards, ability sounds, and ability colors",
       "authorPageNotFound": "Couldn't find this mod's author page",
-      "tagInstalledMods": "Tag installed mods",
-      "tagInstalledModsHint": "Tag installed mods: embed a self-identifying tag into each installed mod so orphaned files can be recognized offline"
+      "imprintInstalledMods": "Imprint installed mods",
+      "imprintInstalledModsHint": "Embed a self-identifying imprint in your installed mods so orphaned files can be recognized offline."
     },
-    "tagAll": {
-      "title": "Tag Installed Mods",
-      "description": "Embed a self-identifying tag into each installed mod so an orphaned file can be recognized offline, with no network. Mods the running game has loaded are skipped.",
-      "start": "Start tagging",
-      "progress": "Tagging {{done}} of {{total}}...",
-      "taggedSummary": "{{n}} mod(s) tagged",
-      "skippedTitle": "Skipped ({{n}})",
-      "failedTitle": "Failed ({{n}})",
+    "imprintAll": {
+      "title": "Imprint installed mods",
+      "description": "Re-packs each installed VPK with a small identity imprint. The file size changes but its original identity hash is preserved.",
+      "checking": "Checking your installed mods...",
+      "startImprinting": "Imprint {{count}} mods",
+      "progress": "Imprinting {{done}} of {{total}}...",
+      "currentFile": "Imprinting {{fileName}}",
+      "eligible_one": "{{count}} eligible to imprint",
+      "eligible_other": "{{count}} eligible to imprint",
+      "alreadyImprinted_one": "{{count}} already imprinted (no change)",
+      "alreadyImprinted_other": "{{count}} already imprinted (no change)",
+      "blockedLoaded_one": "{{count}} in use by the running game (skipped)",
+      "blockedLoaded_other": "{{count}} in use by the running game (skipped)",
+      "autoManaged_one": "{{count}} auto-managed (merged or Locker), not eligible",
+      "autoManaged_other": "{{count}} auto-managed (merged or Locker), not eligible",
+      "anomalies_one": "{{count}} will be reported, not imprinted",
+      "anomalies_other": "{{count}} will be reported, not imprinted",
+      "repackNote": "Imprinting re-packs each VPK, so its size changes. The original identity hash stays the same.",
+      "imprintedSummary_one": "{{count}} mod imprinted",
+      "imprintedSummary_other": "{{count}} mods imprinted",
+      "skippedTitle_one": "Skipped ({{count}})",
+      "skippedTitle_other": "Skipped ({{count}})",
+      "failedTitle_one": "Failed ({{count}})",
+      "failedTitle_other": "Failed ({{count}})",
       "skipReasonLoaded": "In use by the running game",
-      "empty": "No mods to tag.",
-      "error": "Tagging failed: {{error}}"
+      "anomalyUnparseable": "Not a readable VPK",
+      "anomalyEmpty": "Zero-byte or truncated file",
+      "anomalyHashDrift": "File changed since it was recorded",
+      "anomalyForeignEmbed": "Carries a non-Grimoire addon block",
+      "empty": "Nothing to imprint.",
+      "error": "Imprinting failed: {{error}}"
+    },
+    "provenance": {
+      "fromImprint": "Identified from imprint",
+      "fromMergeImprint": "Identified from Grimoire merge imprint"
     },
     "filters": {
       "searchPlaceholder": "Search installed...",

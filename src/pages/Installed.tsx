@@ -62,16 +62,17 @@ import {
   Banana,
   HelpCircle,
   GripVertical,
+  Fingerprint,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute } from '../lib/api';
-import type { UnmergeModResult } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight } from '../lib/api';
+import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs } from '../types/mod';
+import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
 import type { GameBananaModDetails, GameBananaMod } from '../types/gamebanana';
 import { getModThumbnail } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
@@ -89,11 +90,11 @@ import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
-import { Button, CheckboxMark, IconButton, Tag } from '../components/common/ui';
+import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
-import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
+import { ViewModeToggle, EmptyState, LoadingState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -124,6 +125,18 @@ function clearUnknownCacheForMod(
   delete next[mod.id];
   return next;
 }
+
+// The four phases of the bulk-imprint modal, as one discriminated union.
+//  - preflight: the dry-run is in flight; render a LoadingState.
+//  - review: the dry-run returned; render one line per bucket + the commit button.
+//  - running: the bulk imprint is streaming progress ticks (dismiss blocked).
+//  - done: the final report (imprinted / skipped / failed).
+type ImprintModalState =
+  | { phase: 'preflight' }
+  | { phase: 'review'; preflight: ImprintPreflightResult }
+  | { phase: 'running'; progress: ImprintInstalledProgress | null }
+  | { phase: 'done'; result: ImprintAllInstalledResult }
+  | null;
 
 type ReorderPosition = 'before' | 'after';
 type DragSection = 'enabled' | 'disabled';
@@ -824,6 +837,23 @@ export default function Installed() {
   // order no longer maps to load-order priority.
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  // Retroactive "Imprint installed mods" (path B). A single state machine drives
+  // the shared modal through four phases: an up-front preflight dry-run that
+  // classifies every candidate into buckets before the user commits, a live
+  // progress phase streaming done/total + current file, and a final report of
+  // what was imprinted / skipped / failed. `null` means the modal is closed.
+  const [imprintState, setImprintState] = useState<ImprintModalState>(null);
+  // Guards the bulk-imprint post-await state updates (and its streamed progress
+  // callback) against a setState-after-unmount leak if the user navigates away
+  // mid-run. Set false on unmount; every post-resolve setImprintState / showToast
+  // / loadMods checks it first. UX is unchanged, just leak-proof.
+  const imprintMountedRef = useRef(true);
+  useEffect(() => {
+    imprintMountedRef.current = true;
+    return () => {
+      imprintMountedRef.current = false;
+    };
+  }, []);
   const [sortMode, setSortMode] = useState<'priority' | 'recent' | 'name'>(() => {
     const stored = localStorage.getItem('installedSortMode');
     return stored === 'recent' || stored === 'name' ? stored : 'priority';
@@ -1364,10 +1394,14 @@ export default function Installed() {
   const openUnknownModFix = (mod: Mod, mode: 'single' | 'bulk' = 'single') => {
     setUnknownFixMode(mode);
     setUnknownFilterGuess({ mod, loading: unknownFilterPendingIds.has(mod.id) });
-    // The modal opens to the manual search + view-files path. The CRC
-    // auto-matcher is no longer kicked automatically: it fans out a heavy
-    // burst of GameBanana requests that can hit rate limits, so it now waits
-    // for an explicit "Auto-detect" click inside the modal.
+    // The modal opens to the manual search + view-files path. The heavy CRC
+    // NETWORK auto-matcher still waits for an explicit "Auto-detect" click (it
+    // fans out GameBanana requests that can hit rate limits). But the OFFLINE
+    // pass runs on open: the mod's own imprint (embedded Grimoire metadata,
+    // always on and ungated) plus the local CRC cache. It issues no network
+    // requests, so a self-identifying VPK surfaces its imprint card the moment
+    // the modal opens, even with the experimental network matcher off.
+    void runUnknownCacheQueue([mod]);
   };
 
   const applyUnknownMatch = async (mod: Mod, match: FoundUnknownMatch) => {
@@ -2311,6 +2345,57 @@ export default function Installed() {
       exitSelectMode();
     }
   };
+
+  // Open the imprint modal and run the no-network preflight dry-run. Classifies
+  // every installed candidate into buckets (eligible / already imprinted /
+  // loaded / auto-managed / anomalous) before the user commits, so the confirm
+  // step shows exactly what a bulk run would do. A preflight failure closes the
+  // modal and surfaces a toast rather than stranding an empty dialog.
+  const openImprintModal = useCallback(async () => {
+    setImprintState({ phase: 'preflight' });
+    try {
+      const preflight = await imprintPreflight();
+      setImprintState({ phase: 'review', preflight });
+    } catch (err) {
+      setImprintState(null);
+      showToast(
+        t('installed.imprintAll.error', { error: err instanceof Error ? err.message : String(err) }),
+        { tone: 'error' }
+      );
+    }
+  }, [t]);
+
+  // Commit the bulk imprint: embed a self-identifying addoninfo.txt into every
+  // eligible installed VPK the running game hasn't loaded. Streams progress into
+  // the modal, then shows the imprinted / skipped / failed report and refreshes
+  // the list so freshly-imprinted sizes update. A run-level failure closes the
+  // modal and surfaces a toast. The progress subscription is always torn down.
+  const handleImprintAllInstalled = useCallback(async () => {
+    setImprintState({ phase: 'running', progress: null });
+    const unsubscribe = onImprintAllInstalledProgress((progress) => {
+      if (!imprintMountedRef.current) return;
+      setImprintState({ phase: 'running', progress });
+    });
+    try {
+      const result = await imprintAllInstalled();
+      if (!imprintMountedRef.current) return;
+      setImprintState({ phase: 'done', result });
+      showToast(t('installed.imprintAll.imprintedSummary', { count: result.imprinted }), {
+        tone: 'success',
+        duration: 2200,
+      });
+      await loadMods({ silent: true });
+    } catch (err) {
+      if (!imprintMountedRef.current) return;
+      setImprintState(null);
+      showToast(
+        t('installed.imprintAll.error', { error: err instanceof Error ? err.message : String(err) }),
+        { tone: 'error' }
+      );
+    } finally {
+      unsubscribe();
+    }
+  }, [loadMods, t]);
 
   const openBulkDeleteConfirm = () => {
     if (selectedMods.length === 0) return;
@@ -3410,6 +3495,22 @@ export default function Installed() {
                 view controls (wrapping together when cramped) instead of
                 claiming a second strip below the search. */}
             {topStatusActions}
+            {/* Retroactive bulk imprint launcher (experimental, opt-in). Compact
+                secondary button so it rides the same cluster as the filter
+                control without claiming its own strip. Opens the preflight
+                modal. */}
+            {settings?.experimentalVpkImprinting && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Fingerprint}
+                onClick={() => { void openImprintModal(); }}
+                aria-label={t('installed.actions.imprintInstalledMods')}
+                title={t('installed.actions.imprintInstalledModsHint')}
+              >
+                {t('installed.actions.imprintInstalledMods')}
+              </Button>
+            )}
             {/* Sort + filter: load order / recent / name, GameBanana vs local
                 import, hero, and metadata tags. The badge counts active
                 adjustments; while any are on, the list is read-only (no drag
@@ -4179,6 +4280,14 @@ export default function Installed() {
         />
       )}
 
+      {imprintState && (
+        <ImprintModal
+          state={imprintState}
+          onConfirm={() => { void handleImprintAllInstalled(); }}
+          onClose={() => setImprintState(null)}
+        />
+      )}
+
       <ConfirmModal
         isOpen={!!unmergeTarget}
         title={t('installed.merge.unmergeTitle')}
@@ -4775,7 +4884,15 @@ function UnknownMatchPanel({
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const match = result?.crcMatch;
-  const foundMatch = isFoundUnknownMatch(match) ? match : null;
+  // An embedded-provenance result is self-reported by the VPK's own imprint
+  // (offline, ungated): surface it prominently at the top via its own card, and
+  // keep it out of the gated CRC auto-matcher card below (which is reserved for
+  // verified upstream CRC-32 hits). The union values stay 'embedded-*' on the
+  // wire even though the card renders "imprint" to the user.
+  const isEmbedProvenance =
+    match?.provenance === 'embedded-metadata' || match?.provenance === 'embedded-merge';
+  const embeddedMatch = isEmbedProvenance && isFoundUnknownMatch(match) ? match : null;
+  const foundMatch = isFoundUnknownMatch(match) && !isEmbedProvenance ? match : null;
 
   const handleApply = async (matchToApply: FoundUnknownMatch) => {
     if (applying) return;
@@ -4810,6 +4927,19 @@ function UnknownMatchPanel({
 
   return (
     <div className="p-5 overflow-y-auto space-y-4">
+      {/* Self-identifying VPK: identity read offline from the file's own imprint
+          (addoninfo.txt / grimoire_meta.json), never gated behind the network
+          matcher. Shown ahead of everything else. */}
+      {embeddedMatch && (
+        <UnknownEmbeddedCard
+          mod={mod}
+          match={embeddedMatch}
+          hideNsfwPreviews={hideNsfwPreviews}
+          onAssociate={onAssociate}
+          onView={() => onViewMatch(mod, embeddedMatch)}
+        />
+      )}
+
       {/* Primary path: find the mod on GameBanana and link this local file to
           it. Light on the API (one search, optional file list) versus the CRC
           auto-matcher below, which downloads candidate archives. */}
@@ -5517,10 +5647,329 @@ function UnknownFileList({
   );
 }
 
+// One preflight bucket line: a count + its one-line consequence (the full copy,
+// which leads with {{count}}). A small tone-colored dot flags the buckets that
+// need attention. Hidden when the bucket is empty. Rendered in a fixed order so
+// the eligible line always leads and the anomaly line trails.
+function ImprintBucketLine({ count, label, tone = 'muted' }: {
+  count: number;
+  label: string;
+  tone?: 'muted' | 'accent' | 'warning' | 'danger';
+}) {
+  if (count <= 0) return null;
+  const dotTones: Record<string, string> = {
+    muted: 'bg-text-tertiary/50',
+    accent: 'bg-accent',
+    warning: 'bg-state-warning',
+    danger: 'bg-state-danger',
+  };
+  return (
+    <div className="flex items-center gap-2 text-sm text-text-secondary">
+      <span aria-hidden className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotTones[tone]}`} />
+      <span className="tabular-nums">{label}</span>
+    </div>
+  );
+}
+
+// A collapsible per-item report list (Skipped / Failed) for the result phase.
+// Defaults collapsed so a clean run stays tidy; the count sits in the summary.
+function ImprintReportList({ title, items }: {
+  title: string;
+  items: Array<{ key: string; name: string; reason: string }>;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <details className="rounded-md border border-white/5 bg-bg-tertiary/40 overflow-hidden">
+      <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
+        {title}
+      </summary>
+      <ul className="divide-y divide-white/5 border-t border-white/5">
+        {items.map((item) => (
+          <li key={item.key} className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="min-w-0 truncate text-sm text-text-primary" title={item.name}>{item.name}</span>
+            <span className="flex-shrink-0 text-xs text-text-tertiary">{item.reason}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+// The retroactive bulk-imprint modal: a preflight dry-run, a commit + live
+// progress phase, and a final report, all in one shared Modal. Dismissal is
+// blocked while a run is in flight (the game has the VPKs, so an interrupted
+// swap would strand a temp file). No new IPC: it reads the preflight buckets and
+// streams progress from the channels wired in Stage B.
+function ImprintModal({ state, onConfirm, onClose }: {
+  state: NonNullable<ImprintModalState>;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const titleId = 'imprint-modal-title';
+  const running = state.phase === 'running';
+
+  const anomalyReason = (reason: ImprintAnomalousMod['reason']): string => {
+    switch (reason) {
+      case 'unparseable': return t('installed.imprintAll.anomalyUnparseable');
+      case 'empty': return t('installed.imprintAll.anomalyEmpty');
+      case 'hash-drift': return t('installed.imprintAll.anomalyHashDrift');
+      case 'foreign-embed': return t('installed.imprintAll.anomalyForeignEmbed');
+    }
+  };
+
+  let body: ReactNode;
+  let footer: ReactNode;
+
+  if (state.phase === 'preflight') {
+    body = <LoadingState label={t('installed.imprintAll.checking')} className="min-h-40" />;
+    footer = (
+      <Button variant="secondary" onClick={onClose}>{t('common.actions.cancel')}</Button>
+    );
+  } else if (state.phase === 'review') {
+    const { counts } = state.preflight;
+    const autoManaged = counts.merged + counts.lockerManaged;
+    const eligible = counts.eligible;
+    body = (
+      <>
+        <p className="text-sm text-text-secondary">{t('installed.imprintAll.description')}</p>
+        {eligible === 0 &&
+        counts.alreadyImprinted === 0 &&
+        counts.blockedLoaded === 0 &&
+        autoManaged === 0 &&
+        counts.anomalous === 0 ? (
+          <EmptyState
+            icon={Fingerprint}
+            title={t('installed.imprintAll.empty')}
+            className="min-h-40"
+          />
+        ) : (
+          <div className="space-y-1.5 rounded-md border border-white/5 bg-bg-tertiary/40 p-3">
+            <ImprintBucketLine count={eligible} label={t('installed.imprintAll.eligible', { count: eligible })} tone="accent" />
+            <ImprintBucketLine count={counts.alreadyImprinted} label={t('installed.imprintAll.alreadyImprinted', { count: counts.alreadyImprinted })} />
+            <ImprintBucketLine count={counts.blockedLoaded} label={t('installed.imprintAll.blockedLoaded', { count: counts.blockedLoaded })} tone="warning" />
+            <ImprintBucketLine count={autoManaged} label={t('installed.imprintAll.autoManaged', { count: autoManaged })} />
+            <ImprintBucketLine count={counts.anomalous} label={t('installed.imprintAll.anomalies', { count: counts.anomalous })} tone="danger" />
+          </div>
+        )}
+        {state.preflight.anomalous.length > 0 && (
+          <ImprintReportList
+            title={t('installed.imprintAll.anomalies', { count: state.preflight.anomalous.length })}
+            items={state.preflight.anomalous.map((a: ImprintAnomalousMod) => ({
+              key: a.fileName,
+              name: a.modName || a.fileName,
+              reason: anomalyReason(a.reason),
+            }))}
+          />
+        )}
+        {eligible > 0 && (
+          <p className="text-xs text-text-tertiary">{t('installed.imprintAll.repackNote')}</p>
+        )}
+      </>
+    );
+    footer = (
+      <>
+        <Button variant="secondary" onClick={onClose}>{t('common.actions.cancel')}</Button>
+        <Button variant="primary" icon={Fingerprint} disabled={eligible === 0} onClick={onConfirm}>
+          {t('installed.imprintAll.startImprinting', { count: eligible })}
+        </Button>
+      </>
+    );
+  } else if (state.phase === 'running') {
+    const p = state.progress;
+    const done = p?.done ?? 0;
+    const total = p?.total ?? 0;
+    body = (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-accent" />
+          <div className="min-w-0">
+            <div className="text-sm text-text-primary">
+              {t('installed.imprintAll.progress', { done, total })}
+            </div>
+            {p?.fileName && (
+              <div className="mt-0.5 truncate text-xs text-text-tertiary" title={p.fileName}>
+                {t('installed.imprintAll.currentFile', { fileName: p.modName || p.fileName })}
+              </div>
+            )}
+          </div>
+          <span className="ml-auto flex-shrink-0 text-sm tabular-nums text-text-secondary">
+            {done}/{total}
+          </span>
+        </div>
+      </div>
+    );
+    footer = (
+      <Button variant="primary" isLoading disabled>
+        {t('installed.imprintAll.progress', { done, total })}
+      </Button>
+    );
+  } else {
+    const { result } = state;
+    const skipped = result.skipped.map((s: ImprintSkippedMod) => ({
+      key: s.fileName,
+      name: s.modName || s.fileName,
+      reason: t('installed.imprintAll.skipReasonLoaded'),
+    }));
+    const failed = result.failed.map((f: ImprintFailedMod) => ({
+      key: f.fileName,
+      name: f.modName || f.fileName,
+      reason: f.reason,
+    }));
+    body = (
+      <>
+        <div className="flex items-center gap-2 text-sm text-text-primary">
+          <Fingerprint className="h-4 w-4 flex-shrink-0 text-accent" />
+          {t('installed.imprintAll.imprintedSummary', { count: result.imprinted })}
+        </div>
+        <ImprintReportList title={t('installed.imprintAll.skippedTitle', { count: skipped.length })} items={skipped} />
+        <ImprintReportList title={t('installed.imprintAll.failedTitle', { count: failed.length })} items={failed} />
+      </>
+    );
+    footer = (
+      <Button variant="secondary" onClick={onClose}>{t('common.actions.close')}</Button>
+    );
+  }
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="lg"
+      labelledBy={titleId}
+      dismissable={!running}
+      panelClassName="flex max-h-[85vh] flex-col"
+    >
+      <ModalHeader
+        title={t('installed.imprintAll.title')}
+        titleId={titleId}
+        onClose={onClose}
+        closeLabel={t('common.actions.close')}
+        closeDisabled={running}
+      />
+      <div className="flex-1 space-y-4 overflow-y-auto p-5">{body}</div>
+      <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border p-4">{footer}</div>
+    </Modal>
+  );
+}
+
 type FoundUnknownMatch = UnknownModFilterGuess['crcMatch'] & { status: 'found' };
 
 function isFoundUnknownMatch(match: UnknownModFilterGuess['crcMatch'] | undefined): match is FoundUnknownMatch {
   return match?.status === 'found';
+}
+
+// Self-identifying VPK card: the mod's identity was read offline from its own
+// Grimoire imprint (addoninfo.txt / grimoire_meta.json), not matched over the
+// network. Distinct from UnknownMatchCard so an imprint is never confused with a
+// verified upstream CRC-32 hit, and so a merge can list its reconstructed
+// sources. For a single imprinted mod it offers a zero-download "Link in place"
+// (link the existing file) instead of a re-download Apply. The wire provenance
+// keeps the 'embedded-*' union values; the copy says "imprint".
+function UnknownEmbeddedCard({
+  mod,
+  match,
+  hideNsfwPreviews,
+  onAssociate,
+  onView,
+}: {
+  mod: Mod;
+  match: FoundUnknownMatch;
+  hideNsfwPreviews: boolean;
+  onAssociate: (mod: Mod, args: AssociateUnknownModArgs) => Promise<void>;
+  onView: () => void;
+}) {
+  const { t } = useTranslation();
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const isMerge = match.provenance === 'embedded-merge';
+  const mergeSources = match.mergeSources ?? [];
+
+  const handleLink = async () => {
+    if (linking || typeof match.modId !== 'number') return;
+    setLinking(true);
+    setLinkError(null);
+    try {
+      await onAssociate(mod, {
+        gameBananaId: match.modId,
+        modName: match.modName ?? mod.name,
+        thumbnailUrl: match.thumbnailUrl,
+        nsfw: match.nsfw,
+        categoryName: match.categoryName,
+        sourceSection: match.section,
+      });
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-state-success/35 bg-state-success/10 overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start gap-4">
+          {!isMerge && (
+            <ModThumbnail
+              src={match.thumbnailUrl}
+              alt={match.modName ?? t('installed.unknown.gamebananaMod')}
+              nsfw={match.nsfw}
+              hideNsfw={hideNsfwPreviews}
+              className="w-24 h-16 rounded-md bg-bg-primary border border-white/10 flex-shrink-0"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <Tag tone="success" icon={Fingerprint}>
+              {isMerge ? t('installed.provenance.fromMergeImprint') : t('installed.provenance.fromImprint')}
+            </Tag>
+            <h3 className="text-base font-semibold text-text-primary mt-2 truncate" title={match.modName}>
+              {match.modName ?? t('installed.unknown.gamebananaMod')}
+            </h3>
+            <p className="text-sm text-text-secondary mt-1">
+              {isMerge
+                ? t('installed.unknown.embeddedMergeDesc', { count: mergeSources.length })
+                : t('installed.unknown.embeddedMetadataDesc')}
+            </p>
+          </div>
+        </div>
+
+        {!isMerge && (
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            {match.section && (
+              <Tag tone="neutral">
+                {match.section === 'Mod' ? t('installed.unknown.sectionMods') : match.section === 'Sound' ? t('installed.unknown.sectionSounds') : match.section}
+              </Tag>
+            )}
+            {match.categoryName && <Tag tone="neutral">{match.categoryName}</Tag>}
+            {typeof match.modId === 'number' && <Tag tone="neutral">{t('installed.unknown.modIdTag', { id: match.modId })}</Tag>}
+          </div>
+        )}
+
+        {isMerge && mergeSources.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {mergeSources.map((source, i) => (
+              <Tag key={`${source.fileName ?? source.modName}-${i}`} tone="neutral" title={source.modName}>
+                {source.modName}
+                {typeof source.gameBananaId === 'number' ? ` (#${source.gameBananaId})` : ''}
+              </Tag>
+            ))}
+          </div>
+        )}
+
+        {linkError && <p className="text-xs text-state-danger mt-3">{linkError}</p>}
+      </div>
+
+      {!isMerge && typeof match.modId === 'number' && (
+        <div className="border-t border-state-success/20 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" size="sm" icon={Info} disabled={linking} onClick={onView}>
+            {t('installed.unknown.viewMod')}
+          </Button>
+          <Button variant="primary" size="sm" icon={Link2} isLoading={linking} onClick={() => void handleLink()}>
+            {t('installed.unknown.linkInPlace')}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function UnknownMatchCard({

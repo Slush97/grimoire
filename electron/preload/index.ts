@@ -25,7 +25,7 @@ import type {
     EditLocalModArgs,
     LockerClearScope,
     MergeModsArgs,
-    TagInstalledProgress,
+    ImprintInstalledProgress,
     TrippySpriteOptions,
     TrippyVfxChoice,
     UnknownModDetectionProgress,
@@ -312,13 +312,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>
         ipcRenderer.invoke('extract-merge-source', mergedModId, sourceFileName),
-    tagOneMod: (modId: string) => ipcRenderer.invoke('tag-one-mod', modId),
-    tagAllInstalled: () => ipcRenderer.invoke('tag-all-installed'),
-    onTagAllInstalledProgress: (callback: (progress: TagInstalledProgress) => void) => {
-        const handler = (_event: Electron.IpcRendererEvent, progress: TagInstalledProgress) =>
+    imprintOneMod: (modId: string) => ipcRenderer.invoke('imprint-one-mod', modId),
+    imprintAllInstalled: () => ipcRenderer.invoke('imprint-all-installed'),
+    imprintPreflight: () => ipcRenderer.invoke('imprint-preflight'),
+    onImprintAllInstalledProgress: (callback: (progress: ImprintInstalledProgress) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, progress: ImprintInstalledProgress) =>
             callback(progress);
-        ipcRenderer.on('tag-all-installed-progress', handler);
-        return () => ipcRenderer.removeListener('tag-all-installed-progress', handler);
+        ipcRenderer.on('imprint-all-installed-progress', handler);
+        return () => ipcRenderer.removeListener('imprint-all-installed-progress', handler);
     },
 
     // Launch

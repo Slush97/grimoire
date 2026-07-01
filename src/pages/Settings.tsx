@@ -1228,10 +1228,10 @@ export default function Settings() {
             <div className="h-px bg-white/5" />
 
             <Toggle
-              checked={settings?.experimentalVpkTagging ?? false}
-              onChange={(checked) => settings && saveSettings({ ...settings, experimentalVpkTagging: checked })}
-              label={<Tx k="settings.experimental.vpkTagging" fallback="Tag Installed Mods" />}
-              description={<Tx k="settings.toggles.vpkTagging" fallback="Embed a small identity tag inside each newly installed mod so an orphaned file can be recognized offline. Adds a Tag Installed Mods button on the Installed page to tag mods you already have." />}
+              checked={settings?.experimentalVpkImprinting ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalVpkImprinting: checked })}
+              label={<Tx k="settings.experimental.vpkImprint" fallback="Imprint installed mods" />}
+              description={<Tx k="settings.toggles.vpkImprint" fallback="Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have." />}
             />
 
             <div className="h-px bg-white/5" />

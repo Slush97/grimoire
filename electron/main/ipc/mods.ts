@@ -33,7 +33,7 @@ import {
 import { downloadMod } from '../services/download';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
-import { tagOneMod, tagAllInstalled } from '../services/tagMods';
+import { imprintOneMod, imprintAllInstalled, imprintPreflight } from '../services/imprintMods';
 import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
 import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
@@ -42,7 +42,7 @@ import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport
 import { getMainWindow } from '../index';
 import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -215,6 +215,7 @@ function enrichMod(mod: Mod): WireMod {
             soulImport: metadata.soulImport,
             urnImport: metadata.urnImport,
             ignoreUpdates: metadata.ignoreUpdates,
+            imprinted: metadata.imprinted,
         };
     }
     // No metadata row (a VPK dropped straight into addons): still file-tree tag
@@ -1497,27 +1498,39 @@ ipcMain.handle(
     }
 );
 
-// tag-one-mod: re-pack a single installed VPK in place with a self-identifying
+// imprint-one-mod: re-pack a single installed VPK in place with a self-identifying
 // addoninfo.txt embed (path B). Refuses if the running game has the mod loaded.
 // Canonical identity (metadata.sha256) is unchanged; the embed carries it.
-ipcMain.handle('tag-one-mod', async (_, modId: string): Promise<Mod> => {
+ipcMain.handle('imprint-one-mod', async (_, modId: string): Promise<Mod> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    const tagged = await tagOneMod(deadlockPath, modId);
-    return enrichMod(tagged);
+    const imprinted = await imprintOneMod(deadlockPath, modId);
+    return enrichMod(imprinted);
 });
 
-// tag-all-installed: retroactively tag the whole installed library in place.
+// imprint-all-installed: retroactively imprint the whole installed library in place.
 // Loaded mods are skipped and reported; per-mod failures are collected. Streams
-// progress to the requesting renderer via 'tag-all-installed-progress'.
-ipcMain.handle('tag-all-installed', async (event) => {
+// progress to the requesting renderer via 'imprint-all-installed-progress'.
+ipcMain.handle('imprint-all-installed', async (event) => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
     }
-    return tagAllInstalled(deadlockPath, (progress) =>
-        event.sender.send('tag-all-installed-progress', progress)
+    return imprintAllInstalled(deadlockPath, (progress) =>
+        event.sender.send('imprint-all-installed-progress', progress)
     );
+});
+
+// imprint-preflight: no-network dry-run that classifies every installed mod into
+// imprint buckets (eligible / already-imprinted / blocked-loaded / merged /
+// locker-managed / anomalous) WITHOUT mutating any file. Drives the pre-commit
+// confirmation UI. Never re-records any canonical identity (KEYSTONE).
+ipcMain.handle('imprint-preflight', async (): Promise<ImprintPreflightResult> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    return imprintPreflight(deadlockPath);
 });

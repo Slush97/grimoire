@@ -231,12 +231,24 @@ export interface OriginalIdentity {
  * not-yet-embedded merge output, or a single mod being tagged for the first time.
  * For a file that may already carry an embed, prefer carryForwardOriginalIdentity
  * so an existing original hash is never recomputed from already-tagged bytes.
+ *
+ * `includeCrc` (default true) controls whether the original CRC-32 is computed.
+ * The merge path keeps the default so its embed carries the CRC; the imprint path
+ * passes `{ includeCrc: false }` to skip a second full-file read, since nothing
+ * ever reads the embedded/original CRC back for any decision (every consumer keys
+ * on .sha256). When skipped, `crc32` is `undefined` and serializeAddonInfo drops it.
  */
-export async function computeOriginalIdentity(path: string): Promise<OriginalIdentity> {
-    const [fingerprint, crc32] = await Promise.all([fingerprintFile(path), crc32File(path)]);
+export async function computeOriginalIdentity(
+    path: string,
+    { includeCrc = true }: { includeCrc?: boolean } = {}
+): Promise<OriginalIdentity> {
+    const [fingerprint, crc32] = await Promise.all([
+        fingerprintFile(path),
+        includeCrc ? crc32File(path) : Promise.resolve(undefined),
+    ]);
     return {
         sha256: fingerprint.sha256.toLowerCase(),
-        crc32: crc32.toLowerCase(),
+        crc32: crc32?.toLowerCase(),
         size: fingerprint.size,
     };
 }

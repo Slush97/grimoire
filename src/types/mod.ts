@@ -656,6 +656,11 @@ export interface Mod {
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;
+  /** True once this VPK has been re-packed in place with a self-identifying
+   *  `addoninfo.txt` embed (path B imprinting). A UI hint only: it does NOT
+   *  affect canonical identity (sha256 stays the original). Projected from
+   *  metadata.imprinted in enrichMod. */
+  imprinted?: boolean;
 }
 
 export interface MergeModsArgs {
@@ -813,40 +818,87 @@ export interface EditLocalModArgs {
   nsfw?: boolean;
 }
 
-// One mod the bulk "Tag installed mods" action skipped because the running game
-// has it loaded. Surfaced in the report rather than silently dropped (tagging a
+// One mod the bulk "Imprint installed mods" action skipped because the running game
+// has it loaded. Surfaced in the report rather than silently dropped (imprinting a
 // loaded VPK in place is a hard refusal, same as merge/reorder).
-export interface TagSkippedMod {
+export interface ImprintSkippedMod {
   fileName: string;
   modName: string;
   reason: 'loaded';
 }
 
-// One mod the bulk tag action could not tag (embed / repack / swap error). The
+// One mod the bulk imprint action could not imprint (embed / repack / swap error). The
 // installed VPK is left untouched on failure.
-export interface TagFailedMod {
+export interface ImprintFailedMod {
   fileName: string;
   modName: string;
   reason: string;
 }
 
-// Result of the retroactive bulk "Tag installed mods" action.
-export interface TagAllInstalledResult {
-  // Count of mods now carrying a self-identifying embed: newly tagged plus any
-  // that were already tagged (those skip the repack but still count).
-  tagged: number;
+// Result of the retroactive bulk "Imprint installed mods" action.
+export interface ImprintAllInstalledResult {
+  // Count of mods now carrying a self-identifying embed: newly imprinted plus any
+  // that were already imprinted (those skip the repack but still count).
+  imprinted: number;
   // Mods skipped because the running game has them loaded.
-  skipped: TagSkippedMod[];
-  // Mods that errored during tagging.
-  failed: TagFailedMod[];
+  skipped: ImprintSkippedMod[];
+  // Mods that errored during imprinting.
+  failed: ImprintFailedMod[];
 }
 
-// Progress tick emitted while the bulk "Tag installed mods" action runs.
-export interface TagInstalledProgress {
+// Progress tick emitted while the bulk "Imprint installed mods" action runs.
+export interface ImprintInstalledProgress {
   done: number;
   total: number;
   fileName: string;
   modName: string;
+}
+
+// One mod the preflight (or the bulk run's per-mod guard) refused to imprint
+// because it looks anomalous: an unparseable/zero-byte VPK, a live hash/size that
+// drifted from the stored canonical identity (KEYSTONE: never re-recorded), or a
+// foreign addoninfo.txt with no valid grimoireOriginalSha256. Skipped and
+// reported, never silently failed and never re-stamped.
+export interface ImprintAnomalousMod {
+  fileName: string;
+  modName: string;
+  // Why it was flagged. 'unparseable': parseVpkDirectoryCached returned null.
+  // 'empty': zero-byte / truncated file. 'hash-drift': live identity != stored
+  // metadata.sha256 on a non-embedded file. 'foreign-embed': carries an
+  // addoninfo.txt but no valid grimoireOriginalSha256.
+  reason: 'unparseable' | 'empty' | 'hash-drift' | 'foreign-embed';
+}
+
+// Per-bucket counts from imprintPreflight. Every scanMods() candidate lands in
+// exactly one bucket, so the six counts sum to the total scanned candidate count.
+// merged and lockerManaged are kept separate here even though the UI collapses
+// them into one "auto-managed (merged or Locker)" line.
+export interface ImprintPreflightCounts {
+  // Not yet imprinted, not loaded, not auto-managed, not anomalous: safe to imprint.
+  eligible: number;
+  // Already carries a well-formed self-identifying embed.
+  alreadyImprinted: number;
+  // The running game has it loaded (imprinting in place is a hard refusal).
+  blockedLoaded: number;
+  // Produced by mergeMods (a single-mod imprint would clobber the richer merge embed).
+  merged: number;
+  // A Locker-managed artifact (rebuilt automatically; excluded from bulk imprint).
+  lockerManaged: number;
+  // Flagged by the anomaly guard (skipped + reported, never re-stamped).
+  anomalous: number;
+}
+
+// Result of the no-network imprint-preflight dry-run: per-bucket counts plus the
+// item lists for the buckets a user needs to see (loaded + anomalies). No VPK is
+// mutated and no canonical identity is re-recorded.
+export interface ImprintPreflightResult {
+  counts: ImprintPreflightCounts;
+  // Total scanMods() candidates classified (sum of all six bucket counts).
+  total: number;
+  // Mods skipped because the running game has them loaded.
+  blockedLoaded: ImprintSkippedMod[];
+  // Mods flagged by the anomaly guard.
+  anomalous: ImprintAnomalousMod[];
 }
 
 export interface ModConflict {
@@ -930,13 +982,13 @@ export interface AppSettings {
    *  but the search/find buttons and bulk auto-find are hidden, leaving
    *  only the manual "Make Custom Mod" path. */
   experimentalUnknownModMatching: boolean;
-  /** Opt-in install-time VPK tagging. When on, each newly installed single-mod
+  /** Opt-in install-time VPK imprinting. When on, each newly installed single-mod
    *  VPK is re-packed in place with a self-identifying `addoninfo.txt` embed (its
    *  canonical original hash plus GameBanana id when known) so an orphaned file
    *  can be identified offline (see docs/vpk-metadata-embed-integration.md). Off
-   *  by default. Also surfaces the retroactive "Tag installed mods" bulk action
+   *  by default. Also surfaces the retroactive "Imprint installed mods" bulk action
    *  on the Installed page. */
-  experimentalVpkTagging: boolean;
+  experimentalVpkImprinting: boolean;
   /** First-run setup completed. */
   hasCompletedSetup: boolean;
   /** Mod pairs the user has dismissed in the Conflicts page. New entries use

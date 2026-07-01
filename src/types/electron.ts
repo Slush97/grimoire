@@ -13,8 +13,9 @@ import type {
     MergeModsArgs,
     UnmergeModResult,
     ExtractMergeSourceResult,
-    TagAllInstalledResult,
-    TagInstalledProgress,
+    ImprintAllInstalledResult,
+    ImprintInstalledProgress,
+    ImprintPreflightResult,
     ApplyHeroCardResult,
     HeroAbilitySlot,
     AbilitySlot,
@@ -736,9 +737,10 @@ export interface ElectronAPI {
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
-    tagOneMod: (modId: string) => Promise<Mod>;
-    tagAllInstalled: () => Promise<TagAllInstalledResult>;
-    onTagAllInstalledProgress: (callback: (progress: TagInstalledProgress) => void) => () => void;
+    imprintOneMod: (modId: string) => Promise<Mod>;
+    imprintAllInstalled: () => Promise<ImprintAllInstalledResult>;
+    imprintPreflight: () => Promise<ImprintPreflightResult>;
+    onImprintAllInstalledProgress: (callback: (progress: ImprintInstalledProgress) => void) => () => void;
 
     // Launch
     launchModded: () => Promise<void>;
