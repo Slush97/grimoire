@@ -88,6 +88,7 @@ import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
+import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
 import { Button, CheckboxMark, IconButton, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -171,60 +172,6 @@ function modEntryKey(mod: Mod): string {
   }
   return `single:local:${mod.name}:${mod.size}`;
 }
-
-type EnabledVpkRestoreSnapshot = {
-  hadEnabled: boolean;
-  enabledIndexes: Set<number>;
-  enabledUnindexed: boolean;
-};
-
-function getVpkIndex(mod: Pick<Mod, 'vpkIndex'>): number | undefined {
-  return typeof mod.vpkIndex === 'number' && Number.isInteger(mod.vpkIndex) && mod.vpkIndex >= 0
-    ? mod.vpkIndex
-    : undefined;
-}
-
-function createEnabledVpkRestoreSnapshot(
-  targets: Array<{ enabled: boolean; vpkIndex?: number }>
-): EnabledVpkRestoreSnapshot {
-  const enabledIndexes = new Set<number>();
-  let enabledUnindexed = false;
-  for (const target of targets) {
-    if (!target.enabled) continue;
-    const index = getVpkIndex(target);
-    if (index === undefined) {
-      enabledUnindexed = true;
-    } else {
-      enabledIndexes.add(index);
-    }
-  }
-  return {
-    hadEnabled: enabledUnindexed || enabledIndexes.size > 0,
-    enabledIndexes,
-    enabledUnindexed,
-  };
-}
-
-function shouldRestoreVpkEnabled(
-  mod: Mod,
-  candidates: Mod[],
-  snapshot: EnabledVpkRestoreSnapshot
-): boolean {
-  if (!snapshot.hadEnabled) return false;
-  const hasIndexedCandidates = candidates.some((candidate) => getVpkIndex(candidate) !== undefined);
-  const index = getVpkIndex(mod);
-  if (hasIndexedCandidates) {
-    // Snapshot carries no per-VPK index (the old install predates vpkIndex), but
-    // the redownload assigned indexes. We can't map which sibling was on, so
-    // honor the coarse "something was enabled" and restore every VPK, matching
-    // the pre-index behavior. Without this, a multi-VPK mod installed before
-    // vpkIndex existed silently lands fully disabled after an update.
-    if (snapshot.enabledIndexes.size === 0) return snapshot.enabledUnindexed;
-    return index === undefined ? snapshot.enabledUnindexed : snapshot.enabledIndexes.has(index);
-  }
-  return snapshot.enabledIndexes.size === 0 && snapshot.enabledUnindexed;
-}
-
 
 function buildModEntries(mods: Mod[]): ModEntry[] {
   const byGb = new Map<number, Mod[]>();
