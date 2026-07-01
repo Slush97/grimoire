@@ -978,8 +978,8 @@ export function conflictPairKey(a: string, b: string): string {
 
 // Profile wire types are single-sourced in types/electron.ts; re-exported
 // here to preserve this module's existing import surface.
-export type { Profile, ProfileMod, ProfileCrosshairSettings } from '../types/electron';
-import type { Profile, ProfileCrosshairSettings, PerformanceConfigStatus, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
+export type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult } from '../types/electron';
+import type { Profile, ProfileCrosshairSettings, ApplyProfileResult, PerformanceConfigStatus, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
 
 export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();
@@ -1000,7 +1000,7 @@ export async function updateProfile(profileId: string, crosshairSettings?: Profi
   return window.electronAPI.updateProfile(profileId, crosshairSettings);
 }
 
-export async function applyProfile(profileId: string): Promise<Profile> {
+export async function applyProfile(profileId: string): Promise<ApplyProfileResult> {
   return withGameRunningWarning(() => window.electronAPI.applyProfile(profileId));
 }
 

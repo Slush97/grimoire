@@ -302,7 +302,7 @@ export default function Profiles() {
   const handleApplyProfile = async (profileId: string) => {
     setApplyingId(profileId);
     try {
-      const profile = await applyProfile(profileId);
+      const { profile, failures } = await applyProfile(profileId);
 
       // Update local crosshair store if profile has settings
       if (profile.crosshair) {
@@ -313,6 +313,14 @@ export default function Profiles() {
 
       setActiveProfileId(profileId);
       await loadMods();
+
+      // The apply is best-effort: per-mod enable/disable ops that couldn't
+      // complete (typically a VPK locked by the running game) are counted, not
+      // thrown. Surface that count so the profile doesn't silently launch with
+      // missing mods.
+      if (failures.length > 0) {
+        setError(t('profiles.errors.applyPartial', { count: failures.length }));
+      }
     } catch (err) {
       setError(String(err));
     } finally {

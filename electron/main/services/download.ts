@@ -5,6 +5,7 @@ import { tmpdir } from 'os';
 import { BrowserWindow } from 'electron';
 import { getDisabledPath } from './deadlock';
 import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles, type ExtractedVpk } from './extract';
+import { buildVpkIndexBySize } from './vpkVariantIndex';
 import { randomUUID } from 'crypto';
 import { setModMetadataWithHash, getModMetadata } from './metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
@@ -551,6 +552,11 @@ interface RenamedVpk {
     fileName: string;
     /** The archive variant folder this VPK came from, if any. */
     archiveFolder?: string;
+    /** The VPK's original basename inside the archive. Combined with
+     *  archiveFolder this is a cross-machine-stable identity (unlike fileName,
+     *  which gets a random suffix on collision), used to stamp a deterministic
+     *  vpkIndex so shared profiles restore the right sibling. */
+    sourceFileName: string;
 }
 
 /** Title-case a variant folder for display: `Tailed_mod_Beard` -> `Tailed Mod Beard`. */
@@ -585,7 +591,7 @@ async function renameVpksToAvoidConflicts(
         }
 
         await moveFileWithoutOverwrite(vpkPath, join(targetPath, finalFileName));
-        renamedFiles.push({ fileName: finalFileName, archiveFolder });
+        renamedFiles.push({ fileName: finalFileName, archiveFolder, sourceFileName: fileName });
     }
 
     return renamedFiles;
@@ -602,18 +608,6 @@ async function collectVpkFileSizes(
                 return [vpk, stat.size] as const;
             })
         )
-    );
-}
-
-function buildVpkIndexBySize(
-    vpkFileSizes: Record<string, number>,
-    installedVpks: string[]
-): Map<string, number> {
-    if (installedVpks.length <= 1) return new Map();
-    return new Map(
-        [...installedVpks]
-            .sort((a, b) => (vpkFileSizes[a] ?? 0) - (vpkFileSizes[b] ?? 0) || a.localeCompare(b))
-            .map((fileName, index) => [fileName, index])
     );
 }
 
@@ -827,8 +821,11 @@ async function executeDownload(
 
         // Rename VPKs to avoid conflicts
         const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, details.name);
+        const stableKeyByFile = new Map<string, string>();
         for (const r of renamed) {
             if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
+            // Archive folder + original basename: stable across machines/redownloads.
+            stableKeyByFile.set(r.fileName, `${r.archiveFolder ?? ''}\u0000${r.sourceFileName}`);
         }
         installedVpks = renamed.map((r) => r.fileName);
 
@@ -839,7 +836,13 @@ async function executeDownload(
         installedVpks.sort((a, b) => a.localeCompare(b));
         if (installedVpks.length > 1) {
             const vpkFileSizes = await collectVpkFileSizes(targetPath, installedVpks);
-            vpkIndexByFile = buildVpkIndexBySize(vpkFileSizes, installedVpks);
+            vpkIndexByFile = buildVpkIndexBySize(
+                installedVpks.map((f) => ({
+                    fileName: f,
+                    size: vpkFileSizes[f] ?? 0,
+                    stableKey: stableKeyByFile.get(f),
+                }))
+            );
             const pickRequestId = randomUUID();
             const vpkLabels = getVpkLabels(
                 installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
@@ -881,7 +884,10 @@ async function executeDownload(
                 if (!selectedSet.has(vpk)) {
                     const extraPath = join(targetPath, vpk);
                     if (existsSync(extraPath)) {
-                        await fs.unlink(extraPath);
+                        // Best-effort: a failed unlink of a deselected variant
+                        // (Windows lock, already gone) must not fail the install
+                        // of the selected VPKs, which are already on disk.
+                        await fs.unlink(extraPath).catch(() => { });
                     }
                 }
             }
@@ -1328,8 +1334,11 @@ async function executeOneClickDownload(
         }
 
         const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, oneClickModName);
+        const stableKeyByFile = new Map<string, string>();
         for (const r of renamed) {
             if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
+            // Archive folder + original basename: stable across machines/redownloads.
+            stableKeyByFile.set(r.fileName, `${r.archiveFolder ?? ''}\u0000${r.sourceFileName}`);
         }
         installedVpks = renamed.map((r) => r.fileName);
 
@@ -1339,7 +1348,13 @@ async function executeOneClickDownload(
         installedVpks.sort((a, b) => a.localeCompare(b));
         if (installedVpks.length > 1) {
             const vpkFileSizes = await collectVpkFileSizes(targetPath, installedVpks);
-            vpkIndexByFile = buildVpkIndexBySize(vpkFileSizes, installedVpks);
+            vpkIndexByFile = buildVpkIndexBySize(
+                installedVpks.map((f) => ({
+                    fileName: f,
+                    size: vpkFileSizes[f] ?? 0,
+                    stableKey: stableKeyByFile.get(f),
+                }))
+            );
             const pickRequestId = randomUUID();
             const vpkLabels = getVpkLabels(
                 installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
@@ -1377,7 +1392,10 @@ async function executeOneClickDownload(
                 if (!selectedSet.has(vpk)) {
                     const extraPath = join(targetPath, vpk);
                     if (existsSync(extraPath)) {
-                        await fs.unlink(extraPath);
+                        // Best-effort: a failed unlink of a deselected variant
+                        // (Windows lock, already gone) must not fail the install
+                        // of the selected VPKs, which are already on disk.
+                        await fs.unlink(extraPath).catch(() => { });
                     }
                 }
             }

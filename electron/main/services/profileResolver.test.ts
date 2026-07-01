@@ -118,6 +118,26 @@ describe('dedupeEnabledForProfile', () => {
     expect(out.map((m) => m.id).sort()).toEqual(['a', 'b']);
   });
 
+  it('keeps both equal-size legacy siblings that lack a stamped index', () => {
+    // A multi-VPK submission installed before vpkIndex existed, whose two VPKs
+    // are the same byte size, so inferMissingVpkIndexes bails and both stay
+    // index-less -> identical `gbId:fileId` stable key. They are DISTINCT
+    // physical files and both must survive: dropping one would half-load the
+    // mod in game. (Regressed previously: the collapse dropped one.)
+    const mods = [
+      mod({ id: 'a', size: 100, priority: 1 }),
+      mod({ id: 'b', size: 100, priority: 2 }),
+    ];
+    const out = dedupeEnabledForProfile(
+      mods,
+      metaLookup({
+        'a.vpk': { gameBananaId: 1, gameBananaFileId: 1 },
+        'b.vpk': { gameBananaId: 1, gameBananaFileId: 1 },
+      })
+    );
+    expect(out.map((m) => m.id).sort()).toEqual(['a', 'b']);
+  });
+
   it('drops a duplicate of the same file/index, keeping the higher load order (lower priority)', () => {
     // Both stamped index 0 -> same stable key -> duplicate. Feed the low-priority
     // copy second to exercise the swap-in-place branch.
