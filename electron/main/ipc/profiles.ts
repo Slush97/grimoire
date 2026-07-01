@@ -10,6 +10,7 @@ import {
     renameProfile,
     type Profile,
     type ProfileCrosshairSettings,
+    type ApplyProfileResult,
 } from '../services/profiles';
 import {
     buildPortableProfile,
@@ -70,7 +71,7 @@ ipcMain.handle('update-profile', async (_, profileId: string, crosshairSettings?
 });
 
 // apply-profile
-ipcMain.handle('apply-profile', async (_, profileId: string): Promise<Profile> => {
+ipcMain.handle('apply-profile', async (_, profileId: string): Promise<ApplyProfileResult> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
         throw new Error('No Deadlock path configured');
@@ -85,14 +86,14 @@ ipcMain.handle('apply-profile', async (_, profileId: string): Promise<Profile> =
         console.warn('[ApplyProfile] failed to capture pre-apply snapshot:', err);
     }
 
-    const profile = await applyProfile(deadlockPath, profileId);
+    const result = await applyProfile(deadlockPath, profileId);
 
     // Save as active profile
     const settings = loadSettings();
     settings.activeProfileId = profileId;
     saveSettings(settings);
 
-    return profile;
+    return result;
 });
 
 // delete-profile

@@ -835,7 +835,7 @@ export interface ElectronAPI {
     createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
     createProfileFromGameBananaIds: (args: { name: string; gameBananaIds: number[] }) => Promise<Profile>;
     updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
-    applyProfile: (profileId: string) => Promise<Profile>;
+    applyProfile: (profileId: string) => Promise<ApplyProfileResult>;
     deleteProfile: (profileId: string) => Promise<void>;
     renameProfile: (profileId: string, newName: string) => Promise<Profile>;
     exportPortableProfile: (profileId: string) => Promise<import('./portableProfile').PortableExportResult>;
@@ -1120,6 +1120,15 @@ export interface Profile {
     autoexecCommands?: string[];
     createdAt: string;
     updatedAt: string;
+}
+
+/** Result of applying a profile. `failures` holds per-mod enable/disable ops
+ *  that could not complete (e.g. a VPK locked by the running game); the apply
+ *  is otherwise best-effort and does not rethrow, so the renderer surfaces this
+ *  count instead of silently launching with missing mods. */
+export interface ApplyProfileResult {
+    profile: Profile;
+    failures: string[];
 }
 
 declare global {

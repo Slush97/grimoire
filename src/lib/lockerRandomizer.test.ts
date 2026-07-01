@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { planRandomization, shuffleSkinKey } from './lockerRandomizer';
+import { planRandomization, planLaunchShuffle, shuffleSkinKey, readStoredShuffleIncluded } from './lockerRandomizer';
 
 /**
  * Minimal Mod factory. Only the fields the randomizer + lockerUtils grouping
@@ -275,5 +275,86 @@ describe('planRandomization', () => {
       rng: fixedRng(0),
     });
     expect(plan).toEqual({ enableIds: [], disableIds: [], changedHeroes: [] });
+  });
+});
+
+describe('planLaunchShuffle', () => {
+  const heroList = [{ id: 1, name: 'Vindicta' }];
+  const EMPTY = { enableIds: [], disableIds: [], changedHeroes: [] };
+
+  // A per-hero skin the Locker manages: sourceSection 'Mod' + a hero tag, so it
+  // both passes isLockerManagedMod and groups under the hero via heroList.
+  const skin = (over: Partial<Mod> & { id: string }) =>
+    mod({ sourceSection: 'Mod', lockerHero: 'Vindicta', ...over });
+
+  it('returns an empty plan when nothing is opted in (early return)', () => {
+    const mods = [
+      skin({ id: 'a', gameBananaId: 1, enabled: true }),
+      skin({ id: 'b', gameBananaId: 2 }),
+    ];
+    expect(planLaunchShuffle({ mods, heroList, included: new Set() })).toEqual(EMPTY);
+  });
+
+  it('delegates to the randomizer for a hero with an opted-in skin', () => {
+    const mods = [
+      skin({ id: 'active', gameBananaId: 1, enabled: true, priority: 1 }), // enabled, NOT opted in
+      skin({ id: 'pick', gameBananaId: 2, enabled: false }),               // the lone opted-in pick
+    ];
+    const plan = planLaunchShuffle({ mods, heroList, included: new Set(['gamebanana:2']) });
+    expect(plan.changedHeroes).toEqual([1]);
+    expect(plan.enableIds).toContain('pick');
+    expect(plan.disableIds).toContain('active');
+  });
+
+  it('excludes Sound-section mods from the shuffle', () => {
+    // A hero-tagged Sound mod is the Sounds tab's domain, never a skin.
+    const mods = [
+      mod({ id: 'snd', sourceSection: 'Sound', lockerHero: 'Vindicta', gameBananaId: 5, enabled: true }),
+    ];
+    expect(planLaunchShuffle({ mods, heroList, included: new Set(['gamebanana:5']) })).toEqual(EMPTY);
+  });
+
+  it('excludes global mods (e.g. announcer packs) from the shuffle', () => {
+    const mods = [skin({ id: 'g', gameBananaId: 6, enabled: true, globalType: 'announcer' })];
+    expect(planLaunchShuffle({ mods, heroList, included: new Set(['gamebanana:6']) })).toEqual(EMPTY);
+  });
+});
+
+describe('readStoredShuffleIncluded', () => {
+  // node test env has no localStorage; stub getItem per-case, restore after.
+  const withLocalStorage = (value: string | null, fn: () => void) => {
+    const g = globalThis as unknown as { localStorage?: { getItem: (k: string) => string | null } };
+    const original = g.localStorage;
+    g.localStorage = { getItem: () => value };
+    try {
+      fn();
+    } finally {
+      if (original === undefined) delete g.localStorage;
+      else g.localStorage = original;
+    }
+  };
+
+  it('returns an empty set when unset', () => {
+    withLocalStorage(null, () => expect(readStoredShuffleIncluded().size).toBe(0));
+  });
+
+  it('parses a stored string array', () => {
+    withLocalStorage(JSON.stringify(['gamebanana:1', 'sha256:x']), () =>
+      expect(readStoredShuffleIncluded()).toEqual(new Set(['gamebanana:1', 'sha256:x']))
+    );
+  });
+
+  it('ignores malformed JSON', () => {
+    withLocalStorage('{not json', () => expect(readStoredShuffleIncluded().size).toBe(0));
+  });
+
+  it('ignores a non-array payload', () => {
+    withLocalStorage(JSON.stringify({ a: 1 }), () => expect(readStoredShuffleIncluded().size).toBe(0));
+  });
+
+  it('filters out non-string entries', () => {
+    withLocalStorage(JSON.stringify(['ok', 42, null, 'ok2']), () =>
+      expect(readStoredShuffleIncluded()).toEqual(new Set(['ok', 'ok2']))
+    );
   });
 });

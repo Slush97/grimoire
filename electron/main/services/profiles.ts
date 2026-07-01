@@ -27,8 +27,8 @@ import { generateCrosshairCommands, normalizeCrosshairSettings } from '../../../
 // The Profile wire types are single-sourced in src/types/electron.ts
 // (docstrings included); re-exported because portableProfile.ts and the
 // ipc layer import them from this service.
-import type { Profile, ProfileMod, ProfileCrosshairSettings } from '../../../src/types/electron';
-export type { Profile, ProfileMod, ProfileCrosshairSettings };
+import type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult } from '../../../src/types/electron';
+export type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult };
 
 /**
  * Get the profiles file path
@@ -281,7 +281,7 @@ function describeProfileMod(pm: ProfileMod): string {
 /**
  * Apply a profile - enable/disable mods, restore autoexec and crosshair
  */
-export async function applyProfile(deadlockPath: string, profileId: string): Promise<Profile> {
+export async function applyProfile(deadlockPath: string, profileId: string): Promise<ApplyProfileResult> {
     const profiles = loadProfiles();
     const profile = profiles.find(p => p.id === profileId);
 
@@ -495,7 +495,7 @@ export async function applyProfile(deadlockPath: string, profileId: string): Pro
     writeAutoexec(deadlockPath, currentAutoexec);
 
     console.log(`[profiles] apply '${profile.name}' complete`);
-    return profile;
+    return { profile, failures };
 }
 
 /**

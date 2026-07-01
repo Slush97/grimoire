@@ -80,6 +80,17 @@ export function dedupeEnabledForProfile<T extends { metaKey: string; fileName: s
             continue;
         }
         const vpkIndex = normalizeVpkIndex(meta?.vpkIndex) ?? inferredVpkIndexes.get(mod.metaKey);
+        // Without a concrete VPK index (a single-VPK file, or a multi-VPK group
+        // whose siblings are all the same byte size so inferMissingVpkIndexes
+        // bails) we cannot prove two distinct on-disk files are the SAME logical
+        // VPK. Collapsing them on `gbId:fileId` alone would silently drop a real
+        // sibling of a multi-file submission, which would then only half-load in
+        // game. Keep every index-less file; dedupe only fires when a stamped or
+        // inferred index makes the duplicate unambiguous.
+        if (vpkIndex === undefined) {
+            out.push(mod);
+            continue;
+        }
         const key = profileStableKey(gbId, fileId, vpkIndex);
         const existing = byStableKey.get(key);
         if (!existing) {
