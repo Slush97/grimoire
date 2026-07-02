@@ -1,6 +1,7 @@
 {
   "common": {
     "view": "Affichage",
+    "gameRunningWarning": "Le jeu est en cours d'exécution. Fermez Deadlock pour modifier les mods chargés.",
     "actions": {
       "cancel": "Annuler",
       "clear": "Effacer",
@@ -142,7 +143,7 @@
       },
       "pickHero": "Sélectionner un occultiste",
       "scope": {
-        "title": "Choisissez un héros pour voir ses textures",
+        "title": "Choisissez un occultiste pour voir ses textures",
         "description": "Les textures des modèles d'occultistes et des effets sont nombreuses, choisissez un occultiste (ou effectuez une recherche) pour affiner la liste."
       },
       "empty": {
@@ -177,7 +178,7 @@
       },
       "empty": {
         "title": "Aucun son en jeu",
-        "description": "Ce héros n'a aucun son en jeu dans vos fichiers installés."
+        "description": "Cet occultiste n'a aucun son en jeu dans vos fichiers installés."
       },
       "voiceLines": {
         "title": "Lignes vocales",
@@ -220,6 +221,7 @@
     "commands": {
       "emptyTitle": "Aucune commande ajoutée",
       "emptyDescription": "Sélectionnez parmi les commandes à gauche",
+      "manualTooltip": "Cette commande est déjà présente dans autoexec.cfg et s'affiche en lecture seule.",
       "title_one": "Vos commandes ({{count}})",
       "title_other": "Vos commandes ({{count}})"
     },
@@ -242,6 +244,8 @@
       "title": "Options de lancement"
     },
     "presets": {
+      "title": "Commandes prédéfinies",
+      "toggle": "Activer/Désactiver les commandes prédéfinies",
       "performance": {
         "category": "Performances",
         "uncapFps": {
@@ -289,6 +293,10 @@
         "disablePostMatchSurvey": {
           "name": "Désactiver le sondage post-partie",
           "description": "Désactiver le sondage après les parties"
+        },
+        "offscreenDamageIndicator": {
+          "name": "Indicateurs de dégâts hors écran",
+          "description": "Afficher les icônes et barres de vie des troupiers à travers les murs lorsqu'ils subissent des dégâts ou sont visibles."
         }
       },
       "minimap": {
@@ -304,6 +312,10 @@
         "largerPlayerIcons": {
           "name": "Icônes joueurs plus grandes",
           "description": "Icônes joueurs plus grandes sur la minicarte"
+        },
+        "largerLocalPlayerIcon": {
+          "name": "Icône de joueur local plus grande",
+          "description": "Agrandir votre propre icône sur la mini-carte"
         },
         "thickerZiplines": {
           "name": "Tyroliennes plus épaisses",
@@ -541,6 +553,7 @@
       "ignoreAllTitle": "Déplacer chaque paire de conflit active vers la section Ignoré.",
       "ignoreCount_one": "Ignorer {{count}} conflit",
       "ignoreCount_other": "Ignorer {{count}} conflits",
+      "ignoreModEverywhere": "Ignorer ce mod partout",
       "ignoreTitle": "Ne plus signaler ce conflit",
       "ignoring": "En cours...",
       "unignore": "Ne plus ignorer"
@@ -574,6 +587,14 @@
       "ignoreFailed_other": "Impossible d'ignorer {{count}} conflits. Voir la console pour plus de détails."
     },
     "errorTitle": "Erreur lors du chargement des conflits",
+    "files": {
+      "heading_one": "Fichier en commun ({{count}})",
+      "heading_other": "Fichiers en commun ({{count}})",
+      "ignoreEverywhere": "Ignorer dans tous les mods",
+      "ignoreFile": "Ignorer",
+      "ignoreFileTitle": "Ne plus signaler ce fichier uniquement pour ces deux mods (réversible ci-dessous)",
+      "ignoreForPair": "Ignorer pour cette paire"
+    },
     "header": {
       "description": "Résoudre les conflits entre les mods installés",
       "noActiveDescription": "Aucun conflit actif – vous pouvez vérifier ou rétablir vos conflits ignorés ci-dessous."
@@ -583,6 +604,21 @@
       "title_one": "Ignoré ({{count}})",
       "title_other": "Ignorés ({{count}})",
       "unignoreTitle": "Réactiver la détection pour ce conflit"
+    },
+    "ignoredFiles": {
+      "restoreAll": "Tout restaurer",
+      "restoreAllTitle": "Restaurer la détection des conflits pour chaque fichier ignoré dans cette paire",
+      "title": "Fichiers ignorés",
+      "unignoreFileTitle": "Restaurer ce fichier pour la détection des conflits"
+    },
+    "ignoredFilesGlobal": {
+      "title": "Ignorés dans tous les mods",
+      "unignoreTitle": "Signaler à nouveau ce fichier comme un conflit (pour tous les mods)"
+    },
+    "ignoredMods": {
+      "tag": "Ignoré",
+      "title": "Mods ignorés",
+      "unignoreTitle": "Signaler à nouveau les conflits de ce mod"
     },
     "noPreview": "Aucun aperçu",
     "removedMod": "(mod supprimé)",
@@ -703,6 +739,8 @@
       "hideNsfw": "Masquer le contenu NSFW",
       "hideNsfwDescription": "Flouter les vignettes des mods marqués comme NSFW.",
       "hideOutdated": "Masquer les mods obsolètes",
+      "blurInstalledNsfw": "Flouter le contenu NSFW installé",
+      "blurInstalledNsfwDescription": "Flouter les miniatures des mods installés marqués comme NSFW.",
       "expandLocker": "Développer les listes du Casier par défaut",
       "switchVariants": "Désactiver les variantes au lieu de les empiler",
       "enableAfterDownload": "Activer les mods après le téléchargement",
@@ -914,8 +952,8 @@
       "local": "Local",
       "status": "Statut",
       "enabled": "Activé",
-      "hero": "Héros",
-      "tags": "Tags"
+      "hero": "Occultistes",
+      "tags": "Étiquettes"
     },
     "sections": {
       "enabled_one": "Activé",
@@ -1033,6 +1071,7 @@
       "vpkHelp": "Le fichier sera copié dans votre dossier addons et renommé avec la prochaine priorité pak## disponible.",
       "selectVpk": "Sélectionner un fichier VPK",
       "expectedVpk": "Fichier .vpk attendu - reçu \"{{name}}\".",
+      "dropUnresolved": "Impossible de lire ce fichier. Si vous l'avez fait glisser depuis une archive ZIP ouverte, faites plutôt glisser le fichier .zip lui-même ici.",
       "vpkFile": "Fichier VPK",
       "vpkSelected": "VPK sélectionné : {{path}}. Appuyez sur Entrée pour modifier.",
       "vpkSelectedLocked": "VPK sélectionné : {{path}}",
@@ -1150,6 +1189,13 @@
     "empty": {
       "noGamePath": "Définissez votre chemin Deadlock ou activez le mode développeur."
     },
+    "randomize": {
+      "onLaunch": "Sélection aléatoire au lancement",
+      "onLaunchHint": "Lorsqu'elle est activée, un de vos skins choisis sera équipée par occultiste à chaque lancement depuis Grimoire. Ajoutez des skins à la sélection avec le bouton de sélection aléatoire sur chaque skin.",
+      "addToShuffle": "Ajouter {{name}} à la sélection aléatoire",
+      "removeFromShuffle": "Retirer {{name}} de la sélection aléatoire",
+      "inPool": "Dans la sélection aléatoire"
+    },
     "modImage": {
       "set": "Définir l'image du Casier pour {{name}}",
       "title": "Choisir une image du Casier",
@@ -1170,7 +1216,7 @@
       "removedToast": "{{surface}} réinitialisée",
       "useLockerImage": "Utiliser l'image du Casier",
       "hideHeroName": "Masquer le nom de l'occultiste",
-      "hideHeroNameHint": "Activez cette option si l'image affiche déjà le nom de l'occulte."
+      "hideHeroNameHint": "Activez cette option si l'image affiche déjà le nom de l'occultiste."
     },
     "global": {
       "activeBadgeTitle": "Ce conteneur d'âmes est actif et chargé en jeu",
@@ -1503,10 +1549,11 @@
       "soundCount_other": "{{count}} sons",
       "modCount_one": "{{count}} mod",
       "modCount_other": "{{count}} mods",
-      "modsActive_one": "{{count}} mod installé (actif)",
-      "modsActive_other": "{{count}} mods installés (1 actif)",
-      "modsInstalled_one": "{{count}} mod installé (aucun actif)",
-      "modsInstalled_other": "{{count}} mods installés (aucun actif)",
+      "facetSkin": "Skin",
+      "facetSound": "Son",
+      "facetCard": "Portrait",
+      "facetEffects": "Effets",
+      "facetInstalled": "{{label}} (installé, désactivé)",
       "categoryCount_one": "{{count}} catégorie",
       "categoryCount_other": "{{count}} catégories",
       "fileCount_one": "{{count}} fichier",
@@ -1587,7 +1634,9 @@
       "loadSnapshotFailed": "Échec du chargement de la sauvegarde : {{error}}",
       "captureSnapshotFailed": "Échec de la capture de la sauvegarde : {{error}}",
       "deleteSnapshotFailed": "Échec de la suppression de la sauvegarde : {{error}}",
-      "bulkDeleteSnapshotsFailed": "Échec de la suppression de {{failed}} sur {{total}} sauvegardes : {{error}}"
+      "bulkDeleteSnapshotsFailed": "Échec de la suppression de {{failed}} sur {{total}} sauvegardes : {{error}}",
+      "applyPartial_one": "Profil appliqué, mais 1 mod n'a pas pu être activé/désactivé (il peut être verrouillé par le jeu en cours d'exécution).",
+      "applyPartial_other": "Profil appliqué, mais {{count}} mods n'ont pas pu être activés/désactivés (ils peuvent être verrouillés par le jeu en cours d'exécution)."
     },
     "create": {
       "title": "Créer un nouveau profil",
@@ -2028,7 +2077,9 @@
       "stoppedRestoreFailed_one": "Deadlock arrêté, mais impossible de restaurer {{count}} mod.",
       "stoppedRestoreFailed_other": "Deadlock arrêté, mais impossible de restaurer {{count}} mods.",
       "restoredStashed_one": "{{count}} mod mis de côté a été restauré",
-      "restoredStashed_other": "{{count}} mods mis de côté ont été restaurés."
+      "restoredStashed_other": "{{count}} mods mis de côté ont été restaurés.",
+      "shufflePartial_one": "Un skin n'a pas pu être choisi aléatoirement lors de ce lancement.",
+      "shufflePartial_other": "{{count}} skins n'ont pas pu être choisis aléatoirement lors de ce lancement."
     },
     "brand": "Grimoire",
     "previewVolume": {
@@ -2086,7 +2137,12 @@
       "cardStyle": "Style des cartes",
       "cardDesign": "Style des cartes de navigation",
       "detailsView": "Vue des détails",
-      "modDetailsView": "Vue des détails du mod"
+      "modDetailsView": "Vue des détails du mod",
+      "nsfwContent": "Contenu NSFW",
+      "outdatedContent": "Contenu obsolète",
+      "show": "Afficher",
+      "blur": "Flouter",
+      "hide": "Masquer"
     },
     "cardStyle": {
       "default": "Par défaut",
