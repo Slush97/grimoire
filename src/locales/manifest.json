@@ -1,6 +1,10 @@
 {
   "sourceLanguage": "en",
+<<<<<<< HEAD
   "totalKeys": 1920,
+=======
+  "totalKeys": 1914,
+>>>>>>> f38a4ab (fix(imprint): keystone-safe hash capture + audited follow-ups)
   "languages": [
     {
       "code": "bg",
@@ -11,7 +15,11 @@
     {
       "code": "en",
       "name": "English",
+<<<<<<< HEAD
       "translatedKeys": 1920,
+=======
+      "translatedKeys": 1914,
+>>>>>>> f38a4ab (fix(imprint): keystone-safe hash capture + audited follow-ups)
       "pct": 100
     },
     {

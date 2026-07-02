@@ -178,8 +178,13 @@ async function embedAddonInfoInPlace(modPath: string, addonText: string): Promis
  * Imprint one mod in place (the shared core; caller already holds the mutation lock
  * and has verified the mod is not loaded). Carries an existing embed's original
  * hash forward when present, else computes it from the current (still-pristine)
- * bytes. Does NOT re-stamp metadata.sha256 (canonical = original = unchanged);
- * sets an `imprinted: true` hint for the UI and to short-circuit re-runs.
+ * bytes. Does NOT re-stamp a valid metadata.sha256 (canonical = original =
+ * unchanged); sets an `imprinted: true` hint for the UI and to short-circuit
+ * re-runs. When the entry has NO valid stored hash (e.g. a metadata-less unknown
+ * mod being bulk-imprinted), the ORIGINAL hash is stamped alongside the hint:
+ * leaving the entry sha-less would otherwise invite the startup backfill to fill
+ * it later, and stamping the original here keeps the entry on the canonical axis
+ * from the first moment it exists.
  */
 async function imprintModCore(mod: Mod): Promise<void> {
     const meta = getModMetadata(mod.metaKey);
@@ -189,13 +194,20 @@ async function imprintModCore(mod: Mod): Promise<void> {
         (await computeOriginalIdentity(mod.path, { includeCrc: false }));
     const addonText = serializeAddonInfo(buildAddonFields(mod, meta, original));
     await embedAddonInfoInPlace(mod.path, addonText);
-    setModMetadata(mod.metaKey, { imprinted: true });
+    const hasValidStoredHash = !!meta?.sha256 && SHA256_RE.test(meta.sha256);
+    setModMetadata(mod.metaKey, {
+        imprinted: true,
+        ...(hasValidStoredHash ? {} : { sha256: original.sha256 }),
+    });
 }
 
 /**
  * Imprint a single installed mod in place. Runs under the mod-mutation lock and
  * refuses if the running game has the mod loaded (a hard error, the same
- * GAME_RUNNING message merge / reorder use). Returns the post-imprint Mod.
+ * GAME_RUNNING message merge / reorder use). Refuses anomalous files (the same
+ * guard the bulk run applies): imprinting a hash-drifted file would enshrine
+ * drifted bytes as "original", and a foreign addoninfo.txt must be reported,
+ * not clobbered. Returns the post-imprint Mod.
  */
 export async function imprintOneMod(deadlockPath: string, modId: string): Promise<Mod> {
     return runExclusiveModMutation(async () => {
@@ -204,6 +216,10 @@ export async function imprintOneMod(deadlockPath: string, modId: string): Promis
         const mod = installed.find((m) => m.id === modId);
         if (!mod) throw new Error(`Mod not found: ${modId}`);
         assertCanMoveLoadedGameMod(mod);
+        const anomaly = await checkImprintAnomaly(mod);
+        if (anomaly) {
+            throw new Error(`Refusing to imprint ${mod.fileName}: ${anomaly}`);
+        }
         await imprintModCore(mod);
         // The imprint changes the file's bytes/size but not its name, so the id and
         // metaKey are stable; re-scan only to return up-to-date size/state.

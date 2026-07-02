@@ -3,6 +3,7 @@ import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, 
 import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
 import { getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
+import { resolveVpkIdentity } from './vpkIdentity';
 import { getMetadataPath } from '../utils/paths';
 
 export interface ModMetadata {
@@ -200,6 +201,13 @@ export function setModMetadata(fileName: string, data: ModMetadata): void {
  * Set metadata and attach a SHA-256 fingerprint for the installed VPK.
  * Callers pass the path because metadata is keyed by logical pak filename and
  * the same filename may exist in either addons or .disabled.
+ *
+ * The stored hash is the CANONICAL identity (the original, pre-imprint
+ * whole-file sha256), resolved via resolveVpkIdentity: an imprinted VPK yields
+ * its embedded original hash, a pristine VPK yields its live hash (which IS
+ * the original). Hashing live bytes here would re-stamp an imprinted file's
+ * identity to post-imprint bytes and break every record on the original axis
+ * (sha256AtMergeTime, sha256AtApplyTime, absorbed-source hiding).
  */
 export async function setModMetadataWithHash(
     fileName: string,
@@ -208,7 +216,7 @@ export async function setModMetadataWithHash(
 ): Promise<void> {
     setModMetadata(fileName, {
         ...data,
-        sha256: await hashFileSha256(filePath),
+        sha256: (await resolveVpkIdentity(filePath)).sha256,
     });
 }
 
@@ -230,7 +238,9 @@ export async function backfillMissingMetadataHashes(deadlockPath: string): Promi
         if (!filePath) continue;
 
         try {
-            data.sha256 = await hashFileSha256(filePath);
+            // Canonical (embed-aware) identity: an imprinted file backfills its
+            // embedded original hash, never the post-imprint live bytes.
+            data.sha256 = (await resolveVpkIdentity(filePath)).sha256;
             updated++;
         } catch (error) {
             console.warn(`[Metadata] Failed to backfill SHA-256 for ${key}:`, error);

@@ -5717,6 +5717,11 @@ function ImprintModal({ state, onConfirm, onClose }: {
       case 'foreign-embed': return t('installed.imprintAll.anomalyForeignEmbed');
     }
   };
+  // The bulk run reports anomalies as their raw reason tokens (they flow into
+  // failed[] alongside free-form error messages); localize the known tokens so
+  // the result list reads the same as the preflight list.
+  const isAnomalyReason = (reason: string): reason is ImprintAnomalousMod['reason'] =>
+    reason === 'unparseable' || reason === 'empty' || reason === 'hash-drift' || reason === 'foreign-embed';
 
   let body: ReactNode;
   let footer: ReactNode;
@@ -5814,7 +5819,7 @@ function ImprintModal({ state, onConfirm, onClose }: {
     const failed = result.failed.map((f: ImprintFailedMod) => ({
       key: f.fileName,
       name: f.modName || f.fileName,
-      reason: f.reason,
+      reason: isAnomalyReason(f.reason) ? anomalyReason(f.reason) : f.reason,
     }));
     body = (
       <>

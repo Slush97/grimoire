@@ -52,7 +52,7 @@ unmerge, locker apply, and dedup keep matching, retroactively-tagged or not.
 ## Division of labor
 
 - **Grimoire owns all serialization, hashing, and idempotency.** It computes the original
-  hash (it has `crc32File`, `hashFileSha256`, `stat`), serializes `addoninfo.txt` and
+  hash (it has `crc32File`, `fingerprintFile`, `stat`), serializes `addoninfo.txt` and
   `grimoire_meta.json` itself, and reads back existing embeds for idempotency.
 - **vpkmerge is a dumb byte-embedder.** It embeds opaque blobs at given entry paths. It does
   not compute or understand a hash. New CLI surface: repeatable `--extra-file ENTRY=PATH`.

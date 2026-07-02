@@ -68,6 +68,11 @@ export function loadSettings(): AppSettings {
                 settings.installedHideNsfwPreviews ??
                 settings.hideNsfwPreviews ??
                 DEFAULT_SETTINGS.installedHideNsfwPreviews,
+            // Migrate the pre-rename flag id so an existing opt-in survives.
+            experimentalVpkImprinting:
+                settings.experimentalVpkImprinting ??
+                (settings as { experimentalVpkTagging?: boolean }).experimentalVpkTagging ??
+                DEFAULT_SETTINGS.experimentalVpkImprinting,
         };
     } catch (error) {
         console.warn('[Settings] Failed to load settings, resetting to defaults:', error);
