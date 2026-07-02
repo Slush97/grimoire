@@ -101,6 +101,7 @@ import { initUpdater, checkForUpdates, getInstallSource } from './services/updat
 import { runStartupRecovery } from './ipc/launch';
 import { loadSettings, saveSettings } from './services/settings';
 import { backfillMissingMetadataHashes } from './services/metadata';
+import { backfillImprintedFlags } from './services/imprintMods';
 import { destroyDiscordRpc } from './services/discordRpc';
 import { startSaltIngest } from './services/saltIngest';
 
@@ -144,6 +145,18 @@ async function backfillStartupMetadataHashes(): Promise<void> {
         }
     } catch (error) {
         console.warn('[Metadata] Startup SHA-256 backfill failed:', error);
+    }
+
+    try {
+        // Reconcile the imprinted hint flag with the embed truth (files imprinted
+        // by builds that never persisted the flag would otherwise read as
+        // un-imprinted forever; see backfillImprintedFlags).
+        const stamped = await backfillImprintedFlags(deadlockPath);
+        if (stamped > 0) {
+            console.log(`[Metadata] Backfilled imprinted flag for ${stamped} mod${stamped === 1 ? '' : 's'}`);
+        }
+    } catch (error) {
+        console.warn('[Metadata] Startup imprint-flag backfill failed:', error);
     }
 }
 

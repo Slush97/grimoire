@@ -337,6 +337,11 @@ export async function imprintAllInstalled(
             return (async () => {
                 try {
                     if (isAlreadyImprinted(mod.path)) {
+                        // Self-heal the UI hint: the embed is the truth, but the
+                        // flag may be missing (embed written by a build that did
+                        // not persist it, or by another install). The flag drives
+                        // the toolbar button visibility and the View imprint menu.
+                        if (!meta?.imprinted) setModMetadata(mod.metaKey, { imprinted: true });
                         result.imprinted++;
                         return;
                     }
@@ -487,4 +492,41 @@ export async function imprintFreshlyInstalled(deadlockPath: string, fileNames: s
             console.warn(`[imprintMods] Failed to imprint freshly installed ${fileName}:`, err);
         }
     }
+}
+
+/**
+ * Startup reconcile: stamp `imprinted: true` for every installed VPK that
+ * already carries a valid self-identifying embed but whose metadata entry lacks
+ * the hint flag. The EMBED is the truth; the flag is a cheap projection the UI
+ * keys on (toolbar button visibility, the View imprint context-menu entry), and
+ * files imprinted by a build that never persisted the flag (the pre-rename era)
+ * or by another install would otherwise read as un-imprinted forever: the bulk
+ * modal classifies them already-imprinted, so with nothing eligible there is no
+ * run that would ever self-heal them.
+ *
+ * Read-only toward the FILES (no repack, no hash writes: KEYSTONE untouched);
+ * writes only the metadata hint. Cost is one cached VPK directory parse plus at
+ * most one small entry read per unflagged mod, once: after stamping, later
+ * startups skip flagged entries without touching the disk. Merged and
+ * Locker-managed VPKs are stamped too when they carry an embed (the merge path
+ * writes one), which is what lets View imprint work on merged mods.
+ */
+export async function backfillImprintedFlags(deadlockPath: string): Promise<number> {
+    return runExclusiveModMutation(async () => {
+        const installed = await scanMods(deadlockPath);
+        let stamped = 0;
+        for (const mod of installed) {
+            if (getModMetadata(mod.metaKey)?.imprinted) continue;
+            try {
+                if (isAlreadyImprinted(mod.path)) {
+                    setModMetadata(mod.metaKey, { imprinted: true });
+                    stamped++;
+                }
+            } catch (err) {
+                // Best-effort: an unreadable file just stays unflagged.
+                console.warn(`[imprintMods] Imprint-flag backfill skipped ${mod.fileName}:`, err);
+            }
+        }
+        return stamped;
+    });
 }
