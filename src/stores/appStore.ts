@@ -1,9 +1,17 @@
 import { create } from 'zustand';
-import type { Mod, AppSettings, EditLocalModArgs, GlobalModType } from '../types/mod';
+import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType } from '../types/mod';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
+import { buildHeroList } from '../lib/lockerUtils';
+import {
+  SHUFFLE_INCLUDED_KEY,
+  SHUFFLE_ON_LAUNCH_KEY,
+  planLaunchShuffle,
+  readStoredShuffleIncluded,
+  readStoredShuffleOnLaunch,
+} from '../lib/lockerRandomizer';
 
 // Cache entry with timestamp for TTL support
 interface CacheEntry<T> {
@@ -21,6 +29,25 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // resolving late and clobbering a just-completed mutation with a stale scan
 // (the "added a custom mod but can't act on it until I refresh" bug).
 let modsGeneration = 0;
+
+// Serialize mod enable/disable toggles. A mod's id is its filename, which the
+// main process renames on every enable/disable, so two toggles fired in the same
+// tick (rapid Locker clicking, the exact repro in #bugs "disabled a lot of them
+// without replacing them with the mods i turned on") would race: the second
+// reads a now-stale id and either no-ops or hits "Mod not found", silently
+// dropping the click the user expected to take effect. The main process already
+// serializes the file ops; chaining here makes the SECOND toggle observe the
+// store state the first one wrote, so it dispatches a live id. Toggles still
+// queue instantly from the UI's view; they just resolve in order.
+let toggleChain: Promise<unknown> = Promise.resolve();
+function enqueueToggle<T>(fn: () => Promise<T>): Promise<T> {
+  const run = toggleChain.then(fn, fn);
+  toggleChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
 
 // Reuse existing Mod object (and array) identities when a rescan returns
 // unchanged data. Silent refreshes fire on every Installed mount and on
@@ -185,6 +212,14 @@ interface AppState {
   soundVolume: number;
   previewAudioPlaying: boolean;
 
+  // Skin shuffle: the user opts skins into a per-hero pool, then on each launch
+  // (via Grimoire) one chosen skin per hero is equipped at random. Master switch
+  // + the opted-in skin keys (shuffleSkinKey), both mirrored to localStorage so
+  // the Locker and the launch path share one source of truth. See
+  // src/lib/lockerRandomizer.ts.
+  shuffleOnLaunch: boolean;
+  shuffleIncluded: Set<string>;
+
   // Browse-page UI state (preserved across page nav)
   browseUi: BrowseUiState;
 
@@ -200,6 +235,41 @@ interface AppState {
   // null. Published by the Locker page and read by DiscordPresence so Rich
   // Presence can show the viewed hero. Renderer-only, never persisted.
   lockerHeroName: string | null;
+
+  // Issue #208: per-mod (per-skin) Locker view images (display override).
+  // Map is { skinKey -> data URL }, loaded lazily when the Locker opens. Keyed
+  // by getLockerSkinKey(mod). A skin without an entry falls back to its
+  // GameBanana thumbnail; a hero card falls back to the hero render.
+  lockerModImages: Record<string, string>;
+
+  // Per-skin "hide the hero name label" flags for the Locker image override.
+  // Map is { skinKey -> true } (sparse: only hidden skins are present), loaded
+  // alongside lockerModImages. Used when the art already shows the hero's name.
+  lockerHideHeroName: Record<string, boolean>;
+
+  // Issue #208: per-skin hero-detail backdrop images (framed to 16:9). Map is
+  // { skinKey -> data URL }. Independent of the card image; a skin without an
+  // entry falls back to the hero render in the focus view.
+  lockerModBackgrounds: Record<string, string>;
+
+  // Per-skin "hide the hero name logo" flags for the focus-view backdrop, the
+  // backdrop counterpart of lockerHideHeroName. Sparse { skinKey -> true }.
+  lockerBgHideHeroName: Record<string, boolean>;
+
+  // Per-skin grid thumbnail images (framed 3:4) for the main Locker hero-grid
+  // card. Map is { skinKey -> data URL }. Independent of the card image; the
+  // grid card falls back to the card image, then the hero render.
+  lockerModThumbnails: Record<string, string>;
+
+  // Per-skin "hide the hero name label" flags for the grid thumbnail, the
+  // thumbnail counterpart of lockerHideHeroName. Sparse { skinKey -> true }.
+  lockerThumbHideHeroName: Record<string, boolean>;
+
+  // Custom launcher / sidebar background images (issue: unify launcher
+  // backgrounds). Map is { surface -> data URL } of user uploads, loaded on app
+  // start (the Sidebar is always mounted). The per-surface *choice* lives in
+  // settings.appearanceBackgrounds; this only holds the custom image bytes.
+  appearanceImages: Partial<Record<AppearanceSurface, string>>;
 
   // Actions
   loadSettings: () => Promise<void>;
@@ -218,6 +288,9 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
+  setShuffleOnLaunch: (enabled: boolean) => void;
+  toggleShuffleIncluded: (skinKey: string) => void;
+  runLaunchShuffle: () => Promise<{ failures: number }>;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
@@ -241,6 +314,27 @@ interface AppState {
   setBrowseSession: (cache: BrowseSessionCache | null) => void;
   setInstalledScrollTop: (scrollTop: number) => void;
   setLockerHeroName: (name: string | null) => void;
+  loadLockerModImages: () => Promise<void>;
+  /** `source` is a `data:` URL (custom upload) or an `http(s)` gallery URL. */
+  setLockerModImage: (skinKey: string, source: string) => Promise<void>;
+  removeLockerModImage: (skinKey: string) => Promise<void>;
+  /** Hide (or show) the hero name label for this skin's Locker card. */
+  setLockerModImageHideName: (skinKey: string, hide: boolean) => Promise<void>;
+  setLockerModBackground: (skinKey: string, source: string) => Promise<void>;
+  removeLockerModBackground: (skinKey: string) => Promise<void>;
+  /** Hide (or show) the hero name logo over this skin's focus-view backdrop. */
+  setLockerModBackgroundHideName: (skinKey: string, hide: boolean) => Promise<void>;
+  setLockerModThumbnail: (skinKey: string, source: string) => Promise<void>;
+  removeLockerModThumbnail: (skinKey: string) => Promise<void>;
+  /** Hide (or show) the hero name label over this skin's grid thumbnail. */
+  setLockerModThumbnailHideName: (skinKey: string, hide: boolean) => Promise<void>;
+
+  /** Load all custom launcher / sidebar background images from the main process. */
+  loadAppearanceImages: () => Promise<void>;
+  /** Store a custom image (baked data URL) for a surface and refresh the map. */
+  setAppearanceImage: (surface: AppearanceSurface, source: string) => Promise<void>;
+  /** Drop the custom image for a surface (e.g. switching away from `custom`). */
+  removeAppearanceImage: (surface: AppearanceSurface) => Promise<void>;
 }
 
 // The main process throws this exact phrase from every "out of enabled slots"
@@ -250,6 +344,8 @@ interface AppState {
 const ENABLE_CAP_NOTICE =
   'You can have at most 990 mods enabled at once. Disable one to make room.';
 const isEnableCapError = (err: unknown): boolean => /mods enabled at once/.test(String(err));
+const GAME_RUNNING_NOTICE = 'Game is running';
+const isGameRunningModLockError = (err: unknown): boolean => String(err).includes(GAME_RUNNING_NOTICE);
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
@@ -264,10 +360,19 @@ export const useAppStore = create<AppState>((set, get) => ({
   downloadCountsCache: new Map(),
   soundVolume: readPersistedSoundVolume(),
   previewAudioPlaying: false,
+  shuffleOnLaunch: readStoredShuffleOnLaunch(),
+  shuffleIncluded: readStoredShuffleIncluded(),
   browseUi: { ...DEFAULT_BROWSE_UI },
   browseSession: null,
   installedScrollTop: 0,
   lockerHeroName: null,
+  lockerModImages: {},
+  lockerHideHeroName: {},
+  lockerModBackgrounds: {},
+  lockerBgHideHeroName: {},
+  lockerModThumbnails: {},
+  lockerThumbHideHeroName: {},
+  appearanceImages: {},
 
   // Load settings from backend
   loadSettings: async () => {
@@ -297,6 +402,132 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (err) {
       set({ settingsError: String(err), settingsLoading: false });
     }
+  },
+
+  // Issue #208: per-mod (per-skin) Locker view image overrides (display only).
+  loadLockerModImages: async () => {
+    try {
+      const [images, flags, backgrounds, bgFlags, thumbnails, thumbFlags] = await Promise.all([
+        api.getLockerModImages(),
+        api.getLockerModImageFlags(),
+        api.getLockerModBackgrounds(),
+        api.getLockerModBackgroundFlags(),
+        api.getLockerModThumbnails(),
+        api.getLockerModThumbnailFlags(),
+      ]);
+      set({
+        lockerModImages: images,
+        lockerHideHeroName: flags,
+        lockerModBackgrounds: backgrounds,
+        lockerBgHideHeroName: bgFlags,
+        lockerModThumbnails: thumbnails,
+        lockerThumbHideHeroName: thumbFlags,
+      });
+    } catch {
+      // Non-fatal: skins just fall back to their GameBanana thumbnail.
+    }
+  },
+  setLockerModImage: async (skinKey: string, source: string) => {
+    const dataUrl = await api.setLockerModImage(skinKey, source);
+    set((state) => ({
+      lockerModImages: { ...state.lockerModImages, [skinKey]: dataUrl },
+    }));
+  },
+  removeLockerModImage: async (skinKey: string) => {
+    await api.removeLockerModImage(skinKey);
+    set((state) => {
+      const next = { ...state.lockerModImages };
+      delete next[skinKey];
+      // The flag is metadata about the image; removing one clears the other.
+      const nextFlags = { ...state.lockerHideHeroName };
+      delete nextFlags[skinKey];
+      return { lockerModImages: next, lockerHideHeroName: nextFlags };
+    });
+  },
+  setLockerModImageHideName: async (skinKey: string, hide: boolean) => {
+    await api.setLockerModImageHideName(skinKey, hide);
+    set((state) => {
+      const nextFlags = { ...state.lockerHideHeroName };
+      if (hide) nextFlags[skinKey] = true;
+      else delete nextFlags[skinKey];
+      return { lockerHideHeroName: nextFlags };
+    });
+  },
+  setLockerModBackground: async (skinKey: string, source: string) => {
+    const dataUrl = await api.setLockerModBackground(skinKey, source);
+    set((state) => ({
+      lockerModBackgrounds: { ...state.lockerModBackgrounds, [skinKey]: dataUrl },
+    }));
+  },
+  removeLockerModBackground: async (skinKey: string) => {
+    await api.removeLockerModBackground(skinKey);
+    set((state) => {
+      const next = { ...state.lockerModBackgrounds };
+      delete next[skinKey];
+      // The flag is metadata about the backdrop; removing one clears the other.
+      const nextFlags = { ...state.lockerBgHideHeroName };
+      delete nextFlags[skinKey];
+      return { lockerModBackgrounds: next, lockerBgHideHeroName: nextFlags };
+    });
+  },
+  setLockerModBackgroundHideName: async (skinKey: string, hide: boolean) => {
+    await api.setLockerModBackgroundHideName(skinKey, hide);
+    set((state) => {
+      const nextFlags = { ...state.lockerBgHideHeroName };
+      if (hide) nextFlags[skinKey] = true;
+      else delete nextFlags[skinKey];
+      return { lockerBgHideHeroName: nextFlags };
+    });
+  },
+  setLockerModThumbnail: async (skinKey: string, source: string) => {
+    const dataUrl = await api.setLockerModThumbnail(skinKey, source);
+    set((state) => ({
+      lockerModThumbnails: { ...state.lockerModThumbnails, [skinKey]: dataUrl },
+    }));
+  },
+  removeLockerModThumbnail: async (skinKey: string) => {
+    await api.removeLockerModThumbnail(skinKey);
+    set((state) => {
+      const next = { ...state.lockerModThumbnails };
+      delete next[skinKey];
+      // The flag is metadata about the thumbnail; removing one clears the other.
+      const nextFlags = { ...state.lockerThumbHideHeroName };
+      delete nextFlags[skinKey];
+      return { lockerModThumbnails: next, lockerThumbHideHeroName: nextFlags };
+    });
+  },
+  setLockerModThumbnailHideName: async (skinKey: string, hide: boolean) => {
+    await api.setLockerModThumbnailHideName(skinKey, hide);
+    set((state) => {
+      const nextFlags = { ...state.lockerThumbHideHeroName };
+      if (hide) nextFlags[skinKey] = true;
+      else delete nextFlags[skinKey];
+      return { lockerThumbHideHeroName: nextFlags };
+    });
+  },
+
+  // Custom launcher / sidebar background images (issue: unify launcher backgrounds).
+  loadAppearanceImages: async () => {
+    try {
+      const images = await api.getAppearanceImages();
+      set({ appearanceImages: images });
+    } catch {
+      // Non-fatal: surfaces just fall back to their built-in art / hero render.
+    }
+  },
+  setAppearanceImage: async (surface: AppearanceSurface, source: string) => {
+    const dataUrl = await api.setAppearanceImage(surface, source);
+    set((state) => ({
+      appearanceImages: { ...state.appearanceImages, [surface]: dataUrl },
+    }));
+  },
+  removeAppearanceImage: async (surface: AppearanceSurface) => {
+    await api.removeAppearanceImage(surface);
+    set((state) => {
+      const next = { ...state.appearanceImages };
+      delete next[surface];
+      return { appearanceImages: next };
+    });
   },
 
   // Auto-detect Deadlock installation
@@ -334,8 +565,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Toggle mod enabled/disabled
-  toggleMod: async (modId: string) => {
+  // Toggle mod enabled/disabled. Runs through enqueueToggle so concurrent
+  // clicks resolve in order and each sees the previous one's renamed id.
+  toggleMod: (modId: string) => enqueueToggle(async () => {
     const mod = get().mods.find((m) => m.id === modId);
     if (!mod) return false;
 
@@ -355,10 +587,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ modsNotice: ENABLE_CAP_NOTICE });
         return false;
       }
+      if (isGameRunningModLockError(err)) {
+        return false;
+      }
+      // Stale id: a mod's id is its filename, which an enable/disable changes.
+      // When toggles for the same card fire faster than the store resyncs (the
+      // main process now serializes mutations, so the second runs after the file
+      // already moved), the second carries a dead id and the move throws "Mod not
+      // found". The desired state is whatever the folder already reflects, so
+      // resync silently instead of dropping the whole page to the error screen.
+      if (/Mod not found/.test(String(err))) {
+        get().loadMods({ silent: true });
+        return false;
+      }
       set({ modsError: String(err) });
       return false;
     }
-  },
+  }),
 
   clearModsNotice: () => set({ modsNotice: null }),
 
@@ -378,6 +623,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ mods: get().mods.filter((m) => m.id !== modId) });
         return;
       }
+      if (isGameRunningModLockError(err)) {
+        return;
+      }
       set({ modsError: String(err) });
     }
   },
@@ -392,6 +640,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           .sort((a, b) => a.priority - b.priority),
       });
     } catch (err) {
+      if (isGameRunningModLockError(err)) return;
       set({ modsError: String(err) });
     }
   },
@@ -403,6 +652,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ mods: updated });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); return; }
+      if (isGameRunningModLockError(err)) return;
       set({ modsError: String(err) });
     }
   },
@@ -415,9 +665,66 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ mods: updated });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
-      else { set({ modsError: String(err) }); }
+      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods();
     }
+  },
+
+  setShuffleOnLaunch: (enabled: boolean) => {
+    try { localStorage.setItem(SHUFFLE_ON_LAUNCH_KEY, enabled ? 'true' : 'false'); } catch { /* ignore */ }
+    set({ shuffleOnLaunch: enabled });
+  },
+
+  // Add/remove a skin from the launch-shuffle pool, keyed by shuffleSkinKey so
+  // the opt-in survives the id churn enable/disable causes for local imports.
+  toggleShuffleIncluded: (skinKey: string) => {
+    const next = new Set(get().shuffleIncluded);
+    if (next.has(skinKey)) next.delete(skinKey);
+    else next.add(skinKey);
+    try { localStorage.setItem(SHUFFLE_INCLUDED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+    set({ shuffleIncluded: next });
+  },
+
+  // Re-roll skins for the launch. No-op unless the master switch is on and at
+  // least one skin is in the pool. Groups the live mod list by hero (cached
+  // categories, the same grouping the Locker shows), picks one opted-in skin per
+  // hero, and applies the whole swap as one atomic batch. Called from the
+  // Sidebar just before launchModded. Returns the count of per-mod failures so
+  // the caller can warn that the shuffle only half-applied; a stuck shuffle
+  // never blocks the launch (the Sidebar swallows a thrown error).
+  runLaunchShuffle: async (): Promise<{ failures: number }> => {
+    const { shuffleOnLaunch, shuffleIncluded } = get();
+    if (!shuffleOnLaunch || shuffleIncluded.size === 0) return { failures: 0 };
+    let heroList: { id: number; name: string }[] = [];
+    try {
+      heroList = buildHeroList(await api.getGamebananaCategories('ModCategory'));
+    } catch {
+      // Cold category cache only (a fresh install that never opened Browse or
+      // the Locker): getGamebananaCategories is SQLite-backed, so it serves the
+      // warm cache even offline. With heroList=[] groupModsByCategory can route
+      // only mods carrying an author categoryId; lockerHero- and title-matched
+      // skins fall to `unassigned` and won't shuffle. Near-unreachable in
+      // practice since pooling a skin requires the Locker to have already
+      // grouped it from this same cache.
+    }
+    // Build AND apply the plan inside the mutation queue so the plan's ids are
+    // derived from the mods state after any in-flight manual toggle has settled,
+    // not from a pre-launch snapshot that a concurrent rename could invalidate.
+    return enqueueToggle(async () => {
+      const { mods, shuffleIncluded: included } = get();
+      const plan = planLaunchShuffle({ mods, heroList, included });
+      if (plan.enableIds.length === 0 && plan.disableIds.length === 0) return { failures: 0 };
+      try {
+        const { mods: updated, failures } = await api.applyModToggleBatch(plan.enableIds, plan.disableIds);
+        set({ mods: updated });
+        return { failures: failures.length };
+      } catch (err) {
+        if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+        else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+        get().loadMods();
+        return { failures: plan.enableIds.length + plan.disableIds.length };
+      }
+    });
   },
 
   editLocalMod: async (modId: string, args: EditLocalModArgs) => {

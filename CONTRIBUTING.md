@@ -53,6 +53,5 @@ Include:
 - OS and app version
 - Relevant logs (Electron's main-process log lives in `%APPDATA%/Grimoire/logs/` on Windows)
 
-## Questions
-
-Open a [Discussion](../../discussions).
+## AI Usage
+AI contributions are allowed

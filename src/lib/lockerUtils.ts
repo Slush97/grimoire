@@ -1,6 +1,6 @@
 import type { CSSProperties } from 'react';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import type { GlobalModType, Mod } from '../types/mod';
+import type { AppearanceBg, AppearanceSurface, AppSettings, GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
@@ -155,6 +155,34 @@ export const HERO_NAMES_SORTED: readonly string[] = Array.from(
 ).sort((a, b) => a.localeCompare(b));
 
 export const DEFAULT_SIDEBAR_HERO = HERO_NAMES_SORTED[0] ?? 'Abrams';
+
+/**
+ * Resolve the background descriptor for a launcher / sidebar surface, applying
+ * defaults so callers never deal with `undefined` (issue: unify launcher
+ * backgrounds). One place owns the per-surface fallback rules:
+ *
+ * - When `appearanceBackgrounds[surface]` is set, use it verbatim.
+ * - `activeTab` otherwise migrates the legacy `sidebarHeroHighlight` field:
+ *   null/'' -> none, a hero name -> that hero, undefined -> the default hero.
+ *   (So existing installs keep the highlight they already chose.)
+ * - The launch buttons and volume popup otherwise default to their built-in art.
+ */
+export function resolveAppearanceBg(
+  settings: AppSettings | null | undefined,
+  surface: AppearanceSurface,
+): AppearanceBg {
+  const explicit = settings?.appearanceBackgrounds?.[surface];
+  if (explicit) return explicit;
+
+  if (surface === 'activeTab') {
+    const legacy = settings?.sidebarHeroHighlight;
+    if (legacy === null || legacy === '') return { kind: 'none' };
+    if (legacy) return { kind: 'hero', hero: legacy };
+    return { kind: 'hero', hero: DEFAULT_SIDEBAR_HERO };
+  }
+
+  return { kind: 'default' };
+}
 
 /**
  * Infer the Deadlock hero associated with a mod title. Re-exported from the
@@ -369,6 +397,18 @@ export function modLoadOrder(mod: Mod): number {
   return folderIndex * 100 + mod.priority;
 }
 
+/**
+ * The "active" skin for a hero: the highest-priority enabled mod (lowest load
+ * order, i.e. the one that wins file conflicts). Used to decide which skin's
+ * chosen Locker image represents the hero on its card / detail backdrop
+ * (issue #208). Returns undefined when nothing is enabled.
+ */
+export function activeLockerSkin(mods: Mod[]): Mod | undefined {
+  return mods
+    .filter((m) => m.enabled)
+    .sort((a, b) => modLoadOrder(a) - modLoadOrder(b))[0];
+}
+
 export function groupLockerSkins(mods: Mod[]): LockerSkin[] {
   const bySkin = new Map<string, Mod[]>();
   for (const mod of mods) {
@@ -404,6 +444,7 @@ export function countLockerSkins(mods: Mod[]): number {
  */
 export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
   'soul-container': 'Soul Containers',
+  'spirit-urn': 'Spirit Urns',
   hideout: 'Hideout',
   icons: 'Icon Packs',
   hud: 'HUD',
@@ -414,12 +455,28 @@ export const GLOBAL_MOD_TYPE_LABELS: Record<GlobalModType, string> = {
 /** Carousel/section order for the global types. */
 export const GLOBAL_MOD_TYPE_ORDER: readonly GlobalModType[] = [
   'soul-container',
+  'spirit-urn',
   'hideout',
   'icons',
   'hud',
   'announcer',
   'killstreak-music',
 ];
+
+/**
+ * Global types that are a single imported static prop shown with a live 3D
+ * preview and treated as single-select (one in-game slot, so enabling one
+ * disables the others of the same type). Soul containers and spirit urns both
+ * override one prop model and share the GLB-import + 3D-tile treatment. Centralized
+ * so the Locker UI branches (single-select toggle, 3D tile, content-stable key,
+ * frosted glass, active badge) stay in sync across both types.
+ */
+export const PROP_CONTAINER_GLOBAL_TYPES: readonly GlobalModType[] = ['soul-container', 'spirit-urn'];
+
+/** Whether a global type is an imported-prop container (soul container or urn). */
+export function isPropContainerType(type: GlobalModType | undefined | null): boolean {
+  return type === 'soul-container' || type === 'spirit-urn';
+}
 
 export type GlobalModGroups = Record<GlobalModType, Mod[]>;
 
@@ -436,6 +493,7 @@ export type GlobalModGroups = Record<GlobalModType, Mod[]>;
 export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
   const groups: GlobalModGroups = {
     'soul-container': [],
+    'spirit-urn': [],
     hideout: [],
     icons: [],
     hud: [],
@@ -449,7 +507,7 @@ export function groupGlobalMods(mods: Mod[]): GlobalModGroups {
     }
   }
   for (const type of GLOBAL_MOD_TYPE_ORDER) {
-    if (type === 'soul-container') {
+    if (isPropContainerType(type)) {
       groups[type].sort((a, b) => a.name.localeCompare(b.name) || a.priority - b.priority);
     } else {
       groups[type].sort((a, b) => {

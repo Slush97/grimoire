@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type * as THREE from 'three';
 import { Loader2 } from 'lucide-react';
 import { getSoulModelInfo, exportSoulModel } from '../../lib/api';
 import { loadGltfPreview } from '../../lib/loadGltfPreview';
 import { buildNormalizedRoot, disposeScene, meshUrlFor } from './soulModel';
 import { useSoulRegistry } from './soulRegistry';
+import ModThumbnail from '../ModThumbnail';
 
 /**
  * One soul-container card's 3D preview, for the Locker's Global view.
@@ -23,12 +25,19 @@ import { useSoulRegistry } from './soulRegistry';
  * until the new one is ready, so selecting a card never flickers.
  *
  * The whole Locker card is the enable/disable control, so the track element is
- * pointer-events-none; clicks pass through to toggle the mod. On any failure it
- * renders nothing, leaving the card's clear window.
+ * pointer-events-none; clicks pass through to toggle the mod. When the model
+ * can't be exported/decoded (e.g. a legacy-layout mesh older vpkmerge builds
+ * couldn't read), it falls back to the mod's 2D GameBanana thumbnail rather than
+ * leaving an empty window.
  */
 export default function SoulContainerTile({
   tileId,
   modKey,
+  entry,
+  thumbnailUrl,
+  name,
+  nsfw,
+  hideNsfw,
 }: {
   /** Content-stable id (sha256) used as the registry key, so the model survives
    *  the metaKey change that a toggle causes. */
@@ -37,7 +46,17 @@ export default function SoulContainerTile({
    *  Changes when the mod is enabled/disabled (the VPK is renamed); the export
    *  CACHE is keyed by the content-stable tileId instead, not this. */
   modKey: string;
+  /** Model entry to export. Defaults to the soul-container model; a spirit urn
+   *  passes its own entry (`idol_urn.vmdl_c`) so the tile shows the urn model. */
+  entry?: string;
+  /** GameBanana thumbnail, shown as the 2D fallback when the model fails. */
+  thumbnailUrl?: string;
+  /** Mod name, used as the thumbnail's alt text. */
+  name?: string;
+  nsfw?: boolean;
+  hideNsfw?: boolean;
 }) {
+  const { t } = useTranslation();
   const registry = useSoulRegistry();
   const trackRef = useRef<HTMLDivElement>(null);
   const rootRef = useRef<THREE.Object3D | null>(null);
@@ -66,7 +85,7 @@ export default function SoulContainerTile({
           // Spinner only when there's nothing to show yet; on a reload (toggle)
           // the existing model keeps rendering instead.
           if (!rootRef.current) setGenerating(true);
-          info = await exportSoulModel(modKey, tileId);
+          info = await exportSoulModel(modKey, tileId, entry);
           if (cancelled) return;
           setGenerating(false);
         }
@@ -100,7 +119,7 @@ export default function SoulContainerTile({
     return () => {
       cancelled = true;
     };
-  }, [tileId, modKey, registry]);
+  }, [tileId, modKey, entry, registry]);
 
   // Unregister and free the model only on true unmount (tileId is stable, so
   // this does not run on a toggle).
@@ -112,17 +131,30 @@ export default function SoulContainerTile({
     };
   }, [tileId, registry]);
 
-  // Failure: render nothing so the card's clear window shows.
-  if (failed) return null;
-
-  // The track element always renders (even before load) so the shared canvas
-  // has a rect to scissor into once the model is ready.
+  // The track element always renders (even before load, and on failure) so the
+  // shared canvas keeps a stable rect to register; on failure the model is never
+  // set, so the canvas skips this tile and only the 2D thumbnail shows.
   return (
     <div ref={trackRef} className="pointer-events-none absolute inset-0">
-      {generating && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
-          <Loader2 className="h-5 w-5 animate-spin text-white/80" />
-        </div>
+      {failed ? (
+        <ModThumbnail
+          src={thumbnailUrl}
+          alt={name ?? ''}
+          nsfw={nsfw}
+          hideNsfw={hideNsfw}
+          className="h-full w-full"
+          fallback={
+            <div className="flex h-full w-full items-center justify-center text-xs text-text-secondary">
+              {t('locker.page.noPreview')}
+            </div>
+          }
+        />
+      ) : (
+        generating && (
+          <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+            <Loader2 className="h-5 w-5 animate-spin text-white/80" />
+          </div>
+        )
       )}
     </div>
   );

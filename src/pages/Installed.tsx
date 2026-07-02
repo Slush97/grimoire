@@ -61,13 +61,14 @@ import {
   FileText,
   Banana,
   HelpCircle,
+  GripVertical,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute } from '../lib/api';
 import type { UnmergeModResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs } from '../types/mod';
@@ -81,12 +82,16 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
+import { Modal } from '../components/common/Modal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
-import { Button, Tag } from '../components/common/ui';
+import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
+import { Button, CheckboxMark, IconButton, Tag } from '../components/common/ui';
+import { FormField, Input, Select } from '../components/common/forms';
+import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
 import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
@@ -167,7 +172,6 @@ function modEntryKey(mod: Mod): string {
   }
   return `single:local:${mod.name}:${mod.size}`;
 }
-
 
 function buildModEntries(mods: Mod[]): ModEntry[] {
   const byGb = new Map<number, Mod[]>();
@@ -258,6 +262,19 @@ function entryName(entry: ModEntry): string {
   return entry.kind === 'single' ? entry.mod.name : entry.primary.name;
 }
 
+/** Every string a search query may match this entry on. A group collapses many
+ *  files under one card that shows only the primary's name, so searching a
+ *  non-primary variant's name (e.g. "Bunny Ivy" when the card title is "Coat
+ *  Ivy") must still surface the card. Match against every variant's name plus
+ *  its user label / file header / original filename. */
+function entrySearchText(entry: ModEntry): string {
+  if (entry.kind === 'single') return entry.mod.name;
+  return entry.variants
+    .flatMap((v) => [v.name, v.variantLabel, v.fileDescription, v.sourceFileName])
+    .filter((s): s is string => !!s)
+    .join('\n');
+}
+
 /** The mod we read metadata from for filtering (matches the visual primary). */
 function entryPrimaryMod(entry: ModEntry): Mod {
   return entry.kind === 'single' ? entry.mod : entry.primary;
@@ -280,28 +297,40 @@ function entryIsLocal(entry: ModEntry): boolean {
   return entry.kind === 'single' && typeof entry.mod.gameBananaId !== 'number';
 }
 
-const OTHER_TYPE_KEY = 'other';
+const OTHER_TAG_KEY = 'other';
 
-/** Coarse "mod type" bucket for the Installed type filter, derived entirely
- *  from already-classified metadata. Precedence: a global cosmetic type, then
- *  sounds, then the GameBanana category/section, then a catch-all. The key is
- *  opaque; typeKeyLabel turns it into display text. */
-function entryTypeKey(entry: ModEntry): string {
-  const mod = entryPrimaryMod(entry);
-  const global = getEffectiveGlobalType(mod);
-  if (global) return `global:${global}`;
-  const section = (mod.sourceSection ?? '').toLowerCase();
-  if (section.includes('sound')) return 'sound';
-  const category = mod.categoryName?.trim();
-  if (category) return `cat:${category}`;
-  const rawSection = mod.sourceSection?.trim();
-  if (rawSection) return `section:${rawSection}`;
-  return OTHER_TYPE_KEY;
+function heroNameFromTag(label?: string): string | null {
+  if (!label) return null;
+  const direct = heroNameForLabel(label);
+  if (direct) return canonicalHeroName(direct);
+  for (const part of label.split(/[/>]/).map((p) => p.trim()).filter(Boolean).reverse()) {
+    const match = heroNameForLabel(part);
+    if (match) return canonicalHeroName(match);
+  }
+  return null;
 }
 
-function typeKeyLabel(key: string): string {
-  if (key === OTHER_TYPE_KEY) return 'Other';
-  if (key === 'sound') return 'Sounds';
+function modHeroName(mod: Mod): string | null {
+  const tagged = canonicalHeroName(mod.lockerHero);
+  if (tagged) return tagged;
+  const categoryHero = heroNameFromTag(mod.categoryName);
+  if (categoryHero) return categoryHero;
+  const section = (mod.sourceSection ?? '').toLowerCase();
+  if (section.includes('sound')) {
+    const inferred = inferHeroFromTitle(mod.name);
+    return inferred ? canonicalHeroName(inferred) : null;
+  }
+  return null;
+}
+
+function entryHeroNames(entry: ModEntry): string[] {
+  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
+  return Array.from(new Set(mods.map(modHeroName).filter((name): name is string => !!name)));
+}
+
+function tagKeyLabel(key: string): string {
+  if (key === OTHER_TAG_KEY) return 'Other';
+  if (key === 'section:sound') return 'Sounds';
   if (key.startsWith('global:')) {
     const gt = key.slice('global:'.length) as GlobalModType;
     return GLOBAL_MOD_TYPE_LABELS[gt] ?? gt;
@@ -309,6 +338,35 @@ function typeKeyLabel(key: string): string {
   if (key.startsWith('cat:')) return key.slice('cat:'.length);
   if (key.startsWith('section:')) return key.slice('section:'.length);
   return key;
+}
+
+function modTagKeys(mod: Mod): string[] {
+  const keys: string[] = [];
+  const labels = new Set<string>();
+  const add = (key: string) => {
+    const labelKey = tagKeyLabel(key).trim().toLowerCase();
+    if (!labelKey || labels.has(labelKey)) return;
+    labels.add(labelKey);
+    keys.push(key);
+  };
+
+  const global = getEffectiveGlobalType(mod);
+  if (global) add(`global:${global}`);
+
+  const section = (mod.sourceSection ?? '').trim();
+  if (section.toLowerCase().includes('sound')) add('section:sound');
+
+  const category = mod.categoryName?.trim();
+  if (category && !heroNameFromTag(category)) add(`cat:${category}`);
+
+  if (keys.length === 0 && section && section !== 'Mod') add(`section:${section}`);
+  if (keys.length === 0) add(OTHER_TAG_KEY);
+  return keys;
+}
+
+function entryTagKeys(entry: ModEntry): string[] {
+  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
+  return Array.from(new Set(mods.flatMap(modTagKeys)));
 }
 
 function flattenEntries(entries: ModEntry[]): Mod[] {
@@ -340,29 +398,33 @@ const SortableEntryCard = memo(function SortableEntryCard({
     isDragging,
   } = useSortable({ id: cardProps.entry.key, disabled: sortableDisabled });
 
+  const isList = cardProps.viewMode === 'list';
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.32 : undefined,
     position: 'relative',
     zIndex: isDragging ? 1 : undefined,
-    // Skip layout + paint for offscreen cards. This is most of the cost of
-    // mounting a large library: only the ~15 visible cards pay full price up
-    // front. The `auto` keyword keeps the real size once a card has been
-    // rendered; the estimate only stands in before first view. dnd-kit drag
-    // measurement is unaffected: offscreen items still have placeholder boxes.
-    contentVisibility: 'auto',
-    containIntrinsicSize: cardProps.viewMode === 'list' ? 'auto 72px' : 'auto 280px',
+    // Sizing estimate for the content-visibility skip. The property itself lives
+    // in className (not here) so a :hover variant can lift it, see below. The
+    // `auto` keyword keeps the real size once a card has been rendered; the
+    // estimate only stands in before first view. dnd-kit drag measurement is
+    // unaffected: offscreen items still have placeholder boxes.
+    containIntrinsicSize: isList ? 'auto 72px' : 'auto 280px',
   };
 
   return (
     <div
       ref={setNodeRef}
-      // Each card carries a transform (its own stacking context), so a card's
-      // open action menu can only paint within that card. When the menu opens
-      // downward it would land behind the next card; lift this wrapper above its
-      // siblings whenever it contains an open menu so the dropdown stays on top.
-      className={`flex flex-col has-[[data-card-menu-open]]:z-20 ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+      // content-visibility:auto skips layout + paint for offscreen cards (most of
+      // the cost of mounting a large library) but implies contain:paint, which
+      // clips whatever the card paints outside its box AND traps it in its own
+      // stacking context. On grid/compact the enabled-card :hover lifts + scales
+      // the card: that expansion would be cropped and stuck behind neighbors. So
+      // on hover we lift containment (-> visible) and raise z so the expanded card
+      // renders whole and on top. The has-menu-open lift does the same for an open
+      // action menu that would otherwise paint behind the next card.
+      className={`flex flex-col has-[[data-card-menu-open]]:z-20 [content-visibility:auto] ${isList ? '' : 'hover:[content-visibility:visible] hover:z-10'} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
       {...attributes}
       {...listeners}
@@ -580,13 +642,17 @@ const CARD_SIZE_MULTIPLIER_STEP = 0.1;
 // responsive multiplier.
 const CARD_SIZE_COMPACT_MULTIPLIER = 0.95;
 const INSTALLED_CARD_SIZE_MULTIPLIER_KEY = 'installedCardSizeMultiplier';
+// localStorage key for the user-dragged position of the floating select bar.
+const SELECT_BAR_POS_KEY = 'installedSelectBarPos';
 
 function clampCardSizeMultiplier(value: number): number {
   return Math.min(CARD_SIZE_MULTIPLIER_MAX, Math.max(CARD_SIZE_MULTIPLIER_MIN, value));
 }
 
 function readInstalledCardSizeMultiplier(): number {
-  const stored = Number(localStorage.getItem(INSTALLED_CARD_SIZE_MULTIPLIER_KEY));
+  const raw = localStorage.getItem(INSTALLED_CARD_SIZE_MULTIPLIER_KEY);
+  if (raw == null || raw === '') return CARD_SIZE_MULTIPLIER_DEFAULT;
+  const stored = Number(raw);
   return Number.isFinite(stored) ? clampCardSizeMultiplier(stored) : CARD_SIZE_MULTIPLIER_DEFAULT;
 }
 
@@ -630,9 +696,10 @@ export default function Installed() {
 
   // Source mods absorbed into a merged VPK still live on disk (disabled) so
   // unmerge can restore them, but the user shouldn't see them as separate
-  // cards: the merged mod is now the source of truth. Build the absorbed
-  // fileName set once and derive a filtered view; downstream rendering,
-  // reorder, and update checks all run off `visibleMods`.
+  // cards: the merged mod is now the source of truth. Match by identity instead
+  // of filename alone because recyclable pakNN slots can later hold unrelated
+  // enabled mods; downstream rendering, reorder, and update checks all run off
+  // `visibleMods`.
   // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
   // (applied per-ability sounds) are Locker-managed artifacts, not user-
   // installed mods, so they never show as cards here. They're managed entirely
@@ -640,14 +707,39 @@ export default function Installed() {
   // Memoized so the array identity (and the entry identities derived from it)
   // only changes when `mods` does; the memoized card grid depends on that.
   const visibleMods = useMemo(() => {
-    const absorbedFileNames = new Set<string>();
-    for (const m of mods) {
-      if (m.merged?.sources) {
-        for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
+    const absorbedSources: MergedModSource[] = [];
+    for (const m of mods) absorbedSources.push(...(m.merged?.sources ?? []));
+
+    const matchesAbsorbedSource = (mod: Mod, source: MergedModSource): boolean => {
+      if (mod.enabled || mod.fileName !== source.fileName) return false;
+
+      const sourceSha = source.sha256AtMergeTime?.toLowerCase();
+      const modSha = mod.sha256?.toLowerCase();
+      if (sourceSha && modSha) return sourceSha === modSha;
+
+      if (typeof source.gameBananaId === 'number' && typeof mod.gameBananaId === 'number') {
+        if (source.gameBananaId !== mod.gameBananaId) return false;
+        if (
+          typeof source.gameBananaFileId === 'number' &&
+          typeof mod.gameBananaFileId === 'number'
+        ) {
+          return source.gameBananaFileId === mod.gameBananaFileId;
+        }
       }
-    }
+
+      // A disabled VPK at the exact recorded source filename is physically the
+      // absorbed source (filenames are unique within a folder), and enabled
+      // mods were already excluded above, so a recycled pakNN slot can't reach
+      // here. Fold it in unless sha or gbId positively proved a different mod;
+      // a hand-placed VPK with no recorded identity must not leave a stray card.
+      return true;
+    };
+
     return mods.filter(
-      (m) => !m.lockerCosmetics && !m.lockerSounds && !absorbedFileNames.has(m.fileName)
+      (m) =>
+        !m.lockerCosmetics &&
+        !m.lockerSounds &&
+        !absorbedSources.some((source) => matchesAbsorbedSource(m, source))
     );
   }, [mods]);
   // Layout = the user's structural choice (cards grid vs horizontal list).
@@ -726,8 +818,8 @@ export default function Installed() {
   }, [refreshLockerOverrideCount]);
   const [search, setSearch] = useState('');
   // Sort + filter popover (the SlidersHorizontal button in the top bar). Sort
-  // and source persist across launches; the type selection is library-specific
-  // so it resets per session. A non-default sort or any active filter turns the
+  // and source persist across launches; hero/tag selections are library-specific
+  // so they reset per session. A non-default sort or any active filter turns the
   // list into a read-only view (see viewIsReorderable) because the displayed
   // order no longer maps to load-order priority.
   const [filterOpen, setFilterOpen] = useState(false);
@@ -753,7 +845,10 @@ export default function Installed() {
     return ['gamebanana', 'local'];
   });
   const [statusSel, setStatusSel] = useState<('enabled' | 'disabled')[]>(['enabled', 'disabled']);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [heroFilter, setHeroFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const installedHideNsfwPreviews =
+    settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true;
   useEffect(() => {
     localStorage.setItem('installedSortMode', sortMode);
   }, [sortMode]);
@@ -818,6 +913,100 @@ export default function Installed() {
     done: number;
     total: number;
   } | null>(null);
+  // Persisted screen position of the floating select bar. `null` means
+  // "use the default top-center anchor"; once the user drags it we store the
+  // top-left corner in px and reuse it next time the bar appears.
+  const [selectBarPos, setSelectBarPos] = useState<{ x: number; y: number } | null>(() => {
+    try {
+      const raw = localStorage.getItem(SELECT_BAR_POS_KEY);
+      if (!raw) return null;
+      const p = JSON.parse(raw);
+      if (typeof p?.x === 'number' && typeof p?.y === 'number') return p;
+    } catch {
+      // ignore malformed/unavailable storage
+    }
+    return null;
+  });
+  const selectBarRef = useRef<HTMLDivElement>(null);
+  // Pointer offset from the bar's top-left captured on drag start, plus the
+  // live move/end listeners so they can detach themselves.
+  const selectBarDragRef = useRef<{ dx: number; dy: number } | null>(null);
+
+  const clampSelectBarPos = useCallback((x: number, y: number) => {
+    const el = selectBarRef.current;
+    const w = el?.offsetWidth ?? 0;
+    const h = el?.offsetHeight ?? 0;
+    const maxX = Math.max(0, window.innerWidth - w);
+    const maxY = Math.max(0, window.innerHeight - h);
+    return {
+      x: Math.min(Math.max(0, x), maxX),
+      y: Math.min(Math.max(0, y), maxY),
+    };
+  }, []);
+
+  const handleSelectBarDragMove = useCallback(
+    (e: PointerEvent) => {
+      const drag = selectBarDragRef.current;
+      if (!drag) return;
+      setSelectBarPos(clampSelectBarPos(e.clientX - drag.dx, e.clientY - drag.dy));
+    },
+    [clampSelectBarPos],
+  );
+
+  const handleSelectBarDragEnd = useCallback(() => {
+    selectBarDragRef.current = null;
+    window.removeEventListener('pointermove', handleSelectBarDragMove);
+    window.removeEventListener('pointerup', handleSelectBarDragEnd);
+    setSelectBarPos((p) => {
+      if (p) {
+        try {
+          localStorage.setItem(SELECT_BAR_POS_KEY, JSON.stringify(p));
+        } catch {
+          // ignore unavailable storage
+        }
+      }
+      return p;
+    });
+  }, [handleSelectBarDragMove]);
+
+  const handleSelectBarDragStart = useCallback(
+    (e: React.PointerEvent) => {
+      const el = selectBarRef.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      selectBarDragRef.current = { dx: e.clientX - rect.left, dy: e.clientY - rect.top };
+      // Pin the current pixel position so it doesn't jump from the centered
+      // anchor to absolute coords on the first move.
+      setSelectBarPos(clampSelectBarPos(rect.left, rect.top));
+      window.addEventListener('pointermove', handleSelectBarDragMove);
+      window.addEventListener('pointerup', handleSelectBarDragEnd);
+      e.preventDefault();
+    },
+    [clampSelectBarPos, handleSelectBarDragMove, handleSelectBarDragEnd],
+  );
+
+  // Detach drag listeners if the component unmounts mid-drag.
+  useEffect(() => {
+    return () => {
+      window.removeEventListener('pointermove', handleSelectBarDragMove);
+      window.removeEventListener('pointerup', handleSelectBarDragEnd);
+    };
+  }, [handleSelectBarDragMove, handleSelectBarDragEnd]);
+
+  // Keep a saved (dragged) bar position on-screen when the bar appears and on
+  // window resize, so a position saved at a larger window size doesn't strand
+  // the bar off the viewport.
+  useEffect(() => {
+    if (!selectMode || !selectBarPos) return;
+    const reclamp = () => setSelectBarPos((p) => (p ? clampSelectBarPos(p.x, p.y) : p));
+    reclamp();
+    window.addEventListener('resize', reclamp);
+    return () => window.removeEventListener('resize', reclamp);
+    // selectBarPos intentionally omitted: this only re-pins on appear/resize,
+    // not on every drag tick (which would fight the active drag).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectMode, clampSelectBarPos]);
+
   // GB id of the group whose picker is open, or null. The actual entry is
   // derived from live `mods` each render so per-file deletes inside the
   // picker reflect immediately without juggling a separate snapshot.
@@ -831,6 +1020,11 @@ export default function Installed() {
     cancelled?: boolean;
   } | null>(null);
   const [unknownFixMode, setUnknownFixMode] = useState<'single' | 'bulk' | null>(null);
+  // Synchronous re-entry guard for the DMM auto-import step (one click only,
+  // even if the button is mashed before the first run resolves). A ref, not
+  // state, so two clicks in the same tick can't both read a stale `false`.
+  const dmmAutoImportInFlightRef = useRef(false);
+  const [dmmAutoImporting, setDmmAutoImporting] = useState(false);
   const [unknownFilterCache, setUnknownFilterCache] = useState<Record<string, UnknownModFilterGuess>>({});
   const [unknownFilterPendingIds, setUnknownFilterPendingIds] = useState<Set<string>>(new Set());
   const [unknownFilterErrors, setUnknownFilterErrors] = useState<Record<string, string>>({});
@@ -1272,8 +1466,83 @@ export default function Installed() {
     );
   };
 
-  const openBulkUnknownFix = (unknowns: Mod[]) => {
-    const first = unknowns[0];
+  // Adopt any Deadlock Mod Manager install as the first step of the unknown-fix
+  // flow. DMM detection is purely local (reads DMM's on-disk data, no
+  // GameBanana, no rate limit), so it runs regardless of the auto-match toggle.
+  // Importing tags the matching unknown VPKs with GameBanana metadata, so they
+  // drop out of the unknown set before the manual modal opens. Returns the
+  // unknown mods that remain afterward (the input list unchanged when there's
+  // no DMM install or nothing new to adopt).
+  const autoImportDmmMods = async (currentUnknowns: Mod[]): Promise<Mod[]> => {
+    if (currentUnknowns.length === 0) return currentUnknowns;
+
+    // Probe for a DMM install. Scan throws when there's no DMM data on this
+    // machine (the common case): handled silently so the manual flow proceeds.
+    let scan;
+    try {
+      scan = await dmmMigrateScan({});
+    } catch {
+      return currentUnknowns;
+    }
+
+    // Only act on DMM mods Grimoire isn't already managing. Without this gate a
+    // user with DMM installed would see "detected, importing" on every Fix
+    // Unknown click, even after everything had already been adopted.
+    const managedGbIds = new Set(
+      useAppStore
+        .getState()
+        .mods.map((m) => m.gameBananaId)
+        .filter((id): id is number => !!id)
+    );
+    const freshEntries = scan.preview.filter((p) => !managedGbIds.has(p.submissionId));
+    if (freshEntries.length === 0) return currentUnknowns;
+
+    showToast(t('installed.unknown.dmmDetected'), { tone: 'info', duration: 4000 });
+
+    let report;
+    try {
+      report = await dmmMigrateExecute({});
+    } catch (err) {
+      showToast(
+        t('installed.unknown.dmmImportFailed') + ': ' + (err instanceof Error ? err.message : String(err)),
+        { tone: 'error', duration: 8000, dismissable: true }
+      );
+      return currentUnknowns;
+    }
+
+    await loadMods();
+    const remaining = useAppStore
+      .getState()
+      .mods.filter((m) => m.isUnknown)
+      .sort((a, b) => a.priority - b.priority);
+
+    if (report.adopted.length > 0) {
+      showToast(t('installed.unknown.dmmImported', { count: report.adopted.length }), {
+        tone: 'success',
+        duration: 5000,
+      });
+    }
+    return remaining;
+  };
+
+  const openBulkUnknownFix = async (unknowns: Mod[]) => {
+    // Ignore re-entrant clicks while a DMM auto-import is mid-flight: the import
+    // mutates files + reloads mods, so a second concurrent run would race the
+    // first (main-process serialization keeps it safe, but it's wasted work and
+    // a double toast). The button also shows a loading state via dmmAutoImporting.
+    if (dmmAutoImportInFlightRef.current) return;
+    dmmAutoImportInFlightRef.current = true;
+    setDmmAutoImporting(true);
+    let remaining: Mod[];
+    try {
+      // First adopt any Deadlock Mod Manager mods automatically, then open the
+      // manual modal on whatever unknowns are left.
+      remaining = await autoImportDmmMods(unknowns);
+    } finally {
+      dmmAutoImportInFlightRef.current = false;
+      setDmmAutoImporting(false);
+    }
+    const first = remaining[0];
     if (!first) return;
     openUnknownModFix(first, 'bulk');
     // The heavy auto-detect sweep is no longer kicked on open. The bulk modal
@@ -1488,7 +1757,19 @@ export default function Installed() {
         !detailsInstalledFileIds.has(fileId) &&
         !pickedIsArchived;
       const replacing = isReinstall || isUpdate;
-      const restoreEnabled = replacing && !!sourceMod?.enabled;
+      let replacementTargets: typeof mods = [];
+      if (replacing && sourceMod) {
+        replacementTargets = mods.filter(
+          (mod) =>
+            mod.gameBananaId === sourceMod.gameBananaId &&
+            mod.gameBananaFileId === sourceMod.gameBananaFileId,
+        );
+      } else if (detailsInstalledFileIds.has(fileId)) {
+        replacementTargets = mods.filter(
+          (mod) => mod.gameBananaId === detailsMod.id && mod.gameBananaFileId === fileId,
+        );
+      }
+      const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
 
       if (replacing && sourceMod) {
         // Snapshot before the destructive delete so the user can roll back,
@@ -1499,22 +1780,23 @@ export default function Installed() {
         } catch (err) {
           console.warn('[Update] failed to capture pre-update snapshot:', err);
         }
-        await deleteMod(sourceMod.id);
+      }
+      for (const mod of replacementTargets) {
+        await deleteMod(mod.id);
       }
 
       await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
 
-      // Deleting the source removes the only enabled sibling, so the backend's
-      // auto-disable promotion never fires and the freshly downloaded file stays
-      // in /disabled. Re-enable it so an update/reinstall preserves the source's
-      // enabled state instead of silently turning the mod off. (Match by GB ids;
-      // the local mod id changes on reinstall.)
-      if (restoreEnabled) {
+      // Replacement downloads land disabled, so restore the enabled state after
+      // reloading. Match by GB ids because local ids change on reinstall.
+      if (restoreEnabled.hadEnabled) {
         await loadMods();
-        const newMod = useAppStore
+        const newMods = useAppStore
           .getState()
-          .mods.find((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
-        if (newMod && !newMod.enabled) {
+          .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
+        for (const newMod of newMods) {
+          if (!shouldRestoreVpkEnabled(newMod, newMods, restoreEnabled)) continue;
+          if (newMod.enabled) continue;
           try {
             await toggleMod(newMod.id);
           } catch (err) {
@@ -1548,6 +1830,7 @@ export default function Installed() {
         gameBananaId: m.gameBananaId!,
         gameBananaFileId: m.gameBananaFileId!,
         fileName: m.fileName,
+        vpkIndex: m.vpkIndex,
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
@@ -1574,7 +1857,12 @@ export default function Installed() {
     const needsPick: { id: string; name: string }[] = [];
     // Track the (gameBananaId, fileId) actually downloaded so re-enable can
     // still find the new install even when we redirected a stale snapshot.
-    const completed: { gameBananaId: number; gameBananaFileId: number; wasEnabled: boolean; fileName: string }[] = [];
+    const completed: {
+      gameBananaId: number;
+      gameBananaFileId: number;
+      restoreEnabled: EnabledVpkRestoreSnapshot;
+      fileName: string;
+    }[] = [];
     let progress = 0;
     // Guard so a multi-group update writes exactly one recovery snapshot, not
     // one per group.
@@ -1618,6 +1906,7 @@ export default function Installed() {
         | { ok: true; snapshot: (typeof snapshots)[number]; fileId: number; fileName: string }
         | { ok: false; snapshot: (typeof snapshots)[number]; reason: string };
       const resolutions: Resolution[] = [];
+      const resolvedByOldFileId = new Map<number, { fileId: number; fileName: string }>();
       // Seed claims with live files already installed as siblings outside this
       // run, so neither the fuzzy match nor the single-file fallback
       // re-downloads a variant the user already has.
@@ -1637,6 +1926,16 @@ export default function Installed() {
       }
       for (const s of group) {
         if (liveFileIds.has(s.gameBananaFileId)) continue;
+        const existingResolution = resolvedByOldFileId.get(s.gameBananaFileId);
+        if (existingResolution) {
+          resolutions.push({
+            ok: true,
+            snapshot: s,
+            fileId: existingResolution.fileId,
+            fileName: existingResolution.fileName,
+          });
+          continue;
+        }
         const match = resolveUpdateTarget(
           {
             installedFileId: s.gameBananaFileId,
@@ -1648,9 +1947,11 @@ export default function Installed() {
         );
         if (match) {
           resolutions.push({ ok: true, snapshot: s, fileId: match.id, fileName: match.fileName });
+          resolvedByOldFileId.set(s.gameBananaFileId, { fileId: match.id, fileName: match.fileName });
           claimedIds.add(match.id);
         } else if (liveFiles.length === 1 && !claimedIds.has(liveFiles[0].id)) {
           resolutions.push({ ok: true, snapshot: s, fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
+          resolvedByOldFileId.set(s.gameBananaFileId, { fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
           claimedIds.add(liveFiles[0].id);
         } else {
           resolutions.push({
@@ -1675,32 +1976,73 @@ export default function Installed() {
         }
       }
 
+      const okBatches = new Map<
+        string,
+        {
+          gameBananaId: number;
+          fileId: number;
+          fileName: string;
+          section: string;
+          categoryId: number;
+          snapshots: Array<(typeof snapshots)[number]>;
+        }
+      >();
+
       for (const r of resolutions) {
         if (!r.ok) {
           needsPick.push({ id: r.snapshot.oldId, name: r.snapshot.modName });
           console.warn(`[Update] ${r.snapshot.fileName}: ${r.reason}`);
         } else {
-          try {
-            await deleteMod(r.snapshot.oldId);
-            await downloadMod(
-              r.snapshot.gameBananaId,
-              r.fileId,
-              r.fileName,
-              r.snapshot.section,
-              r.snapshot.categoryId,
-            );
-            completed.push({
+          const batchKey = `${r.snapshot.gameBananaId}:${r.fileId}`;
+          const batch =
+            okBatches.get(batchKey) ??
+            {
               gameBananaId: r.snapshot.gameBananaId,
-              gameBananaFileId: r.fileId,
-              wasEnabled: r.snapshot.wasEnabled,
+              fileId: r.fileId,
               fileName: r.fileName,
-            });
-          } catch (err) {
-            failures.push(`${r.snapshot.fileName}: ${String(err)}`);
-          }
+              section: r.snapshot.section,
+              categoryId: r.snapshot.categoryId,
+              snapshots: [],
+            };
+          batch.snapshots.push(r.snapshot);
+          okBatches.set(batchKey, batch);
+          continue;
         }
         progress += 1;
         setUpdateAllProgress({ done: progress, total: snapshots.length });
+      }
+
+      for (const batch of okBatches.values()) {
+        try {
+          for (const snapshot of batch.snapshots) {
+            await deleteMod(snapshot.oldId);
+          }
+          await downloadMod(
+            batch.gameBananaId,
+            batch.fileId,
+            batch.fileName,
+            batch.section,
+            batch.categoryId,
+          );
+          completed.push({
+            gameBananaId: batch.gameBananaId,
+            gameBananaFileId: batch.fileId,
+            restoreEnabled: createEnabledVpkRestoreSnapshot(
+              batch.snapshots.map((snapshot) => ({
+                enabled: snapshot.wasEnabled,
+                vpkIndex: snapshot.vpkIndex,
+              })),
+            ),
+            fileName: batch.fileName,
+          });
+        } catch (err) {
+          for (const snapshot of batch.snapshots) {
+            failures.push(`${snapshot.fileName}: ${String(err)}`);
+          }
+        } finally {
+          progress += batch.snapshots.length;
+          setUpdateAllProgress({ done: progress, total: snapshots.length });
+        }
       }
     }
 
@@ -1720,11 +2062,13 @@ export default function Installed() {
     await loadMods();
     const refreshed = useAppStore.getState().mods;
     for (const c of completed) {
-      if (!c.wasEnabled) continue;
-      const newMod = refreshed.find(
+      if (!c.restoreEnabled.hadEnabled) continue;
+      const newMods = refreshed.filter(
         (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
       );
-      if (newMod && !newMod.enabled) {
+      for (const newMod of newMods) {
+        if (!shouldRestoreVpkEnabled(newMod, newMods, c.restoreEnabled)) continue;
+        if (newMod.enabled) continue;
         try {
           await toggleMod(newMod.id);
         } catch (err) {
@@ -1862,8 +2206,9 @@ export default function Installed() {
     }
     setBulkProgress({ verb: 'Disabling', done: 0, total: targets.length });
     for (let i = 0; i < targets.length; i++) {
-      await toggleMod(targets[i].id);
+      const ok = await toggleMod(targets[i].id);
       setBulkProgress({ verb: 'Disabling', done: i + 1, total: targets.length });
+      if (!ok) break;
     }
     setBulkProgress(null);
     exitSelectMode();
@@ -2064,16 +2409,15 @@ export default function Installed() {
     await toggleMod(target.id);
   };
 
-  const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean) => {
-    for (const v of group.variants) {
-      if (v.enabled !== enabled) {
-        await toggleMod(v.id);
+  const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean): Promise<boolean> => {
+    const targets = group.variants.filter((v) => v.enabled !== enabled);
+    for (const v of targets) {
+      const ok = await toggleMod(v.id);
+      if (!ok) {
+        return false;
       }
     }
-  };
-
-  const disableEntireGroup = async (group: Extract<ModEntry, { kind: 'group' }>) => {
-    await setGroupEnabled(group, false);
+    return true;
   };
 
   /** Top-level toggle on a grouped card. If anything is enabled, disable the
@@ -2333,6 +2677,21 @@ export default function Installed() {
     [allEntries]
   );
 
+  // Per-entry hero/tag metadata, keyed by entry.key. entryHeroNames/entryTagKeys
+  // do real work per mod (canonicalHeroName, tag-label regex splits,
+  // inferHeroFromTitle for sounds), and the option-bucket + filter passes below
+  // hit them for every entry on every render - including drag-start renders that
+  // only flip draggingKey. Caching them here (rebuilt only when allEntries
+  // changes) keeps those passes to cheap Map lookups, so a drag pickup paints the
+  // overlay without rescanning the whole library. Mirrors entryConflicts.
+  const entryFacetMeta = useMemo(() => {
+    const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
+    for (const entry of allEntries) {
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry), tagKeys: entryTagKeys(entry) });
+    }
+    return byKey;
+  }, [allEntries]);
+
   // Conflict arrays per entry key, with identities that persist across
   // renders (plus the module-level EMPTY_CONFLICTS fallback) so memoized
   // cards only re-render when their own conflicts change.
@@ -2519,19 +2878,33 @@ export default function Installed() {
         progress: unknownDetectionProgress[unknownFilterGuess.mod.id],
       }
     : null;
-  // Mod-type buckets present across every installed entry, with counts. Built
-  // from allEntries (not the filtered view) so the option list stays stable as
-  // selections change.
-  const typeOptionMap = new Map<string, number>();
+  // Cached per-entry hero/tag lookups (see entryFacetMeta); fall back to a live
+  // compute if an entry somehow isn't in the cache.
+  const heroNamesOf = (entry: ModEntry): string[] =>
+    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry);
+  const tagKeysOf = (entry: ModEntry): string[] =>
+    entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
+
+  // Hero and tag buckets are built from allEntries (not the filtered view) so
+  // the option lists stay stable as selections change.
+  const heroOptionMap = new Map<string, number>();
+  const tagOptionMap = new Map<string, number>();
   for (const entry of allEntries) {
-    const key = entryTypeKey(entry);
-    typeOptionMap.set(key, (typeOptionMap.get(key) ?? 0) + 1);
+    for (const heroName of heroNamesOf(entry)) {
+      heroOptionMap.set(heroName, (heroOptionMap.get(heroName) ?? 0) + 1);
+    }
+    for (const key of tagKeysOf(entry)) {
+      tagOptionMap.set(key, (tagOptionMap.get(key) ?? 0) + 1);
+    }
   }
-  const typeOptions = Array.from(typeOptionMap.entries())
-    .map(([key, count]) => ({ key, label: typeKeyLabel(key), count }))
+  const heroOptions = HERO_NAMES_SORTED
+    .filter((name) => heroOptionMap.has(name))
+    .map((name) => ({ name, count: heroOptionMap.get(name) ?? 0 }));
+  const tagOptions = Array.from(tagOptionMap.entries())
+    .map(([key, count]) => ({ key, label: tagKeyLabel(key), count }))
     .sort((a, b) => {
-      if (a.key === OTHER_TYPE_KEY) return 1;
-      if (b.key === OTHER_TYPE_KEY) return -1;
+      if (a.key === OTHER_TAG_KEY) return 1;
+      if (b.key === OTHER_TAG_KEY) return -1;
       return a.label.localeCompare(b.label);
     });
   const localCount = allEntries.filter(entryIsLocal).length;
@@ -2551,20 +2924,22 @@ export default function Installed() {
   const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
 
   // Filter by search query (substring on name), source (GameBanana vs local
-  // import), and mod type, then optionally re-sort. Status (enabled/disabled) is
-  // applied per-section below. Drag-and-drop reorder is disabled whenever any of
-  // these is active (see viewIsReorderable) because the displayed order no longer
-  // maps to load-order priority; the canonical priority order lives on
+  // import), hero, and tags, then optionally re-sort. Status (enabled/disabled)
+  // is applied per-section below. Drag-and-drop reorder is disabled whenever any
+  // of these is active (see viewIsReorderable) because the displayed order no
+  // longer maps to load-order priority; the canonical priority order lives on
   // enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
   const matchesSearchEntry = (entry: ModEntry) =>
-    !searchNeedle || entryName(entry).toLowerCase().includes(searchNeedle);
+    !searchNeedle || entrySearchText(entry).toLowerCase().includes(searchNeedle);
   const matchesSourceEntry = (entry: ModEntry) =>
     entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
-  const matchesTypeEntry = (entry: ModEntry) =>
-    typeFilter.length === 0 || typeFilter.includes(entryTypeKey(entry));
+  const matchesHeroEntry = (entry: ModEntry) =>
+    heroFilter === 'all' || heroNamesOf(entry).includes(heroFilter);
+  const matchesTagEntry = (entry: ModEntry) =>
+    tagFilter.length === 0 || tagKeysOf(entry).some((key) => tagFilter.includes(key));
   const matchesAllFilters = (entry: ModEntry) =>
-    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesTypeEntry(entry);
+    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesHeroEntry(entry) && matchesTagEntry(entry);
   const sortEntries = (entries: ModEntry[]): ModEntry[] => {
     if (sortMode === 'name') {
       return [...entries].sort((a, b) =>
@@ -2579,11 +2954,12 @@ export default function Installed() {
   // Both toggles on (length 2) = no filtering on that axis.
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
-  const filtersActive = sourceActive || statusActive || typeFilter.length > 0;
+  const heroActive = heroFilter !== 'all';
+  const filtersActive = sourceActive || statusActive || heroActive || tagFilter.length > 0;
   const sortActive = sortMode !== 'priority';
   const viewIsReorderable = !searchNeedle && !filtersActive && !sortActive;
   const activeAdjustmentCount =
-    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + typeFilter.length + (sortActive ? 1 : 0);
+    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + (heroActive ? 1 : 0) + tagFilter.length + (sortActive ? 1 : 0);
   const visibleEnabled = statusSel.includes('enabled')
     ? sortEntries(enabledEntries.filter(matchesAllFilters))
     : [];
@@ -2794,7 +3170,7 @@ export default function Installed() {
   const cardPropsFor = (entry: ModEntry): InstalledEntryCardProps => ({
     entry,
     viewMode,
-    hideNsfwPreviews: settings?.hideNsfwPreviews ?? true,
+    hideNsfwPreviews: installedHideNsfwPreviews,
     soundVolume,
     conflicts: entryConflicts.get(entry.key) ?? EMPTY_CONFLICTS,
     updateAvailable:
@@ -2962,6 +3338,8 @@ export default function Installed() {
               setFixUnknownHidden(true);
             }}
             icon={HelpCircle}
+            isLoading={dmmAutoImporting}
+            disabled={dmmAutoImporting}
             title={t('installed.unknown.fixButtonHint')}
           >
             {t('installed.unknown.fixButton', { count: unknownMods.length })}
@@ -3018,7 +3396,7 @@ export default function Installed() {
                 claiming a second strip below the search. */}
             {topStatusActions}
             {/* Sort + filter: load order / recent / name, GameBanana vs local
-                import, and mod-type buckets. The badge counts active
+                import, hero, and metadata tags. The badge counts active
                 adjustments; while any are on, the list is read-only (no drag
                 reorder) so it can't be mistaken for load order. order-last keeps
                 it grouped with card size and layout controls at the row end. */}
@@ -3037,7 +3415,7 @@ export default function Installed() {
                 </span>
               )}
               {filterOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm shadow-xl shadow-black/40">
+                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans">
                   <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                     <ArrowDownUp className="h-3.5 w-3.5" /> {t('installed.filters.sort')}
                   </div>
@@ -3131,16 +3509,49 @@ export default function Installed() {
                     </div>
                   </div>
 
-                  {typeOptions.length > 1 && (
+                  {heroOptions.length > 0 && (
                     <div className="mt-3 border-t border-border pt-3">
                       <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                          {t('installed.filters.modType')}
+                          {t('installed.filters.hero')}
                         </span>
-                        {typeFilter.length > 0 && (
+                        {heroFilter !== 'all' && (
                           <button
                             type="button"
-                            onClick={() => setTypeFilter([])}
+                            onClick={() => setHeroFilter('all')}
+                            className="text-[11px] text-accent hover:underline cursor-pointer"
+                          >
+                            {t('common.actions.clear')}
+                          </button>
+                        )}
+                      </div>
+                      <HeroSelect
+                        ariaLabel="Filter by hero"
+                        value={heroFilter}
+                        onChange={setHeroFilter}
+                        size="sm"
+                        options={[
+                          { value: 'all', label: t('browse.filters.allHeroes'), muted: true },
+                          ...heroOptions.map((hero) => ({
+                            value: hero.name,
+                            label: `${hero.name} (${hero.count})`,
+                            heroName: hero.name,
+                          })),
+                        ]}
+                      />
+                    </div>
+                  )}
+
+                  {tagOptions.length > 1 && (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                          {t('installed.filters.tags')}
+                        </span>
+                        {tagFilter.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setTagFilter([])}
                             className="text-[11px] text-accent hover:underline cursor-pointer"
                           >
                             {t('common.actions.clear')}
@@ -3148,15 +3559,14 @@ export default function Installed() {
                         )}
                       </div>
                       <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                        {typeOptions.map((opt) => {
-                          const checked = typeFilter.includes(opt.key);
-                          const hero = heroNameForLabel(opt.label);
+                        {tagOptions.map((opt) => {
+                          const checked = tagFilter.includes(opt.key);
                           return (
                             <button
                               key={opt.key}
                               type="button"
                               onClick={() =>
-                                setTypeFilter((prev) =>
+                                setTagFilter((prev) =>
                                   checked ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
                                 )
                               }
@@ -3169,15 +3579,6 @@ export default function Installed() {
                               >
                                 {checked && <Check className="h-3 w-3" />}
                               </span>
-                              {hero && (
-                                <img
-                                  src={getHeroChipIconPath(hero)}
-                                  alt=""
-                                  aria-hidden="true"
-                                  className="h-4 w-4 flex-shrink-0 rounded-full object-cover"
-                                  loading="lazy"
-                                />
-                              )}
                               <span className="flex-1 truncate">{opt.label}</span>
                               <span className="text-[11px] opacity-60">{opt.count}</span>
                             </button>
@@ -3194,7 +3595,8 @@ export default function Installed() {
                         setSortMode('priority');
                         setSourceSel(['gamebanana', 'local']);
                         setStatusSel(['enabled', 'disabled']);
-                        setTypeFilter([]);
+                        setHeroFilter('all');
+                        setTagFilter([]);
                       }}
                       className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
                     >
@@ -3264,7 +3666,7 @@ export default function Installed() {
                 title={t('installed.view.styleAndCardSize')}
               />
               {viewMenuOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm shadow-xl shadow-black/40">
+                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans [&_input]:font-sans">
                   <div className="mb-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                     {t('installed.view.style')}
                   </div>
@@ -3334,24 +3736,27 @@ export default function Installed() {
               ? t('installed.empty.noSearchMatch', { query: search })
               : t('installed.empty.noFilterMatch')}
           </p>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
+            className="mt-1"
             onClick={() => {
               setSearch('');
               setSourceSel(['gamebanana', 'local']);
               setStatusSel(['enabled', 'disabled']);
-              setTypeFilter([]);
+              setHeroFilter('all');
+              setTagFilter([]);
             }}
-            className="mt-1 px-3 py-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer text-sm"
           >
             {searchNeedle ? t('installed.filters.clearSearch') : t('installed.filters.clearFilters')}
-          </button>
+          </Button>
         </div>
       )}
 
       {visibleEnabled.length > 0 && (
         <div className="mb-6">
           <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.filters.enabled')}</SectionHeader>
+            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.enabled', { count: visibleEnabled.length })}</SectionHeader>
           </div>
           {renderSortableSection('enabled')}
         </div>
@@ -3360,7 +3765,7 @@ export default function Installed() {
       {visibleDisabled.length > 0 && (
         <div>
           <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('locker.global.disabledBadge')}</SectionHeader>
+            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.disabled', { count: visibleDisabled.length })}</SectionHeader>
           </div>
           {renderSortableSection('disabled')}
         </div>
@@ -3557,7 +3962,6 @@ export default function Installed() {
             onReorderVariantTo={(source, neighbor, position) =>
               reorderVariantTo(source, neighbor, position)
             }
-            onDisableAll={() => disableEntireGroup(liveEntry)}
             onDeleteVariant={(variant) => deleteMod(variant.id)}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
             onOpenModDetails={
@@ -3608,7 +4012,7 @@ export default function Installed() {
             className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-red-400 mb-2">{t('installed.details.loadFailed')}</h3>
+            <h3 className="text-lg font-semibold text-state-danger mb-2">{t('installed.details.loadFailed')}</h3>
             <p className="text-sm text-text-secondary mb-4">{detailsError}</p>
             <div className="flex justify-end">
               <Button onClick={closeModDetails}>{t('common.actions.close')}</Button>
@@ -3628,7 +4032,7 @@ export default function Installed() {
           downloadingFileId={null}
           extracting={false}
           progress={null}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={installedHideNsfwPreviews}
           dateAdded={detailsDates?.dateAdded}
           dateModified={detailsDates?.dateModified}
           updateAvailable={detailsUpdateAvailable}
@@ -3651,7 +4055,7 @@ export default function Installed() {
       {selectedUnknownState && unknownFixMode === 'single' && (
         <UnknownFilterGuessModal
           state={selectedUnknownState}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={installedHideNsfwPreviews}
           autoMatchEnabled={autoMatchEnabled}
           onApplyMatch={applyUnknownMatch}
           onAssociate={associateUnknownMatch}
@@ -3668,7 +4072,7 @@ export default function Installed() {
         <BulkUnknownFixModal
           unknownMods={unknownMods}
           state={selectedUnknownState}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={installedHideNsfwPreviews}
           autoMatchEnabled={autoMatchEnabled}
           cache={unknownFilterCacheById}
           pendingIds={unknownFilterPendingIds}
@@ -3724,7 +4128,7 @@ export default function Installed() {
       {mergeSources && (
         <MergeModsModal
           sources={mergeSources}
-          hideNsfw={settings?.hideNsfwPreviews ?? true}
+          hideNsfw={installedHideNsfwPreviews}
           onCancel={() => setMergeSources(null)}
           onConfirm={handleMergeConfirm}
         />
@@ -3733,7 +4137,7 @@ export default function Installed() {
       {mergedContentsMod && (
         <MergedContentsModal
           mod={mergedContentsMod}
-          hideNsfw={settings?.hideNsfwPreviews ?? true}
+          hideNsfw={installedHideNsfwPreviews}
           onClose={() => setMergedContentsMod(null)}
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
           onExtractSource={handleExtractMergeSource}
@@ -3806,11 +4210,24 @@ export default function Installed() {
       )}
 
       {selectMode && (
-        // z-40 keeps this floating bar above the page + sticky header (z-30)
-        // but below modal overlays (z-50), so an open modal's backdrop dims it
-        // like the rest of the page instead of the bar painting over the modal
-        // (e.g. the variant picker overlapping it in a short window).
-        <div className="fixed bottom-4 left-1/2 -translate-x-1/2 z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-border rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2">
+        // Floats at top-center. z-40 keeps this bar above the page + sticky
+        // header (z-30) but below modal overlays (z-50), so an open modal's
+        // backdrop dims it like the rest of the page instead of the bar
+        // painting over the modal (e.g. the variant picker overlapping it in a
+        // short window).
+        <div
+          ref={selectBarRef}
+          className={`fixed z-40 w-max max-w-[calc(100vw-2rem)] bg-bg-secondary border border-accent/40 ring-1 ring-accent/15 rounded-xl shadow-lg shadow-black/40 px-3 py-2 flex flex-wrap items-center gap-2 ${selectBarPos ? '' : 'top-4 left-1/2 -translate-x-1/2'}`}
+          style={selectBarPos ? { left: selectBarPos.x, top: selectBarPos.y } : undefined}
+        >
+          <span
+            onPointerDown={handleSelectBarDragStart}
+            className="flex items-center self-stretch -ml-1 px-0.5 text-text-secondary hover:text-text-primary cursor-grab active:cursor-grabbing touch-none select-none"
+            title={t('installed.select.dragHint')}
+            aria-hidden="true"
+          >
+            <GripVertical className="w-4 h-4" />
+          </span>
           {bulkProgress ? (
             <span className="text-sm text-text-primary tabular-nums px-2 flex items-center gap-2">
               <Loader2 className="w-4 h-4 animate-spin text-accent" />
@@ -3824,21 +4241,13 @@ export default function Installed() {
                   : t('installed.select.countSelected', { count: selectedMods.length })}
               </span>
               <span className="h-5 w-px bg-border" />
-              <button
-                type="button"
-                onClick={selectAllVisible}
-                className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
-              >
+              <Button variant="ghost" size="sm" onClick={selectAllVisible}>
                 {t('installed.select.selectAll')}
-              </button>
+              </Button>
               {selectedMods.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedIds(new Set())}
-                  className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
-                >
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                   {t('common.actions.clear')}
-                </button>
+                </Button>
               )}
               <span className="h-5 w-px bg-border" />
               <Button
@@ -3897,7 +4306,7 @@ export default function Installed() {
                   <div
                     role="dialog"
                     aria-label={t('installed.select.tagDialogLabel')}
-                    className="absolute bottom-full mb-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
+                    className="absolute top-full mt-2 right-0 z-[60] w-56 max-h-80 overflow-y-auto bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
                   >
                     <button
                       type="button"
@@ -3947,15 +4356,12 @@ export default function Installed() {
                 {t('common.actions.delete')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
               </Button>
               <span className="h-5 w-px bg-border" />
-              <button
-                type="button"
+              <IconButton
+                icon={X}
+                label={t('installed.actions.exitSelectionMode')}
+                size="sm"
                 onClick={exitSelectMode}
-                className="p-1.5 text-text-secondary hover:text-text-primary rounded hover:bg-bg-tertiary cursor-pointer"
-                aria-label={t('installed.actions.exitSelectionMode')}
-                title={t('installed.actions.exitSelectionMode')}
-              >
-                <X className="w-4 h-4" />
-              </button>
+              />
             </>
           )}
         </div>
@@ -4079,14 +4485,11 @@ function UnknownFilterGuessModal({
               {mod.fileName}
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon={X}
+            label={t('common.actions.close')}
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         <UnknownMatchPanel
@@ -4210,14 +4613,11 @@ function BulkUnknownFixModal({
                 </Button>
               </>
             )}
-            <button
-              type="button"
+            <IconButton
+              icon={X}
+              label={t('common.actions.close')}
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-              aria-label={t('common.actions.close')}
-            >
-              <X className="w-5 h-5" />
-            </button>
+            />
           </div>
         </div>
 
@@ -4393,7 +4793,7 @@ function UnknownMatchPanel({
       />
 
       {applyError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{applyError}</span>
         </div>
@@ -4446,7 +4846,7 @@ function UnknownMatchPanel({
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -4756,7 +5156,7 @@ function UnknownManualSearch({
       </div>
 
       {searchError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span>{searchError}</span>
         </div>
@@ -4824,18 +5224,20 @@ function UnknownManualSearch({
                     {files && files.length > 0 && (
                       <label className="block text-xs text-text-secondary">
                         {t('installed.unknown.pinExactFile')}
-                        <select
-                          value={fileId ?? ''}
-                          onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
-                          className="mt-1 w-full bg-bg-primary border border-white/10 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent/50"
-                        >
-                          <option value="">{t('installed.unknown.dontPinFile')}</option>
-                          {files.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.fileName}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="mt-1">
+                          <Select
+                            inputSize="sm"
+                            value={fileId ?? ''}
+                            onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
+                          >
+                            <option value="">{t('installed.unknown.dontPinFile')}</option>
+                            {files.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.fileName}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
                       </label>
                     )}
                     <div className="flex justify-end">
@@ -5056,7 +5458,7 @@ function UnknownFileList({
             </div>
           )}
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -5332,7 +5734,7 @@ function ModMediaPreview({
       nsfw={mod.nsfw}
       hideNsfw={hideNsfwPreviews}
       className="w-full h-full"
-      imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+      imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
       mergedSources={mod.merged?.sources}
       onRevealInFolder={onRevealInFolder}
     />
@@ -5343,7 +5745,7 @@ function ModMediaPreview({
         src={soundHeroRenderUrl}
         alt={soundHeroName ?? mod.name}
         draggable={false}
-        className="block h-full w-full object-cover origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+        className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
         style={{ objectPosition: `${soundHeroFacePosX}% 25%` }}
       />
     </ImageContextMenu>
@@ -5658,7 +6060,7 @@ function EditableModTitle({
       }}
       onBlur={() => void commit()}
       data-card-action="true"
-      className={`${className} w-full rounded-[4px] border border-accent/70 bg-bg-primary/90 px-1 outline-none focus:border-accent disabled:opacity-60`}
+      className={`${className} premium-inline-rename-input disabled:opacity-60`}
     />
   );
 }
@@ -5721,7 +6123,7 @@ function ModListRowContent({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
+        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
         aria-label={canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
@@ -5749,7 +6151,7 @@ function ModListRowContent({
             hideNsfw={hideNsfwPreviews}
             className="w-full h-full"
             onRevealInFolder={onRevealInFolder}
-            imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
             mergedSources={mod.merged?.sources}
           />
         )}
@@ -5971,17 +6373,17 @@ function ModCard({
   const stateClasses = hasConflicts
     ? 'bg-state-warning/5 border-state-warning/45'
     : mod.enabled
-      ? 'bg-[#242424] border-white/[0.08] hover:border-white/[0.14] hover:bg-bg-secondary'
-      : 'bg-[#242424]/85 border-white/[0.08] text-text-primary/80 hover:border-white/[0.14] hover:bg-bg-secondary hover:text-text-primary';
+      ? 'bg-bg-tertiary border-white/[0.08] hover:border-white/[0.14] hover:bg-bg-secondary'
+      : 'bg-bg-tertiary/85 border-white/[0.08] text-text-primary/80 hover:border-white/[0.14] hover:bg-bg-secondary hover:text-text-primary';
 
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
   // is tinted by its own thumbnail. List view keeps the solid stateClasses.
   const glassStateClasses = hasConflicts
-    ? 'border-state-warning/45 bg-state-warning/[0.07]'
+    ? 'border-state-warning/45 bg-state-warning/[0.07] premium-card-glow premium-card-glow-warning'
     : mod.enabled
-      ? 'border-white/[0.12] bg-[#141414]/65 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] hover:border-white/[0.2]'
-      : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary';
+      ? 'premium-glass-card premium-card-glow-active'
+      : 'premium-glass-card opacity-85';
 
   // Merged mods get a "stacked card" silhouette via two offset box-shadows
   // that read as cards-behind-the-card. Uses only neutral surface/border
@@ -6034,8 +6436,8 @@ function ModCard({
   const mediaSpacingClasses = isCompact ? 'mb-2' : 'mb-1.5';
   const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
   const audioOverlayClasses = isCompact
-    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer'
-    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2.5 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer';
+    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/85 px-2 shadow-sm [&_*]:cursor-pointer'
+    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/85 px-2.5 shadow-sm [&_*]:cursor-pointer';
   const audioPlayerClassName = isCompact
     ? 'w-full gap-2 [&>button:first-of-type]:h-6 [&>button:first-of-type]:w-6 [&>div]:h-1 [&>span]:text-[10px]'
     : 'w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]';
@@ -6361,7 +6763,7 @@ function ModCard({
       <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
-      className={`group/card relative rounded-[10px] border transform-gpu transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ${isList ? stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
+      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {selectMode && (
@@ -6414,7 +6816,7 @@ function ModCard({
         ) : (
         <>
         {glassBackdropUrl && (
-          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
+          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-xl">
             <img
               src={glassBackdropUrl}
               alt=""
@@ -6424,7 +6826,7 @@ function ModCard({
                 mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
               }`}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f0f]/45 via-[#0f0f0f]/65 to-[#0f0f0f]/[0.88]" />
+            <div className="absolute inset-0 scrim-bottom" />
           </div>
         )}
         {(() => {
@@ -6488,6 +6890,16 @@ function ModCard({
                   className="border-white/20 text-white/90"
                 >
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
+                </Tag>
+              )}
+              {group && group.variantCount > 1 && (
+                <Tag
+                  variant="overlay"
+                  icon={Files}
+                  title={variantStatusTitle}
+                  className="border-white/20 text-white/90 tabular-nums"
+                >
+                  {variantStatusLabel}
                 </Tag>
               )}
             </div>
@@ -6689,21 +7101,18 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
           </div>
         </div>
 
-        <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="local-mod-name">
-          {t('locker.soulImport.fields.name')}
-        </label>
-        <input
-          id="local-mod-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-            if (e.key === 'Escape') onClose();
-          }}
-          autoFocus
-          className="mt-2 w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/60 focus:border-accent focus:ring-2 focus:ring-accent/25"
-          placeholder={t('installed.edit.modNamePlaceholder')}
-        />
+        <FormField className="mt-5" label={t('locker.soulImport.fields.name')}>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit();
+              if (e.key === 'Escape') onClose();
+            }}
+            autoFocus
+            placeholder={t('installed.edit.modNamePlaceholder')}
+          />
+        </FormField>
         <p className="mt-2 truncate text-xs text-text-secondary" title={mod.fileName}>
           {t('installed.edit.fileLabel', { fileName: mod.fileName })}
         </p>
@@ -6813,10 +7222,14 @@ interface ImportCustomModModalProps {
 }
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+// Local mod import accepts a bare VPK or an archive we extract on the main side.
+const VPK_IMPORT_EXTS = ['vpk', 'zip', '7z', 'rar'];
+const VPK_IMPORT_RE = /\.(vpk|zip|7z|rar)$/i;
 
 function deriveModNameFromPath(p: string): string {
   const base = p.split(/[\\/]/).pop() ?? '';
   return base
+    .replace(/\.(zip|7z|rar)$/i, '')
     .replace(/_dir\.vpk$/i, '')
     .replace(/\.vpk$/i, '')
     .replace(/^pak\d{2}_/, '')
@@ -6870,7 +7283,7 @@ function ImportCustomModModal({
     if (lockVpk) return;
     const picked = await showOpenDialog({
       title: t('installed.import.selectVpk'),
-      filters: [{ name: 'VPK files', extensions: ['vpk'] }],
+      filters: [{ name: 'VPK or archive', extensions: VPK_IMPORT_EXTS }],
     });
     if (picked) acceptVpkPath(picked);
   };
@@ -6890,13 +7303,15 @@ function ImportCustomModModal({
     if (lockVpk) return;
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-    if (!/\.vpk$/i.test(file.name)) {
+    if (!VPK_IMPORT_RE.test(file.name)) {
       setError(t('installed.import.expectedVpk', { name: file.name }));
       return;
     }
     const path = window.electronAPI.getDroppedFilePath(file);
     if (!path) {
-      setError(t('locker.soulImport.errors.dropPathUnresolved'));
+      // No real on-disk path: almost always a file dragged out of Windows'
+      // built-in zip viewer (a virtual shell file). Point them at the zip itself.
+      setError(t('installed.import.dropUnresolved'));
       return;
     }
     acceptVpkPath(path);
@@ -6948,27 +7363,40 @@ function ImportCustomModModal({
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-            <FilePlus className="w-5 h-5" />
-            {title}
-          </h3>
+  return (
+    <Modal
+      onClose={onClose}
+      labelledBy="import-custom-mod-title"
+      size="lg"
+      dismissable={!submitting}
+      panelClassName="flex max-h-[80vh] flex-col overflow-hidden"
+    >
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <FilePlus className="h-5 w-5 text-accent" />
+            <h2 id="import-custom-mod-title" className="text-base font-semibold text-text-primary">
+              {title}
+            </h2>
+          </div>
           <button
-            onClick={onClose}
-            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
+            type="button"
+            onClick={() => !submitting && onClose()}
+            disabled={submitting}
             aria-label={t('common.actions.close')}
+            className="rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3.5">
+          <p className="text-xs leading-5 text-text-secondary">
+            {vpkHelpText}
+          </p>
+
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.vpkFile')} <span className="text-red-400">*</span>
+              {t('installed.import.vpkFile')} <span className="text-state-danger">*</span>
             </label>
             <div
               role="button"
@@ -6980,7 +7408,7 @@ function ImportCustomModModal({
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = lockVpk ? 'none' : 'copy'; if (!lockVpk) setVpkDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(false); }}
               onDrop={handleVpkDrop}
-              className={`relative flex flex-col items-center justify-center gap-1.5 px-4 py-5 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`relative flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 vpkDragActive
                   ? 'border-accent bg-accent/10'
                   : vpkPath
@@ -7010,23 +7438,15 @@ function ImportCustomModModal({
                 </>
               )}
             </div>
-            <p className="mt-1 text-xs text-text-secondary">
-              {vpkHelpText}
-            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.modName')} <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
+          <FormField label={t('installed.import.modName')} required>
+            <Input
               value={name}
               onChange={(e) => setName(e.target.value)}
               placeholder={t('installed.import.modNamePlaceholder')}
-              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
             />
-          </div>
+          </FormField>
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
@@ -7042,7 +7462,7 @@ function ImportCustomModModal({
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
               onDrop={handleImageDrop}
-              className={`flex items-center gap-3 p-3 rounded-lg border border-dashed cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-2.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 imgDragActive
                   ? 'border-accent bg-accent/10'
                   : thumbnailDataUrl
@@ -7074,42 +7494,35 @@ function ImportCustomModModal({
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
+          <label className="group flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer select-none">
             <input
               type="checkbox"
               checked={nsfw}
               onChange={(e) => setNsfw(e.target.checked)}
-              className="w-4 h-4 accent-accent cursor-pointer"
+              className="peer sr-only"
             />
+            <CheckboxMark checked={nsfw} />
             {t('locker.soulImport.fields.nsfw')}
           </label>
 
           {error && (
-            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
               {error}
             </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-3 p-5 border-t border-border">
-          <button
-            onClick={onClose}
-            disabled={submitting}
-            className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {t('common.actions.cancel')}
-          </button>
-          <button
+        <div className="flex justify-center border-t border-border px-5 py-3">
+          <Button
+            variant="primary"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            isLoading={submitting}
+            className="!px-10 !py-1.5"
           >
-            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {submitLabel}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }

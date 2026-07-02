@@ -9,6 +9,7 @@ import {
   ArrowLeft,
   ArrowRight,
   ArrowUp,
+  Download,
   Ghost,
   Loader2,
   Pause,
@@ -20,11 +21,12 @@ import {
   UploadCloud,
   X,
 } from 'lucide-react';
-import { exportHeroPose, getHeroPoseInfo, importSoulContainerGlb, previewSoulContainerGlb, showOpenDialog } from '../../lib/api';
+import { exportHeroPose, exportSoulContainerGlb, getHeroPoseInfo, importSoulContainerGlb, previewSoulContainerGlb, showOpenDialog } from '../../lib/api';
 import { loadGltfPreview, parseGltfPreview } from '../../lib/loadGltfPreview';
 import { computeSceneStats, deriveNameFromPath, norm360, TRIANGLE_WARN_THRESHOLD } from '../../lib/soulImport';
 import { useAppStore } from '../../stores/appStore';
 import type { Mod } from '../../types/mod';
+import { FormField, Input } from '../common/forms';
 import SoulImportPreview from './SoulImportPreview';
 import { SOUL_BACKDROP_COUNT } from './soulBackdrops';
 import { disposeScene } from './soulModel';
@@ -129,6 +131,7 @@ export default function SoulContainerImportModal({
     Math.floor(Math.random() * SOUL_BACKDROP_COUNT)
   );
   const [building, setBuilding] = useState(false);
+  const [exporting, setExporting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [dragActive, setDragActive] = useState(false);
@@ -313,7 +316,7 @@ export default function SoulContainerImportModal({
       : t('locker.soulImport.orient.customRotation')
     : (resolvedOrient ?? orientMode);
 
-  const canSubmit = !!glbPath && !!scene && !!name.trim() && !submitting && !building;
+  const canSubmit = !!glbPath && !!scene && !!name.trim() && !submitting && !building && !exporting;
   const highPoly = triangleCount > TRIANGLE_WARN_THRESHOLD;
 
   const handleSubmit = async () => {
@@ -348,6 +351,31 @@ export default function SoulContainerImportModal({
     } catch (err) {
       setError(String(err));
       setSubmitting(false);
+    }
+  };
+
+  // Build the same override VPK and save it to disk instead of installing it.
+  // Closes the modal once a file is written; a cancelled save dialog leaves the
+  // modal open so the user can still import or retry.
+  const handleExport = async () => {
+    if (!canSubmit) return;
+    setExporting(true);
+    setError(null);
+    try {
+      const result = await exportSoulContainerGlb({
+        glbPath,
+        name: name.trim(),
+        orient: orientMode,
+        rotate: hasRotation ? rotate : undefined,
+        yaw: yaw || undefined,
+        upright,
+        glow,
+      });
+      if (result.exported) onClose();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setExporting(false);
     }
   };
 
@@ -552,18 +580,13 @@ export default function SoulContainerImportModal({
 
           {/* Right: controls */}
           <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">
-                {t('locker.soulImport.fields.name')} <span className="text-red-400">*</span>
-              </label>
-              <input
-                type="text"
+            <FormField label={t('locker.soulImport.fields.name')} required>
+              <Input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder={t('locker.soulImport.fields.namePlaceholder')}
-                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
               />
-            </div>
+            </FormField>
 
             {/* Orientation */}
             <div>
@@ -700,18 +723,20 @@ export default function SoulContainerImportModal({
               </div>
             </div>
 
-            <div>
-              <label className="block text-sm font-medium text-text-primary mb-1.5">
-                {t('locker.soulImport.fields.notes')} <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
-              </label>
-              <input
-                type="text"
+            <FormField
+              label={
+                <>
+                  {t('locker.soulImport.fields.notes')}{' '}
+                  <span className="text-text-secondary font-normal">{t('locker.soulImport.fields.notesOptional')}</span>
+                </>
+              }
+            >
+              <Input
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder={t('locker.soulImport.fields.notesPlaceholder')}
-                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
               />
-            </div>
+            </FormField>
 
             <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
               <input
@@ -741,7 +766,7 @@ export default function SoulContainerImportModal({
           )}
 
           {error && (
-            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
               {error}
             </div>
           )}
@@ -784,10 +809,19 @@ export default function SoulContainerImportModal({
           <div className="flex justify-end gap-3 ml-auto shrink-0">
             <button
               onClick={onClose}
-              disabled={submitting}
+              disabled={submitting || exporting}
               className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
             >
               {t('common.actions.cancel')}
+            </button>
+            <button
+              onClick={handleExport}
+              disabled={!canSubmit}
+              title={t('locker.soulImport.exportTitle')}
+              className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            >
+              {exporting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              {t('locker.soulImport.export')}
             </button>
             <button
               onClick={handleSubmit}

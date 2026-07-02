@@ -37,6 +37,9 @@ export interface PortableGameBananaRef {
    *  the archive. Omit when the archive yields a single VPK or when the
    *  installer fell back to `pakNN_dir.vpk` (uninformative). */
   vpkStem?: string;
+  /** Zero-based VPK index within a multi-VPK GameBanana file, assigned by
+   *  ascending VPK size. More stable across renamed `pakNN` files than stems. */
+  vpkIndex?: number;
 }
 
 export type PortableModRef = PortableGameBananaRef | Record<string, unknown>;

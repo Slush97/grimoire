@@ -1,6 +1,7 @@
 import { ipcMain, shell } from 'electron';
 import { promises as fs, existsSync } from 'fs';
-import { extname, basename } from 'path';
+import { extname, basename, join, resolve, sep } from 'path';
+import { tmpdir } from 'os';
 import { loadSettings, saveSettings, getActiveDeadlockPath } from '../services/settings';
 import {
     scanMods,
@@ -10,6 +11,7 @@ import {
     setModPriority,
     reorderMods,
     swapModPriority,
+    setModsEnabledBatch,
     allocateEnabledVpkPath,
     type Mod,
 } from '../services/mods';
@@ -29,12 +31,17 @@ import {
     type UnknownModFilterGuess,
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
+import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
+import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
+import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
+import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
-import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview } from '../../../src/types/electron';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
+import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
+import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -138,7 +145,7 @@ function enrichMod(mod: Mod): WireMod {
             // VPK if the title gave us nothing. The VPK path is authoritative
             // (parses real Source 2 codenames like `ghost` → Lady Geist) but
             // costs a disk read + directory tree parse per call.
-            let inferred = inferHeroFromTitle(metadata.modName || mod.name);
+            let inferred: string | null = inferHeroFromTitle(metadata.modName || mod.name);
             let inferredSource: typeof lockerHeroSource = inferred ? 'title' : undefined;
             if (!inferred) {
                 try {
@@ -186,6 +193,7 @@ function enrichMod(mod: Mod): WireMod {
             audioUrl: metadata.audioUrl,
             gameBananaId: metadata.gameBananaId,
             gameBananaFileId: metadata.gameBananaFileId,
+            vpkIndex: metadata.vpkIndex,
             categoryId: metadata.categoryId,
             categoryName: metadata.categoryName,
             sourceSection: metadata.sourceSection,
@@ -204,6 +212,7 @@ function enrichMod(mod: Mod): WireMod {
             lockerSounds: metadata.lockerSounds,
             abilitySounds: abilitySounds ?? undefined,
             soulImport: metadata.soulImport,
+            urnImport: metadata.urnImport,
             ignoreUpdates: metadata.ignoreUpdates,
         };
     }
@@ -283,7 +292,52 @@ ipcMain.handle('get-mods', async (): Promise<Mod[]> => {
     if (warmPaths.length > 0) {
         await parseVpkDirectoriesAsync(warmPaths);
     }
-    return visible.map(enrichMod);
+    const enriched = visible.map(enrichMod);
+    if (settings.verboseModTrace) {
+        const hidden = mods.length - visible.length;
+        // The renderer (Installed.tsx visibleMods) also hides disabled source
+        // VPKs that are folded into a merged mod. Replicate its identity checks
+        // here so the boundary line is honest about end-user visibility.
+        const absorbedSources = enriched.flatMap((m) => m.merged?.sources ?? []);
+        const matchesAbsorbedSource = (
+            mod: WireMod,
+            source: NonNullable<WireMod['merged']>['sources'][number]
+        ): boolean => {
+            if (mod.enabled || mod.fileName !== source.fileName) return false;
+
+            const sourceSha = source.sha256AtMergeTime?.toLowerCase();
+            const modSha = mod.sha256?.toLowerCase();
+            if (sourceSha && modSha) return sourceSha === modSha;
+
+            if (typeof source.gameBananaId === 'number' && typeof mod.gameBananaId === 'number') {
+                if (source.gameBananaId !== mod.gameBananaId) return false;
+                if (
+                    typeof source.gameBananaFileId === 'number' &&
+                    typeof mod.gameBananaFileId === 'number'
+                ) {
+                    return source.gameBananaFileId === mod.gameBananaFileId;
+                }
+            }
+
+            // Mirror Installed.tsx: a disabled VPK at the exact recorded source
+            // filename is the absorbed source (enabled mods already excluded), so
+            // fold it in unless sha/gbId proved a different mod.
+            return true;
+        };
+        const rendererHidden = enriched.filter((m) =>
+            absorbedSources.some((source) => matchesAbsorbedSource(m, source))
+        );
+        console.log(
+            `[modTrace] get-mods: scanned ${mods.length}, returning ${visible.length} to renderer ` +
+                `(${hidden} locker-managed hidden; ${rendererHidden.length} more will be hidden by the renderer as merge sources)`
+        );
+        for (const m of rendererHidden) {
+            console.log(
+                `[modTrace]   RENDERER-HIDDEN disabled key=${m.metaKey} name="${m.name}" (identity matches a merged mod source -> absent from Installed list)`
+            );
+        }
+    }
+    return enriched;
 });
 
 // enable-mod
@@ -773,6 +827,25 @@ ipcMain.handle(
     }
 );
 
+// apply-mod-toggle-batch: disable a set then enable a set as one atomic
+// mutation, returning the fresh mod list AND the per-mod failures. Backs the
+// Locker skin randomizer. setModsEnabledBatch never rethrows a per-mod lock so
+// one stuck VPK can't abort the batch; we surface the failure count instead of
+// dropping it, so the renderer can warn that the shuffle only half-applied
+// (otherwise a hero silently launches skinless and the call still looks green).
+ipcMain.handle(
+    'apply-mod-toggle-batch',
+    async (_, enableIds: string[], disableIds: string[]): Promise<{ mods: Mod[]; failures: string[] }> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const result = await setModsEnabledBatch(deadlockPath, { enable: enableIds, disable: disableIds });
+        const mods = await scanMods(deadlockPath);
+        return { mods: mods.map(enrichMod), failures: result.failures };
+    }
+);
+
 // swap-mod-priority
 ipcMain.handle(
     'swap-mod-priority',
@@ -831,10 +904,39 @@ ipcMain.handle('read-image-data-url', async (_, imagePath: string): Promise<stri
     return readImageAsDataUrl(imagePath);
 });
 
+// read-renderer-asset
+// Reads a BUNDLED renderer asset (e.g. built-in launcher art, a hero render) as a
+// data URL. The Appearance crop editor needs the bytes to bake/frame a built-in
+// image, but a packaged renderer is served from file:// where fetch() of a file://
+// asset is blocked and a file:// <img> taints the canvas. Main reads it instead.
+// Confined to the renderer output dir, traversal guarded.
+const RENDERER_ASSET_ROOT = resolve(join(__dirname, '../renderer'));
+ipcMain.handle('read-renderer-asset', async (_, relPath: string): Promise<string> => {
+    if (typeof relPath !== 'string' || !relPath) {
+        throw new Error('Invalid asset path');
+    }
+    // Drop any query/hash, then strip leading ./ or / so it resolves under the root.
+    const clean = relPath.split(/[?#]/)[0].replace(/^[./]+/, '');
+    const resolved = resolve(RENDERER_ASSET_ROOT, clean);
+    if (resolved !== RENDERER_ASSET_ROOT && !resolved.startsWith(RENDERER_ASSET_ROOT + sep)) {
+        throw new Error('Asset path escapes the renderer root');
+    }
+    if (!existsSync(resolved)) {
+        throw new Error('Asset not found');
+    }
+    return readImageAsDataUrl(resolved);
+});
+
 // import-custom-mod
 // The Deadlock engine requires strict `pakXX_dir.vpk` naming (see apply-mina-variant),
 // so custom imports always get a naked `pakNN_dir.vpk` filename - no slug. The
 // human-readable name lives in metadata.modName and is shown in the UI instead.
+//
+// The source can be a bare `.vpk` or an archive (`.zip`/`.7z`/`.rar`). Archives are
+// extracted to a temp dir and every contained `.vpk` is imported as its own slot.
+// This lets users drag the whole zip in (the reliable path) instead of dragging a
+// `.vpk` out of Windows' built-in zip viewer, which hands over a virtual shell file
+// with no on-disk path and locks the window while the OS materializes it.
 ipcMain.handle(
     'import-custom-mod',
     async (_, args: ImportCustomModArgs): Promise<Mod[]> => {
@@ -846,38 +948,182 @@ ipcMain.handle(
         const { vpkPath, name, thumbnailDataUrl, nsfw } = args;
 
         if (!vpkPath || !existsSync(vpkPath)) {
-            throw new Error('VPK file not found');
-        }
-        if (!vpkPath.toLowerCase().endsWith('.vpk')) {
-            throw new Error('Selected file is not a .vpk');
+            throw new Error('File not found');
         }
         if (!name?.trim()) {
             throw new Error('A name is required');
         }
+        const trimmedName = name.trim();
 
-        // Imports install ENABLED, so reserve a slot via the overflow-aware
-        // allocator: it fills base addons first and spills into an overflow
-        // folder (creating one + patching gameinfo) when base is full, instead of
-        // failing once a >99 user has filled citadel/addons. Metadata is keyed by
-        // the destination's metaKey (folder-prefixed for an overflow slot).
-        const destPath = await allocateEnabledVpkPath(deadlockPath);
-        const destMetaKey = metaKeyFor(destPath);
+        const lower = vpkPath.toLowerCase();
+        const isVpk = lower.endsWith('.vpk');
+        if (!isVpk && !isArchive(vpkPath)) {
+            throw new Error('Selected file is not a .vpk or supported archive (.zip, .7z, .rar)');
+        }
 
-        await fs.copyFile(vpkPath, destPath);
+        // Resolve the list of source VPKs to import. A bare .vpk is a single
+        // source; an archive is extracted to a temp dir first and every VPK it
+        // contains becomes its own import (extractArchive already filters to .vpk).
+        let sourceVpks: ExtractedVpk[];
+        let tempDir: string | undefined;
+        if (isVpk) {
+            sourceVpks = [{ path: vpkPath, fileName: basename(vpkPath) }];
+        } else {
+            tempDir = await fs.mkdtemp(join(tmpdir(), 'grimoire-import-'));
+            try {
+                sourceVpks = await extractArchive(vpkPath, tempDir);
+            } catch (err) {
+                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+                throw err;
+            }
+            if (sourceVpks.length === 0) {
+                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+                throw new Error('No .vpk file was found inside the archive.');
+            }
+        }
 
-        // Scrub any orphan metadata at this slot before writing. setModMetadata
-        // merges into the existing entry, so stale fields (gameBananaId,
-        // categoryName, etc.) from a prior occupant would otherwise stick to
-        // the new local mod and visually merge it with unrelated mods.
-        removeModMetadata(destMetaKey);
-        await setModMetadataWithHash(destMetaKey, {
-            modName: name.trim(),
-            thumbnailUrl: thumbnailDataUrl,
-            nsfw: !!nsfw,
-        }, destPath);
+        try {
+            // Imports install ENABLED, so reserve a slot via the overflow-aware
+            // allocator: it fills base addons first and spills into an overflow
+            // folder (creating one + patching gameinfo) when base is full, instead
+            // of failing once a >99 user has filled citadel/addons. Metadata is
+            // keyed by the destination's metaKey (folder-prefixed for an overflow
+            // slot). Copying before the next allocate marks the slot taken, so a
+            // multi-VPK archive lands in distinct slots.
+            for (let i = 0; i < sourceVpks.length; i++) {
+                const destPath = await allocateEnabledVpkPath(deadlockPath);
+                const destMetaKey = metaKeyFor(destPath);
+
+                await fs.copyFile(sourceVpks[i].path, destPath);
+
+                // Scrub any orphan metadata at this slot before writing.
+                // setModMetadata merges into the existing entry, so stale fields
+                // (gameBananaId, categoryName, etc.) from a prior occupant would
+                // otherwise stick to the new local mod and visually merge it with
+                // unrelated mods.
+                removeModMetadata(destMetaKey);
+                await setModMetadataWithHash(destMetaKey, {
+                    modName: sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName,
+                    thumbnailUrl: thumbnailDataUrl,
+                    nsfw: !!nsfw,
+                }, destPath);
+            }
+        } finally {
+            if (tempDir) {
+                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            }
+        }
 
         const mods = await scanMods(deadlockPath);
         return mods.map(enrichMod);
+    }
+);
+
+// foundry:swapSound
+// Build a hero sound-swap addon VPK (drop your own MP3 onto a hero gameplay
+// sound event) and install it as a tracked local mod, mirroring
+// import-soul-container-glb's build -> allocate -> copy -> metadata flow. Event
+// mode with --pool all: every clip in the event's randomizer pool is overridden
+// with the user audio, so the swapped sound always plays. Tagged with lockerHero
+// so it groups under the hero in the Locker. v1 takes MP3 only (the mint path
+// parses the rate/channels from MP3 frame headers, no ffmpeg).
+ipcMain.handle(
+    'foundry:swapSound',
+    async (_, args: HeroSoundSwapRequest): Promise<WireMod[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const {
+            heroCodename,
+            heroName,
+            event,
+            clipPaths,
+            audioPath,
+            name,
+            loop,
+            thumbnailDataUrl,
+            nsfw,
+            trimStartMs,
+            trimEndMs,
+            gainDb,
+        } = args;
+        const hasClips = Array.isArray(clipPaths) && clipPaths.length > 0;
+        if (!name?.trim()) {
+            throw new Error('A name is required');
+        }
+        if (!event?.trim() && !hasClips) {
+            throw new Error('A sound event or clip is required');
+        }
+        if (!audioPath || !existsSync(audioPath)) {
+            throw new Error('Audio file not found');
+        }
+        if (!audioPath.toLowerCase().endsWith('.mp3')) {
+            throw new Error('Audio must be an MP3 file (other formats are not supported yet).');
+        }
+
+        // 1. Build the swap VPK to a temp staging path. Gameplay rows pass an
+        //    event (event mode); voice lines pass clipPaths (clip mode), which
+        //    win when both are present.
+        const built = await buildHeroSoundSwapVpk(deadlockPath, {
+            heroCodename,
+            event: event?.trim(),
+            clipPaths: hasClips ? clipPaths : undefined,
+            audioPath,
+            loop: loop ?? 'auto',
+            trimStartMs,
+            trimEndMs,
+            gainDb,
+        });
+
+        try {
+            // 2. Allocate the next free ENABLED slot (same as import-custom-mod).
+            const destPath = await allocateEnabledVpkPath(deadlockPath);
+            const destMetaKey = metaKeyFor(destPath);
+
+            await fs.copyFile(built.vpkPath, destPath);
+
+            const soundSwap: SoundSwapInfo = {
+                heroCodename: built.soundCodename,
+                event: event?.trim() || clipPaths?.[0] || '',
+                audioFileName: basename(audioPath),
+                loop: loop ?? 'auto',
+                pool: 'all',
+            };
+
+            // 3. Scrub orphan metadata, then write the local-import entry. Tag it
+            //    with lockerHero (display name) so it groups under the hero in the
+            //    Locker; sourceSection marks it a Foundry sound swap.
+            removeModMetadata(destMetaKey);
+            await setModMetadataWithHash(
+                destMetaKey,
+                {
+                    modName: name.trim(),
+                    thumbnailUrl: thumbnailDataUrl,
+                    nsfw: !!nsfw,
+                    // 'Sound' routes the mod through the Locker's Sounds bucket
+                    // (isLockerManagedSound) instead of the hero-skin pile
+                    // (isLockerManagedMod treats any non-'Sound' + lockerHero mod
+                    // as a skin card). The lockerHero tag makes it hero-specific,
+                    // which short-circuits the global-sound-category drop. The
+                    // Foundry-swap provenance lives in `soundSwap`, not the section.
+                    sourceSection: 'Sound',
+                    categoryName: 'Sounds',
+                    ...(heroName?.trim()
+                        ? { lockerHero: heroName.trim(), lockerHeroSource: 'manual' as LockerHeroSource }
+                        : {}),
+                    soundSwap,
+                },
+                destPath
+            );
+
+            const mods = await scanMods(deadlockPath);
+            return mods.map(enrichMod);
+        } finally {
+            // 4. Always remove the temp staging dir (the installed copy is
+            //    byte-identical, so nothing is lost).
+            await cleanupHeroSoundSwapBuild(built.vpkPath);
+        }
     }
 );
 
@@ -1003,6 +1249,190 @@ ipcMain.handle(
             // 4. Always remove the temp staging dir (the installed copy is
             //    byte-identical, so nothing is lost).
             await cleanupSoulContainerBuild(built.vpkPath);
+        }
+    }
+);
+
+// export-soul-container-glb
+// Build the same soul-container override VPK import-soul-container-glb builds, but
+// save it to disk via a native dialog instead of installing it into the mod list
+// (the export half of the Foundry output layer). Returns { exported: false } if
+// the user cancels the save dialog.
+ipcMain.handle(
+    'export-soul-container-glb',
+    async (_, args: ImportSoulContainerGlbArgs): Promise<VpkExportResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const { glbPath, name, orient, rotate, yaw, upright, glow } = args;
+        if (!name?.trim()) {
+            throw new Error('A name is required');
+        }
+
+        const built = await buildSoulContainerVpk(deadlockPath, {
+            glbPath,
+            name: name.trim(),
+            orient,
+            rotate,
+            yaw,
+            upright,
+            glow,
+        });
+        try {
+            return await exportVpkViaDialog(built.vpkPath, exportVpkFileName(name));
+        } finally {
+            await cleanupSoulContainerBuild(built.vpkPath);
+        }
+    }
+);
+
+// preview-spirit-urn-glb
+// Build the urn override VPK for the current orientation/span and export its
+// model back to a GLB so the import modal renders EXACTLY what loads in-game.
+// Mirrors preview-soul-container-glb.
+ipcMain.handle(
+    'preview-spirit-urn-glb',
+    async (_, args: PreviewSpiritUrnGlbArgs): Promise<SpiritUrnPreview> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const preview = await previewSpiritUrnGlb(deadlockPath, {
+            glbPath: args.glbPath,
+            name: 'preview',
+            orient: args.orient,
+            rotate: args.rotate,
+            ground: args.ground,
+            span: args.span,
+        });
+        return {
+            glbBase64: preview.glbBase64,
+            orient: preview.orient,
+            fitScale: preview.report.fitScale,
+            sourceSpan: preview.report.sourceSpan,
+            targetSpan: preview.report.targetSpan,
+        };
+    }
+);
+
+// import-spirit-urn-glb
+// Build a Spirit Urn override VPK from a user GLB (bundled `vpkmerge
+// soul-container import-urn`) and install it as a tracked local mod, mirroring
+// import-soul-container-glb. Urn imports all override the same model path
+// (idol_urn.vmdl_c), so two enabled at once would fight: when `replaceMetaKey`
+// is given we reuse that slot in place instead of allocating a new one.
+ipcMain.handle(
+    'import-spirit-urn-glb',
+    async (_, args: ImportSpiritUrnGlbArgs): Promise<Mod[]> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const { glbPath, name, orient, rotate, ground, span, status, notes, nsfw, thumbnailDataUrl, replaceMetaKey } = args;
+        if (!name?.trim()) {
+            throw new Error('A name is required');
+        }
+
+        // 1. Build the override VPK to a temp staging path.
+        const built = await buildSpiritUrnVpk(deadlockPath, {
+            glbPath,
+            name: name.trim(),
+            orient,
+            rotate,
+            ground,
+            span,
+        });
+
+        try {
+            // 2. Resolve the destination slot: reuse the previous import's slot
+            //    when replacing (never stack two urns), else allocate the next
+            //    free ENABLED slot the same way import-soul-container-glb does.
+            let destPath: string | null = null;
+            let destMetaKey: string | null = null;
+            if (replaceMetaKey) {
+                destPath = await resolveModVpk(deadlockPath, replaceMetaKey);
+                if (destPath) destMetaKey = replaceMetaKey;
+            }
+            if (!destPath) {
+                destPath = await allocateEnabledVpkPath(deadlockPath);
+                destMetaKey = metaKeyFor(destPath);
+            }
+
+            await fs.copyFile(built.vpkPath, destPath);
+            // A reused slot may have a stale exported-GLB cache; drop it so the
+            // Locker tile re-exports the new model.
+            await clearSoulModelCache(destMetaKey!);
+
+            const urnImport: UrnImportInfo = {
+                glbFileName: basename(glbPath),
+                orient,
+                ...(rotate && (rotate[0] || rotate[1] || rotate[2]) ? { rotate } : {}),
+                ...(ground ? { ground } : {}),
+                span,
+                vpkmergeVersion: built.report.version,
+                fitScale: built.report.fitScale,
+                sourceSpan: built.report.sourceSpan,
+                targetSpan: built.report.targetSpan,
+                status: status ?? 'untested',
+            };
+
+            // 3. Scrub orphan metadata, then write the local-import entry. We set
+            //    globalType explicitly (always 'spirit-urn') so it lands in the
+            //    Locker's Global spirit-urn group immediately.
+            removeModMetadata(destMetaKey!);
+            await setModMetadataWithHash(
+                destMetaKey!,
+                {
+                    modName: name.trim(),
+                    thumbnailUrl: thumbnailDataUrl,
+                    nsfw: !!nsfw,
+                    sourceSection: 'SpiritUrnImport',
+                    globalType: 'spirit-urn',
+                    globalTypeClassifierVersion: GLOBAL_CLASSIFIER_VERSION,
+                    urnImport,
+                    ...(notes?.trim() ? { variantLabel: notes.trim() } : {}),
+                },
+                destPath
+            );
+
+            const mods = await scanMods(deadlockPath);
+            return mods.map(enrichMod);
+        } finally {
+            // 4. Always remove the temp staging dir (the installed copy is
+            //    byte-identical, so nothing is lost).
+            await cleanupSpiritUrnBuild(built.vpkPath);
+        }
+    }
+);
+
+// export-spirit-urn-glb
+// Disk-export counterpart of import-spirit-urn-glb: build the same urn override
+// VPK, then save it to disk via a native dialog instead of installing it.
+ipcMain.handle(
+    'export-spirit-urn-glb',
+    async (_, args: ImportSpiritUrnGlbArgs): Promise<VpkExportResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        const { glbPath, name, orient, rotate, ground, span } = args;
+        if (!name?.trim()) {
+            throw new Error('A name is required');
+        }
+
+        const built = await buildSpiritUrnVpk(deadlockPath, {
+            glbPath,
+            name: name.trim(),
+            orient,
+            rotate,
+            ground,
+            span,
+        });
+        try {
+            return await exportVpkViaDialog(built.vpkPath, exportVpkFileName(name));
+        } finally {
+            await cleanupSpiritUrnBuild(built.vpkPath);
         }
     }
 );

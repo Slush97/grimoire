@@ -66,6 +66,16 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
 
   const createdLabel = formatRelativeDate(merged.createdAt) || merged.createdAt;
 
+  // merged.sources is stored in the merger's argv order (descending priority,
+  // because vpkmerge is last-input-wins). Display it in load order instead:
+  // ascending pakNN, so the lowest-pakNN source (the collision winner that
+  // loads first) sits at the top, matching the Installed load-order list and
+  // the merge modal. Sort a copy so the stored snapshot (used by extract /
+  // unmerge) is untouched.
+  const orderedSources = [...merged.sources].sort(
+    (a, b) => a.priorityAtMergeTime - b.priorityAtMergeTime
+  );
+
   return (
     <Modal onClose={onClose} labelledBy="merged-contents-title" size="lg">
         <div className="flex items-center justify-between p-5 border-b border-border">
@@ -125,7 +135,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
               )}
             </div>
             <ul className="space-y-1.5 max-h-72 overflow-y-auto pr-1">
-              {merged.sources.map((src) => {
+              {orderedSources.map((src) => {
                 const busy = busyFileName === src.fileName;
                 // Dim and lock other rows while an extract is in flight.
                 const rowLocked = busyFileName !== null && !busy;
@@ -188,7 +198,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
 
             {actionError && (
               <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mt-2">
-                <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 text-state-danger flex-shrink-0 mt-0.5" />
                 <div>{actionError}</div>
               </div>
             )}

@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -23,6 +23,7 @@ import {
   Bell,
   Trash2,
   Coffee,
+  Link2,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type { GameBananaModDetails, GameBananaComment, GameBananaFile, GameBananaModUpdate } from '../types/gamebanana';
@@ -31,8 +32,10 @@ import { getModComments, getModUpdates } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
 import { Skeleton } from './common/Skeleton';
-import { ArchivedTag } from './common/ui';
+import { ArchivedTag, Button, IconButton } from './common/ui';
 import ImageContextMenu from './ImageContextMenu';
+import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
+import { showToast } from '../stores/toastStore';
 
 type ModDetailsNavigationDirection = 'previous' | 'next';
 
@@ -126,6 +129,33 @@ function ModDetailsModal({
   onViewArtist,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
+  // Canonical GameBanana page for this submission. WiPs live under /wips, Sounds
+  // under /sounds, etc., which section.toLowerCase()+'s' already yields.
+  const gbUrl = `https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`;
+  const copyGbLink = async () => {
+    try {
+      await navigator.clipboard.writeText(gbUrl);
+      showToast(t('modDetails.linkCopied'), { tone: 'success' });
+    } catch (err) {
+      console.error('[ModDetails] Failed to copy GameBanana link:', err);
+    }
+  };
+  // Wrap a GameBanana link in a right-click menu (Open / Copy link). A render
+  // helper, not a component, so the trigger keeps its element identity across
+  // re-renders (an inline component type would remount and close an open menu).
+  const withGbLinkMenu = (trigger: ReactNode) => (
+    <MenuRoot>
+      <MenuTrigger asChild>{trigger}</MenuTrigger>
+      <MenuContent>
+        <MenuItem icon={ExternalLink} onSelect={() => window.open(gbUrl, '_blank', 'noopener,noreferrer')}>
+          {t('modDetails.viewOnGamebanana')}
+        </MenuItem>
+        <MenuItem icon={Link2} onSelect={copyGbLink}>
+          {t('modDetails.copyLink')}
+        </MenuItem>
+      </MenuContent>
+    </MenuRoot>
+  );
   const isSidebar = variant === 'sidebar';
   const images = mod.previewMedia?.images ?? [];
   const audioPreviewUrl = mod.previewMedia?.metadata?.audioUrl;
@@ -463,7 +493,7 @@ function ModDetailsModal({
     return (
       <div
         key={file.id}
-        className={`grid grid-cols-[auto,minmax(0,1fr)] items-center gap-x-3 gap-y-2 p-3 rounded-lg border transition-colors sm:grid-cols-[auto,minmax(0,1fr),auto] ${
+        className={`flex flex-wrap items-center gap-3 p-3 rounded-lg border transition-colors sm:flex-nowrap ${
           isUpdate
             ? 'border-accent/40 bg-accent/5'
             : isActive
@@ -488,15 +518,10 @@ function ModDetailsModal({
         }`}>
           <FileArchive className="w-5 h-5" />
         </div>
-        <div className="min-w-0">
+        <div className="min-w-0 flex-1 text-left">
           <div className="flex min-w-0 max-w-full items-center gap-2">
             <p className="min-w-0 flex-1 truncate text-sm font-medium" title={file.fileName}>{file.fileName}</p>
             {archived && <ArchivedTag />}
-            {isActive && (
-              <span className="flex-shrink-0 text-[10px] uppercase tracking-wide bg-accent/20 text-accent rounded px-1.5 py-0.5">
-                {t('common.status.active')}
-              </span>
-            )}
           </div>
           {file.description && (
             <p className="text-xs text-text-secondary/90 mt-0.5 truncate" title={file.description}>
@@ -529,40 +554,39 @@ function ModDetailsModal({
             </div>
           )}
         </div>
-        <div className="col-start-2 flex min-w-0 flex-wrap items-center justify-end gap-2 sm:col-start-3 sm:row-start-1">
+        <div className="ml-[52px] flex min-w-0 flex-1 flex-wrap items-center justify-end gap-2 sm:ml-0 sm:flex-none">
+          {isActive && (
+            <span className="flex-shrink-0 self-center rounded bg-accent/20 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-accent">
+              {t('common.status.active')}
+            </span>
+          )}
           {showEnablePill && installedFileState && (
-            <button
+            <Button
               type="button"
+              variant="warning"
+              icon={Power}
               onClick={() => onEnableFile!(installedFileState.modId)}
               disabled={isBusyThis}
               title={t('modDetails.actions.enableThisModTitle')}
-              className="flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-yellow-500/40 bg-yellow-500/15 px-3 py-2 text-sm font-medium text-yellow-300 transition-colors hover:bg-yellow-500/25 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
             >
-              <Power className="w-3.5 h-3.5" />
               {t('modDetails.actions.enable')}
-            </button>
+            </Button>
           )}
           {showDeleteButton && installedFileState && (
-            <button
-              type="button"
+            <IconButton
+              icon={Trash2}
+              label={`Delete ${file.fileName}`}
+              tone="danger"
               onClick={() => setDeleteCandidate({ modId: installedFileState.modId, fileName: file.fileName })}
               disabled={isBusyThis || deleteInProgress}
-              title={`Delete ${file.fileName}`}
-              aria-label={`Delete ${file.fileName}`}
-              className="flex h-9 w-9 items-center justify-center rounded-md border border-state-danger/35 bg-state-danger/10 text-state-danger transition-colors hover:border-state-danger/55 hover:bg-state-danger/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
-            >
-              <Trash2 className="w-4 h-4" />
-            </button>
+            />
           )}
-          <button
+          <Button
             type="button"
+            variant={isUpdate || !isInstalled ? 'primary' : 'secondary'}
             onClick={() => onDownload(file.id, file.fileName)}
             disabled={isBusyThis}
-            className={`flex min-w-[110px] max-w-full items-center justify-center gap-2 whitespace-nowrap rounded-md border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${
-              isUpdate || !isInstalled
-                ? 'border-accent/45 bg-accent/10 text-text-primary hover:border-accent/65 hover:bg-accent/20'
-                : 'border-border bg-bg-secondary text-text-primary hover:bg-bg-primary'
-            }`}
+            className="min-w-[110px] max-w-full"
           >
             {isDownloadingThis ? (
               <>
@@ -580,11 +604,54 @@ function ModDetailsModal({
                 {actionLabel(file.id, archived)}
               </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
     );
   };
+
+  const filesSection = files.length > 0 ? (
+    <section>
+      <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
+        {t('modDetails.sections.files')} {files.length > 1 && <span className="text-text-secondary/70 normal-case tracking-normal">({files.length})</span>}
+      </h3>
+      <div className="space-y-2">
+        {currentFiles.map((file) => renderFileRow(file))}
+        {archivedFiles.length > 0 && (
+          <div className={currentFiles.length > 0 ? 'pt-1' : undefined}>
+            <button
+              type="button"
+              onClick={() => setArchivedFilesOpen((open) => !open)}
+              aria-expanded={archivedFilesOpen}
+              className="w-full flex items-center justify-between gap-3 px-1 py-1.5 text-left text-sm text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
+            >
+              <span className="flex items-center gap-2 min-w-0">
+                {archivedFilesOpen ? (
+                  <ChevronDown className="w-4 h-4 flex-shrink-0" />
+                ) : (
+                  <ChevronRight className="w-4 h-4 flex-shrink-0" />
+                )}
+                <span className="font-medium truncate">{t('modDetails.files.archived')}</span>
+                {installedFileIsArchived && (
+                  <span className="flex-shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
+                    {t('modDetails.files.yourVersion')}
+                  </span>
+                )}
+              </span>
+              <span className="flex-shrink-0 text-[11px] leading-none text-text-tertiary">
+                ({archivedFiles.length})
+              </span>
+            </button>
+            {archivedFilesOpen && (
+              <div className="mt-2 space-y-2">
+                {archivedFiles.map((file) => renderFileRow(file, true))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  ) : null;
 
   const navigationSkeleton = (
     <div
@@ -838,9 +905,9 @@ function ModDetailsModal({
               </span>
             )}
           </div>
-          {/* Sidebar moves the title down into the body (above the artist) to
-              keep this header from cramming, so here it's just a spacer that
-              pushes the action buttons to the right edge. */}
+          {/* Sidebar moves the title down into the body to keep this header from
+              cramming, so here it's just a spacer that pushes the action buttons
+              to the right edge. */}
           {isSidebar ? (
             <div className="min-w-0 flex-1" />
           ) : (
@@ -851,16 +918,18 @@ function ModDetailsModal({
                   <span className="sr-only">{t('modDetails.aria.loadingNamed', { label: navigationLabel ?? t('modDetails.meta.modDetails') })}</span>
                 </span>
               ) : (
-                <a
-                  href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  title={`View ${mod.name} on GameBanana`}
-                  className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
-                >
-                  <span className="min-w-0 truncate">{mod.name}</span>
-                  <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
-                </a>
+                withGbLinkMenu(
+                  <a
+                    href={gbUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    title={`View ${mod.name} on GameBanana`}
+                    className="group inline-flex max-w-full min-w-0 items-center gap-1.5 text-text-primary transition-colors hover:text-accent"
+                  >
+                    <span className="min-w-0 truncate">{mod.name}</span>
+                    <ExternalLink className="h-3.5 w-3.5 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                  </a>
+                )
               )}
             </h2>
           )}
@@ -907,22 +976,17 @@ function ModDetailsModal({
             );
           })()}
           {onChangeView && (
-            <button
+            <IconButton
+              icon={isSidebar ? Maximize2 : PanelRight}
+              label={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
               onClick={() => onChangeView(isSidebar ? 'modal' : 'sidebar')}
-              aria-label={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
-              title={isSidebar ? 'Pop out to centered window' : 'Dock to side'}
-              className="flex-shrink-0 p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
-            >
-              {isSidebar ? <Maximize2 className="w-[18px] h-[18px]" /> : <PanelRight className="w-5 h-5" />}
-            </button>
+            />
           )}
-          <button
+          <IconButton
+            icon={X}
+            label={t('common.actions.close')}
             onClick={onClose}
-            aria-label={t('common.actions.close')}
-            className="flex-shrink-0 p-1.5 rounded-full text-text-secondary hover:text-text-primary hover:bg-bg-tertiary transition-colors cursor-pointer"
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         {deleteCandidate && (
@@ -951,16 +1015,18 @@ function ModDetailsModal({
                 />
               </p>
               <div className="mt-5 flex justify-end gap-3">
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => setDeleteCandidate(null)}
                   disabled={deleteInProgress}
-                  className="rounded-md border border-border bg-bg-tertiary px-4 py-2 text-sm font-medium text-text-primary transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                 >
                   {t('common.actions.cancel')}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
+                  variant="danger"
+                  isLoading={deleteInProgress}
                   onClick={async () => {
                     if (!onDeleteFile || !deleteCandidate) return;
                     setDeleteInProgress(true);
@@ -971,12 +1037,9 @@ function ModDetailsModal({
                       setDeleteInProgress(false);
                     }
                   }}
-                  disabled={deleteInProgress}
-                  className="inline-flex items-center gap-2 rounded-md border border-state-danger/35 bg-state-danger/10 px-4 py-2 text-sm font-medium text-state-danger transition-colors hover:border-state-danger/55 hover:bg-state-danger/20 disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
                 >
-                  {deleteInProgress && <Loader2 className="w-4 h-4 animate-spin" />}
                   {t('common.actions.delete')}
-                </button>
+                </Button>
               </div>
             </div>
           </div>
@@ -1208,23 +1271,25 @@ function ModDetailsModal({
                 installing a file doesn't move the image stack on the left. */}
             <div className={detailsColClass}>
               {/* Sidebar-only title block. The header drops the title to stay
-                  uncluttered, so the mod name lives here, right above the artist,
-                  with its dates/downloads underneath. */}
+                  uncluttered, so the mod name lives here with its
+                  dates/downloads underneath. */}
               {isSidebar && (
                 <div className="space-y-1.5">
                   {isNavigating ? (
                     <Skeleton className="h-6 w-3/4" />
                   ) : (
-                    <a
-                      href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title={`View ${mod.name} on GameBanana`}
-                      className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent"
-                    >
-                      <span className="min-w-0">{mod.name}</span>
-                      <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
-                    </a>
+                    withGbLinkMenu(
+                      <a
+                        href={gbUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        title={`View ${mod.name} on GameBanana`}
+                        className="group inline-flex max-w-full items-start gap-1.5 text-xl font-bold leading-tight text-text-primary transition-colors hover:text-accent"
+                      >
+                        <span className="min-w-0">{mod.name}</span>
+                        <ExternalLink className="mt-1 h-4 w-4 flex-shrink-0 text-text-tertiary transition-colors group-hover:text-accent" />
+                      </a>
+                    )
                   )}
                   {(() => {
                     const addedStr = dateAdded && dateAdded > 0 ? formatDate(dateAdded) : null;
@@ -1259,6 +1324,8 @@ function ModDetailsModal({
                   })()}
                 </div>
               )}
+
+              {filesSection}
 
               {submitter && (
                 <section>
@@ -1308,7 +1375,7 @@ function ModDetailsModal({
                         target="_blank"
                         rel="noopener noreferrer"
                         title={`Support ${submitter.name} on Ko-fi`}
-                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#FF5E5B]/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
+                        className="inline-flex flex-shrink-0 items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-kofi/50 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary"
                       >
                         <Coffee className="h-4 w-4" />
                         {t('modDetails.meta.koFi')}
@@ -1447,48 +1514,6 @@ function ModDetailsModal({
                 )}
               </section>
 
-              {files.length > 0 && (
-                <section>
-                  <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
-                    {t('modDetails.sections.files')} {files.length > 1 && <span className="text-text-secondary/70 normal-case tracking-normal">({files.length})</span>}
-                  </h3>
-                  <div className="space-y-2">
-                    {currentFiles.map((file) => renderFileRow(file))}
-                    {archivedFiles.length > 0 && (
-                      <div className={currentFiles.length > 0 ? 'pt-1' : undefined}>
-                        <button
-                          type="button"
-                          onClick={() => setArchivedFilesOpen((open) => !open)}
-                          aria-expanded={archivedFilesOpen}
-                          className="w-full flex items-center justify-between gap-3 px-1 py-1.5 text-left text-sm text-text-secondary hover:text-text-primary transition-colors cursor-pointer"
-                        >
-                          <span className="flex items-center gap-2 min-w-0">
-                            {archivedFilesOpen ? (
-                              <ChevronDown className="w-4 h-4 flex-shrink-0" />
-                            ) : (
-                              <ChevronRight className="w-4 h-4 flex-shrink-0" />
-                            )}
-                            <span className="font-medium truncate">{t('modDetails.files.archived')}</span>
-                            {installedFileIsArchived && (
-                              <span className="flex-shrink-0 rounded-full border border-green-500/40 bg-green-500/10 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-green-400">
-                                {t('modDetails.files.yourVersion')}
-                              </span>
-                            )}
-                          </span>
-                          <span className="flex-shrink-0 text-[11px] leading-none text-text-tertiary">
-                            ({archivedFiles.length})
-                          </span>
-                        </button>
-                        {archivedFilesOpen && (
-                          <div className="mt-2 space-y-2">
-                            {archivedFiles.map((file) => renderFileRow(file, true))}
-                          </div>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                </section>
-              )}
               <section>
                 <div className="mb-2 flex items-center justify-between gap-3">
                   <h3 className="flex min-w-0 items-center gap-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">
@@ -1573,15 +1598,17 @@ function ModDetailsModal({
                 )}
               </section>
 
-              <a
-                href={`https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="inline-flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
-              >
-                <ExternalLink className="w-4 h-4" />
-                {t('modDetails.viewOnGamebanana')}
-              </a>
+              {withGbLinkMenu(
+                <a
+                  href={gbUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-accent hover:text-accent-hover transition-colors text-sm"
+                >
+                  <ExternalLink className="w-4 h-4" />
+                  {t('modDetails.viewOnGamebanana')}
+                </a>
+              )}
             </div>
           </div>
           {isNavigating && navigationSkeleton}

@@ -1,9 +1,11 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
+import type { DmmMigrationRequest, DmmMigrationReport } from './dmmMigration';
 import type {
   HeroPortrait,
   CustomCardSlot,
   HeroPoseInfo,
   HeroPoseSkinSource,
+  HeroEffectInfo,
   SoulModelInfo,
 } from '../types/portrait';
 import type {
@@ -20,6 +22,30 @@ import type {
   GameBananaArtistLink,
 } from '../types/gamebanana';
 import type { DownloadedLocale, LocaleManifest } from '../types/locales';
+import { parseFeModel, type ClothModel } from './feModel';
+import { showToast } from '../stores/toastStore';
+import i18n from '../i18n';
+
+// Sentinel that matches the Error thrown by the main process
+// (GAME_RUNNING_MOD_LOCK_MESSAGE in gameSessionMods.ts). It crosses the IPC
+// boundary as a raw string, so it must NOT be translated. The user-facing
+// toast is translated separately.
+const GAME_RUNNING_NOTICE = 'Game is running';
+
+function isGameRunningModLockError(err: unknown): boolean {
+  return String(err).includes(GAME_RUNNING_NOTICE);
+}
+
+async function withGameRunningWarning<T>(operation: () => Promise<T>): Promise<T> {
+  try {
+    return await operation();
+  } catch (err) {
+    if (isGameRunningModLockError(err)) {
+      showToast(i18n.t('common.gameRunningWarning'), { tone: 'warning' });
+    }
+    throw err;
+  }
+}
 
 // Re-export types for convenience
 export type {
@@ -55,6 +81,15 @@ export async function setSettings(settings: AppSettings): Promise<void> {
   return window.electronAPI.setSettings(settings);
 }
 
+// Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
+export async function dmmMigrateScan(req: DmmMigrationRequest): Promise<DmmMigrationReport> {
+  return window.electronAPI.dmmMigrate.scan(req);
+}
+
+export async function dmmMigrateExecute(req: DmmMigrationRequest): Promise<DmmMigrationReport> {
+  return window.electronAPI.dmmMigrate.execute(req);
+}
+
 // Mods
 export async function getMods(): Promise<Mod[]> {
   return window.electronAPI.getMods();
@@ -65,11 +100,11 @@ export async function enableMod(modId: string): Promise<Mod> {
 }
 
 export async function disableMod(modId: string): Promise<Mod> {
-  return window.electronAPI.disableMod(modId);
+  return withGameRunningWarning(() => window.electronAPI.disableMod(modId));
 }
 
 export async function deleteMod(modId: string): Promise<void> {
-  return window.electronAPI.deleteMod(modId);
+  return withGameRunningWarning(() => window.electronAPI.deleteMod(modId));
 }
 
 export async function revealModInFolder(modId: string): Promise<void> {
@@ -191,8 +226,8 @@ export async function getSoulModelInfo(key: string): Promise<SoulModelInfo> {
  *  SOURCE VPK is located by `metaKey` (folder-qualified for overflow mods); the
  *  cache is keyed by `cacheKey` (the mod's content-stable sha256) so an
  *  enable/disable rename can't serve a different soul's stale export. */
-export async function exportSoulModel(metaKey: string, cacheKey: string): Promise<SoulModelInfo> {
-  return window.electronAPI.exportSoulModel(metaKey, cacheKey);
+export async function exportSoulModel(metaKey: string, cacheKey: string, entry?: string): Promise<SoulModelInfo> {
+  return window.electronAPI.exportSoulModel(metaKey, cacheKey, entry);
 }
 
 /** Whether a hero's posed 3D still exists for the given active skin stack (+ mtime, key). */
@@ -231,6 +266,35 @@ export async function exportRiggedHeroPose(
   fallbackSkinMetaKey?: string
 ): Promise<HeroPoseInfo> {
   return window.electronAPI.exportRiggedHeroPose(heroName, skinSources, fallbackSkinMetaKey);
+}
+
+/** The hero's cloth finite-element model (PHYS.m_pFeModel) as the verlet sidecar:
+ *  collision capsules/spheres + nodes the rigged preview's cloth sim reads to
+ *  stop the cloth bones clipping through the body. Returns null on a model with
+ *  no cloth (most heroes carry one; a few don't). */
+export async function getHeroClothModel(
+  heroName: string,
+  skinSources?: HeroPoseSkinSource[]
+): Promise<ClothModel | null> {
+  try {
+    const raw = await window.electronAPI.getHeroClothModel(heroName, skinSources);
+    if (raw == null) return null;
+    const parsed = parseFeModel(raw);
+    if (!parsed) console.warn('[cloth] failed to parse FeModel payload');
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+/** Whether a hero's ambient FX descriptor bundle is cached/current. */
+export async function getHeroEffectInfo(heroName: string): Promise<HeroEffectInfo> {
+  return window.electronAPI.getHeroEffectInfo(heroName);
+}
+
+/** Build (or refresh) a hero's ambient FX bundle via the bundled vpkmerge. */
+export async function exportHeroEffect(heroName: string): Promise<HeroEffectInfo> {
+  return window.electronAPI.exportHeroEffect(heroName);
 }
 
 export async function applyHeroSound(
@@ -372,15 +436,24 @@ export async function backfillGameBananaFileId(
 }
 
 export async function setModPriority(modId: string, priority: number): Promise<Mod> {
-  return window.electronAPI.setModPriority(modId, priority);
+  return withGameRunningWarning(() => window.electronAPI.setModPriority(modId, priority));
 }
 
 export async function reorderMods(orderedIds: string[]): Promise<Mod[]> {
-  return window.electronAPI.reorderMods(orderedIds);
+  return withGameRunningWarning(() => window.electronAPI.reorderMods(orderedIds));
+}
+
+export async function applyModToggleBatch(
+  enableIds: string[],
+  disableIds: string[]
+): Promise<{ mods: Mod[]; failures: string[] }> {
+  return withGameRunningWarning(() =>
+    window.electronAPI.applyModToggleBatch(enableIds, disableIds)
+  );
 }
 
 export async function swapModPriority(modIdA: string, modIdB: string): Promise<Mod[]> {
-  return window.electronAPI.swapModPriority(modIdA, modIdB);
+  return withGameRunningWarning(() => window.electronAPI.swapModPriority(modIdA, modIdB));
 }
 
 export async function importCustomMod(args: {
@@ -400,6 +473,15 @@ export async function importSoulContainerGlb(
   return window.electronAPI.importSoulContainerGlb(args);
 }
 
+/** Build the same soul-container override VPK as importSoulContainerGlb, but save
+ *  it to disk via a native dialog instead of installing it. Resolves with
+ *  `{ exported: false }` if the save dialog is cancelled. */
+export async function exportSoulContainerGlb(
+  args: import('../types/electron').ImportSoulContainerGlbArgs
+): Promise<import('../types/foundry').VpkExportResult> {
+  return window.electronAPI.exportSoulContainerGlb(args);
+}
+
 /** Build the soul-container for the given orientation and export its model to a
  *  GLB for the import preview. Returns the GLB as an ArrayBuffer + the resolved
  *  orientation label and fitted bounds. */
@@ -407,6 +489,36 @@ export async function previewSoulContainerGlb(
   args: import('../types/electron').PreviewSoulContainerGlbArgs
 ): Promise<{ glb: ArrayBuffer; orient: string; fitScale?: number; sourceSpan?: number; targetSpan?: number }> {
   const res = await window.electronAPI.previewSoulContainerGlb(args);
+  const binary = atob(res.glbBase64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return { glb: bytes.buffer, orient: res.orient, fitScale: res.fitScale, sourceSpan: res.sourceSpan, targetSpan: res.targetSpan };
+}
+
+/** Build a Spirit Urn override VPK from a user GLB and install it as a tracked
+ *  local mod. Returns the full enriched mod list after install. */
+export async function importSpiritUrnGlb(
+  args: import('../types/electron').ImportSpiritUrnGlbArgs
+): Promise<Mod[]> {
+  return window.electronAPI.importSpiritUrnGlb(args);
+}
+
+/** Build the same Spirit Urn override VPK as importSpiritUrnGlb, but save it to
+ *  disk via a native dialog instead of installing it. Resolves with
+ *  `{ exported: false }` if the save dialog is cancelled. */
+export async function exportSpiritUrnGlb(
+  args: import('../types/electron').ImportSpiritUrnGlbArgs
+): Promise<import('../types/foundry').VpkExportResult> {
+  return window.electronAPI.exportSpiritUrnGlb(args);
+}
+
+/** Build the urn for the given orientation/span and export its model to a GLB
+ *  for the import preview. Returns the GLB as an ArrayBuffer + the resolved
+ *  orientation label and fitted bounds. */
+export async function previewSpiritUrnGlb(
+  args: import('../types/electron').PreviewSpiritUrnGlbArgs
+): Promise<{ glb: ArrayBuffer; orient: string; fitScale?: number; sourceSpan?: number; targetSpan?: number }> {
+  const res = await window.electronAPI.previewSpiritUrnGlb(args);
   const binary = atob(res.glbBase64);
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
@@ -425,19 +537,133 @@ export async function readImageDataUrl(imagePath: string): Promise<string> {
   return window.electronAPI.readImageDataUrl(imagePath);
 }
 
+export async function readRendererAsset(relPath: string): Promise<string> {
+  return window.electronAPI.readRendererAsset(relPath);
+}
+
+export async function getLockerModImages(): Promise<Record<string, string>> {
+  return window.electronAPI.getLockerModImages();
+}
+
+export async function setLockerModImage(skinKey: string, source: string): Promise<string> {
+  return window.electronAPI.setLockerModImage(skinKey, source);
+}
+
+export async function removeLockerModImage(skinKey: string): Promise<void> {
+  return window.electronAPI.removeLockerModImage(skinKey);
+}
+
+export async function getLockerModImageFlags(): Promise<Record<string, boolean>> {
+  return window.electronAPI.getLockerModImageFlags();
+}
+
+export async function setLockerModImageHideName(skinKey: string, hide: boolean): Promise<void> {
+  return window.electronAPI.setLockerModImageHideName(skinKey, hide);
+}
+
+export async function fetchLockerImageDataUrl(url: string): Promise<string> {
+  return window.electronAPI.fetchLockerImageDataUrl(url);
+}
+
+export async function getLockerModBackgrounds(): Promise<Record<string, string>> {
+  return window.electronAPI.getLockerModBackgrounds();
+}
+
+export async function setLockerModBackground(skinKey: string, source: string): Promise<string> {
+  return window.electronAPI.setLockerModBackground(skinKey, source);
+}
+
+export async function removeLockerModBackground(skinKey: string): Promise<void> {
+  return window.electronAPI.removeLockerModBackground(skinKey);
+}
+
+export async function getLockerModBackgroundFlags(): Promise<Record<string, boolean>> {
+  return window.electronAPI.getLockerModBackgroundFlags();
+}
+
+export async function setLockerModBackgroundHideName(skinKey: string, hide: boolean): Promise<void> {
+  return window.electronAPI.setLockerModBackgroundHideName(skinKey, hide);
+}
+
+export async function getLockerModThumbnails(): Promise<Record<string, string>> {
+  return window.electronAPI.getLockerModThumbnails();
+}
+
+export async function setLockerModThumbnail(skinKey: string, source: string): Promise<string> {
+  return window.electronAPI.setLockerModThumbnail(skinKey, source);
+}
+
+export async function removeLockerModThumbnail(skinKey: string): Promise<void> {
+  return window.electronAPI.removeLockerModThumbnail(skinKey);
+}
+
+export async function getLockerModThumbnailFlags(): Promise<Record<string, boolean>> {
+  return window.electronAPI.getLockerModThumbnailFlags();
+}
+
+export async function setLockerModThumbnailHideName(skinKey: string, hide: boolean): Promise<void> {
+  return window.electronAPI.setLockerModThumbnailHideName(skinKey, hide);
+}
+
+export async function getLockerModImageEdit(
+  variant: LockerImageVariant,
+  skinKey: string
+): Promise<LockerImageEdit | null> {
+  return window.electronAPI.getLockerModImageEdit(variant, skinKey);
+}
+
+export async function setLockerModImageEdit(
+  variant: LockerImageVariant,
+  skinKey: string,
+  source: string,
+  crop: CropRect
+): Promise<void> {
+  return window.electronAPI.setLockerModImageEdit(variant, skinKey, source, crop);
+}
+
+// Custom launcher / sidebar background images (issue: unify launcher backgrounds).
+export async function getAppearanceImages(): Promise<Partial<Record<AppearanceSurface, string>>> {
+  return window.electronAPI.getAppearanceImages();
+}
+
+export async function setAppearanceImage(
+  surface: AppearanceSurface,
+  source: string,
+): Promise<string> {
+  return window.electronAPI.setAppearanceImage(surface, source);
+}
+
+export async function removeAppearanceImage(surface: AppearanceSurface): Promise<void> {
+  return window.electronAPI.removeAppearanceImage(surface);
+}
+
+export async function setAppearanceImageEdit(
+  surface: AppearanceSurface,
+  source: string,
+  crop: CropRect,
+): Promise<void> {
+  return window.electronAPI.setAppearanceImageEdit(surface, source, crop);
+}
+
+export async function getAppearanceImageEdit(
+  surface: AppearanceSurface,
+): Promise<LockerImageEdit | null> {
+  return window.electronAPI.getAppearanceImageEdit(surface);
+}
+
 export async function mergeMods(args: MergeModsArgs): Promise<Mod> {
-  return window.electronAPI.mergeMods(args);
+  return withGameRunningWarning(() => window.electronAPI.mergeMods(args));
 }
 
 export async function unmergeMod(mergedModId: string): Promise<UnmergeModResult> {
-  return window.electronAPI.unmergeMod(mergedModId);
+  return withGameRunningWarning(() => window.electronAPI.unmergeMod(mergedModId));
 }
 
 export async function extractMergeSource(
   mergedModId: string,
   sourceFileName: string,
 ): Promise<ExtractMergeSourceResult> {
-  return window.electronAPI.extractMergeSource(mergedModId, sourceFileName);
+  return withGameRunningWarning(() => window.electronAPI.extractMergeSource(mergedModId, sourceFileName));
 }
 
 export type { UnmergeModResult, ExtractMergeSourceResult };
@@ -543,7 +769,7 @@ export async function downloadMod(
   categoryId?: number,
   modName?: string
 ): Promise<void> {
-  return window.electronAPI.downloadMod({ modId, fileId, fileName, section, categoryId, modName });
+  return withGameRunningWarning(() => window.electronAPI.downloadMod({ modId, fileId, fileName, section, categoryId, modName }));
 }
 
 export async function getGamebananaSections(): Promise<GameBananaSection[]> {
@@ -661,6 +887,10 @@ export interface ModConflict {
   ignoreKey: string;
   conflictType: 'priority' | 'file';
   details: string;
+  /** For `file` conflicts: every overlapping path still flagged for this pair
+   *  (after subtracting any individually ignored files). Undefined for
+   *  `priority` conflicts. */
+  files?: string[];
 }
 
 // Conflict detection re-parses every enabled VPK on the main process, so
@@ -692,6 +922,49 @@ export async function unignoreConflict(modA: string, modB: string): Promise<stri
   return window.electronAPI.unignoreConflict(modA, modB);
 }
 
+export async function getIgnoredConflictFiles(): Promise<Record<string, string[]>> {
+  return window.electronAPI.getIgnoredConflictFiles();
+}
+
+export async function ignoreConflictFile(
+  ignoreKey: string,
+  filePath: string
+): Promise<Record<string, string[]>> {
+  return window.electronAPI.ignoreConflictFile(ignoreKey, filePath);
+}
+
+// filePath === null clears the whole pair entry, not just one path.
+export async function unignoreConflictFile(
+  ignoreKey: string,
+  filePath: string | null
+): Promise<Record<string, string[]>> {
+  return window.electronAPI.unignoreConflictFile(ignoreKey, filePath);
+}
+
+export async function getIgnoredConflictFilesGlobal(): Promise<string[]> {
+  return window.electronAPI.getIgnoredConflictFilesGlobal();
+}
+
+export async function ignoreConflictFileGlobal(filePath: string): Promise<string[]> {
+  return window.electronAPI.ignoreConflictFileGlobal(filePath);
+}
+
+export async function unignoreConflictFileGlobal(filePath: string): Promise<string[]> {
+  return window.electronAPI.unignoreConflictFileGlobal(filePath);
+}
+
+export async function getIgnoredConflictMods(): Promise<string[]> {
+  return window.electronAPI.getIgnoredConflictMods();
+}
+
+export async function ignoreConflictMod(identity: string): Promise<string[]> {
+  return window.electronAPI.ignoreConflictMod(identity);
+}
+
+export async function unignoreConflictMod(identity: string): Promise<string[]> {
+  return window.electronAPI.unignoreConflictMod(identity);
+}
+
 /** Build the ignored-list key for a pair of mod ids or stable identities.
  *  Mirrors the backend helper so the renderer can match locally without an
  *  extra IPC roundtrip. */
@@ -705,8 +978,8 @@ export function conflictPairKey(a: string, b: string): string {
 
 // Profile wire types are single-sourced in types/electron.ts; re-exported
 // here to preserve this module's existing import surface.
-export type { Profile, ProfileMod, ProfileCrosshairSettings } from '../types/electron';
-import type { Profile, ProfileCrosshairSettings, PerformanceConfigStatus, EditorCandidate } from '../types/electron';
+export type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult } from '../types/electron';
+import type { Profile, ProfileCrosshairSettings, ApplyProfileResult, PerformanceConfigStatus, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
 
 export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();
@@ -727,8 +1000,8 @@ export async function updateProfile(profileId: string, crosshairSettings?: Profi
   return window.electronAPI.updateProfile(profileId, crosshairSettings);
 }
 
-export async function applyProfile(profileId: string): Promise<Profile> {
-  return window.electronAPI.applyProfile(profileId);
+export async function applyProfile(profileId: string): Promise<ApplyProfileResult> {
+  return withGameRunningWarning(() => window.electronAPI.applyProfile(profileId));
 }
 
 export async function deleteProfile(profileId: string): Promise<void> {
@@ -964,4 +1237,66 @@ export function deadworksOnDownloadProgress(
   callback: (p: DeadworksConnectProgress) => void
 ): () => void {
   return window.electronAPI.onDeadworksDownloadProgress(callback);
+}
+
+// ── Foundry (asset catalog browse) ───────────────────────────────────────────
+export async function foundryHeroes(): Promise<import('../types/foundry').HeroInfo[]> {
+  return window.electronAPI.foundry.heroes();
+}
+
+export async function foundryTextures(
+  filters?: import('../types/foundry').TextureFilters
+): Promise<import('../types/foundry').TextureEntry[]> {
+  return window.electronAPI.foundry.textures(filters);
+}
+
+export async function foundryThumbnails(
+  category: import('../types/foundry').TextureCategory
+): Promise<import('../types/foundry').TextureGridItem[]> {
+  return window.electronAPI.foundry.ensureThumbnails(category);
+}
+
+export async function foundryVoicelines(
+  filters?: import('../types/foundry').VoicelineFilters
+): Promise<import('../types/foundry').VoiceLine[]> {
+  return window.electronAPI.foundry.voicelines(filters);
+}
+
+export async function foundryHeroSounds(
+  filters?: import('../types/foundry').HeroSoundFilters
+): Promise<import('../types/foundry').HeroSound[]> {
+  return window.electronAPI.foundry.heroSounds(filters);
+}
+
+export async function foundryFullImage(
+  category: import('../types/foundry').TextureCategory,
+  entryPath: string
+): Promise<string | null> {
+  return window.electronAPI.foundry.fullImage(category, entryPath);
+}
+
+export async function foundryVoiceclip(vsndPath: string): Promise<string | null> {
+  return window.electronAPI.foundry.voiceclip(vsndPath);
+}
+
+export async function foundryWarmCache(): Promise<void> {
+  return window.electronAPI.foundry.warmCache();
+}
+
+/** Bake the given hero ability-VFX effect into a standalone addon VPK and prompt
+ *  the user to save it to disk (instead of applying it into the mod manager).
+ *  Resolves with `{ exported: false }` if the save dialog is cancelled. */
+export async function foundryExportHeroEffect(
+  req: import('../types/foundry').HeroEffectExportRequest
+): Promise<import('../types/foundry').VpkExportResult> {
+  return window.electronAPI.foundry.exportHeroEffect(req);
+}
+
+/** Swap a hero gameplay sound event's audio with a user MP3 and install the
+ *  result as a managed local mod. Resolves with the refreshed installed mod list
+ *  (the new swap appears under the hero, tagged as a Foundry sound swap). */
+export async function foundrySwapSound(
+  req: import('../types/foundry').HeroSoundSwapRequest
+): Promise<import('../types/mod').Mod[]> {
+  return window.electronAPI.foundry.swapSound(req);
 }

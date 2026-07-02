@@ -13,6 +13,7 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Button, CheckboxMark } from '../common/ui';
+import { Input, Textarea } from '../common/forms';
 import { Modal } from '../common/Modal';
 import ModThumbnail from '../ModThumbnail';
 import SocialProfileHeader, { type SocialProfileSeed } from '../social/SocialProfileHeader';
@@ -752,12 +753,12 @@ export default function ImportProfileDialog({
 
         {showInputForm && (
           <div className="p-4 sm:p-6 border-b border-white/10 space-y-3">
-            <textarea
+            <Textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder={t('importProfile.pastePlaceholder')}
               rows={4}
-              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent font-mono"
+              className="font-mono"
             />
             <div className="flex items-center justify-between gap-3">
               <label className="text-xs text-text-secondary inline-flex items-center gap-2 cursor-pointer hover:text-text-primary">
@@ -778,7 +779,7 @@ export default function ImportProfileDialog({
               </Button>
             </div>
             {parseError && (
-              <div className="text-xs text-red-400 flex items-start gap-1.5">
+              <div className="text-xs text-state-danger flex items-start gap-1.5">
                 <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                 <span>{parseError}</span>
               </div>
@@ -797,14 +798,15 @@ export default function ImportProfileDialog({
                   <span className="text-xs text-text-tertiary truncate min-w-0">{t('importProfile.originallyBy', { author: parsed.profile.author })}</span>
                 )}
               </div>
-              <input
+              <Input
+                inputSize="sm"
                 type="text"
                 value={profileName}
                 onChange={(e) => setProfileName(e.target.value)}
                 disabled={importing || !!importedProfileName}
                 placeholder={parsed.profile.name}
                 aria-label={t('profiles.create.profileName')}
-                className="w-full px-3 py-1.5 bg-bg-tertiary border border-white/10 rounded-md text-sm font-semibold text-text-primary focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60"
+                className="font-semibold"
               />
             </div>
 
@@ -1056,7 +1058,7 @@ export default function ImportProfileDialog({
                             </div>
                           )}
                           {mod.status === 'unresolvable' && (
-                            <div className="text-xs text-red-400 mt-1 inline-flex items-center gap-1">
+                            <div className="text-xs text-state-danger mt-1 inline-flex items-center gap-1">
                               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
                               <span className="truncate">{mod.reason ?? t('importProfile.notAvailableOnGameBanana')}</span>
                             </div>
@@ -1102,7 +1104,7 @@ export default function ImportProfileDialog({
                           )}
                           {r.status === 'failed' && (
                             <span
-                              className="text-red-400 inline-flex items-center gap-1.5 justify-end text-xs"
+                              className="text-state-danger inline-flex items-center gap-1.5 justify-end text-xs"
                               title={r.statusMessage ?? t('importProfile.status.failed')}
                             >
                               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
@@ -1124,7 +1126,7 @@ export default function ImportProfileDialog({
                             </div>
                           )}
                           {r.detailsError && (
-                            <div className="text-xs text-red-400 flex items-center gap-1.5">
+                            <div className="text-xs text-state-danger flex items-center gap-1.5">
                               <AlertTriangle className="w-3.5 h-3.5" />
                               {r.detailsError}
                             </div>
@@ -1213,7 +1215,7 @@ export default function ImportProfileDialog({
                   t('importProfile.selectedSummary', { selected: selectedCount, total: selectableCount })
                 )}
                 {finalizeError && (
-                  <div className="text-red-400 mt-1 inline-flex items-center gap-1">
+                  <div className="text-state-danger mt-1 inline-flex items-center gap-1">
                     <AlertTriangle className="w-3.5 h-3.5" />
                     {finalizeError}
                   </div>

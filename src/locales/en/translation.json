@@ -1,6 +1,7 @@
 {
   "common": {
     "view": "View",
+    "gameRunningWarning": "Game is running. Close Deadlock to change loaded mods.",
     "actions": {
       "cancel": "Cancel",
       "clear": "Clear",
@@ -37,10 +38,31 @@
       "missing": "Missing",
       "valid": "Valid"
     },
+    "relativeTime": {
+      "justNow": "just now",
+      "minutesAgo": "{{count}}m ago",
+      "hoursAgo": "{{count}}h ago",
+      "daysAgo": "{{count}}d ago",
+      "weeksAgo": "{{count}}w ago",
+      "monthsAgo": "{{count}} mo ago",
+      "yearsAgo": "{{count}} yr ago"
+    },
     "emptyValue": "(empty)",
     "none": "None",
     "versus": "VS",
-    "versusLower": "vs"
+    "versusLower": "vs",
+    "close": "Close"
+  },
+  "sync": {
+    "syncing": "Syncing {{section}}: {{percent}}%",
+    "error": "Sync error: {{section}}",
+    "sections": {
+      "Mod": "Mods",
+      "Sound": "Sounds",
+      "Gui": "GUI",
+      "Model": "Models",
+      "Wip": "WiPs"
+    }
   },
   "nav": {
     "installed": "Installed",
@@ -48,6 +70,7 @@
     "discover": "Discover",
     "servers": "Servers",
     "locker": "Locker",
+    "foundry": "Door Stuck",
     "conflicts": "Conflicts",
     "profiles": "Profiles",
     "crosshair": "Crosshair",
@@ -55,10 +78,150 @@
     "stats": "Stats",
     "settings": "Settings"
   },
+  "foundry": {
+    "header": {
+      "title": "Foundry",
+      "description": "Browse the game's own asset catalog, built offline from your installed files."
+    },
+    "browseCatalog": "Browse full catalog",
+    "backToHeroes": "Heroes",
+    "heroes": {
+      "subtitle": "Pick a hero to edit their look, abilities, voice, and icons.",
+      "search": "Search heroes",
+      "noMatch": "No heroes match that search."
+    },
+    "workshop": {
+      "appearance": "Appearance",
+      "abilities": "Abilities",
+      "voice": "Voice",
+      "icons": "Icons & Textures",
+      "back": "All heroes",
+      "sections": "Workshop sections",
+      "abilityIcons": "Ability & item icons",
+      "abilitiesSoon": {
+        "title": "More per-ability editing coming",
+        "body": "Per-ability icon and VFX color editing will land here next, one row per ability. For now, recolor all ability VFX at once under Appearance, and browse ability icons under Icons & Textures."
+      }
+    },
+    "subtools": {
+      "heading": "Workshop",
+      "library": "Library",
+      "sound": "Sound",
+      "texture": "Texture",
+      "items": "Items",
+      "recolor": "Recolor",
+      "soon": "soon"
+    },
+    "categories": {
+      "abilityIcon": "Ability icons",
+      "itemIcon": "Item icons",
+      "heroImage": "Hero images"
+    },
+    "filters": {
+      "allHeroes": "All heroes",
+      "searchPlaceholder": "Search assets..."
+    },
+    "loading": "Building catalog from your game files...",
+    "error": {
+      "title": "Couldn't read the catalog"
+    },
+    "empty": {
+      "noPath": {
+        "title": "Set your Deadlock path",
+        "description": "Foundry reads the asset catalog from your installed game. Set the Deadlock path in Settings to get started."
+      }
+    },
+    "lightbox": {
+      "unnamed": "(unnamed)",
+      "decoding": "Decoding full size...",
+      "nativeSize": "Native size"
+    },
+    "texture": {
+      "categories": {
+        "heroModel": "Hero models",
+        "abilityVfx": "Ability VFX"
+      },
+      "pickHero": "Select a hero",
+      "scope": {
+        "title": "Pick a hero to browse textures",
+        "description": "Hero model and VFX textures are a large set, so choose a hero (or type a search) to narrow the list."
+      },
+      "empty": {
+        "title": "No textures match",
+        "description": "No textures in this category for that hero or search. Try another category or hero."
+      },
+      "count": "{{count}} textures",
+      "countCapped": "Showing the first {{count}}. Refine your search to see more."
+    },
+    "recolor": {
+      "pickHero": "Select a hero",
+      "scope": {
+        "title": "Pick a hero to recolor",
+        "description": "Choose a hero to repaint their ability VFX (single color, rainbow, gradient, or trippy) and body/gun materials. The result is saved as a managed mod you can remove anytime."
+      }
+    },
+    "sound": {
+      "searchPlaceholder": "Search sounds...",
+      "loading": "Reading sounds from your game files...",
+      "play": "Audition",
+      "gameplayCount": "{{count}} gameplay sounds",
+      "noMatch": "No sounds match your search.",
+      "ult": "ULT",
+      "slot": "{{n}}",
+      "unsorted": "Other",
+      "category": {
+        "ability": "Abilities",
+        "weapon": "Weapon",
+        "movement": "Movement",
+        "melee": "Melee",
+        "other": "Other"
+      },
+      "empty": {
+        "title": "No gameplay sounds",
+        "description": "This hero has no gameplay sounds in your installed game files."
+      },
+      "voiceLines": {
+        "title": "Voice lines",
+        "hint": "optional, large list",
+        "loading": "Reading voice lines...",
+        "empty": "No voice lines match your search.",
+        "count": "{{shown}} of {{total}} voice lines",
+        "capped": "Showing the first {{cap}}. Refine your search to see more."
+      },
+      "swap": {
+        "button": "Swap this sound for your own audio",
+        "buttonLabel": "Swap",
+        "title": "Swap with your own audio",
+        "drop": "Drop an MP3 here, or click to pick",
+        "namePlaceholder": "Mod name",
+        "loop": "Loop the swapped clip",
+        "loopAuto": "Loop: auto",
+        "loopOn": "Loop: on",
+        "loopOff": "Loop: off",
+        "forge": "Forge & install",
+        "mp3only": "Audio must be an MP3 file.",
+        "done": "Installed \"{{name}}\" - enable it in the Installed tab",
+        "poolNote": "Replaces all {{count}} clips in this sound so it always plays your audio.",
+        "singleNote": "Replaces this sound with your audio."
+      },
+      "import": {
+        "decoding": "Reading audio...",
+        "decodeError": "Could not read this MP3 for preview.",
+        "trimStart": "Trim start",
+        "trimEnd": "Trim end",
+        "playSelection": "Play selection",
+        "resetTrim": "Use the whole clip",
+        "reset": "Reset",
+        "matchVolume": "Match the original volume",
+        "matchUnavailable": "original unavailable"
+      }
+    }
+  },
   "autoexec": {
     "commands": {
       "emptyTitle": "No commands added",
       "emptyDescription": "Select from presets on the left",
+      "manualTooltip": "This command was already in autoexec.cfg and is shown read-only.",
       "title_one": "Your Commands ({{count}})",
       "title_other": "Your Commands ({{count}})"
     },
@@ -81,6 +244,8 @@
       "title": "Launch Options"
     },
     "presets": {
+      "title": "Premade Commands",
+      "toggle": "Toggle premade commands",
       "performance": {
         "category": "Performance",
         "uncapFps": {
@@ -128,6 +293,10 @@
         "disablePostMatchSurvey": {
           "name": "Disable Post-Match Survey",
           "description": "Skip the survey after matches"
+        },
+        "offscreenDamageIndicator": {
+          "name": "Offscreen Damage Indicators",
+          "description": "Show minion indicators through walls when a teammate sees a droid"
         }
       },
       "minimap": {
@@ -143,6 +312,10 @@
         "largerPlayerIcons": {
           "name": "Larger Player Icons",
           "description": "Bigger player icons on minimap"
+        },
+        "largerLocalPlayerIcon": {
+          "name": "Larger Local Player Icon",
+          "description": "Make your own minimap icon larger"
         },
         "thickerZiplines": {
           "name": "Thicker Ziplines",
@@ -380,6 +553,7 @@
       "ignoreAllTitle": "Move every active conflict pair to the Ignored section. Reversible per-pair via Unignore.",
       "ignoreCount_one": "Ignore {{count}}",
       "ignoreCount_other": "Ignore {{count}}",
+      "ignoreModEverywhere": "Ignore this mod everywhere",
       "ignoreTitle": "Stop flagging this pair as a conflict",
       "ignoring": "Ignoring…",
       "unignore": "Unignore"
@@ -413,6 +587,14 @@
       "ignoreFailed_other": "Failed to ignore {{count}} pairs. See console for details."
     },
     "errorTitle": "Error Loading Conflicts",
+    "files": {
+      "heading_one": "Shared file ({{count}})",
+      "heading_other": "Shared files ({{count}})",
+      "ignoreEverywhere": "Ignore in all mods",
+      "ignoreFile": "Ignore",
+      "ignoreFileTitle": "Stop flagging just this file for these two mods (reversible below)",
+      "ignoreForPair": "Ignore for this pair"
+    },
     "header": {
       "description": "Resolve conflicts between installed mods",
       "noActiveDescription": "No active conflicts — review or restore your ignored pairs below."
@@ -422,6 +604,21 @@
       "title_one": "Ignored ({{count}})",
       "title_other": "Ignored ({{count}})",
       "unignoreTitle": "Restore conflict detection for this pair"
+    },
+    "ignoredFiles": {
+      "restoreAll": "Restore all",
+      "restoreAllTitle": "Restore conflict detection for every ignored file in this pair",
+      "title": "Ignored files",
+      "unignoreFileTitle": "Restore this file to conflict detection"
+    },
+    "ignoredFilesGlobal": {
+      "title": "Ignored in all mods",
+      "unignoreTitle": "Flag this file as a conflict again (across all mods)"
+    },
+    "ignoredMods": {
+      "tag": "Ignored",
+      "title": "Ignored mods",
+      "unignoreTitle": "Flag this mod's conflicts again"
     },
     "noPreview": "No Preview",
     "removedMod": "(removed mod)",
@@ -478,7 +675,11 @@
       "issuesFound": "Issues Found",
       "verifySteam": "In Steam: right-click Deadlock > Properties > Installed Files > Verify integrity of game files.",
       "foundNearby": "Found nearby: {{candidates}}. Rename one to gameinfo.gi to restore.",
-      "fixConfiguration": "Fix Configuration"
+      "fixConfiguration": "Fix Configuration",
+      "openFile": "Open gameinfo.gi",
+      "openConfirmTitle": "Open gameinfo.gi?",
+      "openConfirmMessage": "This opens Deadlock's gameinfo.gi in your text editor. It controls how the game loads mods. Editing it by hand can break mod loading or stop the game from launching. If something goes wrong, use Fix Configuration to repair it. Only proceed if you know what you're changing.",
+      "openFailed": "Could not open gameinfo.gi: {{error}}"
     },
     "updates": {
       "releaseNotesTitle": "View release notes for {{version}}",
@@ -491,11 +692,8 @@
       "downloadUpdate": "Download Update",
       "checkForUpdates": "Check for Updates",
       "managed": "Updates are managed by your package manager.",
-      "managedPrefix": "Grimoire was installed via a system package. Update with your distro's tools:",
-      "onArchOr": "on Arch, or",
-      "onDebianUbuntu": "on Debian/Ubuntu.",
-      "installedDebPrefix": "Installed the",
-      "installedDebSuffix": "manually? Add the apt repository for automatic updates (instructions at",
+      "managedInstructions": "Grimoire was installed via a system package. Update with your distro's tools: <arch>yay -Syu grimoire-bin</arch> on Arch, or <apt>sudo apt update && sudo apt upgrade</apt> on Debian/Ubuntu.",
+      "installedDeb": "Installed the <deb>.deb</deb> manually? Add the apt repository for automatic updates (instructions at <url>grimoiremods.com/download</url>).",
       "downloading": "Downloading update...",
       "whatsNewIn": "What's New in",
       "released": "Released {{date}}",
@@ -505,18 +703,44 @@
       "accentNamed": "Use {{name}} accent color",
       "pickCustomColor": "Pick custom color",
       "accentCustom": "Custom accent",
-      "sidebarHighlightNamed": "Sidebar highlight: {{hero}}",
-      "sidebarHighlightNone": "No sidebar highlight",
       "customAccentColor": "Custom accent color",
       "selectedColorPreview": "Selected color preview",
-      "closeSidebarHighlightPicker": "Close sidebar highlight picker",
       "customAccent": "Custom Accent",
-      "sidebarHighlight": "Sidebar Highlight"
+      "launchButtons": {
+        "combine": "Combine launch buttons",
+        "combineDescription": "Use a single launch button and switch between Modded and Vanilla with the swap icon or right-click, instead of two stacked buttons."
+      },
+      "art": {
+        "title": "Launcher & sidebar art",
+        "description": "Set the background for each launch button, the active tab, and the volume bar.",
+        "uploadImage": "Upload image",
+        "uploadHint": "Click to choose an image, or drag one here.",
+        "applyError": "Could not apply that image.",
+        "defaultHint": "Use Grimoire's built-in look for this surface.",
+        "noneHint": "Hide this surface's background entirely.",
+        "heroHint": "Pick a hero, then frame their render below.",
+        "changeHero": "Choose a different hero",
+        "preview": "Preview",
+        "surface": {
+          "launchModded": "Launch Modded",
+          "launchVanilla": "Launch Vanilla",
+          "activeTab": "Active tab",
+          "volume": "Volume bar"
+        },
+        "kind": {
+          "default": "Default",
+          "hero": "Hero",
+          "custom": "Custom image",
+          "none": "None"
+        }
+      }
     },
     "preferences": {
       "hideNsfw": "Hide NSFW Content",
       "hideNsfwDescription": "Blur thumbnail images for mods marked as NSFW.",
       "hideOutdated": "Hide Outdated Mods",
+      "blurInstalledNsfw": "Blur Installed NSFW Content",
+      "blurInstalledNsfwDescription": "Blur thumbnail images for installed mods marked as NSFW.",
       "expandLocker": "Expand Locker cards by default",
       "switchVariants": "Switch variants instead of stacking them",
       "enableAfterDownload": "Enable mods after download",
@@ -542,7 +766,8 @@
       "socialDescription": "Sign in with Steam to publish profiles and browse uploads from other players in Discover.",
       "fixUnknownMods": "Fix Unknown Mods",
       "deadworksServers": "Deadworks Servers",
-      "performanceConfig": "Performance Config"
+      "performanceConfig": "Performance Config",
+      "foundry": "Door Stuck"
     },
     "support": {
       "reportBuildFailed": "Failed to build report: {{error}}",
@@ -557,6 +782,7 @@
       "regenerateReport": "Regenerate report",
       "generateReport": "Generate report",
       "includeFullLog": "Include full log (up to 5 MB; Discord auto-attaches as a file)",
+      "verboseModTrace": "Verbose mod logging (traces enable/disable/scan to the log; turn off when done)",
       "reviewBeforeSharing": "Review before sharing. Nothing is sent automatically.",
       "copyFailed": "Copy failed: select and Ctrl+C",
       "copyReport": "Copy report",
@@ -726,7 +952,14 @@
       "local": "Local",
       "status": "Status",
       "enabled": "Enabled",
-      "modType": "Mod type"
+      "hero": "Hero",
+      "tags": "Tags"
+    },
+    "sections": {
+      "enabled_one": "Enabled",
+      "enabled_other": "Enabled",
+      "disabled_one": "Disabled",
+      "disabled_other": "Disabled"
     },
     "view": {
       "viewOptions": "View options",
@@ -744,6 +977,10 @@
       "fixHiddenHint": "Fix unknown is hidden. Right-click to bring it back.",
       "fixButtonHint": "Find GameBanana matches or add custom metadata for unknown local mods. Right-click to hide this button.",
       "fixButton": "Fix unknown ({{count}})",
+      "dmmDetected": "Deadlock Mod Manager mods detected, importing...",
+      "dmmImported_one": "Detected and imported {{count}} mod from Deadlock Mod Manager",
+      "dmmImported_other": "Detected and imported {{count}} mods from Deadlock Mod Manager",
+      "dmmImportFailed": "Could not import Deadlock Mod Manager mods",
       "checkingCrcCache": "Checking local CRC cache...",
       "noCachedMatch": "No cached match found. Queued for online search.",
       "missingMetadata": "Matched mod is missing GameBanana metadata",
@@ -831,14 +1068,15 @@
       "saveCustom": "Save Custom Mod",
       "alreadyInstalledHint": "This VPK is already installed. Saving will only add custom metadata to it.",
       "title": "Import Custom Mod",
-      "vpkHelp": "The file will be copied into your addons folder and renamed with the next available pak## priority.",
-      "selectVpk": "Select VPK file",
-      "expectedVpk": "Expected a .vpk file - got \"{{name}}\".",
-      "vpkFile": "VPK file",
-      "vpkSelected": "VPK selected: {{path}}. Press Enter to change.",
-      "vpkSelectedLocked": "VPK selected: {{path}}",
-      "vpkAriaBrowse": "Drop a VPK file here or press Enter to browse",
-      "dropVpkHere": "Drop a <code>.vpk</code> here",
+      "vpkHelp": "Drop a .vpk or an archive (.zip, .7z, .rar) and it will be copied into your addons folder with the next available pak## priority. Tip: drag the .zip file itself, not a file dragged out of an opened zip window.",
+      "selectVpk": "Select VPK or archive",
+      "expectedVpk": "Expected a .vpk or archive (.zip, .7z, .rar) - got \"{{name}}\".",
+      "dropUnresolved": "Could not read that file. If you dragged it out of an opened zip window, drag the .zip file itself here instead.",
+      "vpkFile": "VPK or archive",
+      "vpkSelected": "File selected: {{path}}. Press Enter to change.",
+      "vpkSelectedLocked": "File selected: {{path}}",
+      "vpkAriaBrowse": "Drop a .vpk or archive here or press Enter to browse",
+      "dropVpkHere": "Drop a <code>.vpk</code> or <code>.zip</code> here",
       "orClickToBrowse": "or click to browse",
       "modName": "Mod name",
       "modNamePlaceholder": "My awesome skin",
@@ -860,6 +1098,7 @@
       "shareCodeCopiedToast": "Share code copied"
     },
     "select": {
+      "dragHint": "Drag to move",
       "noneSelected": "No mods selected",
       "countSelected_one": "{{count}} mod selected",
       "countSelected_other": "{{count}} mods selected",
@@ -950,11 +1189,42 @@
     "empty": {
       "noGamePath": "Set your Deadlock path or enable dev mode."
     },
+    "randomize": {
+      "onLaunch": "Shuffle on launch",
+      "onLaunchHint": "When on, each time you launch from Grimoire one of your chosen skins is equipped per hero. Add skins to the pool with the shuffle button on each skin.",
+      "addToShuffle": "Add {{name}} to the shuffle",
+      "removeFromShuffle": "Remove {{name}} from the shuffle",
+      "inPool": "In shuffle"
+    },
+    "modImage": {
+      "set": "Set Locker image for {{name}}",
+      "title": "Choose a Locker image",
+      "tabCard": "Card thumbnail",
+      "tabThumbnail": "Locker image",
+      "tabBackground": "Background",
+      "cropEmptyHint": "Pick an image to frame it here.",
+      "dialogTitle": "Choose a custom image",
+      "uploadCustom": "Upload a custom image",
+      "fromMod": "From this mod",
+      "loadingGallery": "Loading images...",
+      "galleryError": "Could not load this mod's images.",
+      "applyError": "Could not set the image. Please try again.",
+      "noGallery": "No images available. Upload a custom one above.",
+      "reset": "Reset to default",
+      "useImage": "Use image",
+      "appliedToast": "{{surface}} applied",
+      "removedToast": "{{surface}} reset",
+      "useLockerImage": "Use Locker image",
+      "hideHeroName": "Hide hero name label",
+      "hideHeroNameHint": "Turn on when the image already shows the hero's name."
+    },
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
       "disabledBadge": "Disabled",
       "disabledBadgeTitle": "This mod is disabled and not loaded in-game",
-      "deleteMod": "Delete {{name}}"
+      "deleteMod": "Delete {{name}}",
+      "propEmpty": "No {{type}} installed yet. Import one from a 3D model (.glb) to get started.",
+      "typeEmpty": "No {{type}} installed yet. Find some in Browse and they'll show up here."
     },
     "soulImport": {
       "trigger": {
@@ -964,6 +1234,8 @@
       },
       "title": "Import Soul Container (GLB)",
       "submit": "Build & Import",
+      "export": "Export .vpk",
+      "exportTitle": "Build the override VPK and save it to disk instead of installing it into the mod manager.",
       "dropzone": {
         "ariaBrowse": "Drop a GLB here or press Enter to browse",
         "ariaSelected": "GLB selected: {{path}}. Press Enter to change.",
@@ -1041,6 +1313,36 @@
         "filterName": "glTF binary"
       }
     },
+    "urnImport": {
+      "trigger": {
+        "label": "Import Spirit Urn (GLB)",
+        "ariaLabel": "Import spirit urn from GLB",
+        "title": "Import a Spirit Urn from a 3D model (.glb): orient it, size it, preview it, and build a tracked local mod that replaces the carryable Idol/urn"
+      },
+      "title": "Import Spirit Urn (GLB)",
+      "dropzone": {
+        "previewEmpty": "Drop a GLB to preview it fitted to the spirit urn."
+      },
+      "fields": {
+        "namePlaceholder": "My spirit urn"
+      },
+      "size": {
+        "label": "Size",
+        "units": "units",
+        "hint": "Largest-axis size in Source units. The urn is bigger than a soul orb; the default (28) is a good starting point. Confirm the real size in-game."
+      },
+      "ground": {
+        "label": "Sit base on the ground (instead of centering)"
+      },
+      "highPolyWarning": "This model has {{count}} triangles, well above the {{threshold}} an urn usually needs. It will still build, but a very heavy model can hurt in-game performance.",
+      "conflict": {
+        "heading": "A spirit urn is already enabled",
+        "body": "Only one spirit urn loads in-game at a time (they override the same model). Choose what to do with “{{name}}”:"
+      },
+      "errors": {
+        "previewFailed": "Spirit urn preview failed: {{error}}"
+      }
+    },
     "colors": {
       "loading": "Loading...",
       "intro": "Repaint {{hero}}'s ability effects (particles, projectiles, and the ult body). Pick a single color, a rainbow, a gradient, or a trippy pattern: one pick is active at a time.",
@@ -1111,7 +1413,10 @@
       },
       "bakingHint": "Baking the recolor. The first time for a given pick can take up to a minute (it re-encodes every effect texture); the same pick is instant after that.",
       "restartHint": "Restart Deadlock for this change to take effect (addons mount at game start).",
-      "savedHint": "Saved. This pick mounts the next time you Launch Modded."
+      "savedHint": "Saved. This pick mounts the next time you Launch Modded.",
+      "exportVpk": "Export .vpk",
+      "exportVpkTitle": "Bake this look into a standalone addon VPK and save it to disk (instead of applying it in the mod manager).",
+      "exportSaved": "Exported to {{path}}"
     },
     "sounds": {
       "soundsByAbility": "Sounds by Ability",
@@ -1130,7 +1435,6 @@
       "pitch": "Pitch",
       "db": "dB",
       "saving": "Saving...",
-      "appliesOnRelease": "Applies on release",
       "alsoAbilities": "also {{slots}}",
       "applied": "Applied",
       "use": "Use",
@@ -1215,7 +1519,10 @@
       "resetZoom": "Reset zoom",
       "upscaleWarning": "Source is {{sourceWidth}} x {{sourceHeight}}, smaller than the {{targetWidth}} x {{targetHeight}} target, so it will be upscaled and may look soft.",
       "instructions": "Drag to reposition, scroll or use the slider to zoom. The frame is locked to the card's aspect so the result is not stretched.",
-      "useCrop": "Use crop"
+      "useCrop": "Use crop",
+      "boxHint": "Drag the box to move it, drag a corner to resize. The selection is locked to the surface's shape.",
+      "selectionSize": "Selection size",
+      "resetCrop": "Reset selection"
     },
     "model": {
       "close3d": "Close 3D model",
@@ -1224,7 +1531,9 @@
     "pose": {
       "posing": "Posing {{hero}}...",
       "posingWithMods": "Posing {{hero}} with {{count}} active mods...",
-      "cannotPose": "This hero can't be posed in 3D yet."
+      "cannotPose": "This hero can't be posed in 3D yet.",
+      "pauseSpin": "Pause spin",
+      "resumeSpin": "Resume spin"
     },
     "downloadSkins": {
       "browseMore": "Browse more skins"
@@ -1240,6 +1549,11 @@
       "soundCount_other": "{{count}} sounds",
       "modCount_one": "{{count}} mod",
       "modCount_other": "{{count}} mods",
+      "facetSkin": "Skin",
+      "facetSound": "Sound",
+      "facetCard": "Card",
+      "facetEffects": "Effects",
+      "facetInstalled": "{{label}} (installed, off)",
       "categoryCount_one": "{{count}} category",
       "categoryCount_other": "{{count}} categories",
       "fileCount_one": "{{count}} file",
@@ -1251,10 +1565,15 @@
       "expandAll": "Expand all",
       "collapseAllHeroes": "Collapse all heroes",
       "expandAllHeroes": "Expand all heroes",
+      "hideEmpty": "Hide empty",
+      "showEmpty": "Show all",
+      "hideEmptyHeroes": "Hide heroes with no skins or sounds",
+      "showEmptyHeroes": "Show all heroes",
       "gallery": "Gallery",
       "list": "List",
       "noHeroCategoriesFound": "No hero categories found.",
       "global": "Global",
+      "globalEmptyHint": "Import soul containers & spirit urns",
       "unassigned": "Unassigned",
       "unassignedDescription": "These mods couldn't be matched to a hero automatically. Tag one to move it into that hero's locker pile.",
       "noPreview": "No preview",
@@ -1299,8 +1618,10 @@
       "downloadASkinForThisHero": "Download a skin for this hero to manage it here.",
       "hide3dModel": "Hide 3D model",
       "showLive3dModel": "Show live 3D model",
+      "lockerImages": "Locker images",
       "back": "Back",
       "favorite": "Favorite",
+      "unfavorite": "Unfavorite",
       "lockerSections": "Locker sections",
       "hero3dModel": "{{hero}} 3D model"
     }
@@ -1313,7 +1634,9 @@
       "loadSnapshotFailed": "Failed to load snapshot: {{error}}",
       "captureSnapshotFailed": "Failed to capture snapshot: {{error}}",
       "deleteSnapshotFailed": "Failed to delete snapshot: {{error}}",
-      "bulkDeleteSnapshotsFailed": "Failed to delete {{failed}} of {{total}} snapshots: {{error}}"
+      "bulkDeleteSnapshotsFailed": "Failed to delete {{failed}} of {{total}} snapshots: {{error}}",
+      "applyPartial_one": "Profile applied, but 1 mod couldn't be toggled (it may be locked by the running game).",
+      "applyPartial_other": "Profile applied, but {{count}} mods couldn't be toggled (they may be locked by the running game)."
     },
     "create": {
       "title": "Create New Profile",
@@ -1630,7 +1953,7 @@
     "selectedSummary": "{{selected}} of {{total}} selected"
   },
   "mergeMods": {
-    "oneVariant": "One variant per mod",
+    "oneVariant": "Pick one or more variants per mod",
     "strictDescription": "Stop if two mods touch the same file. Off lets the higher-priority mod win.",
     "localNote": "Local mods merge fine but aren't in the share code. Delete the disabled originals and they can't be recovered on unmerge.",
     "title": "Merge {{count}} mods",
@@ -1713,6 +2036,7 @@
       "discoverNew_other": "{{count}} new published profiles.",
       "servers": "Browse and join Deadworks community servers.",
       "locker": "Active cosmetic skins, organized by hero.",
+      "foundry": "Browse the game's asset catalog: textures, icons, and heroes.",
       "crosshair": "Custom crosshair editor.",
       "autoexec": "Console commands that run at game launch.",
       "stats": "Match history and personal stats.",
@@ -1726,8 +2050,8 @@
       "vanillaStash": "A vanilla session is already active. Restore mods first.",
       "vanillaDefault": "Temporarily stash mods, launch Deadlock via Steam, then auto-restore after the game starts",
       "stopTitle": "Stop the running Deadlock process",
-      "hideArt": "Hide background art",
-      "showArt": "Show background art"
+      "switchToModded": "Switch to Launch Modded",
+      "switchToVanilla": "Switch to Launch Vanilla"
     },
     "vanilla": {
       "stashed": "Vanilla: {{count}} stashed",
@@ -1753,7 +2077,9 @@
       "stoppedRestoreFailed_one": "Stopped Deadlock, but couldn't restore {{count}} mod.",
       "stoppedRestoreFailed_other": "Stopped Deadlock, but couldn't restore {{count}} mods.",
       "restoredStashed_one": "Restored {{count}} stashed mod.",
-      "restoredStashed_other": "Restored {{count}} stashed mods."
+      "restoredStashed_other": "Restored {{count}} stashed mods.",
+      "shufflePartial_one": "1 skin couldn't be shuffled this launch.",
+      "shufflePartial_other": "{{count}} skins couldn't be shuffled this launch."
     },
     "brand": "Grimoire",
     "previewVolume": {
@@ -1767,6 +2093,13 @@
     "actions": {
       "enableDisabledTitle": "Enable this mod (currently in your disabled folder)"
     },
+    "filePicker": {
+      "title": "Choose a file to install for {{name}}",
+      "heading": "Choose a file to install",
+      "downloads_one": "{{count}} download",
+      "downloads_other": "{{count}} downloads",
+      "viewAll": "View all files"
+    },
     "empty": {
       "configureGamePathTitle": "Configure Game Path",
       "configureGamePathBody": "Set your Deadlock installation path in Settings (or enable dev mode) before downloading mods.",
@@ -1778,6 +2111,7 @@
     },
     "section": {
       "sounds": "Sounds",
+      "wips": "WiPs",
       "label": "Section"
     },
     "search": {
@@ -1803,7 +2137,12 @@
       "cardStyle": "Card style",
       "cardDesign": "Browse card design",
       "detailsView": "Details view",
-      "modDetailsView": "Mod details view"
+      "modDetailsView": "Mod details view",
+      "nsfwContent": "NSFW Content",
+      "outdatedContent": "Outdated Content",
+      "show": "Show",
+      "blur": "Blur",
+      "hide": "Hide"
     },
     "cardStyle": {
       "default": "Default",
@@ -1920,6 +2259,8 @@
       "previewHidden": "NSFW preview hidden"
     },
     "viewOnGamebanana": "View on GameBanana",
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied",
     "outdatedWarning": "This mod was last updated on {{date}} and may not be compatible with the current Deadlock version.",
     "deleteFile": {
       "title": "Delete installed file?",
@@ -1987,10 +2328,7 @@
     "renameFile": "Rename file",
     "saving": "Saving...",
     "filesEnabled": "{{enabled}} of {{total}} files enabled",
-    "openModPage": "Open the GameBanana mod page",
-    "modPage": "Mod page",
-    "disableAll": "Disable all",
-    "noFilesEnabled": "No files enabled"
+    "openModPage": "Open the GameBanana mod page"
   },
   "imageContextMenu": {
     "image": "Image",
@@ -2062,6 +2400,18 @@
       "error": "Error",
       "notApplied": "Not applied"
     },
+    "status": {
+      "applied": "Performance config v{{version}} is applied.",
+      "appliedOutdated": "Performance config v{{version}} is applied; v{{latest}} is available (reapply to update).",
+      "overrideNote_one": " Keeping {{count}} of your override.",
+      "overrideNote_other": " Keeping {{count}} of your overrides.",
+      "handEditedNote": " The file has manual edits: Reapply folds them into your overrides.",
+      "wipedRestorable": "gameinfo.gi is empty or corrupt. Restore the Grimoire backup (or verify game files in Steam), then reapply.",
+      "wiped": "A game update reset gameinfo.gi and removed the performance config. Reapply to restore it.",
+      "wipedRestoreNote_one": " Your {{count}} saved override will be restored too.",
+      "wipedRestoreNote_other": " Your {{count}} saved overrides will be restored too.",
+      "notApplied": "Performance config is not applied."
+    },
     "credit": "Map looks dark? Set in-game shadows to Medium or Low. Game updates wipe the config; Grimoire spots that here so you can reapply. By <sqooky>Sqooky</sqooky> and <contributors>contributors<extlink></extlink></contributors>. If it helps, <kofi>buy them a coffee</kofi>.",
     "restoreBackup": "Restore Backup",
     "reapply": "Reapply",
@@ -2083,7 +2433,6 @@
     "pitch": "Pitch",
     "db": "{{value}} dB",
     "saving": "Saving...",
-    "appliesOnRelease": "Applies on release",
     "title": "Locker Overrides",
     "subtitle": "Always-on cosmetics, separate from your mod load order and the 99-slot cap.",
     "tabs": {

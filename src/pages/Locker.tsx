@@ -1,11 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type SVGProps } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Ghost, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Images, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   getGamebananaCategories,
   getHeroColorSupport,
+  getLockerOverview,
   setModGlobalType,
   setModLockerHero,
 } from '../lib/api';
@@ -14,6 +15,7 @@ import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
+import { ErrorBoundary } from '../components/common/ErrorBoundary';
 
 // Heavy (three.js): only pulled in when the soul-container type is viewed.
 import { SoulRegistryProvider } from '../components/locker/SoulRegistryProvider';
@@ -22,20 +24,28 @@ const SoulContainerCanvas = lazy(() => import('../components/locker/SoulContaine
 // Heavy (three.js): only pulled in when the user opens the soul-container GLB
 // import from the global Locker tab, mirroring the Installed-page trigger.
 const SoulContainerImportModal = lazy(() => import('../components/locker/SoulContainerImportModal'));
+const SpiritUrnImportModal = lazy(() => import('../components/locker/SpiritUrnImportModal'));
+// Idol/urn model entry a Spirit Urn mod overrides; the 3D tile exports this entry
+// for an urn (vs the soul-container entry, the tile's default). Mirrors
+// URN_CONTAINER_ENTRY in the main-process soulContainerModels service.
+const URN_MODEL_ENTRY = 'models/props_gameplay/idol_urn/idol_urn.vmdl_c';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
-import type { GlobalModType, Mod } from '../types/mod';
+import type { GlobalModType, LockerOverview, Mod } from '../types/mod';
 import { ViewModeToggle, EmptyState, SectionHeader, ConfirmModal } from '../components/common/PageComponents';
-import { Tag } from '../components/common/ui';
+import { Tag, ToggleIndicator } from '../components/common/ui';
 import { Skeleton } from '../components/common/Skeleton';
 import { HeroSelect } from '../components/common/HeroSelect';
 import {
   FAVORITE_HEROES_KEY,
   GLOBAL_MOD_TYPE_LABELS,
   GLOBAL_MOD_TYPE_ORDER,
+  activeLockerSkin,
   buildHeroList,
+  canonicalHeroName,
   countGlobalMods,
   countLockerSkins,
+  getLockerSkinKey,
   getEffectiveGlobalType,
   getHeroFacePosition,
   getHeroNamePath,
@@ -46,11 +56,13 @@ import {
   groupModsByCategory,
   isLockerManagedMod,
   isLockerManagedSound,
+  isPropContainerType,
   modLoadOrder,
   readStoredFavorites,
   type GlobalModGroups,
   type HeroCategory,
 } from '../lib/lockerUtils';
+import { shuffleSkinKey } from '../lib/lockerRandomizer';
 
 // Route changes flip the overlay state instantly, which unmounts the hero or
 // global panel on the next frame with no exit transition. Retain the last
@@ -128,9 +140,82 @@ function RainbowPaletteIcon({ className = '', title }: { className?: string; tit
   );
 }
 
+// The per-hero customization axes surfaced as gallery-card indicator icons,
+// mirroring the hero detail view's section nav (Skins/Sounds/Cards/Effects) so
+// the icon language is the same in both places. 'skin'/'sound' come from the
+// hero's enabled mods; 'card'/'effect' come from the Locker-managed override
+// manifests (applied hero card art, ability recolors / trippy paints).
+type HeroFacetKey = 'skin' | 'sound' | 'card' | 'effect';
+// 'active' = something is applied in-game right now (enabled mod or an applied
+// override). 'installed' = mods exist for this axis but none are enabled.
+type HeroFacetState = 'active' | 'installed';
+type HeroFacets = Partial<Record<HeroFacetKey, HeroFacetState>>;
+
+// Narrow icon contract shared by the lucide glyphs and the custom solid note
+// below, so both can live in HERO_FACET_ICONS. We only ever pass these props.
+type FacetIcon = ComponentType<{
+  className?: string;
+  fill?: string;
+  strokeWidth?: number;
+  'aria-hidden'?: boolean;
+}>;
+
+// Solid eighth-note glyph (Material's `music_note`): a single closed path that
+// fills cleanly with the sheen gradient. lucide's `Music` is an open
+// note-bar-plus-two-heads outline that turns into an unreadable blob when
+// filled, so the Sounds axis uses this instead. 24x24 viewBox to size with the
+// lucide icons; stroke=currentColor so it picks up the same hardening rim.
+function SolidMusicIcon({ className, fill, strokeWidth, ...rest }: SVGProps<SVGSVGElement>) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={fill}
+      stroke="currentColor"
+      strokeWidth={strokeWidth}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      {...rest}
+    >
+      <path d="M12 3v10.55c-.59-.34-1.27-.55-2-.55-2.21 0-4 1.79-4 4s1.79 4 4 4 4-1.79 4-4V7h4V3h-6z" />
+    </svg>
+  );
+}
+
+const HERO_FACET_ORDER: readonly HeroFacetKey[] = ['skin', 'sound', 'card', 'effect'];
+const HERO_FACET_ICONS: Record<HeroFacetKey, FacetIcon> = {
+  skin: Shirt,
+  sound: SolidMusicIcon,
+  card: Images,
+  effect: Sparkles,
+};
+
+// Vertical sheen gradient used to fill the *active* customization-indicator
+// glyphs so they read as polished chips rather than flat white. Defined once as
+// a shared <defs> (FacetSheenDefs) and referenced by id from every gallery card,
+// the same url(#id) technique as RainbowPaletteIcon.
+const FACET_SHEEN_ID = 'locker-facet-sheen';
+
+function FacetSheenDefs() {
+  return (
+    <svg width="0" height="0" aria-hidden focusable="false" className="absolute">
+      <defs>
+        <linearGradient id={FACET_SHEEN_ID} x1="0" y1="0" x2="0" y2="1">
+          {/* Bright crown, a crisp highlight break across the middle, then a
+              cool steel falloff: a subtle gloss without looking garish. */}
+          <stop offset="0%" stopColor="#ffffff" />
+          <stop offset="46%" stopColor="#f1f4f8" />
+          <stop offset="54%" stopColor="#d7dde7" />
+          <stop offset="100%" stopColor="#aab3c2" />
+        </linearGradient>
+      </defs>
+    </svg>
+  );
+}
+
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -142,14 +227,28 @@ export default function Locker() {
     const stored = localStorage.getItem('lockerViewMode');
     return stored === 'list' ? 'list' : 'gallery';
   });
+  // When on, heroes without any assigned skins/sounds are hidden so the grid
+  // only shows the heroes you've actually customized. Favorited heroes stay
+  // visible regardless. Persisted alongside viewMode.
+  const [hideEmptyHeroes, setHideEmptyHeroes] = useState(
+    () => localStorage.getItem('lockerHideEmpty') === 'true'
+  );
   const [abilityRecolorSupport, setAbilityRecolorSupport] = useState<Record<string, boolean>>({});
   // Soul-container GLB import (lazy three.js modal), openable from the global
   // Locker tab. Mirrors the Installed-page trigger.
   const [soulImportOpen, setSoulImportOpen] = useState(false);
+  // Spirit Urn GLB import (lazy three.js modal), openable from the global Locker
+  // tab. Mirrors the soul-container trigger.
+  const [urnImportOpen, setUrnImportOpen] = useState(false);
   // Enabled soul-container imports (they override the same model), so the modal
   // can warn + offer to replace rather than silently stack two.
   const existingSoulImports = useMemo(
     () => mods.filter((m) => m.enabled && m.globalType === 'soul-container'),
+    [mods]
+  );
+  // Enabled spirit-urn imports (single in-game slot), same warn-or-replace flow.
+  const existingUrnImports = useMemo(
+    () => mods.filter((m) => m.enabled && m.globalType === 'spirit-urn'),
     [mods]
   );
   // List-view accordion state. The Settings preference decides the initial
@@ -174,12 +273,28 @@ export default function Locker() {
   const [favoriteHeroes, setFavoriteHeroes] = useState<number[]>(() =>
     readStoredFavorites()
   );
+  // Applied Locker overrides (hero card art + ability sounds + ability recolors
+  // + trippy paints), keyed by hero name. Lives off the mod list, so it's
+  // fetched separately and feeds the per-hero card/effect indicator icons.
+  const [lockerOverview, setLockerOverview] = useState<LockerOverview | null>(null);
+  const refreshLockerOverview = useCallback(async () => {
+    try {
+      setLockerOverview(await getLockerOverview());
+    } catch {
+      setLockerOverview(null);
+    }
+  }, []);
   const lockerScrollRef = useRef<HTMLDivElement | null>(null);
   const latestLockerScrollTopRef = useRef(lockerPageScrollTop);
 
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+
+  // Issue #208: per-mod (per-skin) Locker view images (display only).
+  useEffect(() => {
+    loadLockerModImages();
+  }, [loadLockerModImages]);
 
   useEffect(() => {
     if (activeDeadlockPath) {
@@ -235,6 +350,10 @@ export default function Locker() {
     localStorage.setItem('lockerViewMode', viewMode);
   }, [viewMode]);
 
+  useEffect(() => {
+    localStorage.setItem('lockerHideEmpty', String(hideEmptyHeroes));
+  }, [hideEmptyHeroes]);
+
   const navigate = useNavigate();
   const location = useLocation();
   const goToHero = useCallback(
@@ -270,6 +389,13 @@ export default function Locker() {
     () => /^\/locker\/global\/?$/.test(location.pathname),
     [location.pathname]
   );
+
+  // Hero cards and ability effects can only be applied from inside a hero
+  // drill-in, so the override overview is fresh enough if we (re)load it on
+  // mount and whenever the user returns to the grid (no overlay open).
+  useEffect(() => {
+    if (selectedHeroId === null && !globalSelected) void refreshLockerOverview();
+  }, [selectedHeroId, globalSelected, refreshLockerOverview]);
 
   // Build basic hero list first (needed for mod categorization)
   const baseHeroList = useMemo(() => buildHeroList(categories), [categories]);
@@ -337,6 +463,34 @@ export default function Locker() {
   const heroSounds = useMemo(() => {
     return groupModsByCategory(lockerSounds, baseHeroList);
   }, [lockerSounds, baseHeroList]);
+  // Issue #208: the image shown on a hero's card/backdrop is the active
+  // (highest-priority enabled) skin's chosen Locker image, if the user picked
+  // one. Otherwise undefined and the card falls back to the hero render.
+  const heroCardImage = useCallback(
+    (heroId: number): string | undefined => {
+      const active = activeLockerSkin(heroMods.map.get(heroId) ?? []);
+      if (!active) return undefined;
+      // The grid thumbnail is an independent override; fall back to the card
+      // image when a skin has no thumbnail of its own (issue #208).
+      const key = getLockerSkinKey(active);
+      return lockerModThumbnails[key] ?? lockerModImages[key];
+    },
+    [heroMods, lockerModThumbnails, lockerModImages]
+  );
+  // Whether the active skin's image already shows the hero name, so the card's
+  // own name label should be hidden (issue #208). Keyed to the active skin, and
+  // to whichever surface is actually showing (thumbnail wins over card).
+  const heroHideName = useCallback(
+    (heroId: number): boolean => {
+      const active = activeLockerSkin(heroMods.map.get(heroId) ?? []);
+      if (!active) return false;
+      const key = getLockerSkinKey(active);
+      return Boolean(
+        lockerModThumbnails[key] ? lockerThumbHideHeroName[key] : lockerHideHeroName[key]
+      );
+    },
+    [heroMods, lockerModThumbnails, lockerThumbHideHeroName, lockerHideHeroName]
+  );
   const installedSkinCount = useMemo(() => countLockerSkins(lockerMods), [lockerMods]);
   const installedSoundCount = useMemo(() => countLockerSkins(lockerSounds), [lockerSounds]);
   const unassignedSkins = useMemo(() => groupLockerSkins(heroMods.unassigned), [heroMods]);
@@ -348,6 +502,60 @@ export default function Locker() {
     [heroSounds]
   );
 
+  // Canonical hero names that currently have an applied card / ability sound /
+  // effect (recolor or trippy paint), derived from the override overview. Keyed
+  // by canonicalHeroName so "The Doorman" and "Doorman" resolve to one hero.
+  const overrideHeroNames = useMemo(() => {
+    const cards = new Set<string>();
+    const sounds = new Set<string>();
+    const effects = new Set<string>();
+    if (lockerOverview) {
+      for (const c of lockerOverview.cards) cards.add(canonicalHeroName(c.heroName));
+      for (const s of lockerOverview.sounds) sounds.add(canonicalHeroName(s.heroName));
+      for (const c of lockerOverview.colors) effects.add(canonicalHeroName(c.heroName));
+      for (const ts of lockerOverview.trippySkins) effects.add(canonicalHeroName(ts.heroName));
+    }
+    return { cards, sounds, effects };
+  }, [lockerOverview]);
+
+  // True when the hero has any applied customization: an enabled skin or sound,
+  // or an applied card / ability sound / effect override. Drives the auto-sort
+  // tier that floats customized heroes up, matching the indicator icons below.
+  const heroHasActive = useCallback(
+    (heroId: number, heroName: string) => {
+      const canon = canonicalHeroName(heroName);
+      return (
+        (heroMods.map.get(heroId) ?? []).some((m) => m.enabled) ||
+        (heroSounds.map.get(heroId) ?? []).some((m) => m.enabled) ||
+        overrideHeroNames.cards.has(canon) ||
+        overrideHeroNames.sounds.has(canon) ||
+        overrideHeroNames.effects.has(canon)
+      );
+    },
+    [heroMods, heroSounds, overrideHeroNames]
+  );
+
+  // The active/installed customization facets for one hero, driving the gallery
+  // card's indicator icons. Skins/sounds reflect the hero's mods; cards/effects
+  // reflect the applied overrides. Card and effect have no "installed" state
+  // (an override is either applied or absent).
+  const heroFacets = useCallback(
+    (heroId: number, heroName: string): HeroFacets => {
+      const skins = heroMods.map.get(heroId) ?? [];
+      const sounds = heroSounds.map.get(heroId) ?? [];
+      const canon = canonicalHeroName(heroName);
+      const facets: HeroFacets = {};
+      if (skins.some((m) => m.enabled)) facets.skin = 'active';
+      else if (skins.length > 0) facets.skin = 'installed';
+      if (sounds.some((m) => m.enabled) || overrideHeroNames.sounds.has(canon)) facets.sound = 'active';
+      else if (sounds.length > 0) facets.sound = 'installed';
+      if (overrideHeroNames.cards.has(canon)) facets.card = 'active';
+      if (overrideHeroNames.effects.has(canon)) facets.effect = 'active';
+      return facets;
+    },
+    [heroMods, heroSounds, overrideHeroNames]
+  );
+
   // Sorted hero list for display
   const heroList = useMemo(() => {
     return [...baseHeroList].sort((a, b) => {
@@ -355,7 +563,12 @@ export default function Locker() {
       const bFav = favoriteHeroes.includes(b.id);
       // Favorites first
       if (aFav !== bFav) return aFav ? -1 : 1;
-      // Then heroes with any locker content (skins or sounds)
+      // Then heroes with any applied customization: anything active in-game floats
+      // above heroes that only have disabled skins/sounds sitting in their pile.
+      const aActive = heroHasActive(a.id, a.name);
+      const bActive = heroHasActive(b.id, b.name);
+      if (aActive !== bActive) return aActive ? -1 : 1;
+      // Then heroes with any locker content (skins or sounds), enabled or not
       const aHasContent =
         countLockerSkins(heroMods.map.get(a.id) ?? []) > 0 ||
         countLockerSkins(heroSounds.map.get(a.id) ?? []) > 0;
@@ -366,7 +579,22 @@ export default function Locker() {
       // Then alphabetically
       return a.name.localeCompare(b.name);
     });
-  }, [baseHeroList, favoriteHeroes, heroMods, heroSounds]);
+  }, [baseHeroList, favoriteHeroes, heroMods, heroSounds, heroHasActive]);
+
+  // When "hide empty" is on, drop heroes with no assigned skins/sounds. Favorites
+  // are kept so an intentional pin never disappears. Uses the same content test
+  // as the sort above so what's hidden matches what sorts to the bottom.
+  const displayedHeroList = useMemo(() => {
+    if (!hideEmptyHeroes) return heroList;
+    return heroList.filter((hero) => {
+      if (favoriteHeroes.includes(hero.id)) return true;
+      return (
+        countLockerSkins(heroMods.map.get(hero.id) ?? []) > 0 ||
+        countLockerSkins(heroSounds.map.get(hero.id) ?? []) > 0
+      );
+    });
+  }, [heroList, hideEmptyHeroes, favoriteHeroes, heroMods, heroSounds]);
+
   const lockerCardsExpandedByDefault = settings?.lockerCardsExpandedByDefault ?? false;
 
   useEffect(() => {
@@ -481,6 +709,22 @@ export default function Locker() {
     await toggleMod(modId);
   };
 
+  // Heroes that have at least one installed skin; gates the shuffle toggle.
+  const heroesWithSkins = heroMods.map.size;
+
+  // Hero ids with at least one skin in the launch-shuffle pool. Drives the
+  // gallery card's shuffle badge (only shown while the master switch is armed).
+  const shufflePoolHeroes = useMemo(() => {
+    const set = new Set<number>();
+    if (shuffleIncluded.size === 0) return set;
+    for (const [heroId, heroSkinMods] of heroMods.map) {
+      if (groupLockerSkins(heroSkinMods).some((g) => shuffleIncluded.has(shuffleSkinKey(g.primary)))) {
+        set.add(heroId);
+      }
+    }
+    return set;
+  }, [heroMods, shuffleIncluded]);
+
   // Reorder the load order of a hero's enabled skins. `orderedModIds` is the
   // new desired order of THIS hero's enabled skin VPK ids (lower index = loads
   // first = wins file conflicts). We splice that order into the full global
@@ -530,14 +774,16 @@ export default function Locker() {
     }
   };
 
-  // Soul containers are single-select: there's one soul-container slot, so
-  // enabling one disables any other active soul container, and clicking the
-  // already-active card turns it back off (vanilla). Other global types keep
-  // normal multi-toggle (they don't all collapse to a single slot).
+  // Prop containers (soul containers + spirit urns) are single-select: each kind
+  // has one in-game slot, so enabling one disables any other active mod of the
+  // SAME kind, and clicking the already-active card turns it back off (vanilla).
+  // A soul container and an urn can both be enabled (different slots). Other
+  // global types keep normal multi-toggle.
   const selectGlobalMod = async (modId: string) => {
     const target = mods.find((m) => m.id === modId);
     if (!target) return;
-    if (getEffectiveGlobalType(target) !== 'soul-container') {
+    const targetType = getEffectiveGlobalType(target);
+    if (!isPropContainerType(targetType)) {
       await toggleMod(modId);
       return;
     }
@@ -547,7 +793,7 @@ export default function Locker() {
     }
     const active = mods.filter(
       (m) =>
-        m.id !== modId && m.enabled && getEffectiveGlobalType(m) === 'soul-container'
+        m.id !== modId && m.enabled && getEffectiveGlobalType(m) === targetType
     );
     for (const m of active) await toggleMod(m.id);
     await toggleMod(modId);
@@ -621,11 +867,13 @@ export default function Locker() {
 
   return (
     <div ref={lockerScrollRef} className="h-full overflow-y-auto">
+      {/* Shared gradient def for the active hero-card customization glyphs. */}
+      <FacetSheenDefs />
       <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-text-secondary">
           {[
-            t('locker.page.heroCount', { count: heroList.length }),
+            t('locker.page.heroCount', { count: displayedHeroList.length }),
             t('locker.page.skinCount', { count: installedSkinCount }),
             installedSoundCount > 0
               ? t('locker.page.soundCount', { count: installedSoundCount })
@@ -635,6 +883,29 @@ export default function Locker() {
             .join(' • ')}
         </div>
         <div className="flex items-center gap-3">
+          {heroesWithSkins > 0 && (
+            <button
+              type="button"
+              role="switch"
+              aria-checked={shuffleOnLaunch}
+              onClick={() => setShuffleOnLaunch(!shuffleOnLaunch)}
+              className="group/toggle flex items-center gap-2 self-stretch rounded-sm border border-border bg-bg-secondary px-3 text-sm text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
+              title={t('locker.randomize.onLaunchHint')}
+            >
+              <Shuffle className="w-4 h-4" />
+              <span>{t('locker.randomize.onLaunch')}</span>
+              {shuffleOnLaunch && (
+                <span
+                  className={`rounded-full px-1.5 text-xs tabular-nums ${
+                    shuffleIncluded.size > 0 ? 'bg-accent/15 text-accent' : 'bg-yellow-500/15 text-yellow-400'
+                  }`}
+                >
+                  {shuffleIncluded.size}
+                </span>
+              )}
+              <ToggleIndicator checked={shuffleOnLaunch} className="ml-0.5 scale-90" />
+            </button>
+          )}
           {viewMode === 'gallery' &&
             unassignedSkins.length + unassignedSounds.length > 0 && (
               <button
@@ -662,6 +933,19 @@ export default function Locker() {
               {allExpanded ? t('locker.page.collapseAll') : t('locker.page.expandAll')}
             </button>
           )}
+          <button
+            onClick={() => setHideEmptyHeroes((v) => !v)}
+            aria-pressed={hideEmptyHeroes}
+            className={`flex items-center gap-1.5 self-stretch rounded-sm border px-3 text-sm transition-colors cursor-pointer ${
+              hideEmptyHeroes
+                ? 'border-accent/50 bg-accent/15 text-accent hover:bg-accent/25'
+                : 'border-border bg-bg-secondary text-text-secondary hover:text-text-primary hover:bg-bg-tertiary'
+            }`}
+            title={hideEmptyHeroes ? t('locker.page.showEmptyHeroes') : t('locker.page.hideEmptyHeroes')}
+          >
+            <Filter className="w-4 h-4" />
+            {hideEmptyHeroes ? t('locker.page.showEmpty') : t('locker.page.hideEmpty')}
+          </button>
           <ViewModeToggle
             value={viewMode}
             options={[
@@ -680,20 +964,22 @@ export default function Locker() {
         </div>
       ) : viewMode === 'gallery' ? (
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
-          {globalCount > 0 && (
-            <GlobalGalleryCard
-              count={globalCount}
-              typeCount={globalTypeCount}
-              onNavigate={() => navigate('/locker/global')}
-            />
-          )}
-          {heroList.map((hero) => (
+          {/* Always rendered: soul containers & spirit urns are imported from
+              inside this drill-in, so the card must stay reachable even with
+              nothing installed yet (otherwise the importer is unreachable). */}
+          <GlobalGalleryCard
+            count={globalCount}
+            typeCount={globalTypeCount}
+            onNavigate={() => navigate('/locker/global')}
+          />
+          {displayedHeroList.map((hero) => (
             <HeroGalleryCard
               key={hero.id}
               hero={hero}
-              skinCount={countLockerSkins(heroMods.map.get(hero.id) ?? [])}
-              soundCount={countLockerSkins(heroSounds.map.get(hero.id) ?? [])}
-              hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
+              facets={heroFacets(hero.id, hero.name)}
+              inShufflePool={shuffleOnLaunch && shufflePoolHeroes.has(hero.id)}
+              cardImage={heroCardImage(hero.id)}
+              hideHeroName={heroHideName(hero.id)}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onNavigate={() => goToHero(hero)}
               onBrowse={() => openHeroInBrowse(hero)}
@@ -709,50 +995,55 @@ export default function Locker() {
         </div>
       ) : (
         <div className="grid grid-cols-1 items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {globalCount > 0 && (
-            <button
-              type="button"
-              onClick={() => navigate('/locker/global')}
-              className="group relative flex items-center gap-3 overflow-hidden rounded-lg border border-accent/40 bg-bg-secondary p-4 text-left transition-colors hover:border-accent/70"
-            >
-              {/* Environment art bleeds behind the card; the left-to-right
-                  gradient keeps the text side dark, mirroring the list-view
-                  hero cards. */}
-              <img
-                src={GLOBAL_BG}
-                alt=""
-                aria-hidden
-                className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
-              />
-              <div
-                aria-hidden
-                className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
-              />
-              <div className="relative z-10 min-w-0 flex-1">
-                <div className="font-semibold text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
-                  {t('locker.page.global')}
-                </div>
-                <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
-                  {t('locker.page.modCount', { count: globalCount })} ·{' '}
-                  {t('locker.page.categoryCount', { count: globalTypeCount })}
-                </div>
+          {/* Always rendered (see gallery-view note): the Global drill-in is the
+              only entry point to the soul-container / spirit-urn importer. */}
+          <button
+            type="button"
+            onClick={() => navigate('/locker/global')}
+            className="group relative flex items-center gap-3 overflow-hidden rounded-lg border border-accent/40 bg-bg-secondary p-4 text-left transition-colors hover:border-accent/70"
+          >
+            {/* Environment art bleeds behind the card; the left-to-right
+                gradient keeps the text side dark, mirroring the list-view
+                hero cards. */}
+            <img
+              src={GLOBAL_BG}
+              alt=""
+              aria-hidden
+              className="pointer-events-none absolute inset-0 h-full w-full object-cover object-center"
+            />
+            <div
+              aria-hidden
+              className="pointer-events-none absolute inset-0 bg-gradient-to-r from-bg-secondary via-bg-secondary/80 to-bg-secondary/30"
+            />
+            <div className="relative z-10 min-w-0 flex-1">
+              <div className="font-semibold text-text-primary drop-shadow-[0_1px_4px_rgba(0,0,0,0.7)]">
+                {t('locker.page.global')}
               </div>
-              <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
-            </button>
-          )}
-          {heroList.map((hero) => (
+              <div className="text-xs text-text-secondary drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]">
+                {globalCount > 0
+                  ? `${t('locker.page.modCount', { count: globalCount })} · ${t('locker.page.categoryCount', { count: globalTypeCount })}`
+                  : t('locker.page.globalEmptyHint')}
+              </div>
+            </div>
+            <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
+          </button>
+          {displayedHeroList.map((hero) => (
             <HeroCard
               key={hero.id}
               hero={hero}
               mods={heroMods.map.get(hero.id) ?? []}
               sounds={heroSounds.map.get(hero.id) ?? []}
               hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
+              cardImage={heroCardImage(hero.id)}
               expanded={expandedHeroes.has(hero.id)}
               onToggleExpanded={() => toggleHeroExpanded(hero.id)}
               onBrowseSkins={() => openHeroInBrowse(hero)}
               onSelect={(modId) => setActiveSkin(hero.id, modId)}
               onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
               onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
+              includedSkinKeys={shuffleIncluded}
+              onToggleShuffleIncluded={toggleShuffleIncluded}
+              shuffleArmed={shuffleOnLaunch}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onToggleFavorite={() =>
                 setFavoriteHeroes((prev) =>
@@ -861,6 +1152,9 @@ export default function Locker() {
             onReorderSkins={(orderedModIds) => reorderHeroSkins(overlayHero.id, orderedModIds)}
             onRequestDeleteSkin={(ids, name) => setDeletePrompt({ ids, name })}
             hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+            includedSkinKeys={shuffleIncluded}
+            onToggleShuffleIncluded={toggleShuffleIncluded}
+            shuffleArmed={shuffleOnLaunch}
           />
         </div>
       )}
@@ -900,6 +1194,7 @@ export default function Locker() {
             onSetGlobalType={tagModGlobalType}
             onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
             onImportSoul={() => setSoulImportOpen(true)}
+            onImportUrn={() => setUrnImportOpen(true)}
           />
         </div>
       )}
@@ -909,6 +1204,18 @@ export default function Locker() {
           <SoulContainerImportModal
             onClose={() => setSoulImportOpen(false)}
             existingSoulImports={existingSoulImports}
+            onImported={() => {
+              void loadMods();
+            }}
+          />
+        </Suspense>
+      )}
+
+      {urnImportOpen && (
+        <Suspense fallback={null}>
+          <SpiritUrnImportModal
+            onClose={() => setUrnImportOpen(false)}
+            existingUrnImports={existingUrnImports}
             onImported={() => {
               void loadMods();
             }}
@@ -935,12 +1242,18 @@ interface HeroCardProps {
   mods: Mod[];
   sounds: Mod[];
   hasAbilityRecolor: boolean;
+  /** Issue #208: the active skin's chosen Locker image (data URL), shown as the
+   *  card backdrop in place of the hero render. Undefined = use the render. */
+  cardImage?: string;
   expanded: boolean;
   onToggleExpanded: () => void;
   onBrowseSkins: () => void;
   onSelect: (modId: string) => void;
   onToggleVariant: (modId: string) => void;
   onRequestDelete: (modIds: string[], name: string) => void;
+  includedSkinKeys: Set<string>;
+  onToggleShuffleIncluded: (skinKey: string) => void;
+  shuffleArmed: boolean;
   isFavorite: boolean;
   onToggleFavorite: () => void;
   hideNsfwPreviews: boolean;
@@ -948,9 +1261,19 @@ interface HeroCardProps {
 
 interface HeroGalleryCardProps {
   hero: HeroCategory;
-  skinCount: number;
-  soundCount: number;
-  hasAbilityRecolor: boolean;
+  /** Per-axis customization state (skin/sound/card/effect) rendered as the
+   *  top-left indicator icons: accent when active, muted when installed but not
+   *  enabled. Absent keys render no icon. */
+  facets: HeroFacets;
+  /** True when the shuffle switch is armed AND this hero has a skin in the pool;
+   *  surfaces a shuffle badge so the rotation is visible at a glance. */
+  inShufflePool?: boolean;
+  /** Issue #208: the active skin's chosen Locker image (data URL), shown as the
+   *  card backdrop in place of the hero render. Undefined = use the render. */
+  cardImage?: string;
+  /** Issue #208: hide the hero name label because the active skin's image
+   *  already shows the hero name. Only meaningful when cardImage is set. */
+  hideHeroName?: boolean;
   isFavorite: boolean;
   onNavigate: () => void;
   onBrowse: () => void;
@@ -972,6 +1295,7 @@ interface GlobalGalleryCardProps {
  */
 function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardProps) {
   const { t } = useTranslation();
+  const isEmpty = count === 0;
   return (
     <div
       onClick={onNavigate}
@@ -986,16 +1310,22 @@ function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardPr
         />
         {/* Subtle top highlight for depth, matching the hero cards. */}
         <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
-        <div className="absolute left-2 top-2 z-20 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
-          {t('locker.page.modCount', { count })}
-        </div>
+        {/* The count badge only earns its spot once something is installed; an
+            empty Global card leans on the bottom import hint instead. */}
+        {!isEmpty && (
+          <div className="absolute left-2 top-2 z-20 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
+            {t('locker.page.modCount', { count })}
+          </div>
+        )}
       </div>
       <div className="absolute inset-x-0 bottom-0 flex flex-col items-end bg-gradient-to-t from-black/70 to-transparent p-2 text-right sm:p-3">
         <div className="font-reaver text-lg leading-tight tracking-wide text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
           {t('locker.page.global')}
         </div>
         <div className="text-[11px] text-white/70 drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-          {t('locker.page.categoryCount', { count: typeCount })}
+          {isEmpty
+            ? t('locker.page.globalEmptyHint')
+            : t('locker.page.categoryCount', { count: typeCount })}
         </div>
       </div>
     </div>
@@ -1013,6 +1343,8 @@ interface LockerGlobalViewProps {
   onRequestDelete: (modIds: string[], name: string) => void;
   /** Open the soul-container GLB import modal (shown on the soul-container tab). */
   onImportSoul: () => void;
+  /** Open the Spirit Urn GLB import modal (shown on the spirit-urn tab). */
+  onImportUrn: () => void;
 }
 
 /**
@@ -1020,13 +1352,23 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
-  const available = GLOBAL_MOD_TYPE_ORDER.filter((type) => groups[type].length > 0);
-  const [selectedType, setSelectedType] = useState<GlobalModType>(
-    () => available[0] ?? 'soul-container'
+  // Every tab is selectable, empty or not. We still default the landing tab to
+  // the first populated type (or a prop container when nothing is installed),
+  // so the view opens on something meaningful rather than a blank pane.
+  const firstPopulated = GLOBAL_MOD_TYPE_ORDER.filter(
+    (type) => groups[type].length > 0 || isPropContainerType(type)
   );
+  const [selectedType, setSelectedType] = useState<GlobalModType>(
+    () => firstPopulated[0] ?? 'soul-container'
+  );
+  // Sliding active-tab highlight, mirroring the main sidebar's glide: one
+  // indicator element animates between the tab rows rather than each row
+  // toggling its own background (which snaps). Refs feed its measured position.
+  const tabRefs = useRef<Map<GlobalModType, HTMLButtonElement | null>>(new Map());
+  const [tabIndicator, setTabIndicator] = useState<{ top: number; height: number } | null>(null);
   // Open retag menu, anchored in viewport coords (fixed-positioned) so it never
   // clips against the scrolling card pane. Null when closed.
   const [retagMenu, setRetagMenu] = useState<{ id: string; x: number; y: number } | null>(null);
@@ -1047,10 +1389,19 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
       window.removeEventListener('keydown', onKey);
     };
   }, [retagMenu]);
-  // Guard against the selected type emptying out (e.g. last mod deleted) by
-  // falling back to the first non-empty type at render time.
-  const activeType = groups[selectedType]?.length ? selectedType : available[0];
-  const activeMods = activeType ? groups[activeType] : [];
+  // Any type is a valid selection now (empty tabs render their own empty
+  // state), so the active tab is simply whatever the user picked.
+  const activeType = selectedType;
+  const activeMods = groups[activeType] ?? [];
+  // Track the active row's box so the highlight can glide to it. Measured in a
+  // layout effect (pre-paint) to avoid a one-frame jump on first mount.
+  useLayoutEffect(() => {
+    const el = tabRefs.current.get(activeType);
+    if (el) setTabIndicator({ top: el.offsetTop, height: el.offsetHeight });
+  }, [activeType]);
+  // Soul containers and spirit urns share the single-select + live-3D-tile
+  // treatment (frosted glass, content-stable key, active badge, import button).
+  const isPropContainer = isPropContainerType(activeType);
   const total = GLOBAL_MOD_TYPE_ORDER.reduce((sum, type) => sum + groups[type].length, 0);
   // The scrollable card pane: the shared soul-container canvas clamps each
   // card's render rect to this element so models never bleed past the pane.
@@ -1139,26 +1490,39 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
           </span>
         </div>
 
-        <nav className="flex flex-col gap-1.5">
+        <nav className="relative flex flex-col gap-1.5">
+          {/* The sliding highlight, glided between rows via a measured transform
+              (matches the main sidebar's active indicator). */}
+          {tabIndicator && (
+            <span
+              aria-hidden
+              className="pointer-events-none absolute inset-x-0 top-0 z-0 rounded-lg border border-accent/60 bg-accent/15 transition-transform duration-300 ease-out motion-reduce:transition-none"
+              style={{
+                height: tabIndicator.height,
+                transform: `translateY(${tabIndicator.top}px)`,
+              }}
+            />
+          )}
           {GLOBAL_MOD_TYPE_ORDER.map((type) => {
             const items = groups[type];
             const isActive = type === activeType;
             const isEmpty = items.length === 0;
+            // Every tab is clickable, empty or not: an empty tab opens its own
+            // empty state (the importer for prop containers, a Browse hint for
+            // the rest), which is more discoverable than a dead disabled row.
             return (
               <button
                 key={type}
+                ref={(el) => {
+                  tabRefs.current.set(type, el);
+                }}
                 type="button"
-                disabled={isEmpty}
                 onClick={() => setSelectedType(type)}
-                className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-left transition-colors ${
-                  isEmpty
-                    ? 'cursor-default border-transparent opacity-40'
-                    : isActive
-                      ? 'border-accent/60 bg-accent/15'
-                      : 'border-transparent hover:bg-white/10'
+                className={`relative z-10 flex cursor-pointer items-center gap-3 rounded-lg border border-transparent px-3 py-2.5 text-left transition-colors ${
+                  isActive ? '' : 'hover:bg-white/10'
                 }`}
               >
-                <span className="flex-1 truncate text-sm font-medium text-white">
+                <span className={`flex-1 truncate text-sm font-medium text-white ${isEmpty && !isActive ? 'opacity-50' : ''}`}>
                   {GLOBAL_MOD_TYPE_LABELS[type]}
                 </span>
                 <span className="text-xs text-white/50">{items.length}</span>
@@ -1168,9 +1532,11 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
         </nav>
       </div>
 
-      {/* Right pane: the selected type's mods as cards */}
+      {/* Right pane: the selected type's mods as cards. Keyed on the active type
+          so its content re-runs the fade on every tab switch (the tab-content
+          transition), which doubles as the drill-in entrance on first mount. */}
       <div ref={paneRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-glass">
-        <div className="space-y-4 p-6">
+        <div key={activeType} className="space-y-4 p-6 animate-fade-in">
           {activeType ? (
             <>
               <div className="flex items-baseline gap-2">
@@ -1180,44 +1546,97 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 <span className="text-xs text-white/60">
                   {t('locker.page.modCount', { count: activeMods.length })}
                 </span>
-                {activeType === 'soul-container' && (
+                {isPropContainer && (
                   <button
                     type="button"
-                    onClick={onImportSoul}
+                    onClick={activeType === 'spirit-urn' ? onImportUrn : onImportSoul}
                     className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
-                    title={t('locker.soulImport.trigger.title')}
+                    title={activeType === 'spirit-urn' ? t('locker.urnImport.trigger.title') : t('locker.soulImport.trigger.title')}
                   >
-                    <Ghost className="h-3.5 w-3.5" />
-                    {t('locker.soulImport.trigger.label')}
+                    {activeType === 'spirit-urn' ? <Box className="h-3.5 w-3.5" /> : <Ghost className="h-3.5 w-3.5" />}
+                    {activeType === 'spirit-urn' ? t('locker.urnImport.trigger.label') : t('locker.soulImport.trigger.label')}
                   </button>
                 )}
               </div>
+              {activeMods.length === 0 && isPropContainer ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                  {activeType === 'spirit-urn' ? (
+                    <Box className="h-8 w-8 text-white/40" />
+                  ) : (
+                    <Ghost className="h-8 w-8 text-white/40" />
+                  )}
+                  <p className="max-w-sm text-sm text-white/70">
+                    {t('locker.global.propEmpty', {
+                      type: GLOBAL_MOD_TYPE_LABELS[activeType],
+                    })}
+                  </p>
+                  <button
+                    type="button"
+                    onClick={activeType === 'spirit-urn' ? onImportUrn : onImportSoul}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                  >
+                    {activeType === 'spirit-urn' ? <Box className="h-3.5 w-3.5" /> : <Ghost className="h-3.5 w-3.5" />}
+                    {activeType === 'spirit-urn' ? t('locker.urnImport.trigger.label') : t('locker.soulImport.trigger.label')}
+                  </button>
+                </div>
+              ) : activeMods.length === 0 ? (
+                // Non-prop types can't be imported, so the empty state just
+                // points the user at Browse instead of an import button.
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                  <Layers className="h-8 w-8 text-white/40" />
+                  <p className="max-w-sm text-sm text-white/70">
+                    {t('locker.global.typeEmpty', {
+                      type: GLOBAL_MOD_TYPE_LABELS[activeType],
+                    })}
+                  </p>
+                </div>
+              ) : (
               <div className="grid grid-cols-2 gap-4 lg:grid-cols-3 2xl:grid-cols-4">
-                {activeMods.map((mod) => {
+                {activeMods.map((mod, cardIndex) => {
                   // Skipped when NSFW previews are hidden so we never bleed
                   // hidden imagery into the glass tint, even blurred.
                   const glassBackdropUrl =
                     mod.thumbnailUrl && !(mod.nsfw && hideNsfw) ? mod.thumbnailUrl : null;
                   return (
                     <div
-                      // Soul containers key on the content-stable sha256: their
+                      // Prop containers key on the content-stable sha256: their
                       // id/metaKey change when toggled, which would otherwise
                       // remount the card and reload its 3D model on every select.
                       // Other types keep the plain id key (original behavior).
                       key={
-                        activeType === 'soul-container' ? mod.sha256 ?? mod.id : mod.id
+                        isPropContainer ? mod.sha256 ?? mod.id : mod.id
+                      }
+                      // Cards stagger in as the grid mounts; the delay is capped
+                      // so a large grid still finishes settling quickly. fill-mode
+                      // 'both' holds the hidden start frame through the delay so a
+                      // delayed card never flashes visible first.
+                      //
+                      // Skipped for prop containers: their model is painted by the
+                      // shared overlay canvas, which ignores the card's CSS
+                      // opacity, so an opacity entrance would briefly float the
+                      // model over an invisible card. The parent fade + the
+                      // model's own load-in cover their entrance instead.
+                      style={
+                        isPropContainer
+                          ? undefined
+                          : {
+                              animationDelay: `${Math.min(cardIndex, 12) * 35}ms`,
+                              animationFillMode: 'both',
+                            }
                       }
                       className={`group/card relative flex flex-col rounded-[10px] border p-2.5 transition-[border-color,background-color,box-shadow] duration-200 ${
+                        isPropContainer ? '' : 'animate-scale-in'
+                      } ${
                         mod.enabled
                           ? 'border-accent bg-accent/[0.06] shadow-[0_0_0_1px_var(--color-accent)] hover:bg-accent/[0.10]'
-                          : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
+                          : 'border-white/[0.08] bg-bg-sunken/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary'
                       }`}
                     >
                       {/* Glass backdrop: a blurred copy of the cover art bleeds
                           behind the card so it's tinted by its own thumbnail,
                           matching the Installed grid cards. Soul containers show
                           a 3D model on a clear window, so they skip it. */}
-                      {glassBackdropUrl && activeType !== 'soul-container' && (
+                      {glassBackdropUrl && !isPropContainer && (
                         <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
                           <img
                             src={glassBackdropUrl}
@@ -1228,7 +1647,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                               mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
                             }`}
                           />
-                          <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f0f]/45 via-[#0f0f0f]/65 to-[#0f0f0f]/[0.88]" />
+                          <div className="absolute inset-0 scrim-bottom" />
                         </div>
                       )}
 
@@ -1237,7 +1656,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           background shows through; other types keep a solid bg. */}
                       <div
                         className={`relative mb-2 aspect-video w-full overflow-hidden rounded-lg border border-white/[0.08] ${
-                          activeType === 'soul-container' ? '' : 'bg-bg-tertiary'
+                          isPropContainer ? '' : 'bg-bg-tertiary'
                         }`}
                       >
                         {/* Frosted-glass panel for soul containers, kept as a
@@ -1246,17 +1665,23 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                             stacking context, which would sink this subtree (and
                             the retag kebab below) under the z-10 full-card toggle
                             and swallow the kebab's clicks. */}
-                        {activeType === 'soul-container' && (
+                        {isPropContainer && (
                           <div className="pointer-events-none absolute inset-0 bg-white/[0.04] backdrop-blur-md" />
                         )}
-                        {/* Soul containers show a live 3D model on a clear window
+                        {/* Prop containers show a live 3D model on a clear window
                             (no 2D thumbnail behind it); other types show their
-                            GameBanana thumbnail. */}
-                        {activeType === 'soul-container' ? (
+                            GameBanana thumbnail. The urn exports its own model
+                            entry; the soul container is the tile's default. */}
+                        {isPropContainer ? (
                           <Suspense fallback={null}>
                             <SoulContainerTile
                               tileId={mod.sha256 ?? mod.id}
                               modKey={mod.metaKey}
+                              entry={activeType === 'spirit-urn' ? URN_MODEL_ENTRY : undefined}
+                              thumbnailUrl={mod.thumbnailUrl}
+                              name={mod.name}
+                              nsfw={mod.nsfw}
+                              hideNsfw={hideNsfw}
                             />
                           </Suspense>
                         ) : (
@@ -1281,13 +1706,13 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                           </div>
                         )}
                         <div className="pointer-events-none absolute inset-0 bg-bg-primary/0 transition-colors duration-200 group-hover/card:bg-bg-primary/20" />
-                        {/* Soul containers are single-select, so mark the one
+                        {/* Prop containers are single-select, so mark the one
                             active pick with a positive "Active" badge (a disabled
                             card is simply unmarked) and fade it in so selecting
                             animates rather than snapping. Other global types
                             allow multiple enabled, so they keep tagging the
                             disabled ones. */}
-                        {activeType === 'soul-container'
+                        {isPropContainer
                           ? mod.enabled && (
                               <div className="pointer-events-none absolute left-2 top-2 z-10 flex h-5 items-start animate-fade-in">
                                 <Tag
@@ -1403,23 +1828,35 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   );
                 })}
               </div>
+              )}
             </>
           ) : (
             <p className="text-sm text-white/70">{t('locker.page.noGlobalNonHeroCosmeticsInstalledYet')}</p>
           )}
         </div>
 
-        {/* Shared 3D canvas for the Global soul-container grid: one WebGL context
-            renders every card (scissored into its on-screen rect), so the grid
-            can't exhaust the browser's live-context cap. Mounted INSIDE the pane
-            (not at the view root) so its z-[5] sits below each card's tags/kebab
-            but above the card background, keeping chrome on top of the model.
-            Only mounted while that type is selected. */}
-        {activeType === 'soul-container' && (
+        {/* Shared 3D canvas for the Global prop-container grid (soul containers
+            and spirit urns): one WebGL context renders every card (scissored into
+            its on-screen rect), so the grid can't exhaust the browser's
+            live-context cap. Mounted INSIDE the pane (not at the view root) so its
+            z-[5] sits below each card's tags/kebab but above the card background,
+            keeping chrome on top of the model.
+
+            Kept mounted for the whole drill-in (not gated on the prop-container
+            tab): tearing the WebGL context down and back up when switching to a
+            non-prop tab and back was the main source of the model flicker. On a
+            non-prop tab the registry is empty, so it simply paints nothing (a
+            transparent, pointer-events-none overlay), which is cheap. */}
+        {/* Local boundary: a WebGL context-creation / r3f failure degrades to no
+            live canvas instead of bubbling to the app-level boundary, which would
+            replace the whole app shell. Tiles that already failed to export keep
+            showing their 2D thumbnails; tiles that exported fine just lose the live
+            3D preview (the card chrome stays). */}
+        <ErrorBoundary fallback={null}>
           <Suspense fallback={null}>
             <SoulContainerCanvas paneRef={paneRef} />
           </Suspense>
-        )}
+        </ErrorBoundary>
       </div>
 
       {/* Retag menu (fixed-positioned, anchored at the kebab's viewport coords so
@@ -1498,15 +1935,34 @@ function HeroGallerySkeleton() {
 
 function HeroGalleryCard({
   hero,
-  skinCount,
-  soundCount,
-  hasAbilityRecolor,
+  facets,
+  inShufflePool,
+  cardImage,
+  hideHeroName,
   isFavorite,
   onNavigate,
   onBrowse,
   onToggleFavorite,
 }: HeroGalleryCardProps) {
   const { t } = useTranslation();
+  // The customization axes this hero actually has, in display order. Drives the
+  // top-left indicator icons. Empty = no pill.
+  const facetKeys = HERO_FACET_ORDER.filter((key) => facets[key]);
+  const facetLabel = (key: HeroFacetKey): string =>
+    key === 'skin'
+      ? t('locker.page.facetSkin')
+      : key === 'sound'
+        ? t('locker.page.facetSound')
+        : key === 'card'
+          ? t('locker.page.facetCard')
+          : t('locker.page.facetEffects');
+  const facetTitle = facetKeys
+    .map((key) =>
+      facets[key] === 'installed'
+        ? t('locker.page.facetInstalled', { label: facetLabel(key) })
+        : facetLabel(key)
+    )
+    .join(' • ');
   const renderLocal = getHeroRenderPath(hero.name);
   const wikiUrl = getHeroWikiUrl(hero.name);
   const namePath = getHeroNamePath(hero.name);
@@ -1515,14 +1971,16 @@ function HeroGalleryCard({
   const [nameFailed, setNameFailed] = useState(false);
   const [, setImageCacheVersion] = useState(0);
 
-  const renderSrc = fallbackStep === 0
+  // A user-provided card image (issue #208) wins over the render chain. Data
+  // URLs paint immediately, so they skip the loaded-image gate / skeleton.
+  const renderSrc = cardImage ?? (fallbackStep === 0
     ? renderLocal
     : fallbackStep === 1
       ? wikiUrl
       : fallbackStep === 2
         ? (hero.iconUrl ?? '')
-        : '';
-  const isRenderReady = !!renderSrc && lockerLoadedImageUrls.has(renderSrc);
+        : '');
+  const isRenderReady = !!cardImage || (!!renderSrc && lockerLoadedImageUrls.has(renderSrc));
 
   useEffect(() => {
     const tick = () => setImageCacheVersion((version) => version + 1);
@@ -1566,7 +2024,7 @@ function HeroGalleryCard({
               className="absolute inset-0 h-full w-full bg-cover will-change-transform backface-visibility-hidden group-hover:scale-[1.06] scale-100 transition-transform duration-500"
               style={{
                 backgroundImage: `url(${JSON.stringify(renderSrc)})`,
-                backgroundPosition: `${facePositionX}% 20%`,
+                backgroundPosition: cardImage ? 'center' : `${facePositionX}% 20%`,
                 imageRendering: 'auto',
                 transform: 'translateZ(0)',
               }}
@@ -1579,8 +2037,10 @@ function HeroGalleryCard({
               aria-hidden
               className="pointer-events-none absolute h-px w-px opacity-0"
               decoding="async"
-              onLoad={() => rememberLockerImageLoaded(renderSrc)}
-              onError={handleRenderError}
+              onLoad={() => {
+                if (!cardImage) rememberLockerImageLoaded(renderSrc);
+              }}
+              onError={cardImage ? undefined : handleRenderError}
             />
           </>
         )}
@@ -1624,57 +2084,65 @@ function HeroGalleryCard({
       >
         <Star className={`w-3 h-3 ${isFavorite ? 'fill-current' : ''}`} />
       </button>
-      {(skinCount > 0 || soundCount > 0 || hasAbilityRecolor) && (
-        <div className="absolute left-2 top-2 z-20 flex items-center gap-2 rounded-full bg-black/45 px-2 py-0.5 text-[10px] font-medium text-white/85 backdrop-blur-sm">
-          {hasAbilityRecolor && (
-            <span
-              className="flex items-center gap-1"
-              title={t('locker.page.abilityColorRecoloringAvailable')}
-              aria-label={t('locker.page.abilityColorRecoloringAvailable')}
-            >
-              <RainbowPaletteIcon className="h-3 w-3" />
-            </span>
-          )}
-          {skinCount > 0 && (
-            <span
-              className="flex items-center gap-1"
-              title={t('locker.page.skinCount', { count: skinCount })}
-              aria-label={t('locker.page.skinCount', { count: skinCount })}
-            >
-              <Shirt className="w-3 h-3" />
-              {skinCount}
-            </span>
-          )}
-          {soundCount > 0 && (
-            <span
-              className="flex items-center gap-1"
-              title={t('locker.page.soundCount', { count: soundCount })}
-              aria-label={t('locker.page.soundCount', { count: soundCount })}
-            >
-              <Music className="w-3 h-3" />
-              {soundCount}
-            </span>
+      {/* Customization indicators (top-left): one icon per axis the hero has
+          something on (skin / sound / card art / ability effect). Active glyphs
+          are filled with a vertical sheen gradient and hardened with a thin dark
+          rim so they read as polished chips; installed-but-off stays a faint
+          outline. Filled vs outline reads at a glance without the accent color. */}
+      {(facetKeys.length > 0 || inShufflePool) && (
+        <div
+          className="absolute left-2 top-2 z-20 flex items-center gap-1.5 rounded-full bg-black/55 px-2 py-1 ring-1 ring-inset ring-white/10 backdrop-blur-sm"
+          title={[facetTitle, inShufflePool ? t('locker.randomize.inPool') : ''].filter(Boolean).join(' • ')}
+          aria-label={[facetTitle, inShufflePool ? t('locker.randomize.inPool') : ''].filter(Boolean).join(' • ')}
+        >
+          {facetKeys.map((key) => {
+            const Icon = HERO_FACET_ICONS[key];
+            const active = facets[key] === 'active';
+            return (
+              <Icon
+                key={key}
+                className={`h-3.5 w-3.5 ${
+                  active
+                    ? 'text-[#3b4250] drop-shadow-[0_1px_1px_rgba(0,0,0,0.85)]'
+                    : 'fill-none text-white/40 drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]'
+                }`}
+                fill={active ? `url(#${FACET_SHEEN_ID})` : 'none'}
+                strokeWidth={active ? 1.5 : 2}
+                aria-hidden
+              />
+            );
+          })}
+          {inShufflePool && (
+            <Shuffle
+              className="h-3.5 w-3.5 text-accent drop-shadow-[0_1px_2px_rgba(0,0,0,0.7)]"
+              strokeWidth={2.25}
+              aria-hidden
+            />
           )}
         </div>
       )}
-      <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex flex-col items-end text-right">
-        {nameFailed ? (
-          <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
-        ) : (
-          <div className="relative w-[70%] h-6 sm:h-7 ml-auto">
-            <img
-              src={namePath}
-              alt={hero.name}
-              className="absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 scale-100 transition-transform duration-300"
-              style={{ transform: 'translateZ(0)' }}
-              decoding="sync"
-              loading="eager"
-              onLoad={() => rememberLockerImageLoaded(namePath)}
-              onError={() => setNameFailed(true)}
-            />
-          </div>
-        )}
-      </div>
+      {/* Issue #208: hide the name label when the active skin's image already
+          shows the hero name. Without an override image the label always shows. */}
+      {!(hideHeroName && cardImage) && (
+        <div className="absolute bottom-0 left-0 right-0 p-2 sm:p-3 flex flex-col items-end text-right">
+          {nameFailed ? (
+            <div className="text-sm font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">{hero.name}</div>
+          ) : (
+            <div className="relative w-[70%] h-6 sm:h-7 ml-auto">
+              <img
+                src={namePath}
+                alt={hero.name}
+                className="absolute inset-0 w-full h-full object-contain object-right drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)] will-change-transform backface-visibility-hidden group-hover:scale-105 scale-100 transition-transform duration-300"
+                style={{ transform: 'translateZ(0)' }}
+                decoding="sync"
+                loading="eager"
+                onLoad={() => rememberLockerImageLoaded(namePath)}
+                onError={() => setNameFailed(true)}
+              />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -1684,12 +2152,16 @@ function HeroCard({
   mods,
   sounds,
   hasAbilityRecolor,
+  cardImage,
   expanded,
   onToggleExpanded,
   onBrowseSkins,
   onSelect,
   onToggleVariant,
   onRequestDelete,
+  includedSkinKeys,
+  onToggleShuffleIncluded,
+  shuffleArmed,
   isFavorite,
   onToggleFavorite,
   hideNsfwPreviews,
@@ -1710,14 +2182,17 @@ function HeroCard({
   const activeSection = section === 'sounds' && !hasSounds ? 'skins' : section;
   const activeList = activeSection === 'sounds' ? sounds : mods;
 
+  // A user-provided card image (issue #208) wins outright; otherwise fall back
+  // through the render chain: local render -> wiki render -> GameBanana icon.
   const bgSrc =
-    bgFallbackStep === 0
+    cardImage ??
+    (bgFallbackStep === 0
       ? localUrl
       : bgFallbackStep === 1
         ? wikiUrl
         : bgFallbackStep === 2
           ? (hero.iconUrl ?? '')
-          : '';
+          : '');
 
   const handleBgError = () => {
     if (bgFallbackStep === 0) {
@@ -1753,9 +2228,9 @@ function HeroCard({
           aria-hidden
           decoding="async"
           onLoad={() => rememberLockerImageLoaded(bgSrc)}
-          onError={handleBgError}
+          onError={cardImage ? undefined : handleBgError}
           className="pointer-events-none absolute inset-0 h-full w-full object-cover"
-          style={{ objectPosition: `${facePositionX}% 18%` }}
+          style={{ objectPosition: cardImage ? 'center' : `${facePositionX}% 18%` }}
         />
       )}
       <div
@@ -1852,6 +2327,9 @@ function HeroCard({
           onSelect={onSelect}
           onToggleVariant={onToggleVariant}
           onRequestDelete={onRequestDelete}
+          includedSkinKeys={activeSection === 'skins' ? includedSkinKeys : undefined}
+          onToggleShuffleIncluded={activeSection === 'skins' ? onToggleShuffleIncluded : undefined}
+          shuffleArmed={shuffleArmed}
           hideNsfwPreviews={hideNsfwPreviews}
           showDownloadable={activeSection === 'skins'}
           browseAction={

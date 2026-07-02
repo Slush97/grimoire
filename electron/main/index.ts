@@ -1,9 +1,10 @@
-import { app, BrowserWindow, shell, session, protocol, nativeTheme } from 'electron';
+import { app, BrowserWindow, shell, session, protocol, nativeTheme, screen } from 'electron';
 import { join, resolve } from 'path';
 import { pathToFileURL } from 'url';
 import { electronApp, optimizer, is } from '@electron-toolkit/utils';
 import { SOUL_MODEL_SCHEME, registerSoulModelProtocol } from './services/soulContainerModels';
 import { HERO_POSE_SCHEME, registerHeroPoseProtocol, sweepHeroPoseCache } from './services/heroPoseModels';
+import { FOUNDRY_THUMB_SCHEME, registerFoundryThumbnailProtocol } from './services/foundryCatalog';
 
 // The `grimoire-soul:` and `grimoire-hero:` schemes serve GLBs (soul-container
 // models and posed hero stills) out of the user's library to the renderer's 3D
@@ -16,6 +17,11 @@ protocol.registerSchemesAsPrivileged([
     },
     {
         scheme: HERO_POSE_SCHEME,
+        privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
+    },
+    {
+        // Serves Foundry's cached texture/icon thumbnails (PNG) to the browse grid.
+        scheme: FOUNDRY_THUMB_SCHEME,
         privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true },
     },
 ]);
@@ -81,11 +87,15 @@ import './ipc/abilitySounds';
 import './ipc/abilityColors';
 import './ipc/trippyEffects';
 import './ipc/locker';
+import './ipc/lockerModImages';
+import './ipc/appearanceImages';
 import './ipc/previewCache';
 import './ipc/discord';
 import './ipc/saltIngest';
 import './ipc/servers';
+import './ipc/foundry';
 import './ipc/performanceConfig';
+import './ipc/dmmMigrate';
 
 import { initUpdater, checkForUpdates, getInstallSource } from './services/updater';
 import { runStartupRecovery } from './ipc/launch';
@@ -137,12 +147,67 @@ async function backfillStartupMetadataHashes(): Promise<void> {
     }
 }
 
+const DEFAULT_WINDOW_WIDTH = 1280;
+const DEFAULT_WINDOW_HEIGHT = 800;
+const MIN_WINDOW_WIDTH = 900;
+const MIN_WINDOW_HEIGHT = 600;
+
+/**
+ * Resolve the saved window rectangle into safe constructor bounds. We only
+ * honour a saved position when it still lands on a connected display: on some
+ * multi-monitor Linux/Wayland setups the OS otherwise placed the window on the
+ * wrong screen at the wrong size, and a stale x/y from an unplugged monitor
+ * would strand the window offscreen. When the saved spot is gone (or nothing
+ * was saved yet) we omit x/y so Electron centers on the primary display.
+ */
+function resolveInitialBounds(): {
+    width: number;
+    height: number;
+    x?: number;
+    y?: number;
+    isMaximized: boolean;
+} {
+    const saved = loadSettings().windowBounds;
+    if (!saved) {
+        return { width: DEFAULT_WINDOW_WIDTH, height: DEFAULT_WINDOW_HEIGHT, isMaximized: false };
+    }
+
+    const width = Math.max(MIN_WINDOW_WIDTH, Math.round(saved.width) || DEFAULT_WINDOW_WIDTH);
+    const height = Math.max(MIN_WINDOW_HEIGHT, Math.round(saved.height) || DEFAULT_WINDOW_HEIGHT);
+
+    // Only restore the position if the saved rectangle visibly overlaps some
+    // display's work area; otherwise the monitor it was on is gone.
+    let x: number | undefined;
+    let y: number | undefined;
+    if (typeof saved.x === 'number' && typeof saved.y === 'number') {
+        const onScreen = screen.getAllDisplays().some((display) => {
+            const wa = display.workArea;
+            return (
+                saved.x! < wa.x + wa.width &&
+                saved.x! + width > wa.x &&
+                saved.y! < wa.y + wa.height &&
+                saved.y! + height > wa.y
+            );
+        });
+        if (onScreen) {
+            x = Math.round(saved.x);
+            y = Math.round(saved.y);
+        }
+    }
+
+    return { width, height, x, y, isMaximized: !!saved.isMaximized };
+}
+
 function createWindow(): void {
+    const initial = resolveInitialBounds();
     mainWindow = new BrowserWindow({
-        width: 1280,
-        height: 800,
-        minWidth: 900,
-        minHeight: 600,
+        width: initial.width,
+        height: initial.height,
+        ...(initial.x !== undefined && initial.y !== undefined
+            ? { x: initial.x, y: initial.y }
+            : {}),
+        minWidth: MIN_WINDOW_WIDTH,
+        minHeight: MIN_WINDOW_HEIGHT,
         title: 'Grimoire',
         show: false, // Don't show until ready to prevent white flash
         backgroundColor: '#0f0f0f', // Dark background matching app theme
@@ -162,7 +227,53 @@ function createWindow(): void {
 
     // Show window when ready to prevent white screen flash
     mainWindow.once('ready-to-show', () => {
+        if (initial.isMaximized) mainWindow?.maximize();
         mainWindow?.show();
+    });
+
+    // Persist position and size so the app reopens where the user left it.
+    // We record the *normal* (non-maximized) bounds via getNormalBounds so a
+    // maximized session still restores to a sensible windowed rectangle, plus
+    // the maximized flag itself. Debounced because move/resize fire rapidly
+    // during a drag.
+    let saveBoundsTimer: NodeJS.Timeout | null = null;
+    const writeBounds = () => {
+        if (!mainWindow || mainWindow.isDestroyed() || mainWindow.isMinimized()) return;
+        try {
+            const bounds = mainWindow.getNormalBounds();
+            saveSettings({
+                ...loadSettings(),
+                windowBounds: {
+                    x: bounds.x,
+                    y: bounds.y,
+                    width: bounds.width,
+                    height: bounds.height,
+                    isMaximized: mainWindow.isMaximized(),
+                },
+            });
+        } catch (err) {
+            console.warn('[Main] Failed to persist window bounds:', err);
+        }
+    };
+    const persistBounds = () => {
+        if (saveBoundsTimer) clearTimeout(saveBoundsTimer);
+        saveBoundsTimer = setTimeout(() => {
+            saveBoundsTimer = null;
+            writeBounds();
+        }, 400);
+    };
+    mainWindow.on('resize', persistBounds);
+    mainWindow.on('move', persistBounds);
+    mainWindow.on('maximize', persistBounds);
+    mainWindow.on('unmaximize', persistBounds);
+    // Flush the final rectangle synchronously: a move/resize immediately before
+    // quitting would otherwise be swallowed by the debounce.
+    mainWindow.on('close', () => {
+        if (saveBoundsTimer) {
+            clearTimeout(saveBoundsTimer);
+            saveBoundsTimer = null;
+        }
+        writeBounds();
     });
 
     mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -303,6 +414,9 @@ if (!gotTheLock) {
         // Serve per-hero posed stills from the user's library.
         registerHeroPoseProtocol();
 
+        // Serve Foundry's cached texture/icon thumbnails to the browse grid.
+        registerFoundryThumbnailProtocol();
+
         // Reclaim disk from stale or least-recently-used pose entries; the
         // cache is also swept after each export.
         void sweepHeroPoseCache();
@@ -323,8 +437,16 @@ if (!gotTheLock) {
                             "script-src 'self'; " +
                             "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
                             "font-src 'self' https://fonts.gstatic.com; " +
-                            "img-src 'self' data: https: blob:; " +
-                            "media-src 'self' https:; " +
+                            // `grimoire-foundry:` serves Foundry's cached texture
+                            // thumbnails, rendered as <img>, so they must be allowed
+                            // here or the browse grid is blank under the prod CSP.
+                            "img-src 'self' data: https: blob: grimoire-foundry:; " +
+                            // Foundry voice-line auditions are served as `data:audio/mpeg`
+                            // URLs into an <audio> element (the clip MP3 is sliced out of
+                            // the `.vsnd_c` in the main process), so `data:` must be allowed
+                            // here or audition is blocked under the prod CSP (works in dev,
+                            // which has no CSP).
+                            "media-src 'self' https: data:; " +
                             // Social fetches happen from the main process (fetch in Node),
                             // not the renderer, so they bypass CSP. The `https://*.workers.dev`
                             // entry is here so any future renderer-side asset (e.g. avatar URL

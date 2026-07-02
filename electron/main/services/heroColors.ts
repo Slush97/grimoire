@@ -42,6 +42,7 @@ import type {
     LockerColorsInfo,
     TrippyVfxChoice,
 } from '../../../src/types/mod';
+import type { HeroEffectExportRequest } from '../../../src/types/foundry';
 
 /**
  * Display name -> model/particle recolor codename, scoped to heroes that have a
@@ -582,6 +583,61 @@ export async function applyHeroTrippyVfx(
     ];
     await rebuildLockerColors(deadlockPath, next);
     return normalized;
+}
+
+/**
+ * Bake the hero effect described by `req` into a standalone addon VPK and return
+ * its path (plus a suggested export filename), WITHOUT folding it into the managed
+ * colors mod. This is the export-to-disk counterpart of `applyHeroColor`/`Prism`/
+ * `TrippyVfx`: it reuses the exact same per-hero, cached `ensureHero*Bake` the apply
+ * path uses (so a previously applied look exports instantly from cache), but stops
+ * before installing. The single-hero cache IS a complete addon VPK, so it can be
+ * copied straight out to disk.
+ */
+export async function buildHeroEffectVpkForExport(
+    deadlockPath: string,
+    req: HeroEffectExportRequest
+): Promise<{ vpkPath: string; suggestedName: string }> {
+    vpkmergeBinaryPath(); // surface a clear error early if the binary is missing/old
+    const codename = colorCodenameForHero(req.heroName);
+    if (!codename) {
+        throw new Error(`Ability color recolor isn't available for ${req.heroName} yet.`);
+    }
+    const pak01 = join(getCitadelPath(deadlockPath), 'pak01_dir.vpk');
+    if (!existsSync(pak01)) {
+        throw new Error('Base game pak01_dir.vpk not found; check the Deadlock path in Settings.');
+    }
+
+    let vpkPath: string;
+    let tag: string;
+    if (req.mode === 'trippy') {
+        const choice = normalizeTrippyVfxChoice(req.trippy ?? {});
+        vpkPath = await ensureHeroTrippyVfxBake(pak01, codename, choice);
+        tag = `trippy_${choice.style}`;
+    } else if (req.mode === 'prism' || req.mode === 'gradient') {
+        const grad = req.gradient && req.gradient.trim() ? req.gradient.trim() : null;
+        vpkPath = await ensureHeroPrismBake(
+            pak01,
+            codename,
+            normalizeHue(req.hue),
+            normalizeSaturation(req.saturation),
+            normalizeBrightness(req.brightness),
+            req.animated ?? false,
+            grad
+        );
+        tag = grad ? 'gradient' : req.animated ? 'prism_animated' : 'prism';
+    } else {
+        vpkPath = await ensureHeroColorBake(
+            pak01,
+            codename,
+            normalizeHue(req.hue),
+            normalizeSaturation(req.saturation),
+            normalizeBrightness(req.brightness)
+        );
+        tag = `hue${normalizeHue(req.hue)}`;
+    }
+
+    return { vpkPath, suggestedName: `${codename}_${tag}_dir.vpk` };
 }
 
 /** Remove hero X's ability color, reverting its VFX to vanilla. */

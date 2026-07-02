@@ -84,6 +84,12 @@
   --color-bg-primary: #0f0f0f;
   --color-bg-secondary: #1a1a1a;
   --color-bg-tertiary: #242424;
+  /* Sunken/recessed surface, darker than the app bg. Sits behind cards and
+     backs inactive picker/segment chips. */
+  --color-bg-sunken: #141414;
+  /* Dark "glass" surface for floating popovers layered over imagery (e.g. the
+     Browse sound-card volume flyout). */
+  --color-bg-glass: #0a0c10;
   --color-accent: #f97316;
   --color-accent-hover: #ea580c;
   /* Foreground (text/icon) color for solid `bg-accent` surfaces. Flips between
@@ -95,6 +101,9 @@
   --color-text-secondary: #a1a1aa;
   --color-text-tertiary: #8a8a94;
   --color-border: #2d2d2d;
+  /* Warm off-white for the Browse "readable" card title, deliberately softer
+     than pure white. */
+  --color-mod-title: #eee8df;
 
   /* Semantic state tokens. Use these for card states, toasts, badges —
      anything that communicates status. The raw Tailwind colors
@@ -107,6 +116,7 @@
   /* Third-party brand colors (buttons/links that represent the brand itself). */
   --color-brand-discord: #5865F2;
   --color-brand-kofi: #FF5E5B;
+  --color-brand-kofi-hover: #ff4542;
 
   --font-radiance: 'Radiance', system-ui, sans-serif;
   --font-reaver: 'Reaver', serif;
@@ -118,6 +128,18 @@
      distinctly from l. To switch to a cleaner neutral look, change this one line
      to: Tahoma, Verdana, system-ui, sans-serif (OS fonts, nothing bundled). */
   --font-mod-title: 'Reaver', serif;
+}
+
+/* Bottom-up dark scrim for art/thumbnail overlays so foreground chrome stays
+   legible over any underlying image. Pairs with `absolute inset-0`. Replaces
+   the gradient that was copy-pasted across the Locker/Installed surfaces. */
+@utility scrim-bottom {
+  background-image: linear-gradient(
+    to bottom,
+    rgb(15 15 15 / 0.45),
+    rgb(15 15 15 / 0.65),
+    rgb(15 15 15 / 0.88)
+  );
 }
 
 /* Base styles */
@@ -494,6 +516,24 @@ body {
   opacity: 1;
 }
 
+/* Category/hero/NSFW chips float over the thumbnail and fade in on card hover
+   (and keyboard focus), keeping the text body short. */
+.browse-readable-card-chips {
+  opacity: 0;
+  transition: opacity 160ms ease;
+}
+
+.group:hover .browse-readable-card-chips,
+.group:focus-visible .browse-readable-card-chips,
+.group:focus-within .browse-readable-card-chips {
+  opacity: 1;
+}
+
+/* Suppressed during fast scroll, like the other hover affordances. */
+.browse-is-scrolling .group:hover .browse-readable-card-chips {
+  opacity: 0;
+}
+
 .browse-sound-placeholder::before {
   content: '';
   position: absolute;
@@ -693,6 +733,26 @@ body {
 
 .browse-details-dock-panel {
   animation: browseDockPanelIn 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+/* Exit slides the whole dock out to the right, mirroring the entrance. By the
+   time this plays the dock is an absolute overlay (see Browse.tsx) and the grid
+   has already reflowed wide underneath it, so sliding the opaque dock off-screen
+   simply uncovers the final layout, and its unmount causes no reflow. Same
+   timing/easing as browseDockPanelIn so open and close read as one motion played
+   in reverse. `forwards` holds the off-screen frame for the unmount tick. */
+@keyframes browseDockPanelOut {
+  from {
+    transform: translateX(0);
+  }
+
+  to {
+    transform: translateX(100%);
+  }
+}
+
+.browse-details-dock.is-closing {
+  animation: browseDockPanelOut 220ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
 /* Locker Hero animations */
@@ -974,8 +1034,16 @@ body {
 
 .sidebar-active-indicator {
   contain: paint;
-  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1);
   will-change: transform;
+}
+
+/* Transition only while gliding between targets (tab/settings select). Off by
+   default so the indicator tracks nav-list scroll instantly instead of trailing
+   it by the ease duration. */
+.sidebar-active-indicator--sliding {
+  transition: transform 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 260ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .sidebar-offset-transition {
@@ -988,6 +1056,36 @@ body {
 
 .sidebar-active-backdrop__image {
   will-change: transform;
+}
+
+/* Settings gear: rotates on hover (light tease) and does a one-shot "spin into
+   place" on click (the .settings-gear--spin flourish), which lands just as the
+   route commits. .settings-gear only exists inside the Settings button, so the
+   generic .group:hover scope is effectively settings-only. */
+.settings-gear {
+  transform-origin: 50% 50%;
+  transition: transform 480ms cubic-bezier(0.22, 1, 0.36, 1);
+  /* Where the click spin lands. Matches the resting transform below so that when
+     the --spin class is stripped on animationend the gear settles in place with
+     no snap: 0deg at rest, a full extra turn (450deg ≡ 90deg) while hovered. */
+  --gear-spin-end: 360deg;
+}
+
+.group:hover .settings-gear {
+  transform: rotate(90deg);
+  --gear-spin-end: 450deg;
+}
+
+/* One-shot mechanical spin: a touch past a full turn, then settles back, like a
+   gear clicking into its seat. Overrides the hover rotate while it runs and ends
+   on the current rest position (--gear-spin-end) so staying hovered doesn't jump. */
+.settings-gear--spin {
+  animation: settingsGearSpin 640ms cubic-bezier(0.34, 1.45, 0.5, 1);
+}
+
+@keyframes settingsGearSpin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(var(--gear-spin-end)); }
 }
 
 /* Skeleton shimmer — used for async-loading placeholders. Surfaces apply
@@ -1268,6 +1366,104 @@ body {
   background: var(--color-bg-secondary);
 }
 
+/* ============================================================================
+   Premium UI Card System Enhancements
+   ========================================================================== */
+
+/* Refined Glassmorphism Cards */
+.premium-glass-card {
+  background: linear-gradient(
+    135deg,
+    rgba(20, 20, 20, 0.45) 0%,
+    rgba(12, 12, 12, 0.75) 100%
+  );
+  backdrop-filter: blur(14px) saturate(125%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  box-shadow: 
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 4px 20px rgba(0, 0, 0, 0.35);
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-glass-card:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(25, 25, 25, 0.55) 0%,
+    rgba(18, 18, 18, 0.8) 100%
+  );
+  border-color: rgba(255, 255, 255, 0.16);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 12px 32px rgba(0, 0, 0, 0.5);
+  /* Lift only, no scale(): this card has backdrop-filter, and scaling a
+     backdrop-filtered element upscales its whole rasterized surface, softening
+     the thumbnail + text. The lift + glow already read as "pop" without blur. */
+  transform: translateY(-3px);
+}
+
+/* Premium Card Hover Glow and Transitions */
+.premium-card-glow {
+  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.premium-card-glow:hover {
+  /* No scale() here either, see .premium-glass-card:hover. */
+  transform: translateY(-3px);
+  box-shadow:
+    0 12px 30px rgba(0, 0, 0, 0.55);
+}
+
+/* Accent Glow for Enabled cards */
+.premium-card-glow-active:hover {
+  box-shadow: 
+    0 0 25px rgba(249, 115, 22, 0.12),
+    0 12px 30px rgba(0, 0, 0, 0.55);
+  border-color: rgba(249, 115, 22, 0.45);
+}
+
+/* Warning Glow for Conflict cards */
+.premium-card-glow-warning:hover {
+  box-shadow: 
+    0 0 25px rgba(250, 204, 21, 0.12),
+    0 12px 30px rgba(0, 0, 0, 0.55);
+  border-color: rgba(250, 204, 21, 0.45);
+}
+
+/* Glassmorphic Overlay Badges */
+.premium-overlay-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  backdrop-filter: blur(8px);
+  background-color: rgba(10, 12, 16, 0.65);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 6px;
+  padding: 3px 8px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: rgba(255, 255, 255, 0.9);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Seamless Title Inline Renaming */
+.premium-inline-rename-input {
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  line-height: inherit;
+  color: inherit;
+  background: rgba(0, 0, 0, 0.3);
+  border: none;
+  border-bottom: 2px solid var(--color-accent);
+  padding: 0 4px;
+  border-radius: 2px;
+  outline: none;
+  width: 100%;
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-slide-in-left,
   .animate-hero-zoom-in,
@@ -1306,6 +1502,7 @@ body {
   .sidebar-title-text,
   .sidebar-collapsible-label,
   .sidebar-active-indicator,
+  .sidebar-active-indicator--sliding,
   .sidebar-offset-transition {
     transition-duration: 0.01ms;
   }
@@ -1333,6 +1530,19 @@ body {
 
   /* Keep the stripe pattern visible (it carries meaning) but stop the slide. */
   .update-stripes::before {
+    animation: none;
+  }
+
+  /* Settings gear: drop the rotate/spin motion. */
+  .settings-gear {
+    transition-duration: 0.01ms;
+  }
+
+  .group:hover .settings-gear {
+    transform: none;
+  }
+
+  .settings-gear--spin {
     animation: none;
   }
 }

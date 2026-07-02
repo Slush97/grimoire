@@ -430,6 +430,7 @@ async function triggerSteamLaunch(): Promise<void> {
 export interface LaunchOptions {
     deadlockPath: string;
     onRestoreComplete?: (result: RestoreResult) => void;
+    beforeLaunch?: () => void | Promise<void>;
 }
 
 /**
@@ -440,6 +441,7 @@ export interface LaunchOptions {
 export async function launchModded({
     deadlockPath,
     onRestoreComplete,
+    beforeLaunch,
 }: LaunchOptions): Promise<void> {
     if (launchInFlight) {
         throw new Error('Another launch is already in progress');
@@ -456,6 +458,7 @@ export async function launchModded({
                 );
             }
         }
+        await beforeLaunch?.();
         await syncLaunchOptionsToSteam();
         await triggerSteamLaunch();
     } finally {
@@ -473,6 +476,7 @@ export async function launchModded({
 export async function launchVanilla({
     deadlockPath,
     onRestoreComplete,
+    beforeLaunch,
 }: LaunchOptions): Promise<void> {
     if (launchInFlight) {
         throw new Error('Another launch is already in progress');
@@ -503,6 +507,7 @@ export async function launchVanilla({
     }
 
     try {
+        await beforeLaunch?.();
         await syncLaunchOptionsToSteam();
         await triggerSteamLaunch();
     } catch (err) {

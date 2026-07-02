@@ -7,6 +7,7 @@ import {
   Globe2,
   Server,
   Vault,
+  Hammer,
   Target,
   ScrollText,
   Activity,
@@ -15,6 +16,7 @@ import {
   Settings2,
   AlertTriangle,
   ArrowRight,
+  ArrowRightLeft,
   Download,
   Play,
   Wand2,
@@ -24,10 +26,7 @@ import {
   Square,
   Volume2,
   VolumeX,
-  Image,
-  ImageOff,
 } from 'lucide-react';
-import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from './common/menu';
 import {
   getConflicts,
   getGameRunningStatus,
@@ -44,13 +43,14 @@ import {
 
 import { getAssetPath } from '../lib/assetPath';
 import { rollMemeTooltip } from '../lib/easterEggs';
-import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath } from '../lib/lockerUtils';
+import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath, resolveAppearanceBg } from '../lib/lockerUtils';
 import { useAppStore } from '../stores/appStore';
 import UpdateModal from './UpdateModal';
 import Tx from './translation/Tx';
+import { SidebarActiveBackdrop, SurfaceBackdrop } from './sidebar/surfaceArt';
 
 const COLLAPSED_KEY = 'grimoire:sidebar-collapsed';
-const LAUNCH_BG_HIDDEN_KEY = 'grimoire:launch-bg-hidden';
+const LAUNCH_MODE_KEY = 'grimoire:launch-mode';
 const LABEL_TRANSITION_MS = 180;
 const DISCOVER_LAST_SEEN_KEY = 'grimoire:discover:last-seen-created-at';
 const DISCOVER_BADGE_POLL_MS = 2 * 60 * 1000;
@@ -65,9 +65,13 @@ function readCollapsedPreference(): boolean {
   return localStorage.getItem(COLLAPSED_KEY) === '1';
 }
 
-function readLaunchBgHiddenPreference(): boolean {
-  if (typeof window === 'undefined') return false;
-  return localStorage.getItem(LAUNCH_BG_HIDDEN_KEY) === '1';
+// Which mode the single dual-use launch button fires (issue: unify launch
+// buttons). Persisted like the collapse preference; defaults to modded.
+type LaunchMode = 'modded' | 'vanilla';
+
+function readLaunchModePreference(): LaunchMode {
+  if (typeof window === 'undefined') return 'modded';
+  return localStorage.getItem(LAUNCH_MODE_KEY) === 'vanilla' ? 'vanilla' : 'modded';
 }
 
 function readDiscoverLastSeen(): number | null {
@@ -117,69 +121,6 @@ function GrimoireTitleIcon() {
   );
 }
 
-function SidebarActiveBackdrop({
-  heroSrc,
-  heroImageStyle,
-}: {
-  heroSrc: string | null;
-  heroImageStyle: CSSProperties;
-}) {
-  if (heroSrc) {
-    return (
-      <span aria-hidden className="sidebar-active-backdrop pointer-events-none absolute inset-0">
-        <img
-          src={heroSrc}
-          alt=""
-          className="sidebar-active-backdrop__image h-full w-full object-cover opacity-75"
-          style={heroImageStyle}
-        />
-        <span className="absolute inset-0 bg-gradient-to-r from-bg-primary/90 via-bg-primary/55 to-bg-primary/20" />
-        <span className="absolute inset-0 bg-black/20" />
-      </span>
-    );
-  }
-
-  return (
-    <span
-      aria-hidden
-      className="sidebar-active-backdrop pointer-events-none absolute inset-0 bg-accent/10"
-    >
-      <span className="absolute inset-0 bg-gradient-to-r from-accent/20 via-accent/8 to-transparent" />
-    </span>
-  );
-}
-
-function LaunchButtonBackdrop({
-  src,
-  position = 'center',
-  warm = false,
-}: {
-  src: string;
-  position?: string;
-  warm?: boolean;
-}) {
-  return (
-    <span aria-hidden className="pointer-events-none absolute inset-0">
-      <img
-        src={src}
-        alt=""
-        className={`h-full w-full object-cover opacity-65 transition-transform duration-300 group-hover:scale-[1.04] ${
-          warm ? 'saturate-[0.95]' : 'saturate-[1.05]'
-        }`}
-        style={{ objectPosition: position }}
-      />
-      <span
-        className={`absolute inset-0 ${
-          warm
-            ? 'bg-gradient-to-r from-bg-primary/85 via-bg-primary/55 to-amber-950/25'
-            : 'bg-gradient-to-r from-bg-primary/82 via-bg-primary/50 to-emerald-950/20'
-        }`}
-      />
-      <span className="absolute inset-0 bg-black/20" />
-    </span>
-  );
-}
-
 export default function Sidebar() {
   const { t } = useTranslation();
   const [conflictCount, setConflictCount] = useState(0);
@@ -187,8 +128,10 @@ export default function Sidebar() {
   const [appVersion, setAppVersion] = useState('');
   const [updateAvailable, setUpdateAvailable] = useState(false);
   const settings = useAppStore((state) => state.settings);
+  const appearanceImages = useAppStore((state) => state.appearanceImages);
   const mods = useAppStore((state) => state.mods);
   const loadMods = useAppStore((state) => state.loadMods);
+  const runLaunchShuffle = useAppStore((state) => state.runLaunchShuffle);
   const soundVolume = useAppStore((state) => state.soundVolume);
   const setSoundVolume = useAppStore((state) => state.setSoundVolume);
   const previewAudioPlaying = useAppStore((state) => state.previewAudioPlaying);
@@ -199,6 +142,7 @@ export default function Sidebar() {
 
   const [stashStatus, setStashStatus] = useState<VanillaStashStatus>({ active: false });
   const [launchPending, setLaunchPending] = useState<'modded' | 'vanilla' | null>(null);
+  const [launchMode, setLaunchMode] = useState<LaunchMode>(readLaunchModePreference);
   const [gameRunning, setGameRunning] = useState(false);
   const [stopPending, setStopPending] = useState(false);
   const [restorePending, setRestorePending] = useState(false);
@@ -211,22 +155,33 @@ export default function Sidebar() {
     action?: { label: string; onClick: () => void | Promise<void> };
   } | null>(null);
   const [updateModalOpen, setUpdateModalOpen] = useState(false);
+  // One-shot "spin into place" for the Settings gear on click. Cleared on
+  // animationend so a re-click can restart it. Hover does a lighter rotate via
+  // CSS; this is the punchier nav-commit flourish.
+  const [gearSpinning, setGearSpinning] = useState(false);
 
   // Persisted via localStorage so it survives reloads without round-tripping
   // through the main-process settings file. This is pure UI state.
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsedPreference);
   const [memeTooltip, setMemeTooltip] = useState<{ to: string; text: string } | null>(null);
-  const [launchBgHidden, setLaunchBgHidden] = useState<boolean>(readLaunchBgHiddenPreference);
   const [labelsVisible, setLabelsVisible] = useState<boolean>(() => !readCollapsedPreference());
   const [labelMounted, setLabelMounted] = useState<boolean>(() => !readCollapsedPreference());
   const [showPreviewVolume, setShowPreviewVolume] = useState(false);
   const collapseTimerRef = useRef<number | null>(null);
   const previewVolumeHideTimerRef = useRef<number | null>(null);
   const labelFrameRef = useRef<number | null>(null);
+  const asideRef = useRef<HTMLElement | null>(null);
+  const navScrollRef = useRef<HTMLElement | null>(null);
   const navListRef = useRef<HTMLUListElement | null>(null);
   const navItemRefs = useRef<Array<HTMLLIElement | null>>([]);
+  const settingsItemRef = useRef<HTMLButtonElement | null>(null);
+  // Measured relative to the <aside> (not the nav list) so the single sliding
+  // highlight can travel between a nav tab and the footer Settings button, which
+  // live in different containers with different padding. Hence left/width too.
   const [activeNavMetrics, setActiveNavMetrics] = useState<{
     top: number;
+    left: number;
+    width: number;
     height: number;
   } | null>(null);
 
@@ -299,15 +254,23 @@ export default function Sidebar() {
   const navLabelClass = `flex-1 ${labelTransitionClass}`;
   const actionLabelClass = `flex-1 text-left ${labelTransitionClass}`;
   const actionIconClass = 'flex h-full w-10 flex-shrink-0 items-center justify-center';
-  const configuredSidebarHero = settings?.sidebarHeroHighlight;
-  const sidebarHeroHighlight =
-    configuredSidebarHero === null || configuredSidebarHero === ''
-      ? null
-      : configuredSidebarHero ?? DEFAULT_SIDEBAR_HERO;
-  const sidebarHeroHighlightSrc = sidebarHeroHighlight
-    ? getHeroRenderPath(sidebarHeroHighlight)
-    : null;
-  const sidebarHeroImageStyle = getSidebarHeroImageStyle(sidebarHeroHighlight);
+  // Resolve each customizable surface's background (issue: unify launcher
+  // backgrounds). resolveAppearanceBg owns the default + legacy fallback rules.
+  const launchModdedBg = resolveAppearanceBg(settings, 'launchModded');
+  const launchVanillaBg = resolveAppearanceBg(settings, 'launchVanilla');
+  const volumeBg = resolveAppearanceBg(settings, 'volume');
+  const activeTabBg = resolveAppearanceBg(settings, 'activeTab');
+  // The active-tab highlight either paints an image (a framed/baked surface, or a
+  // live hero render) or the plain accent glow (default). A baked image wins for
+  // any kind; otherwise a hero render; otherwise null keeps the accent-border state.
+  const activeTabBaked = appearanceImages.activeTab ?? null;
+  const sidebarHeroHighlightSrc =
+    activeTabBaked ??
+    (activeTabBg.kind === 'hero' ? getHeroRenderPath(activeTabBg.hero ?? DEFAULT_SIDEBAR_HERO) : null);
+  const sidebarHeroImageStyle: CSSProperties =
+    !activeTabBaked && activeTabBg.kind === 'hero'
+      ? getSidebarHeroImageStyle(activeTabBg.hero ?? DEFAULT_SIDEBAR_HERO)
+      : { objectPosition: 'center' };
   const settingsActive = location.pathname.startsWith('/settings');
   const discoverActive = location.pathname.startsWith('/discover');
 
@@ -500,7 +463,7 @@ export default function Sidebar() {
       labelKey: string;
       label: string;
       tooltip: string;
-      experimental?: 'crosshair' | 'stats' | 'social' | 'servers';
+      experimental?: 'crosshair' | 'stats' | 'social' | 'servers' | 'foundry';
       tone?: 'test';
       badge?: number;
       badgeTone?: BadgeTone;
@@ -522,6 +485,7 @@ export default function Sidebar() {
       },
       { to: '/servers', icon: Server, labelKey: 'nav.servers', label: t('nav.servers'), tooltip: t('sidebar.tooltip.servers'), experimental: 'servers' },
       { to: '/locker', icon: Vault, labelKey: 'nav.locker', label: t('nav.locker'), tooltip: t('sidebar.tooltip.locker') },
+      { to: '/foundry', icon: Hammer, labelKey: 'nav.foundry', label: t('nav.foundry'), tooltip: t('sidebar.tooltip.foundry'), experimental: 'foundry' },
       { to: '/crosshair', icon: Target, labelKey: 'nav.crosshair', label: t('nav.crosshair'), tooltip: t('sidebar.tooltip.crosshair'), experimental: 'crosshair' },
       { to: '/autoexec', icon: ScrollText, labelKey: 'nav.autoexec', label: t('nav.autoexec'), tooltip: t('sidebar.tooltip.autoexec') },
       { to: '/stats', icon: Activity, labelKey: 'nav.stats', label: t('nav.stats'), tooltip: t('sidebar.tooltip.stats'), experimental: 'stats' },
@@ -534,9 +498,10 @@ export default function Sidebar() {
       if (item.experimental === 'crosshair') return settings?.experimentalCrosshair;
       if (item.experimental === 'social') return settings?.experimentalSocial;
       if (item.experimental === 'servers') return settings?.experimentalDeadworksServers;
+      if (item.experimental === 'foundry') return settings?.experimentalFoundry;
       return true;
     });
-  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, conflictCount, discoverNotificationCount, installedCount]);
+  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, settings?.experimentalFoundry, conflictCount, discoverNotificationCount, installedCount]);
 
   // Optimistic nav highlight. The router wraps navigation in startTransition,
   // so location.pathname (and any highlight derived from it) only updates
@@ -561,62 +526,117 @@ export default function Sidebar() {
   );
   const activeNavTone = activeNavIndex >= 0 ? navItems[activeNavIndex]?.tone : undefined;
 
-  const measureActiveNavItem = useCallback(() => {
-    const list = navListRef.current;
-    const item = activeNavIndex >= 0 ? navItemRefs.current[activeNavIndex] : null;
+  // The active target is either the highlighted nav tab or, when on /settings,
+  // the footer Settings button. We measure it against the <aside> so one indicator
+  // can slide across both regions (offsetTop won't work: they have different
+  // offset parents). getBoundingClientRect deltas give aside-relative box coords.
+  const activeTargetEl = (): HTMLElement | null =>
+    settingsActive
+      ? settingsItemRef.current
+      : activeNavIndex >= 0
+        ? navItemRefs.current[activeNavIndex]
+        : null;
 
-    if (!list || !item) {
+  const measureActiveTarget = useCallback(() => {
+    const aside = asideRef.current;
+    const el = activeTargetEl();
+
+    if (!aside || !el) {
       setActiveNavMetrics(null);
       return;
     }
 
+    const asideRect = aside.getBoundingClientRect();
+    const elRect = el.getBoundingClientRect();
     const next = {
-      top: item.offsetTop,
-      height: item.offsetHeight,
+      top: elRect.top - asideRect.top,
+      left: elRect.left - asideRect.left,
+      width: elRect.width,
+      height: elRect.height,
     };
 
     setActiveNavMetrics((prev) =>
-      prev && prev.top === next.top && prev.height === next.height ? prev : next
+      prev &&
+      prev.top === next.top &&
+      prev.left === next.left &&
+      prev.width === next.width &&
+      prev.height === next.height
+        ? prev
+        : next
     );
-  }, [activeNavIndex]);
+    // activeTargetEl is read fresh each call; deps cover what selects it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNavIndex, settingsActive]);
 
   useLayoutEffect(() => {
-    measureActiveNavItem();
-  }, [measureActiveNavItem, navItems.length, collapsed]);
+    measureActiveTarget();
+  }, [measureActiveTarget, navItems.length, collapsed]);
+
+  // Enable the glide transition only briefly around an active-target change, so
+  // selecting a tab/settings animates the highlight, while nav-list scrolling
+  // (same target, new position) tracks instantly with no trailing ease.
+  const [indicatorSliding, setIndicatorSliding] = useState(false);
+  const slideTimerRef = useRef<number | null>(null);
+  useEffect(() => {
+    setIndicatorSliding(true);
+    if (slideTimerRef.current !== null) window.clearTimeout(slideTimerRef.current);
+    slideTimerRef.current = window.setTimeout(() => {
+      setIndicatorSliding(false);
+      slideTimerRef.current = null;
+    }, 300);
+    return () => {
+      if (slideTimerRef.current !== null) {
+        window.clearTimeout(slideTimerRef.current);
+        slideTimerRef.current = null;
+      }
+    };
+  }, [activeNavIndex, settingsActive]);
 
   useEffect(() => {
-    const list = navListRef.current;
-    const item = activeNavIndex >= 0 ? navItemRefs.current[activeNavIndex] : null;
-    if (!list || !item || typeof ResizeObserver === 'undefined') return;
+    const aside = asideRef.current;
+    const el = activeTargetEl();
+    if (!aside || !el || typeof ResizeObserver === 'undefined') return;
 
-    const observer = new ResizeObserver(measureActiveNavItem);
-    observer.observe(list);
-    observer.observe(item);
-    window.addEventListener('resize', measureActiveNavItem);
+    const observer = new ResizeObserver(measureActiveTarget);
+    observer.observe(aside);
+    observer.observe(el);
+    // Re-measure when the nav list scrolls: nav-tab targets shift relative to the
+    // aside (the Settings target is in the fixed footer and is unaffected).
+    const nav = navScrollRef.current;
+    nav?.addEventListener('scroll', measureActiveTarget, { passive: true });
+    window.addEventListener('resize', measureActiveTarget);
 
     return () => {
       observer.disconnect();
-      window.removeEventListener('resize', measureActiveNavItem);
+      nav?.removeEventListener('scroll', measureActiveTarget);
+      window.removeEventListener('resize', measureActiveTarget);
     };
-  }, [activeNavIndex, measureActiveNavItem]);
-
-  const toggleLaunchBg = () => {
-    setLaunchBgHidden((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(LAUNCH_BG_HIDDEN_KEY, next ? '1' : '0');
-      } catch {
-        /* quota / private mode */
-      }
-      return next;
-    });
-  };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeNavIndex, settingsActive, measureActiveTarget]);
 
   const handleLaunchModded = async () => {
     if (launchPending || stopPending) return;
     setLaunchPending('modded');
     setToast(null);
     try {
+      // Re-roll the shuffled skins (no-op unless "Shuffle on launch" is armed)
+      // before the game mounts addons. Skipped when a vanilla stash is pending:
+      // launchModded restores that stash first, so a shuffle here would operate
+      // on the stashed-out files and get overwritten by the restore. Guarded so
+      // a failed shuffle never blocks the launch.
+      if (!stashStatus.active) {
+        try {
+          const { failures } = await runLaunchShuffle();
+          if (failures > 0) {
+            // The shuffle half-applied (a locked VPK, antivirus, the enable
+            // cap). Warn so a hero that silently fell back to vanilla isn't a
+            // mystery; the launch still proceeds.
+            setToast({ kind: 'error', text: t('sidebar.toast.shufflePartial', { count: failures }) });
+          }
+        } catch (err) {
+          console.warn('[launch] shuffle skipped:', err);
+        }
+      }
       await launchModded();
       if (stashStatus.active) {
         // Modded path did an auto-restore as part of the launch.
@@ -710,11 +730,93 @@ export default function Sidebar() {
 
   const canLaunch = !!settings?.deadlockPath || !!settings?.devDeadlockPath;
 
+  // Opt-in: combine the two launch buttons into one dual-use button. Off by
+  // default, so the sidebar keeps the stacked Launch Modded / Launch Vanilla
+  // buttons unless the user turns this on from Appearance.
+  const unifiedLaunch = settings?.unifiedLaunchButton ?? false;
+
+  // Single dual-use launch button (issue: unify launch buttons): one persisted
+  // mode drives the icon, label, art, handler, and enable/disable rules. The
+  // trailing swap control and right-click both flip between Modded and Vanilla.
+  const swapLaunchMode = useCallback(() => {
+    setLaunchMode((prev) => {
+      const next = prev === 'modded' ? 'vanilla' : 'modded';
+      try {
+        localStorage.setItem(LAUNCH_MODE_KEY, next);
+      } catch {
+        /* quota / private mode */
+      }
+      return next;
+    });
+  }, []);
+
+  const isModdedLaunch = launchMode === 'modded';
+  const LaunchIcon = isModdedLaunch ? Wand2 : Play;
+  const launchConfig = isModdedLaunch
+    ? {
+        onLaunch: handleLaunchModded,
+        labelKey: 'sidebar.launchModded',
+        bg: launchModdedBg,
+        defaultSrc: LAUNCH_MODDED_BG,
+        defaultPosition: 'center 45%',
+        warm: false,
+        customSrc: appearanceImages.launchModded,
+        // Modded is always available; it auto-restores a stash on the way in.
+        disabled: !canLaunch || !!launchPending || stopPending,
+        title: !canLaunch
+          ? t('sidebar.launch.noPath')
+          : stashStatus.active
+            ? t('sidebar.launch.moddedStash')
+            : t('sidebar.launch.moddedDefault'),
+        switchTitle: t('sidebar.launch.switchToVanilla'),
+      }
+    : {
+        onLaunch: handleLaunchVanilla,
+        labelKey: 'sidebar.launchVanilla',
+        bg: launchVanillaBg,
+        defaultSrc: LAUNCH_VANILLA_BG,
+        defaultPosition: 'center 48%',
+        warm: true,
+        customSrc: appearanceImages.launchVanilla,
+        // Vanilla is disabled while a stash is already active (restore first; the
+        // banner above explains it). Right-click can still swap back to Modded.
+        disabled: !canLaunch || !!launchPending || stopPending || stashStatus.active,
+        title: !canLaunch
+          ? t('sidebar.launch.noPath')
+          : stashStatus.active
+            ? t('sidebar.launch.vanillaStash')
+            : t('sidebar.launch.vanillaDefault'),
+        switchTitle: t('sidebar.launch.switchToModded'),
+      };
+
   return (
     <aside
+      ref={asideRef}
       data-collapsed={collapsed}
-      className="grimoire-sidebar bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden"
+      className="grimoire-sidebar relative bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden"
     >
+      {/* Single sliding highlight, positioned against the <aside> so it can glide
+          between a nav tab and the footer Settings button. Sits at z-0 behind the
+          nav list (z-10) and the footer buttons (which paint later in the DOM), so
+          their transparent active surfaces reveal it. */}
+      {activeNavMetrics && activeNavTone !== 'test' && (
+        <div
+          aria-hidden
+          className={`sidebar-active-indicator pointer-events-none absolute left-0 top-0 z-0 overflow-hidden rounded-sm ${
+            indicatorSliding ? 'sidebar-active-indicator--sliding' : ''
+          }`}
+          style={{
+            width: activeNavMetrics.width,
+            height: activeNavMetrics.height,
+            transform: `translate3d(${activeNavMetrics.left}px, ${activeNavMetrics.top}px, 0)`,
+          }}
+        >
+          <SidebarActiveBackdrop
+            heroSrc={sidebarHeroHighlightSrc}
+            heroImageStyle={sidebarHeroImageStyle}
+          />
+        </div>
+      )}
       <div className="relative flex h-11 flex-shrink-0 items-center overflow-hidden border-b border-border px-3">
         {labelMounted && !collapsed && (
           <div
@@ -747,23 +849,8 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <nav className="flex-1 min-h-0 overflow-y-auto p-2">
+      <nav ref={navScrollRef} className="flex-1 min-h-0 overflow-y-auto p-2">
         <div className="relative">
-          {activeNavIndex >= 0 && activeNavMetrics && activeNavTone !== 'test' && (
-            <div
-              aria-hidden
-              className="sidebar-active-indicator pointer-events-none absolute left-0 right-0 z-0 overflow-hidden rounded-sm"
-              style={{
-                height: activeNavMetrics.height,
-                transform: `translate3d(0, ${activeNavMetrics.top}px, 0)`,
-              }}
-            >
-              <SidebarActiveBackdrop
-                heroSrc={sidebarHeroHighlightSrc}
-                heroImageStyle={sidebarHeroImageStyle}
-              />
-            </div>
-          )}
           <ul ref={navListRef} className="relative z-10 space-y-0.5">
             {navItems.map(({ to, icon: Icon, labelKey, label, tooltip, tone, badge, badgeTone }, index) => {
               // Style from the optimistic index, not the router's isActive:
@@ -932,12 +1019,8 @@ export default function Sidebar() {
           </div>
         )}
 
-        {/* flex+gap rather than space-y: the launch context-menu trigger is a
-            display:contents span around both launch buttons, so space-y's
-            direct-child margin selector skips them while flex gap still
-            applies (they participate in the parent's layout individually).
-            gap-2 matches the footer rail's space-y-2 rhythm (launch buttons,
-            update flag, and Settings all sit 8px apart). */}
+        {/* flex+gap matches the footer rail's space-y-2 rhythm: the launch
+            buttons, update flag, and Settings all sit 8px apart. */}
         <div className="flex flex-col gap-2">
           {showPreviewVolume && (collapsed ? (
             <button
@@ -947,7 +1030,7 @@ export default function Sidebar() {
               aria-label={t('sidebar.previewVolume.levelLabel', { percent: Math.round(soundVolume * 100) })}
               className="group relative flex h-8 w-full items-center justify-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary/85 shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] transition-colors hover:border-accent/35 hover:text-text-primary cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 animate-fade-in"
             >
-              <LaunchButtonBackdrop src={PREVIEW_VOLUME_BG} position="center 43%" />
+              <SurfaceBackdrop bg={volumeBg} defaultSrc={PREVIEW_VOLUME_BG} defaultPosition="center 43%" customSrc={appearanceImages.volume} />
               {soundVolume > 0 ? (
                 <Volume2 className="relative z-10 h-4 w-4 drop-shadow-[0_1px_3px_rgba(0,0,0,0.7)]" />
               ) : (
@@ -956,7 +1039,7 @@ export default function Sidebar() {
             </button>
           ) : (
             <div className="group relative flex h-10 w-full items-center overflow-hidden rounded-sm border border-white/10 bg-bg-tertiary text-text-primary shadow-[inset_0_1px_0_rgba(255,255,255,0.06)] animate-fade-in">
-              <LaunchButtonBackdrop src={PREVIEW_VOLUME_BG} position="center 43%" />
+              <SurfaceBackdrop bg={volumeBg} defaultSrc={PREVIEW_VOLUME_BG} defaultPosition="center 43%" customSrc={appearanceImages.volume} />
               <button
                 type="button"
                 onClick={() => setSoundVolume(soundVolume > 0 ? 0 : 0.7)}
@@ -1005,73 +1088,141 @@ export default function Sidebar() {
                 </span>
               )}
             </button>
-          ) : (
-            <MenuRoot>
-              <MenuTrigger asChild>
-                <span className="contents">
-          <button
-            onClick={handleLaunchModded}
-            disabled={!canLaunch || !!launchPending || stopPending}
-            title={
-              !canLaunch
-                ? t('sidebar.launch.noPath')
-                : stashStatus.active
-                  ? t('sidebar.launch.moddedStash')
-                  : t('sidebar.launch.moddedDefault')
-            }
-            className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {!launchBgHidden && <LaunchButtonBackdrop src={LAUNCH_MODDED_BG} position="center 45%" />}
-            <span className={`relative z-10 ${actionIconClass}`}>
-              {launchPending === 'modded' ? (
-                <Loader2 className="w-[18px] h-[18px] animate-spin" />
-              ) : (
-                <Wand2 className="w-[18px] h-[18px]" strokeWidth={2} />
-              )}
-            </span>
-            {labelMounted && (
-              <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
-                {t('sidebar.launchModded')}
-              </span>
-            )}
-          </button>
-
-          <button
-            onClick={handleLaunchVanilla}
-            disabled={!canLaunch || !!launchPending || stopPending || stashStatus.active}
-            title={
-              !canLaunch
-                ? t('sidebar.launch.noPath')
-                : stashStatus.active
-                  ? t('sidebar.launch.vanillaStash')
-                  : t('sidebar.launch.vanillaDefault')
-            }
-            className={`group relative flex w-full h-8 items-center overflow-hidden rounded-sm text-text-primary/85 ring-1 ring-white/10 hover:text-text-primary hover:ring-amber-400/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed ${
-              launchBgHidden ? 'bg-bg-tertiary' : ''
-            }`}
-          >
-            {!launchBgHidden && <LaunchButtonBackdrop src={LAUNCH_VANILLA_BG} position="center 48%" warm />}
-            <span className={`relative z-10 ${actionIconClass}`}>
-              {launchPending === 'vanilla' ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Play className="w-4 h-4" strokeWidth={2} />
-              )}
-            </span>
-            {labelMounted && (
-              <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
-                {t('sidebar.launchVanilla')}
-              </span>
-            )}
-          </button>
+          ) : !unifiedLaunch ? (
+            // Default: the two stacked launch buttons. Each paints its own
+            // appearance surface (issue: unify launcher backgrounds); the old
+            // right-click "hide art" menu is gone (the Appearance surfaces own
+            // that now).
+            <>
+              <button
+                onClick={handleLaunchModded}
+                disabled={!canLaunch || !!launchPending || stopPending}
+                title={
+                  !canLaunch
+                    ? t('sidebar.launch.noPath')
+                    : stashStatus.active
+                      ? t('sidebar.launch.moddedStash')
+                      : t('sidebar.launch.moddedDefault')
+                }
+                className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SurfaceBackdrop
+                  bg={launchModdedBg}
+                  defaultSrc={LAUNCH_MODDED_BG}
+                  defaultPosition="center 45%"
+                  customSrc={appearanceImages.launchModded}
+                />
+                <span className={`relative z-10 ${actionIconClass}`}>
+                  {launchPending === 'modded' ? (
+                    <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                  ) : (
+                    <Wand2 className="w-[18px] h-[18px]" strokeWidth={2} />
+                  )}
                 </span>
-              </MenuTrigger>
-              <MenuContent>
-                <MenuItem icon={launchBgHidden ? Image : ImageOff} onSelect={toggleLaunchBg}>
-                  {launchBgHidden ? t('sidebar.launch.showArt') : t('sidebar.launch.hideArt')}
-                </MenuItem>
-              </MenuContent>
-            </MenuRoot>
+                {labelMounted && (
+                  <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
+                    {t('sidebar.launchModded')}
+                  </span>
+                )}
+              </button>
+
+              <button
+                onClick={handleLaunchVanilla}
+                disabled={!canLaunch || !!launchPending || stopPending || stashStatus.active}
+                title={
+                  !canLaunch
+                    ? t('sidebar.launch.noPath')
+                    : stashStatus.active
+                      ? t('sidebar.launch.vanillaStash')
+                      : t('sidebar.launch.vanillaDefault')
+                }
+                className="group relative flex w-full h-8 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary/85 ring-1 ring-white/10 hover:text-text-primary hover:ring-amber-400/35 text-xs font-medium tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-accent/40 disabled:opacity-60 disabled:cursor-not-allowed"
+              >
+                <SurfaceBackdrop
+                  bg={launchVanillaBg}
+                  defaultSrc={LAUNCH_VANILLA_BG}
+                  defaultPosition="center 48%"
+                  warm
+                  customSrc={appearanceImages.launchVanilla}
+                />
+                <span className={`relative z-10 ${actionIconClass}`}>
+                  {launchPending === 'vanilla' ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Play className="w-4 h-4" strokeWidth={2} />
+                  )}
+                </span>
+                {labelMounted && (
+                  <span className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`} aria-hidden={!labelsVisible}>
+                    {t('sidebar.launchVanilla')}
+                  </span>
+                )}
+              </button>
+            </>
+          ) : (
+            <div
+              className="group/launch relative"
+              onContextMenu={(e) => {
+                e.preventDefault();
+                if (launchPending || stopPending) return;
+                swapLaunchMode();
+              }}
+            >
+              <button
+                onClick={launchConfig.onLaunch}
+                disabled={launchConfig.disabled}
+                title={launchConfig.title}
+                className="group relative flex w-full h-10 items-center overflow-hidden rounded-sm bg-bg-tertiary text-text-primary ring-1 ring-white/10 hover:ring-white/25 text-sm font-semibold tracking-wide transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-white/35 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <SurfaceBackdrop
+                  bg={launchConfig.bg}
+                  defaultSrc={launchConfig.defaultSrc}
+                  defaultPosition={launchConfig.defaultPosition}
+                  warm={launchConfig.warm}
+                  customSrc={launchConfig.customSrc}
+                />
+                <span className={`relative z-10 ${actionIconClass}`}>
+                  {launchPending ? (
+                    <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                  ) : (
+                    <LaunchIcon className="w-[18px] h-[18px]" strokeWidth={2} />
+                  )}
+                </span>
+                {labelMounted && (
+                  <span
+                    className={`relative z-10 drop-shadow-[0_1px_4px_rgba(0,0,0,0.75)] ${actionLabelClass}`}
+                    aria-hidden={!labelsVisible}
+                  >
+                    {t(launchConfig.labelKey)}
+                  </span>
+                )}
+              </button>
+
+              {/* Swap affordance (issue: unify launch buttons). Expanded: a faint
+                  trailing icon that brightens on hover and flips the mode WITHOUT
+                  launching (it sits in its own zone, so it never eats a launch
+                  click). Collapsed: a hover-only hint glyph; the swap itself is the
+                  wrapper's right-click. Right-click anywhere always swaps. */}
+              {labelMounted ? (
+                <button
+                  type="button"
+                  onClick={swapLaunchMode}
+                  disabled={!!launchPending || stopPending}
+                  title={launchConfig.switchTitle}
+                  aria-label={launchConfig.switchTitle}
+                  className="absolute right-1.5 top-1/2 z-20 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-sm text-text-primary/45 opacity-70 drop-shadow-[0_1px_3px_rgba(0,0,0,0.85)] transition-all duration-200 hover:bg-black/30 hover:text-text-primary hover:opacity-100 group-hover/launch:opacity-100 focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-30 cursor-pointer"
+                >
+                  <ArrowRightLeft className="h-3.5 w-3.5" />
+                </button>
+              ) : (
+                <span
+                  aria-hidden
+                  className="pointer-events-none absolute right-0.5 top-0.5 z-20 text-text-primary/0 drop-shadow-[0_1px_2px_rgba(0,0,0,0.9)] transition-colors duration-200 group-hover/launch:text-text-primary/70"
+                >
+                  <ArrowRightLeft className="h-3 w-3" />
+                </span>
+              )}
+            </div>
           )}
         </div>
 
@@ -1114,8 +1265,12 @@ export default function Sidebar() {
             Always visible, including collapsed (gear only), since it's now the
             bottom rail's anchor rather than an afterthought. */}
         <button
+          ref={settingsItemRef}
           type="button"
-          onClick={() => navigate('/settings')}
+          onClick={() => {
+            setGearSpinning(true);
+            navigate('/settings');
+          }}
           title={memeTooltip?.to === '/settings' ? memeTooltip.text : t('sidebar.openSettings')}
           onMouseEnter={() => {
             const meme = rollMemeTooltip('/settings');
@@ -1126,19 +1281,17 @@ export default function Sidebar() {
           className={`group relative flex w-full h-10 items-center overflow-hidden rounded-sm border text-sm transition-colors duration-200 cursor-pointer focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60 ${
             settingsActive
               ? sidebarHeroHighlightSrc
-                ? 'border-white/15 bg-bg-tertiary text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
-                : 'border-accent/40 bg-bg-tertiary text-text-primary font-semibold hover:border-accent/60'
-              : 'border-border bg-bg-tertiary/30 text-text-secondary hover:bg-accent/5 hover:border-accent/30 hover:text-text-primary'
+                ? 'border-white/15 bg-transparent text-text-primary font-semibold shadow-[inset_0_0_0_1px_rgba(255,255,255,0.03)]'
+                : 'border-accent/40 bg-transparent text-text-primary font-semibold hover:border-accent/60'
+              : 'border-accent/25 bg-bg-tertiary text-text-primary/90 hover:bg-accent/10 hover:border-accent/45 hover:text-text-primary'
           }`}
         >
-          {settingsActive && (
-            <SidebarActiveBackdrop
-              heroSrc={sidebarHeroHighlightSrc}
-              heroImageStyle={sidebarHeroImageStyle}
-            />
-          )}
           <span className={`relative z-10 ${actionIconClass}`}>
-            <Settings2 className="w-[18px] h-[18px]" strokeWidth={settingsActive ? 2 : 1.75} />
+            <Settings2
+              className={`settings-gear w-[18px] h-[18px] ${gearSpinning ? 'settings-gear--spin' : ''}`}
+              strokeWidth={settingsActive ? 2 : 1.75}
+              onAnimationEnd={() => setGearSpinning(false)}
+            />
           </span>
           {labelMounted && (
             <span className={`relative z-10 font-medium ${actionLabelClass}`} aria-hidden={!labelsVisible}>

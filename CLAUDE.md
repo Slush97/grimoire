@@ -83,9 +83,9 @@ Both use WAL mode with foreign keys enabled.
 - `tsconfig.json` / `tsconfig.app.json` / `tsconfig.node.json` - TypeScript configs (strict mode)
 - `eslint.config.js` - ESLint 9 flat config with TypeScript + React plugins
 
-## No Tests
+## Tests
 
-No test framework or test files. Quality relies on TypeScript strict mode and ESLint.
+Vitest (`pnpm exec vitest run`; config in `vitest.config.ts`). Coverage is concentrated on the 3D hero-preview lib: the FeModel parser, cloth fit math + solver stability, Source 2 / NPR material reconstruction, and the dynamic-scalar evaluator. Quality also relies on TypeScript strict mode and ESLint.
 
 ## Documentation
 

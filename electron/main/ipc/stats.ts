@@ -12,6 +12,7 @@ import type {
     TrackedPlayer,
     MMRSnapshot,
     StoredMatch,
+    PlayerMatch,
     HeroStatsSnapshot,
     AggregatedStats,
 } from '../../../src/types/deadlock-stats'
@@ -165,6 +166,15 @@ ipcMain.handle(
 
 ipcMain.handle('stats:getLocalMatchCount', (_, accountId: number): number => {
     return statsDb.getMatchCount(accountId)
+})
+
+// Persist already-fetched live matches into the local recorded history. Called
+// on player load so the recorded Match History tab stays in lockstep with the
+// live recent-matches feed (otherwise the newest game shows in Overview but not
+// in the Matches tab until a manual Refresh).
+ipcMain.handle('stats:recordMatches', (_, accountId: number, matches: PlayerMatch[]): void => {
+    if (!Array.isArray(matches) || matches.length === 0) return
+    statsDb.saveMatches(accountId, matches)
 })
 
 ipcMain.handle(

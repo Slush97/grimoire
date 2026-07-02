@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
+import { Input } from './common/forms';
 
 interface Props {
   modName: string;
@@ -121,7 +122,7 @@ export default function PriorityEditor({
         // (text-shadow on all four corners) to stay legible over bright covers.
         className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-white/20 px-2 text-[11px] font-bold leading-none tabular-nums text-text-primary shadow-none transition-colors duration-150 group-hover/order-chip:border-white/35 group-hover/order-chip:bg-white/10 group-focus-visible/order-chip:outline group-focus-visible/order-chip:outline-2 group-focus-visible/order-chip:outline-white/40 ${
           variant === 'overlay'
-            ? 'bg-black/60 backdrop-blur-sm [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000,0_0_2px_#000]'
+            ? 'bg-black/70 [text-shadow:-1px_-1px_0_#000,1px_-1px_0_#000,-1px_1px_0_#000,1px_1px_0_#000,0_0_2px_#000]'
             : 'bg-bg-tertiary'
         }`}
       >
@@ -142,9 +143,8 @@ export default function PriorityEditor({
           <span className="mb-2 block text-xs font-semibold text-text-primary">{t('installed.priorityEditor.loadOrder')}</span>
           <span className="inline-flex h-9 w-full items-center rounded-md border border-border bg-bg-tertiary px-2.5 text-sm text-text-primary transition-colors focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/30">
             <span className="mr-1 text-text-secondary">#</span>
-            <input
+            <Input
               ref={inputRef}
-              type="text"
               inputMode="numeric"
               value={draft}
               disabled={busy}
@@ -161,7 +161,7 @@ export default function PriorityEditor({
               onBlur={() => {
                 if (!busy) void commit();
               }}
-              className="min-w-0 flex-1 bg-transparent text-sm tabular-nums text-text-primary focus:outline-none"
+              className="min-w-0 flex-1 border-0 bg-transparent p-0 tabular-nums focus-visible:ring-0"
               aria-label={t('installed.priorityEditor.inputAriaLabel', { modName })}
               aria-invalid={!!error}
             />

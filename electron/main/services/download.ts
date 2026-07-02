@@ -4,7 +4,8 @@ import { join, basename, extname, resolve } from 'path';
 import { tmpdir } from 'os';
 import { BrowserWindow } from 'electron';
 import { getDisabledPath } from './deadlock';
-import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles } from './extract';
+import { extractArchive, isArchive, checkOneClickOptOut, scanSuspiciousFiles, type ExtractedVpk } from './extract';
+import { buildVpkIndexBySize } from './vpkVariantIndex';
 import { randomUUID } from 'crypto';
 import { setModMetadataWithHash, getModMetadata } from './metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
@@ -546,23 +547,43 @@ async function downloadFile(
  * library is effectively uncapped. A real pakNN slot is assigned later, on
  * enable. Returns the final filenames.
  */
+interface RenamedVpk {
+    /** Final on-disk (disabled) filename. */
+    fileName: string;
+    /** The archive variant folder this VPK came from, if any. */
+    archiveFolder?: string;
+    /** The VPK's original basename inside the archive. Combined with
+     *  archiveFolder this is a cross-machine-stable identity (unlike fileName,
+     *  which gets a random suffix on collision), used to stamp a deterministic
+     *  vpkIndex so shared profiles restore the right sibling. */
+    sourceFileName: string;
+}
+
+/** Title-case a variant folder for display: `Tailed_mod_Beard` -> `Tailed Mod Beard`. */
+function prettifyVariant(folder: string): string {
+    return folder
+        .replace(/[_-]+/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
 async function renameVpksToAvoidConflicts(
     _deadlockPath: string,
     targetPath: string,
-    extractedVpks: string[],
+    extractedVpks: ExtractedVpk[],
     nameHint?: string
-): Promise<string[]> {
+): Promise<RenamedVpk[]> {
     const taken = existsSync(targetPath)
         ? new Set((await fs.readdir(targetPath)).map((n) => n.toLowerCase()))
         : new Set<string>();
-    const renamedFiles: string[] = [];
+    const renamedFiles: RenamedVpk[] = [];
 
-    for (const vpkPath of extractedVpks) {
-        const fileName = basename(vpkPath);
+    for (const { path: vpkPath, fileName, archiveFolder } of extractedVpks) {
         // Prefer the extracted VPK's own descriptive name; for bare pakNN
-        // downloads fall back to the mod's GameBanana name so the disabled file
-        // is still readable on disk.
-        const finalFileName = makeDisabledFileName(fileName, taken, nameHint);
+        // downloads fall back to the variant folder (so sibling variants get
+        // distinct, readable names) and then the mod's GameBanana name.
+        const finalFileName = makeDisabledFileName(fileName, taken, nameHint, archiveFolder);
         taken.add(finalFileName.toLowerCase());
 
         if (finalFileName !== fileName) {
@@ -570,10 +591,24 @@ async function renameVpksToAvoidConflicts(
         }
 
         await moveFileWithoutOverwrite(vpkPath, join(targetPath, finalFileName));
-        renamedFiles.push(finalFileName);
+        renamedFiles.push({ fileName: finalFileName, archiveFolder, sourceFileName: fileName });
     }
 
     return renamedFiles;
+}
+
+async function collectVpkFileSizes(
+    targetPath: string,
+    installedVpks: string[]
+): Promise<Record<string, number>> {
+    return Object.fromEntries(
+        await Promise.all(
+            installedVpks.map(async (vpk) => {
+                const stat = await fs.stat(join(targetPath, vpk));
+                return [vpk, stat.size] as const;
+            })
+        )
+    );
 }
 
 async function enableInstalledVpks(
@@ -739,13 +774,18 @@ async function executeDownload(
     };
 
     let installedVpks: string[] = [];
+    let vpkIndexByFile = new Map<string, number>();
+    // Final disabled filename -> prettified variant folder, for multi-variant
+    // archives (e.g. Tailed_mod vs Tailed_mod_Beard). Drives the picker label
+    // and the persisted variantLabel.
+    const variantByFile = new Map<string, string>();
 
     // Extract if archive
     if (isArchive(downloadPath)) {
         console.log(`[downloadMod] Extracting archive...`);
         mainWindow?.webContents.send('download-extracting', { modId, fileId });
 
-        let extractedVpks: string[];
+        let extractedVpks: ExtractedVpk[];
         try {
             extractedVpks = await extractArchive(downloadPath, workDir);
         } catch (extractError) {
@@ -780,7 +820,14 @@ async function executeDownload(
         console.log(`[downloadMod] Extracted ${extractedVpks.length} VPK files:`, extractedVpks);
 
         // Rename VPKs to avoid conflicts
-        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, details.name);
+        const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, details.name);
+        const stableKeyByFile = new Map<string, string>();
+        for (const r of renamed) {
+            if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
+            // Archive folder + original basename: stable across machines/redownloads.
+            stableKeyByFile.set(r.fileName, `${r.archiveFolder ?? ''}\u0000${r.sourceFileName}`);
+        }
+        installedVpks = renamed.map((r) => r.fileName);
 
         // Multi-VPK archive (Warden Remodel et al). Previously kept only
         // the alphabetically-first VPK and silently unlinked the rest —
@@ -788,19 +835,22 @@ async function executeDownload(
         // when there's more than one and let the user pick which to keep.
         installedVpks.sort((a, b) => a.localeCompare(b));
         if (installedVpks.length > 1) {
+            const vpkFileSizes = await collectVpkFileSizes(targetPath, installedVpks);
+            vpkIndexByFile = buildVpkIndexBySize(
+                installedVpks.map((f) => ({
+                    fileName: f,
+                    size: vpkFileSizes[f] ?? 0,
+                    stableKey: stableKeyByFile.get(f),
+                }))
+            );
             const pickRequestId = randomUUID();
             const vpkLabels = getVpkLabels(
                 installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
             );
-            const vpkFileSizes = Object.fromEntries(
-                await Promise.all(
-                    installedVpks.map(async (vpk) => {
-                        const absPath = join(targetPath, vpk);
-                        const stat = await fs.stat(absPath);
-                        return [vpk, stat.size] as const;
-                    })
-                )
-            );
+            // The author's variant folder is a more reliable picker label than
+            // the heuristic VPK content summary, which returns the same hero for
+            // every variant of a skin.
+            for (const [vpk, label] of variantByFile) vpkLabels[vpk] = label;
             const pick = await awaitMultiVpkPick(
                 pickRequestId,
                 details.name ?? fileName,
@@ -834,7 +884,10 @@ async function executeDownload(
                 if (!selectedSet.has(vpk)) {
                     const extraPath = join(targetPath, vpk);
                     if (existsSync(extraPath)) {
-                        await fs.unlink(extraPath);
+                        // Best-effort: a failed unlink of a deselected variant
+                        // (Windows lock, already gone) must not fail the install
+                        // of the selected VPKs, which are already on disk.
+                        await fs.unlink(extraPath).catch(() => { });
                     }
                 }
             }
@@ -848,7 +901,13 @@ async function executeDownload(
         }
     } else if (extname(downloadPath).toLowerCase() === '.vpk') {
         // Direct VPK download
-        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath], details.name);
+        const renamed = await renameVpksToAvoidConflicts(
+            deadlockPath,
+            targetPath,
+            [{ path: downloadPath, fileName: basename(downloadPath) }],
+            details.name
+        );
+        installedVpks = renamed.map((r) => r.fileName);
     }
 
     // Save metadata for each installed VPK
@@ -856,7 +915,10 @@ async function executeDownload(
     for (const vpkFileName of installedVpks) {
         console.log(`[downloadMod] Saving metadata for: ${vpkFileName}`);
         const vpkPath = join(targetPath, vpkFileName);
-        const perVpkMetadata = stampVpkLockerHero(metadata, section, vpkPath);
+        const base = stampVpkLockerHero(metadata, section, vpkPath);
+        const variantLabel = variantByFile.get(vpkFileName);
+        const vpkIndex = vpkIndexByFile.get(vpkFileName);
+        const perVpkMetadata = { ...base, variantLabel, vpkIndex };
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 
@@ -1236,11 +1298,13 @@ async function executeOneClickDownload(
     };
 
     let installedVpks: string[] = [];
+    let vpkIndexByFile = new Map<string, number>();
+    const variantByFile = new Map<string, string>();
 
     if (isArchive(downloadPath)) {
         mainWindow?.webContents.send('download-extracting', { modId, fileId });
 
-        let extractedVpks: string[];
+        let extractedVpks: ExtractedVpk[];
         try {
             extractedVpks = await extractArchive(downloadPath, workDir);
         } catch (extractError) {
@@ -1269,26 +1333,33 @@ async function executeOneClickDownload(
             throw extractError;
         }
 
-        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, oneClickModName);
+        const renamed = await renameVpksToAvoidConflicts(deadlockPath, targetPath, extractedVpks, oneClickModName);
+        const stableKeyByFile = new Map<string, string>();
+        for (const r of renamed) {
+            if (r.archiveFolder) variantByFile.set(r.fileName, prettifyVariant(r.archiveFolder));
+            // Archive folder + original basename: stable across machines/redownloads.
+            stableKeyByFile.set(r.fileName, `${r.archiveFolder ?? ''}\u0000${r.sourceFileName}`);
+        }
+        installedVpks = renamed.map((r) => r.fileName);
 
         // Multi-VPK 1-Click archive: prompt the user instead of silently
         // dropping all but the first entry. Same shape as the regular
         // download path so behavior is consistent across install entry points.
         installedVpks.sort((a, b) => a.localeCompare(b));
         if (installedVpks.length > 1) {
+            const vpkFileSizes = await collectVpkFileSizes(targetPath, installedVpks);
+            vpkIndexByFile = buildVpkIndexBySize(
+                installedVpks.map((f) => ({
+                    fileName: f,
+                    size: vpkFileSizes[f] ?? 0,
+                    stableKey: stableKeyByFile.get(f),
+                }))
+            );
             const pickRequestId = randomUUID();
             const vpkLabels = getVpkLabels(
                 installedVpks.map((vpk) => ({ fileName: vpk, absPath: join(targetPath, vpk) }))
             );
-            const vpkFileSizes = Object.fromEntries(
-                await Promise.all(
-                    installedVpks.map(async (vpk) => {
-                        const absPath = join(targetPath, vpk);
-                        const stat = await fs.stat(absPath);
-                        return [vpk, stat.size] as const;
-                    })
-                )
-            );
+            for (const [vpk, label] of variantByFile) vpkLabels[vpk] = label;
             const pick = await awaitMultiVpkPick(
                 pickRequestId,
                 enriched?.name ?? fileName,
@@ -1321,7 +1392,10 @@ async function executeOneClickDownload(
                 if (!selectedSet.has(vpk)) {
                     const extraPath = join(targetPath, vpk);
                     if (existsSync(extraPath)) {
-                        await fs.unlink(extraPath);
+                        // Best-effort: a failed unlink of a deselected variant
+                        // (Windows lock, already gone) must not fail the install
+                        // of the selected VPKs, which are already on disk.
+                        await fs.unlink(extraPath).catch(() => { });
                     }
                 }
             }
@@ -1332,12 +1406,21 @@ async function executeOneClickDownload(
             await fs.unlink(downloadPath);
         }
     } else if (extname(downloadPath).toLowerCase() === '.vpk') {
-        installedVpks = await renameVpksToAvoidConflicts(deadlockPath, targetPath, [downloadPath], oneClickModName);
+        const renamed = await renameVpksToAvoidConflicts(
+            deadlockPath,
+            targetPath,
+            [{ path: downloadPath, fileName: basename(downloadPath) }],
+            oneClickModName
+        );
+        installedVpks = renamed.map((r) => r.fileName);
     }
 
     for (const vpkFileName of installedVpks) {
         const vpkPath = join(targetPath, vpkFileName);
-        const perVpkMetadata = stampVpkLockerHero(metadata, section, vpkPath);
+        const base = stampVpkLockerHero(metadata, section, vpkPath);
+        const variantLabel = variantByFile.get(vpkFileName);
+        const vpkIndex = vpkIndexByFile.get(vpkFileName);
+        const perVpkMetadata = { ...base, variantLabel, vpkIndex };
         await setModMetadataWithHash(vpkFileName, perVpkMetadata, vpkPath);
     }
 

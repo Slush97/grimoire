@@ -442,7 +442,7 @@ export interface ApplyTrippySkinResult {
  * here so the classifier (main) and the Locker grouping/UI (renderer) agree on
  * the union.
  */
-export type GlobalModType = 'soul-container' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music';
+export type GlobalModType = 'soul-container' | 'spirit-urn' | 'hideout' | 'icons' | 'hud' | 'announcer' | 'killstreak-music';
 export type LockerHeroSource = 'manual' | 'title' | 'vpk' | 'download-title' | 'download-vpk';
 
 /** Deadlock ability slot. 1-3 are the signature abilities; 4 is the ultimate. */
@@ -536,6 +536,58 @@ export interface SoulContainerImportInfo {
   status: SoulImportStatus;
 }
 
+/**
+ * Set on a mod imported via the Spirit Urn GLB importer (the carryable Idol/urn
+ * objective, overriding `idol_urn.vmdl_c`). Mirrors SoulContainerImportInfo: it
+ * labels the mod as a local urn import and lets the user reproduce/rebuild the
+ * exact orientation later. Presence also identifies the slot for idempotent
+ * re-import. Distinct from SoulContainerImportInfo because the urn has no
+ * soul-glow particles (no `glow`), is not the spinning orb (no `yaw`/`upright`),
+ * and is sized by an explicit `span` instead of fitting the orb's bounds.
+ */
+export interface UrnImportInfo {
+  /** Original GLB filename (basename), for display. */
+  glbFileName: string;
+  /** Orientation mode chosen in the import UI. */
+  orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
+  /** Extra Euler rotation in degrees [X, Y, Z] applied after orient, if any. */
+  rotate?: [number, number, number];
+  /** Lift the mesh so its base sits at the origin instead of being centered. */
+  ground?: boolean;
+  /** Largest-axis size in Source units the mesh was fit to. */
+  span: number;
+  /** vpkmerge version that built the VPK. */
+  vpkmergeVersion?: string;
+  /** Uniform fit scale applied to match `span`. */
+  fitScale?: number;
+  /** Import's largest-axis span before fitting (Source units). */
+  sourceSpan?: number;
+  /** Target span the mesh was fit to (equals the requested `span`). */
+  targetSpan?: number;
+  /** User-tracked test status. */
+  status: SoulImportStatus;
+}
+
+/**
+ * Set on a mod built via the Foundry hero sound-swap (drop your own MP3 onto a
+ * hero gameplay sound event). Labels the mod as a local sound swap and records
+ * what was swapped, so the UI can show it and a later pass can reproduce it.
+ * One addon per swap; v1 uses `--pool all`, overriding every clip in the event's
+ * randomizer pool so the swapped sound always plays.
+ */
+export interface SoundSwapInfo {
+  /** Sound-path codename whose soundevents tree was edited (e.g. `gigawatt`). */
+  heroCodename: string;
+  /** The soundevent that was swapped (e.g. `Gigawatt.LightningBall.Damage`). */
+  event: string;
+  /** Original audio filename (basename), for display. */
+  audioFileName: string;
+  /** Loop handling chosen in the swap UI. */
+  loop: 'auto' | 'on' | 'off';
+  /** How the event's randomizer pool was handled. v1 always 'all'. */
+  pool: 'all' | 'collapse';
+}
+
 export interface Mod {
   id: string;
   name: string;
@@ -554,6 +606,7 @@ export interface Mod {
   audioUrl?: string;
   gameBananaId?: number;
   gameBananaFileId?: number;
+  vpkIndex?: number;
   categoryId?: number;
   categoryName?: string;
   sourceSection?: string;
@@ -596,6 +649,10 @@ export interface Mod {
    *  Carries the orientation/glow transform so the build is reproducible and the
    *  UI can label it as a local soul-container import. */
   soulImport?: SoulContainerImportInfo;
+  /** Set when this VPK was built from a user GLB via the Spirit Urn import.
+   *  Carries the orientation/span transform so the build is reproducible and the
+   *  UI can label it as a local urn import. */
+  urnImport?: UrnImportInfo;
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;
@@ -745,13 +802,48 @@ export interface ModConflict {
   ignoreKey: string;
   conflictType: 'priority' | 'file';
   details: string;
+  /** For `file` conflicts: every overlapping path still flagged for this pair
+   *  (after subtracting any individually ignored files). Drives the per-file
+   *  ignore UI. Undefined for `priority` conflicts. */
+  files?: string[];
+}
+
+/** The customizable launcher/sidebar art surfaces (issue: unify launcher
+ *  backgrounds). Each maps to one rendered area in the Sidebar. */
+export type AppearanceSurface = 'launchModded' | 'launchVanilla' | 'activeTab' | 'volume';
+
+/** Where a surface's background art comes from:
+ *  - `default`: the built-in scenic art (launch buttons / volume popup) or, for
+ *    the active tab, the plain accent glow.
+ *  - `hero`: a hero render chosen by the user (`hero` holds the hero name).
+ *  - `custom`: a user-uploaded image, stored out-of-band by the appearanceImages
+ *    service and keyed by the surface id.
+ *  - `none`: no art (hidden). */
+export type AppearanceBgKind = 'default' | 'hero' | 'custom' | 'none';
+export type BrowseNsfwContentMode = 'show' | 'blur' | 'hide';
+
+export interface AppearanceBg {
+  kind: AppearanceBgKind;
+  /** Hero name, only meaningful when `kind === 'hero'`. */
+  hero?: string | null;
 }
 
 export interface AppSettings {
   deadlockPath: string | null;
   devMode: boolean;
   devDeadlockPath: string | null;
+  /** Diagnostic switch: when true, the main process writes a detailed
+   *  [modTrace] line for every folder scan and enable/disable/reorder so a
+   *  desync (a mod that's enabled in the UI but missing on disk, or vice
+   *  versa) can be traced in the diagnostic report. Off by default; meant to
+   *  be flipped on temporarily to capture a repro. */
+  verboseModTrace?: boolean;
+  /** Shared/legacy NSFW thumbnail blur preference for non-Installed surfaces. */
   hideNsfwPreviews: boolean;
+  /** Browser-specific handling for GameBanana mods marked as NSFW. */
+  browseNsfwContentMode: BrowseNsfwContentMode;
+  /** Blur thumbnail images for installed mods marked as NSFW. */
+  installedHideNsfwPreviews: boolean;
   /** Hide GameBanana mods flagged as outdated in Browse. */
   hideOutdatedMods: boolean;
   /** Open Locker list-view hero cards expanded on first load. */
@@ -791,11 +883,42 @@ export interface AppSettings {
    *  pair is hidden without persisting it to ignoredConflicts, so toggling
    *  back off restores the original conflict view. */
   ignoreConflictsByDefault: boolean;
+  /** Per-pair ignored overlapping file paths. Keyed by the same stable
+   *  identity pair key as ignoredConflicts ("identityA::identityB" sorted);
+   *  the value lists individual paths the user dismissed. A file conflict is
+   *  only hidden entirely when every overlapping path lands here. Lets users
+   *  silence one shared file forever while still being warned about others. */
+  ignoredConflictFiles?: Record<string, string[]>;
+  /** Overlapping file paths the user has globally silenced: never counted as a
+   *  conflict for ANY mod pair (the user-curated companion to the built-in
+   *  compiler-artifact filter). For files that are never a real conflict no
+   *  matter which mods ship them, e.g. a shared build artifact. */
+  ignoredConflictFilesGlobal?: string[];
+  /** Stable mod identities (same scheme as the halves of an ignoredConflicts
+   *  pair key) the user has dismissed wholesale: any conflict involving the
+   *  mod, against any other mod, is suppressed. Right-click a mod in a
+   *  conflict -> "ignore this mod everywhere". */
+  ignoredConflictMods?: string[];
   /** UI accent color (hex, e.g. "#f97316"). Used to theme buttons, links, and
    *  focus rings throughout the app. */
   accentColor: string;
-  /** Hero render used as the active sidebar highlight background. */
+  /** Hero render used as the active sidebar highlight background.
+   *  @deprecated Superseded by `appearanceBackgrounds.activeTab`. Kept as a
+   *  legacy compat read so existing installs keep their chosen highlight; the
+   *  Appearance UI now writes `appearanceBackgrounds` instead. */
   sidebarHeroHighlight?: string | null;
+  /** Combine the separate Launch Modded / Launch Vanilla buttons into one
+   *  dual-use launch button (swap mode via the trailing icon or right-click).
+   *  Off by default: the sidebar keeps the two stacked buttons unless the user
+   *  opts in from Appearance. The chosen mode for the combined button is UI
+   *  state persisted in localStorage, not here. */
+  unifiedLaunchButton?: boolean;
+  /** Per-surface launcher / sidebar background art (issue: unify launcher
+   *  backgrounds). Each of the four surfaces independently chooses default art,
+   *  a hero render, a custom upload, or none. Custom image bytes live out-of-band
+   *  in the appearanceImages service (keyed by surface id), not here. Surfaces
+   *  absent from the map fall back to their defaults (see resolveAppearanceBg). */
+  appearanceBackgrounds?: Partial<Record<AppearanceSurface, AppearanceBg>>;
   /** Order used to render absolute dates (mod/file upload + update dates). */
   dateFormat: 'MM/DD/YYYY' | 'DD/MM/YYYY';
   /** Preferred UI language. Null uses the OS/browser language when available. */
@@ -818,6 +941,11 @@ export interface AppSettings {
   contributeMatchSalts: boolean;
   /** Deadworks custom-server browser: list + join community dedicated servers. */
   experimentalDeadworksServers?: boolean;
+  /** Foundry: in-app asset workshop. Browse the game's own asset catalog
+   *  (textures/icons, hero roster, voice lines) built offline from the user's
+   *  own pak via the bundled vpkmerge sidecar, and (later slices) swap/forge
+   *  edits into the mod list. */
+  experimentalFoundry?: boolean;
   /** Advanced override for the relay the server browser queries. No UI: defaults
    *  to the official Deadworks registry (api.deadworks.net) and can be repointed
    *  via settings.json at any deadworks-shaped relay (e.g. a future grimoire-relay). */
@@ -832,4 +960,17 @@ export interface AppSettings {
    *  (.gi maps to text/plain, which often resolves to a word processor, so
    *  "default" alone makes a bad Edit File experience.) */
   externalEditorPath?: string | null;
+  /** Last main-window position and size, persisted so the app reopens where
+   *  the user left it instead of letting the OS/compositor place it (on some
+   *  multi-monitor Linux setups that meant the secondary screen at a wrong
+   *  size). Restored only when the saved rectangle still intersects a
+   *  currently-connected display; otherwise we fall back to a centered default.
+   *  Undefined until the first move/resize is recorded. */
+  windowBounds?: {
+    x?: number;
+    y?: number;
+    width: number;
+    height: number;
+    isMaximized?: boolean;
+  };
 }

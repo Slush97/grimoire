@@ -115,6 +115,7 @@ export async function buildPortableProfileFromInstalled(
             metadata?.fileDescription ||
             metadata?.sourceFileName ||
             undefined;
+        const vpkIndex = normalizeVpkIndex(metadata?.vpkIndex);
 
         const vpkStem = vpkStemOf(installedMod.fileName);
         mods.push({
@@ -123,6 +124,7 @@ export async function buildPortableProfileFromInstalled(
                 submissionId: gbId,
                 fileId,
                 section: metadata?.sourceSection || 'Mod',
+                ...(vpkIndex !== undefined ? { vpkIndex } : {}),
                 ...(vpkStem !== null ? { vpkStem } : {}),
             },
             enabled: installedMod.enabled,
@@ -180,11 +182,16 @@ export async function buildPortableProfile(
     // undefined and the export warns "Skipped local mod" for known GameBanana
     // installs.
     const modByGbFile = new Map<string, typeof installed[number]>();
+    const modByGbFileIndex = new Map<string, typeof installed[number]>();
     for (const m of installed) {
         const meta = getModMetadata(m.metaKey);
         if (typeof meta?.gameBananaId === 'number' && typeof meta?.gameBananaFileId === 'number') {
             const key = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
             if (!modByGbFile.has(key)) modByGbFile.set(key, m);
+            const vpkIndex = normalizeVpkIndex(meta.vpkIndex);
+            if (vpkIndex !== undefined) {
+                modByGbFileIndex.set(`${key}:${vpkIndex}`, m);
+            }
         }
     }
 
@@ -197,7 +204,11 @@ export async function buildPortableProfile(
             typeof profileMod.gameBananaFileId === 'number'
                 ? `${profileMod.gameBananaId}:${profileMod.gameBananaFileId}`
                 : null;
+        const profileVpkIndex = normalizeVpkIndex(profileMod.vpkIndex);
         const installedMod =
+            (stableKey && profileVpkIndex !== undefined
+                ? modByGbFileIndex.get(`${stableKey}:${profileVpkIndex}`)
+                : undefined) ??
             (stableKey ? modByGbFile.get(stableKey) : undefined) ??
             modByFileName.get(profileMod.fileName);
         const metadataKey = installedMod?.metaKey ?? profileMod.fileName;
@@ -225,6 +236,7 @@ export async function buildPortableProfile(
             metadata?.fileDescription ||
             metadata?.sourceFileName ||
             undefined;
+        const vpkIndex = normalizeVpkIndex(profileMod.vpkIndex ?? metadata?.vpkIndex);
 
         const vpkStem = vpkStemOf(installedMod?.fileName ?? profileMod.fileName);
         mods.push({
@@ -233,6 +245,7 @@ export async function buildPortableProfile(
                 submissionId: gbId,
                 fileId,
                 section: metadata?.sourceSection || 'Mod',
+                ...(vpkIndex !== undefined ? { vpkIndex } : {}),
                 ...(vpkStem !== null ? { vpkStem } : {}),
             },
             enabled: profileMod.enabled,
@@ -315,6 +328,12 @@ function validatePortable(obj: unknown): PortableProfile {
             if (ref.vpkStem !== undefined && typeof ref.vpkStem !== 'string') {
                 throw new Error(`mods[${i}].ref.vpkStem must be a string when present`);
             }
+            if (
+                ref.vpkIndex !== undefined &&
+                (typeof ref.vpkIndex !== 'number' || !Number.isInteger(ref.vpkIndex) || ref.vpkIndex < 0)
+            ) {
+                throw new Error(`mods[${i}].ref.vpkIndex must be a non-negative integer when present`);
+            }
         }
     }
 
@@ -359,8 +378,14 @@ export async function resolvePortableProfile(
                 r.entry.source === 'gamebanana' &&
                 r.resolvedFileId !== undefined
             ) {
-                const ref = r.entry.ref as { submissionId: number; vpkStem?: string };
-                const hit = lookupInstalled(installedIndex, ref.submissionId, r.resolvedFileId, ref.vpkStem);
+                const ref = r.entry.ref as { submissionId: number; vpkIndex?: number; vpkStem?: string };
+                const hit = lookupInstalled(
+                    installedIndex,
+                    ref.submissionId,
+                    r.resolvedFileId,
+                    normalizeVpkIndex(ref.vpkIndex),
+                    ref.vpkStem
+                );
                 if (hit) r.alreadyInstalled = true;
             }
             return r;
@@ -401,7 +426,13 @@ function vpkStemOf(fileName: string): string | null {
     return body.toLowerCase();
 }
 
+function normalizeVpkIndex(value: unknown): number | undefined {
+    return typeof value === 'number' && Number.isInteger(value) && value >= 0 ? value : undefined;
+}
+
 interface InstalledIndex {
+    /** Precise key `<gbId>:<fileId>:<vpkIndex>`. Preferred for multi-VPK files. */
+    byIndex: Map<string, string>;
     /** Precise key `<gbId>:<fileId>:<vpkStem>`. Only populated for installed
      *  VPKs whose filename body survived (i.e. not renamed to `pakNN_dir.vpk`). */
     byVariant: Map<string, string>;
@@ -416,6 +447,7 @@ interface InstalledIndex {
  *  entries) and finalize (to wire entries to existing local VPKs). */
 async function buildInstalledIndex(deadlockPath: string): Promise<InstalledIndex> {
     const installed = await scanMods(deadlockPath);
+    const byIndex = new Map<string, string>();
     const byVariant = new Map<string, string>();
     const byArchive = new Map<string, string>();
     for (const mod of installed) {
@@ -423,12 +455,16 @@ async function buildInstalledIndex(deadlockPath: string): Promise<InstalledIndex
         if (meta?.gameBananaId === undefined || meta?.gameBananaFileId === undefined) continue;
         const archiveKey = `${meta.gameBananaId}:${meta.gameBananaFileId}`;
         if (!byArchive.has(archiveKey)) byArchive.set(archiveKey, mod.fileName);
+        const vpkIndex = normalizeVpkIndex(meta.vpkIndex);
+        if (vpkIndex !== undefined) {
+            byIndex.set(`${archiveKey}:${vpkIndex}`, mod.fileName);
+        }
         const stem = vpkStemOf(mod.fileName);
         if (stem !== null) {
             byVariant.set(`${archiveKey}:${stem}`, mod.fileName);
         }
     }
-    return { byVariant, byArchive };
+    return { byIndex, byVariant, byArchive };
 }
 
 /** Find the installed VPK that corresponds to a resolved portable entry.
@@ -438,8 +474,13 @@ function lookupInstalled(
     index: InstalledIndex,
     submissionId: number,
     fileId: number,
+    vpkIndex?: number,
     vpkStem?: string
 ): string | null {
+    if (vpkIndex !== undefined) {
+        const hit = index.byIndex.get(`${submissionId}:${fileId}:${vpkIndex}`);
+        if (hit) return hit;
+    }
     if (vpkStem) {
         const hit = index.byVariant.get(`${submissionId}:${fileId}:${vpkStem.toLowerCase()}`);
         if (hit) return hit;
@@ -527,8 +568,14 @@ export async function createProfileFromPortable(
         if (r.status === 'unresolvable') continue;
         if (r.entry.source !== 'gamebanana') continue;
         if (r.resolvedFileId === undefined) continue;
-        const ref = r.entry.ref as { submissionId: number; vpkStem?: string };
-        const fileName = lookupInstalled(installedIndex, ref.submissionId, r.resolvedFileId, ref.vpkStem);
+        const ref = r.entry.ref as { submissionId: number; vpkIndex?: number; vpkStem?: string };
+        const fileName = lookupInstalled(
+            installedIndex,
+            ref.submissionId,
+            r.resolvedFileId,
+            normalizeVpkIndex(ref.vpkIndex),
+            ref.vpkStem
+        );
         if (!fileName) continue;
         // Multi-VPK archives may produce several portable entries that all
         // resolve to the same file on disk when stems aren't carried. Skip
@@ -547,6 +594,9 @@ export async function createProfileFromPortable(
             priority: r.entry.priority,
             gameBananaId: ref.submissionId,
             gameBananaFileId: r.resolvedFileId,
+            ...(normalizeVpkIndex(ref.vpkIndex) !== undefined
+                ? { vpkIndex: normalizeVpkIndex(ref.vpkIndex) }
+                : {}),
         });
     }
 

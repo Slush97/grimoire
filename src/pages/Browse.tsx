@@ -7,6 +7,8 @@ import {
   Loader2,
   Download,
   Eye,
+  EyeClosed,
+  EyeOff,
   ThumbsUp,
   X,
   Volume2,
@@ -19,6 +21,7 @@ import {
   Clock,
   Package,
   Music,
+  Construction,
   SlidersHorizontal,
   Power,
   Library,
@@ -70,6 +73,7 @@ import { useStableCallback } from '../lib/useStableCallback';
 import type {
   GameBananaMod,
   GameBananaModDetails,
+  GameBananaFile,
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaArtistLink,
@@ -79,12 +83,15 @@ import {
   useAppStore,
 } from '../stores/appStore';
 import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
+import type { BrowseNsfwContentMode } from '../types/mod';
 import ModThumbnail from '../components/ModThumbnail';
+import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
-import { Button, Tag } from '../components/common/ui';
+import { Button, IconButton, Tag } from '../components/common/ui';
+import { Select } from '../components/common/forms';
 import { IconText } from '../components/common/IconText';
 import { EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
@@ -104,7 +111,11 @@ type BrowseCardDesign = 'classic' | 'readable';
 // like the other Browse view preferences (card design/size).
 type BrowseDetailsView = 'modal' | 'sidebar';
 type ModDetailsNavigationDirection = 'previous' | 'next';
-const SECTION_WHITELIST = new Set(['Mod', 'Sound']);
+// WiPs (Work in Progress) are real installable uploads on GameBanana (53 for
+// Deadlock at time of writing) served by the same /Wip/Index + /Wip/{id} API
+// shape as Mods, so they browse and install through the existing parameterized
+// section path. The section list is otherwise data-driven from CategoryTree.
+const SECTION_WHITELIST = new Set(['Mod', 'Sound', 'Wip']);
 const BROWSE_CARD_DESIGN_STORAGE_KEY = 'browseCardDesign';
 const BROWSE_DETAILS_VIEW_STORAGE_KEY = 'browseDetailsView';
 // Below this window width the docked sidebar would crush the grid, so we force
@@ -116,6 +127,11 @@ const BROWSE_SIDEBAR_WIDTH_DEFAULT = 420;
 // The grid always keeps at least this much room; the sidebar's effective width
 // is capped so a wide drag (or a small window) can't starve the browse area.
 const BROWSE_SIDEBAR_GRID_RESERVE = 360;
+// Must match the browseDockPanelOut animation duration in index.css: we keep the
+// dock (as an absolute overlay) mounted for this long after a close so the
+// slide-out can play, then unmount it (no reflow: the grid already widened at
+// close-start).
+const BROWSE_DOCK_ANIM_MS = 220;
 
 // Filled brand glyphs (see common/BrandIcons). Platform keys come from
 // GameBanana's contact icon classes, lowercased by normalizeContactPlatform
@@ -319,7 +335,9 @@ function clampBrowseCardSizeMultiplier(value: number): number {
 }
 
 function readBrowseCardSizeMultiplier(): number {
-  const stored = Number(localStorage.getItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY));
+  const raw = localStorage.getItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY);
+  if (raw == null || raw === '') return BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
+  const stored = Number(raw);
   return Number.isFinite(stored) ? clampBrowseCardSizeMultiplier(stored) : BROWSE_CARD_SIZE_MULTIPLIER_DEFAULT;
 }
 
@@ -367,15 +385,17 @@ function getReadableDensity(targetWidth: number): BrowseReadableDensity {
 function estimateReadableCardBodyHeight(density: BrowseReadableDensity, section: string): number {
   const isSound = section === 'Sound';
 
+  // The category/hero/NSFW chips now float over the thumbnail (revealed on
+  // hover), so the body no longer reserves a chip row or its margin.
   if (density === 'micro') {
     return 8 + 16 + (isSound ? 8 + 28 : 0) + 8 + 24 + 8;
   }
 
   if (density === 'compact') {
-    return 12 + 22 + 5 + 29 + (isSound ? 10 + 22 : 0) + 10 + 24 + 2;
+    return 12 + 29 + (isSound ? 10 + 22 : 0) + 10 + 24 + 2;
   }
 
-  return 14 + 24 + 6 + 32 + (isSound ? 10 + 38 : 0) + 10 + 28 + 6;
+  return 14 + 32 + (isSound ? 10 + 38 : 0) + 10 + 28 + 6;
 }
 
 function estimateBrowseRowHeight(
@@ -402,7 +422,22 @@ function estimateBrowseRowHeight(
   return Math.ceil(mediaHeight + bodyHeight);
 }
 
-function readableChipTone(tone: BrowseReadableChipTone = 'neutral'): string {
+function readableChipTone(tone: BrowseReadableChipTone = 'neutral', onImage = false): string {
+  // On-image chips float over the thumbnail (revealed on hover), so they need an
+  // opaque dark backdrop + blur to stay legible over bright art, mirroring the
+  // hero-gallery badge treatment.
+  if (onImage) {
+    switch (tone) {
+      case 'accent':
+        return 'border-accent/40 bg-black/55 text-accent backdrop-blur-sm';
+      case 'danger':
+        return 'border-state-danger/45 bg-black/55 text-state-danger backdrop-blur-sm';
+      case 'info':
+        return 'border-state-info/40 bg-black/55 text-state-info backdrop-blur-sm';
+      default:
+        return 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm';
+    }
+  }
   switch (tone) {
     case 'accent':
       return 'border-accent/25 bg-accent/[0.08] text-accent';
@@ -481,7 +516,7 @@ function estimateReadableChipWidth(label: string): number {
   return Math.ceil(label.length * 6 + 14);
 }
 
-function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
+function BrowseReadableChipBadge({ chip, onImage = false }: { chip: BrowseReadableChip; onImage?: boolean }) {
   if (chip.hero) {
     return (
       <img
@@ -490,7 +525,7 @@ function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
         title={chip.label}
         loading="lazy"
         draggable={false}
-        className="h-6 w-6 shrink-0 rounded-full object-cover"
+        className={`h-6 w-6 shrink-0 rounded-full object-cover ${onImage ? 'ring-1 ring-black/40' : ''}`}
       />
     );
   }
@@ -498,7 +533,8 @@ function BrowseReadableChipBadge({ chip }: { chip: BrowseReadableChip }) {
     <span
       title={chip.label}
       className={`inline-flex h-6 shrink-0 items-center whitespace-nowrap rounded-sm border px-2 text-[11px] font-medium leading-none ${readableChipTone(
-        chip.tone
+        chip.tone,
+        onImage
       )}`}
     >
       {chip.label}
@@ -510,10 +546,12 @@ function BrowseReadableChipRow({
   chips,
   availableWidth,
   maxVisible = BROWSE_READABLE_MAX_VISIBLE_CHIPS,
+  onImage = false,
 }: {
   chips: BrowseReadableChip[];
   availableWidth: number;
   maxVisible?: number;
+  onImage?: boolean;
 }) {
   const visibleChips: BrowseReadableChip[] = [];
   let usedWidth = 0;
@@ -541,19 +579,23 @@ function BrowseReadableChipRow({
   return (
     <div className="flex h-6 min-w-0 items-start gap-[clamp(5px,2.1429cqw,7px)] overflow-visible">
       {visibleChips.map((chip, index) => (
-        <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} />
+        <BrowseReadableChipBadge key={`${chip.label}-${index}`} chip={chip} onImage={onImage} />
       ))}
       {hiddenChips.length > 0 && (
         <div className="group/hidden relative shrink-0">
           <span
             title={`${hiddenChips.length} more`}
-            className="inline-flex h-6 items-center rounded-sm border border-white/[0.1] bg-white/[0.04] px-2 text-[11px] font-medium leading-none text-text-secondary"
+            className={`inline-flex h-6 items-center rounded-sm border px-2 text-[11px] font-medium leading-none ${
+              onImage
+                ? 'border-white/20 bg-black/55 text-white/90 backdrop-blur-sm'
+                : 'border-white/[0.1] bg-white/[0.04] text-text-secondary'
+            }`}
           >
             +{hiddenChips.length}
           </span>
           <div className="pointer-events-none absolute left-0 top-[calc(100%+6px)] z-20 hidden min-w-max max-w-[180px] flex-wrap gap-1 rounded-md border border-white/[0.08] bg-bg-secondary/96 p-2 shadow-[0_8px_24px_rgba(0,0,0,0.35)] backdrop-blur-md group-hover/hidden:flex">
             {hiddenChips.map((chip, index) => (
-              <BrowseReadableChipBadge key={`${chip.label}-overflow-${index}`} chip={chip} />
+              <BrowseReadableChipBadge key={`${chip.label}-overflow-${index}`} chip={chip} onImage={onImage} />
             ))}
           </div>
         </div>
@@ -791,7 +833,7 @@ function BrowseReadableAction({
   queuePosition?: number;
   density: BrowseReadableDensity;
   iconOnlyOverride?: boolean;
-  onQuickDownload: () => void;
+  onQuickDownload: (anchor?: HTMLElement) => void;
   onEnable?: () => void;
 }) {
   const { t } = useTranslation();
@@ -910,7 +952,7 @@ function BrowseReadableAction({
     return (
       <button
         type="button"
-        onClick={(event) => { event.stopPropagation(); onQuickDownload(); }}
+        onClick={(event) => { event.stopPropagation(); onQuickDownload(event.currentTarget); }}
         className={`${motionClassName} cursor-pointer`}
         title={`Install ${modName}`}
         aria-label={`Install ${modName}`}
@@ -970,10 +1012,72 @@ function renderErrorWithLinks(text: string): React.ReactNode {
   });
 }
 
+function BrowseViewOptionControl<T extends string>({
+  label,
+  value,
+  options,
+  onChange,
+  disabled = false,
+}: {
+  label: string;
+  value: T;
+  options: readonly { value: T; label: React.ReactNode; icon?: LucideIcon }[];
+  onChange: (value: T) => void;
+  disabled?: boolean;
+}) {
+  const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  const move = (from: number, dir: -1 | 1) => {
+    if (disabled) return;
+    const next = (from + dir + options.length) % options.length;
+    onChange(options[next].value);
+    refs.current[next]?.focus();
+  };
+
+  return (
+    <div className="flex items-center rounded-lg border border-border bg-bg-secondary p-[3px]" role="tablist" aria-label={label}>
+      {options.map((option, i) => {
+        const Icon = option.icon;
+        const active = option.value === value;
+        return (
+          <button
+            key={option.value}
+            ref={(el) => { refs.current[i] = el; }}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            tabIndex={active ? 0 : -1}
+            disabled={disabled}
+            onClick={() => !disabled && onChange(option.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                move(i, 1);
+              } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                move(i, -1);
+              }
+            }}
+            className={`flex h-7 min-w-0 flex-1 items-center justify-center gap-1 rounded-md px-2 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${
+              active
+                ? 'bg-bg-tertiary text-text-primary'
+                : 'text-text-secondary hover:text-text-primary'
+            }`}
+          >
+            {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
+            <span className="min-w-0 translate-y-px truncate">{option.label}</span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
 export default function Browse() {
   const { t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
   const loadSettings = useAppStore((s) => s.loadSettings);
+  const saveSettings = useAppStore((s) => s.saveSettings);
   const loadMods = useAppStore((s) => s.loadMods);
   const deleteMod = useAppStore((s) => s.deleteMod);
   const installedMods = useAppStore((s) => s.mods);
@@ -1015,6 +1119,18 @@ export default function Browse() {
     setBrowseCardSizeMultiplierState(clampedMultiplier);
     localStorage.setItem(BROWSE_CARD_SIZE_MULTIPLIER_KEY, String(clampedMultiplier));
   }, []);
+  const browseNsfwContentMode: BrowseNsfwContentMode =
+    settings?.browseNsfwContentMode ??
+    (settings?.hideNsfwPreviews === false ? 'show' : 'blur');
+  const browseBlurNsfwPreviews = browseNsfwContentMode === 'blur';
+  const setBrowseNsfwContentMode = useCallback((mode: BrowseNsfwContentMode) => {
+    if (!settings) return;
+    void saveSettings({ ...settings, browseNsfwContentMode: mode });
+  }, [saveSettings, settings]);
+  const setBrowseHideOutdated = useCallback((checked: boolean) => {
+    if (!settings) return;
+    void saveSettings({ ...settings, hideOutdatedMods: checked });
+  }, [saveSettings, settings]);
   // Hydrate from session cache on mount so navigating away + back doesn't
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
@@ -1101,6 +1217,13 @@ export default function Browse() {
   const [syncing, setSyncing] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   const [downloadQueue, setDownloadQueue] = useState<Array<{ modId: number; fileId: number; fileName: string }>>([]);
+  // Multi-file quick-install picker anchored to a card's Install button (#209).
+  const [filePicker, setFilePicker] = useState<{
+    details: GameBananaModDetails;
+    files: GameBananaFile[];
+    anchor: HTMLElement;
+    dates: { dateAdded: number; dateModified: number };
+  } | null>(null);
   const [playingModId, setPlayingModId] = useState<number | null>(null);
   const observerRef = useRef<IntersectionObserver | null>(null);
   const loadMoreRef = useRef<HTMLDivElement>(null);
@@ -1194,7 +1317,19 @@ export default function Browse() {
   // Drop a half-finished drag if Browse unmounts mid-gesture.
   useEffect(() => () => sidebarResizeCleanupRef.current?.(), []);
 
-  // Load settings on mount (needed for hideNsfwPreviews)
+  // Docked-sidebar close animation. Closing nulls selectedMod immediately (so the
+  // rest of the page sees the deselect at once), but we keep the aside mounted for
+  // one slide-out by freezing the last-rendered panel into a ref and flipping
+  // sidebarClosing. The timer then unmounts it, reflowing the grid wide once.
+  const prefersReducedMotion = usePrefersReducedMotion();
+  const [sidebarClosing, setSidebarClosing] = useState(false);
+  const sidebarExitContentRef = useRef<React.ReactNode>(null);
+  const sidebarCloseTimerRef = useRef<number | null>(null);
+  useEffect(() => () => {
+    if (sidebarCloseTimerRef.current !== null) window.clearTimeout(sidebarCloseTimerRef.current);
+  }, []);
+
+  // Load settings on mount for Browse content preferences.
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
@@ -2230,7 +2365,27 @@ export default function Browse() {
     }
   });
 
-  const handleQuickDownload = async (mod: GameBananaMod) => {
+  // Kick off the actual download of one specific file. Shared by the single-file
+  // quick install and the multi-file picker so both behave identically.
+  const runDownload = async (modId: number, file: GameBananaFile) => {
+    if (!downloading) {
+      setDownloading({ modId, fileId: file.id });
+      setDownloadProgress({ downloaded: 0, total: 0 });
+      setExtracting(false);
+    }
+    try {
+      await downloadMod(modId, file.id, file.fileName, section, effectiveCategoryId);
+    } catch (err) {
+      setError(String(err));
+      if (downloading?.modId === modId) {
+        setDownloading(null);
+        setDownloadProgress(null);
+        setExtracting(false);
+      }
+    }
+  };
+
+  const handleQuickDownload = async (mod: GameBananaMod, anchor?: HTMLElement) => {
     if (!activeDeadlockPath) return;
 
     // Check if already downloading or in queue
@@ -2239,34 +2394,36 @@ export default function Browse() {
 
     try {
       // Fetch mod details to get the first file. Include the submitter up front
-      // so the multi-file branch below can open the details panel (which shows
-      // the artist card) without a second round-trip against the rate limiter.
+      // so the picker's "View all files" link can open the details panel (which
+      // shows the artist card) without a second round-trip against the limiter.
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       if (!details.files || details.files.length === 0) {
         setError(t('browse.errors.noDownloadableFiles'));
         return;
       }
 
-      // When a mod has more than one downloadable file (different versions,
+      // Archived files are legacy uploads that aren't meant to be installed
+      // anymore, so they shouldn't count toward the "is this a multi-file mod?"
+      // decision. Only fall back to the full list when every file is archived.
+      const liveFiles = details.files.filter((f) => !f.isArchived);
+      const installable = liveFiles.length > 0 ? liveFiles : details.files;
+
+      // When a mod has more than one installable file (different versions,
       // variant builds, etc.) we used to silently pick whichever had the
-      // highest download count. Forum feedback flagged that, so surface the
-      // details modal and let the user choose which file to install.
-      if (details.files.length > 1) {
-        setSelectedMod(details);
-        setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
+      // highest download count. Forum feedback flagged that, so surface a
+      // compact picker anchored to the Install button (issue #209) and let the
+      // user choose. Fall back to the details modal if we have no anchor.
+      if (installable.length > 1) {
+        if (anchor) {
+          setFilePicker({ details, files: installable, anchor, dates: { dateAdded: mod.dateAdded, dateModified: mod.dateModified } });
+        } else {
+          setSelectedMod(details);
+          setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
+        }
         return;
       }
 
-      const file = getPrimaryFile(details.files);
-
-      // If nothing is currently downloading, set this as the active download
-      if (!downloading) {
-        setDownloading({ modId: mod.id, fileId: file.id });
-        setDownloadProgress({ downloaded: 0, total: 0 });
-        setExtracting(false);
-      }
-
-      await downloadMod(mod.id, file.id, file.fileName, section, effectiveCategoryId);
+      await runDownload(mod.id, getPrimaryFile(installable));
     } catch (err) {
       setError(String(err));
       // Only clear downloading state if this was the active download
@@ -2479,6 +2636,9 @@ export default function Browse() {
     if (section === 'Sound' && heroCategoryId === 'none') {
       nextMods = nextMods.filter((m) => inferHeroFromTitle(m.name) === null);
     }
+    if (browseNsfwContentMode === 'hide') {
+      nextMods = nextMods.filter((m) => !m.nsfw);
+    }
     // The NSFW filter is only enforced server-side by the local-search path.
     // The remote paths (artist mode, and the no-local-cache fallback) return
     // unfiltered records, so enforce it here too. Local results already match,
@@ -2490,7 +2650,7 @@ export default function Browse() {
     }
 
     return nextMods;
-  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, nsfw]);
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, browseNsfwContentMode, nsfw]);
   const selectedModIndex = selectedMod
     ? displayMods.findIndex((mod) => mod.id === selectedMod.id)
     : -1;
@@ -2501,12 +2661,55 @@ export default function Browse() {
       : undefined;
   // These three (plus handleDownload above) feed the memoized ModDetailsModal,
   // so they get stable identities via useStableCallback.
-  const closeSelectedMod = useStableCallback(() => {
+  const teardownSelectedMod = useStableCallback(() => {
     modalNavigationRequestRef.current += 1;
     setModalNavigation(null);
     setSelectedMod(null);
     setSelectedModDates(null);
   });
+  const closeSelectedMod = useStableCallback(() => {
+    // Centered modal (and reduced motion) closes instantly. The docked sidebar
+    // fades out: freeze the current panel so it stays visible while selectedMod
+    // is already null, then in this same (batched) commit grow the grid metrics
+    // to full width and flip the closing flag. That single commit reflows the
+    // grid wide while the dock detaches to an absolute overlay over the vacated
+    // strip; the dock fades there and unmounts with no further reflow. Growing
+    // the metrics now (instead of relying on the ResizeObserver after unmount)
+    // is what kills the flicker: the grid never paints a stale narrow frame in a
+    // widened container. flex-1 reclaims exactly the aside's width.
+    if (
+      detailsSidebarActive &&
+      selectedMod &&
+      !prefersReducedMotion &&
+      sidebarCloseTimerRef.current === null
+    ) {
+      sidebarExitContentRef.current = renderModDetails('sidebar');
+      teardownSelectedMod();
+      setBrowseViewportMetrics((m) => ({
+        ...m,
+        containerWidth: m.containerWidth + effectiveSidebarWidth,
+      }));
+      setSidebarClosing(true);
+      sidebarCloseTimerRef.current = window.setTimeout(() => {
+        sidebarCloseTimerRef.current = null;
+        sidebarExitContentRef.current = null;
+        setSidebarClosing(false);
+      }, BROWSE_DOCK_ANIM_MS);
+      return;
+    }
+    teardownSelectedMod();
+  });
+
+  // Re-selecting a mod mid-slide-out aborts the close: cancel the pending unmount
+  // and drop the closing flag so the live panel (not the frozen one) shows.
+  useEffect(() => {
+    if (selectedMod && sidebarCloseTimerRef.current !== null) {
+      window.clearTimeout(sidebarCloseTimerRef.current);
+      sidebarCloseTimerRef.current = null;
+      sidebarExitContentRef.current = null;
+      setSidebarClosing(false);
+    }
+  }, [selectedMod]);
 
   const navigateToPreviousMod = useStableCallback(() => {
     if (previousSelectedMod) void handleNavigateMod(previousSelectedMod, 'previous');
@@ -2623,11 +2826,11 @@ export default function Browse() {
         installedFileIds={installedFileIds}
         installedFileStates={installedFileStates}
         onEnableFile={toggleMod}
-        downloadingFileId={downloading?.modId === selectedMod.id ? downloading.fileId : null}
+        downloadingFileId={downloading && downloading.modId === selectedMod.id ? downloading.fileId : null}
         queuedFileIds={selectedQueuedFileIds}
         extracting={extracting}
         progress={downloadProgress}
-        hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+        hideNsfwPreviews={browseBlurNsfwPreviews}
         dateAdded={selectedModDates?.dateAdded}
         dateModified={selectedModDates?.dateModified}
         isNavigating={!!modalNavigation}
@@ -2645,7 +2848,10 @@ export default function Browse() {
     ) : null;
 
   return (
-    <div className="flex h-full min-h-0">
+    // overflow-hidden clips the closing dock as it slides off the right edge so
+    // it never spills past the page into a horizontal scrollbar. The grid keeps
+    // its own vertical scroll (on the flex-1 child), so this only clips the slide.
+    <div className="relative flex h-full min-h-0 overflow-hidden">
       {/* The scroll listener toggles browse-is-scrolling on this element
           imperatively; keeping it out of the className prop means scroll
           start/stop never re-renders this (large) component. */}
@@ -2654,15 +2860,12 @@ export default function Browse() {
       <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
         {artistMode && submitter ? (
           <div className="flex items-center gap-3">
-            <button
-              type="button"
+            <IconButton
+              icon={ArrowLeft}
+              label={t('browse.artist.backToBrowse')}
               onClick={clearArtist}
-              aria-label={t('browse.artist.backToBrowse')}
-              title={t('browse.artist.backToBrowse')}
-              className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-lg border border-border bg-bg-secondary text-text-secondary transition-colors hover:border-accent/50 hover:text-text-primary cursor-pointer"
-            >
-              <ArrowLeft className="h-5 w-5" />
-            </button>
+              className="flex-shrink-0"
+            />
             {submitter.avatarUrl && !artistAvatarFailed ? (
               <img
                 src={submitter.avatarUrl}
@@ -2727,7 +2930,7 @@ export default function Browse() {
                   target="_blank"
                   rel="noopener noreferrer"
                   title={`Support ${submitter.name} on Ko-fi`}
-                  className="inline-flex items-center gap-1.5 rounded-full bg-[#FF5E5B] px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[#ff4542]"
+                  className="inline-flex items-center gap-1.5 rounded-full bg-brand-kofi px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-brand-kofi-hover"
                 >
                   <KofiIcon className="h-4 w-4" />
                   {t('browse.artist.kofi')}
@@ -2735,7 +2938,7 @@ export default function Browse() {
               )}
             </div>
             <div className="hidden flex-shrink-0 items-center gap-1 rounded-lg border border-border bg-bg-secondary p-0.5 sm:flex">
-              {(['Mod', 'Sound'] as const).map((s) => (
+              {(['Mod', 'Sound', 'Wip'] as const).map((s) => (
                 <button
                   key={s}
                   type="button"
@@ -2744,7 +2947,11 @@ export default function Browse() {
                     section === s ? 'bg-accent/15 text-accent' : 'text-text-secondary hover:text-text-primary'
                   }`}
                 >
-                  {s === 'Mod' ? t('profiles.mods.label') : t('browse.section.sounds')}
+                  {s === 'Mod'
+                    ? t('profiles.mods.label')
+                    : s === 'Sound'
+                      ? t('browse.section.sounds')
+                      : t('browse.section.wips')}
                 </button>
               ))}
             </div>
@@ -2882,32 +3089,15 @@ export default function Browse() {
                   <div className="space-y-4">
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setLayout('grid')}
-                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
-                            layout === 'grid'
-                              ? 'border-accent/50 bg-accent/10 text-accent'
-                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          <LayoutGrid className="h-4 w-4" />
-                          {t('browse.viewOptions.grid')}
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setLayout('list')}
-                          className={`flex h-9 items-center justify-center gap-2 rounded-md border text-sm transition-colors ${
-                            layout === 'list'
-                              ? 'border-accent/50 bg-accent/10 text-accent'
-                              : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                          }`}
-                        >
-                          <List className="h-4 w-4" />
-                          {t('browse.viewOptions.list')}
-                        </button>
-                      </div>
+                      <BrowseViewOptionControl<BrowseLayout>
+                        label={t('browse.viewOptions.layout')}
+                        value={layout}
+                        onChange={setLayout}
+                        options={[
+                          { value: 'grid', label: t('browse.viewOptions.grid'), icon: LayoutGrid },
+                          { value: 'list', label: t('browse.viewOptions.list'), icon: List },
+                        ]}
+                      />
                     </div>
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
@@ -2938,54 +3128,56 @@ export default function Browse() {
 
                     <div className={layout === 'list' ? 'opacity-45' : ''}>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.cardDesign')}>
-                        {(['readable', 'classic'] as const).map((design) => {
-                          const active = browseCardDesign === design;
-                          return (
-                            <button
-                              key={design}
-                              type="button"
-                              role="tab"
-                              aria-selected={active}
-                              disabled={layout === 'list'}
-                              onClick={() => setBrowseCardDesign(design)}
-                              className={`h-9 rounded-md border text-xs font-semibold transition-colors disabled:cursor-default ${
-                                active
-                                  ? 'border-accent/50 bg-accent/10 text-accent'
-                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {design === 'readable' ? t('browse.cardStyle.default') : t('browse.cardStyle.classic')}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <BrowseViewOptionControl<BrowseCardDesign>
+                        disabled={layout === 'list'}
+                        label={t('browse.viewOptions.cardDesign')}
+                        value={browseCardDesign}
+                        onChange={setBrowseCardDesign}
+                        options={[
+                          { value: 'readable', label: t('browse.cardStyle.default') },
+                          { value: 'classic', label: t('browse.cardStyle.classic') },
+                        ]}
+                      />
                     </div>
 
                     <div>
                       <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
-                      <div className="grid grid-cols-2 gap-2" role="tablist" aria-label={t('browse.viewOptions.modDetailsView')}>
-                        {(['modal', 'sidebar'] as const).map((view) => {
-                          const active = browseDetailsView === view;
-                          return (
-                            <button
-                              key={view}
-                              type="button"
-                              role="tab"
-                              aria-selected={active}
-                              onClick={() => setBrowseDetailsView(view)}
-                              className={`flex h-9 items-center justify-center gap-1.5 rounded-md border text-xs font-semibold transition-colors ${
-                                active
-                                  ? 'border-accent/50 bg-accent/10 text-accent'
-                                  : 'border-border bg-bg-tertiary text-text-secondary hover:text-text-primary'
-                              }`}
-                            >
-                              {view === 'modal' ? <Maximize2 className="h-3.5 w-3.5" /> : <PanelRight className="h-3.5 w-3.5" />}
-                              {view === 'modal' ? t('browse.detailsView.window') : t('browse.detailsView.sidebar')}
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <BrowseViewOptionControl<BrowseDetailsView>
+                        label={t('browse.viewOptions.modDetailsView')}
+                        value={browseDetailsView}
+                        onChange={setBrowseDetailsView}
+                        options={[
+                          { value: 'modal', label: t('browse.detailsView.window'), icon: Maximize2 },
+                          { value: 'sidebar', label: t('browse.detailsView.sidebar'), icon: PanelRight },
+                        ]}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.nsfwContent')}</div>
+                      <BrowseViewOptionControl<BrowseNsfwContentMode>
+                        label={t('browse.viewOptions.nsfwContent')}
+                        value={browseNsfwContentMode}
+                        onChange={setBrowseNsfwContentMode}
+                        options={[
+                          { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                          { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
+                          { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                        ]}
+                      />
+                    </div>
+
+                    <div>
+                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.outdatedContent')}</div>
+                      <BrowseViewOptionControl<'show' | 'hide'>
+                        label={t('browse.viewOptions.outdatedContent')}
+                        value={(settings?.hideOutdatedMods ?? false) ? 'hide' : 'show'}
+                        onChange={(mode) => setBrowseHideOutdated(mode === 'hide')}
+                        options={[
+                          { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                          { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                        ]}
+                      />
                     </div>
 
                   </div>
@@ -2997,7 +3189,12 @@ export default function Browse() {
             {sections.length > 1 && (
               <div className="flex items-center h-10 rounded-lg border border-border bg-bg-secondary p-1" role="tablist" aria-label={t('browse.section.label')}>
                 {sections.map((entry) => {
-                  const Icon = entry.modelName === 'Sound' ? Music : Package;
+                  const Icon =
+                    entry.modelName === 'Sound'
+                      ? Music
+                      : entry.modelName === 'Wip'
+                        ? Construction
+                        : Package;
                   const active = section === entry.modelName;
                   return (
                     <button
@@ -3120,18 +3317,17 @@ export default function Browse() {
                         {categoryOptions.length > 0 && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.category')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByCategory')}
                               value={String(categoryId)}
                               onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
                               disabled={heroCategoryId !== 'all'}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <option value="all">{t('browse.filters.allCategories')}</option>
                               {categoryOptions.map((cat) => (
                                 <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
                               ))}
-                            </select>
+                            </Select>
                             {heroCategoryId !== 'all' && (
                               <span className="block text-[11px] text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
                             )}
@@ -3143,34 +3339,32 @@ export default function Browse() {
                         {hasLocalCache && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByContentRating')}
                               value={nsfw}
                               onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">{t('browse.filters.contentAll')}</option>
                               <option value="sfw">{t('browse.filters.sfwOnly')}</option>
                               <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
-                            </select>
+                            </Select>
                           </div>
                         )}
 
                         {hasLocalCache && (
                           <div className="block">
                             <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
-                            <select
+                            <Select
                               aria-label={t('browse.filters.filterByDateAdded')}
                               value={addedWithin}
                               onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
-                              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
                             >
                               <option value="all">{t('browse.filters.anyTime')}</option>
                               <option value="today">{t('browse.filters.today')}</option>
                               <option value="week">{t('browse.filters.thisWeek')}</option>
                               <option value="month">{t('browse.filters.thisMonth')}</option>
                               <option value="custom">{t('browse.filters.customRange')}</option>
-                            </select>
+                            </Select>
                             {addedWithin === 'custom' && (
                               <div className="mt-2 grid grid-cols-2 gap-2">
                                 <label className="block">
@@ -3204,28 +3398,6 @@ export default function Browse() {
               );
             })()}
           </div>
-
-          {section === 'Sound' && (
-            <div className="mt-3 inline-flex max-w-full items-center gap-3 rounded-lg border border-border bg-bg-secondary/70 px-3 py-2">
-              <div className="inline-flex shrink-0 items-center gap-2 text-sm font-medium text-text-primary">
-                <Volume2 className="h-4 w-4 flex-shrink-0 text-text-secondary" />
-                <span>{t('browse.previewVolume')}</span>
-              </div>
-              <input
-                type="range"
-                min="0"
-                max="100"
-                value={Math.round(soundVolume * 100)}
-                onChange={(e) => setSoundVolume(parseInt(e.target.value, 10) / 100)}
-                className="h-1.5 w-40 cursor-pointer accent-accent sm:w-48"
-                title={`Volume: ${Math.round(soundVolume * 100)}%`}
-                aria-label={t('browse.previewVolume')}
-              />
-              <span className="w-9 text-right text-xs tabular-nums text-text-secondary">
-                {Math.round(soundVolume * 100)}%
-              </span>
-            </div>
-          )}
         </form>
         )}
       </div>
@@ -3360,7 +3532,7 @@ export default function Browse() {
                             section={section}
                             volume={soundVolume}
                             onVolumeChange={setSoundVolume}
-                            hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+                            hideNsfwPreviews={browseBlurNsfwPreviews}
                             isPlaying={playingModId === mod.id}
                             suppressHoverIntentRef={isBrowseScrollingRef}
                             enableModId={installedLocal && !installedLocal.enabled ? installedLocal.id : undefined}
@@ -3372,7 +3544,7 @@ export default function Browse() {
                               });
                             }}
                             onClick={() => handleModClick(mod)}
-                            onQuickDownload={() => handleQuickDownload(mod)}
+                            onQuickDownload={(anchor) => handleQuickDownload(mod, anchor)}
                             onEnable={installedLocal && !installedLocal.enabled
                               ? () => toggleMod(installedLocal.id)
                               : undefined}
@@ -3413,9 +3585,29 @@ export default function Browse() {
           mounted in the <aside> outside this scroll container instead. */}
       {!detailsSidebarActive && renderModDetails('modal')}
 
+      {/* Multi-file quick-install picker, anchored to the Install button. */}
+      {filePicker && (
+        <BrowseFileQuickPicker
+          modName={filePicker.details.name}
+          files={filePicker.files}
+          anchor={filePicker.anchor}
+          onPick={(file) => {
+            const modId = filePicker.details.id;
+            setFilePicker(null);
+            void runDownload(modId, file);
+          }}
+          onViewAll={() => {
+            setSelectedMod(filePicker.details);
+            setSelectedModDates(filePicker.dates);
+            setFilePicker(null);
+          }}
+          onClose={() => setFilePicker(null)}
+        />
+      )}
+
       {collectionModalOpen && (
         <ImportCollectionModal
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={browseBlurNsfwPreviews}
           installedIds={installedIds}
           queuedIds={queuedModIds}
           activeDeadlockPath={activeDeadlockPath}
@@ -3426,25 +3618,37 @@ export default function Browse() {
       {importProfileOpen && (
         <ImportProfileDialog
           activeDeadlockPath={activeDeadlockPath}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={browseBlurNsfwPreviews}
           onClose={() => setImportProfileOpen(false)}
           onImported={() => { void loadMods(); }}
         />
       )}
       </div>
 
-      {/* Docked details sidebar. Shrinking the flex-1 grid above triggers the
-          scroll container's ResizeObserver, which recomputes the virtualized
-          column count, so the grid reflows to fewer columns on its own. */}
-      {selectedMod && detailsSidebarActive && (
+      {/* Docked details sidebar. While OPEN it's an in-flow flex child, so the
+          flex-1 grid above shrinks to make room (its ResizeObserver recomputes
+          the virtualized column count). While CLOSING, selectedMod is already
+          null and the grid metrics have been pre-grown to full width in the same
+          commit, so the grid has already reflowed wide; the dock detaches to an
+          absolute overlay over the vacated strip and fades out there. Because it
+          leaves the flex flow at close-start, its later unmount triggers no
+          second reflow: the grid never flickers. The overlay renders the frozen
+          panel captured at close time. */}
+      {(selectedMod || (sidebarClosing && !selectedMod)) && detailsSidebarActive && (
         <aside
-          className="relative flex-shrink-0 h-full bg-bg-primary overflow-hidden"
+          className={
+            sidebarClosing && !selectedMod
+              ? 'browse-details-dock is-closing pointer-events-none absolute right-0 top-0 z-50 h-full bg-bg-primary overflow-hidden'
+              : 'browse-details-dock relative flex-shrink-0 h-full bg-bg-primary overflow-hidden'
+          }
           style={{ width: effectiveSidebarWidth }}
         >
           {/* The border and resize handle live on the sliding panel so the
               dock's left edge arrives with the content instead of popping in
               ahead of it. */}
-          <div className="browse-details-dock-panel relative h-full w-full border-l border-border bg-bg-secondary">
+          <div
+            className="browse-details-dock-panel relative h-full w-full border-l border-border bg-bg-secondary"
+          >
             {/* Drag the left edge to resize; the width is remembered. */}
             <div
               role="separator"
@@ -3455,7 +3659,7 @@ export default function Browse() {
             >
               <div className="absolute inset-y-0 left-1 w-0.5 bg-transparent transition-colors group-hover:bg-accent/60" />
             </div>
-            {renderModDetails('sidebar')}
+            {selectedMod ? renderModDetails('sidebar') : sidebarExitContentRef.current}
           </div>
         </aside>
       )}
@@ -3522,11 +3726,9 @@ function ReadableBrowseModCard({
     : isCompactReadable
       ? 'px-[clamp(12px,5cqw,14px)] pb-[clamp(12px,5cqw,14px)] pt-[clamp(12px,5cqw,14px)]'
       : 'px-[clamp(14px,5cqw,16px)] pb-[clamp(14px,5cqw,16px)] pt-[clamp(14px,5cqw,16px)]';
-  const titleMarginClass = showChips
-    ? isCompactReadable
-      ? 'mt-[clamp(4px,2.5cqw,7px)]'
-      : 'mt-[clamp(5px,2.8571cqw,9px)]'
-    : 'mt-0';
+  // Chips moved onto the thumbnail overlay, so the title is now the first body
+  // row in every density and needs no top margin.
+  const titleMarginClass = 'mt-0';
   const footerMarginClass = isMicro
     ? 'mt-[clamp(6px,3.5714cqw,8px)]'
     : 'mt-[clamp(7px,3.5714cqw,11px)]';
@@ -3611,34 +3813,40 @@ function ReadableBrowseModCard({
       tabIndex={0}
       aria-label={`Open details for ${mod.name}`}
       style={cardFrameStyle}
-      className={`browse-card-hover-surface browse-readable-card group flex w-full flex-col overflow-hidden rounded-md border bg-[#141414] text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] transition-[border-color,transform,box-shadow] duration-150 cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
+      className={`browse-card-hover-surface browse-readable-card premium-card-glow group flex w-full flex-col overflow-hidden rounded-xl border bg-bg-sunken text-left shadow-[0_1px_0_rgba(255,255,255,0.03)] cursor-pointer focus-visible:border-accent focus-visible:outline-none [container-type:inline-size] ${
         isPlaying
           ? 'border-state-danger/70 ring-2 ring-state-danger/35 shadow-lg shadow-state-danger/15'
           : downloading
             ? 'border-accent/40'
-            : 'border-white/[0.07]'
+            : installed && !installedDisabled
+              ? 'border-white/[0.07] premium-card-glow-active'
+              : 'border-white/[0.07]'
       }`}
     >
-      <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-md bg-bg-tertiary`}>
+      <div className={`browse-readable-card-media relative ${mediaHeightClass} overflow-hidden rounded-t-xl bg-bg-tertiary`}>
         {media}
+        {showChips && chips.length > 0 && (
+          <div className="browse-readable-card-chips pointer-events-none absolute inset-x-0 bottom-0 z-[3] flex items-end bg-gradient-to-t from-black/75 via-black/30 to-transparent px-[clamp(8px,4cqw,12px)] pb-[clamp(7px,3.5cqw,10px)] pt-8">
+            <div className="pointer-events-auto min-w-0">
+              <BrowseReadableChipRow
+                chips={chips}
+                availableWidth={chipRowWidth}
+                maxVisible={readableDensity === 'compact' ? 2 : BROWSE_READABLE_MAX_VISIBLE_CHIPS}
+                onImage
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       <div
         className={`browse-readable-card-body relative flex flex-none flex-col ${bodyPaddingClass}`}
       >
-        {showChips && (
-          <BrowseReadableChipRow
-            chips={chips}
-            availableWidth={chipRowWidth}
-            maxVisible={readableDensity === 'compact' ? 2 : BROWSE_READABLE_MAX_VISIBLE_CHIPS}
-          />
-        )}
-
         <div className={`${titleMarginClass} min-w-0`}>
           {/* font-semibold, not font-bold: Reaver ships only a 600 face, so
               bolder weights get synthetic (smeared, blurry) emboldening. */}
           <h3
-            className={`block truncate font-mod-title font-semibold text-[#eee8df] ${
+            className={`block truncate font-mod-title font-semibold text-mod-title ${
               isMicro
                 ? 'text-[13px] leading-4'
                 : 'text-[clamp(11px,5.3571cqw,17px)] leading-[1.28] pb-px'
@@ -3688,7 +3896,7 @@ function ReadableBrowseModCard({
                     )}
                   </button>
                   {showVolumeSlider && (
-                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-[#0a0c10]/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
+                    <div className="absolute bottom-[calc(100%+8px)] right-0 flex items-center rounded-full border border-white/10 bg-bg-glass/92 px-3 py-2 shadow-[0_8px_24px_rgba(0,0,0,0.45)] backdrop-blur-md">
                       <input
                         type="range"
                         min={0}
@@ -3772,7 +3980,7 @@ interface ModCardProps {
   actionContextKey?: string;
   onPlayingChange: (playing: boolean) => void;
   onClick: () => void;
-  onQuickDownload: () => void;
+  onQuickDownload: (anchor?: HTMLElement) => void;
   /** Toggle the local mod's enabled state. Provided only when there's an
    *  installed-but-disabled mod to enable. */
   onEnable?: () => void;
@@ -3847,13 +4055,13 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
-        className={`browse-card-hover-surface relative bg-bg-secondary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
+        className={`browse-card-hover-surface relative bg-bg-secondary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer flex items-center gap-4 p-3 ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
             : 'border-border hover:border-accent/50'
         }`}
       >
-        <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-md overflow-hidden">
+        <div className="relative bg-bg-tertiary w-32 h-20 flex-shrink-0 rounded-lg overflow-hidden">
           {isSoundSection ? (
             heroRenderUrl ? (
               <ImageContextMenu src={heroRenderUrl} alt={inferredHero ?? mod.name}>
@@ -3903,7 +4111,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
               </span>
             ) : (
               <button
-                onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
+                onClick={(e) => { e.stopPropagation(); onQuickDownload(e.currentTarget); }}
                 className="flex-shrink-0 flex items-center justify-center w-7 h-7 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-full shadow-lg transition-colors cursor-pointer"
                 title={t('browse.card.install')}
               >
@@ -4018,13 +4226,13 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
         role="button"
         tabIndex={0}
         aria-label={`Open details for ${mod.name}`}
-        className={`browse-card-hover-surface relative isolate bg-bg-tertiary border rounded-lg overflow-hidden focus-visible:border-accent focus-visible:outline-none transition-colors text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
+        className={`browse-card-hover-surface premium-card-glow relative isolate bg-bg-tertiary border rounded-xl overflow-hidden focus-visible:border-accent focus-visible:outline-none text-left cursor-pointer group ${isCompact ? 'aspect-[4/3]' : 'aspect-[3/2]'} ${
           isPlaying
             ? 'border-state-danger ring-2 ring-state-danger/60 shadow-lg shadow-state-danger/20'
             : downloading
               ? 'border-accent ring-2 ring-accent/40 ring-offset-0'
               : installed
-                ? 'border-state-success/40 hover:border-state-success/70'
+                ? `border-state-success/40 hover:border-state-success/70 ${!installedDisabled ? 'premium-card-glow-active' : ''}`
                 : 'border-border hover:border-accent/50'
         }`}
       >
@@ -4289,7 +4497,7 @@ function ModCard({ mod, installed, installedDisabled, downloading, queuePosition
           </div>
         ) : (
           <button
-            onClick={(e) => { e.stopPropagation(); onQuickDownload(); }}
+            onClick={(e) => { e.stopPropagation(); onQuickDownload(e.currentTarget); }}
             className={`flex items-center justify-center rounded-full bg-bg-primary/85 backdrop-blur-sm ring-1 ring-border shadow-md text-accent hover:bg-accent/20 hover:text-text-primary hover:ring-accent/60 transition-all cursor-pointer ${isCompact ? 'w-7 h-7' : 'w-8 h-8'}`}
             title={t('browse.card.install')}
           >

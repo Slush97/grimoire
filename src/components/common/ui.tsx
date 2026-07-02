@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { Check, type LucideIcon } from 'lucide-react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { Check, X, type LucideIcon } from 'lucide-react';
 import Tx from '../translation/Tx';
 
 interface CardProps {
@@ -53,10 +53,10 @@ interface BadgeProps {
 
 export function Badge({ children, variant = 'neutral', className = '' }: BadgeProps) {
     const variants = {
-        success: 'bg-green-500/10 text-green-400 border-green-500/20',
-        warning: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-        error: 'bg-red-500/10 text-red-400 border-red-500/20',
-        info: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
+        success: 'bg-state-success/10 text-state-success border-state-success/20',
+        warning: 'bg-state-warning/10 text-state-warning border-state-warning/20',
+        error: 'bg-state-danger/10 text-state-danger border-state-danger/20',
+        info: 'bg-state-info/10 text-state-info border-state-info/20',
         neutral: 'bg-white/5 text-text-secondary border-white/10',
     };
 
@@ -110,7 +110,7 @@ export function Tag({
     const t = tones[tone];
     const isOverlay = variant === 'overlay';
     const surface = isOverlay
-        ? `bg-bg-primary/85 backdrop-blur-sm border ${t.overlayBorder} ${t.text} shadow-[0_1px_2px_rgba(0,0,0,0.35)]`
+        ? `bg-bg-primary/90 border ${t.overlayBorder} ${t.text} shadow-[0_1px_2px_rgba(0,0,0,0.35)]`
         : `${t.fill} border ${t.border} ${t.text} opacity-90`;
     return (
         <span
@@ -379,5 +379,182 @@ export function Button({
             ) : null}
             {children}
         </button>
+    );
+}
+
+// ============================================================================
+// IconButton - square icon-only button (modal close X, inline actions). One
+// shape / size / focus treatment so every icon button across dialogs matches,
+// instead of each surface hand-rolling its own. `label` is required (icon-only
+// buttons need an accessible name) and doubles as the hover tooltip.
+// ============================================================================
+
+interface IconButtonProps extends Omit<React.ButtonHTMLAttributes<HTMLButtonElement>, 'aria-label'> {
+    icon: LucideIcon;
+    /** Accessible name + hover tooltip (icon-only, so this is mandatory). */
+    label: string;
+    size?: 'sm' | 'md';
+    tone?: 'default' | 'danger';
+}
+
+export function IconButton({ icon: Icon, label, size = 'md', tone = 'default', className = '', ...props }: IconButtonProps) {
+    const sizes = {
+        sm: 'h-7 w-7',
+        md: 'h-8 w-8',
+    };
+    const tones = {
+        default: 'border-border text-text-secondary hover:border-white/25 hover:bg-white/5 hover:text-text-primary',
+        danger: 'border-border text-text-secondary hover:border-state-danger/60 hover:bg-state-danger/10 hover:text-state-danger',
+    };
+    const iconSize = size === 'sm' ? 'h-3.5 w-3.5' : 'h-4 w-4';
+    return (
+        <button
+            type="button"
+            aria-label={label}
+            title={label}
+            className={`flex flex-shrink-0 items-center justify-center rounded-md border transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer ${sizes[size]} ${tones[tone]} ${className}`}
+            {...props}
+        >
+            <Icon className={iconSize} aria-hidden />
+        </button>
+    );
+}
+
+// ============================================================================
+// ModalHeader - the pinned title row shared by dialogs: display-font title,
+// optional subtitle, an optional actions slot (e.g. a Reset button), and a
+// uniform close button. Replaces the divergent per-modal headers.
+// ============================================================================
+
+interface ModalHeaderProps {
+    title: ReactNode;
+    /** id wired to the Modal's labelledBy for aria-labelledby. */
+    titleId?: string;
+    subtitle?: ReactNode;
+    /** Tooltip for a truncated subtitle (e.g. the full mod name). */
+    subtitleTitle?: string;
+    onClose: () => void;
+    closeLabel?: string;
+    closeDisabled?: boolean;
+    /** Extra controls rendered left of the close button (e.g. a Reset action). */
+    actions?: ReactNode;
+    className?: string;
+}
+
+export function ModalHeader({
+    title,
+    titleId,
+    subtitle,
+    subtitleTitle,
+    onClose,
+    closeLabel,
+    closeDisabled,
+    actions,
+    className = '',
+}: ModalHeaderProps) {
+    return (
+        <div className={`flex flex-shrink-0 items-start justify-between gap-3 border-b border-border px-5 py-4 ${className}`}>
+            <div className="min-w-0">
+                <h2 id={titleId} className="truncate text-lg font-semibold tracking-wide text-text-primary font-reaver">
+                    {title}
+                </h2>
+                {subtitle && (
+                    <p className="truncate text-xs text-text-secondary" title={subtitleTitle}>
+                        {subtitle}
+                    </p>
+                )}
+            </div>
+            <div className="flex flex-shrink-0 items-center gap-2">
+                {actions}
+                <IconButton
+                    icon={X}
+                    label={closeLabel ?? 'Close'}
+                    onClick={onClose}
+                    disabled={closeDisabled}
+                />
+            </div>
+        </div>
+    );
+}
+
+// ============================================================================
+// SegmentedControl - a single tab/segment language for "pick one option"
+// rows (image-picker surfaces, appearance source kinds). role=tablist with
+// roving arrow-key focus and aria-selected, so the two former divergent tab
+// styles (underline vs pill) collapse to one.
+// ============================================================================
+
+interface SegmentOption<T extends string> {
+    value: T;
+    label: ReactNode;
+}
+
+interface SegmentedControlProps<T extends string> {
+    options: readonly SegmentOption<T>[];
+    value: T;
+    onChange: (value: T) => void;
+    label?: string;
+    className?: string;
+    /** Equal-width segments that stretch to fill the container, instead of the
+     *  default content-width chips. Use for full-width pickers (e.g. a settings
+     *  popover row) where the segments should split the available width. */
+    fill?: boolean;
+    /** Disable the whole control (no clicks, no roving focus). Dimming is left to
+     *  the caller so the control's label can dim alongside it. */
+    disabled?: boolean;
+}
+
+export function SegmentedControl<T extends string>({
+    options,
+    value,
+    onChange,
+    label,
+    className = '',
+    fill = false,
+    disabled = false,
+}: SegmentedControlProps<T>) {
+    const refs = useRef<(HTMLButtonElement | null)[]>([]);
+
+    const move = (from: number, dir: -1 | 1) => {
+        if (disabled) return;
+        const next = (from + dir + options.length) % options.length;
+        onChange(options[next].value);
+        refs.current[next]?.focus();
+    };
+
+    return (
+        <div role="tablist" aria-label={label} className={`flex gap-1.5 ${fill ? 'w-full' : 'flex-wrap'} ${className}`}>
+            {options.map((opt, i) => {
+                const active = opt.value === value;
+                return (
+                    <button
+                        key={opt.value}
+                        ref={(el) => { refs.current[i] = el; }}
+                        type="button"
+                        role="tab"
+                        aria-selected={active}
+                        tabIndex={active ? 0 : -1}
+                        disabled={disabled}
+                        onClick={() => !disabled && onChange(opt.value)}
+                        onKeyDown={(e) => {
+                            if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                                e.preventDefault();
+                                move(i, 1);
+                            } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                                e.preventDefault();
+                                move(i, -1);
+                            }
+                        }}
+                        className={`inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border px-2.5 py-1 text-xs font-medium transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-default ${fill ? 'flex-1' : ''} ${
+                            active
+                                ? 'border-accent/70 bg-accent/15 text-text-primary'
+                                : 'border-border bg-bg-tertiary text-text-secondary hover:border-accent/40 hover:text-text-primary'
+                        }`}
+                    >
+                        {opt.label}
+                    </button>
+                );
+            })}
+        </div>
     );
 }

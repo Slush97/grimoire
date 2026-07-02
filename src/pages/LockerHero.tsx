@@ -9,23 +9,28 @@ import {
   Box,
   Loader2,
   Sparkles,
+  ImageIcon,
   type LucideIcon,
 } from 'lucide-react';
 import HeroSkinsPanel, { SkinLoadOrderStrip } from '../components/locker/HeroSkinsPanel';
+import { LockerModImagePicker } from '../components/locker/LockerModImagePicker';
 import HeroCardPicker from '../components/locker/HeroCardPicker';
 import HeroSoundPicker from '../components/locker/HeroSoundPicker';
 import HeroEffectsPanel from '../components/locker/HeroEffectsPanel';
 import FloatingModelPanel from '../components/locker/FloatingModelPanel';
 // three.js viewer is heavy; only pull the chunk when the user flips to 3D.
 const HeroPoseViewer = lazy(() => import('../components/locker/HeroPoseViewer'));
+import { useAppStore } from '../stores/appStore';
 import { useTrippyPreviewStore } from '../stores/trippyPreviewStore';
 import type { Mod } from '../types/mod';
 import type { HeroPoseSkinSource } from '../types/portrait';
 import {
+  activeLockerSkin,
   countLockerSkins,
   getHeroNamePath,
   getHeroRenderPath,
   getHeroWikiUrl,
+  getLockerSkinKey,
   type HeroCategory,
 } from '../lib/lockerUtils';
 
@@ -49,6 +54,11 @@ interface LockerHeroViewProps {
    *  confirmation dialog and the actual delete. */
   onRequestDeleteSkin?: (modIds: string[], name: string) => void;
   hideNsfwPreviews?: boolean;
+  /** Launch-shuffle pool set + toggle, threaded to the skins panel cards. */
+  includedSkinKeys?: Set<string>;
+  onToggleShuffleIncluded?: (skinKey: string) => void;
+  /** Whether the master shuffle switch is armed (keeps per-skin toggles visible). */
+  shuffleArmed?: boolean;
 }
 
 type SectionId = 'skins' | 'sounds' | 'cards' | 'effects';
@@ -79,8 +89,28 @@ export function LockerHeroView({
   onReorderSkins,
   onRequestDeleteSkin,
   hideNsfwPreviews = false,
+  includedSkinKeys,
+  onToggleShuffleIncluded,
+  shuffleArmed,
 }: LockerHeroViewProps) {
   const { t } = useTranslation();
+  // Issue #208: the backdrop reflects the active skin's chosen Locker image, if
+  // the user picked one (set per skin in the skins list below).
+  const lockerModThumbnails = useAppStore((s) => s.lockerModThumbnails);
+  const lockerModBackgrounds = useAppStore((s) => s.lockerModBackgrounds);
+  const lockerBgHideHeroName = useAppStore((s) => s.lockerBgHideHeroName);
+  const activeSkin = useMemo(() => activeLockerSkin(skinList), [skinList]);
+  const activeSkinKey = activeSkin ? getLockerSkinKey(activeSkin) : undefined;
+  // The "Locker image" (grid-thumbnail surface) the picker mirrors from.
+  const thumbnailImage = activeSkinKey ? lockerModThumbnails[activeSkinKey] : undefined;
+  // The full-bleed backdrop is its own per-skin image (issue #208), independent
+  // of the 3:4 card image. Unset = the hero render. The card image is shown only
+  // on the grid card, never here.
+  const backdropImage = activeSkinKey ? lockerModBackgrounds[activeSkinKey] : undefined;
+  // Hide the hero name logo when the active skin's backdrop already shows the
+  // name (only meaningful when a custom backdrop is in play).
+  const hideHeroName = activeSkinKey ? Boolean(lockerBgHideHeroName[activeSkinKey]) : false;
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [renderFallbackStep, setRenderFallbackStep] = useState(0);
   const [nameFailed, setNameFailed] = useState(false);
   const [view3d, setView3d] = useState(false);
@@ -146,13 +176,14 @@ export function LockerHeroView({
   ];
 
   const renderSrc =
-    renderFallbackStep === 0
+    backdropImage ??
+    (renderFallbackStep === 0
       ? getHeroRenderPath(hero.name)
       : renderFallbackStep === 1
         ? getHeroWikiUrl(hero.name)
         : renderFallbackStep === 2
           ? (hero.iconUrl ?? '')
-          : '';
+          : '');
 
   const handleRenderError = () => {
     if (renderFallbackStep === 0) {
@@ -225,6 +256,9 @@ export function LockerHeroView({
         heroName={hero.name}
         emptyMessage={t('locker.hero.downloadASkinForThisHero')}
         layout="cards"
+        includedSkinKeys={includedSkinKeys}
+        onToggleShuffleIncluded={onToggleShuffleIncluded}
+        shuffleArmed={shuffleArmed}
       />
     );
 
@@ -243,8 +277,12 @@ export function LockerHeroView({
           <img
             src={renderSrc}
             alt={hero.name}
-            className="absolute top-0 right-0 h-full w-auto max-w-none"
-            onError={handleRenderError}
+            className={
+              backdropImage
+                ? 'absolute inset-0 h-full w-full object-cover'
+                : 'absolute top-0 right-0 h-full w-auto max-w-none'
+            }
+            onError={backdropImage ? undefined : handleRenderError}
           />
         ) : (
           <div className="absolute inset-0 flex items-center justify-center text-text-secondary text-2xl">
@@ -255,24 +293,37 @@ export function LockerHeroView({
         <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-t from-black/50 to-transparent" />
       </div>
 
-      {/* Live 3D model toggle. Opens/closes the floating model panel rather than
-          swapping the backdrop, so the 2D portrait stays put and the model can
-          float over it at any window size. Shown at every width (the floating
-          panel works without the lg+ backdrop too). */}
-      <button
-        type="button"
-        onClick={() => setView3d((v) => !v)}
-        aria-pressed={view3d}
-        title={view3d ? t('locker.hero.hide3dModel') : t('locker.hero.showLive3dModel')}
-        className={`absolute top-4 right-4 z-20 flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
-          view3d
-            ? 'border-accent/60 bg-accent/20 text-text-primary'
-            : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
-        }`}
-      >
-        <Box className="h-3.5 w-3.5" />
-        3D
-      </button>
+      {/* Top-right controls: adjust the hero-detail backdrop image, and the live
+          3D model toggle. The 3D toggle opens/closes the floating model panel
+          rather than swapping the backdrop, so the 2D portrait stays put and the
+          model can float over it at any window size. */}
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        {activeSkin && activeSkinKey && (
+          <button
+            type="button"
+            onClick={() => setPickerOpen(true)}
+            title={t('locker.hero.lockerImages')}
+            aria-label={t('locker.hero.lockerImages')}
+            className="flex items-center gap-1.5 rounded-full border border-border/70 bg-bg-secondary/70 px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary backdrop-blur cursor-pointer"
+          >
+            <ImageIcon className="h-3.5 w-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={() => setView3d((v) => !v)}
+          aria-pressed={view3d}
+          title={view3d ? t('locker.hero.hide3dModel') : t('locker.hero.showLive3dModel')}
+          className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors cursor-pointer ${
+            view3d
+              ? 'border-accent/60 bg-accent/20 text-text-primary'
+              : 'border-border/70 bg-bg-secondary/70 text-text-secondary hover:text-text-primary backdrop-blur'
+          }`}
+        >
+          <Box className="h-3.5 w-3.5" />
+          3D
+        </button>
+      </div>
 
       {/* Progressive frosted-glass background — every layer (including the
           base heavy blur) is masked with a long, smooth taper so nothing has
@@ -347,12 +398,13 @@ export function LockerHeroView({
             }`}
           >
             <Star className="w-4 h-4" />
-            {isFavorite ? t('locker.hero.favorite') : t('common.actions.save')}
+            {isFavorite ? t('locker.hero.unfavorite') : t('locker.hero.favorite')}
           </button>
         </div>
 
-        {/* Hero Name */}
-        {nameFailed ? (
+        {/* Hero Name. Hidden when the active skin's backdrop already shows the
+            hero name (issue #208). */}
+        {hideHeroName && backdropImage ? null : nameFailed ? (
           <h2 className="text-2xl font-bold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
             {hero.name}
           </h2>
@@ -440,6 +492,19 @@ export function LockerHeroView({
             />
           </Suspense>
         </FloatingModelPanel>
+      )}
+
+      {/* Unified per-skin image picker (issue #208): tabbed for the 3:4 grid
+          thumbnail, the 16:9 skin-panel card and the 16:9 backdrop, opening on
+          the thumbnail tab. */}
+      {pickerOpen && activeSkin && activeSkinKey && (
+        <LockerModImagePicker
+          mod={activeSkin}
+          skinKey={activeSkinKey}
+          heroName={hero.name}
+          lockerImageDataUrl={thumbnailImage}
+          onClose={() => setPickerOpen(false)}
+        />
       )}
     </div>
   );

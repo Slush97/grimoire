@@ -9,7 +9,7 @@ import {
     normalizeCrosshairSettings,
     parseMachineConvarsCrosshair,
 } from '../../../src/lib/crosshair';
-import { readAutoexec, writeAutoexec, getAutoexecPath } from '../services/autoexec';
+import { getManualAutoexecCommands, readAutoexec, writeAutoexec, getAutoexecPath } from '../services/autoexec';
 export type { CrosshairSettings, CrosshairPreset };
 
 interface PresetsData {
@@ -213,15 +213,19 @@ ipcMain.handle('crosshair:importFromGame', async (_event, gamePath: string) => {
 // Get autoexec commands (non-crosshair)
 ipcMain.handle('autoexec:getCommands', async (_event, gamePath: string) => {
     if (!gamePath) {
-        return { commands: [], exists: false };
+        return { commands: [], manualCommands: [], exists: false };
     }
 
     if (!fs.existsSync(getAutoexecPath(gamePath))) {
-        return { commands: [], exists: false };
+        return { commands: [], manualCommands: [], exists: false };
     }
 
     const autoexec = readAutoexec(gamePath);
-    return { commands: autoexec.commands, exists: true };
+    return {
+        commands: autoexec.commands,
+        manualCommands: getManualAutoexecCommands(autoexec),
+        exists: true,
+    };
 });
 
 // Save autoexec commands (preserves the crosshair section and any manual

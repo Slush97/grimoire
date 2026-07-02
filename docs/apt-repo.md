@@ -12,9 +12,13 @@ manager channel that message refers to.
 
 ## How it works
 
-- Hosting: a Cloudflare **R2** bucket (`grimoire-apt`) exposed publicly through
-  the custom domain `apt.grimoiremods.com`. R2 has zero egress fees, so serving
-  large Electron debs costs effectively nothing.
+- Hosting: a Cloudflare **R2** bucket (`grimoire-apt`) served at
+  `apt.grimoiremods.com` by the `grimoire-apt` Worker (in the workspace root).
+  The Worker streams objects straight from the bucket (R2 has zero egress fees,
+  so serving large Electron debs costs effectively nothing) and additionally
+  tallies real `.deb` downloads in KV, which powers the apt install-count badge
+  in the README. It was originally a direct R2 custom domain with no counter;
+  see `../../grimoire-apt/README.md` for that Worker and its one-time cutover.
 - Publishing: the `apt-publish` job in `.github/workflows/release.yml` runs on
   each tagged release. It rebuilds a fresh, GPG-signed, **latest-only** repo
   from that release's `.deb` with `reprepro`, then syncs it to R2.

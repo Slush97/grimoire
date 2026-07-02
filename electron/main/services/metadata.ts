@@ -11,6 +11,7 @@ export interface ModMetadata {
     audioUrl?: string;     // GameBanana audio preview URL (Sound mods)
     gameBananaId?: number;
     gameBananaFileId?: number; // The specific file ID that was downloaded
+    vpkIndex?: number;      // Size-sorted index inside a multi-VPK GameBanana file
     categoryId?: number;
     categoryName?: string; // Hero/category name from GameBanana
     sourceSection?: string;
@@ -78,6 +79,14 @@ export interface ModMetadata {
      *  import. The orientation/glow transform + tracking status; presence marks
      *  the slot for idempotent re-import (replace the previous build). */
     soulImport?: import('../../../src/types/mod').SoulContainerImportInfo;
+    /** Set when this VPK was built from a user GLB via the Spirit Urn import.
+     *  The orientation/span transform + tracking status; presence marks the slot
+     *  for idempotent re-import (replace the previous build). */
+    urnImport?: import('../../../src/types/mod').UrnImportInfo;
+    /** Set when this VPK was built via the Foundry hero sound-swap (drop your own
+     *  MP3 onto a hero sound event). Labels the mod and records what was swapped;
+     *  presence marks the slot as a local sound swap. */
+    soundSwap?: import('../../../src/types/mod').SoundSwapInfo;
     /** Load-order slot this mod last held while enabled. Disabled mods now
      *  get free-form filenames (no pakNN), so the priority is no longer encoded
      *  in the name; we stash it here on disable and try to restore it on enable

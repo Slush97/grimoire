@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, RefreshCw, X, EyeOff, Eye, List, LayoutGrid, Trash2, Globe, Ban } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   getConflicts,
@@ -8,6 +8,15 @@ import {
   getIgnoredConflicts,
   ignoreConflict,
   unignoreConflict,
+  getIgnoredConflictFiles,
+  ignoreConflictFile,
+  unignoreConflictFile,
+  getIgnoredConflictFilesGlobal,
+  ignoreConflictFileGlobal,
+  unignoreConflictFileGlobal,
+  getIgnoredConflictMods,
+  ignoreConflictMod,
+  unignoreConflictMod,
   conflictPairKey,
   reorderMods,
 } from '../lib/api';
@@ -15,11 +24,41 @@ import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
 import { Button } from '../components/common/ui';
-import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, type ViewMode } from '../components/common/PageComponents';
+import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, PageLayout, type ViewMode } from '../components/common/PageComponents';
 import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
+import ConflictFileList from '../components/conflicts/ConflictFileList';
+import { MenuRoot, MenuTrigger, MenuContent, MenuItem, MenuLabel } from '../components/common/menu';
 import Tx from '../components/translation/Tx';
 
 const CONFLICTS_VIEW_MODE_KEY = 'grimoire:conflicts-view-mode';
+
+/** Wraps a conflict card's mod thumbnail in a right-click menu. The thumbnails
+ *  are how you tell the two sides apart (the shared file path is identical), so
+ *  the per-mod "ignore everywhere" lives here rather than on a filename. */
+function ModThumbMenu({
+  modName,
+  busy,
+  onIgnoreMod,
+  children,
+}: {
+  modName: string;
+  busy: boolean;
+  onIgnoreMod: () => void;
+  children: React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  return (
+    <MenuRoot>
+      <MenuTrigger asChild>{children}</MenuTrigger>
+      <MenuContent>
+        <MenuLabel>{modName}</MenuLabel>
+        <MenuItem icon={Ban} disabled={busy} onSelect={onIgnoreMod}>
+          {t('conflicts.actions.ignoreModEverywhere')}
+        </MenuItem>
+      </MenuContent>
+    </MenuRoot>
+  );
+}
 
 /** Global load-order rank of a mod: lower = loads first. The pakNN (mod.priority)
  *  repeats per overflow folder, so fold in the folder index from metaKey
@@ -124,6 +163,19 @@ export default function Conflicts() {
   // filter detected conflicts (defense-in-depth — backend already filters)
   // and to render the "Ignored" panel.
   const [ignored, setIgnored] = useState<Set<string>>(new Set());
+  // Map of stable pair key -> individually ignored overlapping file paths.
+  // Drives the "Ignored files" management panel; the detector already filters
+  // these out of the active list.
+  const [ignoredFiles, setIgnoredFiles] = useState<Record<string, string[]>>({});
+  // Paths silenced for every pair (right-click "ignore in all mods").
+  const [ignoredFilesGlobal, setIgnoredFilesGlobal] = useState<string[]>([]);
+  // The global path currently being unignored from its panel, so just that
+  // row's button disables during the round-trip.
+  const [pendingGlobalFile, setPendingGlobalFile] = useState<string | null>(null);
+  // Stable mod identities ignored wholesale (right-click "ignore this mod
+  // everywhere"), plus the one currently being unignored from its panel.
+  const [ignoredMods, setIgnoredMods] = useState<string[]>([]);
+  const [pendingIgnoredMod, setPendingIgnoredMod] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [disableTarget, setDisableTarget] = useState<ModWithThumbnail | null>(null);
@@ -151,10 +203,20 @@ export default function Conflicts() {
     setLoading(true);
     setError(null);
     try {
-      const [conflictResult, modsResult, ignoredResult] = await Promise.all([
+      const [
+        conflictResult,
+        modsResult,
+        ignoredResult,
+        ignoredFilesResult,
+        ignoredFilesGlobalResult,
+        ignoredModsResult,
+      ] = await Promise.all([
         getConflicts(),
         getMods(),
         getIgnoredConflicts(),
+        getIgnoredConflictFiles(),
+        getIgnoredConflictFilesGlobal(),
+        getIgnoredConflictMods(),
       ]);
 
       const map = new Map<string, ModWithThumbnail>();
@@ -196,6 +258,9 @@ export default function Conflicts() {
       );
       setConflicts(conflictResult);
       setIgnored(new Set(ignoredResult));
+      setIgnoredFiles(ignoredFilesResult);
+      setIgnoredFilesGlobal(ignoredFilesGlobalResult);
+      setIgnoredMods(ignoredModsResult);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -218,6 +283,109 @@ export default function Conflicts() {
       // Sidebar's badge count is derived from getConflicts() and only refreshes
       // on mods-list changes. Ignore/unignore don't touch mods, so notify the
       // Sidebar explicitly — otherwise the badge stays stale until restart.
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  // Dismiss one overlapping file for this pair; re-detect drops the pair if it
+  // was the last shared file.
+  const handleIgnoreFile = async (conflict: ModConflict, filePath: string) => {
+    const key = getConflictIgnoreKey(conflict);
+    setPendingPair(key);
+    try {
+      const map = await ignoreConflictFile(key, filePath);
+      setIgnoredFiles(map);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  // Silence a file for every pair (right-click "ignore in all mods"); pass the
+  // conflict so its card disables during the round-trip.
+  const handleIgnoreFileEverywhere = async (conflict: ModConflict, filePath: string) => {
+    const key = getConflictIgnoreKey(conflict);
+    setPendingPair(key);
+    try {
+      const next = await ignoreConflictFileGlobal(filePath);
+      setIgnoredFilesGlobal(next);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  // Ignore a whole mod everywhere (right-click a conflict thumbnail); `identity`
+  // is the conflict's modAIdentity/modBIdentity.
+  const handleIgnoreMod = async (conflict: ModConflict, identity: string) => {
+    const key = getConflictIgnoreKey(conflict);
+    setPendingPair(key);
+    try {
+      const next = await ignoreConflictMod(identity);
+      setIgnoredMods(next);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingPair(null);
+    }
+  };
+
+  // Drop a mod identity from the ignore list so its conflicts flag again.
+  const handleUnignoreMod = async (identity: string) => {
+    setPendingIgnoredMod(identity);
+    try {
+      const next = await unignoreConflictMod(identity);
+      setIgnoredMods(next);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingIgnoredMod(null);
+    }
+  };
+
+  // Drop a path from the global ignore list so it can flag conflicts again.
+  const handleUnignoreFileGlobal = async (filePath: string) => {
+    setPendingGlobalFile(filePath);
+    try {
+      const next = await unignoreConflictFileGlobal(filePath);
+      setIgnoredFilesGlobal(next);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
+      window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setPendingGlobalFile(null);
+    }
+  };
+
+  // Restore an ignored file (filePath) or every ignored file for a pair
+  // (filePath === null). Re-detects so a still-overlapping file resurfaces.
+  const handleUnignoreFile = async (key: string, filePath: string | null) => {
+    setPendingPair(key);
+    try {
+      const map = await unignoreConflictFile(key, filePath);
+      setIgnoredFiles(map);
+      const fresh = await getConflicts();
+      setConflicts(fresh);
       window.dispatchEvent(new CustomEvent('grimoire:conflicts-changed'));
     } catch (err) {
       setError(String(err));
@@ -395,7 +563,15 @@ export default function Conflicts() {
     );
   }
 
-  if (conflicts.length === 0 && ignored.size === 0) {
+  const ignoredFilePairCount = Object.keys(ignoredFiles).length;
+
+  if (
+    conflicts.length === 0 &&
+    ignored.size === 0 &&
+    ignoredFilePairCount === 0 &&
+    ignoredFilesGlobal.length === 0 &&
+    ignoredMods.length === 0
+  ) {
     return (
       <div className="h-full flex items-center justify-center p-6">
         <EmptyState
@@ -418,7 +594,7 @@ export default function Conflicts() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto animate-fade-in">
+    <PageLayout maxWidth="5xl">
       <PageHeader
         title={
           <Tx
@@ -497,17 +673,23 @@ export default function Conflicts() {
             const variantA = getVariantLabel(modA);
             const variantB = getVariantLabel(modB);
 
-            const renderListSide = (mod: ModWithThumbnail, variant: string | null) => (
+            const renderListSide = (mod: ModWithThumbnail, variant: string | null, identity: string) => (
               <div className="min-w-0 flex items-center gap-3">
-                <div className="h-16 w-24 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary">
-                  {mod.thumbnailUrl ? (
-                    <img src={mod.thumbnailUrl} alt={mod.name} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full w-full items-center justify-center text-[11px] text-text-tertiary">
-                      <Tx k="conflicts.noPreview" fallback="No Preview" />
-                    </div>
-                  )}
-                </div>
+                <ModThumbMenu
+                  modName={mod.name}
+                  busy={pendingPair === getConflictIgnoreKey(conflict)}
+                  onIgnoreMod={() => handleIgnoreMod(conflict, identity)}
+                >
+                  <div className="h-16 w-24 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary">
+                    {mod.thumbnailUrl ? (
+                      <img src={mod.thumbnailUrl} alt={mod.name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[11px] text-text-tertiary">
+                        <Tx k="conflicts.noPreview" fallback="No Preview" />
+                      </div>
+                    )}
+                  </div>
+                </ModThumbMenu>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-medium text-text-primary" title={mod.name}>
                     {mod.name}
@@ -557,12 +739,20 @@ export default function Conflicts() {
                   </button>
                 </div>
                 <div className="grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] items-center gap-3 p-4">
-                  {renderListSide(modA, variantA)}
+                  {renderListSide(modA, variantA, conflict.modAIdentity)}
                   <span className="text-center text-sm font-bold text-text-tertiary">
                     <Tx k="common.versus" fallback="VS" />
                   </span>
-                  {renderListSide(modB, variantB)}
+                  {renderListSide(modB, variantB, conflict.modBIdentity)}
                 </div>
+                {conflict.conflictType === 'file' && conflict.files && conflict.files.length > 0 && (
+                  <ConflictFileList
+                    files={conflict.files}
+                    busy={pendingPair === getConflictIgnoreKey(conflict)}
+                    onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
+                    onIgnoreFileEverywhere={(filePath) => handleIgnoreFileEverywhere(conflict, filePath)}
+                  />
+                )}
                 <ConflictReorderActions
                   conflict={conflict}
                   modA={{ id: modA.id, name: modA.name }}
@@ -610,29 +800,35 @@ export default function Conflicts() {
                 <div className="p-4 grid grid-cols-[minmax(0,1fr)_2rem_minmax(0,1fr)] gap-3 items-start">
                   {/* Mod A Card */}
                   <div className="min-w-0 group">
-                    <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
-                      {modA.thumbnailUrl ? (
-                        <img
-                          src={modA.thumbnailUrl}
-                          alt={modA.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-text-tertiary">
-                          <Tx k="conflicts.noPreview" fallback="No Preview" />
-                        </div>
-                      )}
-                      <button
-                        onClick={() => setDisableTarget(modA)}
-                        aria-label={t('conflicts.actions.disableNamed', { name: modA.name })}
-                        className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
-                      >
-                        <span className="text-white text-sm font-medium flex items-center gap-1">
-                          <X className="w-4 h-4" />
-                          <Tx k="conflicts.actions.disable" fallback="Disable" />
-                        </span>
-                      </button>
-                    </div>
+                    <ModThumbMenu
+                      modName={modA.name}
+                      busy={pendingPair === getConflictIgnoreKey(conflict)}
+                      onIgnoreMod={() => handleIgnoreMod(conflict, conflict.modAIdentity)}
+                    >
+                      <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
+                        {modA.thumbnailUrl ? (
+                          <img
+                            src={modA.thumbnailUrl}
+                            alt={modA.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-text-tertiary">
+                            <Tx k="conflicts.noPreview" fallback="No Preview" />
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setDisableTarget(modA)}
+                          aria-label={t('conflicts.actions.disableNamed', { name: modA.name })}
+                          className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                        >
+                          <span className="text-white text-sm font-medium flex items-center gap-1">
+                            <X className="w-4 h-4" />
+                            <Tx k="conflicts.actions.disable" fallback="Disable" />
+                          </span>
+                        </button>
+                      </div>
+                    </ModThumbMenu>
                     <p className="text-sm font-medium text-text-primary text-center break-words" title={modA.name}>
                       {modA.name}
                     </p>
@@ -657,29 +853,35 @@ export default function Conflicts() {
 
                   {/* Mod B Card */}
                   <div className="min-w-0 group">
-                    <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
-                      {modB.thumbnailUrl ? (
-                        <img
-                          src={modB.thumbnailUrl}
-                          alt={modB.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="w-full h-full flex items-center justify-center text-text-tertiary">
-                          <Tx k="conflicts.noPreview" fallback="No Preview" />
-                        </div>
-                      )}
-                      <button
-                        onClick={() => setDisableTarget(modB)}
-                        aria-label={t('conflicts.actions.disableNamed', { name: modB.name })}
-                        className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
-                      >
-                        <span className="text-white text-sm font-medium flex items-center gap-1">
-                          <X className="w-4 h-4" />
-                          <Tx k="conflicts.actions.disable" fallback="Disable" />
-                        </span>
-                      </button>
-                    </div>
+                    <ModThumbMenu
+                      modName={modB.name}
+                      busy={pendingPair === getConflictIgnoreKey(conflict)}
+                      onIgnoreMod={() => handleIgnoreMod(conflict, conflict.modBIdentity)}
+                    >
+                      <div className="relative w-full aspect-video bg-bg-tertiary rounded-lg overflow-hidden mb-2">
+                        {modB.thumbnailUrl ? (
+                          <img
+                            src={modB.thumbnailUrl}
+                            alt={modB.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center text-text-tertiary">
+                            <Tx k="conflicts.noPreview" fallback="No Preview" />
+                          </div>
+                        )}
+                        <button
+                          onClick={() => setDisableTarget(modB)}
+                          aria-label={t('conflicts.actions.disableNamed', { name: modB.name })}
+                          className="absolute inset-x-0 bottom-0 bg-red-600 hover:bg-red-500 flex items-center justify-center py-2 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-white cursor-pointer"
+                        >
+                          <span className="text-white text-sm font-medium flex items-center gap-1">
+                            <X className="w-4 h-4" />
+                            <Tx k="conflicts.actions.disable" fallback="Disable" />
+                          </span>
+                        </button>
+                      </div>
+                    </ModThumbMenu>
                     <p className="text-sm font-medium text-text-primary text-center break-words" title={modB.name}>
                       {modB.name}
                     </p>
@@ -695,6 +897,15 @@ export default function Conflicts() {
                     )}
                   </div>
                 </div>
+
+                {conflict.conflictType === 'file' && conflict.files && conflict.files.length > 0 && (
+                  <ConflictFileList
+                    files={conflict.files}
+                    busy={pendingPair === getConflictIgnoreKey(conflict)}
+                    onIgnoreFile={(filePath) => handleIgnoreFile(conflict, filePath)}
+                    onIgnoreFileEverywhere={(filePath) => handleIgnoreFileEverywhere(conflict, filePath)}
+                  />
+                )}
 
                 <ConflictReorderActions
                   conflict={conflict}
@@ -769,6 +980,157 @@ export default function Conflicts() {
                     title={t('conflicts.ignored.unignoreTitle')}
                   >
                     <Eye className="w-3.5 h-3.5" />
+                    <Tx k="conflicts.actions.unignore" fallback="Unignore" />
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Ignored files panel — finer-grained companion to the ignored-pairs
+          panel above. Each group is one mod pair; restoring a file (or the
+          whole group) re-runs detection so a still-overlapping path reappears
+          as an active conflict. */}
+      {ignoredFilePairCount > 0 && (
+        <div className="mt-10">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-text-secondary">
+            <EyeOff className="w-4 h-4" />
+            <Tx k="conflicts.ignoredFiles.title" fallback="Ignored files" />
+          </h3>
+          <div className="space-y-3">
+            {Object.entries(ignoredFiles).map(([key, paths]) => {
+              const [idA, idB] = key.split('::');
+              const a = modsMap.get(idA);
+              const b = modsMap.get(idB);
+              const aName = a?.name ?? t('conflicts.removedMod');
+              const bName = b?.name ?? t('conflicts.removedMod');
+              return (
+                <div key={key} className="rounded-xl border border-border bg-bg-secondary">
+                  <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
+                    <div className="min-w-0 flex-1 flex items-center gap-2 text-sm">
+                      <span className="truncate text-text-primary" title={aName}>{aName}</span>
+                      <span className="flex-shrink-0 text-xs text-text-tertiary">
+                        <Tx k="common.versusLower" fallback="vs" />
+                      </span>
+                      <span className="truncate text-text-primary" title={bName}>{bName}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnignoreFile(key, null)}
+                      disabled={pendingPair === key}
+                      title={t('conflicts.ignoredFiles.restoreAllTitle')}
+                      className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                    >
+                      <Eye className="h-3.5 w-3.5" />
+                      <Tx k="conflicts.ignoredFiles.restoreAll" fallback="Restore all" />
+                    </button>
+                  </div>
+                  <ul className="divide-y divide-border/60">
+                    {paths.map((p) => (
+                      <li key={p} className="flex items-center gap-2 px-4 py-2">
+                        <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary" title={p}>
+                          {p}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleUnignoreFile(key, p)}
+                          disabled={pendingPair === key}
+                          title={t('conflicts.ignoredFiles.unignoreFileTitle')}
+                          className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2 py-0.5 text-[11px] text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                        >
+                          <Eye className="h-3 w-3" />
+                          <Tx k="conflicts.actions.unignore" fallback="Unignore" />
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Globally ignored files panel: paths silenced for every pair via the
+          right-click "ignore in all mods" action. Unignoring re-runs detection
+          so any pair that genuinely overlaps on the path reappears. */}
+      {ignoredFilesGlobal.length > 0 && (
+        <div className="mt-10">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-text-secondary">
+            <Globe className="w-4 h-4" />
+            <Tx k="conflicts.ignoredFilesGlobal.title" fallback="Ignored in all mods" />
+          </h3>
+          <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
+            {ignoredFilesGlobal.map((file) => (
+              <div key={file} className="flex items-center gap-3 px-4 py-2.5">
+                <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-text-tertiary" title={file}>
+                  {file}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleUnignoreFileGlobal(file)}
+                  disabled={pendingGlobalFile === file}
+                  title={t('conflicts.ignoredFilesGlobal.unignoreTitle')}
+                  className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                >
+                  <Eye className="h-3.5 w-3.5" />
+                  <Tx k="conflicts.actions.unignore" fallback="Unignore" />
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Ignored mods panel: mods dismissed wholesale via the thumbnail
+          right-click. Shows each mod's preview with an "Ignored" tag so it's
+          easy to see what's silenced; unignoring re-runs detection. */}
+      {ignoredMods.length > 0 && (
+        <div className="mt-10">
+          <h3 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-wide text-text-secondary">
+            <Ban className="w-4 h-4" />
+            <Tx k="conflicts.ignoredMods.title" fallback="Ignored mods" />
+          </h3>
+          <div className="rounded-xl border border-border bg-bg-secondary divide-y divide-border">
+            {ignoredMods.map((identity) => {
+              const m = modsMap.get(identity);
+              const name = m?.name ?? t('conflicts.removedMod');
+              const variant = m ? getVariantLabel(m) : null;
+              return (
+                <div key={identity} className="flex items-center gap-3 px-4 py-2.5">
+                  <div className="h-12 w-16 flex-shrink-0 overflow-hidden rounded bg-bg-tertiary">
+                    {m?.thumbnailUrl ? (
+                      <img src={m.thumbnailUrl} alt={name} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full w-full items-center justify-center text-[10px] text-text-tertiary">
+                        <Tx k="conflicts.noPreview" fallback="No Preview" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <span className="truncate text-sm text-text-primary" title={name}>{name}</span>
+                      <span className="flex-shrink-0 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 text-[10px] uppercase tracking-wide text-amber-400">
+                        <Tx k="conflicts.ignoredMods.tag" fallback="Ignored" />
+                      </span>
+                    </div>
+                    {variant && (
+                      <p className="truncate text-xs text-accent" title={variant}>{variant}</p>
+                    )}
+                    {m?.fileName && (
+                      <p className="truncate text-[11px] font-mono text-text-tertiary" title={m.fileName}>{m.fileName}</p>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleUnignoreMod(identity)}
+                    disabled={pendingIgnoredMod === identity}
+                    title={t('conflicts.ignoredMods.unignoreTitle')}
+                    className="flex-shrink-0 inline-flex items-center gap-1 rounded px-2.5 py-1 text-xs text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 cursor-pointer"
+                  >
+                    <Eye className="h-3.5 w-3.5" />
                     <Tx k="conflicts.actions.unignore" fallback="Unignore" />
                   </button>
                 </div>
@@ -889,6 +1251,6 @@ export default function Conflicts() {
           )
         }
       />
-    </div>
+    </PageLayout>
   );
 }

@@ -6,6 +6,38 @@ import { getAddonsPath, getDisabledPath, getAddonFolderPaths, createNextOverflow
 import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
 import { compareFileContents, fingerprintFile } from './fileMatch';
+import { loadSettings } from './settings';
+import {
+    assertCanMoveLoadedGameMod,
+    assertCanMoveLoadedGameMods,
+    syncRunningGameModSnapshotFromMods,
+    beginModMutationRunningScope,
+    endModMutationRunningScope,
+} from './gameSessionMods';
+
+/** Verbose mod-mutation trace, gated on the `verboseModTrace` setting. Lands in
+ *  main.log (captured by the diagnostic report) so a desync between the UI and
+ *  the addons folder can be reconstructed from a user's repro. No-op unless the
+ *  flag is on, so it costs one cached settings read per logged call. */
+function modTrace(message: string): void {
+    try {
+        if (loadSettings().verboseModTrace) {
+            console.log(`[modTrace] ${message}`);
+        }
+    } catch {
+        /* never let tracing break a mutation */
+    }
+}
+
+/** True when the trace flag is on; lets callers skip building expensive
+ *  per-mod log strings when tracing is off. */
+function modTraceEnabled(): boolean {
+    try {
+        return !!loadSettings().verboseModTrace;
+    } catch {
+        return false;
+    }
+}
 
 /** Minimum VPK priority number */
 const MIN_VPK_PRIORITY = 1;
@@ -23,6 +55,31 @@ export const ENABLE_LIMIT_MESSAGE =
     'You can have at most 990 mods enabled at once. Disable one to make room.';
 
 type CollisionMetadataOwner = 'enabled' | 'disabled';
+
+/**
+ * `fs.rename` that retries on transient Windows file locks. A VPK in `addons/`
+ * can be briefly held open by the running game, an antivirus scan, or one of
+ * grimoire's own readers (the 3D pose export and the conflict scanner both read
+ * VPK bytes), and the OS reports that as EBUSY / EPERM / EACCES on the rename.
+ * Left unretried, a single transient lock aborts a whole profile apply and
+ * leaves the file enabled on disk while the UI believes it moved (#bugs:
+ * "addons folder does not reflect what is shown"; "disabled in the Locker but
+ * the vpk stayed"). A short backoff clears the common case; a genuinely locked
+ * file (game actually running on it) still throws after the last attempt.
+ */
+async function renameWithRetry(from: string, to: string, attempts = 5): Promise<void> {
+    for (let i = 0; ; i++) {
+        try {
+            await fs.rename(from, to);
+            return;
+        } catch (err) {
+            const code = (err as NodeJS.ErrnoException)?.code;
+            const transient = code === 'EBUSY' || code === 'EPERM' || code === 'EACCES';
+            if (!transient || i >= attempts - 1) throw err;
+            await new Promise((resolve) => setTimeout(resolve, 80 * (i + 1)));
+        }
+    }
+}
 
 /** Filesystem-level mod record produced by scanMods. NOT the renderer-facing
  *  Mod from src/types/mod.ts: that wire type is a superset that the ipc
@@ -48,6 +105,7 @@ export interface Mod {
     audioUrl?: string;
     gameBananaId?: number;
     gameBananaFileId?: number;
+    vpkIndex?: number;
     categoryId?: number;
     categoryName?: string;
     sourceSection?: string;
@@ -146,14 +204,18 @@ function extractModName(filename: string): string {
 export function makeDisabledFileName(
     sourceFileName: string,
     taken: Set<string>,
-    preferredName?: string
+    preferredName?: string,
+    variantHint?: string
 ): string {
     // The file's own stem, minus any pak## load-order prefix (disabled files
     // carry no slot). Empty for bare pakNN names, which is the disable case.
     let stem = sourceFileName.replace(/_dir\.vpk$/i, '').replace(/\.vpk$/i, '');
     stem = stem.replace(/^pak\d{2}_?/i, '').trim();
 
-    let base = slugify(stem) || slugify(preferredName ?? '') || 'mod';
+    // variantHint (an archive's variant folder) sits between the file's own stem
+    // and the mod name: it disambiguates sibling variants that share a bare pakNN
+    // name and a single mod name, which would otherwise collide on one slug.
+    let base = slugify(stem) || slugify(variantHint ?? '') || slugify(preferredName ?? '') || 'mod';
     // Guard against a base that still starts with "pak<digit>": parseVpkPriority
     // is lenient (it reads chars 3-4 and parseInts them), so "pak1_foo" would be
     // read back as slot 1 and loop forever below. Prefix it out of that shape.
@@ -239,6 +301,7 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
     }
 
     const entries = await fs.readdir(folder);
+    const trace = modTraceEnabled();
 
     for (const entry of entries) {
         const fullPath = join(folder, entry);
@@ -247,7 +310,23 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
             const stats = await fs.stat(fullPath);
             if (!stats.isFile()) continue;
 
-            if (!isDeadlockModVpk(entry)) continue;
+            if (!isDeadlockModVpk(entry)) {
+                // A .vpk that doesn't end in _dir.vpk is on disk but invisible to
+                // Grimoire (the scan only counts the dir VPK). The likeliest cause
+                // of a local mod "present in the folder but missing from the list".
+                if (trace && entry.toLowerCase().endsWith('.vpk')) {
+                    if (entry.toLowerCase().includes('.merge-rebuild')) {
+                        // A finished mergeMods rebuild renames this temp into place and
+                        // deletes it. A leftover means an interrupted/failed rebuild, so
+                        // the merged mod's source list may need extra scrutiny in the
+                        // source reconciliation trace below.
+                        modTrace(`scanFolder ${basename(folder)}: STALE merge-rebuild artifact "${entry}" (interrupted mergeMods rebuild never cleaned up; merged source list may be half-updated)`);
+                    } else {
+                        modTrace(`scanFolder ${basename(folder)}: SKIPPED "${entry}" (not *_dir.vpk -> never shown in Grimoire)`);
+                    }
+                }
+                continue;
+            }
 
             const priority = parseVpkPriority(entry) ?? DEFAULT_MOD_PRIORITY;
             const metaKey = metaKeyFor(fullPath);
@@ -263,8 +342,10 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
                 size: stats.size,
                 installedAt: stats.mtime.toISOString(),
             });
-        } catch {
-            // Skip files we can't read
+        } catch (err) {
+            // Skip files we can't read (surfaced under trace: an unreadable VPK
+            // is another way a mod silently drops out of the list).
+            if (trace) modTrace(`scanFolder ${basename(folder)}: unreadable "${entry}": ${String(err)}`);
         }
     }
 
@@ -288,6 +369,7 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
     // addons1, addons2, ...) and the single shared .disabled parking lot. Each
     // mod's metaKey is stamped in scanFolder from its folder location.
     const enabledFolders = getAddonFolderPaths(deadlockPath);
+    await cleanupStaleMergeRebuildArtifacts(enabledFolders);
     const scanned = await Promise.all([
         ...enabledFolders.map((folder) => scanFolder(folder, true)),
         scanFolder(disabledPath, false),
@@ -302,7 +384,119 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
             addonFolderIndex(a.path) * 100 + a.priority - (addonFolderIndex(b.path) * 100 + b.priority)
     );
 
+    if (modTraceEnabled()) {
+        const enabled = mods.filter((m) => m.enabled).length;
+        modTrace(`scanMods: ${mods.length} VPKs on disk (${enabled} enabled, ${mods.length - enabled} disabled)`);
+        // fileName -> mod, so we can resolve a merge's recorded source filenames
+        // against what's actually on disk right now (see reconciliation below).
+        const byFileName = new Map(mods.map((m) => [m.fileName, m] as const));
+        for (const m of mods) {
+            const meta = getModMetadata(m.metaKey);
+            const gb = meta?.gameBananaId ? `gb=${meta.gameBananaId}` : 'local';
+            // Surface the flags that drive the renderer's own hide logic
+            // (Installed.tsx visibleMods): merge output + Locker-managed VPKs.
+            const flags: string[] = [];
+            if (meta?.merged) flags.push(`merged(${meta.merged.sources.length}src)`);
+            if (meta?.lockerCosmetics) flags.push('lockerCosmetics');
+            if (meta?.lockerSounds) flags.push('lockerSounds');
+            if (meta?.lockerColors) flags.push('lockerColors');
+            if (meta?.lockerTrippySkins) flags.push('lockerTrippySkins');
+            const flagStr = flags.length ? ` [${flags.join(',')}]` : '';
+            modTrace(`  ${m.enabled ? 'ENABLED ' : 'disabled'} pri=${String(m.priority).padStart(2, '0')} ${gb} key=${m.metaKey} name="${meta?.modName ?? m.name}"${flagStr}`);
+        }
+        // Absorbed-source reconciliation. The Installed list hides disabled VPKs
+        // that are folded into a merged mod, but it must not hide by filename
+        // alone: pakNN slots are recycled, so a stale source filename can point
+        // at an unrelated enabled mod. Log filename hits and classify whether
+        // the current identity-aware renderer will hide them or keep them visible.
+        const matchesAbsorbedSource = (
+            hit: Mod,
+            hitMeta: ReturnType<typeof getModMetadata>,
+            src: import('../../../src/types/mod').MergedModSource
+        ): boolean => {
+            if (hit.enabled || hit.fileName !== src.fileName) return false;
+
+            const sourceSha = src.sha256AtMergeTime?.toLowerCase();
+            const hitSha = hitMeta?.sha256?.toLowerCase();
+            if (sourceSha && hitSha) return sourceSha === hitSha;
+
+            if (typeof src.gameBananaId === 'number' && typeof hitMeta?.gameBananaId === 'number') {
+                if (src.gameBananaId !== hitMeta.gameBananaId) return false;
+                if (
+                    typeof src.gameBananaFileId === 'number' &&
+                    typeof hitMeta.gameBananaFileId === 'number'
+                ) {
+                    return src.gameBananaFileId === hitMeta.gameBananaFileId;
+                }
+            }
+
+            // Mirror Installed.tsx: a disabled VPK at the exact recorded source
+            // filename is the absorbed source (enabled mods already excluded), so
+            // fold it in unless sha/gbId proved a different mod.
+            return true;
+        };
+        for (const m of mods) {
+            const merged = getModMetadata(m.metaKey)?.merged;
+            if (!merged) continue;
+            for (const src of merged.sources) {
+                const hit = byFileName.get(src.fileName);
+                if (!hit) continue;
+                const hitMeta = getModMetadata(hit.metaKey);
+                const hitGb = hitMeta?.gameBananaId;
+                const gbMismatch =
+                    src.gameBananaId !== undefined && hitGb !== undefined && src.gameBananaId !== hitGb;
+                const rendererHides = matchesAbsorbedSource(hit, hitMeta, src);
+                const collision = !rendererHides && (hit.enabled || gbMismatch);
+                modTrace(
+                    `  ${rendererHides ? 'absorbed' : collision ? 'COLLIDE ' : 'VISIBLE '} merge="${merged.id}" source fileName=${src.fileName} (gb=${src.gameBananaId ?? 'local'}) ` +
+                        `matches on-disk ${hit.enabled ? 'ENABLED' : 'disabled'} key=${hit.metaKey} (gb=${hitGb ?? 'local'}) -> renderer ${rendererHides ? 'hides it' : 'keeps it visible'}` +
+                        (collision ? ' [filename collision protected by identity check]' : '')
+                );
+            }
+        }
+    }
+
     return mods;
+}
+
+/** Remove orphaned `.merge-rebuild-*.vpk` temps. A finished rebuild renames its
+ *  temp into place and deletes it; a leftover means an interrupted rebuild (app
+ *  killed mid-swap), whose merged mod's manifest may be half-written. The temp
+ *  is harmless on disk (the scan skips non-`_dir.vpk`), but we clear it and log
+ *  it -- always on, NOT gated on verboseModTrace, so it surfaces in any
+ *  diagnostic. Age-gated so a temp from a rebuild still in flight is never
+ *  touched (a rebuild completes in well under the threshold). */
+async function cleanupStaleMergeRebuildArtifacts(folders: string[]): Promise<void> {
+    const STALE_MS = 2 * 60 * 1000;
+    const now = Date.now();
+    let removed = 0;
+    for (const folder of folders) {
+        if (!existsSync(folder)) continue;
+        let entries: string[];
+        try {
+            entries = await fs.readdir(folder);
+        } catch {
+            continue;
+        }
+        for (const entry of entries) {
+            const lower = entry.toLowerCase();
+            if (!lower.includes('.merge-rebuild') || !lower.endsWith('.vpk')) continue;
+            const full = join(folder, entry);
+            try {
+                const stats = await fs.stat(full);
+                if (now - stats.mtimeMs < STALE_MS) continue; // may be an in-flight rebuild
+                await fs.unlink(full);
+                removed++;
+            } catch {
+                /* best-effort: a concurrent rebuild may have renamed/removed it */
+            }
+        }
+    }
+    if (removed > 0) {
+        console.log(
+            `[merge] removed ${removed} stale .merge-rebuild artifact(s) (interrupted rebuild leftover)`
+        );
+    }
 }
 
 async function reconcileEnabledDisabledCollisions(
@@ -421,7 +615,7 @@ async function moveModToFolderAs(
 
     await fs.mkdir(destinationFolder, { recursive: true });
     const destinationPath = join(destinationFolder, destinationFileName);
-    await fs.rename(targetMod.path, destinationPath);
+    await renameWithRetry(targetMod.path, destinationPath);
     const destMetaKey = metaKeyFor(destinationPath);
 
     if (destMetaKey !== targetMod.metaKey) {
@@ -506,16 +700,158 @@ async function allocateSlot(
  * metaKeyFor(path), since an overflow destination uses a folder-prefixed key.
  */
 export async function allocateEnabledVpkPath(deadlockPath: string): Promise<string> {
+    await syncRunningGameModSnapshotFromMods(await scanMods(deadlockPath));
     const disabledForbidden = await folderPakNumbers(getDisabledPath(deadlockPath));
     const { folder, fileName } = await allocateSlot(deadlockPath, { disabledForbidden, preferred: [] });
     return join(folder, fileName);
 }
 
 /**
+ * Serialize every mod-folder mutation (enable / disable / delete / reorder /
+ * priority) through one in-process queue.
+ *
+ * Each mutation scans the addons + .disabled folders, picks a free pakNN slot,
+ * and renames files. Running two at once (rapid Locker/Installed toggling) raced
+ * on slot allocation: both `scanMods` saw the same free slot, both `allocateSlot`
+ * returned it, and the second `fs.rename` clobbered the first, so a mod the UI
+ * still showed enabled had no VPK in addons (#bugs: toggling "disabled a lot of
+ * them without replacing them with the mods i turned on"; "addons folder does not
+ * reflect what is shown"). Also, a mod's id is derived from its filename, which a
+ * move changes, so concurrent ops worked off stale ids. The queue makes each op
+ * observe a consistent folder state and allocate non-colliding slots.
+ *
+ * Non-reentrant: a locked function must NOT call another locked one (it would
+ * wait on a queue slot it already holds). The one internal cross-call,
+ * swapModPriority -> reorder, goes through the unlocked reorderModsImpl.
+ */
+let modMutationQueue: Promise<unknown> = Promise.resolve();
+function withModMutationLock<T>(fn: () => Promise<T>): Promise<T> {
+    // Compute the game-running state once per locked batch and park it for the
+    // duration, so applyProfile's per-mod snapshot syncs don't each spawn a
+    // pgrep/tasklist (turning N+M+2 spawns into 1).
+    const scoped = async (): Promise<T> => {
+        await beginModMutationRunningScope();
+        try {
+            return await fn();
+        } finally {
+            endModMutationRunningScope();
+        }
+    };
+    const run = modMutationQueue.then(scoped, scoped);
+    // Keep the chain alive regardless of this op's outcome, so one rejection
+    // doesn't poison every operation queued behind it.
+    modMutationQueue = run.then(
+        () => undefined,
+        () => undefined
+    );
+    return run;
+}
+
+/**
  * Enable a mod by moving it from disabled to addons folder (async)
  */
-export async function enableMod(deadlockPath: string, modId: string): Promise<Mod> {
+export function enableMod(deadlockPath: string, modId: string): Promise<Mod> {
+    return withModMutationLock(() => enableModImpl(deadlockPath, modId));
+}
+
+/**
+ * Run `fn` as ONE exclusive mod-folder mutation: it holds the mutation queue for
+ * its whole duration, so a multi-step batch (notably applyProfile's disable ->
+ * enable -> reorder sequence) executes atomically and cannot interleave with a
+ * Locker toggle that would rename files mid-batch and invalidate the batch's
+ * scan ids. Before this, applyProfile took the lock per sub-call, so a toggle
+ * landing in a gap left it operating on stale ids -> "Mod not found" aborted the
+ * apply partway and dropped every mod after it (#bugs: profile apply "dropped
+ * like 5 mods", "reapplying bugged it again").
+ *
+ * `fn` MUST call the *Unlocked variants below, never the exported locked
+ * enableMod/disableMod/reorderMods: those would re-enter the queue this batch
+ * already holds and deadlock.
+ */
+export function runExclusiveModMutation<T>(fn: () => Promise<T>): Promise<T> {
+    return withModMutationLock(fn);
+}
+
+/** Unlocked enable, for use only inside a runExclusiveModMutation batch. */
+export function enableModUnlocked(deadlockPath: string, modId: string): Promise<Mod> {
+    return enableModImpl(deadlockPath, modId);
+}
+
+/** Unlocked disable, for use only inside a runExclusiveModMutation batch. */
+export function disableModUnlocked(deadlockPath: string, modId: string): Promise<Mod> {
+    return disableModImpl(deadlockPath, modId);
+}
+
+/** Unlocked reorder, for use only inside a runExclusiveModMutation batch. */
+export function reorderModsUnlocked(deadlockPath: string, orderedIds: string[]): Promise<void> {
+    return reorderModsImpl(deadlockPath, orderedIds);
+}
+
+/**
+ * Apply a set of disables and enables as ONE atomic batch (the Locker skin
+ * randomizer's apply step). Disables run BEFORE enables, on disjoint id sets, so
+ * the snapshot ids stay valid across both passes - the same ordering and
+ * reasoning as applyProfile (which also frees slots before claiming them). The
+ * whole sequence holds the mutation queue, so a stray Locker toggle can't slip
+ * in, rename files, and invalidate the ids mid-batch.
+ *
+ * Per-mod failures are caught and counted, never rethrown: one locked VPK (game
+ * running, antivirus, our own readers) must not abort the rest of the batch. Ids
+ * not present in the current scan are skipped (the caller's renderer view may be
+ * a beat stale). No reorder pass: the randomizer enables exactly one skin per
+ * hero, and different heroes write different files, so the result has no
+ * file-collision load-order to resolve.
+ */
+export function setModsEnabledBatch(
+    deadlockPath: string,
+    payload: { enable: string[]; disable: string[] }
+): Promise<{ enabled: number; disabled: number; failures: string[] }> {
+    return runExclusiveModMutation(async () => {
+        const enable = new Set(payload.enable);
+        const disable = new Set(payload.disable);
+        let enabled = 0;
+        let disabled = 0;
+        const failures: string[] = [];
+
+        // Fail fast when the game is running and a mod we'd disable is loaded:
+        // the per-mod catch below swallows lock errors (so one stuck file can't
+        // abort the batch), which would otherwise turn a game-running shuffle
+        // into a silent no-op reported as success. Assert upfront so the
+        // standard game-running warning surfaces instead. Mirrors applyProfile.
+        const current = await scanMods(deadlockPath);
+        await syncRunningGameModSnapshotFromMods(current);
+        assertCanMoveLoadedGameMods(current.filter((m) => m.enabled && disable.has(m.id)));
+
+        for (const modId of disable) {
+            try {
+                await disableModUnlocked(deadlockPath, modId);
+                disabled++;
+            } catch (err) {
+                failures.push(`disable ${modId}: ${String(err)}`);
+                console.warn(`[randomize] disable failed (continuing): ${modId}: ${String(err)}`);
+            }
+        }
+        for (const modId of enable) {
+            try {
+                await enableModUnlocked(deadlockPath, modId);
+                enabled++;
+            } catch (err) {
+                failures.push(`enable ${modId}: ${String(err)}`);
+                console.warn(`[randomize] enable failed (continuing): ${modId}: ${String(err)}`);
+            }
+        }
+        if (failures.length > 0) {
+            console.warn(
+                `[randomize] batch completed with ${failures.length} failure(s): ${failures.join('; ')}`
+            );
+        }
+        return { enabled, disabled, failures };
+    });
+}
+
+async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
@@ -545,14 +881,21 @@ export async function enableMod(deadlockPath: string, modId: string): Promise<Mo
         disabledForbidden: disabledUsed,
         preferred: [meta?.lastPriority, ownNumber ?? undefined],
     });
-    return moveModToFolderAs(targetMod, folder, fileName, true);
+    const result = await moveModToFolderAs(targetMod, folder, fileName, true);
+    modTrace(`enable: "${meta?.modName ?? targetMod.name}" ${targetMod.metaKey} -> ${result.metaKey} (pri ${result.priority})`);
+    return result;
 }
 
 /**
  * Disable a mod by moving it to the disabled folder (async)
  */
-export async function disableMod(deadlockPath: string, modId: string): Promise<Mod> {
+export function disableMod(deadlockPath: string, modId: string): Promise<Mod> {
+    return withModMutationLock(() => disableModImpl(deadlockPath, modId));
+}
+
+async function disableModImpl(deadlockPath: string, modId: string): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
@@ -562,6 +905,7 @@ export async function disableMod(deadlockPath: string, modId: string): Promise<M
     if (!targetMod.enabled) {
         return targetMod;
     }
+    assertCanMoveLoadedGameMod(targetMod);
 
     const disabledPath = getDisabledPath(deadlockPath);
 
@@ -577,19 +921,27 @@ export async function disableMod(deadlockPath: string, modId: string): Promise<M
     const preferredName = meta?.modName ?? meta?.sourceFileName ?? meta?.variantLabel;
     const destinationFileName = makeDisabledFileName(targetMod.fileName, taken, preferredName);
 
-    return moveModToFolderAs(targetMod, disabledPath, destinationFileName, false, targetMod.priority);
+    const result = await moveModToFolderAs(targetMod, disabledPath, destinationFileName, false, targetMod.priority);
+    modTrace(`disable: "${meta?.modName ?? targetMod.name}" ${targetMod.metaKey} -> ${result.metaKey}`);
+    return result;
 }
 
 /**
  * Delete a mod completely (async)
  */
-export async function deleteMod(deadlockPath: string, modId: string): Promise<void> {
+export function deleteMod(deadlockPath: string, modId: string): Promise<void> {
+    return withModMutationLock(() => deleteModImpl(deadlockPath, modId));
+}
+
+async function deleteModImpl(deadlockPath: string, modId: string): Promise<void> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
         throw new Error(`Mod not found: ${modId}`);
     }
+    assertCanMoveLoadedGameMod(targetMod);
 
     await fs.unlink(targetMod.path);
 
@@ -611,17 +963,27 @@ function renameWithPriority(fileName: string, priority: number): string {
  * Set the priority of a mod by renaming its VPK file (async).
  * Also migrates metadata to the new filename.
  */
-export async function setModPriority(
+export function setModPriority(
+    deadlockPath: string,
+    modId: string,
+    newPriority: number
+): Promise<Mod> {
+    return withModMutationLock(() => setModPriorityImpl(deadlockPath, modId, newPriority));
+}
+
+async function setModPriorityImpl(
     deadlockPath: string,
     modId: string,
     newPriority: number
 ): Promise<Mod> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const targetMod = mods.find((m) => m.id === modId);
 
     if (!targetMod) {
         throw new Error(`Mod not found: ${modId}`);
     }
+    assertCanMoveLoadedGameMod(targetMod);
 
     const parentDir = dirname(targetMod.path);
     const newFileName = renameWithPriority(targetMod.fileName, newPriority);
@@ -682,11 +1044,15 @@ export async function setModPriority(
  * two-phase rename (source -> temp in the target folder -> final) keeps
  * cross-folder moves and slot swaps collision-free; metadata migrates with each.
  */
-export async function reorderMods(
-    deadlockPath: string,
-    orderedIds: string[]
-): Promise<void> {
+export function reorderMods(deadlockPath: string, orderedIds: string[]): Promise<void> {
+    return withModMutationLock(() => reorderModsImpl(deadlockPath, orderedIds));
+}
+
+// Unlocked: callers that already hold the mutation queue (swapModPriority) call
+// this directly; the exported reorderMods wraps it in the lock.
+async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Promise<void> {
     const allMods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(allMods);
     const modById = new Map(allMods.map((m) => [m.id, m]));
 
     const targets: Mod[] = [];
@@ -756,6 +1122,7 @@ export async function reorderMods(
         }
     }
     if (assignments.length === 0) return;
+    assertCanMoveLoadedGameMods(assignments.map(({ mod }) => mod));
 
     // Two-phase rename: source -> temp (in the TARGET folder) -> final. Unique
     // temp names make cross-folder moves and same-folder slot swaps collision-free.
@@ -770,7 +1137,7 @@ export async function reorderMods(
     const phase1Done: RenameStep[] = [];
     try {
         for (const step of steps) {
-            await fs.rename(step.fromPath, step.tmpPath);
+            await renameWithRetry(step.fromPath, step.tmpPath);
             phase1Done.push(step);
         }
     } catch (err) {
@@ -785,7 +1152,7 @@ export async function reorderMods(
     const phase2Done: RenameStep[] = [];
     try {
         for (const step of steps) {
-            await fs.rename(step.tmpPath, step.finalPath);
+            await renameWithRetry(step.tmpPath, step.finalPath);
             phase2Done.push(step);
         }
     } catch (err) {
@@ -810,18 +1177,28 @@ export async function reorderMods(
 /**
  * Swap the priorities of two mods (async).
  */
-export async function swapModPriority(
+export function swapModPriority(
+    deadlockPath: string,
+    modIdA: string,
+    modIdB: string
+): Promise<void> {
+    return withModMutationLock(() => swapModPriorityImpl(deadlockPath, modIdA, modIdB));
+}
+
+async function swapModPriorityImpl(
     deadlockPath: string,
     modIdA: string,
     modIdB: string
 ): Promise<void> {
     const mods = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(mods);
     const a = mods.find((m) => m.id === modIdA);
     const b = mods.find((m) => m.id === modIdB);
 
     if (!a || !b) {
         throw new Error('Mod not found for swap');
     }
+    assertCanMoveLoadedGameMods([a, b]);
     if (a.priority === b.priority) {
         throw new Error('Cannot swap mods with identical priorities');
     }
@@ -842,7 +1219,8 @@ export async function swapModPriority(
 
     const orderedIds = enabled.map((m) => m.id);
     [orderedIds[aIdx], orderedIds[bIdx]] = [orderedIds[bIdx], orderedIds[aIdx]];
-    await reorderMods(deadlockPath, orderedIds);
+    // reorderModsImpl (unlocked): we already hold the mutation queue here.
+    await reorderModsImpl(deadlockPath, orderedIds);
 }
 
 /**
