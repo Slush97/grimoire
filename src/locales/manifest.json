@@ -1,32 +1,24 @@
 {
   "sourceLanguage": "en",
-<<<<<<< HEAD
-  "totalKeys": 1920,
-=======
-  "totalKeys": 1914,
->>>>>>> f38a4ab (fix(imprint): keystone-safe hash capture + audited follow-ups)
+  "totalKeys": 1948,
   "languages": [
     {
       "code": "bg",
       "name": "български",
       "translatedKeys": 1621,
-      "pct": 84
+      "pct": 83
     },
     {
       "code": "en",
       "name": "English",
-<<<<<<< HEAD
-      "translatedKeys": 1920,
-=======
-      "translatedKeys": 1914,
->>>>>>> f38a4ab (fix(imprint): keystone-safe hash capture + audited follow-ups)
+      "translatedKeys": 1948,
       "pct": 100
     },
     {
       "code": "fr",
       "name": "français",
       "translatedKeys": 1870,
-      "pct": 97
+      "pct": 96
     },
     {
       "code": "ru",

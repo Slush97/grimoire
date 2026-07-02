@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
 import type { DmmMigrationRequest, DmmMigrationReport } from './dmmMigration';
 import type {
   HeroPortrait,
@@ -694,7 +694,14 @@ export async function imprintPreflight(): Promise<ImprintPreflightResult> {
   return window.electronAPI.imprintPreflight();
 }
 
-export type { ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult };
+/** Read the full embedded imprint (addoninfo.txt plus the grimoire_meta.json
+ *  merge companion when present) of one installed VPK. Strictly read-only and
+ *  offline; resolves null when the file carries no valid Grimoire imprint. */
+export async function readImprintDetails(modId: string): Promise<ImprintDetails | null> {
+  return window.electronAPI.readImprintDetails(modId);
+}
+
+export type { ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails };
 
 // =====================
 // Launch API

@@ -16,6 +16,7 @@ import type {
     ImprintAllInstalledResult,
     ImprintInstalledProgress,
     ImprintPreflightResult,
+    ImprintDetails,
     ApplyHeroCardResult,
     HeroAbilitySlot,
     AbilitySlot,
@@ -740,6 +741,10 @@ export interface ElectronAPI {
     imprintOneMod: (modId: string) => Promise<Mod>;
     imprintAllInstalled: () => Promise<ImprintAllInstalledResult>;
     imprintPreflight: () => Promise<ImprintPreflightResult>;
+    /** Read-only: the full embedded imprint (addoninfo.txt + optional
+     *  grimoire_meta.json merge companion) of one installed VPK, or null when
+     *  the file carries no valid Grimoire embed. */
+    readImprintDetails: (modId: string) => Promise<ImprintDetails | null>;
     onImprintAllInstalledProgress: (callback: (progress: ImprintInstalledProgress) => void) => () => void;
 
     // Launch

@@ -63,14 +63,16 @@ import {
   HelpCircle,
   GripVertical,
   Fingerprint,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight } from '../lib/api';
-import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails } from '../lib/api';
+import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
 import type { GameBananaModDetails, GameBananaMod } from '../types/gamebanana';
@@ -470,6 +472,11 @@ interface InstalledEntryCardProps {
   onDelete: (entry: ModEntry) => void;
   onEditLocal: (mod: Mod) => void;
   onRenameLocal: (mod: Mod, newName: string) => Promise<void>;
+  /** Open the imprint details modal for a mod whose wire `imprinted` flag is
+   *  true. Externally-imprinted files without the local flag simply do not get
+   *  the menu entry: the flag is the cheap client hint, and the modal's empty
+   *  state covers a stale flag. */
+  onViewImprint: (mod: Mod) => void;
   onTagLocker: (entry: ModEntry, heroName: string | null) => Promise<void>;
   onTagGlobal: (entry: ModEntry, globalType: GlobalModType | null) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
@@ -507,6 +514,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onDelete,
   onEditLocal,
   onRenameLocal,
+  onViewImprint,
   onTagLocker,
   onTagGlobal,
   onFixUnknown,
@@ -534,6 +542,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onDelete={() => onDelete(entry)}
         onEditLocal={!mod.gameBananaId ? () => onEditLocal(mod) : undefined}
         onRenameLocal={!mod.gameBananaId ? (newName) => onRenameLocal(mod, newName) : undefined}
+        onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
         onTagLocker={(heroName) => onTagLocker(entry, heroName)}
         onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
         onFixUnknown={
@@ -579,6 +588,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       entryKey={entry.key}
       onOpenDetails={() => onOpenPicker(entry.gameBananaId)}
       onViewAuthor={entry.gameBananaId ? () => onViewAuthor(entry.primary) : undefined}
+      // Imprints are per file; a group card shows the primary's imprint.
+      onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
       onToggle={() => onToggle(entry)}
       onDelete={() => onDelete(entry)}
       onTagLocker={(heroName) => onTagLocker(entry, heroName)}
@@ -853,6 +864,9 @@ export default function Installed() {
   // progress phase streaming done/total + current file, and a final report of
   // what was imprinted / skipped / failed. `null` means the modal is closed.
   const [imprintState, setImprintState] = useState<ImprintModalState>(null);
+  // "View imprint" details modal target (right-click menu on an imprinted mod's
+  // card). The modal fetches the embedded imprint itself; null means closed.
+  const [imprintDetailsMod, setImprintDetailsMod] = useState<Mod | null>(null);
   // Guards the bulk-imprint post-await state updates (and its streamed progress
   // callback) against a setState-after-unmount leak if the user navigates away
   // mid-run. Set false on unmount; every post-resolve setImprintState / showToast
@@ -2891,6 +2905,7 @@ export default function Installed() {
     }
   });
   const editLocalEntry = useStableCallback((mod: Mod) => setLocalEditMod(mod));
+  const viewEntryImprint = useStableCallback((mod: Mod) => setImprintDetailsMod(mod));
   // Inline title rename (double-click). Reuses edit-local-mod but carries the
   // current thumbnail/NSFW flag through so renaming the name alone never wipes
   // them (the handler overwrites the full local-mod metadata triplet).
@@ -3299,6 +3314,7 @@ export default function Installed() {
     onDelete: deleteEntry,
     onEditLocal: editLocalEntry,
     onRenameLocal: renameLocalMod,
+    onViewImprint: viewEntryImprint,
     onTagLocker: tagEntryLocker,
     onTagGlobal: tagEntryGlobal,
     onFixUnknown: fixUnknownEntry,
@@ -4300,6 +4316,14 @@ export default function Installed() {
           state={imprintState}
           onConfirm={() => { void handleImprintAllInstalled(); }}
           onClose={() => setImprintState(null)}
+        />
+      )}
+
+      {imprintDetailsMod && (
+        <ImprintDetailsModal
+          key={imprintDetailsMod.id}
+          mod={imprintDetailsMod}
+          onClose={() => setImprintDetailsMod(null)}
         />
       )}
 
@@ -5872,6 +5896,261 @@ function ImprintModal({ state, onConfirm, onClose }: {
   );
 }
 
+// One labeled row of the imprint detail sheet: a fixed-width muted label and a
+// wrapping value column, so the sheet reads like a spec table.
+function ImprintDetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-3 text-sm">
+      <span className="w-32 flex-shrink-0 text-xs text-text-tertiary">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-text-primary">{children}</span>
+    </div>
+  );
+}
+
+// A monospace hash value with a copy-to-clipboard button, for the identity rows.
+function ImprintHashValue({ value, copyLabel, onCopy }: {
+  value: string;
+  copyLabel: string;
+  onCopy: (value: string) => void;
+}) {
+  return (
+    <span className="flex items-center gap-2">
+      <code className="min-w-0 flex-1 break-all font-mono text-xs">{value}</code>
+      <IconButton size="sm" icon={Copy} label={copyLabel} onClick={() => onCopy(value)} />
+    </span>
+  );
+}
+
+// "View imprint" details modal: shows the FULL embedded imprint of one
+// installed VPK (the parsed addoninfo.txt fields, the original identity
+// triple, the grimoire_meta.json merge companion for merged VPKs, and the raw
+// addoninfo.txt text). Strictly read-only and offline. Deliberately NOT gated
+// on experimentalVpkImprinting: like the provenance card, reading an imprint
+// back is recognition of data already inside the file, not writing, so files
+// imprinted elsewhere or before the flag was toggled off stay inspectable.
+function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }) {
+  const { t } = useTranslation();
+  const titleId = 'imprint-details-modal-title';
+  // undefined = fetch in flight; null = the file carries no valid imprint
+  // (reachable when the local `imprinted` flag is stale).
+  const [details, setDetails] = useState<ImprintDetails | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  // Same unmount guard as handleImprintAllInstalled: no setState after the
+  // modal unmounts mid-fetch.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  // No synchronous state reset here: the render site keys this modal by
+  // mod.id, so switching mods remounts it with fresh loading state.
+  useEffect(() => {
+    readImprintDetails(mod.id)
+      .then((result) => {
+        if (mountedRef.current) setDetails(result);
+      })
+      .catch((err) => {
+        if (mountedRef.current) setError(err instanceof Error ? err.message : String(err));
+      });
+  }, [mod.id]);
+
+  // Matches the file's clipboard pattern (copyEntryShareCode): writeText +
+  // success toast, error toast on refusal.
+  const copyValue = (value: string) => {
+    navigator.clipboard.writeText(value).then(
+      () => showToast(t('installed.imprintDetails.copied'), { tone: 'success', duration: 2200 }),
+      (err) => showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' })
+    );
+  };
+
+  const sectionHeading = 'text-xs font-semibold uppercase tracking-wider text-text-tertiary';
+  const sectionBox = 'space-y-1.5 rounded-md border border-white/5 bg-bg-tertiary/40 p-3';
+
+  let body: ReactNode;
+  if (error) {
+    body = <p className="text-sm text-state-danger">{t('installed.imprintDetails.error', { error })}</p>;
+  } else if (details === undefined) {
+    body = <LoadingState label={t('installed.imprintDetails.loading')} className="min-h-40" />;
+  } else if (details === null) {
+    body = (
+      <EmptyState
+        icon={Fingerprint}
+        title={t('installed.imprintDetails.empty')}
+        className="min-h-40"
+      />
+    );
+  } else {
+    const merge = details.merge;
+    body = (
+      <>
+        <div className={sectionBox}>
+          <ImprintDetailRow label={t('installed.imprintDetails.modTitle')}>
+            {details.title ?? mod.name}
+          </ImprintDetailRow>
+          {details.author && (
+            <ImprintDetailRow label={t('installed.imprintDetails.author')}>
+              {details.author}
+            </ImprintDetailRow>
+          )}
+          {details.gamebananaId && (
+            <ImprintDetailRow label={t('installed.imprintDetails.gamebananaId')}>
+              <span className="tabular-nums">#{details.gamebananaId}</span>
+            </ImprintDetailRow>
+          )}
+          {details.sourceUrl && (
+            <ImprintDetailRow label={t('installed.imprintDetails.sourceUrl')}>
+              <a
+                href={details.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-full items-baseline gap-1 break-all text-accent hover:underline"
+              >
+                <span className="min-w-0">{details.sourceUrl}</span>
+                <ExternalLink className="h-3 w-3 flex-shrink-0 self-center" aria-hidden />
+              </a>
+            </ImprintDetailRow>
+          )}
+          {details.buildDate && (
+            <ImprintDetailRow label={t('installed.imprintDetails.buildDate')}>
+              {formatAbsoluteDate(details.buildDate)}
+            </ImprintDetailRow>
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className={sectionHeading}>{t('installed.imprintDetails.identityTitle')}</div>
+          <div className={sectionBox}>
+            <ImprintDetailRow label={t('installed.imprintDetails.sha256')}>
+              <ImprintHashValue
+                value={details.originalSha256}
+                copyLabel={t('installed.imprintDetails.copyValue')}
+                onCopy={copyValue}
+              />
+            </ImprintDetailRow>
+            {details.originalCrc32 && (
+              <ImprintDetailRow label={t('installed.imprintDetails.crc32')}>
+                <ImprintHashValue
+                  value={details.originalCrc32}
+                  copyLabel={t('installed.imprintDetails.copyValue')}
+                  onCopy={copyValue}
+                />
+              </ImprintDetailRow>
+            )}
+            {typeof details.originalSize === 'number' && (
+              <ImprintDetailRow label={t('installed.imprintDetails.size')}>
+                <span className="tabular-nums">{formatBytes(details.originalSize)}</span>
+              </ImprintDetailRow>
+            )}
+          </div>
+        </div>
+
+        {merge && (
+          <div className="space-y-2">
+            <div className={sectionHeading}>{t('installed.imprintDetails.mergeTitle')}</div>
+            <div className={sectionBox}>
+              {merge.title && (
+                <ImprintDetailRow label={t('installed.imprintDetails.mergeName')}>
+                  {merge.title}
+                </ImprintDetailRow>
+              )}
+              {merge.createdAt && (
+                <ImprintDetailRow label={t('installed.imprintDetails.createdAt')}>
+                  {formatAbsoluteDate(merge.createdAt)}
+                </ImprintDetailRow>
+              )}
+              {(merge.createdByTool || merge.createdByVersion) && (
+                <ImprintDetailRow label={t('installed.imprintDetails.createdBy')}>
+                  {[merge.createdByTool, merge.createdByVersion].filter(Boolean).join(' ')}
+                </ImprintDetailRow>
+              )}
+              <ImprintDetailRow label={t('installed.imprintDetails.schemaVersion')}>
+                <span className="tabular-nums">{merge.schemaVersion}</span>
+              </ImprintDetailRow>
+              {merge.originalSha256 && (
+                <ImprintDetailRow label={t('installed.imprintDetails.sha256')}>
+                  <ImprintHashValue
+                    value={merge.originalSha256}
+                    copyLabel={t('installed.imprintDetails.copyValue')}
+                    onCopy={copyValue}
+                  />
+                </ImprintDetailRow>
+              )}
+            </div>
+            {merge.sources.length > 0 && (
+              <>
+                <div className={sectionHeading}>
+                  {t('installed.imprintDetails.sourcesTitle', { count: merge.sources.length })}
+                </div>
+                {/* Tag rows consistent with UnknownEmbeddedCard's source list. */}
+                <div className={sectionBox}>
+                  {merge.sources.map((source, i) => (
+                    <div
+                      key={`${source.fileNameAtMergeTime ?? source.modName ?? 'source'}-${i}`}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <Tag tone="neutral" title={source.fileNameAtMergeTime ?? source.modName}>
+                        {source.modName ?? source.fileNameAtMergeTime ?? '?'}
+                        {typeof source.gameBananaId === 'number' ? ` (#${source.gameBananaId})` : ''}
+                      </Tag>
+                      {typeof source.priorityAtMergeTime === 'number' && (
+                        <span className="text-xs tabular-nums text-text-tertiary">
+                          {t('installed.imprintDetails.sourcePriority', { priority: source.priorityAtMergeTime })}
+                        </span>
+                      )}
+                      {typeof source.enabledAtMergeTime === 'boolean' && (
+                        <span className="text-xs text-text-tertiary">
+                          {source.enabledAtMergeTime
+                            ? t('installed.imprintDetails.sourceEnabled')
+                            : t('installed.imprintDetails.sourceDisabled')}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Same collapsible pattern as ImprintReportList: details/summary,
+            collapsed by default so the sheet stays tidy. */}
+        <details className="overflow-hidden rounded-md border border-white/5 bg-bg-tertiary/40">
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
+            {t('installed.imprintDetails.rawToggle')}
+          </summary>
+          <pre className="max-h-64 overflow-auto border-t border-white/5 p-3 font-mono text-xs leading-relaxed text-text-secondary">
+            {details.rawAddonInfo}
+          </pre>
+        </details>
+      </>
+    );
+  }
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="lg"
+      labelledBy={titleId}
+      panelClassName="flex max-h-[85vh] flex-col"
+    >
+      <ModalHeader
+        title={t('installed.imprintDetails.title')}
+        titleId={titleId}
+        subtitle={mod.fileName}
+        subtitleTitle={mod.fileName}
+        onClose={onClose}
+        closeLabel={t('common.actions.close')}
+      />
+      <div className="flex-1 space-y-4 overflow-y-auto p-5">{body}</div>
+      <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border p-4">
+        <Button variant="secondary" onClick={onClose}>{t('common.actions.close')}</Button>
+      </div>
+    </Modal>
+  );
+}
+
 type FoundUnknownMatch = UnknownModFilterGuess['crcMatch'] & { status: 'found' };
 
 function isFoundUnknownMatch(match: UnknownModFilterGuess['crcMatch'] | undefined): match is FoundUnknownMatch {
@@ -6125,6 +6404,10 @@ interface ModCardProps {
   /** Inline rename of a local mod's name (double-click the title). Undefined
    *  for GameBanana-sourced mods, which can't be renamed. */
   onRenameLocal?: (newName: string) => Promise<void>;
+  /** Open the imprint details modal. Passed only when the mod's wire
+   *  `imprinted` flag is true (the parent gates on it); shown in the card's
+   *  right-click menu and the thumbnail image menus. */
+  onViewImprint?: () => void;
   onTagLocker?: (heroName: string | null) => void | Promise<void>;
   onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
   onFixUnknown?: () => void;
@@ -6171,6 +6454,7 @@ interface ModMediaPreviewProps {
   onOpenDetails?: () => void;
   isGroupCard: boolean;
   onRevealInFolder?: () => void;
+  onViewImprint?: () => void;
 }
 
 function SoundPlaceholder() {
@@ -6211,6 +6495,7 @@ function ModMediaPreview({
   onOpenDetails,
   isGroupCard,
   onRevealInFolder,
+  onViewImprint,
 }: ModMediaPreviewProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -6241,10 +6526,11 @@ function ModMediaPreview({
       imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
       mergedSources={mod.merged?.sources}
       onRevealInFolder={onRevealInFolder}
+      onViewImprint={onViewImprint}
     />
   );
   const soundMedia = mod.thumbnailUrl ? image : soundHeroRenderUrl ? (
-    <ImageContextMenu src={soundHeroRenderUrl} alt={soundHeroName ?? mod.name} onRevealInFolder={onRevealInFolder}>
+    <ImageContextMenu src={soundHeroRenderUrl} alt={soundHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
       <img
         src={soundHeroRenderUrl}
         alt={soundHeroName ?? mod.name}
@@ -6349,6 +6635,7 @@ interface ModListRowContentProps {
   technicalMetaClasses: string;
   actions: ReactNode;
   onRevealInFolder?: () => void;
+  onViewImprint?: () => void;
 }
 
 function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
@@ -6590,6 +6877,7 @@ function ModListRowContent({
   technicalMetaClasses,
   actions,
   onRevealInFolder,
+  onViewImprint,
 }: ModListRowContentProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -6636,7 +6924,7 @@ function ModListRowContent({
         onDragStart={stopMediaDrag}
       >
         {listHeroRenderUrl ? (
-          <ImageContextMenu src={listHeroRenderUrl} alt={listHeroName ?? mod.name} onRevealInFolder={onRevealInFolder}>
+          <ImageContextMenu src={listHeroRenderUrl} alt={listHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
             <img
               src={listHeroRenderUrl}
               alt={listHeroName ?? mod.name}
@@ -6655,6 +6943,7 @@ function ModListRowContent({
             hideNsfw={hideNsfwPreviews}
             className="w-full h-full"
             onRevealInFolder={onRevealInFolder}
+            onViewImprint={onViewImprint}
             imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
             mergedSources={mod.merged?.sources}
           />
@@ -6744,6 +7033,7 @@ function ModCard({
   onDelete,
   onEditLocal,
   onRenameLocal,
+  onViewImprint,
   onTagLocker,
   onTagGlobal,
   onFixUnknown,
@@ -6770,6 +7060,9 @@ function ModCard({
     });
   };
   const revealAction = selectMode ? undefined : handleRevealInFolder;
+  // "View imprint" mirrors reveal-in-folder: offered on the card's right-click
+  // menu and the image menus (which swallow right-clicks), hidden in select mode.
+  const imprintAction = selectMode ? undefined : onViewImprint;
   const variantStatusLabel = group ? `${group.enabledCount}/${group.variantCount}` : null;
   const enabledTitle = group?.enabledLabels.join(', ') ?? '';
   const variantStatusTitle = group
@@ -7316,6 +7609,7 @@ function ModCard({
             technicalMetaClasses={technicalMetaClasses}
             actions={actions}
             onRevealInFolder={revealAction}
+            onViewImprint={imprintAction}
           />
         ) : (
         <>
@@ -7423,6 +7717,7 @@ function ModCard({
             onOpenDetails={onOpenDetails}
             isGroupCard={isGroupCard}
             onRevealInFolder={revealAction}
+            onViewImprint={imprintAction}
           />
         );
         })()}
@@ -7499,6 +7794,11 @@ function ModCard({
         <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
           {t('installed.card.revealInFolder')}
         </MenuItem>
+        {onViewImprint && (
+          <MenuItem icon={Fingerprint} onSelect={onViewImprint}>
+            {t('installed.imprintDetails.menuEntry')}
+          </MenuItem>
+        )}
       </MenuContent>
     </MenuRoot>
   );

@@ -34,6 +34,8 @@ import { downloadMod } from '../services/download';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { imprintOneMod, imprintAllInstalled, imprintPreflight } from '../services/imprintMods';
+import { parseAddonInfo, readEmbeddedAddonInfoText } from '../services/vpkIdentity';
+import { carryForwardOriginalIdentity, readEmbeddedGrimoireMeta } from '../services/embeddedMetadata';
 import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
 import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
@@ -42,7 +44,7 @@ import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport
 import { getMainWindow } from '../index';
 import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult } from '../../../src/types/mod';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -1533,4 +1535,66 @@ ipcMain.handle('imprint-preflight', async (): Promise<ImprintPreflightResult> =>
         throw new Error('No Deadlock path configured');
     }
     return imprintPreflight(deadlockPath);
+});
+
+// read-imprint-details: read back the FULL embedded imprint of one installed VPK
+// for the "View imprint" modal. Strictly read-only: reuses the existing embed
+// readers (readEmbeddedAddonInfoText/parseAddonInfo + readEmbeddedGrimoireMeta),
+// takes no lock, writes no metadata, mutates no file. Returns null (not an
+// error) when the file carries no addoninfo.txt or a foreign embed without a
+// valid grimoireOriginalSha256, so a stale `imprinted` flag degrades to the
+// modal's empty state. fs/scan errors propagate as normal IPC errors.
+ipcMain.handle('read-imprint-details', async (_, modId: string): Promise<ImprintDetails | null> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const mods = await scanMods(deadlockPath);
+    const mod = mods.find((m) => m.id === modId);
+    if (!mod) {
+        throw new Error(`Mod not found: ${modId}`);
+    }
+
+    // One entry read serves both the raw view and the parsed projection.
+    const rawAddonInfo = readEmbeddedAddonInfoText(mod.path);
+    if (rawAddonInfo === null) return null;
+    const embedded = parseAddonInfo(rawAddonInfo);
+    // Reuse the embed-validity rule (a well-formed original sha256 is what
+    // makes an embed a Grimoire imprint); a foreign embed reads as "none".
+    const original = carryForwardOriginalIdentity(embedded);
+    if (!original) return null;
+
+    const meta = readEmbeddedGrimoireMeta(mod.path);
+    return {
+        title: embedded.title,
+        author: embedded.author,
+        gamebananaId: embedded.gamebananaId,
+        sourceUrl: embedded.sourceUrl,
+        buildDate: embedded.raw['builddate'],
+        originalSha256: original.sha256,
+        originalCrc32: original.crc32,
+        originalSize: original.size,
+        rawAddonInfo,
+        hasMergeMeta: meta !== null,
+        merge: meta
+            ? {
+                schemaVersion: meta.schemaVersion,
+                title: meta.merge?.title,
+                originalSha256: meta.merge?.originalSha256,
+                createdAt: meta.createdAt,
+                createdByTool: meta.createdBy?.tool,
+                createdByVersion: meta.createdBy?.version,
+                sources: meta.sources.map((s) => ({
+                    modName: s.modName,
+                    originalSha256: s.originalSha256,
+                    gameBananaId: s.gameBananaId,
+                    gameBananaFileId: s.gameBananaFileId,
+                    section: s.section,
+                    priorityAtMergeTime: s.priorityAtMergeTime,
+                    enabledAtMergeTime: s.enabledAtMergeTime,
+                    fileNameAtMergeTime: s.fileNameAtMergeTime,
+                })),
+            }
+            : undefined,
+    };
 });

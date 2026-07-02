@@ -95,6 +95,17 @@ export async function resolveVpkIdentity(path: string, signal?: AbortSignal): Pr
  * file a second time), then pulls the entry bytes only when it is present.
  */
 export function readEmbeddedAddonInfo(path: string): ParsedAddonInfo | null {
+    const text = readEmbeddedAddonInfoText(path);
+    return text === null ? null : parseAddonInfo(text);
+}
+
+/**
+ * Read the embedded `addoninfo.txt` verbatim (the raw KeyValues1 text), or null
+ * when the file carries none / cannot be read. Callers that need both the raw
+ * text and the parsed projection (e.g. the imprint details reader) read once
+ * here and run `parseAddonInfo` on the result.
+ */
+export function readEmbeddedAddonInfoText(path: string): string | null {
     try {
         const paths = parseVpkDirectoryCached(path);
         if (!paths) return null;
@@ -102,7 +113,7 @@ export function readEmbeddedAddonInfo(path: string): ParsedAddonInfo | null {
         if (!entry) return null;
         const bytes = readVpkEntryBytes(path, entry);
         if (!bytes) return null;
-        return parseAddonInfo(bytes.toString('utf-8'));
+        return bytes.toString('utf-8');
     } catch (error) {
         console.warn(`[vpkIdentity] Failed to read embedded addoninfo.txt from ${path}:`, error);
         return null;

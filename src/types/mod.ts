@@ -901,6 +901,60 @@ export interface ImprintPreflightResult {
   anomalous: ImprintAnomalousMod[];
 }
 
+// One merge source as read back from a grimoire_meta.json companion, projected
+// for the imprint details modal. Mirrors GrimoireEmbeddedMergeSource (the
+// embed reader's shape): serialized nulls stand for "absent at merge time".
+export interface ImprintDetailsMergeSource {
+  modName?: string;
+  originalSha256?: string | null;
+  gameBananaId?: number | null;
+  gameBananaFileId?: number | null;
+  section?: string | null;
+  priorityAtMergeTime?: number;
+  enabledAtMergeTime?: boolean;
+  fileNameAtMergeTime?: string;
+}
+
+// The parsed grimoire_meta.json merge payload, present only for merged VPKs
+// (ImprintDetails.hasMergeMeta). All fields except schemaVersion/sources are
+// optional because the reader tolerates older or partial documents.
+export interface ImprintDetailsMerge {
+  schemaVersion: number;
+  title?: string;
+  // The merged VPK's own original whole-file sha256 (its self-identity).
+  originalSha256?: string;
+  createdAt?: string;
+  createdByTool?: string;
+  createdByVersion?: string;
+  sources: ImprintDetailsMergeSource[];
+}
+
+// Full embedded imprint of one installed VPK, as returned by the read-only
+// 'read-imprint-details' IPC. Null over the wire when the file carries no
+// valid Grimoire embed (no addoninfo.txt, or a foreign embed without a
+// well-formed grimoireOriginalSha256). KEYSTONE: originalSha256 is the
+// canonical pre-imprint identity; this surface never writes anything.
+export interface ImprintDetails {
+  // Parsed addoninfo.txt fields (addontitle / addonauthor / gamebananaId /
+  // sourceUrl / buildDate). All optional: older imprints may omit them.
+  title?: string;
+  author?: string;
+  gamebananaId?: string;
+  sourceUrl?: string;
+  buildDate?: string;
+  // The original (pre-imprint) whole-file identity triple. sha256 is always
+  // present (it is what makes the embed valid); crc32/size may be absent.
+  originalSha256: string;
+  originalCrc32?: string;
+  originalSize?: number;
+  // The raw addoninfo.txt text, verbatim, for the collapsible raw view.
+  rawAddonInfo: string;
+  // Whether a grimoire_meta.json merge companion entry exists.
+  hasMergeMeta: boolean;
+  // Parsed merge payload; set only when hasMergeMeta is true and it parsed.
+  merge?: ImprintDetailsMerge;
+}
+
 export interface ModConflict {
   modA: string;
   modAName: string;
