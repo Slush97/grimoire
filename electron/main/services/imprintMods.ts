@@ -15,6 +15,7 @@ import {
     type OriginalIdentity,
 } from './embeddedMetadata';
 import { runVpkmerge, verifyVpkOutput } from './modMerger';
+import { inferMissingVpkIndexes, type MetaLookup } from './profileResolver';
 import {
     assertCanMoveLoadedGameMod,
     isLoadedGameModLocked,
@@ -202,6 +203,43 @@ async function imprintModCore(mod: Mod): Promise<void> {
 }
 
 /**
+ * Freeze legacy vpkIndexes BEFORE any imprint changes file sizes.
+ *
+ * Legacy multi-VPK GameBanana groups (installed before vpkIndex existed) get
+ * their index reconstructed lazily by inferMissingVpkIndexes, which size-sorts
+ * the group's live on-disk sizes at profile-apply time. Imprinting re-packs a
+ * VPK in place and changes its size, so partially imprinting an un-stamped
+ * group between profile applies could silently shift the inferred sibling
+ * order and bind shared profiles to the wrong file. Persisting the CURRENT
+ * inference here pins every legacy group to the pre-imprint size axis before
+ * a single byte moves.
+ *
+ * Runs over ALL installed mods, not just imprint candidates: a candidate's
+ * sibling may be excluded from imprinting (loaded, merged, locker-managed)
+ * yet still belongs to the group being frozen. Reuses the upstream inference
+ * verbatim so the stamped order is exactly what profile apply would have
+ * inferred; already-stamped indexes are never overwritten (the inference
+ * skips them).
+ *
+ * Accepted residual: groups inferMissingVpkIndexes bails on (single-member,
+ * or all siblings the same byte size) stay un-stamped by design. Stamping an
+ * arbitrary order for an all-equal-size group would mispair shared-profile
+ * indexes that fileName/positional matching currently handles better.
+ *
+ * getMeta / setMeta are injectable for tests only; production callers use the
+ * real synchronous metadata sidecar (this runs under the mutation lock).
+ */
+export function freezeLegacyVpkIndexes(
+    installed: Array<Pick<Mod, 'metaKey' | 'fileName' | 'size'>>,
+    getMeta: MetaLookup = getModMetadata,
+    setMeta: (metaKey: string, data: { vpkIndex: number }) => void = setModMetadata
+): void {
+    for (const [metaKey, vpkIndex] of inferMissingVpkIndexes(installed, getMeta)) {
+        setMeta(metaKey, { vpkIndex });
+    }
+}
+
+/**
  * Imprint a single installed mod in place. Runs under the mod-mutation lock and
  * refuses if the running game has the mod loaded (a hard error, the same
  * GAME_RUNNING message merge / reorder use). Refuses anomalous files (the same
@@ -213,6 +251,9 @@ export async function imprintOneMod(deadlockPath: string, modId: string): Promis
     return runExclusiveModMutation(async () => {
         const installed = await scanMods(deadlockPath);
         await syncRunningGameModSnapshotFromMods(installed);
+        // Pin legacy multi-VPK sibling order before the repack changes sizes
+        // (same lock scope, before any byte moves).
+        freezeLegacyVpkIndexes(installed);
         const mod = installed.find((m) => m.id === modId);
         if (!mod) throw new Error(`Mod not found: ${modId}`);
         assertCanMoveLoadedGameMod(mod);
@@ -244,6 +285,11 @@ export async function imprintAllInstalled(
     return runExclusiveModMutation(async () => {
         const installed = await scanMods(deadlockPath);
         await syncRunningGameModSnapshotFromMods(installed);
+
+        // Pin legacy multi-VPK sibling order before any repack changes sizes.
+        // Over ALL installed mods (not the candidate subset): an excluded
+        // sibling still anchors its group's size order.
+        freezeLegacyVpkIndexes(installed);
 
         const candidates = installed.filter((mod) => {
             const meta = getModMetadata(mod.metaKey);
