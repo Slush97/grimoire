@@ -103,6 +103,13 @@ export interface ModMetadata {
      *  original) and the authoritative imprinted-state is the embed itself, read via
      *  resolveVpkIdentity. */
     imprinted?: boolean;
+    /** Meaningful only alongside `imprinted`: the embed exists but is legacy
+     *  format or has drifted from this sidecar entry, so a re-imprint is
+     *  pending work. A UI hint for the toolbar button's pending count, kept
+     *  honest by the startup reconcile (backfillImprintedFlags) and cleared by
+     *  every successful (re)imprint; the preflight modal stays the source of
+     *  truth for what a bulk run actually does. */
+    imprintStale?: boolean;
     /** Manual opt-out from update detection. When true, the renderer
      *  excludes this mod from the "update available" check even if the
      *  installed gameBananaFileId is gone from the live file list. Useful

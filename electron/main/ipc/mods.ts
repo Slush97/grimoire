@@ -218,6 +218,7 @@ function enrichMod(mod: Mod): WireMod {
             urnImport: metadata.urnImport,
             ignoreUpdates: metadata.ignoreUpdates,
             imprinted: metadata.imprinted,
+            imprintStale: metadata.imprintStale,
         };
     }
     // No metadata row (a VPK dropped straight into addons): still file-tree tag

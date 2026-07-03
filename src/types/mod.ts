@@ -661,6 +661,11 @@ export interface Mod {
    *  affect canonical identity (sha256 stays the original). Projected from
    *  metadata.imprinted in enrichMod. */
   imprinted?: boolean;
+  /** Meaningful only alongside `imprinted`: the embed is legacy format or has
+   *  drifted from the metadata sidecar, so a re-imprint is pending work. Feeds
+   *  the toolbar button's pending count; kept honest by the startup reconcile
+   *  and cleared on every successful (re)imprint. */
+  imprintStale?: boolean;
 }
 
 export interface MergeModsArgs {

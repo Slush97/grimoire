@@ -767,13 +767,15 @@ export default function Installed() {
     );
   }, [mods]);
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
-  // absorbed sources already excluded above), not merged (auto-managed embeds),
-  // not yet imprinted. Drives the toolbar button's hide-when-done visibility.
-  // Deliberately optimistic: files the backend would classify as loaded or
-  // anomalous still count (they need attention, so the entry point stays up);
-  // the preflight modal is the source of truth for what actually happens.
-  const unimprintedCount = useMemo(
-    () => visibleMods.filter((m) => !m.imprinted && !m.merged).length,
+  // absorbed sources already excluded above) that are not yet imprinted OR
+  // carry a stale embed (legacy format / sidecar drift, pending re-imprint).
+  // Merged mods count too: the bulk run refreshes stale merges. Drives the
+  // toolbar button's hide-when-done visibility. Deliberately optimistic:
+  // files the backend would classify as loaded or anomalous still count (they
+  // need attention, so the entry point stays up); the preflight modal is the
+  // source of truth for what actually happens.
+  const pendingImprintCount = useMemo(
+    () => visibleMods.filter((m) => (m.merged ? m.imprintStale : !m.imprinted || m.imprintStale)).length,
     [visibleMods]
   );
   // Layout = the user's structural choice (cards grid vs horizontal list).
@@ -3530,7 +3532,7 @@ export default function Installed() {
                 refreshes the list, the count reaches zero, and the button
                 unmounts; the result modal stays up (it renders on
                 imprintState, not on this condition). */}
-            {settings?.experimentalVpkImprinting && unimprintedCount > 0 && (
+            {settings?.experimentalVpkImprinting && pendingImprintCount > 0 && (
               <Button
                 variant="secondary"
                 size="sm"
