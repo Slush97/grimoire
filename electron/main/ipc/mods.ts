@@ -34,8 +34,8 @@ import { downloadMod } from '../services/download';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import { imprintOneMod, imprintAllInstalled, imprintPreflight } from '../services/imprintMods';
-import { parseAddonInfo, readEmbeddedAddonInfoText } from '../services/vpkIdentity';
-import { carryForwardOriginalIdentity, readEmbeddedGrimoireMeta } from '../services/embeddedMetadata';
+import { parseAddonInfo, readEmbeddedAddonInfoText, carryForwardOriginalIdentity } from '../services/vpkIdentity';
+import { readEmbeddedModinfo, readLegacyGrimoireMergeMeta } from '../services/modinfoFormat';
 import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
 import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
@@ -541,6 +541,39 @@ ipcMain.handle(
     }
 );
 
+/**
+ * Best-effort embed refresh after a metadata-changing handler (associate /
+ * apply-custom / edit-local). A mod identified AFTER it was imprinted would
+ * otherwise carry a stale embed until the next bulk run; refreshing here keeps
+ * the embedded record in step with the sidecar the moment the user fixes it.
+ *
+ * Locking: these handlers do NOT run inside runExclusiveModMutation (they call
+ * scanMods / setModMetadataWithHash directly, holding no lock), and the mod-
+ * mutation lock is a non-reentrant queue, so nesting would deadlock ONLY if we
+ * were already inside it. We are not: imprintOneMod acquires the lock itself,
+ * so awaiting it here is safe. Awaited (not fire-and-forget) so the refresh is
+ * serialized before the handler's response, but failures are swallowed: the
+ * metadata change already succeeded, and a missed refresh just leaves the
+ * embed stale until the next bulk imprint classifies it eligible again.
+ *
+ * apply-unknown-mod-match needs no call here: it installs a fresh replacement
+ * (imprinted by the download path when the setting is on) and deletes the old
+ * file, so no surviving file's sidecar is re-stamped.
+ */
+async function refreshEmbedAfterMetadataChange(
+    deadlockPath: string,
+    modId: string,
+    metaKey: string
+): Promise<void> {
+    try {
+        if (!loadSettings().experimentalVpkImprinting) return;
+        if (!getModMetadata(metaKey)?.imprinted) return;
+        await imprintOneMod(deadlockPath, modId);
+    } catch (err) {
+        console.warn(`[mods] Post-associate embed refresh failed for ${metaKey}:`, err);
+    }
+}
+
 // apply-unknown-custom-mod
 ipcMain.handle(
     'apply-unknown-custom-mod',
@@ -565,6 +598,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
         return enrichMod(target);
     }
 );
@@ -617,6 +651,7 @@ ipcMain.handle(
             sourceSection: args.sourceSection,
         }, target.path);
 
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
         return enrichMod(target);
     }
 );
@@ -651,6 +686,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
         return enrichMod(target);
     }
 );
@@ -1539,11 +1575,13 @@ ipcMain.handle('imprint-preflight', async (): Promise<ImprintPreflightResult> =>
 
 // read-imprint-details: read back the FULL embedded imprint of one installed VPK
 // for the "View imprint" modal. Strictly read-only: reuses the existing embed
-// readers (readEmbeddedAddonInfoText/parseAddonInfo + readEmbeddedGrimoireMeta),
+// readers (readEmbeddedAddonInfoText/parseAddonInfo + readEmbeddedModinfo),
 // takes no lock, writes no metadata, mutates no file. Returns null (not an
 // error) when the file carries no addoninfo.txt or a foreign embed without a
-// valid grimoireOriginalSha256, so a stale `imprinted` flag degrades to the
-// modal's empty state. fs/scan errors propagate as normal IPC errors.
+// recoverable original identity, so a stale `imprinted` flag degrades to the
+// modal's empty state. A legacy (pre-redo) imprint returns its carried
+// identity + addoninfo fields with modinfo: null. fs/scan errors propagate as
+// normal IPC errors.
 ipcMain.handle('read-imprint-details', async (_, modId: string): Promise<ImprintDetails | null> => {
     const deadlockPath = getActiveDeadlockPath();
     if (!deadlockPath) {
@@ -1559,42 +1597,23 @@ ipcMain.handle('read-imprint-details', async (_, modId: string): Promise<Imprint
     const rawAddonInfo = readEmbeddedAddonInfoText(mod.path);
     if (rawAddonInfo === null) return null;
     const embedded = parseAddonInfo(rawAddonInfo);
-    // Reuse the embed-validity rule (a well-formed original sha256 is what
-    // makes an embed a Grimoire imprint); a foreign embed reads as "none".
-    const original = carryForwardOriginalIdentity(embedded);
+    // Reuse the embed-validity rule (a recoverable original sha256, current
+    // keys or legacy shim, is what makes an embed a Grimoire imprint); a
+    // foreign embed reads as "none".
+    const original = carryForwardOriginalIdentity(embedded, readLegacyGrimoireMergeMeta(mod.path));
     if (!original) return null;
 
-    const meta = readEmbeddedGrimoireMeta(mod.path);
     return {
         title: embedded.title,
         author: embedded.author,
         gamebananaId: embedded.gamebananaId,
+        gamebananaFileId: embedded.gamebananaFileId,
         sourceUrl: embedded.sourceUrl,
-        buildDate: embedded.raw['builddate'],
+        buildDate: embedded.buildDate,
         originalSha256: original.sha256,
         originalCrc32: original.crc32,
         originalSize: original.size,
         rawAddonInfo,
-        hasMergeMeta: meta !== null,
-        merge: meta
-            ? {
-                schemaVersion: meta.schemaVersion,
-                title: meta.merge?.title,
-                originalSha256: meta.merge?.originalSha256,
-                createdAt: meta.createdAt,
-                createdByTool: meta.createdBy?.tool,
-                createdByVersion: meta.createdBy?.version,
-                sources: meta.sources.map((s) => ({
-                    modName: s.modName,
-                    originalSha256: s.originalSha256,
-                    gameBananaId: s.gameBananaId,
-                    gameBananaFileId: s.gameBananaFileId,
-                    section: s.section,
-                    priorityAtMergeTime: s.priorityAtMergeTime,
-                    enabledAtMergeTime: s.enabledAtMergeTime,
-                    fileNameAtMergeTime: s.fileNameAtMergeTime,
-                })),
-            }
-            : undefined,
+        modinfo: readEmbeddedModinfo(mod.path),
     };
 });

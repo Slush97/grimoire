@@ -23,24 +23,37 @@ const SHA256_RE = /^[0-9a-f]{64}$/i;
 const ADDONINFO_ENTRY = 'addoninfo.txt';
 
 /**
- * Parsed projection of the embedded `addoninfo.txt` AddonInfo block. The
- * `grimoireOriginal*` triple is the canonical-identity anchor; the GameBanana /
- * descriptive fields are read here so the phase-2 unknown-mod reader can
- * identify an orphaned-but-tagged file offline. `raw` keeps every flat key for
- * forward-compatible reads of fields added later.
+ * Parsed projection of the embedded `addoninfo.txt` AddonInfo block (the
+ * vpk-modinfo v1 key set). The `original*` triple is the canonical-identity
+ * anchor; the GameBanana / descriptive fields are read here so the unknown-mod
+ * reader can identify an orphaned-but-imprinted file offline. `raw` keeps
+ * every flat key for forward-compatible reads (and for the legacy-key shim in
+ * carryForwardOriginalIdentity).
  */
 export interface ParsedAddonInfo {
-    grimoireOriginalSha256?: string;
-    grimoireOriginalCrc32?: string;
-    grimoireOriginalSize?: number;
+    originalSha256?: string;
+    originalCrc32?: string;
+    originalSize?: number;
     gamebananaId?: string;
+    gamebananaFileId?: string;
     sourceUrl?: string;
     title?: string;
     author?: string;
-    /** Pointer flag set only on merges (companion `grimoire_meta.json` present). */
-    grimoireMeta?: string;
+    buildDate?: string;
+    /** The vpk-modinfo schema marker ("1"); absent on legacy/foreign embeds. */
+    modinfoVersion?: string;
     /** Every flat string key/value parsed from the AddonInfo block (lowercased keys). */
     raw: Record<string, string>;
+}
+
+/** Original (pre-first-imprint) whole-file identity of a VPK. */
+export interface OriginalIdentity {
+    /** 64-hex original whole-file sha256, lowercased. */
+    sha256: string;
+    /** 8-hex original whole-file CRC-32, lowercased. */
+    crc32?: string;
+    /** Original whole-file byte length. */
+    size?: number;
 }
 
 export interface VpkIdentity {
@@ -68,12 +81,14 @@ export async function resolveVpkIdentity(path: string, signal?: AbortSignal): Pr
 
     const embedded = readEmbeddedAddonInfo(path);
     if (embedded) {
-        const sha = embedded.grimoireOriginalSha256;
-        if (sha && SHA256_RE.test(sha)) {
+        // carryForwardOriginalIdentity covers both the current key set and the
+        // legacy-shim keys, so pre-redo imprints keep resolving their original.
+        const original = carryForwardOriginalIdentity(embedded);
+        if (original) {
             return {
-                sha256: sha.toLowerCase(),
-                crc32: embedded.grimoireOriginalCrc32,
-                size: embedded.grimoireOriginalSize,
+                sha256: original.sha256,
+                crc32: original.crc32,
+                size: original.size,
                 source: 'embed',
                 embedded,
             };
@@ -136,16 +151,63 @@ export function parseAddonInfo(text: string): ParsedAddonInfo {
     };
 
     return {
-        grimoireOriginalSha256: flat['grimoireoriginalsha256'],
-        grimoireOriginalCrc32: flat['grimoireoriginalcrc32'],
-        grimoireOriginalSize: num(flat['grimoireoriginalsize']),
+        originalSha256: flat['originalsha256'],
+        originalCrc32: flat['originalcrc32'],
+        originalSize: num(flat['originalsize']),
         gamebananaId: flat['gamebananaid'],
+        gamebananaFileId: flat['gamebananafileid'],
         sourceUrl: flat['sourceurl'],
         title: flat['addontitle'],
         author: flat['addonauthor'],
-        grimoireMeta: flat['grimoiremeta'],
+        buildDate: flat['builddate'],
+        modinfoVersion: flat['modinfoversion'],
         raw: flat,
     };
+}
+
+// --- original-identity carry-forward ------------------------------------------
+
+/**
+ * Carry an existing embed's original identity forward, so re-imprinting an
+ * already-imprinted file never recomputes "original" from its (now mutated)
+ * bytes. Reads the current `original*` keys first; when those are absent it
+ * falls back to the legacy shim below. Returns null when no valid original
+ * sha256 can be recovered, in which case the caller should
+ * computeOriginalIdentity from the bytes instead (they are still original).
+ */
+export function carryForwardOriginalIdentity(
+    embed: ParsedAddonInfo | undefined,
+    legacyMergeMeta?: { originalSha256?: string } | null
+): OriginalIdentity | null {
+    const sha = embed?.originalSha256;
+    if (sha && SHA256_RE.test(sha)) {
+        return {
+            sha256: sha.toLowerCase(),
+            crc32: embed?.originalCrc32?.toLowerCase(),
+            size: embed?.originalSize,
+        };
+    }
+
+    // PRE-RELEASE SHIM: delete before first release. Pre-redo imprints (~131
+    // files on this machine) stored the identity under the old grimoire-branded
+    // addoninfo keys and, for merges, inside the old grimoire_meta.json (whose
+    // relevant field the caller passes as legacyMergeMeta). Reading them here
+    // migrates every legacy file to the new format on its next re-imprint.
+    const legacySha = embed?.raw['grimoireoriginalsha256'];
+    if (legacySha && SHA256_RE.test(legacySha)) {
+        const legacySize = Number(embed?.raw['grimoireoriginalsize']);
+        return {
+            sha256: legacySha.toLowerCase(),
+            crc32: embed?.raw['grimoireoriginalcrc32']?.toLowerCase(),
+            size: Number.isFinite(legacySize) ? legacySize : undefined,
+        };
+    }
+    const legacyMergeSha = legacyMergeMeta?.originalSha256;
+    if (legacyMergeSha && SHA256_RE.test(legacyMergeSha)) {
+        return { sha256: legacyMergeSha.toLowerCase() };
+    }
+
+    return null;
 }
 
 // --- KeyValues1 parsing -----------------------------------------------------

@@ -2,19 +2,36 @@ import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
 import os, { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
+import { app } from 'electron';
 import { scanMods, runExclusiveModMutation, type Mod } from './mods';
 import { getModMetadata, setModMetadata, type ModMetadata } from './metadata';
-import { readEmbeddedAddonInfo } from './vpkIdentity';
-import { parseVpkDirectoryCached } from './vpk';
+import {
+    readEmbeddedAddonInfo,
+    carryForwardOriginalIdentity,
+    type OriginalIdentity,
+} from './vpkIdentity';
+import { parseVpkDirectoryCached, parseVpkEntryStats, findChunkSiblingNames } from './vpk';
 import {
     computeOriginalIdentity,
-    carryForwardOriginalIdentity,
     serializeAddonInfo,
+    serializeModinfo,
+    readEmbeddedModinfo,
+    readLegacyGrimoireMergeMeta,
+    findImprintRepackMismatch,
     ADDONINFO_ENTRY,
+    MODINFO_ENTRY,
+    MODINFO_FORMAT,
+    MODINFO_GAME,
+    MODINFO_SCHEMA_VERSION,
     type AddonInfoFields,
-    type OriginalIdentity,
-} from './embeddedMetadata';
-import { runVpkmerge, verifyVpkOutput } from './modMerger';
+    type ModinfoModRecord,
+} from './modinfoFormat';
+import { runVpkmerge } from './modMerger';
+import {
+    evaluateEmbedStaleness,
+    gameBananaPageUrl,
+    refreshableFieldsFromMetadata,
+} from './imprintStaleness';
 import { inferMissingVpkIndexes, type MetaLookup } from './profileResolver';
 import {
     assertCanMoveLoadedGameMod,
@@ -47,38 +64,99 @@ import type {
 
 const SHA256_RE = /^[0-9a-f]{64}$/i;
 
-/** Build the GameBanana page URL for an imprinted single mod, when its id is known. */
-function gameBananaUrl(gameBananaId: number | undefined, section: string | undefined): string | undefined {
-    if (!gameBananaId) return undefined;
-    const path = section === 'Sound' ? 'sounds' : 'mods';
-    return `https://gamebanana.com/${path}/${gameBananaId}`;
-}
-
 /**
- * Assemble the `addoninfo.txt` fields for a single-mod imprint. Title is the mod's
- * display name; author is omitted (Grimoire does not store a per-mod author, and
- * serializeAddonInfo drops empty values); gamebananaId / sourceUrl come from the
- * mod's metadata when present. The grimoireOriginal* triple is the canonical-
- * identity anchor resolveVpkIdentity reads back.
+ * Assemble the `addoninfo.txt` fields for a single-mod imprint. Title is the
+ * mod's display name; author is the GameBanana submitter captured at download
+ * time (absent for local mods, and serializeAddonInfo drops empty values);
+ * gamebananaId / gamebananaFileId / sourceUrl come from the mod's metadata
+ * when present. The original* triple is the canonical-identity anchor
+ * resolveVpkIdentity reads back.
  */
-function buildAddonFields(mod: Mod, meta: ModMetadata | undefined, original: OriginalIdentity): AddonInfoFields {
+function buildAddonFields(
+    mod: Mod,
+    meta: ModMetadata | undefined,
+    original: OriginalIdentity,
+    writtenAt: string
+): AddonInfoFields {
     const gbId = meta?.gameBananaId;
     return {
         title: meta?.modName || mod.name,
-        author: '',
+        author: meta?.author,
         gamebananaId: gbId ? String(gbId) : undefined,
-        sourceUrl: gameBananaUrl(gbId, meta?.sourceSection),
-        buildDate: new Date().toISOString(),
-        grimoireOriginalSha256: original.sha256,
-        grimoireOriginalCrc32: original.crc32,
-        grimoireOriginalSize: original.size,
+        gamebananaFileId: meta?.gameBananaFileId ? String(meta.gameBananaFileId) : undefined,
+        sourceUrl: gameBananaPageUrl(gbId, meta?.sourceSection),
+        buildDate: writtenAt,
+        originalSha256: original.sha256,
+        originalSize: original.size,
+        originalCrc32: original.crc32,
     };
 }
 
-/** Does this VPK already carry a well-formed self-identifying embed? */
-function isAlreadyImprinted(vpkPath: string): boolean {
-    const embed = readEmbeddedAddonInfo(vpkPath);
-    return !!(embed?.grimoireOriginalSha256 && SHA256_RE.test(embed.grimoireOriginalSha256));
+/**
+ * Assemble the modinfo.json machine record for a single-mod imprint. Every
+ * descriptive field refreshes from the current metadata sidecar; only the
+ * identity triple and firstImprintedAt are carried forward by the caller.
+ * KEEP IN SYNC with refreshableFieldsFromMetadata (imprintStaleness.ts): the
+ * staleness predicate derives the same fields from the same sidecar, and a
+ * divergence would make freshly imprinted files read as perpetually stale.
+ */
+function buildModinfoRecord(
+    mod: Mod,
+    meta: ModMetadata | undefined,
+    original: OriginalIdentity,
+    writtenAt: string,
+    firstImprintedAt: string
+): ModinfoModRecord {
+    const gbId = meta?.gameBananaId;
+    const source = gbId
+        ? {
+            gamebananaId: gbId,
+            gamebananaFileId: meta?.gameBananaFileId,
+            url: gameBananaPageUrl(gbId, meta?.sourceSection),
+            section: meta?.sourceSection,
+            categoryId: meta?.categoryId,
+            categoryName: meta?.categoryName,
+        }
+        : undefined;
+    const packaging =
+        meta?.vpkIndex !== undefined || meta?.variantLabel
+            ? { vpkIndex: meta?.vpkIndex, variantLabel: meta?.variantLabel }
+            : undefined;
+    return {
+        format: MODINFO_FORMAT,
+        schemaVersion: MODINFO_SCHEMA_VERSION,
+        kind: 'mod',
+        writtenBy: { tool: 'grimoire', version: app.getVersion() },
+        writtenAt,
+        firstImprintedAt,
+        game: MODINFO_GAME,
+        identity: { sha256: original.sha256, size: original.size, crc32: original.crc32 },
+        title: meta?.modName || mod.name,
+        author: meta?.author,
+        source,
+        packaging,
+    };
+}
+
+/** Classify a candidate's embed against the CURRENT metadata sidecar. 'fresh'
+ *  means it carries a current-format modinfo.json whose refreshable fields
+ *  match the sidecar, so no repack is needed. 'stale' means a (re-)imprint is
+ *  pending work: never imprinted, a legacy-only embed (migrates on re-imprint),
+ *  or the sidecar changed after imprinting (associate / edit / re-label). Bulk
+ *  and preflight both classify through here so they can never diverge. */
+function classifyEmbedFreshness(mod: Mod, meta: ModMetadata | undefined): 'fresh' | 'stale' {
+    const embedded = readEmbeddedModinfo(mod.path);
+    const current = refreshableFieldsFromMetadata(meta, mod.name);
+    return evaluateEmbedStaleness(embedded, current).stale ? 'stale' : 'fresh';
+}
+
+/** Does this VPK carry ANY Grimoire imprint, current or legacy? Drives only
+ *  the `imprinted` metadata flag (UI hint): a legacy embed still counts as
+ *  imprinted for the flag even though it is stale format-wise. */
+function hasAnyImprint(vpkPath: string): boolean {
+    if (readEmbeddedModinfo(vpkPath) !== null) return true;
+    const embed = readEmbeddedAddonInfo(vpkPath) ?? undefined;
+    return carryForwardOriginalIdentity(embed, readLegacyGrimoireMergeMeta(vpkPath)) !== null;
 }
 
 /**
@@ -92,8 +170,12 @@ function isAlreadyImprinted(vpkPath: string): boolean {
  * Checks, in order:
  *  - 'empty': zero-byte / truncated on disk (fs.stat size 0).
  *  - 'unparseable': parseVpkDirectoryCached returns null (not a readable VPK dir).
- *  - 'foreign-embed': carries an addoninfo.txt but no valid grimoireOriginalSha256
- *    (a non-Grimoire addon block, or one written by an incompatible tool).
+ *  - 'chunked': sibling `<base>_NNN.vpk` chunk archives exist next to the dir
+ *    VPK. The repack writes a single self-contained dir VPK, so imprinting
+ *    would orphan the chunk payload; skip + report, never repack.
+ *  - 'foreign-embed': carries an addoninfo.txt but no recoverable original
+ *    identity, current keys or legacy shim (a non-Grimoire addon block, or one
+ *    written by an incompatible tool).
  *  - 'hash-drift': a NON-embedded file whose live whole-file hash no longer
  *    matches the stored canonical metadata.sha256 (someone edited the bytes out
  *    of band). We report it and refuse; we do NOT re-record the drifted hash,
@@ -114,12 +196,24 @@ async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reaso
     // Not a readable VPK directory.
     if (parseVpkDirectoryCached(mod.path) === null) return 'unparseable';
 
-    // An addoninfo.txt that is not a valid Grimoire embed -> foreign embed. A
-    // valid Grimoire embed (already imprinted) is fine; the caller handles it.
+    // Multi-chunk VPK: entry data lives in sibling <base>_NNN.vpk archives,
+    // and the in-place repack emits a single self-contained dir VPK, so the
+    // payload would be orphaned. Never repack; skip + report.
+    try {
+        const siblings = await fs.readdir(dirname(mod.path));
+        if (findChunkSiblingNames(mod.fileName, siblings).length > 0) return 'chunked';
+    } catch {
+        // Cannot enumerate the folder, so chunk safety cannot be established.
+        return 'unparseable';
+    }
+
+    // An addoninfo.txt that carries no recoverable original identity (current
+    // keys or the legacy shim) -> foreign embed. A valid Grimoire embed
+    // (current or legacy, i.e. re-imprintable) is fine; the caller handles it.
     const embed = readEmbeddedAddonInfo(mod.path);
     if (embed) {
-        const sha = embed.grimoireOriginalSha256;
-        if (!sha || !SHA256_RE.test(sha)) return 'foreign-embed';
+        const carried = carryForwardOriginalIdentity(embed, readLegacyGrimoireMergeMeta(mod.path));
+        if (!carried) return 'foreign-embed';
         // Valid embed: canonical identity is the embedded original; live bytes may
         // differ legitimately, so skip the drift check.
         return null;
@@ -142,20 +236,35 @@ async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reaso
 }
 
 /**
- * Re-pack `modPath` in place with `addoninfo.txt` embedded at its root, then
- * atomically swap it over the original. Uses the single-input `vpkmerge metadata`
- * subcommand (which preserves every existing entry and refuses output == input);
- * no typed --title/--author is passed, so Grimoire's own serialized addoninfo.txt
- * rides in purely via --extra-file. The temp output is a dotfile in the mod's OWN
- * folder (a non-`_dir.vpk` name, so it is neither scanned as a mod nor counted as
- * a slot) so the rename stays on one volume; on any failure the original VPK is
- * left untouched.
+ * Re-pack `modPath` in place with BOTH imprint entries (`addoninfo.txt` +
+ * `modinfo.json`) embedded at its root in one pass, then atomically swap it
+ * over the original. Uses the single-input `vpkmerge metadata` subcommand
+ * (which preserves every existing entry and refuses output == input); no typed
+ * --title/--author is passed, so Grimoire's own serialized blobs ride in
+ * purely via the two --extra-file args. The temp output is a dotfile in the
+ * mod's OWN folder (a non-`_dir.vpk` name, so it is neither scanned as a mod
+ * nor counted as a slot) so the rename stays on one volume; on any failure the
+ * original VPK is left untouched.
+ *
+ * Before the swap the repacked output must pass a real parity check against
+ * the input's entry tree (findImprintRepackMismatch): every carried entry
+ * present with an unchanged logical size, nothing added beyond the two
+ * imprint entries. A magic-bytes check alone (verifyVpkOutput) would accept a
+ * structurally valid VPK that silently dropped or corrupted game content. Any
+ * mismatch throws (landing in the caller's fail-soft per-mod handling) and
+ * the original VPK keeps its slot.
  */
-async function embedAddonInfoInPlace(modPath: string, addonText: string): Promise<void> {
+async function embedImprintInPlace(modPath: string, addonText: string, modinfoText: string): Promise<void> {
+    const inputEntries = parseVpkEntryStats(modPath);
+    if (!inputEntries) {
+        throw new Error('Cannot verify the repack: the input VPK entry tree is unreadable.');
+    }
     const addonTmp = join(tmpdir(), `grimoire-imprint-addoninfo-${randomUUID()}.txt`);
+    const modinfoTmp = join(tmpdir(), `grimoire-imprint-modinfo-${randomUUID()}.json`);
     const embedOut = join(dirname(modPath), `.imprint-embed-${randomUUID()}.vpk`);
     try {
         await fs.writeFile(addonTmp, addonText);
+        await fs.writeFile(modinfoTmp, modinfoText);
         await runVpkmerge([
             'metadata',
             '--vpk',
@@ -164,37 +273,57 @@ async function embedAddonInfoInPlace(modPath: string, addonText: string): Promis
             embedOut,
             '--extra-file',
             `${ADDONINFO_ENTRY}=${addonTmp}`,
+            '--extra-file',
+            `${MODINFO_ENTRY}=${modinfoTmp}`,
         ]);
-        await verifyVpkOutput(embedOut);
+        const outputEntries = parseVpkEntryStats(embedOut);
+        if (!outputEntries) {
+            throw new Error('Imprint repack produced an unreadable VPK; the original was left untouched.');
+        }
+        const mismatch = findImprintRepackMismatch(inputEntries, outputEntries);
+        if (mismatch) {
+            throw new Error(`Imprint repack parity check failed: ${mismatch}. The original was left untouched.`);
+        }
         await fs.rename(embedOut, modPath);
     } catch (err) {
         try { await fs.unlink(embedOut); } catch { /* ignore partial-output cleanup */ }
         throw err;
     } finally {
         try { await fs.unlink(addonTmp); } catch { /* best-effort temp cleanup */ }
+        try { await fs.unlink(modinfoTmp); } catch { /* best-effort temp cleanup */ }
     }
 }
 
 /**
  * Imprint one mod in place (the shared core; caller already holds the mutation lock
  * and has verified the mod is not loaded). Carries an existing embed's original
- * hash forward when present, else computes it from the current (still-pristine)
- * bytes. Does NOT re-stamp a valid metadata.sha256 (canonical = original =
- * unchanged); sets an `imprinted: true` hint for the UI and to short-circuit
- * re-runs. When the entry has NO valid stored hash (e.g. a metadata-less unknown
- * mod being bulk-imprinted), the ORIGINAL hash is stamped alongside the hint:
- * leaving the entry sha-less would otherwise invite the startup backfill to fill
- * it later, and stamping the original here keeps the entry on the canonical axis
- * from the first moment it exists.
+ * hash forward when present (current keys or the legacy shim), else computes it
+ * from the current (still-pristine) bytes. firstImprintedAt is carried from an
+ * existing modinfo.json (or a legacy addoninfo buildDate) and otherwise set to
+ * now; everything else refreshes from the current metadata sidecar. Does NOT
+ * re-stamp a valid metadata.sha256 (canonical = original = unchanged); sets an
+ * `imprinted: true` hint for the UI and to short-circuit re-runs. When the entry
+ * has NO valid stored hash (e.g. a metadata-less unknown mod being
+ * bulk-imprinted), the ORIGINAL hash is stamped alongside the hint: leaving the
+ * entry sha-less would otherwise invite the startup backfill to fill it later,
+ * and stamping the original here keeps the entry on the canonical axis from the
+ * first moment it exists.
  */
 async function imprintModCore(mod: Mod): Promise<void> {
     const meta = getModMetadata(mod.metaKey);
+    const existingModinfo = readEmbeddedModinfo(mod.path);
     const existingEmbed = readEmbeddedAddonInfo(mod.path) ?? undefined;
     const original =
-        carryForwardOriginalIdentity(existingEmbed) ??
+        carryForwardOriginalIdentity(existingEmbed, readLegacyGrimoireMergeMeta(mod.path)) ??
         (await computeOriginalIdentity(mod.path, { includeCrc: false }));
-    const addonText = serializeAddonInfo(buildAddonFields(mod, meta, original));
-    await embedAddonInfoInPlace(mod.path, addonText);
+    const writtenAt = new Date().toISOString();
+    const firstImprintedAt =
+        existingModinfo?.firstImprintedAt ?? existingEmbed?.buildDate ?? writtenAt;
+    const addonText = serializeAddonInfo(buildAddonFields(mod, meta, original, writtenAt));
+    const modinfoText = serializeModinfo(
+        buildModinfoRecord(mod, meta, original, writtenAt, firstImprintedAt)
+    );
+    await embedImprintInPlace(mod.path, addonText, modinfoText);
     const hasValidStoredHash = !!meta?.sha256 && SHA256_RE.test(meta.sha256);
     setModMetadata(mod.metaKey, {
         imprinted: true,
@@ -274,9 +403,12 @@ export async function imprintOneMod(deadlockPath: string, modId: string): Promis
  * mod-mutation lock; loaded mods are skipped and reported (never silently
  * failed), and per-mod failures are collected rather than aborting the batch.
  * Locker-managed artifacts (rebuilt automatically) and already-merged mods
- * (Phase 2 embeds a richer addoninfo + grimoire_meta a single-mod imprint would
- * clobber) are excluded. Mods that already carry a well-formed embed are counted
- * as imprinted without a redundant re-pack.
+ * (the merge path embeds a richer kind:"merge" record a single-mod imprint
+ * would clobber) are excluded. Mods whose embed is current-format AND fresh
+ * (refreshable fields still match the sidecar) are counted as imprinted
+ * without a redundant re-pack; stale embeds (legacy-only, or the sidecar
+ * changed after imprinting) are re-imprinted, which refreshes the descriptive
+ * fields and migrates the format (identity + firstImprintedAt carried).
  */
 export async function imprintAllInstalled(
     deadlockPath: string,
@@ -336,7 +468,8 @@ export async function imprintAllInstalled(
 
             return (async () => {
                 try {
-                    if (isAlreadyImprinted(mod.path)) {
+                    if (classifyEmbedFreshness(mod, meta) === 'fresh') {
+                        // Current-format and in step with the sidecar: no repack.
                         // Self-heal the UI hint: the embed is the truth, but the
                         // flag may be missing (embed written by a build that did
                         // not persist it, or by another install). The flag drives
@@ -345,6 +478,9 @@ export async function imprintAllInstalled(
                         result.imprinted++;
                         return;
                     }
+                    // Stale: never imprinted, legacy-only, or the sidecar moved
+                    // after imprinting. Re-imprint refreshes the descriptive
+                    // fields; identity + firstImprintedAt carry forward.
                     // Anomaly guard: skip + report, never re-stamp (KEYSTONE). The
                     // reason flows into the failed list so the run stays fail-soft.
                     const anomaly = await checkImprintAnomaly(mod);
@@ -394,9 +530,13 @@ export async function imprintAllInstalled(
  * one bucket and the six counts sum to scanMods()'s candidate count):
  *   1. locker-managed / merged -> auto-managed (excluded from bulk imprint).
  *   2. blocked-loaded          -> the running game has it memory-mapped.
- *   3. already-imprinted       -> carries a well-formed self-identifying embed.
+ *   3. already-imprinted       -> carries a CURRENT-format embed (modinfo.json)
+ *                                 that is FRESH (refreshable fields match the
+ *                                 sidecar). A legacy-only or stale embed
+ *                                 classifies eligible: it IS pending work, the
+ *                                 same way the bulk run treats it.
  *   4. anomalous               -> anomaly guard flagged it (skip + report).
- *   5. eligible                -> safe to imprint.
+ *   5. eligible                -> safe to imprint (includes stale re-imprints).
  *
  * Ordering merged/locker before already-imprinted matches imprintAllInstalled,
  * which excludes those from its candidate set entirely. Ordering blocked-loaded
@@ -450,8 +590,10 @@ export async function imprintPreflight(deadlockPath: string): Promise<ImprintPre
                 continue;
             }
 
-            // 3. Already carries a well-formed self-identifying embed.
-            if (isAlreadyImprinted(mod.path)) {
+            // 3. Already carries a current-format embed that is still fresh.
+            //    Stale (legacy-only or sidecar-drifted) falls through: the
+            //    anomaly guard exempts valid embeds, so it lands in eligible.
+            if (classifyEmbedFreshness(mod, meta) === 'fresh') {
                 result.counts.alreadyImprinted++;
                 continue;
             }
@@ -518,7 +660,10 @@ export async function backfillImprintedFlags(deadlockPath: string): Promise<numb
         for (const mod of installed) {
             if (getModMetadata(mod.metaKey)?.imprinted) continue;
             try {
-                if (isAlreadyImprinted(mod.path)) {
+                // Any imprint counts for the FLAG, legacy format included: a
+                // legacy embed is stale (not current-format) but the file is
+                // still self-identifying, and the flag is what the UI keys on.
+                if (hasAnyImprint(mod.path)) {
                     setModMetadata(mod.metaKey, { imprinted: true });
                     stamped++;
                 }

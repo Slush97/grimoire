@@ -5752,6 +5752,7 @@ function ImprintModal({ state, onConfirm, onClose }: {
     switch (reason) {
       case 'unparseable': return t('installed.imprintAll.anomalyUnparseable');
       case 'empty': return t('installed.imprintAll.anomalyEmpty');
+      case 'chunked': return t('installed.imprintAll.anomalyChunked');
       case 'hash-drift': return t('installed.imprintAll.anomalyHashDrift');
       case 'foreign-embed': return t('installed.imprintAll.anomalyForeignEmbed');
     }
@@ -5760,7 +5761,8 @@ function ImprintModal({ state, onConfirm, onClose }: {
   // failed[] alongside free-form error messages); localize the known tokens so
   // the result list reads the same as the preflight list.
   const isAnomalyReason = (reason: string): reason is ImprintAnomalousMod['reason'] =>
-    reason === 'unparseable' || reason === 'empty' || reason === 'hash-drift' || reason === 'foreign-embed';
+    reason === 'unparseable' || reason === 'empty' || reason === 'chunked' ||
+    reason === 'hash-drift' || reason === 'foreign-embed';
 
   let body: ReactNode;
   let footer: ReactNode;
@@ -5982,7 +5984,8 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
       />
     );
   } else {
-    const merge = details.merge;
+    const modinfo = details.modinfo;
+    const merge = modinfo?.kind === 'merge' ? modinfo : null;
     body = (
       <>
         <div className={sectionBox}>
@@ -5994,9 +5997,19 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
               {details.author}
             </ImprintDetailRow>
           )}
+          {modinfo?.description && (
+            <ImprintDetailRow label={t('installed.imprintDetails.description')}>
+              {modinfo.description}
+            </ImprintDetailRow>
+          )}
           {details.gamebananaId && (
             <ImprintDetailRow label={t('installed.imprintDetails.gamebananaId')}>
               <span className="tabular-nums">#{details.gamebananaId}</span>
+            </ImprintDetailRow>
+          )}
+          {details.gamebananaFileId && (
+            <ImprintDetailRow label={t('installed.imprintDetails.gamebananaFileId')}>
+              <span className="tabular-nums">#{details.gamebananaFileId}</span>
             </ImprintDetailRow>
           )}
           {details.sourceUrl && (
@@ -6012,10 +6025,33 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
               </a>
             </ImprintDetailRow>
           )}
-          {details.buildDate && (
-            <ImprintDetailRow label={t('installed.imprintDetails.buildDate')}>
-              {formatAbsoluteDate(details.buildDate)}
+          {modinfo?.packaging?.variantLabel && (
+            <ImprintDetailRow label={t('installed.imprintDetails.variant')}>
+              {modinfo.packaging.variantLabel}
             </ImprintDetailRow>
+          )}
+          {typeof modinfo?.packaging?.vpkIndex === 'number' && (
+            <ImprintDetailRow label={t('installed.imprintDetails.vpkIndex')}>
+              <span className="tabular-nums">{modinfo.packaging.vpkIndex}</span>
+            </ImprintDetailRow>
+          )}
+          {/* Current-format imprints carry both timestamps; a legacy imprint
+              only has its addoninfo buildDate. */}
+          {modinfo ? (
+            <>
+              <ImprintDetailRow label={t('installed.imprintDetails.firstImprinted')}>
+                {formatAbsoluteDate(modinfo.firstImprintedAt)}
+              </ImprintDetailRow>
+              <ImprintDetailRow label={t('installed.imprintDetails.lastWritten')}>
+                {formatAbsoluteDate(modinfo.writtenAt)}
+              </ImprintDetailRow>
+            </>
+          ) : (
+            details.buildDate && (
+              <ImprintDetailRow label={t('installed.imprintDetails.buildDate')}>
+                {formatAbsoluteDate(details.buildDate)}
+              </ImprintDetailRow>
+            )
           )}
         </div>
 
@@ -6050,33 +6086,18 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
           <div className="space-y-2">
             <div className={sectionHeading}>{t('installed.imprintDetails.mergeTitle')}</div>
             <div className={sectionBox}>
-              {merge.title && (
-                <ImprintDetailRow label={t('installed.imprintDetails.mergeName')}>
-                  {merge.title}
-                </ImprintDetailRow>
-              )}
-              {merge.createdAt && (
-                <ImprintDetailRow label={t('installed.imprintDetails.createdAt')}>
-                  {formatAbsoluteDate(merge.createdAt)}
-                </ImprintDetailRow>
-              )}
-              {(merge.createdByTool || merge.createdByVersion) && (
-                <ImprintDetailRow label={t('installed.imprintDetails.createdBy')}>
-                  {[merge.createdByTool, merge.createdByVersion].filter(Boolean).join(' ')}
-                </ImprintDetailRow>
-              )}
+              <ImprintDetailRow label={t('installed.imprintDetails.mergeName')}>
+                {merge.merge.title}
+              </ImprintDetailRow>
+              <ImprintDetailRow label={t('installed.imprintDetails.createdAt')}>
+                {formatAbsoluteDate(merge.writtenAt)}
+              </ImprintDetailRow>
+              <ImprintDetailRow label={t('installed.imprintDetails.createdBy')}>
+                {`${merge.writtenBy.tool} ${merge.writtenBy.version}`}
+              </ImprintDetailRow>
               <ImprintDetailRow label={t('installed.imprintDetails.schemaVersion')}>
                 <span className="tabular-nums">{merge.schemaVersion}</span>
               </ImprintDetailRow>
-              {merge.originalSha256 && (
-                <ImprintDetailRow label={t('installed.imprintDetails.sha256')}>
-                  <ImprintHashValue
-                    value={merge.originalSha256}
-                    copyLabel={t('installed.imprintDetails.copyValue')}
-                    onCopy={copyValue}
-                  />
-                </ImprintDetailRow>
-              )}
             </div>
             {merge.sources.length > 0 && (
               <>
@@ -6087,25 +6108,21 @@ function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }
                 <div className={sectionBox}>
                   {merge.sources.map((source, i) => (
                     <div
-                      key={`${source.fileNameAtMergeTime ?? source.modName ?? 'source'}-${i}`}
+                      key={`${source.fileNameAtMergeTime}-${i}`}
                       className="flex flex-wrap items-center gap-2"
                     >
-                      <Tag tone="neutral" title={source.fileNameAtMergeTime ?? source.modName}>
-                        {source.modName ?? source.fileNameAtMergeTime ?? '?'}
-                        {typeof source.gameBananaId === 'number' ? ` (#${source.gameBananaId})` : ''}
+                      <Tag tone="neutral" title={source.fileNameAtMergeTime}>
+                        {source.title}
+                        {typeof source.gamebananaId === 'number' ? ` (#${source.gamebananaId})` : ''}
                       </Tag>
-                      {typeof source.priorityAtMergeTime === 'number' && (
-                        <span className="text-xs tabular-nums text-text-tertiary">
-                          {t('installed.imprintDetails.sourcePriority', { priority: source.priorityAtMergeTime })}
-                        </span>
-                      )}
-                      {typeof source.enabledAtMergeTime === 'boolean' && (
-                        <span className="text-xs text-text-tertiary">
-                          {source.enabledAtMergeTime
-                            ? t('installed.imprintDetails.sourceEnabled')
-                            : t('installed.imprintDetails.sourceDisabled')}
-                        </span>
-                      )}
+                      <span className="text-xs tabular-nums text-text-tertiary">
+                        {t('installed.imprintDetails.sourcePriority', { priority: source.priorityAtMergeTime })}
+                      </span>
+                      <span className="text-xs text-text-tertiary">
+                        {source.enabledAtMergeTime
+                          ? t('installed.imprintDetails.sourceEnabled')
+                          : t('installed.imprintDetails.sourceDisabled')}
+                      </span>
                     </div>
                   ))}
                 </div>

@@ -8,6 +8,9 @@ import { getMetadataPath } from '../utils/paths';
 
 export interface ModMetadata {
     modName?: string;      // The human-readable mod name from GameBanana
+    /** GameBanana submitter name, captured at download time. Absent for local
+     *  mods. Embedded into the imprint (addonauthor / modinfo.author). */
+    author?: string;
     thumbnailUrl?: string;
     audioUrl?: string;     // GameBanana audio preview URL (Sound mods)
     gameBananaId?: number;

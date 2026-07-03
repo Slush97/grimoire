@@ -9,6 +9,8 @@
 import { describe, it, expect } from 'vitest';
 import { vi } from 'vitest';
 import type { Mod } from '../../../src/types/mod';
+import { scanMods } from './mods';
+import { parseVpkDirectoriesAsync } from './vpk';
 
 const h = vi.hoisted(() => ({
   metaMap: {} as Record<
@@ -22,7 +24,12 @@ vi.mock('./mods', () => ({ scanMods: vi.fn() }));
 vi.mock('./vpk', () => ({ parseVpkDirectoriesAsync: vi.fn() }));
 vi.mock('./settings', () => ({ loadSettings: vi.fn(() => ({})) }));
 
-import { conflictPairKey, modConflictIdentity, migrateIgnoredConflictKeysForMods } from './conflicts';
+import {
+  conflictPairKey,
+  modConflictIdentity,
+  migrateIgnoredConflictKeysForMods,
+  detectConflicts,
+} from './conflicts';
 
 function mod(over: Partial<Mod> & { id: string }): Mod {
   return {
@@ -77,6 +84,43 @@ describe('modConflictIdentity', () => {
     const before = modConflictIdentity(mod({ id: 'l', metaKey: 'l.vpk', size: 5, installedAt: '2026-01-01T00:00:00Z' }));
     const afterReinstall = modConflictIdentity(mod({ id: 'l', metaKey: 'l.vpk', size: 5, installedAt: '2026-02-02T00:00:00Z' }));
     expect(before).not.toBe(afterReinstall);
+  });
+});
+
+describe('detectConflicts ignores imprint metadata entries', () => {
+  // Drive the real detection loop through the mocked scan/parse seams: two
+  // enabled mods on distinct pakNN slots whose VPK trees are supplied directly,
+  // so the only question left is whether the overlap filter treats the imprint
+  // entries (and the legacy grimoire_meta.json companion) as real conflicts.
+  const imprintEntries = ['addoninfo.txt', 'modinfo.json', 'grimoire_meta.json'];
+
+  function installed(fileLists: Record<string, string[]>): void {
+    const mods = Object.keys(fileLists).map((id, i) =>
+      mod({ id, metaKey: `${id}.vpk`, priority: i + 1 })
+    );
+    vi.mocked(scanMods).mockResolvedValue(mods);
+    vi.mocked(parseVpkDirectoriesAsync).mockResolvedValue(
+      new Map(mods.map((m) => [m.path, fileLists[m.id]]))
+    );
+  }
+
+  it('reports no conflict when two imprinted mods overlap only on imprint entries', async () => {
+    installed({
+      a: [...imprintEntries, 'models/heroes/abrams/body.vmdl_c'],
+      b: [...imprintEntries, 'models/heroes/bebop/body.vmdl_c'],
+    });
+    expect(await detectConflicts('/deadlock')).toEqual([]);
+  });
+
+  it('still reports the real overlap between two imprinted mods', async () => {
+    installed({
+      a: [...imprintEntries, 'models/heroes/abrams/body.vmdl_c'],
+      b: [...imprintEntries, 'models/heroes/abrams/body.vmdl_c'],
+    });
+    const conflicts = await detectConflicts('/deadlock');
+    expect(conflicts).toHaveLength(1);
+    expect(conflicts[0].conflictType).toBe('file');
+    expect(conflicts[0].files).toEqual(['models/heroes/abrams/body.vmdl_c']);
   });
 });
 

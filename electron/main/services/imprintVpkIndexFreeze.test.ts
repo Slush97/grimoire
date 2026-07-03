@@ -9,15 +9,26 @@
  */
 import { describe, it, expect, vi } from 'vitest';
 
+vi.mock('electron', () => ({ app: { getVersion: () => '0.0.0-test' } }));
 vi.mock('./mods', () => ({ scanMods: vi.fn(), runExclusiveModMutation: vi.fn() }));
 vi.mock('./metadata', () => ({ getModMetadata: vi.fn(), setModMetadata: vi.fn() }));
-vi.mock('./vpkIdentity', () => ({ readEmbeddedAddonInfo: vi.fn() }));
-vi.mock('./vpk', () => ({ parseVpkDirectoryCached: vi.fn() }));
-vi.mock('./embeddedMetadata', () => ({
-  computeOriginalIdentity: vi.fn(),
+vi.mock('./vpkIdentity', () => ({
+  readEmbeddedAddonInfo: vi.fn(),
   carryForwardOriginalIdentity: vi.fn(),
+}));
+vi.mock('./vpk', () => ({ parseVpkDirectoryCached: vi.fn(), parseVpkEntryStats: vi.fn() }));
+vi.mock('./modinfoFormat', () => ({
+  computeOriginalIdentity: vi.fn(),
   serializeAddonInfo: vi.fn(),
+  serializeModinfo: vi.fn(),
+  readEmbeddedModinfo: vi.fn(),
+  readLegacyGrimoireMergeMeta: vi.fn(),
+  findImprintRepackMismatch: vi.fn(),
   ADDONINFO_ENTRY: 'addoninfo.txt',
+  MODINFO_ENTRY: 'modinfo.json',
+  MODINFO_FORMAT: 'vpk-modinfo',
+  MODINFO_GAME: { name: 'Deadlock', steamAppId: 1422450, gameBananaGameId: 20948 },
+  MODINFO_SCHEMA_VERSION: 1,
 }));
 vi.mock('./modMerger', () => ({ runVpkmerge: vi.fn(), verifyVpkOutput: vi.fn() }));
 vi.mock('./gameSessionMods', () => ({

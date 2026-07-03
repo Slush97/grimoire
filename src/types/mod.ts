@@ -855,18 +855,20 @@ export interface ImprintInstalledProgress {
 }
 
 // One mod the preflight (or the bulk run's per-mod guard) refused to imprint
-// because it looks anomalous: an unparseable/zero-byte VPK, a live hash/size that
-// drifted from the stored canonical identity (KEYSTONE: never re-recorded), or a
-// foreign addoninfo.txt with no valid grimoireOriginalSha256. Skipped and
-// reported, never silently failed and never re-stamped.
+// because it looks anomalous: an unparseable/zero-byte VPK, a multi-chunk VPK,
+// a live hash/size that drifted from the stored canonical identity (KEYSTONE:
+// never re-recorded), or a foreign addoninfo.txt with no recoverable original
+// identity. Skipped and reported, never silently failed and never re-stamped.
 export interface ImprintAnomalousMod {
   fileName: string;
   modName: string;
   // Why it was flagged. 'unparseable': parseVpkDirectoryCached returned null.
-  // 'empty': zero-byte / truncated file. 'hash-drift': live identity != stored
-  // metadata.sha256 on a non-embedded file. 'foreign-embed': carries an
-  // addoninfo.txt but no valid grimoireOriginalSha256.
-  reason: 'unparseable' | 'empty' | 'hash-drift' | 'foreign-embed';
+  // 'empty': zero-byte / truncated file. 'chunked': sibling <base>_NNN.vpk
+  // chunk archives detected (an in-place repack would orphan their payload).
+  // 'hash-drift': live identity != stored metadata.sha256 on a non-embedded
+  // file. 'foreign-embed': carries an addoninfo.txt but no recoverable
+  // original identity.
+  reason: 'unparseable' | 'empty' | 'chunked' | 'hash-drift' | 'foreign-embed';
 }
 
 // Per-bucket counts from imprintPreflight. Every scanMods() candidate lands in
@@ -901,45 +903,17 @@ export interface ImprintPreflightResult {
   anomalous: ImprintAnomalousMod[];
 }
 
-// One merge source as read back from a grimoire_meta.json companion, projected
-// for the imprint details modal. Mirrors GrimoireEmbeddedMergeSource (the
-// embed reader's shape): serialized nulls stand for "absent at merge time".
-export interface ImprintDetailsMergeSource {
-  modName?: string;
-  originalSha256?: string | null;
-  gameBananaId?: number | null;
-  gameBananaFileId?: number | null;
-  section?: string | null;
-  priorityAtMergeTime?: number;
-  enabledAtMergeTime?: boolean;
-  fileNameAtMergeTime?: string;
-}
-
-// The parsed grimoire_meta.json merge payload, present only for merged VPKs
-// (ImprintDetails.hasMergeMeta). All fields except schemaVersion/sources are
-// optional because the reader tolerates older or partial documents.
-export interface ImprintDetailsMerge {
-  schemaVersion: number;
-  title?: string;
-  // The merged VPK's own original whole-file sha256 (its self-identity).
-  originalSha256?: string;
-  createdAt?: string;
-  createdByTool?: string;
-  createdByVersion?: string;
-  sources: ImprintDetailsMergeSource[];
-}
-
 // Full embedded imprint of one installed VPK, as returned by the read-only
 // 'read-imprint-details' IPC. Null over the wire when the file carries no
 // valid Grimoire embed (no addoninfo.txt, or a foreign embed without a
-// well-formed grimoireOriginalSha256). KEYSTONE: originalSha256 is the
-// canonical pre-imprint identity; this surface never writes anything.
+// recoverable original identity). KEYSTONE: originalSha256 is the canonical
+// pre-imprint identity; this surface never writes anything.
 export interface ImprintDetails {
-  // Parsed addoninfo.txt fields (addontitle / addonauthor / gamebananaId /
-  // sourceUrl / buildDate). All optional: older imprints may omit them.
+  // Parsed addoninfo.txt fields. All optional: legacy imprints may omit them.
   title?: string;
   author?: string;
   gamebananaId?: string;
+  gamebananaFileId?: string;
   sourceUrl?: string;
   buildDate?: string;
   // The original (pre-imprint) whole-file identity triple. sha256 is always
@@ -949,10 +923,10 @@ export interface ImprintDetails {
   originalSize?: number;
   // The raw addoninfo.txt text, verbatim, for the collapsible raw view.
   rawAddonInfo: string;
-  // Whether a grimoire_meta.json merge companion entry exists.
-  hasMergeMeta: boolean;
-  // Parsed merge payload; set only when hasMergeMeta is true and it parsed.
-  merge?: ImprintDetailsMerge;
+  // The parsed modinfo.json machine record. Null for a legacy (pre-redo)
+  // imprint that carries only the old grimoire-branded embed; such a file is
+  // stale format-wise and migrates on its next re-imprint.
+  modinfo: import('./modinfo').ModinfoRecord | null;
 }
 
 export interface ModConflict {

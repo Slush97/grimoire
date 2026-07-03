@@ -9,7 +9,7 @@ import {
 } from './gamebanana';
 import { parseVpkDirectory, parseVpkDirectoryCached } from './vpk';
 import { resolveVpkIdentity } from './vpkIdentity';
-import { readEmbeddedGrimoireMeta } from './embeddedMetadata';
+import { readEmbeddedModinfo } from './modinfoFormat';
 import { fingerprintFilesInWorkers, type FileFingerprintResult } from './workers';
 import {
     getUnknownCrcEntryCount,
@@ -281,13 +281,14 @@ function isTransientProbeError(err: unknown): boolean {
 
 /**
  * Consult-order step 1 (always on, ungated, offline): read the VPK's embedded
- * Grimoire metadata and, when present, build an identified result with zero
- * network and no GameBanana rate-limit cost. A tagged single mod (an
- * addoninfo.txt carrying a gamebananaId) yields a 'found' match with provenance
- * 'embedded-metadata'; a Grimoire merge (a grimoire_meta.json companion) yields
- * a 'found' result with provenance 'embedded-merge' carrying the reconstructed
- * source list. Returns null when the file carries no usable embed, so the caller
- * falls through to the CRC cache and the (gated) network matcher. Never throws.
+ * imprint and, when present, build an identified result with zero network and
+ * no GameBanana rate-limit cost. An imprinted single mod (an addoninfo.txt
+ * carrying a gamebananaId) yields a 'found' match with provenance
+ * 'embedded-metadata'; a Grimoire merge (a modinfo.json kind:"merge" record)
+ * yields a 'found' result with provenance 'embedded-merge' carrying the
+ * reconstructed source list. Returns null when the file carries no usable
+ * embed, so the caller falls through to the CRC cache and the (gated) network
+ * matcher. Never throws.
  */
 async function detectFromEmbed(
     base: UnknownModFilterBase,
@@ -304,30 +305,28 @@ async function detectFromEmbed(
         return null;
     }
 
-    // A Grimoire merge: reconstruct the source list from grimoire_meta.json.
-    if (embedded.grimoireMeta) {
-        const meta = readEmbeddedGrimoireMeta(vpkPath);
-        if (meta && meta.sources.length > 0) {
-            const mergeSources: UnknownModMergeSource[] = meta.sources.map((source) => ({
-                modName: source.modName ?? source.fileNameAtMergeTime ?? 'Unknown source',
-                gameBananaId: typeof source.gameBananaId === 'number' ? source.gameBananaId : undefined,
-                gameBananaFileId: typeof source.gameBananaFileId === 'number' ? source.gameBananaFileId : undefined,
-                section: source.section ?? undefined,
-                fileName: source.fileNameAtMergeTime,
-            }));
-            return {
-                ...base,
-                crcMatch: {
-                    ...emptyCrcMatch('found'),
-                    status: 'found',
-                    provenance: 'embedded-merge',
-                    modName: meta.merge?.title ?? embedded.title,
-                    confidence: 'exact',
-                    mergeSources,
-                    reason: `Grimoire merge of ${mergeSources.length} mod${mergeSources.length === 1 ? '' : 's'}, read from embedded metadata.`,
-                },
-            };
-        }
+    // A Grimoire merge: reconstruct the source list from modinfo.json.
+    const modinfo = readEmbeddedModinfo(vpkPath);
+    if (modinfo?.kind === 'merge' && modinfo.sources.length > 0) {
+        const mergeSources: UnknownModMergeSource[] = modinfo.sources.map((source) => ({
+            modName: source.title,
+            gameBananaId: source.gamebananaId,
+            gameBananaFileId: source.gamebananaFileId,
+            section: source.section,
+            fileName: source.fileNameAtMergeTime,
+        }));
+        return {
+            ...base,
+            crcMatch: {
+                ...emptyCrcMatch('found'),
+                status: 'found',
+                provenance: 'embedded-merge',
+                modName: modinfo.merge.title,
+                confidence: 'exact',
+                mergeSources,
+                reason: `Grimoire merge of ${mergeSources.length} mod${mergeSources.length === 1 ? '' : 's'}, read from embedded metadata.`,
+            },
+        };
     }
 
     // A single tagged mod carrying its GameBanana submission id.

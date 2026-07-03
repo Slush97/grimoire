@@ -674,8 +674,9 @@ async function executeDownload(
 
     console.log(`[downloadMod] Starting download: modId=${modId}, fileId=${fileId}, fileName=${fileName}`);
 
-    // Get mod details to find download URL
-    const details: GameBananaModDetails = await fetchModDetails(modId, section);
+    // Get mod details to find download URL. includeSubmitter so the author
+    // name can be stamped into metadata (and later into the imprint).
+    const details: GameBananaModDetails = await fetchModDetails(modId, section, { includeSubmitter: true });
 
     if (!details.files || details.files.length === 0) {
         throw new Error(
@@ -759,6 +760,7 @@ async function executeDownload(
 
     const metadata = {
         modName: details.name,  // Store the actual mod name from GameBanana
+        author: details.submitter?.name,  // GameBanana submitter, for the imprint
         gameBananaId: modId,
         gameBananaFileId: fileId,  // Store which specific file was downloaded
         categoryId: details.category?.id,  // Get category from mod details, not filter
@@ -1236,7 +1238,7 @@ async function executeOneClickDownload(
     let enriched: GameBananaModDetails | null = enrichedDetails ?? null;
     if (!enriched && args.modId !== undefined && args.modId > 0) {
         try {
-            enriched = await fetchModDetails(args.modId, section);
+            enriched = await fetchModDetails(args.modId, section, { includeSubmitter: true });
         } catch (err) {
             console.warn('[oneClickInstall] Metadata enrichment failed:', err);
         }
@@ -1290,6 +1292,7 @@ async function executeOneClickDownload(
         section === 'Sound' ? inferHeroFromTitle(oneClickModName) ?? undefined : undefined;
     const metadata = {
         modName: oneClickModName,
+        author: enriched?.submitter?.name,  // GameBanana submitter, for the imprint
         gameBananaId: realModId,
         gameBananaFileId: resolvedFileId,
         categoryId: enriched?.category?.id,
