@@ -20,8 +20,10 @@ import {
     computeOriginalIdentity,
     serializeAddonInfo,
     serializeModinfo,
+    hasLegacyGrimoireMergeMetaEntry,
     ADDONINFO_ENTRY,
     MODINFO_ENTRY,
+    LEGACY_GRIMOIRE_META_ENTRY,
     MODINFO_FORMAT,
     MODINFO_GAME,
     MODINFO_SCHEMA_VERSION,
@@ -264,13 +266,28 @@ const MERGE_ADDON_AUTHOR = 'Multiple (merged)';
  * (the spec's option (a)): it is the stable self-identity stored in metadata,
  * addoninfo, and modinfo alike, and is never re-derived from the post-embed
  * file.
+ *
+ * Exported so imprintMods.ts's merge-refresh path (a merged mod's embed gone
+ * stale, or the identity carried forward from an existing embed rather than
+ * freshly captured) can reuse the exact same pass-2 machinery mergeModsLocked
+ * and extractMergeSourceLocked use, rather than re-deriving a second embed
+ * writer with its own bugs.
+ *
+ * `firstImprintedAt` defaults to `createdAt` when omitted, which is exactly
+ * right for a brand-new merge (mergeModsLocked) or a from-scratch rebuild
+ * (extractMergeSourceLocked): the merge output never existed before, so its
+ * first and current imprint are the same moment. A re-imprint of an EXISTING
+ * merge (imprintMods.ts's merge refresh) passes the carried-forward value
+ * explicitly, per the KEYSTONE carry-forward rule: firstImprintedAt must
+ * never advance on a refresh, only writtenAt does.
  */
-async function embedMergeIdentity(
+export async function embedMergeIdentity(
     mergedPath: string,
     title: string,
     createdAt: string,
     original: OriginalIdentity,
-    sources: ModinfoMergeSource[]
+    sources: ModinfoMergeSource[],
+    firstImprintedAt: string = createdAt
 ): Promise<void> {
     const addonText = serializeAddonInfo({
         title,
@@ -286,7 +303,7 @@ async function embedMergeIdentity(
         kind: 'merge',
         writtenBy: { tool: 'grimoire', version: app.getVersion() },
         writtenAt: createdAt,
-        firstImprintedAt: createdAt,
+        firstImprintedAt,
         game: MODINFO_GAME,
         identity: { sha256: original.sha256, size: original.size, crc32: original.crc32 },
         title,
@@ -307,6 +324,11 @@ async function embedMergeIdentity(
     try {
         await fs.writeFile(addonTmp, addonText);
         await fs.writeFile(metaTmp, metaText);
+        // The new merge record lives entirely in modinfo.json, so a legacy
+        // grimoire_meta.json companion (pre-redo files) is superseded, not
+        // merely shadowed: drop it in the same repack rather than leaving
+        // residue an old reader might still trust.
+        const dropLegacyMeta = hasLegacyGrimoireMergeMetaEntry(mergedPath);
         await runVpkmerge([
             'metadata',
             '--vpk',
@@ -317,6 +339,7 @@ async function embedMergeIdentity(
             `${ADDONINFO_ENTRY}=${addonTmp}`,
             '--extra-file',
             `${MODINFO_ENTRY}=${metaTmp}`,
+            ...(dropLegacyMeta ? ['--drop-entry', LEGACY_GRIMOIRE_META_ENTRY] : []),
         ]);
         await verifyVpkOutput(embedOut);
         // Atomic replace (rename over the existing file, the metadata.ts write
@@ -613,29 +636,52 @@ async function mergeModsLocked(
 }
 
 function buildPortableForSources(sources: Mod[], profileName: string): PortableProfile {
+    const entries: MergedModSource[] = sources.map((src) => {
+        const meta = getModMetadata(src.metaKey);
+        return {
+            fileName: src.fileName,
+            modName: meta?.modName || src.name,
+            thumbnailUrl: meta?.thumbnailUrl,
+            gameBananaId: meta?.gameBananaId ?? src.gameBananaId,
+            gameBananaFileId: meta?.gameBananaFileId ?? src.gameBananaFileId,
+            section: meta?.sourceSection,
+            enabledAtMergeTime: true,
+            priorityAtMergeTime: src.priority,
+        };
+    });
+    return buildPortableForMergeSources(entries, profileName);
+}
+
+/**
+ * Build a portable profile (the unmerge-fallback share code payload) straight
+ * from a merge's own source snapshots, with no live Mod/metadata lookup. Pure
+ * projection of MergedModSource -> PortableModEntry: every field this reads
+ * already lives on the snapshot, which is what lets it double as the DB-wipe
+ * reconstruction path (see reconstructMergedModInfo/imprintMods.ts) where the
+ * sources come from an embedded modinfo.json or legacy grimoire_meta.json
+ * record, not a live scan. Local sources (no GameBanana id) are omitted, same
+ * as buildPortableForSources: the share code is best-effort, not authoritative
+ * (the merge's own metadata.merged manifest is authoritative for unmerge).
+ */
+export function buildPortableForMergeSources(
+    sources: MergedModSource[],
+    profileName: string
+): PortableProfile {
     const mods: PortableModEntry[] = [];
     for (const src of sources) {
-        const meta = getModMetadata(src.metaKey);
-        const gbId = meta?.gameBananaId ?? src.gameBananaId;
-        const fileId = meta?.gameBananaFileId ?? src.gameBananaFileId;
-        if (!gbId || !fileId) continue; // local mod — fast-path unmerge still works
+        if (!src.gameBananaId || !src.gameBananaFileId) continue; // local mod: fast-path unmerge still works
         mods.push({
             source: 'gamebanana',
             ref: {
-                submissionId: gbId,
-                fileId,
-                section: meta?.sourceSection || 'Mod',
+                submissionId: src.gameBananaId,
+                fileId: src.gameBananaFileId,
+                section: src.section || 'Mod',
             },
             enabled: true,
-            priority: src.priority,
+            priority: src.priorityAtMergeTime,
             hint: {
-                name: meta?.modName || src.name,
-                category: meta?.categoryName,
-                fileLabel: meta?.variantLabel || meta?.fileDescription || meta?.sourceFileName,
-                originalFileName: meta?.sourceFileName,
-                thumbnailUrl: meta?.thumbnailUrl,
-                nsfw: meta?.nsfw,
-                isArchived: meta?.isArchived,
+                name: src.modName,
+                thumbnailUrl: src.thumbnailUrl,
             },
         });
     }

@@ -17,6 +17,8 @@ import {
   parseModinfo,
   computeOriginalIdentity,
   findImprintRepackMismatch,
+  reconstructMergedModInfoFromEmbed,
+  reconstructMergedModInfoFromLegacy,
   ADDONINFO_ENTRY,
   MODINFO_ENTRY,
   MODINFO_FORMAT,
@@ -25,6 +27,7 @@ import {
   type AddonInfoFields,
   type ModinfoModRecord,
   type ModinfoMergeRecord,
+  type LegacyGrimoireMergeSource,
 } from './modinfoFormat';
 import type { VpkEntryStat } from './vpk';
 
@@ -318,6 +321,129 @@ describe('findImprintRepackMismatch', () => {
     expect(mismatch).toContain('+3 more');
     expect(mismatch).toContain('; ');
     expect(mismatch).toContain('1 unexpected entries added');
+  });
+
+  describe('droppedEntries (expected removals, e.g. a superseded legacy sidecar)', () => {
+    it('does not report a dropped entry as lost', () => {
+      const input = [...gameEntries, entry('grimoire_meta.json', 400)];
+      const output = [...gameEntries, ...imprintEntries];
+      expect(
+        findImprintRepackMismatch(input, output, ['grimoire_meta.json'])
+      ).toBeNull();
+    });
+
+    it('still reports a DIFFERENT missing entry when one drop is expected and another is not', () => {
+      const input = [...gameEntries, entry('grimoire_meta.json', 400)];
+      const output = [gameEntries[0], ...imprintEntries]; // materials/skin.vtex_c also missing, unexpectedly
+      const mismatch = findImprintRepackMismatch(input, output, ['grimoire_meta.json']);
+      expect(mismatch).toContain('1 carried entries missing from the output');
+      expect(mismatch).toContain('materials/skin.vtex_c');
+      expect(mismatch).not.toContain('grimoire_meta.json');
+    });
+
+    it('normalizes case and slash direction in droppedEntries the same way as carried entries', () => {
+      const input = [...gameEntries, entry('Grimoire_Meta.JSON', 400)];
+      const output = [...gameEntries, ...imprintEntries];
+      expect(
+        findImprintRepackMismatch(input, output, ['grimoire_meta.json'])
+      ).toBeNull();
+    });
+
+    it('is a no-op when the named drop was never present in the input', () => {
+      expect(
+        findImprintRepackMismatch(gameEntries, [...gameEntries, ...imprintEntries], ['grimoire_meta.json'])
+      ).toBeNull();
+    });
+  });
+});
+
+describe('reconstructMergedModInfoFromEmbed', () => {
+  it('rebuilds a manifest from a current-format kind:"merge" record, preferring merge.title', () => {
+    const record = mergeRecord();
+    const manifest = reconstructMergedModInfoFromEmbed(record);
+    expect(manifest.modName).toBe('My Merge');
+    expect(manifest.createdAt).toBe(record.firstImprintedAt);
+    expect(manifest.sources).toEqual([
+      {
+        fileName: 'pak01_dir.vpk',
+        modName: 'Source One',
+        gameBananaId: 123,
+        gameBananaFileId: 456,
+        section: 'Mod',
+        enabledAtMergeTime: true,
+        priorityAtMergeTime: 1,
+        sha256AtMergeTime: 'c'.repeat(64),
+      },
+      {
+        fileName: 'local_mod.vpk',
+        modName: 'Source Two',
+        gameBananaId: undefined,
+        gameBananaFileId: undefined,
+        section: undefined,
+        enabledAtMergeTime: false,
+        priorityAtMergeTime: 2,
+        sha256AtMergeTime: undefined,
+      },
+    ]);
+  });
+
+  it('falls back to record.title when merge.title is empty', () => {
+    const record = mergeRecord({ merge: { title: '' } });
+    expect(reconstructMergedModInfoFromEmbed(record).modName).toBe('My Merge');
+  });
+});
+
+describe('reconstructMergedModInfoFromLegacy', () => {
+  const legacySource = (over: Partial<LegacyGrimoireMergeSource> = {}): LegacyGrimoireMergeSource => ({
+    modName: 'Legacy Source',
+    originalSha256: 'd'.repeat(64),
+    gameBananaId: 777,
+    gameBananaFileId: 888,
+    section: 'Mod',
+    priorityAtMergeTime: 4,
+    enabledAtMergeTime: true,
+    fileNameAtMergeTime: 'legacy_dir.vpk',
+    ...over,
+  });
+
+  it('rebuilds a manifest from a legacy grimoire_meta.json projection', () => {
+    const manifest = reconstructMergedModInfoFromLegacy(
+      { title: 'Legacy Merge', originalSha256: 'e'.repeat(64), sources: [legacySource()] },
+      'fallback title',
+      '2025-01-01T00:00:00.000Z'
+    );
+    expect(manifest.modName).toBe('Legacy Merge');
+    expect(manifest.createdAt).toBe('2025-01-01T00:00:00.000Z');
+    expect(manifest.sources).toEqual([
+      {
+        fileName: 'legacy_dir.vpk',
+        modName: 'Legacy Source',
+        gameBananaId: 777,
+        gameBananaFileId: 888,
+        section: 'Mod',
+        enabledAtMergeTime: true,
+        priorityAtMergeTime: 4,
+        sha256AtMergeTime: 'd'.repeat(64),
+      },
+    ]);
+  });
+
+  it('falls back to the caller-supplied title when the legacy document has none', () => {
+    const manifest = reconstructMergedModInfoFromLegacy(
+      { title: undefined, sources: [legacySource()] },
+      'fallback title',
+      '2025-01-01T00:00:00.000Z'
+    );
+    expect(manifest.modName).toBe('fallback title');
+  });
+
+  it('falls back to the source fileName when a legacy source has no modName', () => {
+    const manifest = reconstructMergedModInfoFromLegacy(
+      { sources: [legacySource({ modName: undefined })] },
+      'fallback title',
+      '2025-01-01T00:00:00.000Z'
+    );
+    expect(manifest.sources[0].modName).toBe('legacy_dir.vpk');
   });
 });
 

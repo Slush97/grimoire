@@ -5755,6 +5755,7 @@ function ImprintModal({ state, onConfirm, onClose }: {
       case 'chunked': return t('installed.imprintAll.anomalyChunked');
       case 'hash-drift': return t('installed.imprintAll.anomalyHashDrift');
       case 'foreign-embed': return t('installed.imprintAll.anomalyForeignEmbed');
+      case 'orphan-merge': return t('installed.imprintAll.anomalyOrphanMerge');
     }
   };
   // The bulk run reports anomalies as their raw reason tokens (they flow into
@@ -5762,7 +5763,7 @@ function ImprintModal({ state, onConfirm, onClose }: {
   // the result list reads the same as the preflight list.
   const isAnomalyReason = (reason: string): reason is ImprintAnomalousMod['reason'] =>
     reason === 'unparseable' || reason === 'empty' || reason === 'chunked' ||
-    reason === 'hash-drift' || reason === 'foreign-embed';
+    reason === 'hash-drift' || reason === 'foreign-embed' || reason === 'orphan-merge';
 
   let body: ReactNode;
   let footer: ReactNode;

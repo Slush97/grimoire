@@ -5,11 +5,16 @@
  */
 import { describe, it, expect } from 'vitest';
 import type { ModinfoModRecord, ModinfoMergeRecord } from '../../../src/types/modinfo';
+import type { MergedModInfo, MergedModSource } from '../../../src/types/mod';
 import {
     evaluateEmbedStaleness,
+    evaluateMergeEmbedStaleness,
+    classifyMissingMergeManifest,
     gameBananaPageUrl,
     refreshableFieldsFromMetadata,
     refreshableFieldsFromRecord,
+    refreshableMergeFieldsFromMetadata,
+    refreshableMergeFieldsFromRecord,
     type ImprintRefreshMeta,
     type RefreshableEmbedFields,
 } from './imprintStaleness';
@@ -215,5 +220,127 @@ describe('refreshableFieldsFromRecord', () => {
         expect(fields.sourceUrl).toBeUndefined();
         expect(fields.vpkIndex).toBeUndefined();
         expect(fields.variantLabel).toBeUndefined();
+    });
+});
+
+// --- merge embed staleness ---------------------------------------------------
+
+const SOURCE_A: MergedModSource = {
+    fileName: 'source-a.vpk',
+    modName: 'Source A',
+    gameBananaId: 111,
+    gameBananaFileId: 222,
+    section: 'Mod',
+    enabledAtMergeTime: true,
+    priorityAtMergeTime: 3,
+    sha256AtMergeTime: 'a'.repeat(64),
+};
+
+const SOURCE_B: MergedModSource = {
+    fileName: 'source-b.vpk',
+    modName: 'Source B',
+    enabledAtMergeTime: false,
+    priorityAtMergeTime: 5,
+    sha256AtMergeTime: 'b'.repeat(64),
+};
+
+const MERGED_INFO: MergedModInfo = {
+    id: 'merge-1',
+    createdAt: '2026-01-01T00:00:00.000Z',
+    shareCode: 'mp1:stub',
+    sources: [SOURCE_A, SOURCE_B],
+};
+
+describe('evaluateMergeEmbedStaleness', () => {
+    const currentFields = () => refreshableMergeFieldsFromMetadata('My Merge', MERGED_INFO);
+    const embeddedFieldsFor = (info: MergedModInfo, title: string) =>
+        refreshableMergeFieldsFromRecord({
+            title,
+            sources: info.sources.map((s) => ({
+                title: s.modName,
+                identity: { sha256: s.sha256AtMergeTime },
+                gamebananaId: s.gameBananaId,
+                gamebananaFileId: s.gameBananaFileId,
+                section: s.section,
+                priorityAtMergeTime: s.priorityAtMergeTime,
+                enabledAtMergeTime: s.enabledAtMergeTime,
+                fileNameAtMergeTime: s.fileName,
+            })),
+        });
+
+    it('is stale with no current embed (never imprinted / legacy-only)', () => {
+        expect(evaluateMergeEmbedStaleness(null, currentFields())).toEqual({
+            stale: true,
+            reason: 'no-current-embed',
+        });
+    });
+
+    it('is fresh when the title and every source field match the manifest', () => {
+        const result = evaluateMergeEmbedStaleness(embeddedFieldsFor(MERGED_INFO, 'My Merge'), currentFields());
+        expect(result).toEqual({ stale: false });
+    });
+
+    it('is stale when the merge title drifted (re-labeled after imprint)', () => {
+        const result = evaluateMergeEmbedStaleness(embeddedFieldsFor(MERGED_INFO, 'Old Name'), currentFields());
+        expect(result.stale).toBe(true);
+        if (result.stale && result.reason === 'fields-drifted') {
+            expect(result.driftedFields).toContain('title');
+        } else {
+            expect.fail(`expected fields-drifted, got ${JSON.stringify(result)}`);
+        }
+    });
+
+    it('is stale when a source field drifted (source metadata edited after imprint)', () => {
+        const relabeled: MergedModInfo = {
+            ...MERGED_INFO,
+            sources: [{ ...SOURCE_A, modName: 'Renamed Source A' }, SOURCE_B],
+        };
+        const result = evaluateMergeEmbedStaleness(
+            embeddedFieldsFor(MERGED_INFO, 'My Merge'),
+            refreshableMergeFieldsFromMetadata('My Merge', relabeled)
+        );
+        expect(result.stale).toBe(true);
+        if (result.stale && result.reason === 'fields-drifted') {
+            expect(result.driftedFields).toContain('sources');
+        } else {
+            expect.fail(`expected fields-drifted, got ${JSON.stringify(result)}`);
+        }
+    });
+
+    it('is stale when the source count changed (a source was extracted)', () => {
+        const oneFewer: MergedModInfo = { ...MERGED_INFO, sources: [SOURCE_A] };
+        const result = evaluateMergeEmbedStaleness(
+            embeddedFieldsFor(MERGED_INFO, 'My Merge'),
+            refreshableMergeFieldsFromMetadata('My Merge', oneFewer)
+        );
+        expect(result).toEqual({ stale: true, reason: 'fields-drifted', driftedFields: ['sources'] });
+    });
+
+    it('falls back to the manifest id when modName is unset (never perpetually drifted)', () => {
+        expect(refreshableMergeFieldsFromMetadata(undefined, MERGED_INFO).title).toBe('merge-1');
+    });
+});
+
+// --- never-flatten guard ------------------------------------------------------
+
+describe('classifyMissingMergeManifest', () => {
+    it('reconstructs from the embed when the current-format record is itself a merge', () => {
+        expect(classifyMissingMergeManifest('merge', false)).toEqual({ kind: 'reconstruct-from-embed' });
+        // Even when a legacy companion also happens to be readable, the embed
+        // (Grimoire's own last write) is the richer, more current source.
+        expect(classifyMissingMergeManifest('merge', true)).toEqual({ kind: 'reconstruct-from-embed' });
+    });
+
+    it('reconstructs from the legacy companion when there is no current embed but legacy sources parse', () => {
+        expect(classifyMissingMergeManifest(null, true)).toEqual({ kind: 'reconstruct-from-legacy' });
+    });
+
+    it('needs no manifest for a genuine plain mod (current-format kind:"mod" record)', () => {
+        expect(classifyMissingMergeManifest('mod', false)).toEqual({ kind: 'no-manifest-needed' });
+        expect(classifyMissingMergeManifest('mod', true)).toEqual({ kind: 'no-manifest-needed' });
+    });
+
+    it('needs no manifest when neither the embed nor a legacy companion has a source list', () => {
+        expect(classifyMissingMergeManifest(null, false)).toEqual({ kind: 'no-manifest-needed' });
     });
 });

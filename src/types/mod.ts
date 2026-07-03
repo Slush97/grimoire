@@ -857,8 +857,9 @@ export interface ImprintInstalledProgress {
 // One mod the preflight (or the bulk run's per-mod guard) refused to imprint
 // because it looks anomalous: an unparseable/zero-byte VPK, a multi-chunk VPK,
 // a live hash/size that drifted from the stored canonical identity (KEYSTONE:
-// never re-recorded), or a foreign addoninfo.txt with no recoverable original
-// identity. Skipped and reported, never silently failed and never re-stamped.
+// never re-recorded), a foreign addoninfo.txt with no recoverable original
+// identity, or a merge whose manifest could not be reconstructed. Skipped and
+// reported, never silently failed and never re-stamped.
 export interface ImprintAnomalousMod {
   fileName: string;
   modName: string;
@@ -867,8 +868,11 @@ export interface ImprintAnomalousMod {
   // chunk archives detected (an in-place repack would orphan their payload).
   // 'hash-drift': live identity != stored metadata.sha256 on a non-embedded
   // file. 'foreign-embed': carries an addoninfo.txt but no recoverable
-  // original identity.
-  reason: 'unparseable' | 'empty' | 'chunked' | 'hash-drift' | 'foreign-embed';
+  // original identity. 'orphan-merge': the metadata sidecar has no `merged`
+  // entry, but the file's own embed/legacy companion is a merge whose source
+  // list could not be read cleanly (NEVER FLATTEN: refused rather than
+  // re-imprinted as a plain kind:"mod", which would destroy the source list).
+  reason: 'unparseable' | 'empty' | 'chunked' | 'hash-drift' | 'foreign-embed' | 'orphan-merge';
 }
 
 // Per-bucket counts from imprintPreflight. Every scanMods() candidate lands in

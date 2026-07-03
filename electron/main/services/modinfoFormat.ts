@@ -15,6 +15,7 @@ import {
     type ModinfoPackaging,
     type ModinfoMergeSource,
 } from '../../../src/types/modinfo';
+import type { MergedModSource } from '../../../src/types/mod';
 
 /**
  * The vpk-modinfo v1 format module. Every imprinted VPK carries BOTH root
@@ -254,6 +255,26 @@ function readRootEntryBytes(path: string, entryName: string): Buffer | null {
     return readVpkEntryBytes(path, entry);
 }
 
+/** Does `path` carry a root-level entry named `entryName`? Cheap presence
+ *  check via the cached directory parse; no entry bytes are read. Used to
+ *  decide whether a re-embed needs a `--drop-entry` for a superseded sidecar
+ *  (see hasLegacyGrimoireMergeMetaEntry) without paying for a read that would
+ *  be thrown away. */
+function hasRootEntry(path: string, entryName: string): boolean {
+    const paths = parseVpkDirectoryCached(path);
+    if (!paths) return false;
+    return paths.some((p) => p.replace(/\\/g, '/').toLowerCase() === entryName);
+}
+
+/** Does `path` carry the legacy `grimoire_meta.json` companion? A writer that
+ *  supersedes it (embedMergeIdentity, embedImprintInPlace) checks this before
+ *  the repack so it can pass `--drop-entry grimoire_meta.json` and retire the
+ *  residue in the same pass, rather than leaving a stale sidecar the new
+ *  modinfo.json record has already superseded. */
+export function hasLegacyGrimoireMergeMetaEntry(path: string): boolean {
+    return hasRootEntry(path, LEGACY_GRIMOIRE_META_ENTRY);
+}
+
 // --- parse helpers (parse-don't-validate primitives) --------------------------
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -364,28 +385,33 @@ function quoteEntryList(paths: string[]): string {
 
 /**
  * Compare an imprint repack's output entry tree against its input's. Parity
- * means: every input entry is carried into the output with an unchanged
- * logical size, nothing appears beyond the two imprint entries, and both
- * imprint entries are present in the output. The imprint entries themselves
- * are exempt from the size check (a re-imprint rewrites them in place).
- * Returns a precise mismatch description, or null on parity.
+ * means: every input entry is EITHER carried into the output with an
+ * unchanged logical size OR named in `droppedEntries` (an expected removal,
+ * e.g. a superseded legacy grimoire_meta.json passed to `--drop-entry`);
+ * nothing appears beyond the two imprint entries; both imprint entries are
+ * present in the output. The imprint entries themselves are exempt from the
+ * size check (a re-imprint rewrites them in place). Returns a precise
+ * mismatch description, or null on parity.
  *
  * Pure set/size comparison so it is unit-testable without VPK binaries; the
  * caller (embedImprintInPlace) feeds it parseVpkEntryStats of the real input
- * VPK (parsed before the repack) and the repacked temp output.
+ * VPK (parsed before the repack) and the repacked temp output, plus whatever
+ * entries it asked vpkmerge to drop.
  */
 export function findImprintRepackMismatch(
     inputEntries: VpkEntryStat[],
-    outputEntries: VpkEntryStat[]
+    outputEntries: VpkEntryStat[],
+    droppedEntries: string[] = []
 ): string | null {
     const imprintEntries = [ADDONINFO_ENTRY, MODINFO_ENTRY];
+    const dropped = new Set(droppedEntries.map(normalizeEntryPath));
     const input = new Map(inputEntries.map((e) => [normalizeEntryPath(e.path), e.size]));
     const output = new Map(outputEntries.map((e) => [normalizeEntryPath(e.path), e.size]));
 
     const lost: string[] = [];
     const resized: string[] = [];
     for (const [path, size] of input) {
-        if (imprintEntries.includes(path)) continue;
+        if (imprintEntries.includes(path) || dropped.has(path)) continue;
         const outSize = output.get(path);
         if (outSize === undefined) {
             lost.push(path);
@@ -456,17 +482,48 @@ export async function computeOriginalIdentity(
 // merge's original sha from the old JSON companion as the last fallback, so
 // every legacy file migrates to the new format on its next re-imprint.
 
-/** Old (pre-redo) merge companion entry name. */
-const LEGACY_GRIMOIRE_META_ENTRY = 'grimoire_meta.json';
+/** Old (pre-redo) merge companion entry name. Exported so a writer that
+ *  supersedes it (embedMergeIdentity, embedImprintInPlace) can pass it to
+ *  vpkmerge's `--drop-entry`, retiring the legacy sidecar in the same repack
+ *  that writes its replacement instead of leaving residue behind. */
+export const LEGACY_GRIMOIRE_META_ENTRY = 'grimoire_meta.json';
 
-/** Identity-relevant projection of an old grimoire_meta.json document. */
+/** One source entry from an old grimoire_meta.json document. Same shape the
+ *  pre-redo serializer wrote (see git history of embeddedMetadata.ts), read
+ *  back tolerantly: every field but the two required by ModinfoMergeSource
+ *  (priorityAtMergeTime, enabledAtMergeTime, fileNameAtMergeTime) is optional
+ *  because a hand-edited or truncated legacy file should degrade gracefully,
+ *  not refuse to migrate. */
+export interface LegacyGrimoireMergeSource {
+    modName?: string;
+    originalSha256?: string;
+    gameBananaId?: number;
+    gameBananaFileId?: number;
+    section?: string;
+    priorityAtMergeTime: number;
+    enabledAtMergeTime: boolean;
+    fileNameAtMergeTime: string;
+}
+
+/** Full projection of an old grimoire_meta.json document: the identity used
+ *  by carryForwardOriginalIdentity, PLUS the merge title and full source list
+ *  needed to reconstruct a merge record when the DB-side manifest (meta.merged)
+ *  is gone (see reconstructMergedModInfoFromLegacy below). `sources` is null
+ *  when the array is missing or structurally broken (parse, don't
+ *  half-trust): a reconstruction caller must treat that the same as "no
+ *  legacy meta". */
 export interface LegacyGrimoireMergeMeta {
     originalSha256?: string;
+    title?: string;
+    sources: LegacyGrimoireMergeSource[] | null;
 }
 
 /**
- * Read the old grimoire_meta.json merge companion's original sha256, or null
- * when the file carries none / it is not an old Grimoire merge document.
+ * Read the old grimoire_meta.json merge companion, or null when the file
+ * carries none / it is not an old Grimoire merge document. `sources` is the
+ * DB-wipe recovery payload: a merge whose meta.merged manifest was lost can
+ * still be reconstructed from this array (see the never-flatten guard in
+ * imprintMods.ts).
  */
 export function readLegacyGrimoireMergeMeta(path: string): LegacyGrimoireMergeMeta | null {
     try {
@@ -475,9 +532,117 @@ export function readLegacyGrimoireMergeMeta(path: string): LegacyGrimoireMergeMe
         const parsed: unknown = JSON.parse(bytes.toString('utf-8'));
         if (!isRecord(parsed) || parsed.format !== 'grimoire-embedded-merge') return null;
         const merge = isRecord(parsed.merge) ? parsed.merge : undefined;
-        return { originalSha256: merge ? asString(merge.originalSha256) : undefined };
+        return {
+            originalSha256: merge ? asString(merge.originalSha256) : undefined,
+            title: merge ? asString(merge.title) : undefined,
+            sources: parseLegacyGrimoireMergeSources(parsed.sources),
+        };
     } catch (error) {
         console.warn(`[modinfoFormat] Failed to read legacy grimoire_meta.json from ${path}:`, error);
         return null;
     }
+}
+
+/** Parse the old grimoire_meta.json `sources` array. Returns null (not a
+ *  partial array) when the value is missing or any entry lacks the fields a
+ *  ModinfoMergeSource requires, so a caller never reconstructs a merge from a
+ *  half-broken source list. */
+function parseLegacyGrimoireMergeSources(value: unknown): LegacyGrimoireMergeSource[] | null {
+    if (!Array.isArray(value)) return null;
+    const sources: LegacyGrimoireMergeSource[] = [];
+    for (const entry of value) {
+        if (!isRecord(entry)) return null;
+        const fileNameAtMergeTime = asString(entry.fileNameAtMergeTime);
+        const priorityAtMergeTime = asNumber(entry.priorityAtMergeTime);
+        if (!fileNameAtMergeTime || priorityAtMergeTime === undefined) return null;
+        if (typeof entry.enabledAtMergeTime !== 'boolean') return null;
+        sources.push({
+            modName: asString(entry.modName),
+            originalSha256: asString(entry.originalSha256),
+            gameBananaId: asNumber(entry.gameBananaId),
+            gameBananaFileId: asNumber(entry.gameBananaFileId),
+            section: asString(entry.section),
+            priorityAtMergeTime,
+            enabledAtMergeTime: entry.enabledAtMergeTime,
+            fileNameAtMergeTime,
+        });
+    }
+    return sources;
+}
+
+// --- never-flatten reconstruction ---------------------------------------------
+
+/** A merge manifest rebuilt from an in-file record rather than the metadata
+ *  sidecar, missing only `id` and `shareCode` (the caller mints a fresh id and
+ *  regenerates the share code from `sources`, since neither travels inside
+ *  the VPK). See reconstructMergedModInfoFromEmbed / ...FromLegacy. */
+export interface ReconstructedMergeManifest {
+    modName: string;
+    createdAt: string;
+    sources: MergedModSource[];
+}
+
+function mergeSourceFromModinfo(source: ModinfoMergeSource): MergedModSource {
+    return {
+        fileName: source.fileNameAtMergeTime,
+        modName: source.title,
+        gameBananaId: source.gamebananaId,
+        gameBananaFileId: source.gamebananaFileId,
+        section: source.section,
+        enabledAtMergeTime: source.enabledAtMergeTime,
+        priorityAtMergeTime: source.priorityAtMergeTime,
+        sha256AtMergeTime: source.identity.sha256,
+    };
+}
+
+/**
+ * Reconstruct a merge manifest from a CURRENT-format embedded kind:"merge"
+ * modinfo.json record. This is the primary never-flatten recovery path: a
+ * merged VPK whose metadata.merged sidecar entry was lost (DB wipe, orphan
+ * metadata prune) still carries its own full source list in the file, so the
+ * manifest can be rebuilt without ever downgrading the file to kind:"mod".
+ */
+export function reconstructMergedModInfoFromEmbed(
+    record: ModinfoMergeRecord
+): ReconstructedMergeManifest {
+    return {
+        modName: record.merge.title || record.title,
+        createdAt: record.firstImprintedAt,
+        sources: record.sources.map(mergeSourceFromModinfo),
+    };
+}
+
+function mergeSourceFromLegacy(source: LegacyGrimoireMergeSource): MergedModSource {
+    return {
+        fileName: source.fileNameAtMergeTime,
+        modName: source.modName || source.fileNameAtMergeTime,
+        gameBananaId: source.gameBananaId,
+        gameBananaFileId: source.gameBananaFileId,
+        section: source.section,
+        enabledAtMergeTime: source.enabledAtMergeTime,
+        priorityAtMergeTime: source.priorityAtMergeTime,
+        sha256AtMergeTime: source.originalSha256,
+    };
+}
+
+/**
+ * Reconstruct a merge manifest from an old (pre-redo) grimoire_meta.json
+ * companion. Fallback recovery path for a file imprinted before the
+ * vpk-modinfo redo whose metadata.merged sidecar entry was lost: the legacy
+ * companion still carries the full source list under the old key names.
+ * `legacy.sources` must be non-null (see parseLegacyGrimoireMergeSources); a
+ * null sources list means the legacy document itself is unusable for
+ * reconstruction, and the caller falls through to the anomalous/orphan-merge
+ * outcome rather than guessing at a partial source list.
+ */
+export function reconstructMergedModInfoFromLegacy(
+    legacy: LegacyGrimoireMergeMeta & { sources: LegacyGrimoireMergeSource[] },
+    fallbackTitle: string,
+    fallbackCreatedAt: string
+): ReconstructedMergeManifest {
+    return {
+        modName: legacy.title || fallbackTitle,
+        createdAt: fallbackCreatedAt,
+        sources: legacy.sources.map(mergeSourceFromLegacy),
+    };
 }

@@ -18,19 +18,30 @@ import {
     readEmbeddedModinfo,
     readLegacyGrimoireMergeMeta,
     findImprintRepackMismatch,
+    hasLegacyGrimoireMergeMetaEntry,
+    reconstructMergedModInfoFromEmbed,
+    reconstructMergedModInfoFromLegacy,
     ADDONINFO_ENTRY,
     MODINFO_ENTRY,
+    LEGACY_GRIMOIRE_META_ENTRY,
     MODINFO_FORMAT,
     MODINFO_GAME,
     MODINFO_SCHEMA_VERSION,
     type AddonInfoFields,
     type ModinfoModRecord,
+    type ModinfoMergeSource,
+    type ReconstructedMergeManifest,
 } from './modinfoFormat';
-import { runVpkmerge } from './modMerger';
+import { runVpkmerge, embedMergeIdentity, buildPortableForMergeSources } from './modMerger';
+import { encodeShareCode } from './portableProfile';
 import {
     evaluateEmbedStaleness,
+    evaluateMergeEmbedStaleness,
+    classifyMissingMergeManifest,
     gameBananaPageUrl,
     refreshableFieldsFromMetadata,
+    refreshableMergeFieldsFromMetadata,
+    refreshableMergeFieldsFromRecord,
 } from './imprintStaleness';
 import { inferMissingVpkIndexes, type MetaLookup } from './profileResolver';
 import {
@@ -43,6 +54,7 @@ import type {
     ImprintInstalledProgress,
     ImprintPreflightResult,
     ImprintAnomalousMod,
+    MergedModInfo,
 } from '../../../src/types/mod';
 
 /**
@@ -143,11 +155,66 @@ function buildModinfoRecord(
  *  match the sidecar, so no repack is needed. 'stale' means a (re-)imprint is
  *  pending work: never imprinted, a legacy-only embed (migrates on re-imprint),
  *  or the sidecar changed after imprinting (associate / edit / re-label). Bulk
- *  and preflight both classify through here so they can never diverge. */
+ *  and preflight both classify through here so they can never diverge.
+ *
+ * A MERGED mod (`meta.merged` present) routes through the merge-record
+ * comparison instead: a merge's refreshable data is the title plus the whole
+ * source list, not the flat single-mod field set, so evaluateEmbedStaleness's
+ * single-mod compare does not apply. A merged mod whose embed is not itself a
+ * `kind: "merge"` record classifies stale too (never fresh): that shape only
+ * happens on a file mid-migration from the legacy format, and re-imprinting
+ * (which routes to the merge refresh path, never a flattening kind:"mod"
+ * write) is exactly the pending work that clears it. */
 function classifyEmbedFreshness(mod: Mod, meta: ModMetadata | undefined): 'fresh' | 'stale' {
+    if (meta?.merged) {
+        const embedded = readEmbeddedModinfo(mod.path);
+        const embeddedMerge = embedded?.kind === 'merge' ? refreshableMergeFieldsFromRecord(embedded) : null;
+        const current = refreshableMergeFieldsFromMetadata(meta.modName, meta.merged);
+        return evaluateMergeEmbedStaleness(embeddedMerge, current).stale ? 'stale' : 'fresh';
+    }
     const embedded = readEmbeddedModinfo(mod.path);
     const current = refreshableFieldsFromMetadata(meta, mod.name);
     return evaluateEmbedStaleness(embedded, current).stale ? 'stale' : 'fresh';
+}
+
+/**
+ * NEVER FLATTEN guard: decide what to do with a mod whose metadata sidecar has
+ * NO `merged` entry but whose file (embed or legacy companion) says it IS a
+ * merge. `meta.merged` being absent does not by itself mean "plain mod": a
+ * DB wipe, or an orphan-metadata prune racing a merge, can drop the sidecar
+ * entry while the file itself still carries the full source list. Re-imprinting
+ * such a file as kind:"mod" would permanently destroy that list, so this is
+ * checked BEFORE any single-mod imprint decision, for every candidate that
+ * lacks meta.merged.
+ *
+ * Returns null when the mod looks like a genuine plain mod (classifyMissingMergeManifest
+ * resolved to 'no-manifest-needed'): the caller proceeds with normal single-mod
+ * handling. Otherwise returns the reconstructed manifest fields (never re-embeds
+ * here; the caller's merge-refresh path does that) or the literal string
+ * 'orphan-merge' when the file positively looks like an orphaned merge but no
+ * source list could be read cleanly from either the embed or the legacy
+ * companion (skip + report, per the anomaly guard's contract).
+ */
+function classifyOrphanMerge(mod: Mod): ReconstructedMergeManifest | 'orphan-merge' | null {
+    const embedded = readEmbeddedModinfo(mod.path);
+    const legacy = readLegacyGrimoireMergeMeta(mod.path);
+    const embeddedKind = embedded?.kind ?? null;
+    const outcome = classifyMissingMergeManifest(embeddedKind, !!legacy?.sources);
+
+    if (outcome.kind === 'no-manifest-needed') return null;
+    if (outcome.kind === 'reconstruct-from-embed') {
+        // classifyMissingMergeManifest only returns this outcome when
+        // embeddedKind === 'merge', so `embedded` is a ModinfoMergeRecord here.
+        if (embedded?.kind !== 'merge') return 'orphan-merge';
+        return reconstructMergedModInfoFromEmbed(embedded);
+    }
+    // 'reconstruct-from-legacy': only returned when legacy.sources is non-null.
+    if (!legacy || !legacy.sources) return 'orphan-merge';
+    return reconstructMergedModInfoFromLegacy(
+        { ...legacy, sources: legacy.sources },
+        mod.name,
+        new Date().toISOString()
+    );
 }
 
 /** Does this VPK carry ANY Grimoire imprint, current or legacy? Drives only
@@ -248,11 +315,19 @@ async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reaso
  *
  * Before the swap the repacked output must pass a real parity check against
  * the input's entry tree (findImprintRepackMismatch): every carried entry
- * present with an unchanged logical size, nothing added beyond the two
- * imprint entries. A magic-bytes check alone (verifyVpkOutput) would accept a
- * structurally valid VPK that silently dropped or corrupted game content. Any
- * mismatch throws (landing in the caller's fail-soft per-mod handling) and
- * the original VPK keeps its slot.
+ * present with an unchanged logical size (except an expected `--drop-entry`
+ * removal), nothing added beyond the two imprint entries. A magic-bytes check
+ * alone (verifyVpkOutput) would accept a structurally valid VPK that silently
+ * dropped or corrupted game content. Any mismatch throws (landing in the
+ * caller's fail-soft per-mod handling) and the original VPK keeps its slot.
+ *
+ * A single-mod imprint record fully supersedes the old grimoire-branded merge
+ * companion (kind:"mod" never had one to begin with, but a file that started
+ * life as a legacy MERGE and is being handled as a plain mod here should not
+ * happen post-never-flatten; the check is defensive residue cleanup either
+ * way): when the input still carries a legacy grimoire_meta.json entry, it is
+ * passed to vpkmerge's `--drop-entry` so the residue is retired in the same
+ * repack that writes its replacement.
  */
 async function embedImprintInPlace(modPath: string, addonText: string, modinfoText: string): Promise<void> {
     const inputEntries = parseVpkEntryStats(modPath);
@@ -262,6 +337,7 @@ async function embedImprintInPlace(modPath: string, addonText: string, modinfoTe
     const addonTmp = join(tmpdir(), `grimoire-imprint-addoninfo-${randomUUID()}.txt`);
     const modinfoTmp = join(tmpdir(), `grimoire-imprint-modinfo-${randomUUID()}.json`);
     const embedOut = join(dirname(modPath), `.imprint-embed-${randomUUID()}.vpk`);
+    const droppedEntries = hasLegacyGrimoireMergeMetaEntry(modPath) ? [LEGACY_GRIMOIRE_META_ENTRY] : [];
     try {
         await fs.writeFile(addonTmp, addonText);
         await fs.writeFile(modinfoTmp, modinfoText);
@@ -275,12 +351,13 @@ async function embedImprintInPlace(modPath: string, addonText: string, modinfoTe
             `${ADDONINFO_ENTRY}=${addonTmp}`,
             '--extra-file',
             `${MODINFO_ENTRY}=${modinfoTmp}`,
+            ...droppedEntries.flatMap((entry) => ['--drop-entry', entry]),
         ]);
         const outputEntries = parseVpkEntryStats(embedOut);
         if (!outputEntries) {
             throw new Error('Imprint repack produced an unreadable VPK; the original was left untouched.');
         }
-        const mismatch = findImprintRepackMismatch(inputEntries, outputEntries);
+        const mismatch = findImprintRepackMismatch(inputEntries, outputEntries, droppedEntries);
         if (mismatch) {
             throw new Error(`Imprint repack parity check failed: ${mismatch}. The original was left untouched.`);
         }
@@ -332,6 +409,45 @@ async function imprintModCore(mod: Mod): Promise<void> {
 }
 
 /**
+ * Refresh a MERGED mod's embed in place (the merge counterpart of
+ * imprintModCore). Re-embeds via the exact same pass-2 machinery
+ * mergeModsLocked/extractMergeSourceLocked use (embedMergeIdentity), sourced
+ * from `merged.sources` (the CURRENT metadata sidecar's manifest, which is
+ * the authoritative source list; classifyEmbedFreshness already established
+ * this needs a refresh). The identity triple and firstImprintedAt are carried
+ * forward from whatever embed already exists (current or legacy shim) per the
+ * KEYSTONE carry-forward rule; only a merge with NO prior embed at all
+ * computes an original from the live bytes, exactly like a first single-mod
+ * imprint.
+ */
+async function imprintMergeCore(mod: Mod, merged: MergedModInfo, modName: string | undefined): Promise<void> {
+    const existingModinfo = readEmbeddedModinfo(mod.path);
+    const existingEmbed = readEmbeddedAddonInfo(mod.path) ?? undefined;
+    const original =
+        carryForwardOriginalIdentity(existingEmbed, readLegacyGrimoireMergeMeta(mod.path)) ??
+        (await computeOriginalIdentity(mod.path));
+    const writtenAt = new Date().toISOString();
+    const firstImprintedAt =
+        existingModinfo?.firstImprintedAt ?? existingEmbed?.buildDate ?? writtenAt;
+    const title = modName || merged.id;
+    const sources: ModinfoMergeSource[] = merged.sources.map((s) => ({
+        title: s.modName,
+        identity: { sha256: s.sha256AtMergeTime },
+        gamebananaId: s.gameBananaId,
+        gamebananaFileId: s.gameBananaFileId,
+        section: s.section,
+        priorityAtMergeTime: s.priorityAtMergeTime,
+        enabledAtMergeTime: s.enabledAtMergeTime,
+        fileNameAtMergeTime: s.fileName,
+        // vpkIndex is not tracked on MergedModSource (see the comment on
+        // RefreshableMergeSourceFields in imprintStaleness.ts); a refresh
+        // simply does not carry a per-source vpkIndex forward.
+    }));
+    await embedMergeIdentity(mod.path, title, writtenAt, original, sources, firstImprintedAt);
+    setModMetadata(mod.metaKey, { imprinted: true });
+}
+
+/**
  * Freeze legacy vpkIndexes BEFORE any imprint changes file sizes.
  *
  * Legacy multi-VPK GameBanana groups (installed before vpkIndex existed) get
@@ -374,7 +490,10 @@ export function freezeLegacyVpkIndexes(
  * GAME_RUNNING message merge / reorder use). Refuses anomalous files (the same
  * guard the bulk run applies): imprinting a hash-drifted file would enshrine
  * drifted bytes as "original", and a foreign addoninfo.txt must be reported,
- * not clobbered. Returns the post-imprint Mod.
+ * not clobbered. NEVER FLATTEN applies here too: a merged mod (or an orphan
+ * whose manifest gets recovered) routes through the merge-refresh path, never
+ * a plain single-mod re-imprint that would clobber the source list. Returns
+ * the post-imprint Mod.
  */
 export async function imprintOneMod(deadlockPath: string, modId: string): Promise<Mod> {
     return runExclusiveModMutation(async () => {
@@ -386,11 +505,28 @@ export async function imprintOneMod(deadlockPath: string, modId: string): Promis
         const mod = installed.find((m) => m.id === modId);
         if (!mod) throw new Error(`Mod not found: ${modId}`);
         assertCanMoveLoadedGameMod(mod);
+
+        let meta = getModMetadata(mod.metaKey);
+        if (!meta?.merged) {
+            const orphan = classifyOrphanMerge(mod);
+            if (orphan === 'orphan-merge') {
+                throw new Error(`Refusing to imprint ${mod.fileName}: orphan-merge`);
+            }
+            if (orphan !== null) {
+                recoverMergedModInfo(mod, orphan);
+                meta = getModMetadata(mod.metaKey);
+            }
+        }
+
         const anomaly = await checkImprintAnomaly(mod);
         if (anomaly) {
             throw new Error(`Refusing to imprint ${mod.fileName}: ${anomaly}`);
         }
-        await imprintModCore(mod);
+        if (meta?.merged) {
+            await imprintMergeCore(mod, meta.merged, meta.modName);
+        } else {
+            await imprintModCore(mod);
+        }
         // The imprint changes the file's bytes/size but not its name, so the id and
         // metaKey are stable; re-scan only to return up-to-date size/state.
         const rescanned = (await scanMods(deadlockPath)).find((m) => m.metaKey === mod.metaKey);
@@ -399,16 +535,42 @@ export async function imprintOneMod(deadlockPath: string, modId: string): Promis
 }
 
 /**
+ * Recover the metadata sidecar's `merged` entry for a mod that has none, by
+ * reconstructing it from the file's own embed or legacy companion (NEVER
+ * FLATTEN). Mints a fresh manifest id and regenerates the share code from the
+ * recovered source list (neither travels inside the VPK); persists the
+ * manifest to metadata immediately so classifyEmbedFreshness's merge path
+ * (and every subsequent read of this mod this run) sees it. Returns the
+ * restored `MergedModInfo`.
+ */
+function recoverMergedModInfo(mod: Mod, reconstructed: ReconstructedMergeManifest): MergedModInfo {
+    const merged: MergedModInfo = {
+        id: randomUUID(),
+        createdAt: reconstructed.createdAt,
+        shareCode: encodeShareCode(
+            JSON.stringify(buildPortableForMergeSources(reconstructed.sources, reconstructed.modName))
+        ),
+        sources: reconstructed.sources,
+    };
+    setModMetadata(mod.metaKey, { modName: reconstructed.modName, merged });
+    return merged;
+}
+
+/**
  * Retroactively imprint the whole installed library in place. Runs under the
  * mod-mutation lock; loaded mods are skipped and reported (never silently
  * failed), and per-mod failures are collected rather than aborting the batch.
- * Locker-managed artifacts (rebuilt automatically) and already-merged mods
- * (the merge path embeds a richer kind:"merge" record a single-mod imprint
- * would clobber) are excluded. Mods whose embed is current-format AND fresh
- * (refreshable fields still match the sidecar) are counted as imprinted
- * without a redundant re-pack; stale embeds (legacy-only, or the sidecar
- * changed after imprinting) are re-imprinted, which refreshes the descriptive
- * fields and migrates the format (identity + firstImprintedAt carried).
+ * Locker-managed artifacts (rebuilt automatically) are excluded, but merged
+ * mods are NOT: a merge whose embed has gone stale (never migrated to the
+ * current format, or its title/source list drifted from the sidecar) is
+ * pending work like any other stale embed, and processOne routes it through
+ * the merge-refresh path (imprintMergeCore) rather than a plain re-imprint,
+ * so the richer kind:"merge" record is refreshed in place, never clobbered
+ * with kind:"mod". Mods whose embed is current-format AND fresh (refreshable
+ * fields still match the sidecar) are counted as imprinted without a
+ * redundant re-pack; stale embeds (legacy-only, or the sidecar changed after
+ * imprinting) are re-imprinted, which refreshes the descriptive fields and
+ * migrates the format (identity + firstImprintedAt carried).
  */
 export async function imprintAllInstalled(
     deadlockPath: string,
@@ -426,7 +588,6 @@ export async function imprintAllInstalled(
         const candidates = installed.filter((mod) => {
             const meta = getModMetadata(mod.metaKey);
             if (!meta) return true;
-            if (meta.merged) return false;
             if (meta.lockerCosmetics || meta.lockerSounds || meta.lockerColors || meta.lockerTrippySkins) {
                 return false;
             }
@@ -438,7 +599,7 @@ export async function imprintAllInstalled(
         let done = 0;
 
         // Bounded worker pool: the dominant per-mod cost is the vpkmerge repack
-        // subprocess in embedAddonInfoInPlace, so overlapping several across cores
+        // subprocess in embedImprintInPlace, so overlapping several across cores
         // shrinks a bulk run wall-clock. The per-mod work is fully independent, and
         // JS is single-threaded: every shared-state mutation below (result.*, the
         // `done` counter + its onProgress emit, setModMetadata inside imprintModCore)
@@ -450,7 +611,7 @@ export async function imprintAllInstalled(
         let nextIndex = 0;
 
         const processOne = (mod: Mod): Promise<void> => {
-            const meta = getModMetadata(mod.metaKey);
+            let meta = getModMetadata(mod.metaKey);
             const modName = meta?.modName || mod.name;
 
             // Emit progress + classify once this mod is FULLY resolved, so done is
@@ -468,6 +629,24 @@ export async function imprintAllInstalled(
 
             return (async () => {
                 try {
+                    // NEVER FLATTEN: no `merged` sidecar entry, but the file's own
+                    // embed/legacy companion says it IS a merge. Recover the
+                    // manifest (persisting it to metadata) before any freshness
+                    // classification, since classifyEmbedFreshness's merge path
+                    // reads meta.merged. An unreconstructable orphan is reported
+                    // and skipped, never re-imprinted as a flattened kind:"mod".
+                    if (!meta?.merged) {
+                        const orphan = classifyOrphanMerge(mod);
+                        if (orphan === 'orphan-merge') {
+                            result.failed.push({ fileName: mod.fileName, modName, reason: 'orphan-merge' });
+                            return;
+                        }
+                        if (orphan !== null) {
+                            recoverMergedModInfo(mod, orphan);
+                            meta = getModMetadata(mod.metaKey);
+                        }
+                    }
+
                     if (classifyEmbedFreshness(mod, meta) === 'fresh') {
                         // Current-format and in step with the sidecar: no repack.
                         // Self-heal the UI hint: the embed is the truth, but the
@@ -488,7 +667,11 @@ export async function imprintAllInstalled(
                         result.failed.push({ fileName: mod.fileName, modName, reason: anomaly });
                         return;
                     }
-                    await imprintModCore(mod);
+                    if (meta?.merged) {
+                        await imprintMergeCore(mod, meta.merged, meta.modName);
+                    } else {
+                        await imprintModCore(mod);
+                    }
                     result.imprinted++;
                 } catch (err) {
                     // Fail-soft: a per-mod throw lands in failed and never aborts.
@@ -528,21 +711,34 @@ export async function imprintAllInstalled(
  *
  * Classification order (first match wins, so every candidate lands in exactly
  * one bucket and the six counts sum to scanMods()'s candidate count):
- *   1. locker-managed / merged -> auto-managed (excluded from bulk imprint).
+ *   1. locker-managed          -> auto-managed (excluded from bulk imprint).
+ *   1b. merged + FRESH         -> auto-managed (merge already reflects the
+ *                                 sidecar; no repack pending).
  *   2. blocked-loaded          -> the running game has it memory-mapped.
  *   3. already-imprinted       -> carries a CURRENT-format embed (modinfo.json)
  *                                 that is FRESH (refreshable fields match the
  *                                 sidecar). A legacy-only or stale embed
  *                                 classifies eligible: it IS pending work, the
- *                                 same way the bulk run treats it.
- *   4. anomalous               -> anomaly guard flagged it (skip + report).
- *   5. eligible                -> safe to imprint (includes stale re-imprints).
+ *                                 same way the bulk run treats it. A merged
+ *                                 mod whose embed is stale (never migrated, or
+ *                                 the source list/title drifted) ALSO lands
+ *                                 here: merged is no longer a blanket auto-
+ *                                 managed exclusion, only a fresh merge is.
+ *   4. anomalous               -> anomaly guard flagged it (skip + report),
+ *                                 including 'orphan-merge': the sidecar has no
+ *                                 `merged` entry but the file's own embed/
+ *                                 legacy companion positively looks like an
+ *                                 unreconstructable merge (NEVER FLATTEN).
+ *   5. eligible                -> safe to imprint (includes stale re-imprints,
+ *                                 merged or not).
  *
- * Ordering merged/locker before already-imprinted matches imprintAllInstalled,
- * which excludes those from its candidate set entirely. Ordering blocked-loaded
- * before already-imprinted mirrors the bulk loop (loaded is checked first, so a
- * loaded-but-already-imprinted mod reports as loaded, consistent across both).
- * The anomaly guard never re-records any canonical identity (KEYSTONE).
+ * Ordering locker before already-imprinted matches imprintAllInstalled, which
+ * excludes Locker-managed artifacts from its candidate set entirely (merged
+ * mods are no longer excluded there either, mirroring this). Ordering
+ * blocked-loaded before already-imprinted mirrors the bulk loop (loaded is
+ * checked first, so a loaded-but-already-imprinted mod reports as loaded,
+ * consistent across both). The anomaly guard never re-records any canonical
+ * identity (KEYSTONE).
  */
 export async function imprintPreflight(deadlockPath: string): Promise<ImprintPreflightResult> {
     return runExclusiveModMutation(async () => {
@@ -568,11 +764,7 @@ export async function imprintPreflight(deadlockPath: string): Promise<ImprintPre
             const meta = getModMetadata(mod.metaKey);
             const modName = meta?.modName || mod.name;
 
-            // 1. Auto-managed (merged or Locker): excluded from bulk imprint.
-            if (meta?.merged) {
-                result.counts.merged++;
-                continue;
-            }
+            // 1. Locker-managed: excluded from bulk imprint (rebuilt automatically).
             if (
                 meta?.lockerCosmetics ||
                 meta?.lockerSounds ||
@@ -583,6 +775,14 @@ export async function imprintPreflight(deadlockPath: string): Promise<ImprintPre
                 continue;
             }
 
+            // 1b. Merged + fresh: auto-managed, no pending work. A merged mod
+            // whose embed is STALE falls through (it is pending work, handled
+            // by bucket 3 below, same shape as a stale single-mod embed).
+            if (meta?.merged && classifyEmbedFreshness(mod, meta) === 'fresh') {
+                result.counts.merged++;
+                continue;
+            }
+
             // 2. Loaded by the running game (a hard imprint refusal).
             if (isLoadedGameModLocked(mod)) {
                 result.counts.blockedLoaded++;
@@ -590,12 +790,31 @@ export async function imprintPreflight(deadlockPath: string): Promise<ImprintPre
                 continue;
             }
 
-            // 3. Already carries a current-format embed that is still fresh.
+            // 3. Already carries a current-format embed that is still fresh
+            //    (single mod; a fresh merge was already caught at 1b, so
+            //    reaching here with meta.merged set means it was stale).
             //    Stale (legacy-only or sidecar-drifted) falls through: the
             //    anomaly guard exempts valid embeds, so it lands in eligible.
-            if (classifyEmbedFreshness(mod, meta) === 'fresh') {
+            if (!meta?.merged && classifyEmbedFreshness(mod, meta) === 'fresh') {
                 result.counts.alreadyImprinted++;
                 continue;
+            }
+
+            // NEVER FLATTEN: no `merged` sidecar entry, but the file's own
+            // embed/legacy companion says otherwise. Checked before the
+            // anomaly guard so an unreconstructable orphan merge reports as
+            // 'orphan-merge' specifically, not a generic anomaly reason.
+            if (!meta?.merged) {
+                const orphan = classifyOrphanMerge(mod);
+                if (orphan === 'orphan-merge') {
+                    result.counts.anomalous++;
+                    result.anomalous.push({ fileName: mod.fileName, modName, reason: 'orphan-merge' });
+                    continue;
+                }
+                // A reconstructable manifest (or null, a genuine plain mod)
+                // both proceed to the normal anomaly guard + eligible bucket:
+                // preflight never mutates metadata, so the reconstruction
+                // itself happens only when the bulk run actually imprints.
             }
 
             // 4. Anomaly guard (skip + report, never re-stamp: KEYSTONE).
