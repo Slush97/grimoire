@@ -6211,6 +6211,7 @@ function UnknownEmbeddedCard({
       await onAssociate(mod, {
         gameBananaId: match.modId,
         modName: match.modName ?? mod.name,
+        gameBananaFileId: match.fileId,
         thumbnailUrl: match.thumbnailUrl,
         nsfw: match.nsfw,
         categoryName: match.categoryName,

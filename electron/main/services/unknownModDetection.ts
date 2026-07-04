@@ -8,7 +8,7 @@ import {
     type GameBananaModsResponse,
 } from './gamebanana';
 import { parseVpkDirectory, parseVpkDirectoryCached } from './vpk';
-import { resolveVpkIdentity } from './vpkIdentity';
+import { carryForwardOriginalIdentity, readEmbeddedAddonInfo } from './vpkIdentity';
 import { readEmbeddedModinfo } from './modinfoFormat';
 import { fingerprintFilesInWorkers, type FileFingerprintResult } from './workers';
 import {
@@ -296,11 +296,18 @@ async function detectFromEmbed(
     vpkPath: string,
     signal?: AbortSignal
 ): Promise<UnknownModFilterGuess | null> {
+    if (signal?.aborted) return null;
+    // Cheap presence probe: the cached directory parse detects an embed
+    // without reading the whole file. The same validity rule as
+    // resolveVpkIdentity's embed arm (a parseable addoninfo.txt carrying the
+    // original-identity anchor), but without its live fallback, which used to
+    // whole-file-hash every non-imprinted VPK here only for the result to be
+    // discarded.
     let embedded;
     try {
-        const identity = await resolveVpkIdentity(vpkPath, signal);
-        if (identity.source !== 'embed' || !identity.embedded) return null;
-        embedded = identity.embedded;
+        const parsed = readEmbeddedAddonInfo(vpkPath);
+        if (!parsed || !carryForwardOriginalIdentity(parsed)) return null;
+        embedded = parsed;
     } catch {
         return null;
     }
@@ -329,10 +336,39 @@ async function detectFromEmbed(
         };
     }
 
-    // A single tagged mod carrying its GameBanana submission id.
+    // A single tagged mod carrying its GameBanana submission id. Prefer the
+    // machine record (modinfo.json): GameBanana sections are separate id
+    // namespaces (Mod/<id> vs Sound/<id>), so section and file id must ride
+    // along or a Sound mod resolves against the wrong submission.
+    if (modinfo?.kind === 'mod' && modinfo.source?.gamebananaId) {
+        return {
+            ...base,
+            crcMatch: {
+                ...emptyCrcMatch('found'),
+                status: 'found',
+                provenance: 'embedded-metadata',
+                modId: modinfo.source.gamebananaId,
+                modName: modinfo.title ?? base.search ?? undefined,
+                fileId: modinfo.source.gamebananaFileId,
+                fileName,
+                section: modinfo.source.section === 'Sound' ? 'Sound' : 'Mod',
+                categoryName: modinfo.source.categoryName,
+                confidence: 'exact',
+                reason: 'Identified from embedded Grimoire metadata (no network).',
+            },
+        };
+    }
+
+    // Legacy fallback: pre-modinfo imprints carry only the addoninfo keys.
+    // The section is recoverable from the source URL's path (the inverse of
+    // gameBananaPageUrl's mapping); left undefined when not derivable.
     if (embedded.gamebananaId) {
         const gbId = Number(embedded.gamebananaId);
         if (Number.isFinite(gbId) && gbId > 0) {
+            const legacyFileId = Number(embedded.gamebananaFileId);
+            let section: 'Mod' | 'Sound' | undefined;
+            if (embedded.sourceUrl?.includes('/sounds/')) section = 'Sound';
+            else if (embedded.sourceUrl?.includes('/mods/')) section = 'Mod';
             return {
                 ...base,
                 crcMatch: {
@@ -341,7 +377,12 @@ async function detectFromEmbed(
                     provenance: 'embedded-metadata',
                     modId: gbId,
                     modName: embedded.title ?? base.search ?? undefined,
+                    fileId:
+                        Number.isFinite(legacyFileId) && legacyFileId > 0
+                            ? legacyFileId
+                            : undefined,
                     fileName,
+                    section,
                     confidence: 'exact',
                     reason: 'Identified from embedded Grimoire metadata (no network).',
                 },
