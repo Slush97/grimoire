@@ -30,6 +30,9 @@ import {
   setModMetadataWithHash,
   getModMetadata,
   removeModMetadata,
+  loadMetadata,
+  hashFileSha256,
+  backupMetadataSidecar,
   type ModMetadata,
 } from './metadata';
 import {
@@ -51,6 +54,70 @@ export interface DmmMigrationOptions extends DmmMigrationRequest {
   deadlockPath: string;
   /** Dry run: build the plan + preview without copying anything. */
   planOnly?: boolean;
+  /** Validates a submission id against Grimoire's local GameBanana catalog
+   *  (mods-cache.db). Injected by the IPC layer so this service stays free of
+   *  native sqlite imports (its tests run without Electron). Omitted = catalog
+   *  unavailable, check skipped. Guards against stamping a bogus id (e.g. a
+   *  digit-prefixed filename that isn't a GameBanana id) onto a real file:
+   *  such ids render as arbitrary submissions from unrelated games. */
+  isKnownSubmission?: (submissionId: number) => boolean;
+}
+
+/** Tolerance when comparing a VPK's mtime against the mtime of the DMM record
+ *  that claims it (filesystems and DMM's deploy-then-save ordering can put
+ *  them within the same second). */
+const STALE_CLAIM_SLACK_MS = 2000;
+
+/** Collapse a name to lowercase alphanumerics for fuzzy comparison. */
+function normalizeForMatch(value: string): string {
+  return value.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+/** Whether the on-disk filename resembles the DMM record's own name for the
+ *  mod (display name or source archive stem). Rescues legitimate adoptions
+ *  whose mtime corroboration fails because the files were copied to a new
+ *  drive or machine (copies refresh mtimes). */
+function nameCorroborates(fileName: string, entry: DmmAdoptionEntry): boolean {
+  let stem = fileName.replace(/_dir\.vpk$/i, '').replace(/\.vpk$/i, '');
+  stem = stem.replace(/^pak\d{2}_?/i, '');
+  const normalizedStem = normalizeForMatch(stem);
+  if (normalizedStem.length < 5) return false;
+  for (const candidate of [entry.modName, entry.sourceFileName]) {
+    if (!candidate) continue;
+    const normalized = normalizeForMatch(candidate);
+    if (normalized.length < 5) continue;
+    if (normalizedStem.includes(normalized) || normalized.includes(normalizedStem)) return true;
+  }
+  return false;
+}
+
+/**
+ * Staleness guard. DMM's records claim shared pakNN/.disabled slots by bare
+ * path, and Grimoire reuses those exact slots, so a record written long ago
+ * can now point at a completely different mod. Stamping DMM's identity onto
+ * such a file hijacks it (wrong name/thumbnail/GameBanana id on a real mod).
+ * A claim is trusted only when the file is provably the one DMM recorded:
+ *  - the filename carries the submission-id prefix DMM mints (`<id>_*.vpk`), or
+ *  - the file is not newer than the DMM record that claims it (a slot Grimoire
+ *    reused was rewritten AFTER DMM last saved its bookkeeping), or
+ *  - the filename matches the mod's recorded name.
+ */
+async function claimCorroborated(
+  src: string,
+  entry: DmmAdoptionEntry,
+  claimMtimeMs: number
+): Promise<boolean> {
+  const name = basename(src);
+  if (name.toLowerCase().startsWith(`${entry.submissionId}_`)) return true;
+  if (claimMtimeMs > 0) {
+    try {
+      const stat = await fs.stat(src);
+      if (stat.mtimeMs <= claimMtimeMs + STALE_CLAIM_SLACK_MS) return true;
+    } catch {
+      return false;
+    }
+  }
+  return nameCorroborates(name, entry);
 }
 
 /** Candidate on-disk locations of DMM's state.json. Tauri's store-plugin base
@@ -275,18 +342,81 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
     profileName: plan.profileName,
     enrichment,
     mode,
-    preview: planToPreview(plan),
+    preview: [],
     adopted: [],
     skipped: [],
     warnings: [...plan.warnings],
   };
 
+  // Idempotency + validity filters run BEFORE the preview is built, so scan
+  // and execute agree on the same entry set and a re-run (another Fix Unknown
+  // click) is a true no-op for everything adopted last time, instead of
+  // minting duplicate slots/copies of it.
+  const allMetadata = loadMetadata();
+  const managedSubmissionIds = new Set<number>();
+  const managedHashes = new Set<string>();
+  for (const meta of Object.values(allMetadata)) {
+    if (meta.gameBananaId !== undefined) managedSubmissionIds.add(meta.gameBananaId);
+    if (meta.sha256) managedHashes.add(meta.sha256.toLowerCase());
+  }
+
+  const adoptableEntries: DmmAdoptionEntry[] = [];
+  let unknownToCatalog = 0;
+  for (const entry of plan.entries) {
+    if (managedSubmissionIds.has(entry.submissionId)) {
+      report.skipped.push({
+        submissionId: entry.submissionId,
+        reason: 'already managed by Grimoire (submission id present in metadata)',
+      });
+    } else if (opts.isKnownSubmission && !opts.isKnownSubmission(entry.submissionId)) {
+      unknownToCatalog++;
+      report.skipped.push({
+        submissionId: entry.submissionId,
+        reason:
+          'submission id not found in the local GameBanana catalog (wrong id or catalog out of date); left for manual identification',
+      });
+    } else {
+      adoptableEntries.push(entry);
+    }
+  }
+  if (unknownToCatalog > 0) {
+    report.warnings.push(
+      `${unknownToCatalog} mod(s) skipped: their DMM submission id is not in the local GameBanana catalog.`
+    );
+  }
+  report.preview = planToPreview({ ...plan, entries: adoptableEntries });
+
   if (opts.planOnly) return report;
+
+  // Staleness reference: a file claim is only as fresh as the DMM bookkeeping
+  // file that made it (the manifest when present, else state.json).
+  let claimMtimeMs = 0;
+  try {
+    const claimFile = manifestHit ? manifestHit.path : statePath;
+    claimMtimeMs = (await fs.stat(claimFile)).mtimeMs;
+  } catch {
+    claimMtimeMs = 0;
+  }
+
+  // Recoverability: back up the metadata sidecar before the first identity
+  // write (lazily, inside the batch), so a bad import can be rolled back by
+  // restoring one file. (The IPC layer additionally takes a mod snapshot.)
+  // Lazy on purpose: an execute whose every file is skipped (e.g. a
+  // perpetually stale entry re-clicked repeatedly) writes nothing and must
+  // not mint a backup, or it would rotate the REAL pre-import backup out of
+  // the pruned set. Non-fatal on failure.
+  let sidecarBackedUp = false;
+  const backupSidecarOnce = () => {
+    if (sidecarBackedUp) return;
+    sidecarBackedUp = true;
+    const backupPath = backupMetadataSidecar('pre-dmm-import');
+    if (backupPath) console.log(`[DMM] metadata sidecar backed up to ${backupPath}`);
+  };
 
   // Adopt enabled mods first (ascending priority so sequential slot allocation
   // -> pak01, pak02, ... preserves load order in copy mode; harmless in-place),
   // then disabled mods.
-  const ordered = [...plan.entries].sort((a, b) => {
+  const ordered = [...adoptableEntries].sort((a, b) => {
     if (a.enabled !== b.enabled) return a.enabled ? -1 : 1;
     return a.priority - b.priority;
   });
@@ -312,6 +442,31 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
         const src = await locateVpk(dmmAddonsDir, [vpkName]);
         if (!src) {
           fileSkips.push(`${vpkName} (not found on disk)`);
+          continue;
+        }
+
+        // Staleness guard: only adopt a file the DMM record provably still
+        // describes; a shared slot Grimoire has since reused must stay
+        // untouched (see claimCorroborated).
+        if (!(await claimCorroborated(src, entry, claimMtimeMs))) {
+          fileSkips.push(
+            `${vpkName} (file is newer than the DMM record claiming it; possibly a reused slot, left for manual identification)`
+          );
+          continue;
+        }
+
+        // Content dedupe: if a byte-identical file is already managed (e.g. a
+        // copy minted by an earlier import run whose metadata lost the id),
+        // adopting another copy only duplicates the mod.
+        let srcHash: string;
+        try {
+          srcHash = (await hashFileSha256(src)).toLowerCase();
+        } catch (err) {
+          fileSkips.push(`${vpkName} (${err instanceof Error ? err.message : String(err)})`);
+          continue;
+        }
+        if (managedHashes.has(srcHash)) {
+          fileSkips.push(`${vpkName} (an identical file is already managed by Grimoire)`);
           continue;
         }
 
@@ -367,8 +522,10 @@ export async function migrateDmmInstall(opts: DmmMigrationOptions): Promise<DmmM
           // is only guaranteed free on disk, so a stale entry from a deleted mod
           // could otherwise bleed its fields (lockerHero, merged, thumbnail) into
           // this one via setModMetadata's shallow merge.
+          backupSidecarOnce();
           removeModMetadata(metaKey);
           await setModMetadataWithHash(metaKey, meta, destPath);
+          managedHashes.add(srcHash);
           adoptedKeys.push(metaKey);
         } catch (err) {
           fileSkips.push(`${vpkName} (${err instanceof Error ? err.message : String(err)})`);

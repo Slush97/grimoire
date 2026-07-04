@@ -1,7 +1,8 @@
 /** Reason a snapshot was taken. Automatic triggers fire before destructive
  *  operations that overwrite installed mods (update from Browse,
- *  apply-profile swap). `manual` is the "Snapshot now" button. */
-export type SnapshotTrigger = 'pre-update' | 'pre-apply-profile' | 'manual';
+ *  apply-profile swap, the DMM import's batch identity write). `manual` is
+ *  the "Snapshot now" button. */
+export type SnapshotTrigger = 'pre-update' | 'pre-apply-profile' | 'pre-dmm-import' | 'manual';
 
 /** Summary used by the list view. Keeps the wire small when the user has
  *  accumulated many snapshots — the full PortableProfile only crosses the
