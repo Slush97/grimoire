@@ -977,9 +977,14 @@
       "fixHiddenHint": "Fix unknown is hidden. Right-click to bring it back.",
       "fixButtonHint": "Find GameBanana matches or add custom metadata for unknown local mods. Right-click to hide this button.",
       "fixButton": "Fix unknown ({{count}})",
-      "dmmDetected": "Deadlock Mod Manager mods detected, importing...",
-      "dmmImported_one": "Detected and imported {{count}} mod from Deadlock Mod Manager",
-      "dmmImported_other": "Detected and imported {{count}} mods from Deadlock Mod Manager",
+      "dmmDetected": "Importing Deadlock Mod Manager mods...",
+      "dmmConfirmTitle": "Import Deadlock Mod Manager mods?",
+      "dmmConfirmMessage_one": "Grimoire found a Deadlock Mod Manager library (profile: {{profile}}) with {{count}} mod it doesn't manage yet. Import it? A snapshot and a metadata backup are taken first, and Deadlock Mod Manager's own files are never moved or deleted. Skipping goes straight to manual identification.",
+      "dmmConfirmMessage_other": "Grimoire found a Deadlock Mod Manager library (profile: {{profile}}) with {{count}} mods it doesn't manage yet. Import them? A snapshot and a metadata backup are taken first, and Deadlock Mod Manager's own files are never moved or deleted. Skipping goes straight to manual identification.",
+      "dmmConfirmImport": "Import",
+      "dmmConfirmSkip": "Skip",
+      "dmmImported_one": "Imported {{count}} mod from Deadlock Mod Manager",
+      "dmmImported_other": "Imported {{count}} mods from Deadlock Mod Manager",
       "dmmImportFailed": "Could not import Deadlock Mod Manager mods",
       "checkingCrcCache": "Checking local CRC cache...",
       "noCachedMatch": "No cached match found. Queued for online search.",
@@ -1695,11 +1700,13 @@
       "trigger": {
         "preUpdate": "Before mod update",
         "preApplyProfile": "Before applying profile",
+        "preDmmImport": "Before DMM import",
         "manual": "Manual snapshot"
       },
       "explanation": {
         "preUpdate": "Captured before a mod update changed your installed set.",
         "preApplyProfile": "Captured before applying a profile changed your installed set.",
+        "preDmmImport": "Captured before importing mods from Deadlock Mod Manager.",
         "manual": "Captured manually from the Profiles page."
       },
       "unselect": "Unselect snapshot",

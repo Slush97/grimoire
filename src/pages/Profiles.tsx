@@ -569,12 +569,16 @@ export default function Profiles() {
                       ? t('profiles.snapshots.trigger.preUpdate')
                       : snap.trigger === 'pre-apply-profile'
                       ? t('profiles.snapshots.trigger.preApplyProfile')
+                      : snap.trigger === 'pre-dmm-import'
+                      ? t('profiles.snapshots.trigger.preDmmImport')
                       : t('profiles.snapshots.trigger.manual');
                   const triggerExplanation =
                     snap.trigger === 'pre-update'
                       ? t('profiles.snapshots.explanation.preUpdate')
                       : snap.trigger === 'pre-apply-profile'
                       ? t('profiles.snapshots.explanation.preApplyProfile')
+                      : snap.trigger === 'pre-dmm-import'
+                      ? t('profiles.snapshots.explanation.preDmmImport')
                       : t('profiles.snapshots.explanation.manual');
                   return (
                     <li

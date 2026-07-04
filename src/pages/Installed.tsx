@@ -1025,6 +1025,13 @@ export default function Installed() {
   // state, so two clicks in the same tick can't both read a stale `false`.
   const dmmAutoImportInFlightRef = useRef(false);
   const [dmmAutoImporting, setDmmAutoImporting] = useState(false);
+  // Pending DMM-import consent dialog. Holds the promise resolver so
+  // autoImportDmmMods can await the user's answer; null = no dialog.
+  const [dmmConfirm, setDmmConfirm] = useState<{
+    count: number;
+    profileName: string;
+    resolve: (ok: boolean) => void;
+  } | null>(null);
   const [unknownFilterCache, setUnknownFilterCache] = useState<Record<string, UnknownModFilterGuess>>({});
   const [unknownFilterPendingIds, setUnknownFilterPendingIds] = useState<Set<string>>(new Set());
   const [unknownFilterErrors, setUnknownFilterErrors] = useState<Record<string, string>>({});
@@ -1496,6 +1503,14 @@ export default function Installed() {
     );
     const freshEntries = scan.preview.filter((p) => !managedGbIds.has(p.submissionId));
     if (freshEntries.length === 0) return currentUnknowns;
+
+    // Consent gate: importing writes mod identities in batch, so it never
+    // runs on a toast alone. The dialog says what was found; declining goes
+    // straight to manual identification.
+    const consent = await new Promise<boolean>((resolve) =>
+      setDmmConfirm({ count: freshEntries.length, profileName: scan.profileName, resolve })
+    );
+    if (!consent) return currentUnknowns;
 
     showToast(t('installed.unknown.dmmDetected'), { tone: 'info', duration: 4000 });
 
@@ -4090,6 +4105,26 @@ export default function Installed() {
           onClose={closeUnknownFix}
         />
       )}
+
+      {/* Consent gate for the DMM auto-import step of Fix Unknown Mods. */}
+      <ConfirmModal
+        isOpen={dmmConfirm !== null}
+        title={t('installed.unknown.dmmConfirmTitle')}
+        message={t('installed.unknown.dmmConfirmMessage', {
+          count: dmmConfirm?.count ?? 0,
+          profile: dmmConfirm?.profileName ?? '',
+        })}
+        confirmLabel={t('installed.unknown.dmmConfirmImport')}
+        cancelLabel={t('installed.unknown.dmmConfirmSkip')}
+        onConfirm={() => {
+          dmmConfirm?.resolve(true);
+          setDmmConfirm(null);
+        }}
+        onCancel={() => {
+          dmmConfirm?.resolve(false);
+          setDmmConfirm(null);
+        }}
+      />
 
       {customUnknownMod && (
         <ImportCustomModModal

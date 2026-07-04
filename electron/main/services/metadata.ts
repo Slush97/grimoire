@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
-import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync } from 'fs';
+import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync, mkdirSync, copyFileSync, readdirSync } from 'fs';
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
 import { getMetadataPath } from '../utils/paths';
 
@@ -261,7 +261,45 @@ function isValidSha256(value: string | undefined): boolean {
     return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
 }
 
-async function hashFileSha256(filePath: string): Promise<string> {
+/**
+ * Copy the metadata sidecar into mod-metadata.backups/<timestamp>_<tag>.json
+ * before a batch identity mutation (e.g. the DMM import), so a bad batch can
+ * be rolled back by restoring the file. Keeps the newest `keep` backups.
+ * Returns the backup path, or null when there is no sidecar yet. Never
+ * throws: a failed backup must not block the operation itself, so failures
+ * log a warning and return null.
+ */
+export function backupMetadataSidecar(tag: string, keep = 5): string | null {
+    const path = getMetadataPath();
+    if (!existsSync(path)) return null;
+
+    try {
+        const dir = join(dirname(path), 'mod-metadata.backups');
+        mkdirSync(dir, { recursive: true });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = join(dir, `${stamp}_${tag}.json`);
+        copyFileSync(path, backupPath);
+
+        // Prune old backups: ISO-stamped names sort chronologically, so a
+        // descending sort puts the newest first.
+        const stale = readdirSync(dir)
+            .filter((name) => name.endsWith('.json'))
+            .sort()
+            .reverse()
+            .slice(keep);
+        for (const name of stale) {
+            try {
+                unlinkSync(join(dir, name));
+            } catch { /* ignore prune failure */ }
+        }
+        return backupPath;
+    } catch (error) {
+        console.warn('[Metadata] Sidecar backup failed:', error);
+        return null;
+    }
+}
+
+export async function hashFileSha256(filePath: string): Promise<string> {
     const hash = createHash('sha256');
 
     await new Promise<void>((resolve, reject) => {
