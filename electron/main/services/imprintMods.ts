@@ -42,6 +42,11 @@ import {
     refreshableFieldsFromMetadata,
     refreshableMergeFieldsFromMetadata,
     refreshableMergeFieldsFromRecord,
+    deriveAdoptionPatch,
+    adoptionFieldsFromModRecord,
+    adoptionFieldsFromLegacyAddonInfo,
+    refreshableFieldsFromRecord,
+    type AdoptionPatch,
 } from './imprintStaleness';
 import { inferMissingVpkIndexes, type MetaLookup } from './profileResolver';
 import {
@@ -166,15 +171,121 @@ function buildModinfoRecord(
  * (which routes to the merge refresh path, never a flattening kind:"mod"
  * write) is exactly the pending work that clears it. */
 function classifyEmbedFreshness(mod: Mod, meta: ModMetadata | undefined): 'fresh' | 'stale' {
+    return classifyEmbedFreshnessAt(mod.path, mod.name, meta);
+}
+
+/**
+ * classifyEmbedFreshness's actual implementation, keyed by a bare path + scan-
+ * name fallback instead of a full scanned Mod. Exported so callers that
+ * haven't scanned yet (import-custom-mod stamps imprinted/imprintStale for a
+ * freshly-copied VPK before the post-copy scanMods runs) can classify against
+ * the embed without waiting for a rescan, using the exact same rule bulk/
+ * preflight/backfill all share.
+ */
+export function classifyEmbedFreshnessAt(
+    path: string,
+    fallbackName: string,
+    meta: ModMetadata | undefined
+): 'fresh' | 'stale' {
     if (meta?.merged) {
-        const embedded = readEmbeddedModinfo(mod.path);
+        const embedded = readEmbeddedModinfo(path);
         const embeddedMerge = embedded?.kind === 'merge' ? refreshableMergeFieldsFromRecord(embedded) : null;
         const current = refreshableMergeFieldsFromMetadata(meta.modName, meta.merged);
         return evaluateMergeEmbedStaleness(embeddedMerge, current).stale ? 'stale' : 'fresh';
     }
-    const embedded = readEmbeddedModinfo(mod.path);
-    const current = refreshableFieldsFromMetadata(meta, mod.name);
+    const embedded = readEmbeddedModinfo(path);
+    const current = refreshableFieldsFromMetadata(meta, fallbackName);
     return evaluateEmbedStaleness(embedded, current).stale ? 'stale' : 'fresh';
+}
+
+/**
+ * Read whatever Grimoire embed `mod.path` carries (current-format modinfo.json
+ * first, else the legacy addoninfo.txt keys) and project it onto
+ * deriveAdoptionPatch's flat input shape. Returns null when the file carries
+ * no recoverable Grimoire embed at all (a genuinely fresh local import), the
+ * same "nothing to adopt from" signal deriveAdoptionPatch expects.
+ *
+ * A `kind: "merge"` embed returns null here too (NEVER FLATTEN's mirror image):
+ * a merge's addoninfo.txt carries only its merge title + the fixed
+ * MERGE_ADDON_AUTHOR label ("Multiple (merged)"), never a gamebananaId, but
+ * leaking even that much through the legacy-shaped fallback below would stamp
+ * a plain single-mod import's `author` field with a merge label if the user
+ * ever re-imports an already-merged VPK as a "custom mod" (a raw copy, not
+ * routed through recoverMergedModInfo the way the imprint bulk/preflight/
+ * backfill paths are). Merges have their own recovery machinery
+ * (classifyOrphanMerge/recoverMergedModInfo) for the paths that actually need
+ * it; this flat single-mod adoption patch is never the right tool for a merge,
+ * so it opts out at the read step rather than relying solely on every caller
+ * remembering to check `!meta?.merged` first.
+ */
+export function readAdoptionEmbedFields(modPath: string): ReturnType<typeof adoptionFieldsFromModRecord> | null {
+    const current = readEmbeddedModinfo(modPath);
+    if (current) {
+        return current.kind === 'mod' ? adoptionFieldsFromModRecord(refreshableFieldsFromRecord(current)) : null;
+    }
+    const legacyEmbed = readEmbeddedAddonInfo(modPath);
+    if (legacyEmbed) {
+        const carried = carryForwardOriginalIdentity(legacyEmbed, readLegacyGrimoireMergeMeta(modPath));
+        // Only a RECOVERABLE Grimoire embed (current keys or the legacy shim)
+        // counts as adoption material; a foreign addoninfo.txt has no basis for
+        // trust and is handled elsewhere by the anomaly guard. A legacy MERGE
+        // companion (hasLegacyGrimoireMergeMetaEntry) is excluded the same way
+        // a current-format merge record is above.
+        if (carried && !hasLegacyGrimoireMergeMetaEntry(modPath)) {
+            return adoptionFieldsFromLegacyAddonInfo({
+                title: legacyEmbed.title,
+                author: legacyEmbed.author,
+                gamebananaId: legacyEmbed.gamebananaId,
+                gamebananaFileId: legacyEmbed.gamebananaFileId,
+            });
+        }
+    }
+    return null;
+}
+
+/**
+ * Compute the adoption patch for a non-merged candidate: the fields its own
+ * embed knows that the CURRENT sidecar (`meta`) does not. Shared by
+ * imprintPreflight (classifies against this WITHOUT persisting) and
+ * imprintAllInstalled's processOne (persists it before classifying), so the
+ * two can never diverge on what adoption would do. Callers must have already
+ * established `!meta?.merged` (or equivalent): this never inspects
+ * meta.merged itself and always treats the candidate as a plain mod.
+ */
+function computeAdoptionPatch(mod: Mod, meta: ModMetadata | undefined): AdoptionPatch {
+    return computeAdoptionPatchAt(mod.path, meta);
+}
+
+/**
+ * computeAdoptionPatch's actual implementation, keyed by a bare path instead
+ * of a scanned Mod. Exported for import-custom-mod (ipc/mods.ts), which needs
+ * to adopt from a freshly-copied VPK's own embed before the post-copy
+ * scanMods has run.
+ */
+export function computeAdoptionPatchAt(path: string, meta: ModMetadata | undefined): AdoptionPatch {
+    const embed = readAdoptionEmbedFields(path);
+    return deriveAdoptionPatch(embed, meta);
+}
+
+/** True when an AdoptionPatch has at least one field to apply. Exported for
+ *  import-custom-mod, which needs the same "is there anything to merge" check
+ *  before deciding whether to touch the freshly-stamped sidecar entry. */
+export function hasAdoptionFields(patch: AdoptionPatch): boolean {
+    return Object.keys(patch).length > 0;
+}
+
+/** In-memory merge of an adoption patch onto a sidecar snapshot, WITHOUT
+ *  writing anything. imprintPreflight's whole contract is read-only, so it
+ *  classifies against this hypothetical merge instead of calling
+ *  setModMetadata like imprintAllInstalled's processOne does; both go through
+ *  computeAdoptionPatch first, so what gets merged here is identical to what
+ *  the bulk run would actually persist. */
+function applyAdoptionPatch(
+    meta: ModMetadata | undefined,
+    patch: AdoptionPatch
+): ModMetadata | undefined {
+    if (!hasAdoptionFields(patch)) return meta;
+    return { ...meta, ...patch };
 }
 
 /**
@@ -219,8 +330,12 @@ function classifyOrphanMerge(mod: Mod): ReconstructedMergeManifest | 'orphan-mer
 
 /** Does this VPK carry ANY Grimoire imprint, current or legacy? Drives only
  *  the `imprinted` metadata flag (UI hint): a legacy embed still counts as
- *  imprinted for the flag even though it is stale format-wise. */
-function hasAnyImprint(vpkPath: string): boolean {
+ *  imprinted for the flag even though it is stale format-wise. Exported for
+ *  import-custom-mod (ipc/mods.ts), which needs this same any-embed check
+ *  (including a `kind: "merge"` embed, which readAdoptionEmbedFields
+ *  deliberately excludes) to stamp `imprinted` honestly for a re-imported
+ *  already-imprinted file regardless of whether it happens to be a merge. */
+export function hasAnyImprint(vpkPath: string): boolean {
     if (readEmbeddedModinfo(vpkPath) !== null) return true;
     const embed = readEmbeddedAddonInfo(vpkPath) ?? undefined;
     return carryForwardOriginalIdentity(embed, readLegacyGrimoireMergeMeta(vpkPath)) !== null;
@@ -648,6 +763,25 @@ export async function imprintAllInstalled(
                         }
                     }
 
+                    // ADOPTION: a non-merged candidate's own embed may know
+                    // gamebananaId/author/category/etc. the sidecar doesn't (an
+                    // imported already-imprinted orphan, or metadata loss). Persist
+                    // the patch BEFORE classifying, synchronously (no await in
+                    // between), so classifyEmbedFreshness compares the embed
+                    // against the now-adopted sidecar, not the impoverished one -
+                    // otherwise the embed would read as stale and the next line
+                    // would re-imprint FROM the impoverished sidecar, destroying
+                    // exactly the data adoption just recovered. imprintPreflight
+                    // mirrors this via the same computeAdoptionPatch helper
+                    // without writing, so the two can never diverge.
+                    if (!meta?.merged) {
+                        const adoptionPatch = computeAdoptionPatch(mod, meta);
+                        if (hasAdoptionFields(adoptionPatch)) {
+                            setModMetadata(mod.metaKey, adoptionPatch);
+                            meta = getModMetadata(mod.metaKey);
+                        }
+                    }
+
                     if (classifyEmbedFreshness(mod, meta) === 'fresh') {
                         // Current-format and in step with the sidecar: no repack.
                         // Self-heal the UI hints: the embed is the truth, but the
@@ -799,7 +933,15 @@ export async function imprintPreflight(deadlockPath: string): Promise<ImprintPre
             //    reaching here with meta.merged set means it was stale).
             //    Stale (legacy-only or sidecar-drifted) falls through: the
             //    anomaly guard exempts valid embeds, so it lands in eligible.
-            if (!meta?.merged && classifyEmbedFreshness(mod, meta) === 'fresh') {
+            //    ADOPTION: classify against (sidecar + hypothetical adoption
+            //    patch), NEVER persisted here - preflight is read-only by
+            //    contract. imprintAllInstalled's processOne computes the exact
+            //    same patch via computeAdoptionPatch and actually writes it
+            //    before classifying, so the two share one source of truth for
+            //    what adoption would do and can never disagree about which
+            //    bucket a mod lands in.
+            const adoptedMeta = !meta?.merged ? applyAdoptionPatch(meta, computeAdoptionPatch(mod, meta)) : meta;
+            if (!meta?.merged && classifyEmbedFreshness(mod, adoptedMeta) === 'fresh') {
                 result.counts.alreadyImprinted++;
                 continue;
             }
@@ -881,8 +1023,27 @@ export async function backfillImprintedFlags(deadlockPath: string): Promise<numb
         let updated = 0;
         for (const mod of installed) {
             try {
-                const meta = getModMetadata(mod.metaKey);
+                let meta = getModMetadata(mod.metaKey);
                 if (!meta?.imprinted && !hasAnyImprint(mod.path)) continue;
+
+                // ADOPTION: same fill-missing pass as the bulk run, so a mod
+                // whose sidecar is impoverished relative to its own embed (an
+                // imported orphan that was never routed through import-time
+                // adoption, or older metadata loss) self-heals here too,
+                // BEFORE the freshness check - otherwise it would read as
+                // stale and stay that way until the next full bulk imprint.
+                // Persisted only when non-empty (the existing only-write-when-
+                // changed discipline extends naturally: an empty patch is a
+                // no-op merge).
+                if (!meta?.merged) {
+                    const adoptionPatch = computeAdoptionPatch(mod, meta);
+                    if (hasAdoptionFields(adoptionPatch)) {
+                        setModMetadata(mod.metaKey, adoptionPatch);
+                        meta = getModMetadata(mod.metaKey);
+                        updated++;
+                    }
+                }
+
                 const stale = classifyEmbedFreshness(mod, meta) === 'stale';
                 if (meta?.imprinted !== true || (meta?.imprintStale ?? false) !== stale) {
                     setModMetadata(mod.metaKey, { imprinted: true, imprintStale: stale });

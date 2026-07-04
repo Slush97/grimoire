@@ -316,6 +316,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     imprintAllInstalled: () => ipcRenderer.invoke('imprint-all-installed'),
     imprintPreflight: () => ipcRenderer.invoke('imprint-preflight'),
     readImprintDetails: (modId: string) => ipcRenderer.invoke('read-imprint-details', modId),
+    peekImprint: (filePath: string) => ipcRenderer.invoke('peek-imprint', filePath),
     onImprintAllInstalledProgress: (callback: (progress: ImprintInstalledProgress) => void) => {
         const handler = (_event: Electron.IpcRendererEvent, progress: ImprintInstalledProgress) =>
             callback(progress);

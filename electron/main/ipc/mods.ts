@@ -31,11 +31,20 @@ import {
     type UnknownModFilterGuess,
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
+import { fetchModDetails } from '../services/gamebanana';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
-import { imprintOneMod, imprintAllInstalled, imprintPreflight } from '../services/imprintMods';
-import { parseAddonInfo, readEmbeddedAddonInfoText, carryForwardOriginalIdentity } from '../services/vpkIdentity';
-import { readEmbeddedModinfo, readLegacyGrimoireMergeMeta } from '../services/modinfoFormat';
+import {
+    imprintOneMod,
+    imprintAllInstalled,
+    imprintPreflight,
+    classifyEmbedFreshnessAt,
+    computeAdoptionPatchAt,
+    hasAdoptionFields,
+    hasAnyImprint,
+} from '../services/imprintMods';
+import { parseAddonInfo, readEmbeddedAddonInfoText, readEmbeddedAddonInfo, carryForwardOriginalIdentity } from '../services/vpkIdentity';
+import { readEmbeddedModinfo, readLegacyGrimoireMergeMeta, hasLegacyGrimoireMergeMetaEntry } from '../services/modinfoFormat';
 import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
 import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
@@ -44,7 +53,7 @@ import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport
 import { getMainWindow } from '../index';
 import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails } from '../../../src/types/mod';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -1023,6 +1032,12 @@ ipcMain.handle(
             }
         }
 
+        // Adoption targets: destMetaKeys whose embed adopted a gamebananaId but
+        // has no thumbnail yet, collected during the copy loop so the
+        // best-effort background thumbnail fetch (fired after the lock/import
+        // fully completes) knows which slots to enrich.
+        const thumbnailFetchTargets: Array<{ metaKey: string; gameBananaId: number; section: string }> = [];
+
         try {
             // Imports install ENABLED, so reserve a slot via the overflow-aware
             // allocator: it fills base addons first and spills into an overflow
@@ -1043,11 +1058,61 @@ ipcMain.handle(
                 // otherwise stick to the new local mod and visually merge it with
                 // unrelated mods.
                 removeModMetadata(destMetaKey);
+                const stampedName = sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName;
                 await setModMetadataWithHash(destMetaKey, {
-                    modName: sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName,
+                    modName: stampedName,
                     thumbnailUrl: thumbnailDataUrl,
                     nsfw: !!nsfw,
                 }, destPath);
+
+                // ADOPTION: the just-copied VPK may already carry a Grimoire
+                // imprint (the user re-imported an already-imprinted file, or
+                // extracted one from an archive). Fill in whatever the embed
+                // knows that the freshly-stamped sidecar above doesn't -
+                // gamebananaId/author/category/etc. - so a later bulk imprint
+                // classifies against a sidecar that already agrees with the
+                // embed instead of one that looks impoverished by comparison
+                // (the live bug this build fixes: without this, the next bulk
+                // run would re-imprint FROM the impoverished sidecar and wipe
+                // the embed's real identity). The user-typed name always wins
+                // (setModMetadataWithHash already wrote it above; adoption's
+                // own modName fill-in only fires when the sidecar has none,
+                // which never happens here since stampedName is always set).
+                const adoptionPatch = computeAdoptionPatchAt(destPath, getModMetadata(destMetaKey));
+                if (hasAdoptionFields(adoptionPatch)) {
+                    setModMetadata(destMetaKey, adoptionPatch);
+                }
+
+                // Stamp imprinted/imprintStale from the embed truth immediately,
+                // so the toolbar button's pending count is honest without
+                // waiting for a restart (backfillImprintedFlags would otherwise
+                // be the only thing to notice). Classify AFTER adoption so a
+                // richer embed that adoption just caught the sidecar up to
+                // reads fresh, not stale. hasAnyImprint (not
+                // readAdoptionEmbedFields) is the right "is this file imprinted
+                // at all" check: it also counts a re-imported merge embed,
+                // which adoption itself deliberately never reads fields from.
+                const finalMeta = getModMetadata(destMetaKey);
+                if (hasAnyImprint(destPath)) {
+                    setModMetadata(destMetaKey, {
+                        imprinted: true,
+                        imprintStale: classifyEmbedFreshnessAt(destPath, stampedName, finalMeta) === 'stale',
+                    });
+                }
+
+                // THUMBNAIL FETCH: adoption may have just learned a gamebananaId
+                // for a mod whose sidecar has no thumbnail (a local import of an
+                // already-imprinted file never had a chance to fetch one). Queue
+                // it; the actual network fetch runs after this handler returns
+                // (best-effort, never blocks or fails the import).
+                const adoptedGbId = finalMeta?.gameBananaId;
+                if (adoptedGbId && !finalMeta?.thumbnailUrl) {
+                    thumbnailFetchTargets.push({
+                        metaKey: destMetaKey,
+                        gameBananaId: adoptedGbId,
+                        section: finalMeta?.sourceSection || 'Mod',
+                    });
+                }
             }
         } finally {
             if (tempDir) {
@@ -1056,9 +1121,49 @@ ipcMain.handle(
         }
 
         const mods = await scanMods(deadlockPath);
-        return mods.map(enrichMod);
+        const result = mods.map(enrichMod);
+
+        // Fire-and-forget: never await, never let a network failure affect the
+        // import result already being returned to the renderer.
+        for (const target of thumbnailFetchTargets) {
+            void fetchAdoptedThumbnail(target.metaKey, target.gameBananaId, target.section);
+        }
+
+        return result;
     }
 );
+
+/**
+ * Best-effort background fetch of a thumbnail (and audio preview, for Sound
+ * mods) for a mod whose gamebananaId was just ADOPTED from its own embed at
+ * import time, but whose sidecar has no thumbnailUrl (the user imported a
+ * bare VPK, not an archive with art, or the embed predates thumbnails).
+ * Mirrors download.ts's own field mapping (thumbnail = file530 falling back to
+ * file; audioUrl from previewMedia.metadata). Never throws: offline or a
+ * revoked/renamed GameBanana submission just leaves the mod without a
+ * thumbnail, exactly as if adoption had never found the id.
+ */
+async function fetchAdoptedThumbnail(metaKey: string, gameBananaId: number, section: string): Promise<void> {
+    try {
+        const details = await fetchModDetails(gameBananaId, section);
+        const thumbnail = details.previewMedia?.images?.[0];
+        const thumbnailUrl = thumbnail
+            ? `${thumbnail.baseUrl}/${thumbnail.file530 || thumbnail.file}`
+            : undefined;
+        const audioUrl = details.previewMedia?.metadata?.audioUrl;
+        if (!thumbnailUrl && !audioUrl) return;
+        // Re-check under the current sidecar: don't clobber a thumbnail the
+        // user set (or another path fetched) while this request was in flight.
+        const current = getModMetadata(metaKey);
+        if (current?.thumbnailUrl) return;
+        setModMetadata(metaKey, {
+            ...(thumbnailUrl ? { thumbnailUrl } : {}),
+            ...(audioUrl ? { audioUrl } : {}),
+        });
+    } catch (err) {
+        console.warn(`[import-custom-mod] Best-effort thumbnail fetch failed for ${metaKey}:`, err);
+    }
+}
 
 // foundry:swapSound
 // Build a hero sound-swap addon VPK (drop your own MP3 onto a hero gameplay
@@ -1616,5 +1721,54 @@ ipcMain.handle('read-imprint-details', async (_, modId: string): Promise<Imprint
         originalSize: original.size,
         rawAddonInfo,
         modinfo: readEmbeddedModinfo(mod.path),
+    };
+});
+
+// peek-imprint: read-only recognition check for the import dialog. Takes an
+// absolute file path directly (the user's picked source .vpk, BEFORE it is
+// copied/imported anywhere), not a modId - there is no installed Mod yet at
+// this point. No lock, no writes, no scanMods: same read-only contract as
+// read-imprint-details, just against an arbitrary path instead of an
+// installed slot. Returns null when the path isn't a readable .vpk or carries
+// no recoverable Grimoire embed, so the dialog's recognition note simply
+// doesn't show rather than erroring.
+ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintResult | null> => {
+    if (!filePath || !filePath.toLowerCase().endsWith('.vpk') || !existsSync(filePath)) {
+        return null;
+    }
+
+    const modinfo = readEmbeddedModinfo(filePath);
+    if (modinfo) {
+        if (modinfo.kind === 'merge') {
+            return { title: modinfo.merge.title || modinfo.title, kind: 'merge' };
+        }
+        return {
+            title: modinfo.title,
+            author: modinfo.author,
+            gamebananaId: modinfo.source?.gamebananaId,
+            gamebananaFileId: modinfo.source?.gamebananaFileId,
+            kind: 'mod',
+        };
+    }
+
+    // No current-format record: fall back to the legacy addoninfo.txt keys
+    // (mirrors read-imprint-details' embed-validity rule).
+    const embedded = readEmbeddedAddonInfo(filePath);
+    if (!embedded) return null;
+    const original = carryForwardOriginalIdentity(embedded, readLegacyGrimoireMergeMeta(filePath));
+    if (!original) return null;
+
+    const legacyGbId = embedded.gamebananaId ? Number(embedded.gamebananaId) : undefined;
+    const legacyFileId = embedded.gamebananaFileId ? Number(embedded.gamebananaFileId) : undefined;
+    return {
+        title: embedded.title,
+        author: embedded.author,
+        gamebananaId: legacyGbId !== undefined && Number.isFinite(legacyGbId) ? legacyGbId : undefined,
+        gamebananaFileId:
+            legacyFileId !== undefined && Number.isFinite(legacyFileId) ? legacyFileId : undefined,
+        // A legacy merge companion is the only way a legacy embed could be a
+        // merge; readLegacyGrimoireMergeMeta's presence with a readable source
+        // list is the same signal classifyMissingMergeManifest uses elsewhere.
+        kind: hasLegacyGrimoireMergeMetaEntry(filePath) ? 'merge' : 'mod',
     };
 });

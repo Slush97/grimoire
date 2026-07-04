@@ -71,8 +71,8 @@ import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/comm
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails } from '../lib/api';
-import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint } from '../lib/api';
+import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
 import type { GameBananaModDetails, GameBananaMod } from '../types/gamebanana';
@@ -8084,11 +8084,38 @@ function ImportCustomModModal({
   const [error, setError] = useState<string | null>(null);
   const [vpkDragActive, setVpkDragActive] = useState(false);
   const [imgDragActive, setImgDragActive] = useState(false);
+  // Whether the CURRENT name field value came from the user actually typing,
+  // vs. an auto-fill (filename-derived, or an imprint recognition prefill).
+  // Recognition only prefills over an auto-filled name, never over one the
+  // user actually edited.
+  const nameTouchedRef = useRef(!!initialName);
+  // Imprint recognition for a single picked .vpk (archives skip the peek:
+  // extraction happens later, at which point every extracted VPK still goes
+  // through adoption at import time, so nothing is lost by not peeking here).
+  const [recognized, setRecognized] = useState<PeekImprintResult | null>(null);
+  const peekRequestRef = useRef(0);
 
   const acceptVpkPath = (picked: string) => {
     setVpkPath(picked);
     setError(null);
-    if (!name) setName(deriveModNameFromPath(picked));
+    setRecognized(null);
+    if (!nameTouchedRef.current) setName(deriveModNameFromPath(picked));
+
+    if (!picked.toLowerCase().endsWith('.vpk')) return;
+    const requestId = ++peekRequestRef.current;
+    void peekImprint(picked)
+      .then((result) => {
+        // Stale response guard: the user may have picked a different file
+        // (or closed the modal) while this was in flight.
+        if (peekRequestRef.current !== requestId) return;
+        setRecognized(result);
+        if (result?.title && !nameTouchedRef.current) {
+          setName(result.title);
+        }
+      })
+      .catch(() => {
+        // Best-effort recognition only; a failed peek just shows no note.
+      });
   };
 
   const acceptImagePath = async (picked: string) => {
@@ -8267,9 +8294,25 @@ function ImportCustomModModal({
           <FormField label={t('installed.import.modName')} required>
             <Input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                nameTouchedRef.current = true;
+                setName(e.target.value);
+              }}
               placeholder={t('installed.import.modNamePlaceholder')}
             />
+            {recognized && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <Tag tone="success" icon={Fingerprint}>
+                  {t('installed.import.recognizedFromImprint')}
+                </Tag>
+                {recognized.title && <Tag tone="neutral">{recognized.title}</Tag>}
+                {recognized.gamebananaId && (
+                  <Tag tone="neutral">
+                    {t('installed.import.recognizedGameBananaId', { id: recognized.gamebananaId })}
+                  </Tag>
+                )}
+              </div>
+            )}
           </FormField>
 
           <div>

@@ -938,6 +938,21 @@ export interface ImprintDetails {
   modinfo: import('./modinfo').ModinfoRecord | null;
 }
 
+// Small typed summary for the import dialog's recognition note, as returned by
+// the read-only 'peek-imprint' IPC. Takes an absolute file path (not yet an
+// installed mod: the dialog calls this on the picked source file BEFORE
+// import runs), so it has no modId/mod-scan dependency at all. Null when the
+// file carries no recoverable Grimoire embed. `kind` distinguishes a merge
+// embed (whose title is the merge's name, not a single mod's) so the dialog
+// can phrase the recognition note correctly.
+export interface PeekImprintResult {
+  title?: string;
+  gamebananaId?: number;
+  gamebananaFileId?: number;
+  author?: string;
+  kind: 'mod' | 'merge';
+}
+
 export interface ModConflict {
   modA: string;
   modAName: string;
