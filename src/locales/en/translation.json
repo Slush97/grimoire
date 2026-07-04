@@ -974,6 +974,7 @@
       "anomalyHashDrift": "File changed since it was recorded",
       "anomalyForeignEmbed": "Carries a non-Grimoire addon block",
       "anomalyOrphanMerge": "Merged mod record couldn't be recovered",
+      "anomalyUnidentified": "Not identified yet: link it to its source first",
       "empty": "Nothing to imprint.",
       "error": "Imprinting failed: {{error}}"
     },
@@ -1120,10 +1121,7 @@
       "modIdTag": "Mod #{{id}}",
       "fileIdTag": "File #{{id}}",
       "viewMod": "View Mod",
-      "embeddedBadge": "Embedded metadata",
-      "embeddedMetadataBadge": "Identified via embedded Grimoire metadata",
       "embeddedMetadataDesc": "This VPK carries embedded Grimoire metadata identifying it. No network needed.",
-      "embeddedMergeBadge": "Grimoire merge (embedded metadata)",
       "embeddedMergeDesc_one": "This is a Grimoire merge of {{count}} mod, reconstructed from embedded metadata.",
       "embeddedMergeDesc_other": "This is a Grimoire merge of {{count}} mods, reconstructed from embedded metadata.",
       "linkInPlace": "Link in place"

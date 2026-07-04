@@ -1,6 +1,5 @@
 import { promises as fs } from 'fs';
-import { join, dirname } from 'path';
-import os, { tmpdir } from 'os';
+import { dirname } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import { scanMods, runExclusiveModMutation, type Mod } from './mods';
@@ -10,20 +9,16 @@ import {
     carryForwardOriginalIdentity,
     type OriginalIdentity,
 } from './vpkIdentity';
-import { parseVpkDirectoryCached, parseVpkEntryStats, findChunkSiblingNames } from './vpk';
+import { parseVpkDirectoryCached, findChunkSiblingNames } from './vpk';
 import {
     computeOriginalIdentity,
     serializeAddonInfo,
     serializeModinfo,
     readEmbeddedModinfo,
     readLegacyGrimoireMergeMeta,
-    findImprintRepackMismatch,
     hasLegacyGrimoireMergeMetaEntry,
     reconstructMergedModInfoFromEmbed,
     reconstructMergedModInfoFromLegacy,
-    ADDONINFO_ENTRY,
-    MODINFO_ENTRY,
-    LEGACY_GRIMOIRE_META_ENTRY,
     MODINFO_FORMAT,
     MODINFO_GAME,
     MODINFO_SCHEMA_VERSION,
@@ -32,7 +27,8 @@ import {
     type ModinfoMergeSource,
     type ReconstructedMergeManifest,
 } from './modinfoFormat';
-import { runVpkmerge, embedMergeIdentity, buildPortableForMergeSources } from './modMerger';
+import { embedMergeIdentity, buildPortableForMergeSources, repackWithEmbeddedEntries } from './modMerger';
+import { DEFAULT_WORKER_CONCURRENCY } from './workers';
 import { encodeShareCode } from './portableProfile';
 import {
     evaluateEmbedStaleness,
@@ -358,6 +354,10 @@ export function hasAnyImprint(vpkPath: string): boolean {
  *  - 'foreign-embed': carries an addoninfo.txt but no recoverable original
  *    identity, current keys or legacy shim (a non-Grimoire addon block, or one
  *    written by an incompatible tool).
+ *  - 'unidentified': a NON-embedded file with no metadata row at all. The
+ *    repack would permanently change the live size/CRC the GameBanana archive
+ *    matchers key on, with nothing in the embed to compensate; refuse so the
+ *    file stays identifiable (identify first, imprint after).
  *  - 'hash-drift': a NON-embedded file whose live whole-file hash no longer
  *    matches the stored canonical metadata.sha256 (someone edited the bytes out
  *    of band). We report it and refuse; we do NOT re-record the drifted hash,
@@ -365,7 +365,11 @@ export function hasAnyImprint(vpkPath: string): boolean {
  *    on. Files that already carry a valid embed are exempt: their canonical
  *    identity is the embedded original, and the live bytes legitimately differ.
  */
-async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reason'] | null> {
+async function checkImprintAnomaly(
+    mod: Mod,
+    opts: { checkHashDrift?: boolean } = {}
+): Promise<ImprintAnomalousMod['reason'] | null> {
+    const { checkHashDrift = true } = opts;
     // Zero-byte / truncated file.
     try {
         const st = await fs.stat(mod.path);
@@ -401,11 +405,20 @@ async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reaso
         return null;
     }
 
+    // Non-embedded file with no metadata row: never identified. The repack
+    // permanently changes the live size/CRC the GameBanana archive matchers
+    // key on, and with no GameBanana source to write into the embed, the file
+    // could never be identified again, offline or online. Refuse: identify
+    // first (Fix Unknown / Link), imprint after.
+    const meta = getModMetadata(mod.metaKey);
+    if (!meta) return 'unidentified';
+
     // Non-embedded file: the live whole-file hash must still match the stored
     // canonical identity. Drift means the bytes changed out of band; refuse and
-    // report, but NEVER re-record (KEYSTONE).
-    const meta = getModMetadata(mod.metaKey);
-    if (meta?.sha256 && SHA256_RE.test(meta.sha256)) {
+    // report, but NEVER re-record (KEYSTONE). The whole-file read is the only
+    // expensive check here, so read-only callers (preflight) opt out and the
+    // refusal happens at write time in the bulk run instead.
+    if (checkHashDrift && meta?.sha256 && SHA256_RE.test(meta.sha256)) {
         try {
             const live = await computeOriginalIdentity(mod.path, { includeCrc: false });
             if (live.sha256 !== meta.sha256.toLowerCase()) return 'hash-drift';
@@ -415,75 +428,6 @@ async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reaso
     }
 
     return null;
-}
-
-/**
- * Re-pack `modPath` in place with BOTH imprint entries (`addoninfo.txt` +
- * `modinfo.json`) embedded at its root in one pass, then atomically swap it
- * over the original. Uses the single-input `vpkmerge metadata` subcommand
- * (which preserves every existing entry and refuses output == input); no typed
- * --title/--author is passed, so Grimoire's own serialized blobs ride in
- * purely via the two --extra-file args. The temp output is a dotfile in the
- * mod's OWN folder (a non-`_dir.vpk` name, so it is neither scanned as a mod
- * nor counted as a slot) so the rename stays on one volume; on any failure the
- * original VPK is left untouched.
- *
- * Before the swap the repacked output must pass a real parity check against
- * the input's entry tree (findImprintRepackMismatch): every carried entry
- * present with an unchanged logical size (except an expected `--drop-entry`
- * removal), nothing added beyond the two imprint entries. A magic-bytes check
- * alone (verifyVpkOutput) would accept a structurally valid VPK that silently
- * dropped or corrupted game content. Any mismatch throws (landing in the
- * caller's fail-soft per-mod handling) and the original VPK keeps its slot.
- *
- * A single-mod imprint record fully supersedes the old grimoire-branded merge
- * companion (kind:"mod" never had one to begin with, but a file that started
- * life as a legacy MERGE and is being handled as a plain mod here should not
- * happen post-never-flatten; the check is defensive residue cleanup either
- * way): when the input still carries a legacy grimoire_meta.json entry, it is
- * passed to vpkmerge's `--drop-entry` so the residue is retired in the same
- * repack that writes its replacement.
- */
-async function embedImprintInPlace(modPath: string, addonText: string, modinfoText: string): Promise<void> {
-    const inputEntries = parseVpkEntryStats(modPath);
-    if (!inputEntries) {
-        throw new Error('Cannot verify the repack: the input VPK entry tree is unreadable.');
-    }
-    const addonTmp = join(tmpdir(), `grimoire-imprint-addoninfo-${randomUUID()}.txt`);
-    const modinfoTmp = join(tmpdir(), `grimoire-imprint-modinfo-${randomUUID()}.json`);
-    const embedOut = join(dirname(modPath), `.imprint-embed-${randomUUID()}.vpk`);
-    const droppedEntries = hasLegacyGrimoireMergeMetaEntry(modPath) ? [LEGACY_GRIMOIRE_META_ENTRY] : [];
-    try {
-        await fs.writeFile(addonTmp, addonText);
-        await fs.writeFile(modinfoTmp, modinfoText);
-        await runVpkmerge([
-            'metadata',
-            '--vpk',
-            modPath,
-            '--output',
-            embedOut,
-            '--extra-file',
-            `${ADDONINFO_ENTRY}=${addonTmp}`,
-            '--extra-file',
-            `${MODINFO_ENTRY}=${modinfoTmp}`,
-            ...droppedEntries.flatMap((entry) => ['--drop-entry', entry]),
-        ]);
-        const outputEntries = parseVpkEntryStats(embedOut);
-        if (!outputEntries) {
-            throw new Error('Imprint repack produced an unreadable VPK; the original was left untouched.');
-        }
-        const mismatch = findImprintRepackMismatch(inputEntries, outputEntries, droppedEntries);
-        if (mismatch) {
-            throw new Error(`Imprint repack parity check failed: ${mismatch}. The original was left untouched.`);
-        }
-        await fs.rename(embedOut, modPath);
-    } catch (err) {
-        try { await fs.unlink(embedOut); } catch { /* ignore partial-output cleanup */ }
-        throw err;
-    } finally {
-        try { await fs.unlink(addonTmp); } catch { /* best-effort temp cleanup */ }
-        try { await fs.unlink(modinfoTmp); } catch { /* best-effort temp cleanup */ }
-    }
 }
 
 /**
@@ -515,7 +459,7 @@ async function imprintModCore(mod: Mod): Promise<void> {
     const modinfoText = serializeModinfo(
         buildModinfoRecord(mod, meta, original, writtenAt, firstImprintedAt)
     );
-    await embedImprintInPlace(mod.path, addonText, modinfoText);
+    await repackWithEmbeddedEntries(mod.path, addonText, modinfoText);
     const hasValidStoredHash = !!meta?.sha256 && SHA256_RE.test(meta.sha256);
     setModMetadata(mod.metaKey, {
         imprinted: true,
@@ -715,7 +659,7 @@ export async function imprintAllInstalled(
         let done = 0;
 
         // Bounded worker pool: the dominant per-mod cost is the vpkmerge repack
-        // subprocess in embedImprintInPlace, so overlapping several across cores
+        // subprocess in repackWithEmbeddedEntries, so overlapping several across cores
         // shrinks a bulk run wall-clock. The per-mod work is fully independent, and
         // JS is single-threaded: every shared-state mutation below (result.*, the
         // `done` counter + its onProgress emit, setModMetadata inside imprintModCore)
@@ -723,7 +667,7 @@ export async function imprintAllInstalled(
         // read-then-write of shared state. Each worker pulls the next candidate via a
         // synchronous index bump (nextIndex++). `done` is incremented once per mod as
         // it COMPLETES (all classifications land there), keeping done/total monotonic.
-        const poolSize = Math.min(8, Math.max(1, os.cpus().length));
+        const poolSize = DEFAULT_WORKER_CONCURRENCY;
         let nextIndex = 0;
 
         const processOne = (mod: Mod): Promise<void> => {
@@ -964,7 +908,13 @@ export async function imprintPreflight(deadlockPath: string): Promise<ImprintPre
             }
 
             // 4. Anomaly guard (skip + report, never re-stamp: KEYSTONE).
-            const anomaly = await checkImprintAnomaly(mod);
+            //    checkHashDrift: false keeps the modal-open path free of
+            //    whole-file reads (preflight runs inside the exclusive
+            //    mutation lock, so every other mutation queues behind it). A
+            //    hash-drifted file therefore previews as eligible and is
+            //    refused at write time by the bulk run's own guard, landing
+            //    in failed[] with the same localized 'hash-drift' reason.
+            const anomaly = await checkImprintAnomaly(mod, { checkHashDrift: false });
             if (anomaly) {
                 result.counts.anomalous++;
                 result.anomalous.push({ fileName: mod.fileName, modName, reason: anomaly });

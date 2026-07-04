@@ -31,7 +31,7 @@ import {
     type UnknownModFilterGuess,
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
-import { fetchModDetails } from '../services/gamebanana';
+import { fetchAdoptedThumbnail, type AdoptedThumbnailTarget } from '../services/adoptedThumbnail';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
 import {
@@ -573,11 +573,19 @@ ipcMain.handle(
 async function refreshEmbedAfterMetadataChange(
     deadlockPath: string,
     modId: string,
-    metaKey: string
+    metaKey: string,
+    modPath: string
 ): Promise<void> {
     try {
         if (!loadSettings().experimentalVpkImprinting) return;
-        if (!getModMetadata(metaKey)?.imprinted) return;
+        // The sidecar flag alone misses a VPK dropped into addons mid-session:
+        // the startup backfill has not seen it, so `imprinted` is unset even
+        // though the file carries an embed, and bailing here would silently
+        // leave the wrong embed in the file after the user just corrected the
+        // identity. Consult the file itself too (the same predicate the
+        // backfill and the import handler use). A foreign embed surviving to
+        // imprintOneMod fails soft into the warn below, unchanged.
+        if (!getModMetadata(metaKey)?.imprinted && !hasAnyImprint(modPath)) return;
         await imprintOneMod(deadlockPath, modId);
     } catch (err) {
         console.warn(`[mods] Post-associate embed refresh failed for ${metaKey}:`, err);
@@ -608,7 +616,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
@@ -661,7 +669,7 @@ ipcMain.handle(
             sourceSection: args.sourceSection,
         }, target.path);
 
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
@@ -696,7 +704,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
@@ -1036,7 +1044,7 @@ ipcMain.handle(
         // has no thumbnail yet, collected during the copy loop so the
         // best-effort background thumbnail fetch (fired after the lock/import
         // fully completes) knows which slots to enrich.
-        const thumbnailFetchTargets: Array<{ metaKey: string; gameBananaId: number; section: string }> = [];
+        const thumbnailFetchTargets: AdoptedThumbnailTarget[] = [];
 
         try {
             // Imports install ENABLED, so reserve a slot via the overflow-aware
@@ -1111,6 +1119,9 @@ ipcMain.handle(
                         metaKey: destMetaKey,
                         gameBananaId: adoptedGbId,
                         section: finalMeta?.sourceSection || 'Mod',
+                        // The hash setModMetadataWithHash just stamped: pins the
+                        // fetch to THIS file, so a recycled slot is never stamped.
+                        expectedSha256: finalMeta?.sha256,
                     });
                 }
             }
@@ -1124,46 +1135,16 @@ ipcMain.handle(
         const result = mods.map(enrichMod);
 
         // Fire-and-forget: never await, never let a network failure affect the
-        // import result already being returned to the renderer.
+        // import result already being returned to the renderer. The fetch
+        // itself re-verifies slot identity before writing (see
+        // services/adoptedThumbnail.ts).
         for (const target of thumbnailFetchTargets) {
-            void fetchAdoptedThumbnail(target.metaKey, target.gameBananaId, target.section);
+            void fetchAdoptedThumbnail(target);
         }
 
         return result;
     }
 );
-
-/**
- * Best-effort background fetch of a thumbnail (and audio preview, for Sound
- * mods) for a mod whose gamebananaId was just ADOPTED from its own embed at
- * import time, but whose sidecar has no thumbnailUrl (the user imported a
- * bare VPK, not an archive with art, or the embed predates thumbnails).
- * Mirrors download.ts's own field mapping (thumbnail = file530 falling back to
- * file; audioUrl from previewMedia.metadata). Never throws: offline or a
- * revoked/renamed GameBanana submission just leaves the mod without a
- * thumbnail, exactly as if adoption had never found the id.
- */
-async function fetchAdoptedThumbnail(metaKey: string, gameBananaId: number, section: string): Promise<void> {
-    try {
-        const details = await fetchModDetails(gameBananaId, section);
-        const thumbnail = details.previewMedia?.images?.[0];
-        const thumbnailUrl = thumbnail
-            ? `${thumbnail.baseUrl}/${thumbnail.file530 || thumbnail.file}`
-            : undefined;
-        const audioUrl = details.previewMedia?.metadata?.audioUrl;
-        if (!thumbnailUrl && !audioUrl) return;
-        // Re-check under the current sidecar: don't clobber a thumbnail the
-        // user set (or another path fetched) while this request was in flight.
-        const current = getModMetadata(metaKey);
-        if (current?.thumbnailUrl) return;
-        setModMetadata(metaKey, {
-            ...(thumbnailUrl ? { thumbnailUrl } : {}),
-            ...(audioUrl ? { audioUrl } : {}),
-        });
-    } catch (err) {
-        console.warn(`[import-custom-mod] Best-effort thumbnail fetch failed for ${metaKey}:`, err);
-    }
-}
 
 // foundry:swapSound
 // Build a hero sound-swap addon VPK (drop your own MP3 onto a hero gameplay

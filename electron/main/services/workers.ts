@@ -21,7 +21,11 @@ export interface FileFingerprintWorkerOptions {
     onResult?: (result: FileFingerprintResult) => void;
 }
 
-const DEFAULT_WORKER_CONCURRENCY = Math.max(1, Math.min(8, availableParallelism() - 1));
+/** House default for bounded per-file work pools (worker threads or
+ *  subprocess fan-out): cores minus one, capped at 8. Exported so callers
+ *  running their own pools (e.g. the bulk imprint's vpkmerge subprocesses)
+ *  share the same number instead of hardcoding a copy. */
+export const DEFAULT_WORKER_CONCURRENCY = Math.max(1, Math.min(8, availableParallelism() - 1));
 
 // Long-lived worker: waits for task messages and fingerprints one file per
 // message, so the pool reuses threads across a batch instead of paying worker
