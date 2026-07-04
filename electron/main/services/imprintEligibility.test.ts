@@ -13,7 +13,6 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { ModinfoRecord } from '../../../src/types/modinfo';
 import type { ParsedAddonInfo } from './vpkIdentity';
 import type { Mod } from './mods';
-import type { ModMetadata } from './metadata';
 
 vi.mock('electron', () => ({ app: { getVersion: () => '0.0.0-test' } }));
 vi.mock('fs', () => ({

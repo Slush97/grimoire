@@ -573,11 +573,19 @@ ipcMain.handle(
 async function refreshEmbedAfterMetadataChange(
     deadlockPath: string,
     modId: string,
-    metaKey: string
+    metaKey: string,
+    modPath: string
 ): Promise<void> {
     try {
         if (!loadSettings().experimentalVpkImprinting) return;
-        if (!getModMetadata(metaKey)?.imprinted) return;
+        // The sidecar flag alone misses a VPK dropped into addons mid-session:
+        // the startup backfill has not seen it, so `imprinted` is unset even
+        // though the file carries an embed, and bailing here would silently
+        // leave the wrong embed in the file after the user just corrected the
+        // identity. Consult the file itself too (the same predicate the
+        // backfill and the import handler use). A foreign embed surviving to
+        // imprintOneMod fails soft into the warn below, unchanged.
+        if (!getModMetadata(metaKey)?.imprinted && !hasAnyImprint(modPath)) return;
         await imprintOneMod(deadlockPath, modId);
     } catch (err) {
         console.warn(`[mods] Post-associate embed refresh failed for ${metaKey}:`, err);
@@ -608,7 +616,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
@@ -661,7 +669,7 @@ ipcMain.handle(
             sourceSection: args.sourceSection,
         }, target.path);
 
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
@@ -696,7 +704,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
-        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey);
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
