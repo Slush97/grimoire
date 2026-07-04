@@ -636,7 +636,7 @@ async function mergeModsLocked(
 }
 
 function buildPortableForSources(sources: Mod[], profileName: string): PortableProfile {
-    const entries: MergedModSource[] = sources.map((src) => {
+    const entries: PortableMergeSourceEntry[] = sources.map((src) => {
         const meta = getModMetadata(src.metaKey);
         return {
             fileName: src.fileName,
@@ -647,24 +647,48 @@ function buildPortableForSources(sources: Mod[], profileName: string): PortableP
             section: meta?.sourceSection,
             enabledAtMergeTime: true,
             priorityAtMergeTime: src.priority,
+            // Hint extras the snapshot shape cannot carry: the merge-time
+            // caller has full metadata, so the share code keeps the same hint
+            // a plain (non-merge) export would. nsfw in particular drives the
+            // import dialog's skip filter and thumbnail blur.
+            nsfw: meta?.nsfw,
+            categoryName: meta?.categoryName,
+            fileLabel: meta?.variantLabel || meta?.fileDescription || meta?.sourceFileName,
+            originalFileName: meta?.sourceFileName,
+            isArchived: meta?.isArchived,
         };
     });
     return buildPortableForMergeSources(entries, profileName);
 }
 
 /**
+ * A merge-source snapshot, optionally enriched with the hint-only fields a
+ * live metadata lookup can supply (nsfw / category / file labels). The
+ * snapshot shape itself stays lean: these extras exist only to round-trip
+ * into PortableModHint when the caller has them.
+ */
+export type PortableMergeSourceEntry = MergedModSource & {
+    nsfw?: boolean;
+    categoryName?: string;
+    fileLabel?: string;
+    originalFileName?: string;
+    isArchived?: boolean;
+};
+
+/**
  * Build a portable profile (the unmerge-fallback share code payload) straight
  * from a merge's own source snapshots, with no live Mod/metadata lookup. Pure
- * projection of MergedModSource -> PortableModEntry: every field this reads
- * already lives on the snapshot, which is what lets it double as the DB-wipe
+ * projection of the snapshot -> PortableModEntry: every field this reads
+ * already lives on the entry, which is what lets it double as the DB-wipe
  * reconstruction path (see reconstructMergedModInfo/imprintMods.ts) where the
  * sources come from an embedded modinfo.json or legacy grimoire_meta.json
- * record, not a live scan. Local sources (no GameBanana id) are omitted, same
- * as buildPortableForSources: the share code is best-effort, not authoritative
+ * record, not a live scan (those bare snapshots simply omit the hint extras).
+ * Local sources (no GameBanana id) are omitted, same as
+ * buildPortableForSources: the share code is best-effort, not authoritative
  * (the merge's own metadata.merged manifest is authoritative for unmerge).
  */
 export function buildPortableForMergeSources(
-    sources: MergedModSource[],
+    sources: PortableMergeSourceEntry[],
     profileName: string
 ): PortableProfile {
     const mods: PortableModEntry[] = [];
@@ -681,7 +705,12 @@ export function buildPortableForMergeSources(
             priority: src.priorityAtMergeTime,
             hint: {
                 name: src.modName,
+                category: src.categoryName,
+                fileLabel: src.fileLabel,
+                originalFileName: src.originalFileName,
                 thumbnailUrl: src.thumbnailUrl,
+                nsfw: src.nsfw,
+                isArchived: src.isArchived,
             },
         });
     }
