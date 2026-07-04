@@ -71,6 +71,7 @@ import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/comm
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
+import { isImprintPending } from '../lib/imprintPending';
 import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint } from '../lib/api';
 import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
@@ -769,13 +770,14 @@ export default function Installed() {
   // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
   // absorbed sources already excluded above) that are not yet imprinted OR
   // carry a stale embed (legacy format / sidecar drift, pending re-imprint).
-  // Merged mods count too: the bulk run refreshes stale merges. Drives the
-  // toolbar button's hide-when-done visibility. Deliberately optimistic:
+  // Merged mods count under the same uniform rule (see isImprintPending: a
+  // pre-feature merge has no embed and no flags, and IS pending work). Drives
+  // the toolbar button's hide-when-done visibility. Deliberately optimistic:
   // files the backend would classify as loaded or anomalous still count (they
   // need attention, so the entry point stays up); the preflight modal is the
   // source of truth for what actually happens.
   const pendingImprintCount = useMemo(
-    () => visibleMods.filter((m) => (m.merged ? m.imprintStale : !m.imprinted || m.imprintStale)).length,
+    () => visibleMods.filter(isImprintPending).length,
     [visibleMods]
   );
   // Layout = the user's structural choice (cards grid vs horizontal list).
