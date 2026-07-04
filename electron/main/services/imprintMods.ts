@@ -358,6 +358,10 @@ export function hasAnyImprint(vpkPath: string): boolean {
  *  - 'foreign-embed': carries an addoninfo.txt but no recoverable original
  *    identity, current keys or legacy shim (a non-Grimoire addon block, or one
  *    written by an incompatible tool).
+ *  - 'unidentified': a NON-embedded file with no metadata row at all. The
+ *    repack would permanently change the live size/CRC the GameBanana archive
+ *    matchers key on, with nothing in the embed to compensate; refuse so the
+ *    file stays identifiable (identify first, imprint after).
  *  - 'hash-drift': a NON-embedded file whose live whole-file hash no longer
  *    matches the stored canonical metadata.sha256 (someone edited the bytes out
  *    of band). We report it and refuse; we do NOT re-record the drifted hash,
@@ -401,10 +405,17 @@ async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reaso
         return null;
     }
 
+    // Non-embedded file with no metadata row: never identified. The repack
+    // permanently changes the live size/CRC the GameBanana archive matchers
+    // key on, and with no GameBanana source to write into the embed, the file
+    // could never be identified again, offline or online. Refuse: identify
+    // first (Fix Unknown / Link), imprint after.
+    const meta = getModMetadata(mod.metaKey);
+    if (!meta) return 'unidentified';
+
     // Non-embedded file: the live whole-file hash must still match the stored
     // canonical identity. Drift means the bytes changed out of band; refuse and
     // report, but NEVER re-record (KEYSTONE).
-    const meta = getModMetadata(mod.metaKey);
     if (meta?.sha256 && SHA256_RE.test(meta.sha256)) {
         try {
             const live = await computeOriginalIdentity(mod.path, { includeCrc: false });

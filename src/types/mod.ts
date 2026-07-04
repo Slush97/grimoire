@@ -877,7 +877,10 @@ export interface ImprintAnomalousMod {
   // entry, but the file's own embed/legacy companion is a merge whose source
   // list could not be read cleanly (NEVER FLATTEN: refused rather than
   // re-imprinted as a plain kind:"mod", which would destroy the source list).
-  reason: 'unparseable' | 'empty' | 'chunked' | 'hash-drift' | 'foreign-embed' | 'orphan-merge';
+  // 'unidentified': no metadata row and no embed. Repacking would permanently
+  // change the live size/CRC the GameBanana archive matchers key on, with no
+  // GameBanana source in the embed to compensate: identify first, imprint after.
+  reason: 'unparseable' | 'empty' | 'chunked' | 'hash-drift' | 'foreign-embed' | 'orphan-merge' | 'unidentified';
 }
 
 // Per-bucket counts from imprintPreflight. Every scanMods() candidate lands in

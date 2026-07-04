@@ -974,6 +974,7 @@
       "anomalyHashDrift": "File changed since it was recorded",
       "anomalyForeignEmbed": "Carries a non-Grimoire addon block",
       "anomalyOrphanMerge": "Merged mod record couldn't be recovered",
+      "anomalyUnidentified": "Not identified yet: link it to its source first",
       "empty": "Nothing to imprint.",
       "error": "Imprinting failed: {{error}}"
     },
