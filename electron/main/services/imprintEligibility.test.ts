@@ -178,3 +178,29 @@ describe('never-identified VPKs and bulk imprint', () => {
         expect(result.counts.alreadyImprinted + result.counts.eligible).toBe(1);
     });
 });
+describe('preflight cost contract', () => {
+    it('never whole-file-hashes during the read-only preflight', async () => {
+        // An identified, non-embedded mod with a stored sha256: exactly the
+        // shape the old preflight hashed serially inside the mutation lock.
+        metadataStore.set('pak10_dir.vpk', { modName: 'Known Mod', sha256: 'c'.repeat(64) });
+        scanMods.mockResolvedValue([makeMod()]);
+
+        await imprintPreflight('C:/deadlock');
+
+        expect(computeOriginalIdentity).not.toHaveBeenCalled();
+    });
+
+    it('still hash-checks at write time in the bulk run (KEYSTONE drift refusal)', async () => {
+        metadataStore.set('pak10_dir.vpk', { modName: 'Known Mod', sha256: 'c'.repeat(64) });
+        scanMods.mockResolvedValue([makeMod()]);
+        computeOriginalIdentity.mockResolvedValue({ sha256: 'd'.repeat(64) });
+
+        const result = await imprintAllInstalled('C:/deadlock');
+
+        expect(computeOriginalIdentity).toHaveBeenCalled();
+        expect(result.failed).toEqual([
+            { fileName: 'pak10_dir.vpk', modName: 'Known Mod', reason: 'hash-drift' },
+        ]);
+        expect(runVpkmerge).not.toHaveBeenCalled();
+    });
+});

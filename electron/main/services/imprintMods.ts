@@ -1,6 +1,6 @@
 import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
-import os, { tmpdir } from 'os';
+import { tmpdir } from 'os';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import { scanMods, runExclusiveModMutation, type Mod } from './mods';
@@ -33,6 +33,7 @@ import {
     type ReconstructedMergeManifest,
 } from './modinfoFormat';
 import { runVpkmerge, embedMergeIdentity, buildPortableForMergeSources } from './modMerger';
+import { DEFAULT_WORKER_CONCURRENCY } from './workers';
 import { encodeShareCode } from './portableProfile';
 import {
     evaluateEmbedStaleness,
@@ -369,7 +370,11 @@ export function hasAnyImprint(vpkPath: string): boolean {
  *    on. Files that already carry a valid embed are exempt: their canonical
  *    identity is the embedded original, and the live bytes legitimately differ.
  */
-async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reason'] | null> {
+async function checkImprintAnomaly(
+    mod: Mod,
+    opts: { checkHashDrift?: boolean } = {}
+): Promise<ImprintAnomalousMod['reason'] | null> {
+    const { checkHashDrift = true } = opts;
     // Zero-byte / truncated file.
     try {
         const st = await fs.stat(mod.path);
@@ -415,8 +420,10 @@ async function checkImprintAnomaly(mod: Mod): Promise<ImprintAnomalousMod['reaso
 
     // Non-embedded file: the live whole-file hash must still match the stored
     // canonical identity. Drift means the bytes changed out of band; refuse and
-    // report, but NEVER re-record (KEYSTONE).
-    if (meta?.sha256 && SHA256_RE.test(meta.sha256)) {
+    // report, but NEVER re-record (KEYSTONE). The whole-file read is the only
+    // expensive check here, so read-only callers (preflight) opt out and the
+    // refusal happens at write time in the bulk run instead.
+    if (checkHashDrift && meta?.sha256 && SHA256_RE.test(meta.sha256)) {
         try {
             const live = await computeOriginalIdentity(mod.path, { includeCrc: false });
             if (live.sha256 !== meta.sha256.toLowerCase()) return 'hash-drift';
@@ -734,7 +741,7 @@ export async function imprintAllInstalled(
         // read-then-write of shared state. Each worker pulls the next candidate via a
         // synchronous index bump (nextIndex++). `done` is incremented once per mod as
         // it COMPLETES (all classifications land there), keeping done/total monotonic.
-        const poolSize = Math.min(8, Math.max(1, os.cpus().length));
+        const poolSize = DEFAULT_WORKER_CONCURRENCY;
         let nextIndex = 0;
 
         const processOne = (mod: Mod): Promise<void> => {
@@ -975,7 +982,13 @@ export async function imprintPreflight(deadlockPath: string): Promise<ImprintPre
             }
 
             // 4. Anomaly guard (skip + report, never re-stamp: KEYSTONE).
-            const anomaly = await checkImprintAnomaly(mod);
+            //    checkHashDrift: false keeps the modal-open path free of
+            //    whole-file reads (preflight runs inside the exclusive
+            //    mutation lock, so every other mutation queues behind it). A
+            //    hash-drifted file therefore previews as eligible and is
+            //    refused at write time by the bulk run's own guard, landing
+            //    in failed[] with the same localized 'hash-drift' reason.
+            const anomaly = await checkImprintAnomaly(mod, { checkHashDrift: false });
             if (anomaly) {
                 result.counts.anomalous++;
                 result.anomalous.push({ fileName: mod.fileName, modName, reason: anomaly });
