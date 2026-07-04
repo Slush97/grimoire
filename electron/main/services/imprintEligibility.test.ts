@@ -77,11 +77,11 @@ vi.mock('./modinfoFormat', () => ({
     MODINFO_SCHEMA_VERSION: 1,
 }));
 
-const { runVpkmerge } = vi.hoisted(() => ({
-    runVpkmerge: vi.fn<(args: string[]) => Promise<void>>(),
+const { repackWithEmbeddedEntries } = vi.hoisted(() => ({
+    repackWithEmbeddedEntries: vi.fn<(...args: unknown[]) => Promise<void>>(),
 }));
 vi.mock('./modMerger', () => ({
-    runVpkmerge,
+    repackWithEmbeddedEntries,
     embedMergeIdentity: vi.fn(),
     buildPortableForMergeSources: vi.fn(),
 }));
@@ -138,7 +138,7 @@ describe('never-identified VPKs and bulk imprint', () => {
 
         const result = await imprintAllInstalled('C:/deadlock');
 
-        expect(runVpkmerge).not.toHaveBeenCalled();
+        expect(repackWithEmbeddedEntries).not.toHaveBeenCalled();
         expect(result.imprinted).toBe(0);
         expect(result.failed).toEqual([
             { fileName: 'pak10_dir.vpk', modName: 'pak10', reason: 'unidentified' },
@@ -200,6 +200,6 @@ describe('preflight cost contract', () => {
         expect(result.failed).toEqual([
             { fileName: 'pak10_dir.vpk', modName: 'Known Mod', reason: 'hash-drift' },
         ]);
-        expect(runVpkmerge).not.toHaveBeenCalled();
+        expect(repackWithEmbeddedEntries).not.toHaveBeenCalled();
     });
 });

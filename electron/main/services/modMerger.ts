@@ -16,11 +16,13 @@ import {
 } from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
 import { resolveVpkIdentity, type OriginalIdentity } from './vpkIdentity';
+import { parseVpkEntryStats } from './vpk';
 import {
     computeOriginalIdentity,
     serializeAddonInfo,
     serializeModinfo,
     hasLegacyGrimoireMergeMetaEntry,
+    findImprintRepackMismatch,
     ADDONINFO_ENTRY,
     MODINFO_ENTRY,
     LEGACY_GRIMOIRE_META_ENTRY,
@@ -312,47 +314,80 @@ export async function embedMergeIdentity(
         sources,
     };
     const metaText = serializeModinfo(record);
+    await repackWithEmbeddedEntries(mergedPath, addonText, metaText);
+}
 
-    const addonTmp = join(tmpdir(), `grimoire-addoninfo-${randomUUID()}.txt`);
-    const metaTmp = join(tmpdir(), `grimoire-modinfo-${randomUUID()}.json`);
-    // Build the embed output as a dotfile in the merged mod's OWN folder (a
-    // non-`_dir.vpk` name, so it is neither scanned as a mod nor counted as a
-    // slot), then swap it over the original. Same-folder keeps the rename on one
-    // volume (no cross-device EXDEV), exactly like extractMergeSource's rebuild.
-    const embedOut = join(dirname(mergedPath), `.merge-embed-${randomUUID()}.vpk`);
-
+/**
+ * Re-pack `vpkPath` in place with BOTH imprint entries (`addoninfo.txt` +
+ * `modinfo.json`) embedded at its root in one `vpkmerge metadata` pass, then
+ * atomically swap it over the original. The single shared embed writer: the
+ * merge pass (embedMergeIdentity above) and the single-mod imprint
+ * (imprintMods.ts) both go through here, so the parity check and the legacy
+ * residue retirement cannot drift between them.
+ *
+ * The temp output is a dotfile in the VPK's OWN folder (a non-`_dir.vpk`
+ * name, so it is neither scanned as a mod nor counted as a slot), keeping the
+ * rename on one volume; on any failure the original VPK is left untouched.
+ *
+ * Before the swap the repacked output must pass a real parity check against
+ * the input's entry tree (findImprintRepackMismatch): every carried entry
+ * present with an unchanged logical size (except an expected `--drop-entry`
+ * removal), nothing added beyond the two imprint entries. A magic-bytes check
+ * alone (verifyVpkOutput) would accept a structurally valid VPK that silently
+ * dropped or corrupted game content. Any mismatch throws (landing in the
+ * caller's fail-soft handling) and the original VPK keeps its slot.
+ *
+ * When the input still carries a legacy grimoire_meta.json companion, it is
+ * passed to vpkmerge's `--drop-entry` so the residue is retired in the same
+ * repack that writes its replacement (the new record fully supersedes it).
+ */
+export async function repackWithEmbeddedEntries(
+    vpkPath: string,
+    addonText: string,
+    modinfoText: string
+): Promise<void> {
+    const inputEntries = parseVpkEntryStats(vpkPath);
+    if (!inputEntries) {
+        throw new Error('Cannot verify the repack: the input VPK entry tree is unreadable.');
+    }
+    const addonTmp = join(tmpdir(), `grimoire-imprint-addoninfo-${randomUUID()}.txt`);
+    const modinfoTmp = join(tmpdir(), `grimoire-imprint-modinfo-${randomUUID()}.json`);
+    const embedOut = join(dirname(vpkPath), `.imprint-embed-${randomUUID()}.vpk`);
+    const droppedEntries = hasLegacyGrimoireMergeMetaEntry(vpkPath) ? [LEGACY_GRIMOIRE_META_ENTRY] : [];
     try {
         await fs.writeFile(addonTmp, addonText);
-        await fs.writeFile(metaTmp, metaText);
-        // The new merge record lives entirely in modinfo.json, so a legacy
-        // grimoire_meta.json companion (pre-redo files) is superseded, not
-        // merely shadowed: drop it in the same repack rather than leaving
-        // residue an old reader might still trust.
-        const dropLegacyMeta = hasLegacyGrimoireMergeMetaEntry(mergedPath);
+        await fs.writeFile(modinfoTmp, modinfoText);
         await runVpkmerge([
             'metadata',
             '--vpk',
-            mergedPath,
+            vpkPath,
             '--output',
             embedOut,
             '--extra-file',
             `${ADDONINFO_ENTRY}=${addonTmp}`,
             '--extra-file',
-            `${MODINFO_ENTRY}=${metaTmp}`,
-            ...(dropLegacyMeta ? ['--drop-entry', LEGACY_GRIMOIRE_META_ENTRY] : []),
+            `${MODINFO_ENTRY}=${modinfoTmp}`,
+            ...droppedEntries.flatMap((entry) => ['--drop-entry', entry]),
         ]);
-        await verifyVpkOutput(embedOut);
+        const outputEntries = parseVpkEntryStats(embedOut);
+        if (!outputEntries) {
+            throw new Error('Imprint repack produced an unreadable VPK; the original was left untouched.');
+        }
+        const mismatch = findImprintRepackMismatch(inputEntries, outputEntries, droppedEntries);
+        if (mismatch) {
+            throw new Error(`Imprint repack parity check failed: ${mismatch}. The original was left untouched.`);
+        }
         // Atomic replace (rename over the existing file, the metadata.ts write
         // idiom): either the embedded VPK fully takes the slot or, if the rename
-        // fails, the original un-embedded merged VPK is left untouched. Avoids a
-        // window where the merged slot is missing on disk.
-        await fs.rename(embedOut, mergedPath);
+        // fails, the original un-embedded VPK is left untouched. Avoids a
+        // window where the slot is missing on disk.
+        await fs.rename(embedOut, vpkPath);
     } catch (err) {
         try { await fs.unlink(embedOut); } catch { /* ignore partial-output cleanup */ }
         throw err;
     } finally {
         try { await fs.unlink(addonTmp); } catch { /* best-effort temp cleanup */ }
-        try { await fs.unlink(metaTmp); } catch { /* best-effort temp cleanup */ }
+        try { await fs.unlink(modinfoTmp); } catch { /* best-effort temp cleanup */ }
     }
 }
 
