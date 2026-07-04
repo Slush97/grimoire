@@ -10,9 +10,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { EventEmitter } from 'events';
 
 const fsMocks = vi.hoisted(() => ({
-    writeFile: vi.fn(async () => undefined),
-    rename: vi.fn(async () => undefined),
-    unlink: vi.fn(async () => undefined),
+    writeFile: vi.fn(async (..._args: unknown[]) => undefined),
+    rename: vi.fn(async (..._args: unknown[]) => undefined),
+    unlink: vi.fn(async (..._args: unknown[]) => undefined),
 }));
 vi.mock('fs', () => ({
     promises: fsMocks,
