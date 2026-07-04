@@ -25,6 +25,7 @@ import type {
     EditLocalModArgs,
     LockerClearScope,
     MergeModsArgs,
+    ImprintInstalledProgress,
     TrippySpriteOptions,
     TrippyVfxChoice,
     UnknownModDetectionProgress,
@@ -311,6 +312,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>
         ipcRenderer.invoke('extract-merge-source', mergedModId, sourceFileName),
+    imprintOneMod: (modId: string) => ipcRenderer.invoke('imprint-one-mod', modId),
+    imprintAllInstalled: () => ipcRenderer.invoke('imprint-all-installed'),
+    imprintPreflight: () => ipcRenderer.invoke('imprint-preflight'),
+    readImprintDetails: (modId: string) => ipcRenderer.invoke('read-imprint-details', modId),
+    peekImprint: (filePath: string) => ipcRenderer.invoke('peek-imprint', filePath),
+    onImprintAllInstalledProgress: (callback: (progress: ImprintInstalledProgress) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, progress: ImprintInstalledProgress) =>
+            callback(progress);
+        ipcRenderer.on('imprint-all-installed-progress', handler);
+        return () => ipcRenderer.removeListener('imprint-all-installed-progress', handler);
+    },
 
     // Launch
     launchModded: () => ipcRenderer.invoke('launch-modded'),

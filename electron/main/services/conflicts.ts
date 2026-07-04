@@ -20,6 +20,12 @@ const IGNORED_CONFLICT_FILES = new Set([
     'credits.txt',
     'changelog.txt',
     'info.txt',
+    // Grimoire imprint metadata (and the legacy pre-redo companion): embedded at
+    // the VPK root by the imprint/merge repack, inert to the game, and present in
+    // every imprinted mod, so two imprinted mods would otherwise always "conflict".
+    'addoninfo.txt',
+    'modinfo.json',
+    'grimoire_meta.json',
 ]);
 
 // Exact paths of Source 2 compiler artifacts that any mod touching a given

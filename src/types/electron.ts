@@ -13,6 +13,11 @@ import type {
     MergeModsArgs,
     UnmergeModResult,
     ExtractMergeSourceResult,
+    ImprintAllInstalledResult,
+    ImprintInstalledProgress,
+    ImprintPreflightResult,
+    ImprintDetails,
+    PeekImprintResult,
     ApplyHeroCardResult,
     HeroAbilitySlot,
     AbilitySlot,
@@ -734,6 +739,19 @@ export interface ElectronAPI {
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
+    imprintOneMod: (modId: string) => Promise<Mod>;
+    imprintAllInstalled: () => Promise<ImprintAllInstalledResult>;
+    imprintPreflight: () => Promise<ImprintPreflightResult>;
+    /** Read-only: the full embedded imprint (addoninfo.txt + optional
+     *  grimoire_meta.json merge companion) of one installed VPK, or null when
+     *  the file carries no valid Grimoire embed. */
+    readImprintDetails: (modId: string) => Promise<ImprintDetails | null>;
+    /** Read-only recognition check for the import dialog: peek at an arbitrary
+     *  absolute .vpk path (before it's imported anywhere) for a recoverable
+     *  Grimoire embed. Null when the path isn't a readable .vpk or carries no
+     *  valid embed. No lock, no writes, no scanMods. */
+    peekImprint: (filePath: string) => Promise<PeekImprintResult | null>;
+    onImprintAllInstalledProgress: (callback: (progress: ImprintInstalledProgress) => void) => () => void;
 
     // Launch
     launchModded: () => Promise<void>;

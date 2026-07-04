@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
 import type { DmmMigrationRequest, DmmMigrationReport } from './dmmMigration';
 import type {
   HeroPortrait,
@@ -667,6 +667,49 @@ export async function extractMergeSource(
 }
 
 export type { UnmergeModResult, ExtractMergeSourceResult };
+
+/** Imprint a single installed VPK in place with a self-identifying addoninfo.txt
+ *  embed (path B). Surfaces the game-running warning toast on a loaded-mod
+ *  refusal, like the other in-place mutations. */
+export async function imprintOneMod(modId: string): Promise<Mod> {
+  return withGameRunningWarning(() => window.electronAPI.imprintOneMod(modId));
+}
+
+/** Retroactively imprint the whole installed library in place. Loaded mods are
+ *  skipped and reported; per-mod failures are collected (never thrown). */
+export async function imprintAllInstalled(): Promise<ImprintAllInstalledResult> {
+  return window.electronAPI.imprintAllInstalled();
+}
+
+/** Subscribe to bulk-imprint progress ticks; returns an unsubscribe function. */
+export function onImprintAllInstalledProgress(
+  callback: (progress: ImprintInstalledProgress) => void
+): () => void {
+  return window.electronAPI.onImprintAllInstalledProgress(callback);
+}
+
+/** No-network dry-run: classify every installed mod into imprint buckets without
+ *  mutating any file. Drives the pre-commit confirmation before a bulk imprint. */
+export async function imprintPreflight(): Promise<ImprintPreflightResult> {
+  return window.electronAPI.imprintPreflight();
+}
+
+/** Read the full embedded imprint (addoninfo.txt plus the grimoire_meta.json
+ *  merge companion when present) of one installed VPK. Strictly read-only and
+ *  offline; resolves null when the file carries no valid Grimoire imprint. */
+export async function readImprintDetails(modId: string): Promise<ImprintDetails | null> {
+  return window.electronAPI.readImprintDetails(modId);
+}
+
+/** Read-only recognition check for the import dialog: peek at an arbitrary
+ *  absolute .vpk path (before it's imported) for a recoverable Grimoire
+ *  embed. Resolves null when the path isn't a readable .vpk or carries no
+ *  valid embed. */
+export async function peekImprint(filePath: string): Promise<PeekImprintResult | null> {
+  return window.electronAPI.peekImprint(filePath);
+}
+
+export type { ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult };
 
 // =====================
 // Launch API

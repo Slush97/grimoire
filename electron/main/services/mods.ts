@@ -5,7 +5,8 @@ import { createHash, randomBytes } from 'crypto';
 import { getAddonsPath, getDisabledPath, getAddonFolderPaths, createNextOverflowFolder, overflowAddonsPath, MAX_ADDON_FOLDERS, metaKeyFor } from './deadlock';
 import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
-import { compareFileContents, fingerprintFile } from './fileMatch';
+import { compareFileContents } from './fileMatch';
+import { resolveVpkIdentity, readEmbeddedAddonInfo, carryForwardOriginalIdentity } from './vpkIdentity';
 import { loadSettings } from './settings';
 import {
     assertCanMoveLoadedGameMod,
@@ -519,7 +520,7 @@ async function reconcileEnabledDisabledCollisions(
         const enabledEntry = enabledByName.get(disabledEntry.toLowerCase());
         if (!enabledEntry) continue;
 
-        const identical = await sameFileContents(
+        const identical = await sameCanonicalContents(
             join(addonsPath, enabledEntry),
             join(disabledPath, disabledEntry)
         );
@@ -570,6 +571,33 @@ async function sameFileContents(leftPath: string, rightPath: string): Promise<bo
     return comparison.matches;
 }
 
+/**
+ * Embed-aware duplicate check for the enabled/disabled collision heal. Two
+ * copies of the same mod can carry different LIVE bytes once either has been
+ * (re-)imprinted, so a raw byte compare (which size-fast-fails) would keep a
+ * genuine duplicate around under a renamed disabled file. When either side
+ * carries an embedded original identity, compare CANONICAL identities instead:
+ * equal original sha256 means the same mod. This is the same axis
+ * getCollisionMetadataOwner below resolves against, so the "is it a duplicate"
+ * and "who owns the metadata" decisions can no longer disagree. Files with no
+ * embed on either side keep the cheap live-bytes compare, exactly the
+ * pre-imprint behavior.
+ */
+async function sameCanonicalContents(leftPath: string, rightPath: string): Promise<boolean> {
+    // Cheap probe (cached dir parse + one small entry read): the same test
+    // resolveVpkIdentity uses to decide embed vs live.
+    const leftEmbed = carryForwardOriginalIdentity(readEmbeddedAddonInfo(leftPath) ?? undefined);
+    const rightEmbed = carryForwardOriginalIdentity(readEmbeddedAddonInfo(rightPath) ?? undefined);
+    if (!leftEmbed && !rightEmbed) {
+        return sameFileContents(leftPath, rightPath);
+    }
+    // At least one side is imprinted: fall back to a live whole-file hash only
+    // for a side without an embed (its live hash IS its canonical identity).
+    const leftSha = leftEmbed?.sha256 ?? (await resolveVpkIdentity(leftPath)).sha256;
+    const rightSha = rightEmbed?.sha256 ?? (await resolveVpkIdentity(rightPath)).sha256;
+    return leftSha === rightSha;
+}
+
 function moveCollisionMetadata(
     enabledFileName: string,
     renamedFileName: string,
@@ -589,7 +617,10 @@ async function getCollisionMetadataOwner(
 ): Promise<CollisionMetadataOwner> {
     if (!sha256) return 'enabled';
 
-    const disabledHash = await fingerprintFile(disabledPath);
+    // Resolve to the canonical (original) hash so a tagged disabled VPK still
+    // matches the stored original sha256; untagged files resolve to their live
+    // hash, exactly as before embeds existed.
+    const disabledHash = await resolveVpkIdentity(disabledPath);
     return disabledHash.sha256.toLowerCase() === sha256.toLowerCase() ? 'disabled' : 'enabled';
 }
 

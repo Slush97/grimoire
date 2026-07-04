@@ -26,6 +26,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalCrosshair: false,
     experimentalSocial: false,
     experimentalUnknownModMatching: false,
+    experimentalVpkImprinting: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,
@@ -67,6 +68,12 @@ export function loadSettings(): AppSettings {
                 settings.installedHideNsfwPreviews ??
                 settings.hideNsfwPreviews ??
                 DEFAULT_SETTINGS.installedHideNsfwPreviews,
+            // PRE-RELEASE SHIM: delete before first release. Migrate the
+            // pre-rename flag id so an existing opt-in survives.
+            experimentalVpkImprinting:
+                settings.experimentalVpkImprinting ??
+                (settings as { experimentalVpkTagging?: boolean }).experimentalVpkTagging ??
+                DEFAULT_SETTINGS.experimentalVpkImprinting,
         };
     } catch (error) {
         console.warn('[Settings] Failed to load settings, resetting to defaults:', error);

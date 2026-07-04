@@ -656,6 +656,16 @@ export interface Mod {
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;
+  /** True once this VPK has been re-packed in place with a self-identifying
+   *  `addoninfo.txt` embed (path B imprinting). A UI hint only: it does NOT
+   *  affect canonical identity (sha256 stays the original). Projected from
+   *  metadata.imprinted in enrichMod. */
+  imprinted?: boolean;
+  /** Meaningful only alongside `imprinted`: the embed is legacy format or has
+   *  drifted from the metadata sidecar, so a re-imprint is pending work. Feeds
+   *  the toolbar button's pending count; kept honest by the startup reconcile
+   *  and cleared on every successful (re)imprint. */
+  imprintStale?: boolean;
 }
 
 export interface MergeModsArgs {
@@ -729,6 +739,15 @@ export interface UnknownModDetectionProgress {
   result?: UnknownModFilterGuess;
 }
 
+/** One source reconstructed from a merged VPK's embedded grimoire_meta.json. */
+export interface UnknownModMergeSource {
+  modName: string;
+  gameBananaId?: number;
+  gameBananaFileId?: number;
+  section?: string;
+  fileName?: string;
+}
+
 export interface UnknownModCrcMatchResult {
   status: 'found' | 'not-found' | 'error';
   modId?: number;
@@ -741,6 +760,18 @@ export interface UnknownModCrcMatchResult {
   categoryName?: string;
   confidence?: 'exact';
   reason?: string;
+  /** How a 'found' result was identified, so the UI can distinguish a self-
+   *  reported embed from a verified upstream CRC hit:
+   *  - 'crc-32': matched a GameBanana archive's CRC-32 (cached or live network).
+   *  - 'embedded-metadata': read from the VPK's embedded Grimoire addoninfo.txt
+   *    (offline, ungated). The file says which GameBanana mod it is.
+   *  - 'embedded-merge': the VPK is a Grimoire merge carrying a grimoire_meta.json
+   *    source list (offline, ungated); see `mergeSources`.
+   *  Absent on legacy results (treat as 'crc-32'). */
+  provenance?: 'crc-32' | 'embedded-metadata' | 'embedded-merge';
+  /** For an 'embedded-merge' result: the source list reconstructed from the
+   *  embedded grimoire_meta.json (no network). */
+  mergeSources?: UnknownModMergeSource[];
   searchedBuckets: string[];
   checkedMods: number;
   checkedFiles: number;
@@ -790,6 +821,136 @@ export interface EditLocalModArgs {
   name: string;
   thumbnailDataUrl?: string;
   nsfw?: boolean;
+}
+
+// One mod the bulk "Imprint installed mods" action skipped because the running game
+// has it loaded. Surfaced in the report rather than silently dropped (imprinting a
+// loaded VPK in place is a hard refusal, same as merge/reorder).
+export interface ImprintSkippedMod {
+  fileName: string;
+  modName: string;
+  reason: 'loaded';
+}
+
+// One mod the bulk imprint action could not imprint (embed / repack / swap error). The
+// installed VPK is left untouched on failure.
+export interface ImprintFailedMod {
+  fileName: string;
+  modName: string;
+  reason: string;
+}
+
+// Result of the retroactive bulk "Imprint installed mods" action.
+export interface ImprintAllInstalledResult {
+  // Count of mods now carrying a self-identifying embed: newly imprinted plus any
+  // that were already imprinted (those skip the repack but still count).
+  imprinted: number;
+  // Mods skipped because the running game has them loaded.
+  skipped: ImprintSkippedMod[];
+  // Mods that errored during imprinting.
+  failed: ImprintFailedMod[];
+}
+
+// Progress tick emitted while the bulk "Imprint installed mods" action runs.
+export interface ImprintInstalledProgress {
+  done: number;
+  total: number;
+  fileName: string;
+  modName: string;
+}
+
+// One mod the preflight (or the bulk run's per-mod guard) refused to imprint
+// because it looks anomalous: an unparseable/zero-byte VPK, a multi-chunk VPK,
+// a live hash/size that drifted from the stored canonical identity (KEYSTONE:
+// never re-recorded), a foreign addoninfo.txt with no recoverable original
+// identity, or a merge whose manifest could not be reconstructed. Skipped and
+// reported, never silently failed and never re-stamped.
+export interface ImprintAnomalousMod {
+  fileName: string;
+  modName: string;
+  // Why it was flagged. 'unparseable': parseVpkDirectoryCached returned null.
+  // 'empty': zero-byte / truncated file. 'chunked': sibling <base>_NNN.vpk
+  // chunk archives detected (an in-place repack would orphan their payload).
+  // 'hash-drift': live identity != stored metadata.sha256 on a non-embedded
+  // file. 'foreign-embed': carries an addoninfo.txt but no recoverable
+  // original identity. 'orphan-merge': the metadata sidecar has no `merged`
+  // entry, but the file's own embed/legacy companion is a merge whose source
+  // list could not be read cleanly (NEVER FLATTEN: refused rather than
+  // re-imprinted as a plain kind:"mod", which would destroy the source list).
+  reason: 'unparseable' | 'empty' | 'chunked' | 'hash-drift' | 'foreign-embed' | 'orphan-merge';
+}
+
+// Per-bucket counts from imprintPreflight. Every scanMods() candidate lands in
+// exactly one bucket, so the six counts sum to the total scanned candidate count.
+// merged and lockerManaged are kept separate here even though the UI collapses
+// them into one "auto-managed (merged or Locker)" line.
+export interface ImprintPreflightCounts {
+  // Not yet imprinted, not loaded, not auto-managed, not anomalous: safe to imprint.
+  eligible: number;
+  // Already carries a well-formed self-identifying embed.
+  alreadyImprinted: number;
+  // The running game has it loaded (imprinting in place is a hard refusal).
+  blockedLoaded: number;
+  // Produced by mergeMods (a single-mod imprint would clobber the richer merge embed).
+  merged: number;
+  // A Locker-managed artifact (rebuilt automatically; excluded from bulk imprint).
+  lockerManaged: number;
+  // Flagged by the anomaly guard (skipped + reported, never re-stamped).
+  anomalous: number;
+}
+
+// Result of the no-network imprint-preflight dry-run: per-bucket counts plus the
+// item lists for the buckets a user needs to see (loaded + anomalies). No VPK is
+// mutated and no canonical identity is re-recorded.
+export interface ImprintPreflightResult {
+  counts: ImprintPreflightCounts;
+  // Total scanMods() candidates classified (sum of all six bucket counts).
+  total: number;
+  // Mods skipped because the running game has them loaded.
+  blockedLoaded: ImprintSkippedMod[];
+  // Mods flagged by the anomaly guard.
+  anomalous: ImprintAnomalousMod[];
+}
+
+// Full embedded imprint of one installed VPK, as returned by the read-only
+// 'read-imprint-details' IPC. Null over the wire when the file carries no
+// valid Grimoire embed (no addoninfo.txt, or a foreign embed without a
+// recoverable original identity). KEYSTONE: originalSha256 is the canonical
+// pre-imprint identity; this surface never writes anything.
+export interface ImprintDetails {
+  // Parsed addoninfo.txt fields. All optional: legacy imprints may omit them.
+  title?: string;
+  author?: string;
+  gamebananaId?: string;
+  gamebananaFileId?: string;
+  sourceUrl?: string;
+  buildDate?: string;
+  // The original (pre-imprint) whole-file identity triple. sha256 is always
+  // present (it is what makes the embed valid); crc32/size may be absent.
+  originalSha256: string;
+  originalCrc32?: string;
+  originalSize?: number;
+  // The raw addoninfo.txt text, verbatim, for the collapsible raw view.
+  rawAddonInfo: string;
+  // The parsed modinfo.json machine record. Null for a legacy (pre-redo)
+  // imprint that carries only the old grimoire-branded embed; such a file is
+  // stale format-wise and migrates on its next re-imprint.
+  modinfo: import('./modinfo').ModinfoRecord | null;
+}
+
+// Small typed summary for the import dialog's recognition note, as returned by
+// the read-only 'peek-imprint' IPC. Takes an absolute file path (not yet an
+// installed mod: the dialog calls this on the picked source file BEFORE
+// import runs), so it has no modId/mod-scan dependency at all. Null when the
+// file carries no recoverable Grimoire embed. `kind` distinguishes a merge
+// embed (whose title is the merge's name, not a single mod's) so the dialog
+// can phrase the recognition note correctly.
+export interface PeekImprintResult {
+  title?: string;
+  gamebananaId?: number;
+  gamebananaFileId?: number;
+  author?: string;
+  kind: 'mod' | 'merge';
 }
 
 export interface ModConflict {
@@ -873,6 +1034,13 @@ export interface AppSettings {
    *  but the search/find buttons and bulk auto-find are hidden, leaving
    *  only the manual "Make Custom Mod" path. */
   experimentalUnknownModMatching: boolean;
+  /** Opt-in install-time VPK imprinting. When on, each newly installed single-mod
+   *  VPK is re-packed in place with a self-identifying `addoninfo.txt` embed (its
+   *  canonical original hash plus GameBanana id when known) so an orphaned file
+   *  can be identified offline (see docs/vpk-metadata-embed-integration.md). Off
+   *  by default. Also surfaces the retroactive "Imprint installed mods" bulk action
+   *  on the Installed page. */
+  experimentalVpkImprinting: boolean;
   /** First-run setup completed. */
   hasCompletedSetup: boolean;
   /** Mod pairs the user has dismissed in the Conflicts page. New entries use

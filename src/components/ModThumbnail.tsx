@@ -26,6 +26,9 @@ interface ModThumbnailProps {
   mergedSources?: MergedModSource[];
   /** Forwarded to the image context menu as a "Reveal mod in folder" item. */
   onRevealInFolder?: () => void;
+  /** Forwarded to the image context menu as a "View imprint" item. Callers
+   *  pass it only for imprinted mods. */
+  onViewImprint?: () => void;
 }
 
 export default function ModThumbnail({
@@ -41,6 +44,7 @@ export default function ModThumbnail({
   heroPortrait,
   mergedSources,
   onRevealInFolder,
+  onViewImprint,
 }: ModThumbnailProps) {
   const { t } = useTranslation();
   const shouldBlur = nsfw && hideNsfw;
@@ -60,6 +64,7 @@ export default function ModThumbnail({
         className={className}
         shouldBlur={shouldBlur}
         onRevealInFolder={onRevealInFolder}
+        onViewImprint={onViewImprint}
       />
     );
   }
@@ -100,7 +105,7 @@ export default function ModThumbnail({
   if (resolvedBlur) return thumbnail;
 
   return (
-    <ImageContextMenu src={resolvedSrc} alt={alt} onRevealInFolder={onRevealInFolder}>
+    <ImageContextMenu src={resolvedSrc} alt={alt} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
       {thumbnail}
     </ImageContextMenu>
   );
@@ -112,6 +117,7 @@ interface MergedCollageProps {
   className: string;
   shouldBlur?: boolean;
   onRevealInFolder?: () => void;
+  onViewImprint?: () => void;
 }
 
 /**
@@ -120,7 +126,7 @@ interface MergedCollageProps {
  * cells. Grid shape is picked to keep cells roughly square on a wide card;
  * with more than 16 thumbnails the last cell becomes a "+N more" tile.
  */
-function MergedCollage({ sources, alt, className, shouldBlur, onRevealInFolder }: MergedCollageProps) {
+function MergedCollage({ sources, alt, className, shouldBlur, onRevealInFolder, onViewImprint }: MergedCollageProps) {
   const { t } = useTranslation();
   const { cells, cols } = buildCollage(sources);
   return (
@@ -142,7 +148,7 @@ function MergedCollage({ sources, alt, className, shouldBlur, onRevealInFolder }
                   className="block w-full h-full object-cover blur-xl scale-110"
                 />
               ) : (
-                <ImageContextMenu src={cell.url} alt={alt} onRevealInFolder={onRevealInFolder}>
+                <ImageContextMenu src={cell.url} alt={alt} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
                   <img
                     src={cell.url}
                     alt=""
