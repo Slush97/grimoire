@@ -62,6 +62,7 @@ import {
   Banana,
   HelpCircle,
   GripVertical,
+  ClipboardList,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
@@ -2923,6 +2924,25 @@ export default function Installed() {
   const enabledModCount = enabledByLoadOrder.length;
   const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
 
+  const handleCopyEnabledMods = async () => {
+    const names = mods
+      .filter((m) => m.enabled)
+      .sort((a, b) => modLoadOrder(a) - modLoadOrder(b))
+      .map((m) => m.name);
+    if (names.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(names.join('\n'));
+      showToast(t('installed.actions.copyEnabledToast', { count: names.length }), {
+        tone: 'success',
+        duration: 2200,
+      });
+    } catch (err) {
+      showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, {
+        tone: 'error',
+      });
+    }
+  };
+
   // Filter by search query (substring on name), source (GameBanana vs local
   // import), hero, and tags, then optionally re-sort. Status (enabled/disabled)
   // is applied per-section below. Drag-and-drop reorder is disabled whenever any
@@ -3391,6 +3411,16 @@ export default function Installed() {
             )}
           </div>
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
+            {mods.some((m) => m.enabled) && (
+              <Button
+                variant="secondary"
+                onClick={handleCopyEnabledMods}
+                icon={ClipboardList}
+                className="!px-2.5"
+                aria-label={t('installed.actions.copyEnabled')}
+                title={t('installed.actions.copyEnabledHint')}
+              />
+            )}
             {/* Contextual status + reorder actions ride the same row as the
                 view controls (wrapping together when cramped) instead of
                 claiming a second strip below the search. */}

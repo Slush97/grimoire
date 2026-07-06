@@ -322,6 +322,16 @@ ipcMain.handle('stats:syncPlayerData', async (_, accountId: number) => {
         results.errors.push(`Match history: ${err}`)
     }
 
+    // Refresh cached Steam persona name + avatar
+    try {
+        const profiles = await statsApi.getPlayerSteamProfiles([accountId])
+        if (profiles.length > 0) {
+            statsDb.updatePlayerProfile(profiles[0])
+        }
+    } catch (err) {
+        results.errors.push(`Profile: ${err}`)
+    }
+
     return results
 })
 

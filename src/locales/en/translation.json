@@ -936,7 +936,10 @@
       "selectMultipleHint": "Select multiple mods for bulk delete, enable, or disable",
       "lockerOverrides": "Locker overrides",
       "lockerOverridesHint": "Locker overrides: review and remove applied hero cards, ability sounds, and ability colors",
-      "authorPageNotFound": "Couldn't find this mod's author page"
+      "authorPageNotFound": "Couldn't find this mod's author page",
+      "copyEnabled": "Copy enabled mods",
+      "copyEnabledHint": "Copy the names of all enabled mods to the clipboard",
+      "copyEnabledToast": "Enabled mods copied ({{count}})"
     },
     "filters": {
       "searchPlaceholder": "Search installed...",
