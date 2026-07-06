@@ -72,7 +72,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
@@ -470,6 +470,7 @@ interface InstalledEntryCardProps {
   onViewAuthor: (mod: Mod) => void;
   onOpenPicker: (gameBananaId: number) => void;
   onToggle: (entry: ModEntry) => void;
+  onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
   onEditLocal: (mod: Mod) => void;
   onRenameLocal: (mod: Mod, newName: string) => Promise<void>;
@@ -512,6 +513,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onViewAuthor,
   onOpenPicker,
   onToggle,
+  onSoloLaunch,
   onDelete,
   onEditLocal,
   onRenameLocal,
@@ -540,6 +542,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         }
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
+        onSoloLaunch={() => onSoloLaunch(entry)}
         onDelete={() => onDelete(entry)}
         onEditLocal={!mod.gameBananaId ? () => onEditLocal(mod) : undefined}
         onRenameLocal={!mod.gameBananaId ? (newName) => onRenameLocal(mod, newName) : undefined}
@@ -592,6 +595,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
       onToggle={() => onToggle(entry)}
+      onSoloLaunch={() => onSoloLaunch(entry)}
       onDelete={() => onDelete(entry)}
       onTagLocker={(heroName) => onTagLocker(entry, heroName)}
       onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
@@ -703,6 +707,10 @@ export default function Installed() {
     modsError,
     modsNotice,
     clearModsNotice,
+    soloRestore,
+    soloMod,
+    restoreSoloMods,
+    clearSoloRestore,
     loadSettings,
     loadMods,
     toggleMod,
@@ -2897,6 +2905,27 @@ export default function Installed() {
     if (entry.kind === 'group') void handleGroupToggle(entry);
     else void toggleMod(entry.mod.id);
   });
+  // "Start with only this mod enabled": solo the entry (disable everything else)
+  // then launch. For a group we keep its already-enabled variants, or fall back
+  // to the primary when the whole group is currently off. The prior enabled set
+  // is snapshotted by soloMod for the restore banner.
+  const soloLaunchEntry = useStableCallback(async (entry: ModEntry) => {
+    const targetIds =
+      entry.kind === 'group'
+        ? (entry.enabledVariants.length > 0 ? entry.enabledVariants : [entry.primary]).map((m) => m.id)
+        : [entry.mod.id];
+    const label = entry.kind === 'group' ? entry.primary.name : entry.mod.name;
+    const { applied, failures } = await soloMod(targetIds, label);
+    if (!applied) return;
+    if (failures > 0) {
+      showToast(t('installed.solo.partial', { count: failures }), { tone: 'warning' });
+    }
+    try {
+      await launchModded();
+    } catch (err) {
+      showToast(String(err).replace(/^Error:\s*/, ''), { tone: 'error' });
+    }
+  });
   const deleteEntry = useStableCallback((entry: ModEntry) => {
     if (entry.kind === 'group') {
       setModToDelete({
@@ -3315,6 +3344,7 @@ export default function Installed() {
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
     onToggle: toggleEntry,
+    onSoloLaunch: soloLaunchEntry,
     onDelete: deleteEntry,
     onEditLocal: editLocalEntry,
     onRenameLocal: renameLocalMod,
@@ -3868,6 +3898,27 @@ export default function Installed() {
           </div>
         </div>
       </div>
+
+      {soloRestore && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5">
+          <Beaker className="h-4 w-4 flex-shrink-0 text-accent" />
+          <span className="flex-1 text-sm text-text-primary">
+            {t('installed.solo.banner', { name: soloRestore.label })}
+          </span>
+          <Button variant="secondary" size="sm" onClick={() => void restoreSoloMods()}>
+            {t('installed.solo.restore')}
+          </Button>
+          <button
+            type="button"
+            onClick={() => clearSoloRestore()}
+            title={t('common.actions.dismiss')}
+            aria-label={t('common.actions.dismiss')}
+            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {lockerOverridesOpen && (
         <LockerOverridesModal
@@ -6424,6 +6475,9 @@ interface ModCardProps {
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
   onToggle: () => void;
+  /** Disable every other mod, enable only this one, and launch the game. Used
+   *  for A/B testing a single skin. */
+  onSoloLaunch?: () => void;
   onDelete: () => void;
   onEditLocal?: () => void;
   /** Inline rename of a local mod's name (double-click the title). Undefined
@@ -7055,6 +7109,7 @@ function ModCard({
   onOpenDetails,
   onViewAuthor,
   onToggle,
+  onSoloLaunch,
   onDelete,
   onEditLocal,
   onRenameLocal,
@@ -7397,6 +7452,21 @@ function ModCard({
               >
                 <Banana className="w-3.5 h-3.5" />
                 {t('installed.card.viewAuthorPage')}
+              </button>
+            )}
+            {onSoloLaunch && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onSoloLaunch();
+                }}
+                className={menuItemClasses}
+              >
+                <Beaker className="w-3.5 h-3.5" />
+                {t('installed.card.soloLaunch')}
               </button>
             )}
             {(onTagLocker || onTagGlobal) && (

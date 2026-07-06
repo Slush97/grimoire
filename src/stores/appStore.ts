@@ -5,6 +5,7 @@ import { setDateFormat } from '../lib/dateFormat';
 import { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
 import { buildHeroList } from '../lib/lockerUtils';
+import { modRestoreKey, planSolo, planRestore } from '../lib/soloRestore';
 import {
   SHUFFLE_INCLUDED_KEY,
   SHUFFLE_ON_LAUNCH_KEY,
@@ -205,6 +206,12 @@ interface AppState {
   // toast rather than replacing the page the way modsError does.
   modsNotice: string | null;
 
+  // "Start with only this mod" solo test: identity keys of the mods that were
+  // enabled before the last soloMod swap, so the Installed page can offer a
+  // one-click restore. Kept as stable keys (not ids) because disabling renames
+  // a VPK and churns its id. Null when no solo swap is outstanding.
+  soloRestore: { keys: string[]; label: string } | null;
+
   // Download counts cache (mod id -> { downloadCount, timestamp })
   downloadCountsCache: Map<number, CacheEntry<number>>;
 
@@ -291,6 +298,15 @@ interface AppState {
   setShuffleOnLaunch: (enabled: boolean) => void;
   toggleShuffleIncluded: (skinKey: string) => void;
   runLaunchShuffle: () => Promise<{ failures: number }>;
+  /** Disable every other mod and enable only `enableIds` (one card's file(s)),
+   *  snapshotting the prior enabled set for one-click restore. `applied` is
+   *  false only when the whole batch was rejected (e.g. game running), so the
+   *  caller knows whether it's safe to launch. */
+  soloMod: (enableIds: string[], label: string) => Promise<{ applied: boolean; failures: number }>;
+  /** Re-apply the enabled set captured by the last soloMod call. */
+  restoreSoloMods: () => Promise<void>;
+  /** Drop the solo-restore snapshot without touching enablement. */
+  clearSoloRestore: () => void;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
@@ -357,6 +373,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   modsLoading: false,
   modsError: null,
   modsNotice: null,
+  soloRestore: null,
   downloadCountsCache: new Map(),
   soundVolume: readPersistedSoundVolume(),
   previewAudioPlaying: false,
@@ -726,6 +743,47 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
     });
   },
+
+  // "Start with only this mod enabled." Disables every currently-enabled mod
+  // except the target file(s) and enables the target, as one atomic batch, then
+  // snapshots the prior enabled set (by stable key) so the page can restore it.
+  // Runs inside enqueueToggle so the plan is derived after any in-flight toggle.
+  soloMod: (enableIds, label) => enqueueToggle(async () => {
+    const mods = get().mods;
+    const { enable, disable } = planSolo(mods, enableIds);
+    // Already solo (target is the only thing enabled): nothing to swap, and no
+    // meaningful state to restore to, so skip the snapshot but let the caller
+    // launch.
+    if (enable.length === 0 && disable.length === 0) return { applied: true, failures: 0 };
+    const keys = mods.filter((m) => m.enabled).map(modRestoreKey);
+    try {
+      const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
+      set({ mods: updated, soloRestore: { keys, label } });
+      return { applied: true, failures: failures.length };
+    } catch (err) {
+      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+      get().loadMods();
+      return { applied: false, failures: 0 };
+    }
+  }),
+
+  restoreSoloMods: () => enqueueToggle(async () => {
+    const snap = get().soloRestore;
+    if (!snap) return;
+    const { enable, disable } = planRestore(get().mods, snap.keys);
+    if (enable.length === 0 && disable.length === 0) { set({ soloRestore: null }); return; }
+    try {
+      const { mods: updated } = await api.applyModToggleBatch(enable, disable);
+      set({ mods: updated, soloRestore: null });
+    } catch (err) {
+      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+      get().loadMods();
+    }
+  }),
+
+  clearSoloRestore: () => set({ soloRestore: null }),
 
   editLocalMod: async (modId: string, args: EditLocalModArgs) => {
     const updated = await api.editLocalMod(modId, args);
