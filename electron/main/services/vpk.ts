@@ -340,6 +340,232 @@ export function parseVpkDirectory(vpkPath: string): string[] | null {
     }
 }
 
+// ArchiveIndex sentinel meaning the entry's data lives inside the _dir.vpk
+// itself (in the data section after the directory tree), rather than in a
+// separate _NNN.vpk archive. vpkmerge re-embeds everything inline into the dir
+// VPK, so a Grimoire-embedded addoninfo.txt always uses this index.
+const VPK_DIR_ARCHIVE_INDEX = 0x7fff;
+
+/**
+ * Names of sibling chunk archives (`<base>_NNN.vpk`, NNN numeric) for a given
+ * `<base>_dir.vpk` file name, out of the file names sharing its folder. A
+ * multi-chunk VPK stores entry data in those siblings, so an in-place repack
+ * of just the dir VPK would orphan the payload; the imprint anomaly guard
+ * keys off a non-empty result. Pure name matching, unit-testable without a
+ * real directory. Returns [] when the name is not a `_dir.vpk` at all.
+ */
+export function findChunkSiblingNames(dirVpkFileName: string, siblingFileNames: string[]): string[] {
+    const base = dirVpkFileName.replace(/_dir\.vpk$/i, '');
+    if (base === dirVpkFileName) return [];
+    const prefix = `${base.toLowerCase()}_`;
+    return siblingFileNames.filter((name) => {
+        const lower = name.toLowerCase();
+        if (!lower.startsWith(prefix) || !lower.endsWith('.vpk')) return false;
+        const middle = lower.slice(prefix.length, -'.vpk'.length);
+        return /^\d+$/.test(middle);
+    });
+}
+
+/** One VPK directory entry with its logical payload size. */
+export interface VpkEntryStat {
+    /** Entry path exactly as parseVpkDirectory would produce it. */
+    path: string;
+    /** Logical entry byte length: preload bytes + archive entry length. */
+    size: number;
+}
+
+/**
+ * Parse a VPK's directory tree into per-entry logical sizes (preload bytes +
+ * archive entry length). Built for the imprint repack parity check: it needs
+ * the input and output entry trees with sizes, which parseVpkDirectory does
+ * not surface. Directory-tree only (no data reads), side-effect free, and
+ * uncached (callers compare freshly written temp files). Returns null when
+ * the file is not a readable VPK directory.
+ */
+export function parseVpkEntryStats(vpkPath: string): VpkEntryStat[] | null {
+    if (!existsSync(vpkPath)) return null;
+
+    let fd: number | null = null;
+    try {
+        fd = openSync(vpkPath, 'r');
+
+        const headerBuffer = Buffer.alloc(12);
+        readSync(fd, headerBuffer, 0, 12, 0);
+        if (headerBuffer.readUInt32LE(0) !== VPK_SIGNATURE) {
+            closeSync(fd);
+            return null;
+        }
+        const version = headerBuffer.readUInt32LE(4);
+        const treeSize = headerBuffer.readUInt32LE(8);
+        const headerSize = version === 2 ? 28 : 12;
+
+        const treeBuffer = Buffer.alloc(treeSize);
+        readSync(fd, treeBuffer, 0, treeSize, headerSize);
+        closeSync(fd);
+        fd = null;
+
+        const entries: VpkEntryStat[] = [];
+        let offset = 0;
+        while (offset < treeBuffer.length) {
+            const extResult = readNullTerminatedString(treeBuffer, offset);
+            offset += extResult.bytesRead;
+            if (extResult.str === '') break;
+            const extension = extResult.str;
+
+            while (offset < treeBuffer.length) {
+                const pathResult = readNullTerminatedString(treeBuffer, offset);
+                offset += pathResult.bytesRead;
+                if (pathResult.str === '') break;
+                const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
+
+                while (offset < treeBuffer.length) {
+                    const nameResult = readNullTerminatedString(treeBuffer, offset);
+                    offset += nameResult.bytesRead;
+                    if (nameResult.str === '') break;
+
+                    // Entry metadata block (18 bytes):
+                    // CRC(4) PreloadBytes(2) ArchiveIndex(2) EntryOffset(4) EntryLength(4) Terminator(2)
+                    if (offset + 18 > treeBuffer.length) return null;
+                    const preloadBytes = treeBuffer.readUInt16LE(offset + 4);
+                    const entryLength = treeBuffer.readUInt32LE(offset + 12);
+
+                    const fullPath = dirPath
+                        ? `${dirPath}/${nameResult.str}.${extension}`
+                        : `${nameResult.str}.${extension}`;
+                    entries.push({ path: fullPath, size: preloadBytes + entryLength });
+
+                    offset += 18 + preloadBytes;
+                }
+            }
+        }
+        return entries;
+    } catch (error) {
+        if (fd !== null) {
+            try { closeSync(fd); } catch { /* already closed */ }
+        }
+        console.warn(`[parseVpkEntryStats] Error parsing ${vpkPath}:`, error);
+        return null;
+    }
+}
+
+/**
+ * Read the raw bytes of a single entry out of a VPK, by the exact path string
+ * `parseVpkDirectory` would produce for it (case-insensitive). Returns null when
+ * the file is not a valid VPK, the entry is absent, or it cannot be read.
+ *
+ * Reuses the same directory-tree walk as parseVpkDirectory; the only addition is
+ * decoding each entry's metadata block (preload bytes inline in the tree +
+ * archive data after it) so the bytes can be reassembled. Built for small
+ * root-level entries like the embedded addoninfo.txt; it reads the whole entry
+ * into memory.
+ */
+export function readVpkEntryBytes(vpkPath: string, entryPath: string): Buffer | null {
+    if (!existsSync(vpkPath)) {
+        return null;
+    }
+
+    const target = entryPath.replace(/\\/g, '/').toLowerCase();
+    let fd: number | null = null;
+
+    try {
+        fd = openSync(vpkPath, 'r');
+
+        const headerBuffer = Buffer.alloc(12);
+        readSync(fd, headerBuffer, 0, 12, 0);
+
+        if (headerBuffer.readUInt32LE(0) !== VPK_SIGNATURE) {
+            closeSync(fd);
+            return null;
+        }
+
+        const version = headerBuffer.readUInt32LE(4);
+        const treeSize = headerBuffer.readUInt32LE(8);
+        const headerSize = version === 2 ? 28 : 12;
+
+        const treeBuffer = Buffer.alloc(treeSize);
+        readSync(fd, treeBuffer, 0, treeSize, headerSize);
+
+        let offset = 0;
+        while (offset < treeBuffer.length) {
+            const extResult = readNullTerminatedString(treeBuffer, offset);
+            offset += extResult.bytesRead;
+            if (extResult.str === '') break;
+            const extension = extResult.str;
+
+            while (offset < treeBuffer.length) {
+                const pathResult = readNullTerminatedString(treeBuffer, offset);
+                offset += pathResult.bytesRead;
+                if (pathResult.str === '') break;
+                const dirPath = pathResult.str === ' ' ? '' : pathResult.str;
+
+                while (offset < treeBuffer.length) {
+                    const nameResult = readNullTerminatedString(treeBuffer, offset);
+                    offset += nameResult.bytesRead;
+                    if (nameResult.str === '') break;
+                    const filename = nameResult.str;
+
+                    const fullPath = dirPath
+                        ? `${dirPath}/${filename}.${extension}`
+                        : `${filename}.${extension}`;
+
+                    // Entry metadata block (18 bytes):
+                    // CRC(4) PreloadBytes(2) ArchiveIndex(2) EntryOffset(4) EntryLength(4) Terminator(2)
+                    if (offset + 18 > treeBuffer.length) {
+                        closeSync(fd);
+                        return null;
+                    }
+                    const preloadBytes = treeBuffer.readUInt16LE(offset + 4);
+                    const archiveIndex = treeBuffer.readUInt16LE(offset + 6);
+                    const entryOffset = treeBuffer.readUInt32LE(offset + 8);
+                    const entryLength = treeBuffer.readUInt32LE(offset + 12);
+                    const preloadStart = offset + 18;
+
+                    if (fullPath.replace(/\\/g, '/').toLowerCase() === target) {
+                        const preload = preloadBytes > 0
+                            ? treeBuffer.subarray(preloadStart, preloadStart + preloadBytes)
+                            : Buffer.alloc(0);
+
+                        let archiveData = Buffer.alloc(0);
+                        if (entryLength > 0) {
+                            archiveData = Buffer.alloc(entryLength);
+                            if (archiveIndex === VPK_DIR_ARCHIVE_INDEX) {
+                                // Data lives in the dir VPK after header + tree.
+                                readSync(fd, archiveData, 0, entryLength, headerSize + treeSize + entryOffset);
+                            } else {
+                                // Data lives in a sibling _NNN.vpk archive.
+                                const archivePath = vpkPath.replace(
+                                    /_dir\.vpk$/i,
+                                    `_${String(archiveIndex).padStart(3, '0')}.vpk`
+                                );
+                                const afd = openSync(archivePath, 'r');
+                                try {
+                                    readSync(afd, archiveData, 0, entryLength, entryOffset);
+                                } finally {
+                                    closeSync(afd);
+                                }
+                            }
+                        }
+
+                        closeSync(fd);
+                        return Buffer.concat([preload, archiveData]);
+                    }
+
+                    offset = preloadStart + preloadBytes;
+                }
+            }
+        }
+
+        closeSync(fd);
+        return null;
+    } catch (error) {
+        if (fd !== null) {
+            try { closeSync(fd); } catch { /* already closed */ }
+        }
+        console.warn(`[readVpkEntryBytes] Error reading ${entryPath} from ${vpkPath}:`, error);
+        return null;
+    }
+}
+
 /**
  * Extract hero name from a VPK file path if it's a hero-related file
  * Returns null if not a hero file

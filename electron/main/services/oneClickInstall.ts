@@ -86,7 +86,9 @@ export async function handleOneClickInstall(
     let enrichedDetails: Awaited<ReturnType<typeof fetchModDetails>> | undefined;
     if (parsed.modId !== undefined && parsed.modId > 0) {
         try {
-            enrichedDetails = await fetchModDetails(parsed.modId, parsed.modType ?? 'Mod');
+            // includeSubmitter so the pre-fetched payload carries the author
+            // name the download path stamps into metadata (for the imprint).
+            enrichedDetails = await fetchModDetails(parsed.modId, parsed.modType ?? 'Mod', { includeSubmitter: true });
         } catch (err) {
             console.warn('[oneClick] Could not resolve mod details:', err);
         }

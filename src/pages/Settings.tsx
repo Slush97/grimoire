@@ -1228,6 +1228,15 @@ export default function Settings() {
             <div className="h-px bg-white/5" />
 
             <Toggle
+              checked={settings?.experimentalVpkImprinting ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalVpkImprinting: checked })}
+              label={<Tx k="settings.experimental.vpkImprint" fallback="Imprint installed mods" />}
+              description={<Tx k="settings.toggles.vpkImprint" fallback="Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have." />}
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
               checked={settings?.experimentalDeadworksServers ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalDeadworksServers: checked })}
               label={<Tx k="settings.experimental.deadworksServers" fallback="Deadworks Servers" />}

@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ExternalLink, FolderOpen, ImageDown, Link, Loader2 } from 'lucide-react';
+import { Check, ExternalLink, Fingerprint, FolderOpen, ImageDown, Link, Loader2 } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuTrigger } from './common/menu';
 
 interface ImageContextMenuProps {
@@ -11,12 +11,16 @@ interface ImageContextMenuProps {
    *  right-clicks (its trigger stops propagation), so card surfaces that offer
    *  reveal-in-folder pass it down here too to keep the action reachable. */
   onRevealInFolder?: () => void;
+  /** When set, appends a "View imprint" item (Fingerprint icon). Same rationale
+   *  as onRevealInFolder: mod cards offer this on right-click, and the image
+   *  menu swallows those clicks. Callers pass it only for imprinted mods. */
+  onViewImprint?: () => void;
   children: ReactNode;
 }
 
 type CopyState = 'idle' | 'copying' | 'copied' | 'failed';
 
-export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, children }: ImageContextMenuProps) {
+export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, onViewImprint, children }: ImageContextMenuProps) {
   const { t } = useTranslation();
   const [imageCopyState, setImageCopyState] = useState<CopyState>('idle');
   const [urlCopyState, setUrlCopyState] = useState<CopyState>('idle');
@@ -146,12 +150,19 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
               </MenuItem>
             </>
           )}
-          {onRevealInFolder && (
+          {(onRevealInFolder || onViewImprint) && (
             <>
               <MenuSeparator />
-              <MenuItem icon={FolderOpen} onSelect={onRevealInFolder}>
-                {t('imageContextMenu.revealModInFolder')}
-              </MenuItem>
+              {onRevealInFolder && (
+                <MenuItem icon={FolderOpen} onSelect={onRevealInFolder}>
+                  {t('imageContextMenu.revealModInFolder')}
+                </MenuItem>
+              )}
+              {onViewImprint && (
+                <MenuItem icon={Fingerprint} onSelect={onViewImprint}>
+                  {t('installed.imprintDetails.menuEntry')}
+                </MenuItem>
+              )}
             </>
           )}
       </MenuContent>

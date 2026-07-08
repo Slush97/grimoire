@@ -31,7 +31,7 @@ import {
     migrateManagedVpksToGrimoire,
 } from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
-import { fingerprintFile } from './fileMatch';
+import { resolveVpkIdentity } from './vpkIdentity';
 import { soundCodenameForHero } from './heroSoundCodenames';
 import { abilitySoundClipsForSlot, eventsForClips } from './abilitySounds';
 import type {
@@ -114,8 +114,8 @@ async function locateSource(
     const wanted = sha256.toLowerCase();
     for (const v of vpks) {
         try {
-            const fp = await fingerprintFile(v.path);
-            if (fp.sha256.toLowerCase() === wanted) return v;
+            const id = await resolveVpkIdentity(v.path);
+            if (id.sha256.toLowerCase() === wanted) return v;
         } catch {
             // unreadable; keep looking
         }
@@ -340,7 +340,7 @@ export async function applyHeroSound(
         throw new Error(`${basename(src.fileName)} has no ability ${slot} sound for ${heroName}.`);
     }
 
-    const fp = await fingerprintFile(src.path);
+    const id = await resolveVpkIdentity(src.path);
     const srcMeta = getModMetadata(src.metaKey);
     const selection: LockerSoundSelection = {
         heroName,
@@ -354,7 +354,7 @@ export async function applyHeroSound(
             fileName: src.metaKey,
             modName: srcMeta?.modName,
             gameBananaId: srcMeta?.gameBananaId,
-            sha256AtApplyTime: fp.sha256,
+            sha256AtApplyTime: id.sha256,
         },
         addedAt: new Date().toISOString(),
     };

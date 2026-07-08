@@ -31,8 +31,20 @@ import {
     type UnknownModFilterGuess,
 } from '../services/unknownModDetection';
 import { downloadMod } from '../services/download';
+import { fetchAdoptedThumbnail, type AdoptedThumbnailTarget } from '../services/adoptedThumbnail';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
 import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
+import {
+    imprintOneMod,
+    imprintAllInstalled,
+    imprintPreflight,
+    classifyEmbedFreshnessAt,
+    computeAdoptionPatchAt,
+    hasAdoptionFields,
+    hasAnyImprint,
+} from '../services/imprintMods';
+import { parseAddonInfo, readEmbeddedAddonInfoText, readEmbeddedAddonInfo, carryForwardOriginalIdentity } from '../services/vpkIdentity';
+import { readEmbeddedModinfo, readLegacyGrimoireMergeMeta, hasLegacyGrimoireMergeMetaEntry } from '../services/modinfoFormat';
 import { buildHeroSoundSwapVpk, cleanupHeroSoundSwapBuild } from '../services/foundryCatalog';
 import { buildSoulContainerVpk, cleanupSoulContainerBuild, previewSoulContainerGlb } from '../services/soulContainerImport';
 import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '../services/spiritUrnImport';
@@ -41,7 +53,7 @@ import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport
 import { getMainWindow } from '../index';
 import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList } from '../../../src/types/mod';
+import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -214,6 +226,8 @@ function enrichMod(mod: Mod): WireMod {
             soulImport: metadata.soulImport,
             urnImport: metadata.urnImport,
             ignoreUpdates: metadata.ignoreUpdates,
+            imprinted: metadata.imprinted,
+            imprintStale: metadata.imprintStale,
         };
     }
     // No metadata row (a VPK dropped straight into addons): still file-tree tag
@@ -537,6 +551,47 @@ ipcMain.handle(
     }
 );
 
+/**
+ * Best-effort embed refresh after a metadata-changing handler (associate /
+ * apply-custom / edit-local). A mod identified AFTER it was imprinted would
+ * otherwise carry a stale embed until the next bulk run; refreshing here keeps
+ * the embedded record in step with the sidecar the moment the user fixes it.
+ *
+ * Locking: these handlers do NOT run inside runExclusiveModMutation (they call
+ * scanMods / setModMetadataWithHash directly, holding no lock), and the mod-
+ * mutation lock is a non-reentrant queue, so nesting would deadlock ONLY if we
+ * were already inside it. We are not: imprintOneMod acquires the lock itself,
+ * so awaiting it here is safe. Awaited (not fire-and-forget) so the refresh is
+ * serialized before the handler's response, but failures are swallowed: the
+ * metadata change already succeeded, and a missed refresh just leaves the
+ * embed stale until the next bulk imprint classifies it eligible again.
+ *
+ * apply-unknown-mod-match needs no call here: it installs a fresh replacement
+ * (imprinted by the download path when the setting is on) and deletes the old
+ * file, so no surviving file's sidecar is re-stamped.
+ */
+async function refreshEmbedAfterMetadataChange(
+    deadlockPath: string,
+    modId: string,
+    metaKey: string,
+    modPath: string
+): Promise<void> {
+    try {
+        if (!loadSettings().experimentalVpkImprinting) return;
+        // The sidecar flag alone misses a VPK dropped into addons mid-session:
+        // the startup backfill has not seen it, so `imprinted` is unset even
+        // though the file carries an embed, and bailing here would silently
+        // leave the wrong embed in the file after the user just corrected the
+        // identity. Consult the file itself too (the same predicate the
+        // backfill and the import handler use). A foreign embed surviving to
+        // imprintOneMod fails soft into the warn below, unchanged.
+        if (!getModMetadata(metaKey)?.imprinted && !hasAnyImprint(modPath)) return;
+        await imprintOneMod(deadlockPath, modId);
+    } catch (err) {
+        console.warn(`[mods] Post-associate embed refresh failed for ${metaKey}:`, err);
+    }
+}
+
 // apply-unknown-custom-mod
 ipcMain.handle(
     'apply-unknown-custom-mod',
@@ -561,6 +616,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
@@ -613,6 +669,7 @@ ipcMain.handle(
             sourceSection: args.sourceSection,
         }, target.path);
 
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
@@ -647,6 +704,7 @@ ipcMain.handle(
             nsfw: !!args.nsfw,
         }, target.path);
 
+        await refreshEmbedAfterMetadataChange(deadlockPath, target.id, target.metaKey, target.path);
         return enrichMod(target);
     }
 );
@@ -982,6 +1040,12 @@ ipcMain.handle(
             }
         }
 
+        // Adoption targets: destMetaKeys whose embed adopted a gamebananaId but
+        // has no thumbnail yet, collected during the copy loop so the
+        // best-effort background thumbnail fetch (fired after the lock/import
+        // fully completes) knows which slots to enrich.
+        const thumbnailFetchTargets: AdoptedThumbnailTarget[] = [];
+
         try {
             // Imports install ENABLED, so reserve a slot via the overflow-aware
             // allocator: it fills base addons first and spills into an overflow
@@ -1002,11 +1066,64 @@ ipcMain.handle(
                 // otherwise stick to the new local mod and visually merge it with
                 // unrelated mods.
                 removeModMetadata(destMetaKey);
+                const stampedName = sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName;
                 await setModMetadataWithHash(destMetaKey, {
-                    modName: sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName,
+                    modName: stampedName,
                     thumbnailUrl: thumbnailDataUrl,
                     nsfw: !!nsfw,
                 }, destPath);
+
+                // ADOPTION: the just-copied VPK may already carry a Grimoire
+                // imprint (the user re-imported an already-imprinted file, or
+                // extracted one from an archive). Fill in whatever the embed
+                // knows that the freshly-stamped sidecar above doesn't -
+                // gamebananaId/author/category/etc. - so a later bulk imprint
+                // classifies against a sidecar that already agrees with the
+                // embed instead of one that looks impoverished by comparison
+                // (the live bug this build fixes: without this, the next bulk
+                // run would re-imprint FROM the impoverished sidecar and wipe
+                // the embed's real identity). The user-typed name always wins
+                // (setModMetadataWithHash already wrote it above; adoption's
+                // own modName fill-in only fires when the sidecar has none,
+                // which never happens here since stampedName is always set).
+                const adoptionPatch = computeAdoptionPatchAt(destPath, getModMetadata(destMetaKey));
+                if (hasAdoptionFields(adoptionPatch)) {
+                    setModMetadata(destMetaKey, adoptionPatch);
+                }
+
+                // Stamp imprinted/imprintStale from the embed truth immediately,
+                // so the toolbar button's pending count is honest without
+                // waiting for a restart (backfillImprintedFlags would otherwise
+                // be the only thing to notice). Classify AFTER adoption so a
+                // richer embed that adoption just caught the sidecar up to
+                // reads fresh, not stale. hasAnyImprint (not
+                // readAdoptionEmbedFields) is the right "is this file imprinted
+                // at all" check: it also counts a re-imported merge embed,
+                // which adoption itself deliberately never reads fields from.
+                const finalMeta = getModMetadata(destMetaKey);
+                if (hasAnyImprint(destPath)) {
+                    setModMetadata(destMetaKey, {
+                        imprinted: true,
+                        imprintStale: classifyEmbedFreshnessAt(destPath, stampedName, finalMeta) === 'stale',
+                    });
+                }
+
+                // THUMBNAIL FETCH: adoption may have just learned a gamebananaId
+                // for a mod whose sidecar has no thumbnail (a local import of an
+                // already-imprinted file never had a chance to fetch one). Queue
+                // it; the actual network fetch runs after this handler returns
+                // (best-effort, never blocks or fails the import).
+                const adoptedGbId = finalMeta?.gameBananaId;
+                if (adoptedGbId && !finalMeta?.thumbnailUrl) {
+                    thumbnailFetchTargets.push({
+                        metaKey: destMetaKey,
+                        gameBananaId: adoptedGbId,
+                        section: finalMeta?.sourceSection || 'Mod',
+                        // The hash setModMetadataWithHash just stamped: pins the
+                        // fetch to THIS file, so a recycled slot is never stamped.
+                        expectedSha256: finalMeta?.sha256,
+                    });
+                }
             }
         } finally {
             if (tempDir) {
@@ -1015,7 +1132,17 @@ ipcMain.handle(
         }
 
         const mods = await scanMods(deadlockPath);
-        return mods.map(enrichMod);
+        const result = mods.map(enrichMod);
+
+        // Fire-and-forget: never await, never let a network failure affect the
+        // import result already being returned to the renderer. The fetch
+        // itself re-verifies slot identity before writing (see
+        // services/adoptedThumbnail.ts).
+        for (const target of thumbnailFetchTargets) {
+            void fetchAdoptedThumbnail(target);
+        }
+
+        return result;
     }
 );
 
@@ -1495,3 +1622,134 @@ ipcMain.handle(
         };
     }
 );
+
+// imprint-one-mod: re-pack a single installed VPK in place with a self-identifying
+// addoninfo.txt embed (path B). Refuses if the running game has the mod loaded.
+// Canonical identity (metadata.sha256) is unchanged; the embed carries it.
+ipcMain.handle('imprint-one-mod', async (_, modId: string): Promise<Mod> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const imprinted = await imprintOneMod(deadlockPath, modId);
+    return enrichMod(imprinted);
+});
+
+// imprint-all-installed: retroactively imprint the whole installed library in place.
+// Loaded mods are skipped and reported; per-mod failures are collected. Streams
+// progress to the requesting renderer via 'imprint-all-installed-progress'.
+ipcMain.handle('imprint-all-installed', async (event) => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    return imprintAllInstalled(deadlockPath, (progress) =>
+        event.sender.send('imprint-all-installed-progress', progress)
+    );
+});
+
+// imprint-preflight: no-network dry-run that classifies every installed mod into
+// imprint buckets (eligible / already-imprinted / blocked-loaded / merged /
+// locker-managed / anomalous) WITHOUT mutating any file. Drives the pre-commit
+// confirmation UI. Never re-records any canonical identity (KEYSTONE).
+ipcMain.handle('imprint-preflight', async (): Promise<ImprintPreflightResult> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    return imprintPreflight(deadlockPath);
+});
+
+// read-imprint-details: read back the FULL embedded imprint of one installed VPK
+// for the "View imprint" modal. Strictly read-only: reuses the existing embed
+// readers (readEmbeddedAddonInfoText/parseAddonInfo + readEmbeddedModinfo),
+// takes no lock, writes no metadata, mutates no file. Returns null (not an
+// error) when the file carries no addoninfo.txt or a foreign embed without a
+// recoverable original identity, so a stale `imprinted` flag degrades to the
+// modal's empty state. A legacy (pre-redo) imprint returns its carried
+// identity + addoninfo fields with modinfo: null. fs/scan errors propagate as
+// normal IPC errors.
+ipcMain.handle('read-imprint-details', async (_, modId: string): Promise<ImprintDetails | null> => {
+    const deadlockPath = getActiveDeadlockPath();
+    if (!deadlockPath) {
+        throw new Error('No Deadlock path configured');
+    }
+    const mods = await scanMods(deadlockPath);
+    const mod = mods.find((m) => m.id === modId);
+    if (!mod) {
+        throw new Error(`Mod not found: ${modId}`);
+    }
+
+    // One entry read serves both the raw view and the parsed projection.
+    const rawAddonInfo = readEmbeddedAddonInfoText(mod.path);
+    if (rawAddonInfo === null) return null;
+    const embedded = parseAddonInfo(rawAddonInfo);
+    // Reuse the embed-validity rule (a recoverable original sha256, current
+    // keys or legacy shim, is what makes an embed a Grimoire imprint); a
+    // foreign embed reads as "none".
+    const original = carryForwardOriginalIdentity(embedded, readLegacyGrimoireMergeMeta(mod.path));
+    if (!original) return null;
+
+    return {
+        title: embedded.title,
+        author: embedded.author,
+        gamebananaId: embedded.gamebananaId,
+        gamebananaFileId: embedded.gamebananaFileId,
+        sourceUrl: embedded.sourceUrl,
+        buildDate: embedded.buildDate,
+        originalSha256: original.sha256,
+        originalCrc32: original.crc32,
+        originalSize: original.size,
+        rawAddonInfo,
+        modinfo: readEmbeddedModinfo(mod.path),
+    };
+});
+
+// peek-imprint: read-only recognition check for the import dialog. Takes an
+// absolute file path directly (the user's picked source .vpk, BEFORE it is
+// copied/imported anywhere), not a modId - there is no installed Mod yet at
+// this point. No lock, no writes, no scanMods: same read-only contract as
+// read-imprint-details, just against an arbitrary path instead of an
+// installed slot. Returns null when the path isn't a readable .vpk or carries
+// no recoverable Grimoire embed, so the dialog's recognition note simply
+// doesn't show rather than erroring.
+ipcMain.handle('peek-imprint', async (_, filePath: string): Promise<PeekImprintResult | null> => {
+    if (!filePath || !filePath.toLowerCase().endsWith('.vpk') || !existsSync(filePath)) {
+        return null;
+    }
+
+    const modinfo = readEmbeddedModinfo(filePath);
+    if (modinfo) {
+        if (modinfo.kind === 'merge') {
+            return { title: modinfo.merge.title || modinfo.title, kind: 'merge' };
+        }
+        return {
+            title: modinfo.title,
+            author: modinfo.author,
+            gamebananaId: modinfo.source?.gamebananaId,
+            gamebananaFileId: modinfo.source?.gamebananaFileId,
+            kind: 'mod',
+        };
+    }
+
+    // No current-format record: fall back to the legacy addoninfo.txt keys
+    // (mirrors read-imprint-details' embed-validity rule).
+    const embedded = readEmbeddedAddonInfo(filePath);
+    if (!embedded) return null;
+    const original = carryForwardOriginalIdentity(embedded, readLegacyGrimoireMergeMeta(filePath));
+    if (!original) return null;
+
+    const legacyGbId = embedded.gamebananaId ? Number(embedded.gamebananaId) : undefined;
+    const legacyFileId = embedded.gamebananaFileId ? Number(embedded.gamebananaFileId) : undefined;
+    return {
+        title: embedded.title,
+        author: embedded.author,
+        gamebananaId: legacyGbId !== undefined && Number.isFinite(legacyGbId) ? legacyGbId : undefined,
+        gamebananaFileId:
+            legacyFileId !== undefined && Number.isFinite(legacyFileId) ? legacyFileId : undefined,
+        // A legacy merge companion is the only way a legacy embed could be a
+        // merge; readLegacyGrimoireMergeMeta's presence with a readable source
+        // list is the same signal classifyMissingMergeManifest uses elsewhere.
+        kind: hasLegacyGrimoireMergeMetaEntry(filePath) ? 'merge' : 'mod',
+    };
+});

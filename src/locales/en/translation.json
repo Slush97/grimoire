@@ -765,6 +765,7 @@
       "crosshairDesignerDescription": "Create custom crosshairs with a live preview.",
       "socialDescription": "Sign in with Steam to publish profiles and browse uploads from other players in Discover.",
       "fixUnknownMods": "Fix Unknown Mods",
+      "vpkImprint": "Imprint installed mods",
       "deadworksServers": "Deadworks Servers",
       "performanceConfig": "Performance Config",
       "foundry": "Door Stuck"
@@ -836,6 +837,7 @@
       "discordRpc": "Show your current Grimoire activity on your Discord profile. Talks only to your local Discord app and sends nothing to Grimoire.",
       "contributeSalts": "Share the replay keys Steam already caches for matches you view in-game. Sends only the match id, server cluster, and two download keys: no account id, no username, nothing about you or your mods.",
       "fixUnknown": "Match unknown local VPKs against GameBanana to recover names and thumbnails. May hit rate limits on large libraries.",
+      "vpkImprint": "Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
       "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."
     }
@@ -940,7 +942,84 @@
       "copyEnabled": "Copy enabled mods",
       "copyEnabledHint": "Copy the names of all enabled mods to the clipboard",
       "copyEnabledToast": "Enabled mods copied ({{count}})",
-      "copyFailed": "Couldn't copy: {{error}}"
+      "copyFailed": "Couldn't copy: {{error}}",
+      "imprintInstalledMods": "Imprint installed mods",
+      "imprintInstalledModsHint": "Embed a self-identifying imprint in your installed mods so orphaned files can be recognized offline."
+    },
+    "imprintAll": {
+      "title": "Imprint installed mods",
+      "description": "Re-packs each installed VPK with a small identity imprint. The file size changes but its original identity hash is preserved.",
+      "checking": "Checking your installed mods...",
+      "startImprinting_one": "Imprint {{count}} mod",
+      "startImprinting_other": "Imprint {{count}} mods",
+      "progress": "Imprinting {{done}} of {{total}}...",
+      "currentFile": "Imprinting {{fileName}}",
+      "eligible_one": "{{count}} eligible to imprint",
+      "eligible_other": "{{count}} eligible to imprint",
+      "alreadyImprinted_one": "{{count}} already imprinted (no change)",
+      "alreadyImprinted_other": "{{count}} already imprinted (no change)",
+      "blockedLoaded_one": "{{count}} in use by the running game (skipped)",
+      "blockedLoaded_other": "{{count}} in use by the running game (skipped)",
+      "autoManaged_one": "{{count}} auto-managed (merged or Locker), not eligible",
+      "autoManaged_other": "{{count}} auto-managed (merged or Locker), not eligible",
+      "anomalies_one": "{{count}} will be reported, not imprinted",
+      "anomalies_other": "{{count}} will be reported, not imprinted",
+      "repackNote": "Imprinting re-packs each VPK, so its size changes. The original identity hash stays the same.",
+      "imprintedSummary_one": "{{count}} mod imprinted",
+      "imprintedSummary_other": "{{count}} mods imprinted",
+      "skippedTitle_one": "Skipped ({{count}})",
+      "skippedTitle_other": "Skipped ({{count}})",
+      "failedTitle_one": "Failed ({{count}})",
+      "failedTitle_other": "Failed ({{count}})",
+      "skipReasonLoaded": "In use by the running game",
+      "anomalyUnparseable": "Not a readable VPK",
+      "anomalyEmpty": "Zero-byte or truncated file",
+      "anomalyChunked": "Split across sibling chunk files",
+      "anomalyHashDrift": "File changed since it was recorded",
+      "anomalyForeignEmbed": "Carries a non-Grimoire addon block",
+      "anomalyOrphanMerge": "Merged mod record couldn't be recovered",
+      "anomalyUnidentified": "Not identified yet: link it to its source first",
+      "empty": "Nothing to imprint.",
+      "error": "Imprinting failed: {{error}}"
+    },
+    "imprintDetails": {
+      "menuEntry": "View imprint",
+      "title": "Imprint details",
+      "loading": "Reading imprint...",
+      "empty": "No imprint found in this file",
+      "error": "Couldn't read imprint: {{error}}",
+      "copied": "Copied to clipboard",
+      "copyValue": "Copy to clipboard",
+      "rawToggle": "Raw addoninfo.txt",
+      "modTitle": "Title",
+      "author": "Author",
+      "description": "Description",
+      "gamebananaId": "GameBanana ID",
+      "gamebananaFileId": "GameBanana file ID",
+      "sourceUrl": "Source page",
+      "variant": "Variant",
+      "vpkIndex": "VPK index",
+      "firstImprinted": "First imprinted",
+      "lastWritten": "Imprint updated",
+      "buildDate": "Imprinted",
+      "identityTitle": "Original identity",
+      "sha256": "SHA-256",
+      "crc32": "CRC-32",
+      "size": "Size",
+      "mergeTitle": "Merge imprint",
+      "mergeName": "Merge name",
+      "createdAt": "Created",
+      "createdBy": "Created by",
+      "schemaVersion": "Schema version",
+      "sourcesTitle_one": "Merge sources ({{count}})",
+      "sourcesTitle_other": "Merge sources ({{count}})",
+      "sourcePriority": "priority {{priority}}",
+      "sourceEnabled": "enabled at merge",
+      "sourceDisabled": "disabled at merge"
+    },
+    "provenance": {
+      "fromImprint": "Identified from imprint",
+      "fromMergeImprint": "Identified from Grimoire merge imprint"
     },
     "filters": {
       "searchPlaceholder": "Search installed...",
@@ -981,9 +1060,14 @@
       "fixHiddenHint": "Fix unknown is hidden. Right-click to bring it back.",
       "fixButtonHint": "Find GameBanana matches or add custom metadata for unknown local mods. Right-click to hide this button.",
       "fixButton": "Fix unknown ({{count}})",
-      "dmmDetected": "Deadlock Mod Manager mods detected, importing...",
-      "dmmImported_one": "Detected and imported {{count}} mod from Deadlock Mod Manager",
-      "dmmImported_other": "Detected and imported {{count}} mods from Deadlock Mod Manager",
+      "dmmDetected": "Importing Deadlock Mod Manager mods...",
+      "dmmConfirmTitle": "Import Deadlock Mod Manager mods?",
+      "dmmConfirmMessage_one": "Grimoire found a Deadlock Mod Manager library (profile: {{profile}}) with {{count}} mod it doesn't manage yet. Import it? A snapshot and a metadata backup are taken first, and Deadlock Mod Manager's own files are never moved or deleted. Skipping goes straight to manual identification.",
+      "dmmConfirmMessage_other": "Grimoire found a Deadlock Mod Manager library (profile: {{profile}}) with {{count}} mods it doesn't manage yet. Import them? A snapshot and a metadata backup are taken first, and Deadlock Mod Manager's own files are never moved or deleted. Skipping goes straight to manual identification.",
+      "dmmConfirmImport": "Import",
+      "dmmConfirmSkip": "Skip",
+      "dmmImported_one": "Imported {{count}} mod from Deadlock Mod Manager",
+      "dmmImported_other": "Imported {{count}} mods from Deadlock Mod Manager",
       "dmmImportFailed": "Could not import Deadlock Mod Manager mods",
       "checkingCrcCache": "Checking local CRC cache...",
       "noCachedMatch": "No cached match found. Queued for online search.",
@@ -1040,7 +1124,11 @@
       "crcMatch": "CRC Match",
       "modIdTag": "Mod #{{id}}",
       "fileIdTag": "File #{{id}}",
-      "viewMod": "View Mod"
+      "viewMod": "View Mod",
+      "embeddedMetadataDesc": "This VPK carries embedded Grimoire metadata identifying it. No network needed.",
+      "embeddedMergeDesc_one": "This is a Grimoire merge of {{count}} mod, reconstructed from embedded metadata.",
+      "embeddedMergeDesc_other": "This is a Grimoire merge of {{count}} mods, reconstructed from embedded metadata.",
+      "linkInPlace": "Link in place"
     },
     "updateAll": {
       "description": "Re-download every mod flagged with an available update. Each one's enabled state will be restored after the install finishes. Downloads run one at a time and may take a while.",
@@ -1085,7 +1173,9 @@
       "modName": "Mod name",
       "modNamePlaceholder": "My awesome skin",
       "thumbnailImage": "Thumbnail image",
-      "thumbnailSelected": "Thumbnail selected: {{path}}. Press Enter to change."
+      "thumbnailSelected": "Thumbnail selected: {{path}}. Press Enter to change.",
+      "recognizedFromImprint": "Recognized from imprint",
+      "recognizedGameBananaId": "GameBanana #{{id}}"
     },
     "merge": {
       "unmergeTitle": "Unmerge mod?",
@@ -1156,7 +1246,17 @@
       "mergedBadge": "Merged · {{count}}",
       "noFilesEnabled": "No files enabled",
       "variantStatusTitle": "{{labels}} - click card to choose files",
-      "revealInFolder": "Reveal in folder"
+      "revealInFolder": "Reveal in folder",
+      "soloLaunch": "Start with only this enabled"
+    },
+    "solo": {
+      "banner": "Testing {{name}} solo: every other mod is disabled.",
+      "restore": "Restore mods",
+      "partial_one": "{{count}} mod could not be toggled; launching anyway.",
+      "partial_other": "{{count}} mods could not be toggled; launching anyway.",
+      "restorePartial_one": "{{count}} mod could not be restored; try again.",
+      "restorePartial_other": "{{count}} mods could not be restored; try again.",
+      "targetMissing": "Couldn't find that mod to solo. It may have been toggled or removed."
     },
     "edit": {
       "title": "Edit mod",
@@ -1699,11 +1799,13 @@
       "trigger": {
         "preUpdate": "Before mod update",
         "preApplyProfile": "Before applying profile",
+        "preDmmImport": "Before DMM import",
         "manual": "Manual snapshot"
       },
       "explanation": {
         "preUpdate": "Captured before a mod update changed your installed set.",
         "preApplyProfile": "Captured before applying a profile changed your installed set.",
+        "preDmmImport": "Captured before importing mods from Deadlock Mod Manager.",
         "manual": "Captured manually from the Profiles page."
       },
       "unselect": "Unselect snapshot",
