@@ -62,6 +62,7 @@ import {
   Banana,
   HelpCircle,
   GripVertical,
+  ClipboardList,
   Fingerprint,
   Copy,
   ExternalLink,
@@ -76,7 +77,7 @@ import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModD
 import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
-import type { GameBananaModDetails, GameBananaMod } from '../types/gamebanana';
+import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef } from '../types/gamebanana';
 import { getModThumbnail } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import ImageContextMenu from '../components/ImageContextMenu';
@@ -1228,6 +1229,8 @@ export default function Installed() {
   // delete this entry first so Update/Reinstall replaces the old VPK instead
   // of installing a second copy alongside it.
   const [detailsSourceModId, setDetailsSourceModId] = useState<string | null>(null);
+  // Monotonic guard so a slower linked-item fetch can't clobber a newer one.
+  const detailsRequestIdRef = useRef(0);
 
   // Map of mod id → true if a newer version exists on GameBanana.
   const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
@@ -1295,6 +1298,8 @@ export default function Installed() {
     if (!m.gameBananaId) return;
     const section = m.sourceSection ?? 'Mod';
     const categoryId = m.categoryId ?? 0;
+    const requestId = detailsRequestIdRef.current + 1;
+    detailsRequestIdRef.current = requestId;
     setDetailsLoading(true);
     setDetailsMod(null);
     setDetailsError(null);
@@ -1325,14 +1330,18 @@ export default function Installed() {
         getModDetails(m.gameBananaId, section, { includeSubmitter: true }),
         window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null),
       ]);
+      if (detailsRequestIdRef.current !== requestId) return;
       setDetailsMod(details);
       if (cached) {
         setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
       }
     } catch (err) {
+      if (detailsRequestIdRef.current !== requestId) return;
       setDetailsError(String(err));
     } finally {
-      setDetailsLoading(false);
+      if (detailsRequestIdRef.current === requestId) {
+        setDetailsLoading(false);
+      }
     }
   };
 
@@ -1345,6 +1354,60 @@ export default function Installed() {
     setDetailsActiveFileIds(new Set());
     setDetailsDates(null);
   };
+
+  // Open a GameBanana item linked from description/changelog/comments inside
+  // the same details modal (in-app), rather than the OS browser. Works for
+  // mods that are not installed too.
+  const openLinkedGameBananaItem = useStableCallback(async (item: GameBananaItemRef) => {
+    if (detailsMod && item.id === detailsMod.id && item.section === detailsSection) {
+      return;
+    }
+
+    const requestId = detailsRequestIdRef.current + 1;
+    detailsRequestIdRef.current = requestId;
+
+    // Keep the current modal open while loading so we don't flash-close.
+    setDetailsError(null);
+    setDetailsSection(item.section);
+    setDetailsCategoryId(0);
+
+    const siblingFileIds = new Set<number>();
+    const activeFileIds = new Set<number>();
+    let sourceModId: string | null = null;
+    let ignoreUpdates = false;
+    let updateAvailable = false;
+    for (const candidate of mods) {
+      if (candidate.gameBananaId !== item.id) continue;
+      if (!sourceModId) sourceModId = candidate.id;
+      if (candidate.ignoreUpdates) ignoreUpdates = true;
+      if (updatesAvailable.has(candidate.id)) updateAvailable = true;
+      if (typeof candidate.gameBananaFileId !== 'number') continue;
+      siblingFileIds.add(candidate.gameBananaFileId);
+      if (candidate.enabled) activeFileIds.add(candidate.gameBananaFileId);
+    }
+    setDetailsInstalledFileIds(siblingFileIds);
+    setDetailsActiveFileIds(activeFileIds);
+    setDetailsSourceModId(sourceModId);
+    setDetailsIgnoreUpdates(ignoreUpdates);
+    setDetailsUpdateAvailable(updateAvailable);
+    setDetailsDates(null);
+
+    try {
+      const [details, cached] = await Promise.all([
+        getModDetails(item.id, item.section, { includeSubmitter: true }),
+        window.electronAPI.getCachedMod(item.id).catch(() => null),
+      ]);
+      if (detailsRequestIdRef.current !== requestId) return;
+      setDetailsMod(details);
+      setDetailsSection(item.section);
+      if (cached) {
+        setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
+      }
+    } catch (err) {
+      if (detailsRequestIdRef.current !== requestId) return;
+      setDetailsError(String(err));
+    }
+  });
 
   const getUnknownCache = (mod: Mod) => unknownFilterCache[unknownModCacheKey(mod)];
 
@@ -2510,7 +2573,12 @@ export default function Installed() {
       showToast(t('installed.merge.shareCodeCopiedToast'), { tone: 'success', duration: 2200 });
     } catch (err) {
       console.error('[Installed] clipboard write failed:', err);
-      showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' });
+      showToast(
+        t('installed.actions.copyFailed', {
+          error: err instanceof Error ? err.message : String(err),
+        }),
+        { tone: 'error' },
+      );
     }
   };
 
@@ -3116,6 +3184,27 @@ export default function Installed() {
   const enabledModCount = enabledByLoadOrder.length;
   const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
 
+  const handleCopyEnabledMods = async () => {
+    // Use the same enabled list the UI shows (visibleMods / load order), not the
+    // raw store: that includes Locker-managed VPKs the Installed grid hides.
+    const names = enabledByLoadOrder.map((m) => m.name);
+    if (names.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(names.join('\n'));
+      showToast(t('installed.actions.copyEnabledToast', { count: names.length }), {
+        tone: 'success',
+        duration: 2200,
+      });
+    } catch (err) {
+      showToast(
+        t('installed.actions.copyFailed', {
+          error: err instanceof Error ? err.message : String(err),
+        }),
+        { tone: 'error' },
+      );
+    }
+  };
+
   // Filter by search query (substring on name), source (GameBanana vs local
   // import), hero, and tags, then optionally re-sort. Status (enabled/disabled)
   // is applied per-section below. Drag-and-drop reorder is disabled whenever any
@@ -3543,21 +3632,33 @@ export default function Installed() {
         ))}
     </div>
   ) : null;
-  const topStatusActions = hasStatusButtons || viewIsReorderable ? (
-    <div className="flex flex-wrap items-center gap-2">
-      {statusButtons}
-      {viewIsReorderable && (
-        <Button
-          variant="secondary"
-          onClick={fixOrder}
-          icon={Wrench}
-          className="!px-2.5"
-          aria-label={t('installed.actions.fixOrder')}
-          title={t('installed.actions.fixOrderHint')}
-        />
-      )}
-    </div>
-  ) : null;
+  const topStatusActions =
+    hasStatusButtons || viewIsReorderable || enabledModCount > 0 ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {statusButtons}
+        {/* After Fix Unknown (last status button): copy enabled names in load order. */}
+        {enabledModCount > 0 && (
+          <Button
+            variant="secondary"
+            onClick={handleCopyEnabledMods}
+            icon={ClipboardList}
+            className="!px-2.5"
+            aria-label={t('installed.actions.copyEnabled')}
+            title={t('installed.actions.copyEnabledHint')}
+          />
+        )}
+        {viewIsReorderable && (
+          <Button
+            variant="secondary"
+            onClick={fixOrder}
+            icon={Wrench}
+            className="!px-2.5"
+            aria-label={t('installed.actions.fixOrder')}
+            title={t('installed.actions.fixOrderHint')}
+          />
+        )}
+      </div>
+    ) : null;
 
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
@@ -3589,7 +3690,8 @@ export default function Installed() {
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {/* Contextual status + reorder actions ride the same row as the
                 view controls (wrapping together when cramped) instead of
-                claiming a second strip below the search. */}
+                claiming a second strip below the search. Copy-enabled sits
+                inside topStatusActions, immediately after Fix Unknown. */}
             {topStatusActions}
             {/* Retroactive bulk imprint launcher (experimental, opt-in). Compact
                 secondary button so it rides the same cluster as the filter
@@ -4265,7 +4367,7 @@ export default function Installed() {
         <ModDetailsModal
           mod={detailsMod}
           section={detailsSection}
-          installed={true}
+          installed={detailsInstalledFileIds.size > 0}
           installedFileIds={detailsInstalledFileIds}
           activeFileIds={detailsActiveFileIds}
           downloadingFileId={null}
@@ -4276,7 +4378,9 @@ export default function Installed() {
           dateModified={detailsDates?.dateModified}
           updateAvailable={detailsUpdateAvailable}
           ignoreUpdates={detailsIgnoreUpdates}
-          onToggleIgnoreUpdates={handleToggleIgnoreUpdates}
+          onToggleIgnoreUpdates={
+            detailsSourceModId ? handleToggleIgnoreUpdates : undefined
+          }
           onClose={closeModDetails}
           onViewArtist={openArtistPage}
           onDownload={handleDetailsDownload}
@@ -4288,6 +4392,7 @@ export default function Installed() {
           }
           previousLabel={previousDetailsEntry ? entryName(previousDetailsEntry) : undefined}
           nextLabel={nextDetailsEntry ? entryName(nextDetailsEntry) : undefined}
+          onOpenGameBananaItem={openLinkedGameBananaItem}
         />
       )}
 

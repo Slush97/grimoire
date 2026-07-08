@@ -163,6 +163,7 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
         try {
             await window.electronAPI.stats.syncPlayerData(accountId)
             await get().loadPlayerData(accountId)
+            await get().loadTrackedPlayers()
         } catch (err) {
             if (get().selectedAccountId !== accountId) return
             set((s) => ({

@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type ReactNode } from 'react';
+import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { createPortal } from 'react-dom';
 import {
@@ -26,8 +26,14 @@ import {
   Link2,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
-import type { GameBananaModDetails, GameBananaComment, GameBananaFile, GameBananaModUpdate } from '../types/gamebanana';
-import { isModOutdated, formatDate } from '../types/gamebanana';
+import type {
+  GameBananaModDetails,
+  GameBananaComment,
+  GameBananaFile,
+  GameBananaModUpdate,
+  GameBananaItemRef,
+} from '../types/gamebanana';
+import { isModOutdated, formatDate, parseGameBananaItemUrl } from '../types/gamebanana';
 import { getModComments, getModUpdates } from '../lib/api';
 import { useAppStore } from '../stores/appStore';
 import AudioPreviewPlayer from './AudioPreviewPlayer';
@@ -94,6 +100,14 @@ interface ModDetailsModalProps {
   /** When provided, clicking the artist opens "artist mode" (a grid of all the
    *  artist's mods) instead of their GameBanana profile. */
   onViewArtist?: (artist: { id: number; name: string; avatarUrl?: string; profileUrl?: string; kofiUrl?: string }) => void;
+  /**
+   * When provided, primary-clicks on GameBanana *item* links inside HTML bodies
+   * (description, changelog, comments) open that mod in-app instead of the
+   * system browser. Non-item GB URLs and every other host keep the default
+   * external open path. Modifier / middle clicks are left alone so users can
+   * still force an external browser.
+   */
+  onOpenGameBananaItem?: (item: GameBananaItemRef) => void;
 }
 
 function ModDetailsModal({
@@ -127,11 +141,40 @@ function ModDetailsModal({
   variant = 'modal',
   onChangeView,
   onViewArtist,
+  onOpenGameBananaItem,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
   // Canonical GameBanana page for this submission. WiPs live under /wips, Sounds
   // under /sounds, etc., which section.toLowerCase()+'s' already yields.
   const gbUrl = `https://gamebanana.com/${section.toLowerCase()}s/${mod.id}`;
+
+  // Intercept description / changelog / comment links that point at another
+  // GameBanana item page so they open in this modal instead of the OS browser.
+  // Everything else (members, collections, Ko-fi, arbitrary sites) falls through
+  // to Electron's setWindowOpenHandler / will-navigate external open path.
+  const handleRichHtmlClick = (event: ReactMouseEvent<HTMLElement>) => {
+    if (!onOpenGameBananaItem) return;
+    if (event.defaultPrevented) return;
+    if (event.button !== 0) return;
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return;
+
+    const anchor = (event.target as HTMLElement | null)?.closest?.('a');
+    if (!anchor || !(anchor instanceof HTMLAnchorElement)) return;
+
+    const href = anchor.getAttribute('href');
+    if (!href) return;
+
+    const item = parseGameBananaItemUrl(href);
+    if (!item) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Already viewing this item: nothing to load.
+    if (item.id === mod.id && item.section === section) return;
+
+    onOpenGameBananaItem(item);
+  };
   const copyGbLink = async () => {
     try {
       await navigator.clipboard.writeText(gbUrl);
@@ -1390,7 +1433,10 @@ function ModDetailsModal({
                   <h3 className="font-semibold text-xs uppercase tracking-wide text-text-secondary mb-2">
                     {t('modDetails.sections.about')}
                   </h3>
-                  <div className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full">
+                  <div
+                    className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-2 [&_a]:text-accent [&_a]:hover:underline [&_img]:rounded-md [&_img]:my-2 [&_img]:max-w-full"
+                    onClick={handleRichHtmlClick}
+                  >
                     <div dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(mod.description) }} />
                   </div>
                 </section>
@@ -1500,6 +1546,7 @@ function ModDetailsModal({
                                 update.text && (
                                   <div
                                     className="text-sm text-text-primary/90 leading-relaxed [&_p]:mb-1 [&_a]:text-accent [&_a]:hover:underline"
+                                    onClick={handleRichHtmlClick}
                                     dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(update.text) }}
                                   />
                                 )
@@ -1588,6 +1635,7 @@ function ModDetailsModal({
                             </div>
                             <div
                               className="mod-comment-content mt-1"
+                              onClick={handleRichHtmlClick}
                               dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(comment.text) }}
                             />
                           </div>

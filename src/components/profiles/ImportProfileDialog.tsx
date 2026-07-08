@@ -7,6 +7,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   ArrowUpCircle,
+  ArrowDownCircle,
   FileText,
   Terminal,
   ChevronDown,
@@ -1071,11 +1072,14 @@ export default function ImportProfileDialog({
                         </div>
                         <div className="text-sm flex-shrink-0 text-right sm:min-w-[100px]">
                           {r.status === 'pending' && !isUnresolvable && (
-                            <span className="text-text-tertiary text-xs">{t('servers.connect.status.ready')}</span>
+                            <span className="text-amber-300 inline-flex items-center gap-1.5 justify-end text-xs" title={t('servers.connect.status.ready')}>
+                              <ArrowDownCircle className="w-3.5 h-3.5 flex-shrink-0" />
+                              <span className="hidden sm:inline">{t('servers.connect.status.ready')}</span>
+                            </span>
                           )}
                           {r.status === 'already-installed' && (
                             <span
-                              className="text-text-secondary inline-flex items-center gap-1.5 justify-end text-xs"
+                              className="text-green-400 inline-flex items-center gap-1.5 justify-end text-xs"
                               title={t('importProfile.alreadyInstalled')}
                             >
                               <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />

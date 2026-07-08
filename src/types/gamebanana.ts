@@ -213,6 +213,60 @@ export function parseCollectionId(input: string): number | null {
   }
 }
 
+/**
+ * GameBanana content item pages Grimoire can open in the details modal.
+ * Path segment (plural) -> API model name used by getModDetails / fetchModDetails.
+ * Keep this aligned with Browse SECTION_WHITELIST (Mod / Sound / Wip).
+ * Members, collections, download pages, category pages, etc. stay external.
+ */
+const GAMEBANANA_ITEM_PATH_TO_SECTION: Record<string, string> = {
+  mods: 'Mod',
+  sounds: 'Sound',
+  wips: 'Wip',
+};
+
+export type GameBananaItemRef = {
+  id: number;
+  /** API section / model name, e.g. "Mod", "Sound", "Wip". */
+  section: string;
+};
+
+/**
+ * Parse a GameBanana *item* page URL into { id, section }.
+ * Accepts absolute and protocol-relative URLs. Returns null for non-GB hosts,
+ * non-item paths (/members, /collections, /dl, /mods/download, /mods/cats, ...),
+ * and item types we do not open in-app.
+ */
+export function parseGameBananaItemUrl(input: string): GameBananaItemRef | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+
+  try {
+    // Protocol-relative and bare paths: resolve against gamebanana.com so
+    // `//gamebanana.com/mods/1` and accidental root-relative paths still parse.
+    const url = new URL(trimmed, 'https://gamebanana.com');
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+    // Exact host or real subdomain (www.gamebanana.com). Reject lookalikes
+    // like evilgamebanana.com that merely end with the same suffix.
+    const host = url.hostname.toLowerCase();
+    if (host !== 'gamebanana.com' && !host.endsWith('.gamebanana.com')) return null;
+
+    // Strict: /{type}/{id} only. Reject /mods/download/123, /mods/cats/..., trailing junk.
+    const match = url.pathname.match(/^\/(mods|sounds|wips)\/(\d+)\/?$/i);
+    if (!match) return null;
+
+    const section = GAMEBANANA_ITEM_PATH_TO_SECTION[match[1].toLowerCase()];
+    if (!section) return null;
+
+    const id = Number(match[2]);
+    if (!Number.isFinite(id) || id <= 0) return null;
+
+    return { id, section };
+  } catch {
+    return null;
+  }
+}
+
 export function getModThumbnail(mod: GameBananaMod): string | undefined {
   const images = mod.previewMedia?.images;
   if (!images || images.length === 0) return undefined;
