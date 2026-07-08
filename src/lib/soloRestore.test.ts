@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { modRestoreKey, planSolo, planRestore } from './soloRestore';
+import { modRestoreKey, planSoloByKeys, planRestore } from './soloRestore';
 
 function mod(over: Partial<Mod> & { id: string }): Mod {
   return {
@@ -35,33 +35,51 @@ describe('modRestoreKey', () => {
   });
 });
 
-describe('planSolo', () => {
+describe('planSoloByKeys', () => {
   it('disables every other enabled mod and enables the target if off', () => {
     const mods = [
-      mod({ id: 'a', enabled: true }),
-      mod({ id: 'b', enabled: true }),
-      mod({ id: 'c', enabled: false }),
+      mod({ id: 'a', enabled: true, sha256: 'aa' }),
+      mod({ id: 'b', enabled: true, sha256: 'bb' }),
+      mod({ id: 'c', enabled: false, sha256: 'cc' }),
     ];
-    expect(planSolo(mods, ['c'])).toEqual({ enable: ['c'], disable: ['a', 'b'] });
+    expect(planSoloByKeys(mods, ['sha:cc'])).toEqual({ enable: ['c'], disable: ['a', 'b'] });
   });
 
   it('is a no-op when the target is already the only thing enabled', () => {
-    const mods = [mod({ id: 'a', enabled: true }), mod({ id: 'b', enabled: false })];
-    expect(planSolo(mods, ['a'])).toEqual({ enable: [], disable: [] });
+    const mods = [mod({ id: 'a', enabled: true, sha256: 'aa' }), mod({ id: 'b', enabled: false, sha256: 'bb' })];
+    expect(planSoloByKeys(mods, ['sha:aa'])).toEqual({ enable: [], disable: [] });
   });
 
-  it('keeps multiple target ids enabled (group variants)', () => {
+  it('keeps multiple target keys enabled (group variants)', () => {
     const mods = [
-      mod({ id: 'v1', enabled: true }),
-      mod({ id: 'v2', enabled: false }),
-      mod({ id: 'other', enabled: true }),
+      mod({ id: 'v1', enabled: true, gameBananaId: 5, gameBananaFileId: 9, vpkIndex: 0 }),
+      mod({ id: 'v2', enabled: false, gameBananaId: 5, gameBananaFileId: 9, vpkIndex: 1 }),
+      mod({ id: 'other', enabled: true, gameBananaId: 6, gameBananaFileId: 10 }),
     ];
-    expect(planSolo(mods, ['v1', 'v2'])).toEqual({ enable: ['v2'], disable: ['other'] });
+    expect(planSoloByKeys(mods, ['gb:5:9:0', 'gb:5:9:1'])).toEqual({ enable: ['v2'], disable: ['other'] });
   });
 
-  it('ignores unknown ids', () => {
-    const mods = [mod({ id: 'a', enabled: true })];
-    expect(planSolo(mods, ['ghost'])).toEqual({ enable: [], disable: ['a'] });
+  it('aborts when no target keys resolve', () => {
+    const mods = [mod({ id: 'a', enabled: true, sha256: 'aa' })];
+    expect(planSoloByKeys(mods, ['sha:ghost'])).toBeNull();
+  });
+
+  it('resolves a target after id churn', () => {
+    const targetKey = modRestoreKey(mod({ id: 'before-disable', gameBananaId: 5, gameBananaFileId: 9 }));
+    const mods = [
+      mod({ id: 'renamed-after-toggle', enabled: false, gameBananaId: 5, gameBananaFileId: 9 }),
+      mod({ id: 'other', enabled: true, sha256: 'other' }),
+    ];
+    expect(planSoloByKeys(mods, [targetKey])).toEqual({ enable: ['renamed-after-toggle'], disable: ['other'] });
+  });
+
+  it('targets every local import that shares the name+size fallback key', () => {
+    const mods = [
+      mod({ id: 'local-a', name: 'Same Local', size: 42, enabled: false }),
+      mod({ id: 'local-b', name: 'Same Local', size: 42, enabled: false }),
+      mod({ id: 'other', name: 'Other', size: 42, enabled: true }),
+    ];
+    expect(planSoloByKeys(mods, ['nm:Same Local:42'])).toEqual({ enable: ['local-a', 'local-b'], disable: ['other'] });
   });
 });
 
@@ -97,5 +115,14 @@ describe('planRestore', () => {
     ];
     const mods = [mod({ id: 'A', enabled: false, sha256: 'aa' })];
     expect(planRestore(mods, snapshot)).toEqual({ enable: ['A'], disable: [] });
+  });
+
+  it('enables every current local import that shares a snapshotted name+size fallback key', () => {
+    const snapshot = ['nm:Same Local:42'];
+    const mods = [
+      mod({ id: 'local-a', name: 'Same Local', size: 42, enabled: false }),
+      mod({ id: 'local-b', name: 'Same Local', size: 42, enabled: false }),
+    ];
+    expect(planRestore(mods, snapshot)).toEqual({ enable: ['local-a', 'local-b'], disable: [] });
   });
 });

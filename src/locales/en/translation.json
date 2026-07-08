@@ -1248,8 +1248,11 @@
     "solo": {
       "banner": "Testing {{name}} solo: every other mod is disabled.",
       "restore": "Restore mods",
-      "partial": "{{count}} mod could not be toggled; launching anyway.",
-      "partial_other": "{{count}} mods could not be toggled; launching anyway."
+      "partial_one": "{{count}} mod could not be toggled; launching anyway.",
+      "partial_other": "{{count}} mods could not be toggled; launching anyway.",
+      "restorePartial_one": "{{count}} mod could not be restored; try again.",
+      "restorePartial_other": "{{count}} mods could not be restored; try again.",
+      "targetMissing": "Couldn't find that mod to solo. It may have been toggled or removed."
     },
     "edit": {
       "title": "Edit mod",

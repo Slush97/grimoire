@@ -5,7 +5,7 @@ import { setDateFormat } from '../lib/dateFormat';
 import { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
 import { buildHeroList } from '../lib/lockerUtils';
-import { modRestoreKey, planSolo, planRestore } from '../lib/soloRestore';
+import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import {
   SHUFFLE_INCLUDED_KEY,
   SHUFFLE_ON_LAUNCH_KEY,
@@ -298,13 +298,13 @@ interface AppState {
   setShuffleOnLaunch: (enabled: boolean) => void;
   toggleShuffleIncluded: (skinKey: string) => void;
   runLaunchShuffle: () => Promise<{ failures: number }>;
-  /** Disable every other mod and enable only `enableIds` (one card's file(s)),
+  /** Disable every other mod and enable only `enableKeys` (one card's file(s)),
    *  snapshotting the prior enabled set for one-click restore. `applied` is
-   *  false only when the whole batch was rejected (e.g. game running), so the
-   *  caller knows whether it's safe to launch. */
-  soloMod: (enableIds: string[], label: string) => Promise<{ applied: boolean; failures: number }>;
+   *  false when the target no longer resolves or the whole batch was rejected
+   *  (e.g. game running), so the caller knows whether it's safe to launch. */
+  soloMod: (enableKeys: string[], label: string) => Promise<{ applied: boolean; failures: number; reason?: 'missing' | 'blocked' }>;
   /** Re-apply the enabled set captured by the last soloMod call. */
-  restoreSoloMods: () => Promise<void>;
+  restoreSoloMods: () => Promise<{ failures: number }>;
   /** Drop the solo-restore snapshot without touching enablement. */
   clearSoloRestore: () => void;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
@@ -744,18 +744,19 @@ export const useAppStore = create<AppState>((set, get) => ({
     });
   },
 
-  // "Start with only this mod enabled." Disables every currently-enabled mod
-  // except the target file(s) and enables the target, as one atomic batch, then
-  // snapshots the prior enabled set (by stable key) so the page can restore it.
-  // Runs inside enqueueToggle so the plan is derived after any in-flight toggle.
-  soloMod: (enableIds, label) => enqueueToggle(async () => {
+  // "Start with only this mod enabled." The UI passes stable keys, not current
+  // ids, because queued toggles may rename the target before this plan runs.
+  // The plan is resolved inside enqueueToggle against the post-toggle mod list.
+  soloMod: (enableKeys, label) => enqueueToggle(async () => {
     const mods = get().mods;
-    const { enable, disable } = planSolo(mods, enableIds);
+    const plan = planSoloByKeys(mods, enableKeys);
+    if (!plan) return { applied: false, failures: 0, reason: 'missing' };
+    const { enable, disable } = plan;
     // Already solo (target is the only thing enabled): nothing to swap, and no
     // meaningful state to restore to, so skip the snapshot but let the caller
     // launch.
     if (enable.length === 0 && disable.length === 0) return { applied: true, failures: 0 };
-    const keys = mods.filter((m) => m.enabled).map(modRestoreKey);
+    const keys = get().soloRestore?.keys ?? mods.filter((m) => m.enabled).map(modRestoreKey);
     try {
       const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
       set({ mods: updated, soloRestore: { keys, label } });
@@ -764,22 +765,27 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods();
-      return { applied: false, failures: 0 };
+      return { applied: false, failures: 0, reason: 'blocked' };
     }
   }),
 
   restoreSoloMods: () => enqueueToggle(async () => {
     const snap = get().soloRestore;
-    if (!snap) return;
+    if (!snap) return { failures: 0 };
     const { enable, disable } = planRestore(get().mods, snap.keys);
-    if (enable.length === 0 && disable.length === 0) { set({ soloRestore: null }); return; }
+    if (enable.length === 0 && disable.length === 0) {
+      set({ soloRestore: null });
+      return { failures: 0 };
+    }
     try {
-      const { mods: updated } = await api.applyModToggleBatch(enable, disable);
-      set({ mods: updated, soloRestore: null });
+      const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
+      set({ mods: updated, soloRestore: failures.length === 0 ? null : snap });
+      return { failures: failures.length };
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods();
+      return { failures: enable.length + disable.length };
     }
   }),
 

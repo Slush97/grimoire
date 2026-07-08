@@ -93,6 +93,7 @@ import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
+import { modRestoreKey } from '../lib/soloRestore';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -466,6 +467,7 @@ interface InstalledEntryCardProps {
   loadCount: number;
   selectMode: boolean;
   selected: boolean;
+  soloBusy: boolean;
   onOpenDetails: (mod: Mod) => void;
   onViewAuthor: (mod: Mod) => void;
   onOpenPicker: (gameBananaId: number) => void;
@@ -509,6 +511,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   loadCount,
   selectMode,
   selected,
+  soloBusy,
   onOpenDetails,
   onViewAuthor,
   onOpenPicker,
@@ -543,6 +546,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
         onSoloLaunch={() => onSoloLaunch(entry)}
+        soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
         onEditLocal={!mod.gameBananaId ? () => onEditLocal(mod) : undefined}
         onRenameLocal={!mod.gameBananaId ? (newName) => onRenameLocal(mod, newName) : undefined}
@@ -596,6 +600,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
       onToggle={() => onToggle(entry)}
       onSoloLaunch={() => onSoloLaunch(entry)}
+      soloBusy={soloBusy}
       onDelete={() => onDelete(entry)}
       onTagLocker={(heroName) => onTagLocker(entry, heroName)}
       onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
@@ -1091,6 +1096,8 @@ export default function Installed() {
   // state, so two clicks in the same tick can't both read a stale `false`.
   const dmmAutoImportInFlightRef = useRef(false);
   const [dmmAutoImporting, setDmmAutoImporting] = useState(false);
+  const soloBusyRef = useRef(false);
+  const [soloBusy, setSoloBusy] = useState(false);
   // Pending DMM-import consent dialog. Holds the promise resolver so
   // autoImportDmmMods can await the user's answer; null = no dialog.
   const [dmmConfirm, setDmmConfirm] = useState<{
@@ -2906,24 +2913,52 @@ export default function Installed() {
     else void toggleMod(entry.mod.id);
   });
   // "Start with only this mod enabled": solo the entry (disable everything else)
-  // then launch. For a group we keep its already-enabled variants, or fall back
-  // to the primary when the whole group is currently off. The prior enabled set
+  // then launch. For a group we keep its already-enabled variants, or enable
+  // every variant when the whole group is currently off. The prior enabled set
   // is snapshotted by soloMod for the restore banner.
   const soloLaunchEntry = useStableCallback(async (entry: ModEntry) => {
-    const targetIds =
-      entry.kind === 'group'
-        ? (entry.enabledVariants.length > 0 ? entry.enabledVariants : [entry.primary]).map((m) => m.id)
-        : [entry.mod.id];
-    const label = entry.kind === 'group' ? entry.primary.name : entry.mod.name;
-    const { applied, failures } = await soloMod(targetIds, label);
-    if (!applied) return;
-    if (failures > 0) {
-      showToast(t('installed.solo.partial', { count: failures }), { tone: 'warning' });
-    }
+    if (soloBusyRef.current) return;
+    soloBusyRef.current = true;
+    setSoloBusy(true);
     try {
-      await launchModded();
-    } catch (err) {
-      showToast(String(err).replace(/^Error:\s*/, ''), { tone: 'error' });
+      const targetMods =
+        entry.kind === 'group'
+          ? (entry.enabledVariants.length > 0 ? entry.enabledVariants : entry.variants)
+          : [entry.mod];
+      const targetKeys = targetMods.map(modRestoreKey);
+      const label = entry.kind === 'group' ? entry.primary.name : entry.mod.name;
+      const { applied, failures, reason } = await soloMod(targetKeys, label);
+      if (!applied) {
+        if (reason === 'missing') {
+          showToast(t('installed.solo.targetMissing'), { tone: 'error' });
+        }
+        return;
+      }
+      if (failures > 0) {
+        showToast(t('installed.solo.partial', { count: failures }), { tone: 'warning' });
+      }
+      try {
+        await launchModded();
+      } catch (err) {
+        showToast(String(err).replace(/^Error:\s*/, ''), { tone: 'error' });
+      }
+    } finally {
+      soloBusyRef.current = false;
+      setSoloBusy(false);
+    }
+  });
+  const restoreSolo = useStableCallback(async () => {
+    if (soloBusyRef.current) return;
+    soloBusyRef.current = true;
+    setSoloBusy(true);
+    try {
+      const { failures } = await restoreSoloMods();
+      if (failures > 0) {
+        showToast(t('installed.solo.restorePartial', { count: failures }), { tone: 'warning' });
+      }
+    } finally {
+      soloBusyRef.current = false;
+      setSoloBusy(false);
     }
   });
   const deleteEntry = useStableCallback((entry: ModEntry) => {
@@ -3340,6 +3375,7 @@ export default function Installed() {
     loadCount: enabledModCount,
     selectMode,
     selected: isEntrySelected(entry),
+    soloBusy,
     onOpenDetails: openEntryDetails,
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
@@ -3905,15 +3941,16 @@ export default function Installed() {
           <span className="flex-1 text-sm text-text-primary">
             {t('installed.solo.banner', { name: soloRestore.label })}
           </span>
-          <Button variant="secondary" size="sm" onClick={() => void restoreSoloMods()}>
+          <Button variant="secondary" size="sm" disabled={soloBusy} onClick={() => void restoreSolo()}>
             {t('installed.solo.restore')}
           </Button>
           <button
             type="button"
+            disabled={soloBusy}
             onClick={() => clearSoloRestore()}
             title={t('common.actions.dismiss')}
             aria-label={t('common.actions.dismiss')}
-            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary"
+            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
           >
             <X className="h-4 w-4" />
           </button>
@@ -6478,6 +6515,7 @@ interface ModCardProps {
   /** Disable every other mod, enable only this one, and launch the game. Used
    *  for A/B testing a single skin. */
   onSoloLaunch?: () => void;
+  soloBusy?: boolean;
   onDelete: () => void;
   onEditLocal?: () => void;
   /** Inline rename of a local mod's name (double-click the title). Undefined
@@ -7110,6 +7148,7 @@ function ModCard({
   onViewAuthor,
   onToggle,
   onSoloLaunch,
+  soloBusy = false,
   onDelete,
   onEditLocal,
   onRenameLocal,
@@ -7458,6 +7497,7 @@ function ModCard({
               <button
                 type="button"
                 role="menuitem"
+                disabled={soloBusy}
                 onClick={(e) => {
                   e.stopPropagation();
                   setMenuOpen(false);

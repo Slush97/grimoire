@@ -24,7 +24,9 @@ type IdentityFields = Pick<
 /**
  * Stable identity for a mod across the id churn that enable/disable causes.
  * Prefer GameBanana file identity (survives the rename), then content hash,
- * then name+size for local imports that carry neither.
+ * then name+size for local imports that carry neither. The name+size fallback
+ * can collide for distinct local imports; callers intentionally treat every
+ * matching mod as the same logical target in that rare case.
  */
 export function modRestoreKey(m: IdentityFields): string {
   if (typeof m.gameBananaFileId === 'number') {
@@ -35,17 +37,19 @@ export function modRestoreKey(m: IdentityFields): string {
 }
 
 /**
- * Enable exactly `enableIds` and disable every other currently-enabled mod.
- * Ids in `enableIds` that are already enabled (or unknown) contribute nothing.
+ * Enable exactly the mods matching `enableKeys` and disable every other
+ * currently-enabled mod. Returns null when no key resolves against the live mod
+ * list, so a stale click cannot disable the whole library and launch with
+ * nothing enabled.
  */
-export function planSolo(mods: Mod[], enableIds: string[]): TogglePlan {
-  const enableSet = new Set(enableIds);
-  const byId = new Map(mods.map((m) => [m.id, m]));
-  const disable = mods.filter((m) => m.enabled && !enableSet.has(m.id)).map((m) => m.id);
-  const enable = enableIds.filter((id) => {
-    const m = byId.get(id);
-    return !!m && !m.enabled;
-  });
+export function planSoloByKeys(mods: Mod[], enableKeys: string[]): TogglePlan | null {
+  const keySet = new Set(enableKeys);
+  const targets = mods.filter((m) => keySet.has(modRestoreKey(m)));
+  if (targets.length === 0) return null;
+
+  const keep = new Set(targets.map((m) => m.id));
+  const enable = targets.filter((m) => !m.enabled).map((m) => m.id);
+  const disable = mods.filter((m) => m.enabled && !keep.has(m.id)).map((m) => m.id);
   return { enable, disable };
 }
 
