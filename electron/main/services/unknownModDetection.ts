@@ -351,7 +351,17 @@ async function detectFromEmbed(
                 modName: modinfo.title ?? base.search ?? undefined,
                 fileId: modinfo.source.gamebananaFileId,
                 fileName,
-                section: modinfo.source.section === 'Sound' ? 'Sound' : 'Mod',
+                // GameBanana ids are per-section namespaces, so only carry a
+                // section we can map to the two the match result models. An
+                // unrecognized section (notably 'Wip') falls to undefined
+                // rather than coercing to 'Mod', which would query the wrong
+                // namespace. Mirrors the legacy addoninfo branch below.
+                section:
+                    modinfo.source.section === 'Sound'
+                        ? 'Sound'
+                        : modinfo.source.section === 'Mod'
+                          ? 'Mod'
+                          : undefined,
                 categoryName: modinfo.source.categoryName,
                 confidence: 'exact',
                 reason: 'Identified from embedded Grimoire metadata (no network).',

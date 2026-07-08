@@ -2999,6 +2999,8 @@ export default function Installed() {
       if (!applied) {
         if (reason === 'missing') {
           showToast(t('installed.solo.targetMissing'), { tone: 'error' });
+        } else if (reason === 'gameRunning') {
+          showToast(t('common.gameRunningWarning'), { tone: 'warning' });
         }
         return;
       }
