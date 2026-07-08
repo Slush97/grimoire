@@ -302,7 +302,7 @@ interface AppState {
    *  snapshotting the prior enabled set for one-click restore. `applied` is
    *  false when the target no longer resolves or the whole batch was rejected
    *  (e.g. game running), so the caller knows whether it's safe to launch. */
-  soloMod: (enableKeys: string[], label: string) => Promise<{ applied: boolean; failures: number; reason?: 'missing' | 'blocked' }>;
+  soloMod: (enableKeys: string[], label: string) => Promise<{ applied: boolean; failures: number; reason?: 'missing' | 'blocked' | 'gameRunning' }>;
   /** Re-apply the enabled set captured by the last soloMod call. */
   restoreSoloMods: () => Promise<{ failures: number }>;
   /** Drop the solo-restore snapshot without touching enablement. */
@@ -765,7 +765,15 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods();
-      return { applied: false, failures: 0, reason: 'blocked' };
+      // The game-running lock is swallowed silently everywhere else (background
+      // toggles), but a solo *launch* that does nothing needs a reason, so the
+      // caller can surface it. Enable-cap already auto-toasts via modsNotice and
+      // a generic error drops the full-page modsError screen, so both stay 'blocked'.
+      return {
+        applied: false,
+        failures: 0,
+        reason: isGameRunningModLockError(err) ? 'gameRunning' : 'blocked',
+      };
     }
   }),
 

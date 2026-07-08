@@ -10,6 +10,9 @@ vi.mock('../i18n', () => ({
 
 vi.mock('../lib/api', () => ({
   applyModToggleBatch: vi.fn(),
+  // soloMod's error path re-scans via loadMods; keep it a no-op so the catch
+  // branch under test isn't derailed by an unmocked api call.
+  getMods: vi.fn(async () => []),
 }));
 
 function mod(over: Partial<Mod> & { id: string }): Mod {
@@ -101,5 +104,18 @@ describe('appStore solo restore', () => {
     expect(result).toEqual({ applied: false, failures: 0, reason: 'missing' });
     expect(applyModToggleBatch).not.toHaveBeenCalled();
     expect(useAppStore.getState().mods.map((m) => m.id)).toEqual(['a']);
+  });
+
+  it('reports the game-running lock as a distinct reason so the caller can warn', async () => {
+    const a = mod({ id: 'a', enabled: true, sha256: 'aa' });
+    const b = mod({ id: 'b', enabled: true, sha256: 'bb' });
+    useAppStore.setState({ mods: [a, b] });
+    applyModToggleBatch.mockRejectedValueOnce(new Error('Game is running; refusing to modify mods.'));
+
+    const result = await useAppStore.getState().soloMod([modRestoreKey(a)], 'A');
+
+    expect(result).toEqual({ applied: false, failures: 0, reason: 'gameRunning' });
+    // Expected, recoverable lock: it must not snapshot a restore set (nothing changed).
+    expect(useAppStore.getState().soloRestore).toBeNull();
   });
 });

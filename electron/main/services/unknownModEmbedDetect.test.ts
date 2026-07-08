@@ -125,6 +125,32 @@ describe('detectUnknownModCacheMatches embed consult', () => {
         });
     });
 
+    it('leaves the section undefined for a non-Mod/Sound modinfo section instead of coercing to Mod', async () => {
+        readEmbeddedAddonInfo.mockReturnValue(addonInfo());
+        carryForwardOriginalIdentity.mockReturnValue({ sha256: 'a'.repeat(64) });
+        readEmbeddedModinfo.mockReturnValue(
+            modRecord({
+                source: {
+                    gamebananaId: 4242,
+                    gamebananaFileId: 9001,
+                    section: 'Wip',
+                    categoryName: 'Works in Progress',
+                },
+            })
+        );
+
+        const [result] = await detectUnknownModCacheMatches([
+            { modId: 'm1', fileName: 'pak01_dir.vpk', vpkPath: IMPRINTED },
+        ]);
+
+        // GameBanana ids are per-section namespaces; coercing 'Wip' -> 'Mod'
+        // would query the wrong submission. It must fall to undefined.
+        expect(result.crcMatch.status).toBe('found');
+        expect(result.crcMatch.section).toBeUndefined();
+        expect(result.crcMatch.modId).toBe(4242);
+        expect(result.crcMatch.fileId).toBe(9001);
+    });
+
     it('derives the Sound section and file id from legacy addoninfo keys', async () => {
         readEmbeddedAddonInfo.mockReturnValue(
             addonInfo({
