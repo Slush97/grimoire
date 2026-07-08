@@ -72,7 +72,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
@@ -93,6 +93,7 @@ import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
+import { modRestoreKey } from '../lib/soloRestore';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -466,10 +467,12 @@ interface InstalledEntryCardProps {
   loadCount: number;
   selectMode: boolean;
   selected: boolean;
+  soloBusy: boolean;
   onOpenDetails: (mod: Mod) => void;
   onViewAuthor: (mod: Mod) => void;
   onOpenPicker: (gameBananaId: number) => void;
   onToggle: (entry: ModEntry) => void;
+  onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
   onEditLocal: (mod: Mod) => void;
   onRenameLocal: (mod: Mod, newName: string) => Promise<void>;
@@ -508,10 +511,12 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   loadCount,
   selectMode,
   selected,
+  soloBusy,
   onOpenDetails,
   onViewAuthor,
   onOpenPicker,
   onToggle,
+  onSoloLaunch,
   onDelete,
   onEditLocal,
   onRenameLocal,
@@ -540,6 +545,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         }
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
+        onSoloLaunch={() => onSoloLaunch(entry)}
+        soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
         onEditLocal={!mod.gameBananaId ? () => onEditLocal(mod) : undefined}
         onRenameLocal={!mod.gameBananaId ? (newName) => onRenameLocal(mod, newName) : undefined}
@@ -592,6 +599,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       // Imprints are per file; a group card shows the primary's imprint.
       onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
       onToggle={() => onToggle(entry)}
+      onSoloLaunch={() => onSoloLaunch(entry)}
+      soloBusy={soloBusy}
       onDelete={() => onDelete(entry)}
       onTagLocker={(heroName) => onTagLocker(entry, heroName)}
       onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
@@ -703,6 +712,10 @@ export default function Installed() {
     modsError,
     modsNotice,
     clearModsNotice,
+    soloRestore,
+    soloMod,
+    restoreSoloMods,
+    clearSoloRestore,
     loadSettings,
     loadMods,
     toggleMod,
@@ -1083,6 +1096,8 @@ export default function Installed() {
   // state, so two clicks in the same tick can't both read a stale `false`.
   const dmmAutoImportInFlightRef = useRef(false);
   const [dmmAutoImporting, setDmmAutoImporting] = useState(false);
+  const soloBusyRef = useRef(false);
+  const [soloBusy, setSoloBusy] = useState(false);
   // Pending DMM-import consent dialog. Holds the promise resolver so
   // autoImportDmmMods can await the user's answer; null = no dialog.
   const [dmmConfirm, setDmmConfirm] = useState<{
@@ -2897,6 +2912,55 @@ export default function Installed() {
     if (entry.kind === 'group') void handleGroupToggle(entry);
     else void toggleMod(entry.mod.id);
   });
+  // "Start with only this mod enabled": solo the entry (disable everything else)
+  // then launch. For a group we keep its already-enabled variants, or enable
+  // every variant when the whole group is currently off. The prior enabled set
+  // is snapshotted by soloMod for the restore banner.
+  const soloLaunchEntry = useStableCallback(async (entry: ModEntry) => {
+    if (soloBusyRef.current) return;
+    soloBusyRef.current = true;
+    setSoloBusy(true);
+    try {
+      const targetMods =
+        entry.kind === 'group'
+          ? (entry.enabledVariants.length > 0 ? entry.enabledVariants : entry.variants)
+          : [entry.mod];
+      const targetKeys = targetMods.map(modRestoreKey);
+      const label = entry.kind === 'group' ? entry.primary.name : entry.mod.name;
+      const { applied, failures, reason } = await soloMod(targetKeys, label);
+      if (!applied) {
+        if (reason === 'missing') {
+          showToast(t('installed.solo.targetMissing'), { tone: 'error' });
+        }
+        return;
+      }
+      if (failures > 0) {
+        showToast(t('installed.solo.partial', { count: failures }), { tone: 'warning' });
+      }
+      try {
+        await launchModded();
+      } catch (err) {
+        showToast(String(err).replace(/^Error:\s*/, ''), { tone: 'error' });
+      }
+    } finally {
+      soloBusyRef.current = false;
+      setSoloBusy(false);
+    }
+  });
+  const restoreSolo = useStableCallback(async () => {
+    if (soloBusyRef.current) return;
+    soloBusyRef.current = true;
+    setSoloBusy(true);
+    try {
+      const { failures } = await restoreSoloMods();
+      if (failures > 0) {
+        showToast(t('installed.solo.restorePartial', { count: failures }), { tone: 'warning' });
+      }
+    } finally {
+      soloBusyRef.current = false;
+      setSoloBusy(false);
+    }
+  });
   const deleteEntry = useStableCallback((entry: ModEntry) => {
     if (entry.kind === 'group') {
       setModToDelete({
@@ -3311,10 +3375,12 @@ export default function Installed() {
     loadCount: enabledModCount,
     selectMode,
     selected: isEntrySelected(entry),
+    soloBusy,
     onOpenDetails: openEntryDetails,
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
     onToggle: toggleEntry,
+    onSoloLaunch: soloLaunchEntry,
     onDelete: deleteEntry,
     onEditLocal: editLocalEntry,
     onRenameLocal: renameLocalMod,
@@ -3868,6 +3934,28 @@ export default function Installed() {
           </div>
         </div>
       </div>
+
+      {soloRestore && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5">
+          <Beaker className="h-4 w-4 flex-shrink-0 text-accent" />
+          <span className="flex-1 text-sm text-text-primary">
+            {t('installed.solo.banner', { name: soloRestore.label })}
+          </span>
+          <Button variant="secondary" size="sm" disabled={soloBusy} onClick={() => void restoreSolo()}>
+            {t('installed.solo.restore')}
+          </Button>
+          <button
+            type="button"
+            disabled={soloBusy}
+            onClick={() => clearSoloRestore()}
+            title={t('common.actions.dismiss')}
+            aria-label={t('common.actions.dismiss')}
+            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
 
       {lockerOverridesOpen && (
         <LockerOverridesModal
@@ -6424,6 +6512,10 @@ interface ModCardProps {
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
   onToggle: () => void;
+  /** Disable every other mod, enable only this one, and launch the game. Used
+   *  for A/B testing a single skin. */
+  onSoloLaunch?: () => void;
+  soloBusy?: boolean;
   onDelete: () => void;
   onEditLocal?: () => void;
   /** Inline rename of a local mod's name (double-click the title). Undefined
@@ -7055,6 +7147,8 @@ function ModCard({
   onOpenDetails,
   onViewAuthor,
   onToggle,
+  onSoloLaunch,
+  soloBusy = false,
   onDelete,
   onEditLocal,
   onRenameLocal,
@@ -7397,6 +7491,22 @@ function ModCard({
               >
                 <Banana className="w-3.5 h-3.5" />
                 {t('installed.card.viewAuthorPage')}
+              </button>
+            )}
+            {onSoloLaunch && (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={soloBusy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onSoloLaunch();
+                }}
+                className={menuItemClasses}
+              >
+                <Beaker className="w-3.5 h-3.5" />
+                {t('installed.card.soloLaunch')}
               </button>
             )}
             {(onTagLocker || onTagGlobal) && (
