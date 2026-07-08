@@ -77,6 +77,7 @@ import type {
   GameBananaSection,
   GameBananaCategoryNode,
   GameBananaArtistLink,
+  GameBananaItemRef,
 } from '../types/gamebanana';
 import { getModThumbnail, getSoundPreviewUrl, getPrimaryFile, formatDate, isModOutdated } from '../types/gamebanana';
 import {
@@ -1155,6 +1156,10 @@ export default function Browse() {
   // current section's category tree has no Skins parent.
   const [modCategories, setModCategories] = useState<GameBananaCategoryNode[]>([]);
   const [selectedMod, setSelectedMod] = useState<GameBananaModDetails | null>(null);
+  // Section of the open details item. Usually matches the browse tab, but
+  // description/changelog links can jump to a Sound/Wip/Mod from another tab;
+  // downloads and comments must use this, not the grid's current section.
+  const [selectedDetailsSection, setSelectedDetailsSection] = useState(section);
   const [selectedModDates, setSelectedModDates] = useState<{ dateAdded: number; dateModified: number } | null>(null);
   const [modalNavigation, setModalNavigation] = useState<{ direction: ModDetailsNavigationDirection; label: string } | null>(null);
   const modalNavigationRequestRef = useRef(0);
@@ -2273,8 +2278,13 @@ export default function Browse() {
     setRefreshKey((k) => k + 1);
   }, []);
 
-  const applyLoadedModDetails = async (mod: GameBananaMod, details: GameBananaModDetails) => {
+  const applyLoadedModDetails = async (
+    mod: GameBananaMod,
+    details: GameBananaModDetails,
+    detailsSection: string = section,
+  ) => {
     setSelectedMod(details);
+    setSelectedDetailsSection(detailsSection);
     setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
 
     // Update the mods array with the correct nsfw flag from details
@@ -2310,7 +2320,7 @@ export default function Browse() {
   const handleModClick = async (mod: GameBananaMod) => {
     try {
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
-      await applyLoadedModDetails(mod, details);
+      await applyLoadedModDetails(mod, details, section);
     } catch (err) {
       setError(String(err));
     }
@@ -2326,7 +2336,7 @@ export default function Browse() {
     try {
       const details = await getModDetails(mod.id, section, { includeSubmitter: true });
       if (modalNavigationRequestRef.current !== requestId) return;
-      await applyLoadedModDetails(mod, details);
+      await applyLoadedModDetails(mod, details, section);
     } catch (err) {
       if (modalNavigationRequestRef.current === requestId) {
         setError(String(err));
@@ -2337,6 +2347,49 @@ export default function Browse() {
       }
     }
   };
+
+  // Open a GameBanana item linked from description/changelog/comments in the
+  // same details surface (no external browser). Uses the URL's section so a
+  // Sound link works even while the Mods tab is selected.
+  const handleOpenGameBananaItem = useStableCallback(async (item: GameBananaItemRef) => {
+    if (selectedMod && item.id === selectedMod.id && item.section === selectedDetailsSection) {
+      return;
+    }
+
+    const requestId = modalNavigationRequestRef.current + 1;
+    modalNavigationRequestRef.current = requestId;
+    setModalNavigation({ direction: 'next', label: t('modDetails.aria.loadingDetails') });
+
+    try {
+      const details = await getModDetails(item.id, item.section, { includeSubmitter: true });
+      if (modalNavigationRequestRef.current !== requestId) return;
+
+      setSelectedMod(details);
+      setSelectedDetailsSection(item.section);
+      // Dates may not be in the current grid (cross-section / off-page link).
+      // Prefer cache when present so the meta row still has something useful.
+      try {
+        const cached = await window.electronAPI.getCachedMod(item.id);
+        if (modalNavigationRequestRef.current !== requestId) return;
+        setSelectedModDates(
+          cached
+            ? { dateAdded: cached.dateAdded, dateModified: cached.dateModified }
+            : null,
+        );
+      } catch {
+        if (modalNavigationRequestRef.current !== requestId) return;
+        setSelectedModDates(null);
+      }
+    } catch (err) {
+      if (modalNavigationRequestRef.current === requestId) {
+        setError(String(err));
+      }
+    } finally {
+      if (modalNavigationRequestRef.current === requestId) {
+        setModalNavigation(null);
+      }
+    }
+  });
 
   // Stable identity (useStableCallback) so the memoized ModDetailsModal does
   // not re-render every time this large component does (e.g. on every
@@ -2354,7 +2407,7 @@ export default function Browse() {
     }
 
     try {
-      await downloadMod(selectedMod.id, fileId, fileName, section, effectiveCategoryId);
+      await downloadMod(selectedMod.id, fileId, fileName, selectedDetailsSection, effectiveCategoryId);
     } catch (err) {
       setError(String(err));
       // Reset the active UI only if the file that failed is the active one.
@@ -2418,6 +2471,7 @@ export default function Browse() {
           setFilePicker({ details, files: installable, anchor, dates: { dateAdded: mod.dateAdded, dateModified: mod.dateModified } });
         } else {
           setSelectedMod(details);
+          setSelectedDetailsSection(section);
           setSelectedModDates({ dateAdded: mod.dateAdded, dateModified: mod.dateModified });
         }
         return;
@@ -2821,7 +2875,7 @@ export default function Browse() {
         variant={variant}
         onChangeView={setBrowseDetailsView}
         mod={selectedMod}
-        section={section}
+        section={selectedDetailsSection}
         installed={installedIds.has(selectedMod.id)}
         installedFileIds={installedFileIds}
         installedFileStates={installedFileStates}
@@ -2844,6 +2898,7 @@ export default function Browse() {
         nextLabel={nextSelectedMod?.name}
         onDeleteFile={deleteMod}
         onViewArtist={viewArtist}
+        onOpenGameBananaItem={handleOpenGameBananaItem}
       />
     ) : null;
 
@@ -3598,6 +3653,7 @@ export default function Browse() {
           }}
           onViewAll={() => {
             setSelectedMod(filePicker.details);
+            setSelectedDetailsSection(section);
             setSelectedModDates(filePicker.dates);
             setFilePicker(null);
           }}

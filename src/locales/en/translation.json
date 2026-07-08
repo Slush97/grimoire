@@ -939,7 +939,8 @@
       "authorPageNotFound": "Couldn't find this mod's author page",
       "copyEnabled": "Copy enabled mods",
       "copyEnabledHint": "Copy the names of all enabled mods to the clipboard",
-      "copyEnabledToast": "Enabled mods copied ({{count}})"
+      "copyEnabledToast": "Enabled mods copied ({{count}})",
+      "copyFailed": "Couldn't copy: {{error}}"
     },
     "filters": {
       "searchPlaceholder": "Search installed...",
