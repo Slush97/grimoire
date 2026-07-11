@@ -24,6 +24,7 @@ import {
   Trash2,
   Coffee,
   Link2,
+  CloudOff,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type {
@@ -71,6 +72,10 @@ interface ModDetailsModalProps {
   hideNsfwPreviews: boolean;
   dateAdded?: number;
   dateModified?: number;
+  /** The mod object was rebuilt from the local catalog cache because the live
+   *  GameBanana fetch failed. Renders a banner explaining why description,
+   *  files, and previews may be missing. */
+  offline?: boolean;
   isNavigating?: boolean;
   navigationDirection?: ModDetailsNavigationDirection;
   navigationLabel?: string;
@@ -125,6 +130,7 @@ function ModDetailsModal({
   hideNsfwPreviews,
   dateAdded,
   dateModified,
+  offline = false,
   isNavigating = false,
   navigationDirection = 'next',
   navigationLabel,
@@ -250,6 +256,14 @@ function ModDetailsModal({
   }, [mod.id, installedFileIsArchived]);
 
   useEffect(() => {
+    // Offline fallback mods were built from the local cache; comments and
+    // updates would just re-fail against the same unreachable API.
+    if (offline) {
+      setComments([]);
+      setCommentsTotalCount(0);
+      setCommentsLoading(false);
+      return;
+    }
     let cancelled = false;
     setCommentsLoading(true);
     getModComments(mod.id, section)
@@ -268,9 +282,16 @@ function ModDetailsModal({
     return () => {
       cancelled = true;
     };
-  }, [mod.id, section]);
+  }, [mod.id, section, offline]);
 
   useEffect(() => {
+    if (offline) {
+      setUpdates([]);
+      setUpdatesTotalCount(0);
+      setUpdatesError(null);
+      setUpdatesLoading(false);
+      return;
+    }
     let cancelled = false;
     setUpdatesLoading(true);
     setUpdatesError(null);
@@ -300,7 +321,7 @@ function ModDetailsModal({
     return () => {
       cancelled = true;
     };
-  }, [mod.id, section]);
+  }, [mod.id, section, offline]);
 
   // Reset the image cursor when the mod changes so the sidebar carousel (and a
   // subsequently-opened lightbox) starts on the first preview rather than a
@@ -1085,6 +1106,13 @@ function ModDetailsModal({
                 </Button>
               </div>
             </div>
+          </div>
+        )}
+
+        {offline && (
+          <div className="flex items-center gap-2 border-b border-amber-500/20 bg-amber-500/10 px-5 py-2 text-xs text-amber-300">
+            <CloudOff className="h-3.5 w-3.5 flex-shrink-0" />
+            {t('modDetails.offlineNotice')}
           </div>
         )}
 

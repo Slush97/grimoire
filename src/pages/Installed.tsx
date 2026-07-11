@@ -78,6 +78,7 @@ import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgr
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
 import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef } from '../types/gamebanana';
+import type { CachedMod } from '../types/electron';
 import { getModThumbnail } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import ImageContextMenu from '../components/ImageContextMenu';
@@ -703,6 +704,35 @@ function getCardSizeGridStyle(multiplier: number): CSSProperties {
   } as CSSProperties;
 }
 
+// Degraded details built from the local catalog mirror (mods-cache.db) plus
+// the installed mod's own metadata, shown when the live GameBanana fetch
+// fails. Keeps the overlay usable offline instead of surfacing a raw fetch
+// error; the modal hides its files section when `files` is absent.
+function buildCachedModDetails(
+  gbId: number,
+  cached: CachedMod | null,
+  fallbackName?: string,
+): GameBananaModDetails | null {
+  const name = cached?.name ?? fallbackName;
+  if (!name) return null;
+  const thumbnailUrl = cached?.thumbnailUrl;
+  const slash = thumbnailUrl?.lastIndexOf('/') ?? -1;
+  return {
+    id: gbId,
+    name,
+    nsfw: cached?.isNsfw ?? false,
+    category: cached?.categoryName ? { id: cached.categoryId ?? undefined, name: cached.categoryName } : undefined,
+    submitter:
+      cached?.submitterName && cached.submitterId
+        ? { id: cached.submitterId, name: cached.submitterName }
+        : undefined,
+    previewMedia:
+      thumbnailUrl && slash > 0
+        ? { images: [{ baseUrl: thumbnailUrl.slice(0, slash), file: thumbnailUrl.slice(slash + 1) }] }
+        : undefined,
+  };
+}
+
 export default function Installed() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -1218,6 +1248,9 @@ export default function Installed() {
   const [detailsCategoryId, setDetailsCategoryId] = useState<number>(0);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
+  // True when the overlay is showing cached-catalog data because the live
+  // GameBanana fetch failed; drives the offline banner in the modal.
+  const [detailsOffline, setDetailsOffline] = useState(false);
   const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
   const [detailsIgnoreUpdates, setDetailsIgnoreUpdates] = useState(false);
   const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
@@ -1325,19 +1358,32 @@ export default function Installed() {
     setDetailsUpdateAvailable(updatesAvailable.has(m.id));
     setDetailsIgnoreUpdates(!!m.ignoreUpdates);
     setDetailsDates(null);
+    setDetailsOffline(false);
+    const cachedPromise = window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null);
     try {
-      const [details, cached] = await Promise.all([
-        getModDetails(m.gameBananaId, section, { includeSubmitter: true }),
-        window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null),
-      ]);
+      const details = await getModDetails(m.gameBananaId, section, { includeSubmitter: true });
+      const cached = await cachedPromise;
       if (detailsRequestIdRef.current !== requestId) return;
       setDetailsMod(details);
       if (cached) {
         setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
       }
     } catch (err) {
+      const cached = await cachedPromise;
       if (detailsRequestIdRef.current !== requestId) return;
-      setDetailsError(String(err));
+      // GameBanana unreachable (or the page is gone): fall back to the local
+      // catalog record plus the installed mod's own name so the overlay still
+      // opens instead of dead-ending on a raw fetch error.
+      const fallback = buildCachedModDetails(m.gameBananaId, cached, m.name);
+      if (fallback) {
+        setDetailsMod(fallback);
+        setDetailsOffline(true);
+        if (cached) {
+          setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
+        }
+      } else {
+        setDetailsError(String(err));
+      }
     } finally {
       if (detailsRequestIdRef.current === requestId) {
         setDetailsLoading(false);
@@ -1348,6 +1394,7 @@ export default function Installed() {
   const closeModDetails = () => {
     setDetailsMod(null);
     setDetailsError(null);
+    setDetailsOffline(false);
     setDetailsUpdateAvailable(false);
     setDetailsIgnoreUpdates(false);
     setDetailsSourceModId(null);
@@ -1392,20 +1439,31 @@ export default function Installed() {
     setDetailsUpdateAvailable(updateAvailable);
     setDetailsDates(null);
 
+    const cachedPromise = window.electronAPI.getCachedMod(item.id).catch(() => null);
     try {
-      const [details, cached] = await Promise.all([
-        getModDetails(item.id, item.section, { includeSubmitter: true }),
-        window.electronAPI.getCachedMod(item.id).catch(() => null),
-      ]);
+      const details = await getModDetails(item.id, item.section, { includeSubmitter: true });
+      const cached = await cachedPromise;
       if (detailsRequestIdRef.current !== requestId) return;
       setDetailsMod(details);
+      setDetailsOffline(false);
       setDetailsSection(item.section);
       if (cached) {
         setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
       }
     } catch (err) {
+      const cached = await cachedPromise;
       if (detailsRequestIdRef.current !== requestId) return;
-      setDetailsError(String(err));
+      // Linked items may not be installed, so the only offline fallback is the
+      // catalog cache; without a row there we still have to show the error.
+      const fallback = buildCachedModDetails(item.id, cached);
+      if (fallback) {
+        setDetailsMod(fallback);
+        setDetailsOffline(true);
+        setDetailsSection(item.section);
+        setDetailsDates({ dateAdded: cached!.dateAdded, dateModified: cached!.dateModified });
+      } else {
+        setDetailsError(String(err));
+      }
     }
   });
 
@@ -4378,6 +4436,7 @@ export default function Installed() {
           hideNsfwPreviews={installedHideNsfwPreviews}
           dateAdded={detailsDates?.dateAdded}
           dateModified={detailsDates?.dateModified}
+          offline={detailsOffline}
           updateAvailable={detailsUpdateAvailable}
           ignoreUpdates={detailsIgnoreUpdates}
           onToggleIgnoreUpdates={
