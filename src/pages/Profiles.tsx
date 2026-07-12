@@ -309,6 +309,7 @@ export default function Profiles() {
       const newProfile = await createProfile(newProfileName.trim(), crosshair as unknown as ProfileCrosshairSettings | undefined);
 
       setNewProfileName('');
+      setIncludeCrosshairOnCreate(false);
       setActiveProfileId(newProfile.id);
       await loadProfileList();
     } catch (err) {
@@ -363,9 +364,9 @@ export default function Profiles() {
     }
   };
 
-  // Drops the crosshair from a single profile without touching its mods. Needed
-  // because Update re-bakes the live crosshair back in whenever the experimental
-  // crosshair feature is on, so there'd otherwise be no way to forget it.
+  // Drops the crosshair from a single profile without touching its mods. Update
+  // preserves the profile's existing crosshair (it no longer re-bakes editor
+  // state), so clearing one needs this dedicated op.
   const handleRemoveCrosshair = async (profileId: string) => {
     setRemovingCrosshairId(profileId);
     try {

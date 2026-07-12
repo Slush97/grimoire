@@ -107,7 +107,7 @@ ipcMain.handle('rename-profile', (_, profileId: string, newName: string): Profil
     return renameProfile(profileId, newName);
 });
 
-// remove-profile-crosshair — drops the crosshair from a profile without
+// remove-profile-crosshair: drops the crosshair from a profile without
 // re-scanning/clobbering its mod list (unlike update-profile).
 ipcMain.handle('remove-profile-crosshair', (_, profileId: string): Profile => {
     return removeProfileCrosshair(profileId);
