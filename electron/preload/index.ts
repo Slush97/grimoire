@@ -483,6 +483,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     applyProfile: (profileId: string) => ipcRenderer.invoke('apply-profile', profileId),
     deleteProfile: (profileId: string) => ipcRenderer.invoke('delete-profile', profileId),
     renameProfile: (profileId: string, newName: string) => ipcRenderer.invoke('rename-profile', profileId, newName),
+    removeProfileCrosshair: (profileId: string) => ipcRenderer.invoke('remove-profile-crosshair', profileId),
     exportPortableProfile: (profileId: string) => ipcRenderer.invoke('export-portable-profile', profileId),
     parsePortableProfile: (input: string) => ipcRenderer.invoke('parse-portable-profile', input),
     resolvePortableProfile: (profile: PortableProfile) => ipcRenderer.invoke('resolve-portable-profile', profile),

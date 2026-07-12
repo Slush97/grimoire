@@ -856,6 +856,7 @@ export interface ElectronAPI {
     applyProfile: (profileId: string) => Promise<ApplyProfileResult>;
     deleteProfile: (profileId: string) => Promise<void>;
     renameProfile: (profileId: string, newName: string) => Promise<Profile>;
+    removeProfileCrosshair: (profileId: string) => Promise<Profile>;
     exportPortableProfile: (profileId: string) => Promise<import('./portableProfile').PortableExportResult>;
     parsePortableProfile: (input: string) => Promise<import('./portableProfile').PortableProfile>;
     resolvePortableProfile: (

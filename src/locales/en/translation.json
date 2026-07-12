@@ -1746,7 +1746,8 @@
       "title": "Create New Profile",
       "placeholder": "Enter profile name, e.g. Competitive, Casual",
       "profileName": "Profile name",
-      "submit": "Create Profile"
+      "submit": "Create Profile",
+      "includeCrosshair": "Include current crosshair"
     },
     "import": {
       "title": "Import a portable profile from a share code or file"
@@ -1834,7 +1835,9 @@
     },
     "crosshair": {
       "summary": "Gap: {{gap}} | Height: {{height}} | Width: {{width}}",
-      "rgb": "RGB({{r}}, {{g}}, {{b}})"
+      "rgb": "RGB({{r}}, {{g}}, {{b}})",
+      "remove": "Remove",
+      "removeTitle": "Remove the crosshair from this profile"
     },
     "confirm": {
       "updateTitle": "Update Profile",
