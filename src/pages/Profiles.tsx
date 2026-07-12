@@ -8,6 +8,7 @@ import {
   updateProfile,
   deleteProfile,
   renameProfile,
+  removeProfileCrosshair,
   getSettings,
   createSnapshot,
   listSnapshots,
@@ -109,6 +110,7 @@ export default function Profiles() {
   const [isCreating, setIsCreating] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [removingCrosshairId, setRemovingCrosshairId] = useState<string | null>(null);
   // Profile id pending an "overwrite this profile?" confirmation. Gated on the
   // confirmProfileUpdate setting (on by default) so Update isn't a one-click,
   // no-undo overwrite sitting right next to Apply.
@@ -339,6 +341,21 @@ export default function Profiles() {
       setError(String(err));
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  // Drops the crosshair from a single profile without touching its mods. Needed
+  // because Update re-bakes the live crosshair back in whenever the experimental
+  // crosshair feature is on, so there'd otherwise be no way to forget it.
+  const handleRemoveCrosshair = async (profileId: string) => {
+    setRemovingCrosshairId(profileId);
+    try {
+      await removeProfileCrosshair(profileId);
+      await loadProfileList();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setRemovingCrosshairId(null);
     }
   };
 
@@ -909,8 +926,22 @@ export default function Profiles() {
                           {/* Crosshair Preview */}
                           {profile.crosshair && (
                             <div className="pt-3 border-t border-white/5">
-                              <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-                                <Tx k="nav.crosshair" fallback="Crosshair" />
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+                                  <Tx k="nav.crosshair" fallback="Crosshair" />
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRemoveCrosshair(profile.id)}
+                                  disabled={isApplying || isUpdating || removingCrosshairId === profile.id}
+                                  icon={X}
+                                  title={t('profiles.crosshair.removeTitle')}
+                                  aria-label={t('profiles.crosshair.remove')}
+                                  className="px-1.5"
+                                >
+                                  <Tx k="profiles.crosshair.remove" fallback="Remove" />
+                                </Button>
                               </div>
                               <div className="flex items-center gap-4">
                                 <CrosshairPreview size={56} scale={1.3} settings={profile.crosshair} />

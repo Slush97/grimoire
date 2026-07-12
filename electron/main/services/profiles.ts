@@ -529,3 +529,23 @@ export function renameProfile(profileId: string, newName: string): Profile {
     saveProfiles(profiles);
     return profiles[index];
 }
+
+/**
+ * Remove the crosshair from a profile without touching its mods or autoexec.
+ * updateProfile() re-scans the live mod state, so it can't be used to just drop
+ * the crosshair. This is the targeted "forget the crosshair on this profile" op.
+ */
+export function removeProfileCrosshair(profileId: string): Profile {
+    const profiles = loadProfiles();
+    const index = profiles.findIndex(p => p.id === profileId);
+
+    if (index === -1) {
+        throw new Error(`Profile not found: ${profileId}`);
+    }
+
+    profiles[index].crosshair = undefined;
+    profiles[index].updatedAt = new Date().toISOString();
+
+    saveProfiles(profiles);
+    return profiles[index];
+}

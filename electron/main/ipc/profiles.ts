@@ -8,6 +8,7 @@ import {
     applyProfile,
     deleteProfile,
     renameProfile,
+    removeProfileCrosshair,
     type Profile,
     type ProfileCrosshairSettings,
     type ApplyProfileResult,
@@ -104,6 +105,12 @@ ipcMain.handle('delete-profile', (_, profileId: string): void => {
 // rename-profile
 ipcMain.handle('rename-profile', (_, profileId: string, newName: string): Profile => {
     return renameProfile(profileId, newName);
+});
+
+// remove-profile-crosshair — drops the crosshair from a profile without
+// re-scanning/clobbering its mod list (unlike update-profile).
+ipcMain.handle('remove-profile-crosshair', (_, profileId: string): Profile => {
+    return removeProfileCrosshair(profileId);
 });
 
 // export-portable-profile
