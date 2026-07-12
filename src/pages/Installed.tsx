@@ -78,7 +78,6 @@ import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgr
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
 import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef } from '../types/gamebanana';
-import type { CachedMod } from '../types/electron';
 import { getModThumbnail } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import ImageContextMenu from '../components/ImageContextMenu';
@@ -96,6 +95,7 @@ import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
 import { modRestoreKey } from '../lib/soloRestore';
+import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -702,35 +702,6 @@ function getCardSizeGridStyle(multiplier: number): CSSProperties {
     '--card-size': getCardSizeCss(multiplier),
     gridTemplateColumns: 'repeat(auto-fill, minmax(var(--card-size), 1fr))',
   } as CSSProperties;
-}
-
-// Degraded details built from the local catalog mirror (mods-cache.db) plus
-// the installed mod's own metadata, shown when the live GameBanana fetch
-// fails. Keeps the overlay usable offline instead of surfacing a raw fetch
-// error; the modal hides its files section when `files` is absent.
-function buildCachedModDetails(
-  gbId: number,
-  cached: CachedMod | null,
-  fallbackName?: string,
-): GameBananaModDetails | null {
-  const name = cached?.name ?? fallbackName;
-  if (!name) return null;
-  const thumbnailUrl = cached?.thumbnailUrl;
-  const slash = thumbnailUrl?.lastIndexOf('/') ?? -1;
-  return {
-    id: gbId,
-    name,
-    nsfw: cached?.isNsfw ?? false,
-    category: cached?.categoryName ? { id: cached.categoryId ?? undefined, name: cached.categoryName } : undefined,
-    submitter:
-      cached?.submitterName && cached.submitterId
-        ? { id: cached.submitterId, name: cached.submitterName }
-        : undefined,
-    previewMedia:
-      thumbnailUrl && slash > 0
-        ? { images: [{ baseUrl: thumbnailUrl.slice(0, slash), file: thumbnailUrl.slice(slash + 1) }] }
-        : undefined,
-  };
 }
 
 export default function Installed() {
@@ -1371,10 +1342,12 @@ export default function Installed() {
     } catch (err) {
       const cached = await cachedPromise;
       if (detailsRequestIdRef.current !== requestId) return;
-      // GameBanana unreachable (or the page is gone): fall back to the local
-      // catalog record plus the installed mod's own name so the overlay still
-      // opens instead of dead-ending on a raw fetch error.
-      const fallback = buildCachedModDetails(m.gameBananaId, cached, m.name);
+      // For transient GameBanana failures, fall back to the local catalog
+      // record plus the installed mod's own name so the overlay still opens.
+      // Permanent and unexpected errors remain visible for diagnosis.
+      const fallback = canUseCachedModDetails(err)
+        ? buildCachedModDetails(m.gameBananaId, cached, m.name)
+        : null;
       if (fallback) {
         setDetailsMod(fallback);
         setDetailsOffline(true);
@@ -1455,13 +1428,20 @@ export default function Installed() {
       if (detailsRequestIdRef.current !== requestId) return;
       // Linked items may not be installed, so the only offline fallback is the
       // catalog cache; without a row there we still have to show the error.
-      const fallback = buildCachedModDetails(item.id, cached);
+      const fallback = canUseCachedModDetails(err)
+        ? buildCachedModDetails(item.id, cached)
+        : null;
       if (fallback) {
         setDetailsMod(fallback);
         setDetailsOffline(true);
         setDetailsSection(item.section);
         setDetailsDates({ dateAdded: cached!.dateAdded, dateModified: cached!.dateModified });
       } else {
+        // The previous item remains mounted while a linked item loads. Clear it
+        // before setting the error so the error dialog is not suppressed by its
+        // `!detailsMod` guard.
+        setDetailsMod(null);
+        setDetailsOffline(false);
         setDetailsError(String(err));
       }
     }
