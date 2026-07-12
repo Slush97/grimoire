@@ -107,6 +107,10 @@ export default function Profiles() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
+  // Opt-in: whether a newly created profile should bake in the currently applied
+  // crosshair. Off by default so a profile only carries a crosshair when the
+  // user explicitly asks for it (and only when one is actually set).
+  const [includeCrosshairOnCreate, setIncludeCrosshairOnCreate] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
@@ -136,7 +140,7 @@ export default function Profiles() {
   const [bulkDeletingSnapshots, setBulkDeletingSnapshots] = useState(false);
 
   const { mods, loadMods } = useAppStore();
-  const { getSettings: getCrosshairSettings, loadSettingsFromPreset } = useCrosshairStore();
+  const { loadSettingsFromPreset, loadPresets, presets, activePresetId } = useCrosshairStore();
   const socialSignedIn = useSocialStore((s) => s.status.signedIn);
 
   const modByFileName = new Map(mods.map((m) => [m.fileName, m]));
@@ -175,7 +179,18 @@ export default function Profiles() {
   useEffect(() => {
     loadProfileList();
     void loadSnapshotList();
-  }, [loadSnapshotList]);
+    // Populate presets + activePresetId so we know whether a crosshair is
+    // actually applied (the store's editor settings aren't hydrated here).
+    void loadPresets();
+  }, [loadSnapshotList, loadPresets]);
+
+  // The crosshair currently applied to the game, as structured settings, or null
+  // if none is set. Sourced from the active preset (the persisted "applied"
+  // signal) rather than the editor store, which is often just defaults here.
+  const activeCrosshair =
+    crosshairEnabled
+      ? (presets.find((p) => p.id === activePresetId)?.settings ?? null)
+      : null;
 
   const handleRestoreSnapshot = useCallback(async (snapshotId: string) => {
     setRestoringSnapshotId(snapshotId);
@@ -287,8 +302,10 @@ export default function Profiles() {
 
     setIsCreating(true);
     try {
-      // Only include crosshair settings if the experimental crosshair feature is enabled
-      const crosshair = crosshairEnabled ? getCrosshairSettings() : undefined;
+      // Bake in the crosshair only when the user opted in AND one is actually
+      // applied. No crosshair set (or not opted in) means the profile carries
+      // no crosshair at all.
+      const crosshair = includeCrosshairOnCreate && activeCrosshair ? activeCrosshair : undefined;
       const newProfile = await createProfile(newProfileName.trim(), crosshair as unknown as ProfileCrosshairSettings | undefined);
 
       setNewProfileName('');
@@ -333,9 +350,11 @@ export default function Profiles() {
   const handleUpdateProfile = async (profileId: string) => {
     setUpdatingId(profileId);
     try {
-      // Only include crosshair settings if the experimental crosshair feature is enabled
-      const crosshair = crosshairEnabled ? getCrosshairSettings() : undefined;
-      await updateProfile(profileId, crosshair as unknown as ProfileCrosshairSettings | undefined);
+      // Preserve whatever crosshair the profile already has (set at creation or
+      // cleared via Remove). Update refreshes mods/autoexec but must not silently
+      // re-bake the editor's crosshair, which would undo a Remove.
+      const existingCrosshair = profiles.find((p) => p.id === profileId)?.crosshair;
+      await updateProfile(profileId, existingCrosshair);
       await loadProfileList();
     } catch (err) {
       setError(String(err));
@@ -447,6 +466,19 @@ export default function Profiles() {
                 <Tx k="profiles.actions.import" fallback="Import" />
               </Button>
             </div>
+            {/* Opt-in: only offered when a crosshair is actually applied. */}
+            {activeCrosshair && (
+              <label className="flex items-center gap-2 mt-3 cursor-pointer select-none text-sm text-text-secondary w-fit">
+                <input
+                  type="checkbox"
+                  checked={includeCrosshairOnCreate}
+                  onChange={(e) => setIncludeCrosshairOnCreate(e.target.checked)}
+                  className="peer sr-only"
+                />
+                <CheckboxMark checked={includeCrosshairOnCreate} />
+                <Tx k="profiles.create.includeCrosshair" fallback="Include current crosshair" />
+              </label>
+            )}
           </Card>
 
           {/* Snapshots — automatic recovery points captured before

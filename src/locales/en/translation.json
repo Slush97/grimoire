@@ -1746,7 +1746,8 @@
       "title": "Create New Profile",
       "placeholder": "Enter profile name, e.g. Competitive, Casual",
       "profileName": "Profile name",
-      "submit": "Create Profile"
+      "submit": "Create Profile",
+      "includeCrosshair": "Include current crosshair"
     },
     "import": {
       "title": "Import a portable profile from a share code or file"
