@@ -2370,6 +2370,7 @@
     "viewOnGamebanana": "View on GameBanana",
     "copyLink": "Copy link",
     "linkCopied": "Link copied",
+    "offlineNotice": "Live GameBanana details are temporarily unavailable. Showing cached info; description, files, and comments are unavailable.",
     "outdatedWarning": "This mod was last updated on {{date}} and may not be compatible with the current Deadlock version.",
     "deleteFile": {
       "title": "Delete installed file?",
