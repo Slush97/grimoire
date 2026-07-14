@@ -527,6 +527,7 @@ async function resolveOne(entry: PortableModEntry): Promise<PortableResolvedMod>
             status: 'exact',
             resolvedFileId: pinned.id,
             resolvedFileName: pinned.fileName,
+            resolvedName: details.name,
         };
     }
 
@@ -547,6 +548,7 @@ async function resolveOne(entry: PortableModEntry): Promise<PortableResolvedMod>
         status: 'upgraded',
         resolvedFileId: newest.id,
         resolvedFileName: newest.fileName,
+        resolvedName: details.name,
     };
 }
 
