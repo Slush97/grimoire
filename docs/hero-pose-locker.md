@@ -97,6 +97,25 @@ overridden entry.)
 The service tries the override(s) first, then the panorama codename(s); a hero
 that resolves nothing falls back to the 2D portrait in the UI.
 
+## Hero namespace traps
+
+Hero lookup is not one namespace. Keep the names separate when debugging pose,
+shader, material, or recolor behavior:
+
+| Namespace | Example source | McGinnis value |
+|---|---|---|
+| Display name | Grimoire UI, API-facing hero name | `McGinnis` |
+| Panorama/class/live-materials codename | `heroPortraits.ts`, `vpkmerge model live-materials --hero` | `forge` |
+| Legacy addon alias | Older community addon/card paths, `heroPortraits.ts` aliases | `engineer` |
+| Current preview model entry | `MODEL_ENTRY_OVERRIDES` in `heroPoseModels.ts` | `models/heroes_wip/mcginnis/mcginnis.vmdl_c` |
+| Material/recolor namespace | `heroColors.ts`, vpkmerge recolor/material recipes and paths | `mcginnis` |
+
+McGinnis is the easy one to get wrong because Valve's old naming still leaks
+into some content. For preview and material-shader debugging, use the pinned
+current model entry, not `engineer`. For `vpkmerge model live-materials`, use
+`--hero forge`. For VFX/material/recolor paths, expect `mcginnis` in
+`models/heroes_wip/mcginnis/...` and material names.
+
 **Six heroes resolve a model but cannot pose** (verified 2026-05-29). Their
 current body model lives under `models/heroes_wip/` and bakes *zero* animation
 clips into the `.vmdl_c` (the clips ship as external `clips/` files morphic does

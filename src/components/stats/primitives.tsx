@@ -110,8 +110,8 @@ export function AsyncSection<T>({
     if (state.status === 'error') {
         return (
             <div className="flex flex-col items-center gap-3 py-8 text-center">
-                <AlertCircle className="w-8 h-8 text-red-400" />
-                <p className="text-sm text-red-400 max-w-md">{state.error}</p>
+                <AlertCircle className="w-8 h-8 text-state-danger" />
+                <p className="text-sm text-state-danger max-w-md">{state.error}</p>
                 <Button variant="secondary" size="sm" icon={RefreshCw} onClick={onRetry}>
                     {t('common.actions.retry')}
                 </Button>
@@ -177,7 +177,7 @@ export function MatchRow({
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2">
                     <span className="font-medium truncate">{heroName(heroId)}</span>
-                    <span className={`text-xs font-semibold ${won ? 'text-green-400' : 'text-red-400'}`}>
+                    <span className={`text-xs font-semibold ${won ? 'text-green-400' : 'text-state-danger'}`}>
                         {won ? t('stats.primitives.win') : t('stats.primitives.loss')}
                     </span>
                 </div>
@@ -192,7 +192,7 @@ export function MatchRow({
                 <div className="font-mono text-sm tabular-nums">
                     {kills}
                     <span className="text-text-secondary/60">/</span>
-                    <span className="text-red-400">{deaths}</span>
+                    <span className="text-state-danger">{deaths}</span>
                     <span className="text-text-secondary/60">/</span>
                     {assists}
                 </div>

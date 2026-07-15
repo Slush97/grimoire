@@ -10,16 +10,19 @@ import {
   Sparkles,
   Blend,
   Waves,
+  Download,
 } from 'lucide-react';
 import {
   applyHeroColor,
   applyHeroPrism,
   applyTrippyVfx,
+  foundryExportHeroEffect,
   previewHeroColor,
   revertHeroColor,
   getActiveHeroColor,
   getGameRunningStatus,
 } from '../../lib/api';
+import type { HeroEffectExportRequest } from '../../types/foundry';
 import {
   GRADIENT_PRESETS,
   DEFAULT_CUSTOM_STOPS,
@@ -177,6 +180,8 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
   const [busy, setBusy] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
   const [changed, setChanged] = useState(false);
+  // Path of the most recently exported VPK file (null until an export succeeds).
+  const [exportedPath, setExportedPath] = useState<string | null>(null);
   const [gameRunning, setGameRunning] = useState(false);
   // Live recolored swatch (a real ability texture run through the recolor).
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -363,6 +368,59 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
     }
   };
 
+  // The current picker selection as an export request, mirroring exactly what
+  // handleApply sends to the apply path (so an exported VPK matches the applied
+  // look byte for byte; both run the same per-hero bake).
+  const currentExportRequest = (): HeroEffectExportRequest => {
+    if (mode === 'trippy') {
+      return {
+        heroName,
+        mode: 'trippy',
+        hue,
+        saturation,
+        brightness,
+        trippy: {
+          style: trippyStyle,
+          intensity: trippyIntensity,
+          phase: trippyPhase,
+          animationStyle: trippyAnimStyle,
+          animationIntensity: trippyAnimIntensity,
+          targets: trippyTargets,
+        },
+      };
+    }
+    if (mode === 'prism' || mode === 'gradient') {
+      return {
+        heroName,
+        mode,
+        hue,
+        saturation,
+        brightness,
+        animated,
+        gradient: mode === 'gradient' ? gradientSpecOf(gradientPreset, customStops) : null,
+      };
+    }
+    return { heroName, mode: 'hue', hue, saturation, brightness };
+  };
+
+  // Export the current look to a standalone addon VPK on disk (save dialog),
+  // instead of (or as well as) applying it into the managed mod list.
+  const handleExport = async () => {
+    if (busy) return;
+    setBusy(true);
+    setActionError(null);
+    setExportedPath(null);
+    try {
+      const result = await foundryExportHeroEffect(currentExportRequest());
+      if (!mounted.current) return;
+      if (result.exported && result.path) setExportedPath(result.path);
+    } catch (err) {
+      if (mounted.current) setActionError(String(err));
+    } finally {
+      if (mounted.current) setBusy(false);
+    }
+  };
+
   const handleRemove = async () => {
     if (busy) return;
     setBusy(true);
@@ -479,7 +537,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
 
   if (error) {
     return (
-      <div className="flex items-start gap-2 py-2 text-xs text-red-400">
+      <div className="flex items-start gap-2 py-2 text-xs text-state-danger">
         <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
         <span className="break-words">{error}</span>
       </div>
@@ -932,6 +990,16 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
                   ? t('locker.colors.applyTrippy')
                   : t('locker.colors.applyColor')}
         </button>
+        <button
+          type="button"
+          onClick={handleExport}
+          disabled={busy}
+          title={t('locker.colors.exportVpkTitle')}
+          className="flex items-center gap-1.5 rounded-md border border-border px-3 py-1.5 text-xs font-semibold text-text-secondary transition-colors hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <Download className="h-3.5 w-3.5" />
+          {t('locker.colors.exportVpk')}
+        </button>
         {applied && (
           <button
             type="button"
@@ -945,6 +1013,15 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
         )}
       </div>
 
+      {exportedPath && (
+        <div className="flex items-start gap-2 rounded-md border border-border bg-bg-secondary/70 px-3 py-2 text-xs text-text-secondary">
+          <Download className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" />
+          <span className="break-all">
+            {t('locker.colors.exportSaved', { path: exportedPath })}
+          </span>
+        </div>
+      )}
+
       {busy && (
         <p className="text-[11px] text-text-secondary/80">
           {t('locker.colors.bakingHint')}
@@ -952,7 +1029,7 @@ export default function HeroColorPicker({ heroName, onAppliedChange }: HeroColor
       )}
 
       {actionError && (
-        <div className="flex items-start gap-2 py-1 text-xs text-red-400">
+        <div className="flex items-start gap-2 py-1 text-xs text-state-danger">
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span className="break-words">{actionError}</span>
         </div>

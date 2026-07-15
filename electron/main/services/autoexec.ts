@@ -14,6 +14,23 @@ export interface AutoexecData {
     other: string;
 }
 
+function getExecutableAutoexecLine(line: string): string {
+    // A line comment starts at the first // that begins the line or follows
+    // whitespace. A // inside a token (e.g. a URL in an echo) is left intact.
+    const match = /(^|\s)\/\//.exec(line);
+    if (match) {
+        return line.slice(0, match.index + match[1].length).trim();
+    }
+    return line.trim();
+}
+
+export function getManualAutoexecCommands(data: AutoexecData): string[] {
+    return [data.header, data.other]
+        .flatMap((section) => section.split('\n'))
+        .map(getExecutableAutoexecLine)
+        .filter((line) => line.length > 0);
+}
+
 // Helper to parse autoexec into sections
 export function parseAutoexec(content: string): AutoexecData {
     const lines = content.split('\n');
@@ -25,16 +42,18 @@ export function parseAutoexec(content: string): AutoexecData {
     let section: 'header' | 'crosshair' | 'commands' | 'other' = 'header';
 
     for (const line of lines) {
-        if (line.includes(CROSSHAIR_START)) {
+        const trimmed = line.trim();
+
+        if (trimmed === CROSSHAIR_START) {
             section = 'crosshair';
             continue;
-        } else if (line.includes(CROSSHAIR_END)) {
+        } else if (trimmed === CROSSHAIR_END) {
             section = 'other';
             continue;
-        } else if (line.includes(COMMANDS_START)) {
+        } else if (trimmed === COMMANDS_START) {
             section = 'commands';
             continue;
-        } else if (line.includes(COMMANDS_END)) {
+        } else if (trimmed === COMMANDS_END) {
             section = 'other';
             continue;
         }
@@ -43,7 +62,7 @@ export function parseAutoexec(content: string): AutoexecData {
             // Old-style crosshair commands (written without section markers by
             // pre-1.18 applyPreset) are rescued into the crosshair section so a
             // rewrite upgrades them instead of silently deleting them.
-            if (line.trim().startsWith('citadel_crosshair_') || line.trim().startsWith('// Preset:')) {
+            if (trimmed.startsWith('citadel_crosshair_') || trimmed.startsWith('// Preset:')) {
                 crosshair.push(line);
             } else if (!line.includes('Mod Manager')) {
                 header.push(line);
@@ -51,9 +70,10 @@ export function parseAutoexec(content: string): AutoexecData {
         } else if (section === 'crosshair') {
             crosshair.push(line);
         } else if (section === 'commands') {
-            if (line.trim()) commands.push(line.trim());
+            const command = getExecutableAutoexecLine(line);
+            if (command) commands.push(command);
         } else if (section === 'other') {
-            if (line.trim().startsWith('citadel_crosshair_')) {
+            if (trimmed.startsWith('citadel_crosshair_')) {
                 crosshair.push(line);
             } else if (!line.includes('Crosshair settings from Deadlock Mod Manager') &&
                 !line.includes('// Preset:')) {

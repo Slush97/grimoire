@@ -470,7 +470,7 @@ export function LockerModImagePicker({
               {t('locker.modImage.loadingGallery')}
             </div>
           ) : error ? (
-            <div className="py-6 text-center text-sm text-red-400">{error}</div>
+            <div className="py-6 text-center text-sm text-state-danger">{error}</div>
           ) : choices.length > 0 ? (
             <>
               <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-secondary">

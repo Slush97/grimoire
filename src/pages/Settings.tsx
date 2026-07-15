@@ -14,11 +14,14 @@ import {
   openGameFolder,
   validateDeadlockPath,
   showOpenDialog,
+  openPerformanceConfigFile,
 } from '../lib/api';
+import { showToast } from '../stores/toastStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
-import { PageHeader, ConfirmModal } from '../components/common/PageComponents';
+import { Input, Textarea } from '../components/common/forms';
+import { PageHeader, ConfirmModal, PageLayout, LoadingState } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 import LanguageSelector from '../components/settings/LanguageSelector';
 import { ACCENT_PRESETS, DEFAULT_ACCENT_COLOR, applyAccentColor } from '../lib/accentColor';
@@ -75,6 +78,7 @@ export default function Settings() {
   const [gameinfoMissing, setGameinfoMissing] = useState(false);
   const [gameinfoCandidates, setGameinfoCandidates] = useState<string[]>([]);
   const [isFixingGameinfo, setIsFixingGameinfo] = useState(false);
+  const [openGameinfoConfirm, setOpenGameinfoConfirm] = useState(false);
   const [syncStatus, setSyncStatus] = useState<Record<string, { lastSync: number; count: number } | null> | null>(null);
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState<{ section: string; modsProcessed: number; totalMods: number } | null>(null);
@@ -270,21 +274,15 @@ export default function Settings() {
     return () => document.removeEventListener('keydown', onKey);
   }, [customPickerOpen, commitCustomDraft]);
 
-  const handleHideNsfwChange = async (checked: boolean) => {
-    if (settings) {
-      await saveSettings({ ...settings, hideNsfwPreviews: checked });
-    }
-  };
-
-  const handleHideOutdatedChange = async (checked: boolean) => {
-    if (settings) {
-      await saveSettings({ ...settings, hideOutdatedMods: checked });
-    }
-  };
-
   const handleLockerCardsExpandedByDefaultChange = async (checked: boolean) => {
     if (settings) {
       await saveSettings({ ...settings, lockerCardsExpandedByDefault: checked });
+    }
+  };
+
+  const handleInstalledHideNsfwChange = async (checked: boolean) => {
+    if (settings) {
+      await saveSettings({ ...settings, installedHideNsfwPreviews: checked });
     }
   };
 
@@ -309,6 +307,12 @@ export default function Settings() {
   const handleDiscordRpcChange = async (checked: boolean) => {
     if (settings) {
       await saveSettings({ ...settings, discordRpcEnabled: checked });
+    }
+  };
+
+  const handleVerboseModTraceChange = async (checked: boolean) => {
+    if (settings) {
+      await saveSettings({ ...settings, verboseModTrace: checked });
     }
   };
 
@@ -401,6 +405,23 @@ export default function Settings() {
       setGameinfoConfigured(false);
     } finally {
       setIsFixingGameinfo(false);
+    }
+  };
+
+  const handleOpenGameinfo = async () => {
+    setOpenGameinfoConfirm(false);
+    try {
+      // Reuses the performance-config opener: same gameinfo.gi, opened in the
+      // user's chosen editor (path read in the main process, never passed here).
+      await openPerformanceConfigFile();
+    } catch (err) {
+      const detail = err instanceof Error ? err.message : String(err);
+      showToast(
+        t('settings.gameinfo.openFailed', {
+          error: detail.replace(/^Error invoking remote method '[^']+': (Error: )?/, ''),
+        }),
+        { tone: 'error' }
+      );
     }
   };
 
@@ -600,15 +621,11 @@ export default function Settings() {
     : 0;
 
   if (settingsLoading && !settings) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="w-8 h-8 animate-spin text-accent" />
-      </div>
-    );
+    return <LoadingState />;
   }
 
   return (
-    <div className="p-8 max-w-5xl mx-auto space-y-8 animate-fade-in">
+    <PageLayout maxWidth="5xl">
       <PageHeader
         title={<Tx k="nav.settings" fallback="Settings" />}
         description={<Tx k="settings.header.description" fallback="Game paths, preferences, and maintenance" />}
@@ -633,7 +650,7 @@ export default function Settings() {
                       </span>
                     )}
                     {isValidPath === false && (
-                      <span className="text-red-400 flex items-center gap-1">
+                      <span className="text-state-danger flex items-center gap-1">
                         <X className="w-3 h-3" />
                         <Tx k="common.status.invalid" fallback="Invalid" />
                       </span>
@@ -656,13 +673,13 @@ export default function Settings() {
 
               <div className="flex gap-2">
                 <div className="relative flex-1">
-                  <input
+                  <Input
                     type="text"
                     value={displayPath}
                     onChange={(e) => handlePathChange(e.target.value)}
                     placeholder={t('settings.gamePath.pathPlaceholder')}
                     disabled={isDevMode}
-                    className="w-full bg-bg-tertiary border border-white/5 rounded-sm px-4 py-2.5 text-text-primary placeholder:text-text-secondary/50 focus:outline-none focus:ring-2 focus:ring-accent disabled:opacity-60 disabled:cursor-not-allowed font-mono text-sm"
+                    className="font-mono"
                   />
                 </div>
                 <Button
@@ -743,15 +760,25 @@ export default function Settings() {
                   <Tx k="settings.gamePath.openGameFolder" fallback="Open Game Folder" />
                 </Button>
               ) : (
-                <Button
-                  onClick={handleFixGameinfo}
-                  disabled={isFixingGameinfo || !activeDeadlockPath}
-                  isLoading={isFixingGameinfo}
-                  variant={gameinfoConfigured ? 'secondary' : 'primary'}
-                  icon={Wrench}
-                >
-                  <Tx k="settings.gameinfo.fixConfiguration" fallback="Fix Configuration" />
-                </Button>
+                <div className="flex flex-shrink-0 gap-2">
+                  <Button
+                    onClick={() => setOpenGameinfoConfirm(true)}
+                    disabled={!activeDeadlockPath}
+                    variant="secondary"
+                    icon={FileText}
+                  >
+                    <Tx k="settings.gameinfo.openFile" fallback="Open gameinfo.gi" />
+                  </Button>
+                  <Button
+                    onClick={handleFixGameinfo}
+                    disabled={isFixingGameinfo || !activeDeadlockPath}
+                    isLoading={isFixingGameinfo}
+                    variant={gameinfoConfigured ? 'secondary' : 'primary'}
+                    icon={Wrench}
+                  >
+                    <Tx k="settings.gameinfo.fixConfiguration" fallback="Fix Configuration" />
+                  </Button>
+                </div>
               )}
             </div>
           </div>
@@ -787,7 +814,7 @@ export default function Settings() {
                   </span>
                 )}
                 {updateStatus?.error && (
-                  <span className="text-xs text-red-400 basis-full">{updateStatus.error}</span>
+                  <span className="text-xs text-state-danger basis-full">{updateStatus.error}</span>
                 )}
               </div>
               <div className="flex flex-wrap gap-2">
@@ -1014,19 +1041,10 @@ export default function Settings() {
         <Card title={<Tx k="settings.sections.preferences" fallback="Preferences" />} icon={Shield}>
           <div className="space-y-6">
             <Toggle
-              checked={settings?.hideNsfwPreviews ?? true}
-              onChange={handleHideNsfwChange}
-              label={<Tx k="settings.preferences.hideNsfw" fallback="Hide NSFW Content" />}
-              description={<Tx k="settings.preferences.hideNsfwDescription" fallback="Blur thumbnail images for mods marked as NSFW." />}
-            />
-
-            <div className="h-px bg-white/5" />
-
-            <Toggle
-              checked={settings?.hideOutdatedMods ?? false}
-              onChange={handleHideOutdatedChange}
-              label={<Tx k="settings.preferences.hideOutdated" fallback="Hide Outdated Mods" />}
-              description={<Tx k="settings.toggles.hideOutdated" fallback="Hide Browse mods older than the current game version." />}
+              checked={settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true}
+              onChange={handleInstalledHideNsfwChange}
+              label={<Tx k="settings.preferences.blurInstalledNsfw" fallback="Blur Installed NSFW Content" />}
+              description={<Tx k="settings.preferences.blurInstalledNsfwDescription" fallback="Blur thumbnail images for installed mods marked as NSFW." />}
             />
 
             <div className="h-px bg-white/5" />
@@ -1210,6 +1228,15 @@ export default function Settings() {
             <div className="h-px bg-white/5" />
 
             <Toggle
+              checked={settings?.experimentalVpkImprinting ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalVpkImprinting: checked })}
+              label={<Tx k="settings.experimental.vpkImprint" fallback="Imprint installed mods" />}
+              description={<Tx k="settings.toggles.vpkImprint" fallback="Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have." />}
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
               checked={settings?.experimentalDeadworksServers ?? false}
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalDeadworksServers: checked })}
               label={<Tx k="settings.experimental.deadworksServers" fallback="Deadworks Servers" />}
@@ -1223,6 +1250,14 @@ export default function Settings() {
               onChange={(checked) => settings && saveSettings({ ...settings, experimentalPerformanceConfig: checked })}
               label={<Tx k="settings.experimental.performanceConfig" fallback="Performance Config" />}
               description={<Tx k="settings.toggles.performanceConfig" fallback="One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time." />}
+            />
+
+            <div className="h-px bg-white/5" />
+
+            <Toggle
+              checked={settings?.experimentalFoundry ?? false}
+              onChange={(checked) => settings && saveSettings({ ...settings, experimentalFoundry: checked })}
+              label={<Tx k="settings.experimental.foundry" fallback="Door Stuck" />}
             />
           </div>
         </Card>
@@ -1283,12 +1318,11 @@ export default function Settings() {
                 </p>
               </div>
 
-              <textarea
+              <Textarea
                 value={bugDescription}
                 onChange={(e) => setBugDescription(e.target.value)}
                 placeholder={t('settings.support.bugPlaceholder')}
                 rows={3}
-                className="w-full px-3 py-2 text-sm bg-bg-tertiary border border-white/5 rounded-sm text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent resize-y"
               />
 
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -1317,10 +1351,22 @@ export default function Settings() {
                     fallback="Include full log (up to 5 MB; Discord auto-attaches as a file)"
                   />
                 </label>
+                <label className="inline-flex items-center gap-2 text-xs text-text-secondary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={settings?.verboseModTrace ?? false}
+                    onChange={(e) => handleVerboseModTraceChange(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded-sm border border-white/20 bg-bg-tertiary accent-accent focus:outline-none focus:ring-2 focus:ring-accent"
+                  />
+                  <Tx
+                    k="settings.support.verboseModTrace"
+                    fallback="Verbose mod logging (traces enable/disable/scan to the log; turn off when done)"
+                  />
+                </label>
               </div>
 
               {bugReportError && (
-                <p className="text-xs text-red-400 break-all">{bugReportError}</p>
+                <p className="text-xs text-state-danger break-all">{bugReportError}</p>
               )}
 
               {bugReportText && (
@@ -1649,7 +1695,22 @@ export default function Settings() {
         confirmLabel={<Tx k="common.actions.reset" fallback="Reset" />}
         variant="primary"
       />
-    </div>
+
+      <ConfirmModal
+        isOpen={openGameinfoConfirm}
+        onCancel={() => setOpenGameinfoConfirm(false)}
+        onConfirm={handleOpenGameinfo}
+        title={<Tx k="settings.gameinfo.openConfirmTitle" fallback="Open gameinfo.gi?" />}
+        message={
+          <Tx
+            k="settings.gameinfo.openConfirmMessage"
+            fallback="This opens Deadlock's gameinfo.gi in your text editor. It controls how the game loads mods. Editing it by hand can break mod loading or stop the game from launching. If something goes wrong, use Fix Configuration to repair it. Only proceed if you know what you're changing."
+          />
+        }
+        confirmLabel={<Tx k="settings.gameinfo.openFile" fallback="Open gameinfo.gi" />}
+        variant="primary"
+      />
+    </PageLayout>
   );
 }
 

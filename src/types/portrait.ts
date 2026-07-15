@@ -70,3 +70,11 @@ export interface HeroPoseInfo {
   mtimeMs: number | null;
   key: string;
 }
+
+/** Whether a hero's ambient FX bundle (descriptor + textures) is cached/current,
+ *  plus its storage key and source `.vpcf_c` entry. Mirrors HeroPoseInfo. */
+export interface HeroEffectInfo {
+  hasEffect: boolean;
+  key: string;
+  entry: string | null;
+}

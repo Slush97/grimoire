@@ -11,11 +11,15 @@ export type { SearchOptions, SearchResult };
 /**
  * Escape special FTS5 characters in search terms
  * FTS5 treats these as operators: AND, OR, NOT, -, ", *, ^, :
+ * and ' opens a string literal, so an unbalanced one is a syntax error
+ * (a name like "Tu'er Shen" crashed the whole query). The unicode61
+ * tokenizer already splits on these, so replacing them with a space and
+ * prefix-matching each token matches the same content.
  */
 function escapeFts5Term(term: string): string {
     // Remove characters that could break FTS5 queries
     // Keep alphanumeric and basic punctuation that's safe
-    return term.replace(/["\-*^:()]/g, ' ').trim();
+    return term.replace(/["\-*^:()']/g, ' ').trim();
 }
 
 

@@ -108,7 +108,7 @@ function buildUrl(path: string, query?: RequestOptions['query']): string {
 
 async function request<T>(
     path: string,
-    schema: z.ZodType<T>,
+    schema: z.ZodType<T, z.ZodTypeDef, unknown>,
     options: RequestOptions = {}
 ): Promise<T> {
     const { method = 'GET', body, auth = 'optional', timeoutMs = DEFAULT_TIMEOUT_MS, query } = options;

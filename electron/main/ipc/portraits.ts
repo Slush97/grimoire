@@ -20,8 +20,12 @@ import {
     exportHeroPose,
     getRiggedHeroPose,
     exportRiggedHeroPose,
+    getHeroClothModel,
+    getHeroEffectInfo,
+    exportHeroEffect,
     type HeroPoseInfo,
     type HeroPoseSkinSource,
+    type HeroEffectInfo,
 } from '../services/heroPoseModels';
 import type { HeroPortrait } from '../../../src/types/portrait';
 import type { ApplyHeroCardResult } from '../../../src/types/mod';
@@ -113,17 +117,21 @@ ipcMain.handle(
 
 ipcMain.handle(
     'export-soul-model',
-    async (_, metaKey: string, cacheKey: string): Promise<SoulModelInfo> => {
+    async (_, metaKey: string, cacheKey: string, entry?: string): Promise<SoulModelInfo> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
-        return exportSoulModel(deadlockPath, metaKey, cacheKey);
+        return exportSoulModel(deadlockPath, metaKey, cacheKey, entry);
     }
 );
 
 ipcMain.handle(
     'get-hero-pose-info',
     async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroPoseInfo> => {
-        return getHeroPoseInfo(heroName, skinSources);
+        const deadlockPath = getActiveDeadlockPath();
+        // No Deadlock path: nothing can be resolved or exported anyway. Report
+        // absent so the renderer's export attempt surfaces the real failure.
+        if (!deadlockPath) return { hasModel: false, mtimeMs: null, key: '' };
+        return getHeroPoseInfo(deadlockPath, heroName, skinSources);
     }
 );
 
@@ -144,7 +152,9 @@ ipcMain.handle(
 ipcMain.handle(
     'get-rigged-hero-pose',
     async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<HeroPoseInfo> => {
-        return getRiggedHeroPose(heroName, skinSources);
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) return { hasModel: false, mtimeMs: null, key: '' };
+        return getRiggedHeroPose(deadlockPath, heroName, skinSources);
     }
 );
 
@@ -159,5 +169,30 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) throw new Error('No Deadlock path configured');
         return exportRiggedHeroPose(deadlockPath, heroName, skinSources, fallbackSkinMetaKey);
+    }
+);
+
+ipcMain.handle(
+    'get-hero-cloth-model',
+    async (_, heroName: string, skinSources?: HeroPoseSkinSource[]): Promise<unknown> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return getHeroClothModel(deadlockPath, heroName, skinSources);
+    }
+);
+
+ipcMain.handle(
+    'get-hero-effect-info',
+    async (_, heroName: string): Promise<HeroEffectInfo> => {
+        return getHeroEffectInfo(heroName);
+    }
+);
+
+ipcMain.handle(
+    'export-hero-effect',
+    async (_, heroName: string): Promise<HeroEffectInfo> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return exportHeroEffect(deadlockPath, heroName);
     }
 );

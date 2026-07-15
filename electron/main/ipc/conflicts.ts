@@ -81,3 +81,124 @@ ipcMain.handle('unignore-conflict', async (_, modA: string, modB: string): Promi
     }
     return next;
 });
+
+// --- Per-file ignores ---------------------------------------------------
+// Finer-grained than whole-pair ignores: dismiss individual overlapping file
+// paths while keeping the pair flagged for any files that still overlap. Keyed
+// by the same stable identity pair key (ignoreKey) the detector emits, so the
+// renderer passes that key straight back rather than re-resolving mod ids.
+
+// get-ignored-conflict-files — the full pairKey -> ignored-paths map, used to
+// render the "Ignored files" management panel.
+ipcMain.handle('get-ignored-conflict-files', async (): Promise<Record<string, string[]>> => {
+    return loadSettings().ignoredConflictFiles ?? {};
+});
+
+// ignore-conflict-file — add one overlapping path to a pair's ignore list.
+// Idempotent. Returns the updated map.
+ipcMain.handle(
+    'ignore-conflict-file',
+    async (_, ignoreKey: string, filePath: string): Promise<Record<string, string[]>> => {
+        const settings = loadSettings();
+        const map = { ...(settings.ignoredConflictFiles ?? {}) };
+        const existing = map[ignoreKey] ?? [];
+        if (!existing.includes(filePath)) {
+            map[ignoreKey] = [...existing, filePath];
+            saveSettings({ ...settings, ignoredConflictFiles: map });
+        }
+        return map;
+    }
+);
+
+// unignore-conflict-file — remove a single path, or the whole pair entry when
+// filePath is null. Empties prune themselves so the map stays clean. Accepts
+// the stable key directly so the panel can clear entries even after a mod was
+// uninstalled.
+ipcMain.handle(
+    'unignore-conflict-file',
+    async (_, ignoreKey: string, filePath: string | null): Promise<Record<string, string[]>> => {
+        const settings = loadSettings();
+        const current = settings.ignoredConflictFiles ?? {};
+        if (!(ignoreKey in current)) {
+            return current;
+        }
+        const map = { ...current };
+        if (filePath === null) {
+            delete map[ignoreKey];
+        } else {
+            const next = (map[ignoreKey] ?? []).filter((f) => f !== filePath);
+            if (next.length === 0) {
+                delete map[ignoreKey];
+            } else {
+                map[ignoreKey] = next;
+            }
+        }
+        saveSettings({ ...settings, ignoredConflictFiles: map });
+        return map;
+    }
+);
+
+// --- Global file ignores ------------------------------------------------
+// Silence a path for EVERY pair, not just one (the user-curated companion to
+// the built-in compiler-artifact filter). For files that are never a real
+// conflict no matter which mods ship them.
+
+ipcMain.handle('get-ignored-conflict-files-global', async (): Promise<string[]> => {
+    return loadSettings().ignoredConflictFilesGlobal ?? [];
+});
+
+// ignore-conflict-file-global — add a path to the global ignore list.
+// Idempotent. Returns the updated list.
+ipcMain.handle('ignore-conflict-file-global', async (_, filePath: string): Promise<string[]> => {
+    const settings = loadSettings();
+    const current = settings.ignoredConflictFilesGlobal ?? [];
+    if (current.includes(filePath)) {
+        return current;
+    }
+    const next = [...current, filePath];
+    saveSettings({ ...settings, ignoredConflictFilesGlobal: next });
+    return next;
+});
+
+// unignore-conflict-file-global — drop a path from the global ignore list.
+ipcMain.handle('unignore-conflict-file-global', async (_, filePath: string): Promise<string[]> => {
+    const settings = loadSettings();
+    const current = settings.ignoredConflictFilesGlobal ?? [];
+    const next = current.filter((f) => f !== filePath);
+    if (next.length !== current.length) {
+        saveSettings({ ...settings, ignoredConflictFilesGlobal: next });
+    }
+    return next;
+});
+
+// --- Whole-mod ignores --------------------------------------------------
+// Suppress every conflict that involves a given mod, against any other mod.
+// Keyed by the stable per-mod identity the detector already stamps onto each
+// conflict (modAIdentity/modBIdentity), so the renderer passes that back.
+
+ipcMain.handle('get-ignored-conflict-mods', async (): Promise<string[]> => {
+    return loadSettings().ignoredConflictMods ?? [];
+});
+
+// ignore-conflict-mod — add a mod identity to the ignore list. Idempotent.
+ipcMain.handle('ignore-conflict-mod', async (_, identity: string): Promise<string[]> => {
+    const settings = loadSettings();
+    const current = settings.ignoredConflictMods ?? [];
+    if (current.includes(identity)) {
+        return current;
+    }
+    const next = [...current, identity];
+    saveSettings({ ...settings, ignoredConflictMods: next });
+    return next;
+});
+
+// unignore-conflict-mod — drop a mod identity from the ignore list.
+ipcMain.handle('unignore-conflict-mod', async (_, identity: string): Promise<string[]> => {
+    const settings = loadSettings();
+    const current = settings.ignoredConflictMods ?? [];
+    const next = current.filter((id) => id !== identity);
+    if (next.length !== current.length) {
+        saveSettings({ ...settings, ignoredConflictMods: next });
+    }
+    return next;
+});

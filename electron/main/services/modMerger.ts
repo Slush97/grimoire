@@ -1,14 +1,43 @@
 import { promises as fs, existsSync } from 'fs';
-import { join, dirname, resolve } from 'path';
+import { join, dirname, resolve, basename } from 'path';
 import { tmpdir } from 'os';
 import { spawn } from 'child_process';
-import { randomUUID, createHash } from 'crypto';
+import { randomUUID } from 'crypto';
 import { app } from 'electron';
 import { metaKeyFor } from './deadlock';
-import { scanMods, disableMod, enableMod, allocateEnabledVpkPath, type Mod } from './mods';
+import { loadSettings } from './settings';
+import {
+    scanMods,
+    disableModUnlocked,
+    enableModUnlocked,
+    allocateEnabledVpkPath,
+    runExclusiveModMutation,
+    type Mod,
+} from './mods';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
-import { fingerprintFile } from './fileMatch';
+import { resolveVpkIdentity, type OriginalIdentity } from './vpkIdentity';
+import { parseVpkEntryStats } from './vpk';
+import {
+    computeOriginalIdentity,
+    serializeAddonInfo,
+    serializeModinfo,
+    hasLegacyGrimoireMergeMetaEntry,
+    findImprintRepackMismatch,
+    ADDONINFO_ENTRY,
+    MODINFO_ENTRY,
+    LEGACY_GRIMOIRE_META_ENTRY,
+    MODINFO_FORMAT,
+    MODINFO_GAME,
+    MODINFO_SCHEMA_VERSION,
+    type ModinfoMergeRecord,
+    type ModinfoMergeSource,
+} from './modinfoFormat';
 import { encodeShareCode } from './portableProfile';
+import {
+    assertCanMoveLoadedGameMod,
+    assertCanMoveLoadedGameMods,
+    syncRunningGameModSnapshotFromMods,
+} from './gameSessionMods';
 import {
     PORTABLE_PROFILE_FORMAT,
     PORTABLE_PROFILE_SCHEMA_VERSION,
@@ -24,6 +53,38 @@ import type {
 
 const DEADLOCK_STEAM_APP_ID = 1422450;
 const DEADLOCK_GAMEBANANA_GAME_ID = 20948;
+
+/** Verbose merge-lifecycle trace, gated on the same `verboseModTrace` setting as
+ *  services/mods.ts. Merge/rebuild operations were previously silent, so an
+ *  interrupted rebuild left a half-written manifest with no record of how it got
+ *  that way. A `start` line with no matching `done` line localizes the crash. */
+function mergeTrace(message: string): void {
+    try {
+        if (loadSettings().verboseModTrace) console.log(`[modTrace] ${message}`);
+    } catch {
+        /* never let tracing break a merge */
+    }
+}
+
+/** Compact one-line render of a source list for the trace: each source's
+ *  recorded fileName plus whether we captured the stable identities (gb id /
+ *  sha) that the Installed-list hide logic needs to avoid a pakNN collision. */
+function describeSources(sources: MergedModSource[]): string {
+    return sources
+        .map(
+            (s) =>
+                `${s.fileName}(${s.gameBananaId ? `gb=${s.gameBananaId}` : 'local'},${s.sha256AtMergeTime ? 'sha' : 'NO-sha'})`
+        )
+        .join(', ');
+}
+
+/** Source filenames recorded as a bare enabled slot (pakNN_dir.vpk). A finished
+ *  merge rewrites these to the disabled free-form name; a leftover means the
+ *  disable/rebuild loop was interrupted, and that recyclable name can later
+ *  collide with an unrelated mod that lands in the slot. */
+function stalePakSources(sources: MergedModSource[]): MergedModSource[] {
+    return sources.filter((s) => /^pak\d+_dir\.vpk$/i.test(s.fileName));
+}
 
 type SupportedPlatform = 'linux-x64' | 'darwin-arm64' | 'win32-x64';
 
@@ -160,12 +221,6 @@ export function runVpkmergeStdout(args: string[], timeoutMs = 120000): Promise<s
     });
 }
 
-async function hashFile(path: string): Promise<string> {
-    const hash = createHash('sha256');
-    hash.update(await fs.readFile(path));
-    return hash.digest('hex');
-}
-
 /** Valve Pak v1/v2 magic: little-endian 0x55aa1234 at file offset 0. */
 const VPK_MAGIC = 0x55aa1234;
 
@@ -192,6 +247,147 @@ export async function verifyVpkOutput(path: string): Promise<void> {
         }
     } finally {
         await fh.close();
+    }
+}
+
+/** Author string stamped into a merged VPK's embedded addoninfo.txt (a merge
+ *  has many real authors, so there is no single one). */
+const MERGE_ADDON_AUTHOR = 'Multiple (merged)';
+
+/**
+ * Embed the self-identifying vpk-modinfo entries into an already-merged VPK
+ * (path A, see docs/vpk-metadata-embed-integration.md). Serializes
+ * `addoninfo.txt` (carrying the merge's canonical-identity triple) and
+ * `modinfo.json` (the kind:"merge" machine record with the source list),
+ * writes both to temp files, and runs a vpkmerge `--extra-file` pass that
+ * re-packs the merged VPK with the two blobs embedded at its root, then
+ * atomically swaps it into place. A DB-wiped Grimoire reads the record back
+ * to repopulate the merged-mod metadata and drive unmerge / extractMergeSource.
+ *
+ * `original` is the merged output's identity captured from the PRE-EMBED bytes
+ * (the spec's option (a)): it is the stable self-identity stored in metadata,
+ * addoninfo, and modinfo alike, and is never re-derived from the post-embed
+ * file.
+ *
+ * Exported so imprintMods.ts's merge-refresh path (a merged mod's embed gone
+ * stale, or the identity carried forward from an existing embed rather than
+ * freshly captured) can reuse the exact same pass-2 machinery mergeModsLocked
+ * and extractMergeSourceLocked use, rather than re-deriving a second embed
+ * writer with its own bugs.
+ *
+ * `firstImprintedAt` defaults to `createdAt` when omitted, which is exactly
+ * right for a brand-new merge (mergeModsLocked) or a from-scratch rebuild
+ * (extractMergeSourceLocked): the merge output never existed before, so its
+ * first and current imprint are the same moment. A re-imprint of an EXISTING
+ * merge (imprintMods.ts's merge refresh) passes the carried-forward value
+ * explicitly, per the KEYSTONE carry-forward rule: firstImprintedAt must
+ * never advance on a refresh, only writtenAt does.
+ */
+export async function embedMergeIdentity(
+    mergedPath: string,
+    title: string,
+    createdAt: string,
+    original: OriginalIdentity,
+    sources: ModinfoMergeSource[],
+    firstImprintedAt: string = createdAt
+): Promise<void> {
+    const addonText = serializeAddonInfo({
+        title,
+        author: MERGE_ADDON_AUTHOR,
+        buildDate: createdAt,
+        originalSha256: original.sha256,
+        originalSize: original.size,
+        originalCrc32: original.crc32,
+    });
+    const record: ModinfoMergeRecord = {
+        format: MODINFO_FORMAT,
+        schemaVersion: MODINFO_SCHEMA_VERSION,
+        kind: 'merge',
+        writtenBy: { tool: 'grimoire', version: app.getVersion() },
+        writtenAt: createdAt,
+        firstImprintedAt,
+        game: MODINFO_GAME,
+        identity: { sha256: original.sha256, size: original.size, crc32: original.crc32 },
+        title,
+        author: MERGE_ADDON_AUTHOR,
+        merge: { title },
+        sources,
+    };
+    const metaText = serializeModinfo(record);
+    await repackWithEmbeddedEntries(mergedPath, addonText, metaText);
+}
+
+/**
+ * Re-pack `vpkPath` in place with BOTH imprint entries (`addoninfo.txt` +
+ * `modinfo.json`) embedded at its root in one `vpkmerge metadata` pass, then
+ * atomically swap it over the original. The single shared embed writer: the
+ * merge pass (embedMergeIdentity above) and the single-mod imprint
+ * (imprintMods.ts) both go through here, so the parity check and the legacy
+ * residue retirement cannot drift between them.
+ *
+ * The temp output is a dotfile in the VPK's OWN folder (a non-`_dir.vpk`
+ * name, so it is neither scanned as a mod nor counted as a slot), keeping the
+ * rename on one volume; on any failure the original VPK is left untouched.
+ *
+ * Before the swap the repacked output must pass a real parity check against
+ * the input's entry tree (findImprintRepackMismatch): every carried entry
+ * present with an unchanged logical size (except an expected `--drop-entry`
+ * removal), nothing added beyond the two imprint entries. A magic-bytes check
+ * alone (verifyVpkOutput) would accept a structurally valid VPK that silently
+ * dropped or corrupted game content. Any mismatch throws (landing in the
+ * caller's fail-soft handling) and the original VPK keeps its slot.
+ *
+ * When the input still carries a legacy grimoire_meta.json companion, it is
+ * passed to vpkmerge's `--drop-entry` so the residue is retired in the same
+ * repack that writes its replacement (the new record fully supersedes it).
+ */
+export async function repackWithEmbeddedEntries(
+    vpkPath: string,
+    addonText: string,
+    modinfoText: string
+): Promise<void> {
+    const inputEntries = parseVpkEntryStats(vpkPath);
+    if (!inputEntries) {
+        throw new Error('Cannot verify the repack: the input VPK entry tree is unreadable.');
+    }
+    const addonTmp = join(tmpdir(), `grimoire-imprint-addoninfo-${randomUUID()}.txt`);
+    const modinfoTmp = join(tmpdir(), `grimoire-imprint-modinfo-${randomUUID()}.json`);
+    const embedOut = join(dirname(vpkPath), `.imprint-embed-${randomUUID()}.vpk`);
+    const droppedEntries = hasLegacyGrimoireMergeMetaEntry(vpkPath) ? [LEGACY_GRIMOIRE_META_ENTRY] : [];
+    try {
+        await fs.writeFile(addonTmp, addonText);
+        await fs.writeFile(modinfoTmp, modinfoText);
+        await runVpkmerge([
+            'metadata',
+            '--vpk',
+            vpkPath,
+            '--output',
+            embedOut,
+            '--extra-file',
+            `${ADDONINFO_ENTRY}=${addonTmp}`,
+            '--extra-file',
+            `${MODINFO_ENTRY}=${modinfoTmp}`,
+            ...droppedEntries.flatMap((entry) => ['--drop-entry', entry]),
+        ]);
+        const outputEntries = parseVpkEntryStats(embedOut);
+        if (!outputEntries) {
+            throw new Error('Imprint repack produced an unreadable VPK; the original was left untouched.');
+        }
+        const mismatch = findImprintRepackMismatch(inputEntries, outputEntries, droppedEntries);
+        if (mismatch) {
+            throw new Error(`Imprint repack parity check failed: ${mismatch}. The original was left untouched.`);
+        }
+        // Atomic replace (rename over the existing file, the metadata.ts write
+        // idiom): either the embedded VPK fully takes the slot or, if the rename
+        // fails, the original un-embedded VPK is left untouched. Avoids a
+        // window where the slot is missing on disk.
+        await fs.rename(embedOut, vpkPath);
+    } catch (err) {
+        try { await fs.unlink(embedOut); } catch { /* ignore partial-output cleanup */ }
+        throw err;
+    } finally {
+        try { await fs.unlink(addonTmp); } catch { /* best-effort temp cleanup */ }
+        try { await fs.unlink(modinfoTmp); } catch { /* best-effort temp cleanup */ }
     }
 }
 
@@ -273,7 +469,17 @@ export async function mergeMods(
     if (!trimmedName) throw new Error('A name is required for the merged mod.');
     if (modIds.length < 2) throw new Error('Select at least two mods to merge.');
 
+    return runExclusiveModMutation(() => mergeModsLocked(deadlockPath, modIds, options, trimmedName));
+}
+
+async function mergeModsLocked(
+    deadlockPath: string,
+    modIds: string[],
+    options: MergeOptions,
+    trimmedName: string
+): Promise<MergeResult> {
     const installed = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(installed);
     const sources: Mod[] = [];
     for (const id of modIds) {
         const found = installed.find((m) => m.id === id);
@@ -286,6 +492,7 @@ export async function mergeMods(
         }
         sources.push(found);
     }
+    assertCanMoveLoadedGameMods(sources.filter((source) => source.enabled));
 
     // In Deadlock a LOWER pakNN wins a file collision (pak09 overrides pak10),
     // so the lowest-pakNN source is the highest priority. vpkmerge is
@@ -293,12 +500,18 @@ export async function mergeMods(
     // (lowest-pakNN) source LAST in the argv and reproduce the in-game winner.
     sources.sort((a, b) => b.priority - a.priority);
 
+    mergeTrace(
+        `merge start "${trimmedName}": ${sources.length} sources -> ${sources
+            .map((s) => `${s.fileName}(pri ${s.priority}${s.enabled ? '' : ',disabled'})`)
+            .join(', ')}`
+    );
+
     // Hash every source BEFORE any filesystem mutation. sha256AtMergeTime
     // is the content-identity fallback unmerge uses when the manifest
     // fileName lookup misses (file renamed by reconcile, partial-disable
     // recovery, etc). Parallel because the files are independent.
     const sourceHashes = await Promise.all(
-        sources.map((src) => fingerprintFile(src.path).then((fp) => fp.sha256))
+        sources.map((src) => resolveVpkIdentity(src.path).then((id) => id.sha256))
     );
 
     const portable = buildPortableForSources(sources, trimmedName);
@@ -330,6 +543,22 @@ export async function mergeMods(
         throw err;
     }
 
+    // Capture the merged output's canonical identity from its PRE-EMBED bytes.
+    // A merged VPK never existed before, so its "original" is the hash of the
+    // freshly-merged-but-not-yet-embedded output. This is the spec's option (a)
+    // (two passes: merge -> hash -> embed) chosen for a stable self-identity
+    // that does not depend on re-deriving a hash from the post-embed file. The
+    // same value is stored as metadata.sha256 AND inside addoninfo.txt /
+    // grimoire_meta.json, so resolveVpkIdentity returns it whether or not the
+    // embed pass below succeeds (the un-embedded file's live hash equals it too).
+    const mergedOriginal = await computeOriginalIdentity(mergedPath);
+    const sha256 = mergedOriginal.sha256;
+
+    // Each source's stamped vpkIndex, captured BEFORE the disable loop renames
+    // files (and migrates their metadata keys). Embedded into the modinfo
+    // record's source list so a shared profile can rebind multi-VPK variants.
+    const sourceVpkIndexes = sources.map((src) => getModMetadata(src.metaKey)?.vpkIndex);
+
     const preDisableSnapshot: MergedModSource[] = sources.map((src, i) => {
         const meta = getModMetadata(src.metaKey);
         return {
@@ -352,7 +581,6 @@ export async function mergeMods(
         sources: preDisableSnapshot,
     };
 
-    const sha256 = await hashFile(mergedPath);
     // Stamp the metadata BEFORE the disable loop. If disable fails partway
     // through, the manifest still points at every source by sha256 and
     // unmerge can find them whether they're enabled or disabled. The
@@ -368,8 +596,8 @@ export async function mergeMods(
     });
 
     // Disable each enabled source so its priority slot frees up and the
-    // engine stops loading the original. disableMod returns the post-move
-    // Mod so we record the actual on-disk filename (it may have been
+    // engine stops loading the original. The disable helper returns the
+    // post-move Mod so we record the actual on-disk filename (it may have been
     // renamed by reconcileEnabledDisabledCollisions). We re-stamp the
     // manifest after each successful disable so a mid-loop failure leaves
     // the manifest as up-to-date as it can be: sources processed already
@@ -378,7 +606,7 @@ export async function mergeMods(
     for (let i = 0; i < sources.length; i++) {
         const src = sources[i];
         if (src.enabled) {
-            const after = await disableMod(deadlockPath, src.id);
+            const after = await disableModUnlocked(deadlockPath, src.id);
             disabledSources.push(after);
             preDisableSnapshot[i].fileName = after.fileName;
             setModMetadata(mergedMetaKey, {
@@ -392,6 +620,48 @@ export async function mergeMods(
         }
     }
 
+    const stale = stalePakSources(preDisableSnapshot);
+    if (stale.length > 0) {
+        mergeTrace(
+            `merge WARNING "${trimmedName}": ${stale.length} source(s) still recorded under a recyclable pakNN name (${stale
+                .map((s) => s.fileName)
+                .join(', ')}) -> a future slot reuse can collide with merge-source reconciliation`
+        );
+    }
+    mergeTrace(`merge done "${trimmedName}" key=${mergedMetaKey} sources: ${describeSources(preDisableSnapshot)}`);
+
+    // Pass 2: embed the self-identifying addoninfo.txt + modinfo.json into
+    // the merged VPK. Done AFTER the disable loop so the recorded source
+    // fileNames match the metadata manifest's final (post-disable) names. The
+    // merge itself already succeeded; a failed embed only costs the self-
+    // describing metadata, never the merged mod, and metadata.sha256 stays
+    // correct (it equals the un-embedded file's live hash), so on failure we
+    // log and keep the un-embedded merged VPK rather than unwinding the merge.
+    try {
+        await embedMergeIdentity(
+            mergedPath,
+            trimmedName,
+            merged.createdAt,
+            mergedOriginal,
+            preDisableSnapshot.map((s, i) => ({
+                title: s.modName,
+                identity: { sha256: s.sha256AtMergeTime },
+                gamebananaId: s.gameBananaId,
+                gamebananaFileId: s.gameBananaFileId,
+                section: s.section,
+                priorityAtMergeTime: s.priorityAtMergeTime,
+                enabledAtMergeTime: s.enabledAtMergeTime,
+                fileNameAtMergeTime: s.fileName,
+                vpkIndex: sourceVpkIndexes[i],
+            }))
+        );
+        await verifyVpkOutput(mergedPath);
+        mergeTrace(`merge embed done "${trimmedName}" key=${mergedMetaKey}`);
+    } catch (err) {
+        mergeTrace(`merge WARNING "${trimmedName}": embed pass failed: ${String(err)} (merged mod left un-embedded)`);
+        console.warn(`[modMerger] Failed to embed identity into merged VPK ${mergedPath}:`, err);
+    }
+
     const finalMods = await scanMods(deadlockPath);
     const newMod = finalMods.find((m) => m.metaKey === mergedMetaKey);
     if (!newMod) {
@@ -401,29 +671,81 @@ export async function mergeMods(
 }
 
 function buildPortableForSources(sources: Mod[], profileName: string): PortableProfile {
+    const entries: PortableMergeSourceEntry[] = sources.map((src) => {
+        const meta = getModMetadata(src.metaKey);
+        return {
+            fileName: src.fileName,
+            modName: meta?.modName || src.name,
+            thumbnailUrl: meta?.thumbnailUrl,
+            gameBananaId: meta?.gameBananaId ?? src.gameBananaId,
+            gameBananaFileId: meta?.gameBananaFileId ?? src.gameBananaFileId,
+            section: meta?.sourceSection,
+            enabledAtMergeTime: true,
+            priorityAtMergeTime: src.priority,
+            // Hint extras the snapshot shape cannot carry: the merge-time
+            // caller has full metadata, so the share code keeps the same hint
+            // a plain (non-merge) export would. nsfw in particular drives the
+            // import dialog's skip filter and thumbnail blur.
+            nsfw: meta?.nsfw,
+            categoryName: meta?.categoryName,
+            fileLabel: meta?.variantLabel || meta?.fileDescription || meta?.sourceFileName,
+            originalFileName: meta?.sourceFileName,
+            isArchived: meta?.isArchived,
+        };
+    });
+    return buildPortableForMergeSources(entries, profileName);
+}
+
+/**
+ * A merge-source snapshot, optionally enriched with the hint-only fields a
+ * live metadata lookup can supply (nsfw / category / file labels). The
+ * snapshot shape itself stays lean: these extras exist only to round-trip
+ * into PortableModHint when the caller has them.
+ */
+export type PortableMergeSourceEntry = MergedModSource & {
+    nsfw?: boolean;
+    categoryName?: string;
+    fileLabel?: string;
+    originalFileName?: string;
+    isArchived?: boolean;
+};
+
+/**
+ * Build a portable profile (the unmerge-fallback share code payload) straight
+ * from a merge's own source snapshots, with no live Mod/metadata lookup. Pure
+ * projection of the snapshot -> PortableModEntry: every field this reads
+ * already lives on the entry, which is what lets it double as the DB-wipe
+ * reconstruction path (see reconstructMergedModInfo/imprintMods.ts) where the
+ * sources come from an embedded modinfo.json or legacy grimoire_meta.json
+ * record, not a live scan (those bare snapshots simply omit the hint extras).
+ * Local sources (no GameBanana id) are omitted, same as
+ * buildPortableForSources: the share code is best-effort, not authoritative
+ * (the merge's own metadata.merged manifest is authoritative for unmerge).
+ */
+export function buildPortableForMergeSources(
+    sources: PortableMergeSourceEntry[],
+    profileName: string
+): PortableProfile {
     const mods: PortableModEntry[] = [];
     for (const src of sources) {
-        const meta = getModMetadata(src.metaKey);
-        const gbId = meta?.gameBananaId ?? src.gameBananaId;
-        const fileId = meta?.gameBananaFileId ?? src.gameBananaFileId;
-        if (!gbId || !fileId) continue; // local mod — fast-path unmerge still works
+        if (!src.gameBananaId || !src.gameBananaFileId) continue; // local mod: fast-path unmerge still works
         mods.push({
             source: 'gamebanana',
             ref: {
-                submissionId: gbId,
-                fileId,
-                section: meta?.sourceSection || 'Mod',
+                submissionId: src.gameBananaId,
+                fileId: src.gameBananaFileId,
+                section: src.section || 'Mod',
             },
             enabled: true,
-            priority: src.priority,
+            priority: src.priorityAtMergeTime,
             hint: {
-                name: meta?.modName || src.name,
-                category: meta?.categoryName,
-                fileLabel: meta?.variantLabel || meta?.fileDescription || meta?.sourceFileName,
-                originalFileName: meta?.sourceFileName,
-                thumbnailUrl: meta?.thumbnailUrl,
-                nsfw: meta?.nsfw,
-                isArchived: meta?.isArchived,
+                name: src.modName,
+                category: src.categoryName,
+                fileLabel: src.fileLabel,
+                originalFileName: src.originalFileName,
+                thumbnailUrl: src.thumbnailUrl,
+                nsfw: src.nsfw,
+                isArchived: src.isArchived,
             },
         });
     }
@@ -471,8 +793,8 @@ function makeSourceLocator(candidates: Mod[]): SourceLocator {
             hashCache.set(mod.metaKey, lower);
             return lower;
         }
-        const fp = await fingerprintFile(mod.path);
-        const lower = fp.sha256.toLowerCase();
+        const id = await resolveVpkIdentity(mod.path);
+        const lower = id.sha256.toLowerCase();
         hashCache.set(mod.metaKey, lower);
         return lower;
     };
@@ -513,7 +835,15 @@ export async function unmergeMod(
     deadlockPath: string,
     mergedModId: string
 ): Promise<UnmergeModResult> {
+    return runExclusiveModMutation(() => unmergeModLocked(deadlockPath, mergedModId));
+}
+
+async function unmergeModLocked(
+    deadlockPath: string,
+    mergedModId: string
+): Promise<UnmergeModResult> {
     const installed = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(installed);
     const target = installed.find((m) => m.id === mergedModId);
     if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
 
@@ -521,6 +851,7 @@ export async function unmergeMod(
     if (!meta?.merged) {
         throw new Error(`"${meta?.modName || target.name}" is not a merged mod.`);
     }
+    assertCanMoveLoadedGameMod(target);
     const manifest = meta.merged;
 
     // Recover each source from disk via the shared locator (disabled folder by
@@ -537,7 +868,7 @@ export async function unmergeMod(
             continue;
         }
         if (src.enabledAtMergeTime && !onDisk.enabled) {
-            recovered.push(await enableMod(deadlockPath, onDisk.id));
+            recovered.push(await enableModUnlocked(deadlockPath, onDisk.id));
         } else {
             recovered.push(onDisk);
         }
@@ -568,7 +899,18 @@ export async function extractMergeSource(
     mergedModId: string,
     sourceFileName: string
 ): Promise<ExtractMergeSourceResult> {
+    return runExclusiveModMutation(() =>
+        extractMergeSourceLocked(deadlockPath, mergedModId, sourceFileName)
+    );
+}
+
+async function extractMergeSourceLocked(
+    deadlockPath: string,
+    mergedModId: string,
+    sourceFileName: string
+): Promise<ExtractMergeSourceResult> {
     const installed = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(installed);
     const target = installed.find((m) => m.id === mergedModId);
     if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
 
@@ -576,6 +918,7 @@ export async function extractMergeSource(
     if (!meta?.merged) {
         throw new Error(`"${meta?.modName || target.name}" is not a merged mod.`);
     }
+    assertCanMoveLoadedGameMod(target);
     const manifest = meta.merged;
 
     const removedSnapshot = manifest.sources.find((s) => s.fileName === sourceFileName);
@@ -599,7 +942,7 @@ export async function extractMergeSource(
     const restoreExtracted = async (): Promise<void> => {
         if (!removedOnDisk) return;
         if (removedSnapshot.enabledAtMergeTime && !removedOnDisk.enabled) {
-            restored.push(await enableMod(deadlockPath, removedOnDisk.id));
+            restored.push(await enableModUnlocked(deadlockPath, removedOnDisk.id));
         } else {
             restored.push(removedOnDisk);
         }
@@ -612,7 +955,7 @@ export async function extractMergeSource(
             const onDisk = await locator.locate(survivor);
             if (onDisk) {
                 if (survivor.enabledAtMergeTime && !onDisk.enabled) {
-                    restored.push(await enableMod(deadlockPath, onDisk.id));
+                    restored.push(await enableModUnlocked(deadlockPath, onDisk.id));
                 } else {
                     restored.push(onDisk);
                 }
@@ -659,15 +1002,30 @@ export async function extractMergeSource(
     // move the merge to the base folder) for a merge that lives in an overflow folder.
     const targetDir = dirname(target.path);
     const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
+    mergeTrace(
+        `rebuild start merge=${manifest.id} key=${target.metaKey}: ${ordered.length} sources -> ${basename(buildPath)} (removed "${sourceFileName}")`
+    );
     try {
         await runVpkmerge([buildPath, ...ordered.map((m) => m.path)]);
         await verifyVpkOutput(buildPath);
     } catch (err) {
         try { await fs.unlink(buildPath); } catch { /* ignore partial-output cleanup */ }
+        mergeTrace(`rebuild FAILED merge=${manifest.id}: ${String(err)} (build temp removed)`);
         throw err;
     }
 
-    const sha256 = await hashFile(buildPath);
+    // Capture the rebuilt output's canonical identity from its PRE-EMBED bytes,
+    // exactly like mergeModsLocked does for a fresh merge: the rebuilt VPK is a
+    // new file, so its "original" is the hash of the freshly-rebuilt-but-not-
+    // yet-embedded output. Stored as metadata.sha256 AND embedded below, so
+    // resolveVpkIdentity returns it whether or not the embed pass succeeds.
+    const rebuiltOriginal = await computeOriginalIdentity(buildPath);
+    const sha256 = rebuiltOriginal.sha256;
+
+    // Each remaining source's stamped vpkIndex, same capture the merge path
+    // does. remainingOnDisk is index-aligned with remainingSnapshots (the
+    // missing check above guarantees every snapshot resolved).
+    const remainingVpkIndexes = remainingOnDisk.map((m) => getModMetadata(m.metaKey)?.vpkIndex);
 
     // Fresh manifest: keep the surviving source snapshots (still accurate),
     // regenerate the share code from the on-disk survivors, preserve createdAt.
@@ -691,6 +1049,38 @@ export async function extractMergeSource(
         sha256,
         merged: newManifest,
     });
+    mergeTrace(`rebuild done merge=${manifest.id} key=${target.metaKey}: ${describeSources(remainingSnapshots)}`);
+
+    // Pass 2: re-embed the self-identifying entries with the UPDATED remaining
+    // source list, mirroring mergeModsLocked's embed pass. Without this the
+    // rebuild would permanently strip the imprint the original merge carried.
+    // Fail-soft exactly like the merge path: the rebuild already succeeded, a
+    // failed embed only costs the self-describing metadata, and the stamped
+    // sha256 equals the un-embedded file's live hash, so identity stays sound.
+    try {
+        await embedMergeIdentity(
+            target.path,
+            meta.modName || target.name,
+            newManifest.createdAt,
+            rebuiltOriginal,
+            remainingSnapshots.map((s, i) => ({
+                title: s.modName,
+                identity: { sha256: s.sha256AtMergeTime },
+                gamebananaId: s.gameBananaId,
+                gamebananaFileId: s.gameBananaFileId,
+                section: s.section,
+                priorityAtMergeTime: s.priorityAtMergeTime,
+                enabledAtMergeTime: s.enabledAtMergeTime,
+                fileNameAtMergeTime: s.fileName,
+                vpkIndex: remainingVpkIndexes[i],
+            }))
+        );
+        await verifyVpkOutput(target.path);
+        mergeTrace(`rebuild embed done merge=${manifest.id} key=${target.metaKey}`);
+    } catch (err) {
+        mergeTrace(`rebuild WARNING merge=${manifest.id}: embed pass failed: ${String(err)} (rebuilt merge left un-embedded)`);
+        console.warn(`[modMerger] Failed to embed identity into rebuilt merged VPK ${target.path}:`, err);
+    }
 
     await restoreExtracted();
 

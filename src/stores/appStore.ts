@@ -4,6 +4,15 @@ import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
+import { buildHeroList } from '../lib/lockerUtils';
+import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
+import {
+  SHUFFLE_INCLUDED_KEY,
+  SHUFFLE_ON_LAUNCH_KEY,
+  planLaunchShuffle,
+  readStoredShuffleIncluded,
+  readStoredShuffleOnLaunch,
+} from '../lib/lockerRandomizer';
 
 // Cache entry with timestamp for TTL support
 interface CacheEntry<T> {
@@ -21,6 +30,25 @@ const DOWNLOAD_COUNTS_TTL = 60 * 60 * 1000;
 // resolving late and clobbering a just-completed mutation with a stale scan
 // (the "added a custom mod but can't act on it until I refresh" bug).
 let modsGeneration = 0;
+
+// Serialize mod enable/disable toggles. A mod's id is its filename, which the
+// main process renames on every enable/disable, so two toggles fired in the same
+// tick (rapid Locker clicking, the exact repro in #bugs "disabled a lot of them
+// without replacing them with the mods i turned on") would race: the second
+// reads a now-stale id and either no-ops or hits "Mod not found", silently
+// dropping the click the user expected to take effect. The main process already
+// serializes the file ops; chaining here makes the SECOND toggle observe the
+// store state the first one wrote, so it dispatches a live id. Toggles still
+// queue instantly from the UI's view; they just resolve in order.
+let toggleChain: Promise<unknown> = Promise.resolve();
+function enqueueToggle<T>(fn: () => Promise<T>): Promise<T> {
+  const run = toggleChain.then(fn, fn);
+  toggleChain = run.then(
+    () => undefined,
+    () => undefined
+  );
+  return run;
+}
 
 // Reuse existing Mod object (and array) identities when a rescan returns
 // unchanged data. Silent refreshes fire on every Installed mount and on
@@ -178,12 +206,26 @@ interface AppState {
   // toast rather than replacing the page the way modsError does.
   modsNotice: string | null;
 
+  // "Start with only this mod" solo test: identity keys of the mods that were
+  // enabled before the last soloMod swap, so the Installed page can offer a
+  // one-click restore. Kept as stable keys (not ids) because disabling renames
+  // a VPK and churns its id. Null when no solo swap is outstanding.
+  soloRestore: { keys: string[]; label: string } | null;
+
   // Download counts cache (mod id -> { downloadCount, timestamp })
   downloadCountsCache: Map<number, CacheEntry<number>>;
 
   // Global sound preview volume (0-1)
   soundVolume: number;
   previewAudioPlaying: boolean;
+
+  // Skin shuffle: the user opts skins into a per-hero pool, then on each launch
+  // (via Grimoire) one chosen skin per hero is equipped at random. Master switch
+  // + the opted-in skin keys (shuffleSkinKey), both mirrored to localStorage so
+  // the Locker and the launch path share one source of truth. See
+  // src/lib/lockerRandomizer.ts.
+  shuffleOnLaunch: boolean;
+  shuffleIncluded: Set<string>;
 
   // Browse-page UI state (preserved across page nav)
   browseUi: BrowseUiState;
@@ -253,6 +295,18 @@ interface AppState {
   setModPriority: (modId: string, priority: number) => Promise<void>;
   swapModPriority: (modIdA: string, modIdB: string) => Promise<void>;
   reorderMods: (orderedIds: string[]) => Promise<void>;
+  setShuffleOnLaunch: (enabled: boolean) => void;
+  toggleShuffleIncluded: (skinKey: string) => void;
+  runLaunchShuffle: () => Promise<{ failures: number }>;
+  /** Disable every other mod and enable only `enableKeys` (one card's file(s)),
+   *  snapshotting the prior enabled set for one-click restore. `applied` is
+   *  false when the target no longer resolves or the whole batch was rejected
+   *  (e.g. game running), so the caller knows whether it's safe to launch. */
+  soloMod: (enableKeys: string[], label: string) => Promise<{ applied: boolean; failures: number; reason?: 'missing' | 'blocked' | 'gameRunning' }>;
+  /** Re-apply the enabled set captured by the last soloMod call. */
+  restoreSoloMods: () => Promise<{ failures: number }>;
+  /** Drop the solo-restore snapshot without touching enablement. */
+  clearSoloRestore: () => void;
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
@@ -306,6 +360,8 @@ interface AppState {
 const ENABLE_CAP_NOTICE =
   'You can have at most 990 mods enabled at once. Disable one to make room.';
 const isEnableCapError = (err: unknown): boolean => /mods enabled at once/.test(String(err));
+const GAME_RUNNING_NOTICE = 'Game is running';
+const isGameRunningModLockError = (err: unknown): boolean => String(err).includes(GAME_RUNNING_NOTICE);
 
 export const useAppStore = create<AppState>((set, get) => ({
   // Initial state
@@ -317,9 +373,12 @@ export const useAppStore = create<AppState>((set, get) => ({
   modsLoading: false,
   modsError: null,
   modsNotice: null,
+  soloRestore: null,
   downloadCountsCache: new Map(),
   soundVolume: readPersistedSoundVolume(),
   previewAudioPlaying: false,
+  shuffleOnLaunch: readStoredShuffleOnLaunch(),
+  shuffleIncluded: readStoredShuffleIncluded(),
   browseUi: { ...DEFAULT_BROWSE_UI },
   browseSession: null,
   installedScrollTop: 0,
@@ -523,8 +582,9 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  // Toggle mod enabled/disabled
-  toggleMod: async (modId: string) => {
+  // Toggle mod enabled/disabled. Runs through enqueueToggle so concurrent
+  // clicks resolve in order and each sees the previous one's renamed id.
+  toggleMod: (modId: string) => enqueueToggle(async () => {
     const mod = get().mods.find((m) => m.id === modId);
     if (!mod) return false;
 
@@ -544,10 +604,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ modsNotice: ENABLE_CAP_NOTICE });
         return false;
       }
+      if (isGameRunningModLockError(err)) {
+        return false;
+      }
+      // Stale id: a mod's id is its filename, which an enable/disable changes.
+      // When toggles for the same card fire faster than the store resyncs (the
+      // main process now serializes mutations, so the second runs after the file
+      // already moved), the second carries a dead id and the move throws "Mod not
+      // found". The desired state is whatever the folder already reflects, so
+      // resync silently instead of dropping the whole page to the error screen.
+      if (/Mod not found/.test(String(err))) {
+        get().loadMods({ silent: true });
+        return false;
+      }
       set({ modsError: String(err) });
       return false;
     }
-  },
+  }),
 
   clearModsNotice: () => set({ modsNotice: null }),
 
@@ -567,6 +640,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ mods: get().mods.filter((m) => m.id !== modId) });
         return;
       }
+      if (isGameRunningModLockError(err)) {
+        return;
+      }
       set({ modsError: String(err) });
     }
   },
@@ -581,6 +657,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           .sort((a, b) => a.priority - b.priority),
       });
     } catch (err) {
+      if (isGameRunningModLockError(err)) return;
       set({ modsError: String(err) });
     }
   },
@@ -592,6 +669,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ mods: updated });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); return; }
+      if (isGameRunningModLockError(err)) return;
       set({ modsError: String(err) });
     }
   },
@@ -604,10 +682,122 @@ export const useAppStore = create<AppState>((set, get) => ({
       set({ mods: updated });
     } catch (err) {
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
-      else { set({ modsError: String(err) }); }
+      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
       get().loadMods();
     }
   },
+
+  setShuffleOnLaunch: (enabled: boolean) => {
+    try { localStorage.setItem(SHUFFLE_ON_LAUNCH_KEY, enabled ? 'true' : 'false'); } catch { /* ignore */ }
+    set({ shuffleOnLaunch: enabled });
+  },
+
+  // Add/remove a skin from the launch-shuffle pool, keyed by shuffleSkinKey so
+  // the opt-in survives the id churn enable/disable causes for local imports.
+  toggleShuffleIncluded: (skinKey: string) => {
+    const next = new Set(get().shuffleIncluded);
+    if (next.has(skinKey)) next.delete(skinKey);
+    else next.add(skinKey);
+    try { localStorage.setItem(SHUFFLE_INCLUDED_KEY, JSON.stringify([...next])); } catch { /* ignore */ }
+    set({ shuffleIncluded: next });
+  },
+
+  // Re-roll skins for the launch. No-op unless the master switch is on and at
+  // least one skin is in the pool. Groups the live mod list by hero (cached
+  // categories, the same grouping the Locker shows), picks one opted-in skin per
+  // hero, and applies the whole swap as one atomic batch. Called from the
+  // Sidebar just before launchModded. Returns the count of per-mod failures so
+  // the caller can warn that the shuffle only half-applied; a stuck shuffle
+  // never blocks the launch (the Sidebar swallows a thrown error).
+  runLaunchShuffle: async (): Promise<{ failures: number }> => {
+    const { shuffleOnLaunch, shuffleIncluded } = get();
+    if (!shuffleOnLaunch || shuffleIncluded.size === 0) return { failures: 0 };
+    let heroList: { id: number; name: string }[] = [];
+    try {
+      heroList = buildHeroList(await api.getGamebananaCategories('ModCategory'));
+    } catch {
+      // Cold category cache only (a fresh install that never opened Browse or
+      // the Locker): getGamebananaCategories is SQLite-backed, so it serves the
+      // warm cache even offline. With heroList=[] groupModsByCategory can route
+      // only mods carrying an author categoryId; lockerHero- and title-matched
+      // skins fall to `unassigned` and won't shuffle. Near-unreachable in
+      // practice since pooling a skin requires the Locker to have already
+      // grouped it from this same cache.
+    }
+    // Build AND apply the plan inside the mutation queue so the plan's ids are
+    // derived from the mods state after any in-flight manual toggle has settled,
+    // not from a pre-launch snapshot that a concurrent rename could invalidate.
+    return enqueueToggle(async () => {
+      const { mods, shuffleIncluded: included } = get();
+      const plan = planLaunchShuffle({ mods, heroList, included });
+      if (plan.enableIds.length === 0 && plan.disableIds.length === 0) return { failures: 0 };
+      try {
+        const { mods: updated, failures } = await api.applyModToggleBatch(plan.enableIds, plan.disableIds);
+        set({ mods: updated });
+        return { failures: failures.length };
+      } catch (err) {
+        if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+        else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+        get().loadMods();
+        return { failures: plan.enableIds.length + plan.disableIds.length };
+      }
+    });
+  },
+
+  // "Start with only this mod enabled." The UI passes stable keys, not current
+  // ids, because queued toggles may rename the target before this plan runs.
+  // The plan is resolved inside enqueueToggle against the post-toggle mod list.
+  soloMod: (enableKeys, label) => enqueueToggle(async () => {
+    const mods = get().mods;
+    const plan = planSoloByKeys(mods, enableKeys);
+    if (!plan) return { applied: false, failures: 0, reason: 'missing' };
+    const { enable, disable } = plan;
+    // Already solo (target is the only thing enabled): nothing to swap, and no
+    // meaningful state to restore to, so skip the snapshot but let the caller
+    // launch.
+    if (enable.length === 0 && disable.length === 0) return { applied: true, failures: 0 };
+    const keys = get().soloRestore?.keys ?? mods.filter((m) => m.enabled).map(modRestoreKey);
+    try {
+      const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
+      set({ mods: updated, soloRestore: { keys, label } });
+      return { applied: true, failures: failures.length };
+    } catch (err) {
+      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+      get().loadMods();
+      // The game-running lock is swallowed silently everywhere else (background
+      // toggles), but a solo *launch* that does nothing needs a reason, so the
+      // caller can surface it. Enable-cap already auto-toasts via modsNotice and
+      // a generic error drops the full-page modsError screen, so both stay 'blocked'.
+      return {
+        applied: false,
+        failures: 0,
+        reason: isGameRunningModLockError(err) ? 'gameRunning' : 'blocked',
+      };
+    }
+  }),
+
+  restoreSoloMods: () => enqueueToggle(async () => {
+    const snap = get().soloRestore;
+    if (!snap) return { failures: 0 };
+    const { enable, disable } = planRestore(get().mods, snap.keys);
+    if (enable.length === 0 && disable.length === 0) {
+      set({ soloRestore: null });
+      return { failures: 0 };
+    }
+    try {
+      const { mods: updated, failures } = await api.applyModToggleBatch(enable, disable);
+      set({ mods: updated, soloRestore: failures.length === 0 ? null : snap });
+      return { failures: failures.length };
+    } catch (err) {
+      if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
+      else if (!isGameRunningModLockError(err)) { set({ modsError: String(err) }); }
+      get().loadMods();
+      return { failures: enable.length + disable.length };
+    }
+  }),
+
+  clearSoloRestore: () => set({ soloRestore: null }),
 
   editLocalMod: async (modId: string, args: EditLocalModArgs) => {
     const updated = await api.editLocalMod(modId, args);

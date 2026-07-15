@@ -117,6 +117,8 @@ export async function writeSnapshot(
     const profileName =
         trigger === 'pre-update'
             ? `Auto-snapshot (before update) ${friendlyTimestamp}`
+            : trigger === 'pre-dmm-import'
+            ? `Auto-snapshot (before DMM import) ${friendlyTimestamp}`
             : `Snapshot ${friendlyTimestamp}`;
 
     const { profile, warnings } = await buildPortableProfileFromInstalled(

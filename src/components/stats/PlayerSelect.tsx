@@ -201,7 +201,7 @@ export function PlayerSelect() {
                                             title={t('stats.playerSelect.removePlayer')}
                                             className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-500/20 rounded transition-all cursor-pointer"
                                         >
-                                            <Trash2 className="w-4 h-4 text-red-400" />
+                                            <Trash2 className="w-4 h-4 text-state-danger" />
                                         </button>
                                     </div>
                                 )
@@ -226,7 +226,7 @@ export function PlayerSelect() {
                             </Button>
                         </div>
                         {searchError && (
-                            <p className="text-red-400 text-xs mt-2 flex items-center gap-1">
+                            <p className="text-state-danger text-xs mt-2 flex items-center gap-1">
                                 <AlertCircle className="w-3 h-3 shrink-0" />
                                 {searchError}
                             </p>

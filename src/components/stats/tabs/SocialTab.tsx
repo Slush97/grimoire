@@ -89,8 +89,8 @@ export function SocialTab({ accountId }: SocialTabProps) {
     if (social.status === 'error') {
         return (
             <div className="flex flex-col items-center gap-3 py-12 text-center">
-                <AlertCircle className="w-8 h-8 text-red-400" />
-                <p className="text-sm text-red-400 max-w-md">{social.error}</p>
+                <AlertCircle className="w-8 h-8 text-state-danger" />
+                <p className="text-sm text-state-danger max-w-md">{social.error}</p>
                 <Button variant="secondary" size="sm" icon={RefreshCw} onClick={() => loadSocialStats(accountId)}>
                     {t('common.actions.retry')}
                 </Button>
@@ -153,7 +153,7 @@ export function SocialTab({ accountId }: SocialTabProps) {
                                 name={enemy.persona_name}
                                 avatarUrl={enemy.avatar_url}
                                 fallbackIcon={UserX}
-                                fallbackTone="bg-red-500/20 text-red-400"
+                                fallbackTone="bg-red-500/20 text-state-danger"
                                 subtitle={t('stats.social.gamesAgainst', { count: enemy.matches_played })}
                                 winRate={enemy.win_rate || 0}
                                 wins={enemy.wins}

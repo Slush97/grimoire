@@ -8,6 +8,8 @@ import {
     type GameBananaModsResponse,
 } from './gamebanana';
 import { parseVpkDirectory, parseVpkDirectoryCached } from './vpk';
+import { carryForwardOriginalIdentity, readEmbeddedAddonInfo } from './vpkIdentity';
+import { readEmbeddedModinfo } from './modinfoFormat';
 import { fingerprintFilesInWorkers, type FileFingerprintResult } from './workers';
 import {
     getUnknownCrcEntryCount,
@@ -26,6 +28,7 @@ import type {
     UnknownModCrcMatchResult,
     UnknownModDetectionProgress,
     UnknownModFilterGuess,
+    UnknownModMergeSource,
 } from '../../../src/types/mod';
 
 export type { UnknownModFilterGuess };
@@ -276,6 +279,130 @@ function isTransientProbeError(err: unknown): boolean {
     return /Archive range request failed: (?:429|5\d\d)\b/.test(errorMessage(err));
 }
 
+/**
+ * Consult-order step 1 (always on, ungated, offline): read the VPK's embedded
+ * imprint and, when present, build an identified result with zero network and
+ * no GameBanana rate-limit cost. An imprinted single mod (an addoninfo.txt
+ * carrying a gamebananaId) yields a 'found' match with provenance
+ * 'embedded-metadata'; a Grimoire merge (a modinfo.json kind:"merge" record)
+ * yields a 'found' result with provenance 'embedded-merge' carrying the
+ * reconstructed source list. Returns null when the file carries no usable
+ * embed, so the caller falls through to the CRC cache and the (gated) network
+ * matcher. Never throws.
+ */
+async function detectFromEmbed(
+    base: UnknownModFilterBase,
+    fileName: string,
+    vpkPath: string,
+    signal?: AbortSignal
+): Promise<UnknownModFilterGuess | null> {
+    if (signal?.aborted) return null;
+    // Cheap presence probe: the cached directory parse detects an embed
+    // without reading the whole file. The same validity rule as
+    // resolveVpkIdentity's embed arm (a parseable addoninfo.txt carrying the
+    // original-identity anchor), but without its live fallback, which used to
+    // whole-file-hash every non-imprinted VPK here only for the result to be
+    // discarded.
+    let embedded;
+    try {
+        const parsed = readEmbeddedAddonInfo(vpkPath);
+        if (!parsed || !carryForwardOriginalIdentity(parsed)) return null;
+        embedded = parsed;
+    } catch {
+        return null;
+    }
+
+    // A Grimoire merge: reconstruct the source list from modinfo.json.
+    const modinfo = readEmbeddedModinfo(vpkPath);
+    if (modinfo?.kind === 'merge' && modinfo.sources.length > 0) {
+        const mergeSources: UnknownModMergeSource[] = modinfo.sources.map((source) => ({
+            modName: source.title,
+            gameBananaId: source.gamebananaId,
+            gameBananaFileId: source.gamebananaFileId,
+            section: source.section,
+            fileName: source.fileNameAtMergeTime,
+        }));
+        return {
+            ...base,
+            crcMatch: {
+                ...emptyCrcMatch('found'),
+                status: 'found',
+                provenance: 'embedded-merge',
+                modName: modinfo.merge.title,
+                confidence: 'exact',
+                mergeSources,
+                reason: `Grimoire merge of ${mergeSources.length} mod${mergeSources.length === 1 ? '' : 's'}, read from embedded metadata.`,
+            },
+        };
+    }
+
+    // A single tagged mod carrying its GameBanana submission id. Prefer the
+    // machine record (modinfo.json): GameBanana sections are separate id
+    // namespaces (Mod/<id> vs Sound/<id>), so section and file id must ride
+    // along or a Sound mod resolves against the wrong submission.
+    if (modinfo?.kind === 'mod' && modinfo.source?.gamebananaId) {
+        return {
+            ...base,
+            crcMatch: {
+                ...emptyCrcMatch('found'),
+                status: 'found',
+                provenance: 'embedded-metadata',
+                modId: modinfo.source.gamebananaId,
+                modName: modinfo.title ?? base.search ?? undefined,
+                fileId: modinfo.source.gamebananaFileId,
+                fileName,
+                // GameBanana ids are per-section namespaces, so only carry a
+                // section we can map to the two the match result models. An
+                // unrecognized section (notably 'Wip') falls to undefined
+                // rather than coercing to 'Mod', which would query the wrong
+                // namespace. Mirrors the legacy addoninfo branch below.
+                section:
+                    modinfo.source.section === 'Sound'
+                        ? 'Sound'
+                        : modinfo.source.section === 'Mod'
+                          ? 'Mod'
+                          : undefined,
+                categoryName: modinfo.source.categoryName,
+                confidence: 'exact',
+                reason: 'Identified from embedded Grimoire metadata (no network).',
+            },
+        };
+    }
+
+    // Legacy fallback: pre-modinfo imprints carry only the addoninfo keys.
+    // The section is recoverable from the source URL's path (the inverse of
+    // gameBananaPageUrl's mapping); left undefined when not derivable.
+    if (embedded.gamebananaId) {
+        const gbId = Number(embedded.gamebananaId);
+        if (Number.isFinite(gbId) && gbId > 0) {
+            const legacyFileId = Number(embedded.gamebananaFileId);
+            let section: 'Mod' | 'Sound' | undefined;
+            if (embedded.sourceUrl?.includes('/sounds/')) section = 'Sound';
+            else if (embedded.sourceUrl?.includes('/mods/')) section = 'Mod';
+            return {
+                ...base,
+                crcMatch: {
+                    ...emptyCrcMatch('found'),
+                    status: 'found',
+                    provenance: 'embedded-metadata',
+                    modId: gbId,
+                    modName: embedded.title ?? base.search ?? undefined,
+                    fileId:
+                        Number.isFinite(legacyFileId) && legacyFileId > 0
+                            ? legacyFileId
+                            : undefined,
+                    fileName,
+                    section,
+                    confidence: 'exact',
+                    reason: 'Identified from embedded Grimoire metadata (no network).',
+                },
+            };
+        }
+    }
+
+    return null;
+}
+
 export async function detectUnknownModFilters(
     modId: string,
     fileName: string,
@@ -299,6 +426,19 @@ export async function detectUnknownModFilters(
     let bestMatch: UnknownModCrcMatchResult | null = null;
 
     try {
+        // Consult order step 1: embedded Grimoire metadata (always on, offline,
+        // ungated). A self-identifying VPK answers here before the CRC cache or
+        // the gated network matcher, with zero network and no rate-limit cost.
+        const embedResult = await detectFromEmbed(base, fileName, vpkPath, options.signal);
+        if (embedResult) {
+            emit({
+                phase: 'complete',
+                message: 'Identified from embedded Grimoire metadata.',
+                result: embedResult,
+            });
+            return embedResult;
+        }
+
         emit({ phase: 'fingerprinting', message: 'Reading local VPK fingerprint...' });
         const localFile = await getLocalVpkFingerprint(vpkPath, options.signal);
         if (!localFile) {
@@ -565,7 +705,31 @@ export async function detectUnknownModCacheMatches(
         .filter((input) => !input.vpkPath.toLowerCase().endsWith('.vpk'))
         .map((input) => cacheMiss(input, 'No local VPK file was found.'));
 
+    const results: UnknownModFilterGuess[] = [];
+
+    // Consult order step 1: embedded Grimoire metadata (always on, offline,
+    // ungated). Resolve any self-identifying VPK before the CRC-cache fingerprint
+    // pass, so a tagged file or a Grimoire merge is recognized without even
+    // hashing it. Only the rest fall through to the local-CRC-cache lookup.
+    const needFingerprint: UnknownModCacheMatchInput[] = [];
     for (const input of vpkInputs) {
+        const base = buildUnknownGuessBase(input.modId, input.fileName, []);
+        const embedResult = await detectFromEmbed(base, input.fileName, input.vpkPath);
+        if (embedResult) {
+            options.onProgress?.({
+                modId: input.modId,
+                requestId: input.requestId,
+                phase: 'complete',
+                message: 'Identified from embedded Grimoire metadata.',
+                result: embedResult,
+            });
+            results.push(embedResult);
+        } else {
+            needFingerprint.push(input);
+        }
+    }
+
+    for (const input of needFingerprint) {
         options.onProgress?.({
             modId: input.modId,
             requestId: input.requestId,
@@ -575,11 +739,10 @@ export async function detectUnknownModCacheMatches(
     }
 
     const fingerprints = await fingerprintFilesInWorkers(
-        vpkInputs.map((input) => ({ id: input.modId, filePath: input.vpkPath })),
+        needFingerprint.map((input) => ({ id: input.modId, filePath: input.vpkPath })),
         { concurrency: CACHE_FINGERPRINT_CONCURRENCY }
     );
-    const inputById = new Map(vpkInputs.map((input) => [input.modId, input]));
-    const results: UnknownModFilterGuess[] = [];
+    const inputById = new Map(needFingerprint.map((input) => [input.modId, input]));
     const fingerprintResults: Array<{ input: UnknownModCacheMatchInput; fingerprint: FileFingerprintResult }> = [];
 
     for (const fingerprint of fingerprints) {
@@ -985,6 +1148,7 @@ function toFoundMatch(
         section: match.section === 'Mod' || match.section === 'Sound' ? match.section : undefined,
         categoryName: match.categoryName ?? undefined,
         confidence: 'exact',
+        provenance: 'crc-32',
         reason,
         searchedBuckets: [],
         checkedMods: 0,

@@ -1,5 +1,5 @@
 import { existsSync, mkdirSync, readdirSync, copyFileSync, unlinkSync, writeFileSync, readFileSync, rmdirSync } from 'fs';
-import { join, extname, basename } from 'path';
+import { join, extname, basename, dirname } from 'path';
 import { randomBytes } from 'crypto';
 import AdmZip from 'adm-zip';
 import { spawn } from 'child_process';
@@ -112,6 +112,53 @@ export async function scanSuspiciousFiles(archivePath: string): Promise<string[]
     return flagged;
 }
 
+export interface ExtractedVpk {
+    /** Absolute path of the extracted VPK in the destination directory. */
+    path: string;
+    /** The VPK's original basename inside the archive, used to derive its
+     *  installed name. Differs from basename(path) only when a duplicate
+     *  basename was suffixed to keep both variants on disk. */
+    fileName: string;
+    /** Immediate parent folder inside the archive, when present. Multi-variant
+     *  mods use these folders as the per-variant label. */
+    archiveFolder?: string;
+}
+
+/**
+ * The immediate parent folder of an archive entry, or undefined when the entry
+ * sits at the archive root. Multi-variant mods use these folders (e.g.
+ * `Beard/pak83_dir.vpk`, `NoBeard/pak83_dir.vpk`) as the only label that
+ * distinguishes otherwise identically-named VPKs.
+ */
+function archiveParentFolder(entryName: string): string | undefined {
+    const parts = entryName.split(/[\\/]/).filter(Boolean);
+    return parts.length >= 2 ? parts[parts.length - 2] : undefined;
+}
+
+/**
+ * A destination filename guaranteed not to collide with one already taken this
+ * extraction. Sibling variant folders routinely ship an identically-named
+ * pakNN_dir.vpk; flattening them to the same basename made the second silently
+ * overwrite the first (data loss) and left the install referencing a file that
+ * no longer existed on disk. Suffixing duplicates keeps every variant.
+ */
+function uniqueDestName(fileName: string, taken: Set<string>): string {
+    if (!taken.has(fileName.toLowerCase())) {
+        taken.add(fileName.toLowerCase());
+        return fileName;
+    }
+    const ext = fileName.toLowerCase().endsWith('_dir.vpk') ? fileName.slice(-8) : extname(fileName);
+    const stem = fileName.slice(0, fileName.length - ext.length);
+    let n = 2;
+    let candidate = `${stem}_${n}${ext}`;
+    while (taken.has(candidate.toLowerCase())) {
+        n++;
+        candidate = `${stem}_${n}${ext}`;
+    }
+    taken.add(candidate.toLowerCase());
+    return candidate;
+}
+
 /**
  * Extract an archive to a destination directory
  * Returns the list of extracted VPK files
@@ -119,7 +166,7 @@ export async function scanSuspiciousFiles(archivePath: string): Promise<string[]
 export async function extractArchive(
     archivePath: string,
     destDir: string
-): Promise<string[]> {
+): Promise<ExtractedVpk[]> {
     const ext = extname(archivePath).toLowerCase();
 
     switch (ext) {
@@ -137,33 +184,32 @@ export async function extractArchive(
 /**
  * Extract a ZIP archive
  */
-function extractZip(archivePath: string, destDir: string): string[] {
+function extractZip(archivePath: string, destDir: string): ExtractedVpk[] {
     const zip = new AdmZip(archivePath);
-    const entries = zip.getEntries();
-    const extractedVpks: string[] = [];
+    const extracted: ExtractedVpk[] = [];
+    const taken = new Set<string>();
 
-    for (const entry of entries) {
+    for (const entry of zip.getEntries()) {
         if (entry.isDirectory) continue;
 
         const fileName = basename(entry.entryName);
-        const ext = extname(fileName).toLowerCase();
+        if (extname(fileName).toLowerCase() !== '.vpk') continue;
 
-        // Only extract VPK files
-        if (ext !== '.vpk') continue;
-
-        // Flatten to dest directory
-        const destPath = join(destDir, fileName);
-        zip.extractEntryTo(entry, destDir, false, true);
-        extractedVpks.push(destPath);
+        // Write straight to the chosen name rather than extractEntryTo, which can
+        // only flatten to the entry's own basename and so clobbers same-named
+        // VPKs from sibling variant folders.
+        const destPath = join(destDir, uniqueDestName(fileName, taken));
+        writeFileSync(destPath, entry.getData());
+        extracted.push({ path: destPath, fileName, archiveFolder: archiveParentFolder(entry.entryName) });
     }
 
-    return extractedVpks;
+    return extracted;
 }
 
 /**
  * Extract a 7z archive using the bundled 7za binary (falls back to system 7z).
  */
-async function extract7z(archivePath: string, destDir: string): Promise<string[]> {
+async function extract7z(archivePath: string, destDir: string): Promise<ExtractedVpk[]> {
     const tempDir = createTempDir('modmanager-7z');
 
     try {
@@ -171,8 +217,7 @@ async function extract7z(archivePath: string, destDir: string): Promise<string[]
             try {
                 await runCommand(tool, ['x', '-y', `-o${tempDir}`, archivePath]);
                 const vpks = collectVpks(tempDir);
-                const copied = copyVpksToDest(vpks, destDir);
-                return copied;
+                return copyVpksToDest(vpks, destDir, tempDir);
             } catch {
                 // Try next tool
             }
@@ -195,7 +240,7 @@ async function extract7z(archivePath: string, destDir: string): Promise<string[]
  * default; falls back to the bundled 7za or system unrar if the in-process
  * extractor fails (e.g. RAR5-specific features it can't handle).
  */
-async function extractRar(archivePath: string, destDir: string): Promise<string[]> {
+async function extractRar(archivePath: string, destDir: string): Promise<ExtractedVpk[]> {
     // Primary path: pure-JS in-process RAR extractor (no install required).
     try {
         const data = readFileSync(archivePath);
@@ -207,13 +252,14 @@ async function extractRar(archivePath: string, destDir: string): Promise<string[
             files: (header) => !header.flags.directory && extname(header.name).toLowerCase() === '.vpk',
         });
 
-        const extractedVpks: string[] = [];
+        const extractedVpks: ExtractedVpk[] = [];
+        const taken = new Set<string>();
         for (const file of extracted.files) {
             if (!file.extraction) continue;
             const fileName = basename(file.fileHeader.name);
-            const destPath = join(destDir, fileName);
+            const destPath = join(destDir, uniqueDestName(fileName, taken));
             writeFileSync(destPath, Buffer.from(file.extraction));
-            extractedVpks.push(destPath);
+            extractedVpks.push({ path: destPath, fileName, archiveFolder: archiveParentFolder(file.fileHeader.name) });
         }
 
         if (extractedVpks.length > 0) {
@@ -236,8 +282,7 @@ async function extractRar(archivePath: string, destDir: string): Promise<string[
                     await runCommand(tool, ['x', '-y', `-o${tempDir}`, archivePath]);
                 }
                 const vpks = collectVpks(tempDir);
-                const copied = copyVpksToDest(vpks, destDir);
-                return copied;
+                return copyVpksToDest(vpks, destDir, tempDir);
             } catch {
                 // Try next tool
             }
@@ -325,16 +370,24 @@ function collectVpks(dir: string): string[] {
 }
 
 /**
- * Copy VPK files to destination directory (flattening structure)
+ * Copy VPK files to destination directory (flattening structure). `rootDir` is
+ * the extraction root, used to recover each VPK's variant folder; same-named
+ * VPKs from sibling folders are kept under suffixed names instead of colliding.
  */
-function copyVpksToDest(vpks: string[], destDir: string): string[] {
-    const copied: string[] = [];
+function copyVpksToDest(vpks: string[], destDir: string, rootDir: string): ExtractedVpk[] {
+    const copied: ExtractedVpk[] = [];
+    const taken = new Set<string>();
 
     for (const vpk of vpks) {
         const fileName = basename(vpk);
-        const destPath = join(destDir, fileName);
+        const destPath = join(destDir, uniqueDestName(fileName, taken));
         copyFileSync(vpk, destPath);
-        copied.push(destPath);
+        const parent = dirname(vpk);
+        copied.push({
+            path: destPath,
+            fileName,
+            archiveFolder: parent === rootDir ? undefined : basename(parent),
+        });
     }
 
     return copied;

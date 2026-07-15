@@ -6,6 +6,14 @@ import type {
 import type { SnapshotTrigger } from '../../src/types/snapshot';
 import type { SocialSessionStatus } from '../../src/types/social';
 import type {
+    HeroEffectExportRequest,
+    HeroSoundFilters,
+    HeroSoundSwapRequest,
+    TextureCategory,
+    TextureFilters,
+    VoicelineFilters,
+} from '../../src/types/foundry';
+import type {
     AbilitySlot,
     AbilitySoundParams,
     ActiveTrippySkin,
@@ -17,6 +25,7 @@ import type {
     EditLocalModArgs,
     LockerClearScope,
     MergeModsArgs,
+    ImprintInstalledProgress,
     TrippySpriteOptions,
     TrippyVfxChoice,
     UnknownModDetectionProgress,
@@ -38,6 +47,8 @@ import type {
     ImportCustomModArgs,
     ImportSoulContainerGlbArgs,
     PreviewSoulContainerGlbArgs,
+    ImportSpiritUrnGlbArgs,
+    PreviewSpiritUrnGlbArgs,
     SearchLocalModsOptions,
     CrosshairSettings,
     VanillaRestoreResult,
@@ -57,6 +68,7 @@ import type {
 } from '../../src/types/electron';
 import type { AppearanceSurface } from '../../src/types/mod';
 import type { DeadworksConnectProgress } from '../../src/types/deadworks';
+import type { DmmMigrationRequest } from '../../src/lib/dmmMigration';
 import type {
     ProfileSort,
     PublishRequest,
@@ -74,6 +86,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
     createDevDeadlockPath: () => ipcRenderer.invoke('create-dev-deadlock-path'),
     getSettings: () => ipcRenderer.invoke('get-settings'),
     setSettings: (settings: AppSettings) => ipcRenderer.invoke('set-settings', settings),
+
+    // Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
+    dmmMigrate: {
+        scan: (req: DmmMigrationRequest) => ipcRenderer.invoke('dmm-migrate:scan', req),
+        execute: (req: DmmMigrationRequest) => ipcRenderer.invoke('dmm-migrate:execute', req),
+    },
 
     // Discord Rich Presence (opt-in; talks only to the local Discord client)
     discord: {
@@ -142,8 +160,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-applied-custom-card', heroName),
     getSoulModelInfo: (key: string) =>
         ipcRenderer.invoke('get-soul-model-info', key),
-    exportSoulModel: (metaKey: string, cacheKey: string) =>
-        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey),
+    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) =>
+        ipcRenderer.invoke('export-soul-model', metaKey, cacheKey, entry),
     getHeroPoseInfo: (heroName: string, skinSources?: unknown[]) =>
         ipcRenderer.invoke('get-hero-pose-info', heroName, skinSources),
     exportHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
@@ -152,6 +170,12 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('get-rigged-hero-pose', heroName, skinSources),
     exportRiggedHeroPose: (heroName: string, skinSources?: unknown[], fallbackSkinMetaKey?: string) =>
         ipcRenderer.invoke('export-rigged-hero-pose', heroName, skinSources, fallbackSkinMetaKey),
+    getHeroClothModel: (heroName: string, skinSources?: unknown[]) =>
+        ipcRenderer.invoke('get-hero-cloth-model', heroName, skinSources),
+    getHeroEffectInfo: (heroName: string) =>
+        ipcRenderer.invoke('get-hero-effect-info', heroName),
+    exportHeroEffect: (heroName: string) =>
+        ipcRenderer.invoke('export-hero-effect', heroName),
     getPreviewCacheSize: () =>
         ipcRenderer.invoke('get-preview-cache-size'),
     clearPreviewCache: () =>
@@ -217,14 +241,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-mod-priority', modId, priority),
     reorderMods: (orderedIds: string[]) =>
         ipcRenderer.invoke('reorder-mods', orderedIds),
+    applyModToggleBatch: (enableIds: string[], disableIds: string[]) =>
+        ipcRenderer.invoke('apply-mod-toggle-batch', enableIds, disableIds),
     swapModPriority: (modIdA: string, modIdB: string) =>
         ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
     importCustomMod: (args: ImportCustomModArgs) =>
         ipcRenderer.invoke('import-custom-mod', args),
     importSoulContainerGlb: (args: ImportSoulContainerGlbArgs) =>
         ipcRenderer.invoke('import-soul-container-glb', args),
+    exportSoulContainerGlb: (args: ImportSoulContainerGlbArgs) =>
+        ipcRenderer.invoke('export-soul-container-glb', args),
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) =>
         ipcRenderer.invoke('preview-soul-container-glb', args),
+    importSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) =>
+        ipcRenderer.invoke('import-spirit-urn-glb', args),
+    exportSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) =>
+        ipcRenderer.invoke('export-spirit-urn-glb', args),
+    previewSpiritUrnGlb: (args: PreviewSpiritUrnGlbArgs) =>
+        ipcRenderer.invoke('preview-spirit-urn-glb', args),
     readGlbFile: (glbPath: string) =>
         ipcRenderer.invoke('read-glb-file', glbPath),
     readImageDataUrl: (imagePath: string) =>
@@ -278,6 +312,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>
         ipcRenderer.invoke('extract-merge-source', mergedModId, sourceFileName),
+    imprintOneMod: (modId: string) => ipcRenderer.invoke('imprint-one-mod', modId),
+    imprintAllInstalled: () => ipcRenderer.invoke('imprint-all-installed'),
+    imprintPreflight: () => ipcRenderer.invoke('imprint-preflight'),
+    readImprintDetails: (modId: string) => ipcRenderer.invoke('read-imprint-details', modId),
+    peekImprint: (filePath: string) => ipcRenderer.invoke('peek-imprint', filePath),
+    onImprintAllInstalledProgress: (callback: (progress: ImprintInstalledProgress) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, progress: ImprintInstalledProgress) =>
+            callback(progress);
+        ipcRenderer.on('imprint-all-installed-progress', handler);
+        return () => ipcRenderer.removeListener('imprint-all-installed-progress', handler);
+    },
 
     // Launch
     launchModded: () => ipcRenderer.invoke('launch-modded'),
@@ -413,6 +458,21 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('ignore-conflict', modA, modB),
     unignoreConflict: (modA: string, modB: string) =>
         ipcRenderer.invoke('unignore-conflict', modA, modB),
+    getIgnoredConflictFiles: () => ipcRenderer.invoke('get-ignored-conflict-files'),
+    ignoreConflictFile: (ignoreKey: string, filePath: string) =>
+        ipcRenderer.invoke('ignore-conflict-file', ignoreKey, filePath),
+    unignoreConflictFile: (ignoreKey: string, filePath: string | null) =>
+        ipcRenderer.invoke('unignore-conflict-file', ignoreKey, filePath),
+    getIgnoredConflictFilesGlobal: () => ipcRenderer.invoke('get-ignored-conflict-files-global'),
+    ignoreConflictFileGlobal: (filePath: string) =>
+        ipcRenderer.invoke('ignore-conflict-file-global', filePath),
+    unignoreConflictFileGlobal: (filePath: string) =>
+        ipcRenderer.invoke('unignore-conflict-file-global', filePath),
+    getIgnoredConflictMods: () => ipcRenderer.invoke('get-ignored-conflict-mods'),
+    ignoreConflictMod: (identity: string) =>
+        ipcRenderer.invoke('ignore-conflict-mod', identity),
+    unignoreConflictMod: (identity: string) =>
+        ipcRenderer.invoke('unignore-conflict-mod', identity),
 
     // Profiles
     getProfiles: () => ipcRenderer.invoke('get-profiles'),
@@ -423,6 +483,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     applyProfile: (profileId: string) => ipcRenderer.invoke('apply-profile', profileId),
     deleteProfile: (profileId: string) => ipcRenderer.invoke('delete-profile', profileId),
     renameProfile: (profileId: string, newName: string) => ipcRenderer.invoke('rename-profile', profileId, newName),
+    removeProfileCrosshair: (profileId: string) => ipcRenderer.invoke('remove-profile-crosshair', profileId),
     exportPortableProfile: (profileId: string) => ipcRenderer.invoke('export-portable-profile', profileId),
     parsePortableProfile: (input: string) => ipcRenderer.invoke('parse-portable-profile', input),
     resolvePortableProfile: (profile: PortableProfile) => ipcRenderer.invoke('resolve-portable-profile', profile),
@@ -525,6 +586,27 @@ contextBridge.exposeInMainWorld('electronAPI', {
         },
     },
 
+    // Foundry: catalog browse backed by the bundled vpkmerge sidecar.
+    foundry: {
+        heroes: () => ipcRenderer.invoke('foundry:heroes'),
+        textures: (filters?: TextureFilters) =>
+            ipcRenderer.invoke('foundry:textures', filters ?? {}),
+        voicelines: (filters?: VoicelineFilters) =>
+            ipcRenderer.invoke('foundry:voicelines', filters ?? {}),
+        heroSounds: (filters?: HeroSoundFilters) =>
+            ipcRenderer.invoke('foundry:heroSounds', filters ?? {}),
+        ensureThumbnails: (category: TextureCategory) =>
+            ipcRenderer.invoke('foundry:ensureThumbnails', category),
+        fullImage: (category: TextureCategory, entryPath: string) =>
+            ipcRenderer.invoke('foundry:fullImage', category, entryPath),
+        voiceclip: (vsndPath: string) => ipcRenderer.invoke('foundry:voiceclip', vsndPath),
+        warmCache: () => ipcRenderer.invoke('foundry:warmCache'),
+        exportHeroEffect: (req: HeroEffectExportRequest) =>
+            ipcRenderer.invoke('foundry:exportHeroEffect', req),
+        swapSound: (req: HeroSoundSwapRequest) =>
+            ipcRenderer.invoke('foundry:swapSound', req),
+    },
+
     // Language packs (downloaded on demand from GitHub)
     locales: {
         getManifest: () => ipcRenderer.invoke('locales:getManifest'),
@@ -572,6 +654,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
             ipcRenderer.invoke('stats:getLocalMatchHistory', accountId, limit, offset),
         getLocalMatchCount: (accountId: number) =>
             ipcRenderer.invoke('stats:getLocalMatchCount', accountId),
+        recordMatches: (accountId: number, matches: unknown[]) =>
+            ipcRenderer.invoke('stats:recordMatches', accountId, matches),
         getLocalHeroStats: (accountId: number, heroId?: number) =>
             ipcRenderer.invoke('stats:getLocalHeroStats', accountId, heroId),
         getAggregatedStats: (accountId: number) =>

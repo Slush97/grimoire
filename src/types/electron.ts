@@ -13,6 +13,11 @@ import type {
     MergeModsArgs,
     UnmergeModResult,
     ExtractMergeSourceResult,
+    ImprintAllInstalledResult,
+    ImprintInstalledProgress,
+    ImprintPreflightResult,
+    ImprintDetails,
+    PeekImprintResult,
     ApplyHeroCardResult,
     HeroAbilitySlot,
     AbilitySlot,
@@ -46,7 +51,7 @@ import type {
     GameBananaCommentsResponse,
     GameBananaArtistLink,
 } from './gamebanana';
-import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource } from './portrait';
+import type { HeroPortrait, CustomCardSlot, SoulModelInfo, HeroPoseInfo, HeroPoseSkinSource, HeroEffectInfo } from './portrait';
 import type {
     DeadworksServer,
     DeadworksContentItem,
@@ -54,6 +59,7 @@ import type {
     DeadworksConnectProgress,
     DeadworksRelayStats,
 } from './deadworks';
+import type { DmmMigrationRequest, DmmMigrationReport } from '../lib/dmmMigration';
 
 export interface BrowseModsArgs {
     page: number;
@@ -198,6 +204,50 @@ export interface SoulContainerPreview {
     /** Import's largest-axis span before fitting (Source units). */
     sourceSpan?: number;
     /** Vanilla soul-container span the mesh was fit to (~12.65). */
+    targetSpan?: number;
+}
+
+export interface ImportSpiritUrnGlbArgs {
+    /** Path to the source `.glb` on disk. */
+    glbPath: string;
+    name: string;
+    orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
+    /** Extra Euler degrees [X, Y, Z] applied after orient. */
+    rotate?: [number, number, number];
+    /** Lift the mesh so its base sits at the origin instead of being centered. */
+    ground?: boolean;
+    /** Largest-axis size in Source units to fit the import to. */
+    span: number;
+    /** User-tracked test status; defaults to 'untested'. */
+    status?: SoulImportStatus;
+    /** Free-text label shown as the variant sublabel in Installed. */
+    notes?: string;
+    nsfw?: boolean;
+    /** Captured 3D preview as a data URL, used as the Installed thumbnail. */
+    thumbnailDataUrl?: string;
+    /** metaKey of an existing urn import to REPLACE in place (reuse its slot)
+     *  instead of allocating a new one. Avoids stacking two enabled urns. */
+    replaceMetaKey?: string;
+}
+
+export interface PreviewSpiritUrnGlbArgs {
+    glbPath: string;
+    orient: 'y-up' | 'z-up' | 'flip-y' | 'auto';
+    rotate?: [number, number, number];
+    ground?: boolean;
+    span: number;
+}
+
+export interface SpiritUrnPreview {
+    /** The built model exported back to a GLB, base64-encoded. */
+    glbBase64: string;
+    /** Resolved orientation label from the build (e.g. `y-up`, `auto:z-up`). */
+    orient: string;
+    /** Uniform fit scale applied to match the requested span. */
+    fitScale?: number;
+    /** Import's largest-axis span before fitting (Source units). */
+    sourceSpan?: number;
+    /** Span the mesh was fit to (equals the requested span). */
     targetSpan?: number;
 }
 
@@ -460,6 +510,12 @@ export interface ElectronAPI {
     getSettings: () => Promise<AppSettings>;
     setSettings: (settings: AppSettings) => Promise<void>;
 
+    // Deadlock Mod Manager migration (adopt DMM's on-disk VPKs; no cloud)
+    dmmMigrate: {
+        scan: (req: DmmMigrationRequest) => Promise<DmmMigrationReport>;
+        execute: (req: DmmMigrationRequest) => Promise<DmmMigrationReport>;
+    };
+
     // Discord Rich Presence (opt-in; talks only to the local Discord client)
     discord: {
         update: (ctx: { surface: string; count?: number; hero?: string }) => Promise<void>;
@@ -510,7 +566,9 @@ export interface ElectronAPI {
         heroName: string
     ) => Promise<{ variant: string; dataUrl: string }[]>;
     getSoulModelInfo: (key: string) => Promise<SoulModelInfo>;
-    exportSoulModel: (metaKey: string, cacheKey: string) => Promise<SoulModelInfo>;
+    /** `entry` selects which model entry to export (soul container vs urn);
+     *  defaults to the soul-container model when omitted. */
+    exportSoulModel: (metaKey: string, cacheKey: string, entry?: string) => Promise<SoulModelInfo>;
     getHeroPoseInfo: (
         heroName: string,
         skinSources?: HeroPoseSkinSource[]
@@ -529,6 +587,12 @@ export interface ElectronAPI {
         skinSources?: HeroPoseSkinSource[],
         fallbackSkinMetaKey?: string
     ) => Promise<HeroPoseInfo>;
+    getHeroClothModel: (
+        heroName: string,
+        skinSources?: HeroPoseSkinSource[]
+    ) => Promise<unknown>;
+    getHeroEffectInfo: (heroName: string) => Promise<HeroEffectInfo>;
+    exportHeroEffect: (heroName: string) => Promise<HeroEffectInfo>;
     getPreviewCacheSize: () => Promise<{ bytes: number }>;
     clearPreviewCache: () => Promise<{ bytesFreed: number }>;
     applyHeroSound: (
@@ -584,10 +648,22 @@ export interface ElectronAPI {
     ) => Promise<Mod>;
     setModPriority: (modId: string, priority: number) => Promise<Mod>;
     reorderMods: (orderedIds: string[]) => Promise<Mod[]>;
+    applyModToggleBatch: (
+        enableIds: string[],
+        disableIds: string[]
+    ) => Promise<{ mods: Mod[]; failures: string[] }>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
     importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
     importSoulContainerGlb: (args: ImportSoulContainerGlbArgs) => Promise<Mod[]>;
+    exportSoulContainerGlb: (
+        args: ImportSoulContainerGlbArgs
+    ) => Promise<import('./foundry').VpkExportResult>;
     previewSoulContainerGlb: (args: PreviewSoulContainerGlbArgs) => Promise<SoulContainerPreview>;
+    importSpiritUrnGlb: (args: ImportSpiritUrnGlbArgs) => Promise<Mod[]>;
+    exportSpiritUrnGlb: (
+        args: ImportSpiritUrnGlbArgs
+    ) => Promise<import('./foundry').VpkExportResult>;
+    previewSpiritUrnGlb: (args: PreviewSpiritUrnGlbArgs) => Promise<SpiritUrnPreview>;
     readGlbFile: (glbPath: string) => Promise<string>;
     readImageDataUrl: (imagePath: string) => Promise<string>;
     /** Read a bundled renderer asset (built-in art, hero render) as a data URL.
@@ -663,6 +739,19 @@ export interface ElectronAPI {
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
+    imprintOneMod: (modId: string) => Promise<Mod>;
+    imprintAllInstalled: () => Promise<ImprintAllInstalledResult>;
+    imprintPreflight: () => Promise<ImprintPreflightResult>;
+    /** Read-only: the full embedded imprint (addoninfo.txt + optional
+     *  grimoire_meta.json merge companion) of one installed VPK, or null when
+     *  the file carries no valid Grimoire embed. */
+    readImprintDetails: (modId: string) => Promise<ImprintDetails | null>;
+    /** Read-only recognition check for the import dialog: peek at an arbitrary
+     *  absolute .vpk path (before it's imported anywhere) for a recoverable
+     *  Grimoire embed. Null when the path isn't a readable .vpk or carries no
+     *  valid embed. No lock, no writes, no scanMods. */
+    peekImprint: (filePath: string) => Promise<PeekImprintResult | null>;
+    onImprintAllInstalledProgress: (callback: (progress: ImprintInstalledProgress) => void) => () => void;
 
     // Launch
     launchModded: () => Promise<void>;
@@ -749,15 +838,25 @@ export interface ElectronAPI {
     getIgnoredConflicts: () => Promise<string[]>;
     ignoreConflict: (modA: string, modB: string) => Promise<string[]>;
     unignoreConflict: (modA: string, modB: string) => Promise<string[]>;
+    getIgnoredConflictFiles: () => Promise<Record<string, string[]>>;
+    ignoreConflictFile: (ignoreKey: string, filePath: string) => Promise<Record<string, string[]>>;
+    unignoreConflictFile: (ignoreKey: string, filePath: string | null) => Promise<Record<string, string[]>>;
+    getIgnoredConflictFilesGlobal: () => Promise<string[]>;
+    ignoreConflictFileGlobal: (filePath: string) => Promise<string[]>;
+    unignoreConflictFileGlobal: (filePath: string) => Promise<string[]>;
+    getIgnoredConflictMods: () => Promise<string[]>;
+    ignoreConflictMod: (identity: string) => Promise<string[]>;
+    unignoreConflictMod: (identity: string) => Promise<string[]>;
 
     // Profiles
     getProfiles: () => Promise<Profile[]>;
     createProfile: (name: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
     createProfileFromGameBananaIds: (args: { name: string; gameBananaIds: number[] }) => Promise<Profile>;
     updateProfile: (profileId: string, crosshairSettings?: ProfileCrosshairSettings) => Promise<Profile>;
-    applyProfile: (profileId: string) => Promise<Profile>;
+    applyProfile: (profileId: string) => Promise<ApplyProfileResult>;
     deleteProfile: (profileId: string) => Promise<void>;
     renameProfile: (profileId: string, newName: string) => Promise<Profile>;
+    removeProfileCrosshair: (profileId: string) => Promise<Profile>;
     exportPortableProfile: (profileId: string) => Promise<import('./portableProfile').PortableExportResult>;
     parsePortableProfile: (input: string) => Promise<import('./portableProfile').PortableProfile>;
     resolvePortableProfile: (
@@ -808,7 +907,7 @@ export interface ElectronAPI {
     /** Read the player's live in-game crosshair from machine_convars.vcfg.
      *  settings is null when the file is missing or has no crosshair convars. */
     importCrosshairFromGame: (gamePath: string) => Promise<{ found: boolean; settings: CrosshairSettings | null }>;
-    getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; exists: boolean }>;
+    getAutoexecCommands: (gamePath: string) => Promise<{ commands: string[]; manualCommands: string[]; exists: boolean }>;
     saveAutoexecCommands: (gamePath: string, commands: string[]) => Promise<{ success: boolean; path: string }>;
 
     // Updater
@@ -861,6 +960,37 @@ export interface ElectronAPI {
         ) => () => void;
     };
 
+    // Foundry: in-app asset workshop. Catalog browse backed by the bundled
+    // `vpkmerge catalog *` sidecar (codename -> name, texture/icon index +
+    // thumbnails). Experimental, gated behind settings.experimentalFoundry.
+    foundry: {
+        heroes: () => Promise<import('./foundry').HeroInfo[]>;
+        textures: (
+            filters?: import('./foundry').TextureFilters
+        ) => Promise<import('./foundry').TextureEntry[]>;
+        voicelines: (
+            filters?: import('./foundry').VoicelineFilters
+        ) => Promise<import('./foundry').VoiceLine[]>;
+        heroSounds: (
+            filters?: import('./foundry').HeroSoundFilters
+        ) => Promise<import('./foundry').HeroSound[]>;
+        ensureThumbnails: (
+            category: import('./foundry').TextureCategory
+        ) => Promise<import('./foundry').TextureGridItem[]>;
+        fullImage: (
+            category: import('./foundry').TextureCategory,
+            entryPath: string
+        ) => Promise<string | null>;
+        voiceclip: (vsndPath: string) => Promise<string | null>;
+        warmCache: () => Promise<void>;
+        exportHeroEffect: (
+            req: import('./foundry').HeroEffectExportRequest
+        ) => Promise<import('./foundry').VpkExportResult>;
+        swapSound: (
+            req: import('./foundry').HeroSoundSwapRequest
+        ) => Promise<import('./mod').Mod[]>;
+    };
+
     // Language packs (downloaded on demand from GitHub)
     locales: {
         getManifest: () => Promise<import('./locales').LocaleManifest>;
@@ -898,6 +1028,7 @@ export interface ElectronAPI {
         getLocalMMRHistory: (accountId: number, limit?: number) => Promise<unknown[]>;
         getLocalMatchHistory: (accountId: number, limit?: number, offset?: number) => Promise<unknown[]>;
         getLocalMatchCount: (accountId: number) => Promise<number>;
+        recordMatches: (accountId: number, matches: unknown[]) => Promise<void>;
         getLocalHeroStats: (accountId: number, heroId?: number) => Promise<unknown[]>;
         getAggregatedStats: (accountId: number) => Promise<unknown | null>;
 
@@ -979,9 +1110,10 @@ export interface ElectronAPI {
 
 export interface ProfileMod {
     /** Filename when the profile was saved. NOT stable across reorders or
-     *  collision-renames; use `gameBananaId` + `gameBananaFileId` as the
-     *  primary identifier when present, and fall back to `fileName` only for
-     *  pre-stable-id profiles or custom mods that lack GameBanana ids. */
+     *  collision-renames; use `gameBananaId` + `gameBananaFileId` +
+     *  `vpkIndex` as the primary identifier when present, and fall back to
+     *  `fileName` only for pre-stable-id profiles or custom mods that lack
+     *  GameBanana ids. */
     fileName: string;
     enabled: boolean;
     priority: number;
@@ -989,11 +1121,9 @@ export interface ProfileMod {
      *  can find the mod even if its fileName has changed since. */
     gameBananaId?: number;
     gameBananaFileId?: number;
-    /** Content fingerprint, populated from metadata at save time. The identity
-     *  of last resort for custom/local mods that carry no GameBanana ids: it
-     *  survives a fileName change (reorder, or the free-form rename a mod gets
-     *  when disabled), so apply can still re-enable the right local mod. */
-    sha256?: string;
+    /** Zero-based VPK index within a multi-VPK GameBanana file, assigned by
+     *  ascending VPK size at install time. Omitted for normal single-VPK files. */
+    vpkIndex?: number;
 }
 
 /** Profiles embed the same crosshair model the Crosshair tab edits. Saved
@@ -1009,6 +1139,15 @@ export interface Profile {
     autoexecCommands?: string[];
     createdAt: string;
     updatedAt: string;
+}
+
+/** Result of applying a profile. `failures` holds per-mod enable/disable ops
+ *  that could not complete (e.g. a VPK locked by the running game); the apply
+ *  is otherwise best-effort and does not rethrow, so the renderer surfaces this
+ *  count instead of silently launching with missing mods. */
+export interface ApplyProfileResult {
+    profile: Profile;
+    failures: string[];
 }
 
 declare global {

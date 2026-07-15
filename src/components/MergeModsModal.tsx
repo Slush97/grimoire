@@ -4,6 +4,7 @@ import { Layers, X, AlertTriangle, Info } from 'lucide-react';
 import type { Mod } from '../types/mod';
 import ModThumbnail from './ModThumbnail';
 import { Button } from './common/ui';
+import { FormField, Input } from './common/forms';
 import { Modal } from './common/Modal';
 
 interface Props {
@@ -16,9 +17,8 @@ interface Props {
 /**
  * Confirmation modal for combining multiple installed mods into a single
  * merged VPK. Sources that share a GameBanana submission (color variants,
- * preset versions, etc.) collapse into a variant picker: exactly one
- * variant per group enters the merge, because variants of the same mod
- * occupy the same in-game file paths and would just override each other.
+ * preset versions, etc.) collapse into a variant picker. One variant is
+ * selected by default, and users can include more from the same group.
  *
  * The merger itself orders inputs by priority so the highest-priority source
  * (the lowest pakNN) wins on collisions, matching Deadlock's lower-pakNN-wins
@@ -31,9 +31,9 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
   const { t } = useTranslation();
   const groups = useMemo(() => buildSourceGroups(sources), [sources]);
 
-  // Picks: one chosen variant id per multi-variant group. Singles + single-
+  // Picks: selected variant ids per multi-variant group. Singles + single-
   // variant groups have no picker (they're always-on).
-  const [picks, setPicks] = useState<Record<string, string>>(() => initialPicks(groups));
+  const [picks, setPicks] = useState<Record<string, string[]>>(() => initialPicks(groups));
 
   const effectiveSources = useMemo(
     () => resolveEffectiveSources(groups, picks),
@@ -82,6 +82,25 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
     }
   };
 
+  const toggleVariantPick = (group: Extract<SourceGroup, { kind: 'variants' }>, variantId: string) => {
+    setPicks((prev) => {
+      const current = prev[group.key] ?? [defaultVariantForGroup(group).id];
+      const alreadyPicked = current.includes(variantId);
+      if (alreadyPicked && current.length <= 1) return prev;
+
+      const selected = new Set(current);
+      if (alreadyPicked) selected.delete(variantId);
+      else selected.add(variantId);
+
+      return {
+        ...prev,
+        [group.key]: group.variants
+          .filter((variant) => selected.has(variant.id))
+          .map((variant) => variant.id),
+      };
+    });
+  };
+
   return (
     <Modal onClose={onCancel} labelledBy="merge-mods-title" size="none" panelClassName="max-w-xl">
         <div className="flex items-center justify-between p-5 border-b border-border">
@@ -109,24 +128,21 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
               />
             </div>
             <div className="flex-1 min-w-0">
-              <label htmlFor="merge-name" className="block text-sm font-medium text-text-primary mb-1.5">
-                {t('mergeMods.mergedModName')} <span className="text-red-400">*</span>
-              </label>
-              <input
-                id="merge-name"
-                type="text"
-                value={liveName}
-                onChange={(e) => {
-                  setNameTouched(true);
-                  setName(e.target.value);
-                }}
-                placeholder={t('mergeMods.namePlaceholder')}
-                className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
-                autoFocus
-              />
-              <p className="mt-2 text-xs text-text-secondary">
-                {t('mergeMods.originalsStay')}
-              </p>
+              <FormField
+                label={t('mergeMods.mergedModName')}
+                required
+                hint={t('mergeMods.originalsStay')}
+              >
+                <Input
+                  value={liveName}
+                  onChange={(e) => {
+                    setNameTouched(true);
+                    setName(e.target.value);
+                  }}
+                  placeholder={t('mergeMods.namePlaceholder')}
+                  autoFocus
+                />
+              </FormField>
             </div>
           </div>
 
@@ -174,8 +190,8 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                     </div>
                     <div className="space-y-1">
                       {group.variants.map((variant) => {
-                        const id = picks[group.key];
-                        const isPicked = id === variant.id;
+                        const ids = picks[group.key] ?? [defaultVariantForGroup(group).id];
+                        const isPicked = ids.includes(variant.id);
                         return (
                           <label
                             key={variant.id}
@@ -186,10 +202,9 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                             }`}
                           >
                             <input
-                              type="radio"
-                              name={`variant-${group.key}`}
+                              type="checkbox"
                               checked={isPicked}
-                              onChange={() => setPicks((prev) => ({ ...prev, [group.key]: variant.id }))}
+                              onChange={() => toggleVariantPick(group, variant.id)}
                               className="w-3.5 h-3.5 accent-accent cursor-pointer"
                             />
                             <span className="font-mono text-[11px] text-text-secondary tabular-nums w-6 text-right">
@@ -238,7 +253,7 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
 
           {error && (
             <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5">
-              <AlertTriangle className="w-4 h-4 text-red-400 flex-shrink-0 mt-0.5" />
+              <AlertTriangle className="w-4 h-4 text-state-danger flex-shrink-0 mt-0.5" />
               <div>{error}</div>
             </div>
           )}
@@ -326,25 +341,28 @@ function primaryPriority(group: SourceGroup): number {
 
 /** Pick the most reasonable default variant for each multi-variant group:
  *  the first enabled variant if any, else the first by priority. */
-function initialPicks(groups: SourceGroup[]): Record<string, string> {
-  const picks: Record<string, string> = {};
+function initialPicks(groups: SourceGroup[]): Record<string, string[]> {
+  const picks: Record<string, string[]> = {};
   for (const g of groups) {
     if (g.kind !== 'variants') continue;
-    const defaultVariant = g.variants.find((v) => v.enabled) ?? g.variants[0];
-    picks[g.key] = defaultVariant.id;
+    picks[g.key] = [defaultVariantForGroup(g).id];
   }
   return picks;
 }
 
-function resolveEffectiveSources(groups: SourceGroup[], picks: Record<string, string>): Mod[] {
+function defaultVariantForGroup(group: Extract<SourceGroup, { kind: 'variants' }>): Mod {
+  return group.variants.find((v) => v.enabled) ?? group.variants[0];
+}
+
+function resolveEffectiveSources(groups: SourceGroup[], picks: Record<string, string[]>): Mod[] {
   const out: Mod[] = [];
   for (const g of groups) {
     if (g.kind === 'single') {
       out.push(g.mod);
     } else {
-      const pickedId = picks[g.key];
-      const picked = g.variants.find((v) => v.id === pickedId) ?? g.variants[0];
-      out.push(picked);
+      const pickedIds = new Set(picks[g.key] ?? [defaultVariantForGroup(g).id]);
+      const picked = g.variants.filter((v) => pickedIds.has(v.id));
+      out.push(...(picked.length > 0 ? picked : [defaultVariantForGroup(g)]));
     }
   }
   return out;

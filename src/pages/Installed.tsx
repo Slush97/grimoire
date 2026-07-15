@@ -62,17 +62,22 @@ import {
   Banana,
   HelpCircle,
   GripVertical,
+  ClipboardList,
+  Fingerprint,
+  Copy,
+  ExternalLink,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder } from '../lib/api';
-import type { UnmergeModResult } from '../lib/api';
+import { isImprintPending } from '../lib/imprintPending';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint, launchModded } from '../lib/api';
+import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
-import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs } from '../types/mod';
-import type { GameBananaModDetails, GameBananaMod } from '../types/gamebanana';
+import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
+import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef } from '../types/gamebanana';
 import { getModThumbnail } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
 import ImageContextMenu from '../components/ImageContextMenu';
@@ -82,14 +87,20 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
+import { Modal } from '../components/common/Modal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
-import { Button, Tag } from '../components/common/ui';
+import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
+import { modRestoreKey } from '../lib/soloRestore';
+import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
+import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
+import { FormField, Input, Select } from '../components/common/forms';
+import { HeroSelect } from '../components/common/HeroSelect';
 import { LockerOverridesModal } from '../components/LockerOverridesModal';
-import { ViewModeToggle, EmptyState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
+import { ViewModeToggle, EmptyState, LoadingState, ConfirmModal, SectionHeader, type ViewMode } from '../components/common/PageComponents';
 
 const UNKNOWN_FIND_QUEUE_CONCURRENCY = 1;
 const UNKNOWN_FIND_QUEUE_PAUSE_MS = 35;
@@ -120,6 +131,18 @@ function clearUnknownCacheForMod(
   delete next[mod.id];
   return next;
 }
+
+// The four phases of the bulk-imprint modal, as one discriminated union.
+//  - preflight: the dry-run is in flight; render a LoadingState.
+//  - review: the dry-run returned; render one line per bucket + the commit button.
+//  - running: the bulk imprint is streaming progress ticks (dismiss blocked).
+//  - done: the final report (imprinted / skipped / failed).
+type ImprintModalState =
+  | { phase: 'preflight' }
+  | { phase: 'review'; preflight: ImprintPreflightResult }
+  | { phase: 'running'; progress: ImprintInstalledProgress | null }
+  | { phase: 'done'; result: ImprintAllInstalledResult }
+  | null;
 
 type ReorderPosition = 'before' | 'after';
 type DragSection = 'enabled' | 'disabled';
@@ -168,7 +191,6 @@ function modEntryKey(mod: Mod): string {
   }
   return `single:local:${mod.name}:${mod.size}`;
 }
-
 
 function buildModEntries(mods: Mod[]): ModEntry[] {
   const byGb = new Map<number, Mod[]>();
@@ -259,6 +281,19 @@ function entryName(entry: ModEntry): string {
   return entry.kind === 'single' ? entry.mod.name : entry.primary.name;
 }
 
+/** Every string a search query may match this entry on. A group collapses many
+ *  files under one card that shows only the primary's name, so searching a
+ *  non-primary variant's name (e.g. "Bunny Ivy" when the card title is "Coat
+ *  Ivy") must still surface the card. Match against every variant's name plus
+ *  its user label / file header / original filename. */
+function entrySearchText(entry: ModEntry): string {
+  if (entry.kind === 'single') return entry.mod.name;
+  return entry.variants
+    .flatMap((v) => [v.name, v.variantLabel, v.fileDescription, v.sourceFileName])
+    .filter((s): s is string => !!s)
+    .join('\n');
+}
+
 /** The mod we read metadata from for filtering (matches the visual primary). */
 function entryPrimaryMod(entry: ModEntry): Mod {
   return entry.kind === 'single' ? entry.mod : entry.primary;
@@ -281,28 +316,40 @@ function entryIsLocal(entry: ModEntry): boolean {
   return entry.kind === 'single' && typeof entry.mod.gameBananaId !== 'number';
 }
 
-const OTHER_TYPE_KEY = 'other';
+const OTHER_TAG_KEY = 'other';
 
-/** Coarse "mod type" bucket for the Installed type filter, derived entirely
- *  from already-classified metadata. Precedence: a global cosmetic type, then
- *  sounds, then the GameBanana category/section, then a catch-all. The key is
- *  opaque; typeKeyLabel turns it into display text. */
-function entryTypeKey(entry: ModEntry): string {
-  const mod = entryPrimaryMod(entry);
-  const global = getEffectiveGlobalType(mod);
-  if (global) return `global:${global}`;
-  const section = (mod.sourceSection ?? '').toLowerCase();
-  if (section.includes('sound')) return 'sound';
-  const category = mod.categoryName?.trim();
-  if (category) return `cat:${category}`;
-  const rawSection = mod.sourceSection?.trim();
-  if (rawSection) return `section:${rawSection}`;
-  return OTHER_TYPE_KEY;
+function heroNameFromTag(label?: string): string | null {
+  if (!label) return null;
+  const direct = heroNameForLabel(label);
+  if (direct) return canonicalHeroName(direct);
+  for (const part of label.split(/[/>]/).map((p) => p.trim()).filter(Boolean).reverse()) {
+    const match = heroNameForLabel(part);
+    if (match) return canonicalHeroName(match);
+  }
+  return null;
 }
 
-function typeKeyLabel(key: string): string {
-  if (key === OTHER_TYPE_KEY) return 'Other';
-  if (key === 'sound') return 'Sounds';
+function modHeroName(mod: Mod): string | null {
+  const tagged = canonicalHeroName(mod.lockerHero);
+  if (tagged) return tagged;
+  const categoryHero = heroNameFromTag(mod.categoryName);
+  if (categoryHero) return categoryHero;
+  const section = (mod.sourceSection ?? '').toLowerCase();
+  if (section.includes('sound')) {
+    const inferred = inferHeroFromTitle(mod.name);
+    return inferred ? canonicalHeroName(inferred) : null;
+  }
+  return null;
+}
+
+function entryHeroNames(entry: ModEntry): string[] {
+  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
+  return Array.from(new Set(mods.map(modHeroName).filter((name): name is string => !!name)));
+}
+
+function tagKeyLabel(key: string): string {
+  if (key === OTHER_TAG_KEY) return 'Other';
+  if (key === 'section:sound') return 'Sounds';
   if (key.startsWith('global:')) {
     const gt = key.slice('global:'.length) as GlobalModType;
     return GLOBAL_MOD_TYPE_LABELS[gt] ?? gt;
@@ -310,6 +357,35 @@ function typeKeyLabel(key: string): string {
   if (key.startsWith('cat:')) return key.slice('cat:'.length);
   if (key.startsWith('section:')) return key.slice('section:'.length);
   return key;
+}
+
+function modTagKeys(mod: Mod): string[] {
+  const keys: string[] = [];
+  const labels = new Set<string>();
+  const add = (key: string) => {
+    const labelKey = tagKeyLabel(key).trim().toLowerCase();
+    if (!labelKey || labels.has(labelKey)) return;
+    labels.add(labelKey);
+    keys.push(key);
+  };
+
+  const global = getEffectiveGlobalType(mod);
+  if (global) add(`global:${global}`);
+
+  const section = (mod.sourceSection ?? '').trim();
+  if (section.toLowerCase().includes('sound')) add('section:sound');
+
+  const category = mod.categoryName?.trim();
+  if (category && !heroNameFromTag(category)) add(`cat:${category}`);
+
+  if (keys.length === 0 && section && section !== 'Mod') add(`section:${section}`);
+  if (keys.length === 0) add(OTHER_TAG_KEY);
+  return keys;
+}
+
+function entryTagKeys(entry: ModEntry): string[] {
+  const mods = entry.kind === 'single' ? [entry.mod] : entry.variants;
+  return Array.from(new Set(mods.flatMap(modTagKeys)));
 }
 
 function flattenEntries(entries: ModEntry[]): Mod[] {
@@ -341,29 +417,33 @@ const SortableEntryCard = memo(function SortableEntryCard({
     isDragging,
   } = useSortable({ id: cardProps.entry.key, disabled: sortableDisabled });
 
+  const isList = cardProps.viewMode === 'list';
   const style: CSSProperties = {
     transform: CSS.Transform.toString(transform),
     transition,
     opacity: isDragging ? 0.32 : undefined,
     position: 'relative',
     zIndex: isDragging ? 1 : undefined,
-    // Skip layout + paint for offscreen cards. This is most of the cost of
-    // mounting a large library: only the ~15 visible cards pay full price up
-    // front. The `auto` keyword keeps the real size once a card has been
-    // rendered; the estimate only stands in before first view. dnd-kit drag
-    // measurement is unaffected: offscreen items still have placeholder boxes.
-    contentVisibility: 'auto',
-    containIntrinsicSize: cardProps.viewMode === 'list' ? 'auto 72px' : 'auto 280px',
+    // Sizing estimate for the content-visibility skip. The property itself lives
+    // in className (not here) so a :hover variant can lift it, see below. The
+    // `auto` keyword keeps the real size once a card has been rendered; the
+    // estimate only stands in before first view. dnd-kit drag measurement is
+    // unaffected: offscreen items still have placeholder boxes.
+    containIntrinsicSize: isList ? 'auto 72px' : 'auto 280px',
   };
 
   return (
     <div
       ref={setNodeRef}
-      // Each card carries a transform (its own stacking context), so a card's
-      // open action menu can only paint within that card. When the menu opens
-      // downward it would land behind the next card; lift this wrapper above its
-      // siblings whenever it contains an open menu so the dropdown stays on top.
-      className={`flex flex-col has-[[data-card-menu-open]]:z-20 ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+      // content-visibility:auto skips layout + paint for offscreen cards (most of
+      // the cost of mounting a large library) but implies contain:paint, which
+      // clips whatever the card paints outside its box AND traps it in its own
+      // stacking context. On grid/compact the enabled-card :hover lifts + scales
+      // the card: that expansion would be cropped and stuck behind neighbors. So
+      // on hover we lift containment (-> visible) and raise z so the expanded card
+      // renders whole and on top. The has-menu-open lift does the same for an open
+      // action menu that would otherwise paint behind the next card.
+      className={`flex flex-col has-[[data-card-menu-open]]:z-20 [content-visibility:auto] ${isList ? '' : 'hover:[content-visibility:visible] hover:z-10'} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
       {...attributes}
       {...listeners}
@@ -389,13 +469,20 @@ interface InstalledEntryCardProps {
   loadCount: number;
   selectMode: boolean;
   selected: boolean;
+  soloBusy: boolean;
   onOpenDetails: (mod: Mod) => void;
   onViewAuthor: (mod: Mod) => void;
   onOpenPicker: (gameBananaId: number) => void;
   onToggle: (entry: ModEntry) => void;
+  onSoloLaunch: (entry: ModEntry) => void;
   onDelete: (entry: ModEntry) => void;
   onEditLocal: (mod: Mod) => void;
   onRenameLocal: (mod: Mod, newName: string) => Promise<void>;
+  /** Open the imprint details modal for a mod whose wire `imprinted` flag is
+   *  true. Externally-imprinted files without the local flag simply do not get
+   *  the menu entry: the flag is the cheap client hint, and the modal's empty
+   *  state covers a stale flag. */
+  onViewImprint: (mod: Mod) => void;
   onTagLocker: (entry: ModEntry, heroName: string | null) => Promise<void>;
   onTagGlobal: (entry: ModEntry, globalType: GlobalModType | null) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
@@ -426,13 +513,16 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   loadCount,
   selectMode,
   selected,
+  soloBusy,
   onOpenDetails,
   onViewAuthor,
   onOpenPicker,
   onToggle,
+  onSoloLaunch,
   onDelete,
   onEditLocal,
   onRenameLocal,
+  onViewImprint,
   onTagLocker,
   onTagGlobal,
   onFixUnknown,
@@ -457,9 +547,12 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         }
         onViewAuthor={mod.gameBananaId ? () => onViewAuthor(mod) : undefined}
         onToggle={() => onToggle(entry)}
+        onSoloLaunch={() => onSoloLaunch(entry)}
+        soloBusy={soloBusy}
         onDelete={() => onDelete(entry)}
         onEditLocal={!mod.gameBananaId ? () => onEditLocal(mod) : undefined}
         onRenameLocal={!mod.gameBananaId ? (newName) => onRenameLocal(mod, newName) : undefined}
+        onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
         onTagLocker={(heroName) => onTagLocker(entry, heroName)}
         onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
         onFixUnknown={
@@ -505,7 +598,11 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       entryKey={entry.key}
       onOpenDetails={() => onOpenPicker(entry.gameBananaId)}
       onViewAuthor={entry.gameBananaId ? () => onViewAuthor(entry.primary) : undefined}
+      // Imprints are per file; a group card shows the primary's imprint.
+      onViewImprint={entry.primary.imprinted ? () => onViewImprint(entry.primary) : undefined}
       onToggle={() => onToggle(entry)}
+      onSoloLaunch={() => onSoloLaunch(entry)}
+      soloBusy={soloBusy}
       onDelete={() => onDelete(entry)}
       onTagLocker={(heroName) => onTagLocker(entry, heroName)}
       onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
@@ -589,7 +686,9 @@ function clampCardSizeMultiplier(value: number): number {
 }
 
 function readInstalledCardSizeMultiplier(): number {
-  const stored = Number(localStorage.getItem(INSTALLED_CARD_SIZE_MULTIPLIER_KEY));
+  const raw = localStorage.getItem(INSTALLED_CARD_SIZE_MULTIPLIER_KEY);
+  if (raw == null || raw === '') return CARD_SIZE_MULTIPLIER_DEFAULT;
+  const stored = Number(raw);
   return Number.isFinite(stored) ? clampCardSizeMultiplier(stored) : CARD_SIZE_MULTIPLIER_DEFAULT;
 }
 
@@ -615,6 +714,10 @@ export default function Installed() {
     modsError,
     modsNotice,
     clearModsNotice,
+    soloRestore,
+    soloMod,
+    restoreSoloMods,
+    clearSoloRestore,
     loadSettings,
     loadMods,
     toggleMod,
@@ -633,9 +736,10 @@ export default function Installed() {
 
   // Source mods absorbed into a merged VPK still live on disk (disabled) so
   // unmerge can restore them, but the user shouldn't see them as separate
-  // cards: the merged mod is now the source of truth. Build the absorbed
-  // fileName set once and derive a filtered view; downstream rendering,
-  // reorder, and update checks all run off `visibleMods`.
+  // cards: the merged mod is now the source of truth. Match by identity instead
+  // of filename alone because recyclable pakNN slots can later hold unrelated
+  // enabled mods; downstream rendering, reorder, and update checks all run off
+  // `visibleMods`.
   // The Locker cosmetics VPK (applied hero cards) and the Locker sound VPK
   // (applied per-ability sounds) are Locker-managed artifacts, not user-
   // installed mods, so they never show as cards here. They're managed entirely
@@ -643,16 +747,54 @@ export default function Installed() {
   // Memoized so the array identity (and the entry identities derived from it)
   // only changes when `mods` does; the memoized card grid depends on that.
   const visibleMods = useMemo(() => {
-    const absorbedFileNames = new Set<string>();
-    for (const m of mods) {
-      if (m.merged?.sources) {
-        for (const src of m.merged.sources) absorbedFileNames.add(src.fileName);
+    const absorbedSources: MergedModSource[] = [];
+    for (const m of mods) absorbedSources.push(...(m.merged?.sources ?? []));
+
+    const matchesAbsorbedSource = (mod: Mod, source: MergedModSource): boolean => {
+      if (mod.enabled || mod.fileName !== source.fileName) return false;
+
+      const sourceSha = source.sha256AtMergeTime?.toLowerCase();
+      const modSha = mod.sha256?.toLowerCase();
+      if (sourceSha && modSha) return sourceSha === modSha;
+
+      if (typeof source.gameBananaId === 'number' && typeof mod.gameBananaId === 'number') {
+        if (source.gameBananaId !== mod.gameBananaId) return false;
+        if (
+          typeof source.gameBananaFileId === 'number' &&
+          typeof mod.gameBananaFileId === 'number'
+        ) {
+          return source.gameBananaFileId === mod.gameBananaFileId;
+        }
       }
-    }
+
+      // A disabled VPK at the exact recorded source filename is physically the
+      // absorbed source (filenames are unique within a folder), and enabled
+      // mods were already excluded above, so a recycled pakNN slot can't reach
+      // here. Fold it in unless sha or gbId positively proved a different mod;
+      // a hand-placed VPK with no recorded identity must not leave a stray card.
+      return true;
+    };
+
     return mods.filter(
-      (m) => !m.lockerCosmetics && !m.lockerSounds && !absorbedFileNames.has(m.fileName)
+      (m) =>
+        !m.lockerCosmetics &&
+        !m.lockerSounds &&
+        !absorbedSources.some((source) => matchesAbsorbedSource(m, source))
     );
   }, [mods]);
+  // Mods the bulk imprint could plausibly act on: visible (locker artifacts and
+  // absorbed sources already excluded above) that are not yet imprinted OR
+  // carry a stale embed (legacy format / sidecar drift, pending re-imprint).
+  // Merged mods count under the same uniform rule (see isImprintPending: a
+  // pre-feature merge has no embed and no flags, and IS pending work). Drives
+  // the toolbar button's hide-when-done visibility. Deliberately optimistic:
+  // files the backend would classify as loaded or anomalous still count (they
+  // need attention, so the entry point stays up); the preflight modal is the
+  // source of truth for what actually happens.
+  const pendingImprintCount = useMemo(
+    () => visibleMods.filter(isImprintPending).length,
+    [visibleMods]
+  );
   // Layout = the user's structural choice (cards grid vs horizontal list).
   const [layout, setLayout] = useState<'grid' | 'list'>(() => {
     const stored = localStorage.getItem('installedLayout');
@@ -729,12 +871,32 @@ export default function Installed() {
   }, [refreshLockerOverrideCount]);
   const [search, setSearch] = useState('');
   // Sort + filter popover (the SlidersHorizontal button in the top bar). Sort
-  // and source persist across launches; the type selection is library-specific
-  // so it resets per session. A non-default sort or any active filter turns the
+  // and source persist across launches; hero/tag selections are library-specific
+  // so they reset per session. A non-default sort or any active filter turns the
   // list into a read-only view (see viewIsReorderable) because the displayed
   // order no longer maps to load-order priority.
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  // Retroactive "Imprint installed mods" (path B). A single state machine drives
+  // the shared modal through four phases: an up-front preflight dry-run that
+  // classifies every candidate into buckets before the user commits, a live
+  // progress phase streaming done/total + current file, and a final report of
+  // what was imprinted / skipped / failed. `null` means the modal is closed.
+  const [imprintState, setImprintState] = useState<ImprintModalState>(null);
+  // "View imprint" details modal target (right-click menu on an imprinted mod's
+  // card). The modal fetches the embedded imprint itself; null means closed.
+  const [imprintDetailsMod, setImprintDetailsMod] = useState<Mod | null>(null);
+  // Guards the bulk-imprint post-await state updates (and its streamed progress
+  // callback) against a setState-after-unmount leak if the user navigates away
+  // mid-run. Set false on unmount; every post-resolve setImprintState / showToast
+  // / loadMods checks it first. UX is unchanged, just leak-proof.
+  const imprintMountedRef = useRef(true);
+  useEffect(() => {
+    imprintMountedRef.current = true;
+    return () => {
+      imprintMountedRef.current = false;
+    };
+  }, []);
   const [sortMode, setSortMode] = useState<'priority' | 'recent' | 'name'>(() => {
     const stored = localStorage.getItem('installedSortMode');
     return stored === 'recent' || stored === 'name' ? stored : 'priority';
@@ -756,7 +918,10 @@ export default function Installed() {
     return ['gamebanana', 'local'];
   });
   const [statusSel, setStatusSel] = useState<('enabled' | 'disabled')[]>(['enabled', 'disabled']);
-  const [typeFilter, setTypeFilter] = useState<string[]>([]);
+  const [heroFilter, setHeroFilter] = useState('all');
+  const [tagFilter, setTagFilter] = useState<string[]>([]);
+  const installedHideNsfwPreviews =
+    settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true;
   useEffect(() => {
     localStorage.setItem('installedSortMode', sortMode);
   }, [sortMode]);
@@ -928,6 +1093,20 @@ export default function Installed() {
     cancelled?: boolean;
   } | null>(null);
   const [unknownFixMode, setUnknownFixMode] = useState<'single' | 'bulk' | null>(null);
+  // Synchronous re-entry guard for the DMM auto-import step (one click only,
+  // even if the button is mashed before the first run resolves). A ref, not
+  // state, so two clicks in the same tick can't both read a stale `false`.
+  const dmmAutoImportInFlightRef = useRef(false);
+  const [dmmAutoImporting, setDmmAutoImporting] = useState(false);
+  const soloBusyRef = useRef(false);
+  const [soloBusy, setSoloBusy] = useState(false);
+  // Pending DMM-import consent dialog. Holds the promise resolver so
+  // autoImportDmmMods can await the user's answer; null = no dialog.
+  const [dmmConfirm, setDmmConfirm] = useState<{
+    count: number;
+    profileName: string;
+    resolve: (ok: boolean) => void;
+  } | null>(null);
   const [unknownFilterCache, setUnknownFilterCache] = useState<Record<string, UnknownModFilterGuess>>({});
   const [unknownFilterPendingIds, setUnknownFilterPendingIds] = useState<Set<string>>(new Set());
   const [unknownFilterErrors, setUnknownFilterErrors] = useState<Record<string, string>>({});
@@ -1040,6 +1219,9 @@ export default function Installed() {
   const [detailsCategoryId, setDetailsCategoryId] = useState<number>(0);
   const [detailsLoading, setDetailsLoading] = useState(false);
   const [detailsError, setDetailsError] = useState<string | null>(null);
+  // True when the overlay is showing cached-catalog data because the live
+  // GameBanana fetch failed; drives the offline banner in the modal.
+  const [detailsOffline, setDetailsOffline] = useState(false);
   const [detailsUpdateAvailable, setDetailsUpdateAvailable] = useState(false);
   const [detailsIgnoreUpdates, setDetailsIgnoreUpdates] = useState(false);
   const [detailsInstalledFileIds, setDetailsInstalledFileIds] = useState<Set<number>>(new Set());
@@ -1051,6 +1233,8 @@ export default function Installed() {
   // delete this entry first so Update/Reinstall replaces the old VPK instead
   // of installing a second copy alongside it.
   const [detailsSourceModId, setDetailsSourceModId] = useState<string | null>(null);
+  // Monotonic guard so a slower linked-item fetch can't clobber a newer one.
+  const detailsRequestIdRef = useRef(0);
 
   // Map of mod id → true if a newer version exists on GameBanana.
   const [updatesAvailable, setUpdatesAvailable] = useState<Set<string>>(new Set());
@@ -1118,6 +1302,8 @@ export default function Installed() {
     if (!m.gameBananaId) return;
     const section = m.sourceSection ?? 'Mod';
     const categoryId = m.categoryId ?? 0;
+    const requestId = detailsRequestIdRef.current + 1;
+    detailsRequestIdRef.current = requestId;
     setDetailsLoading(true);
     setDetailsMod(null);
     setDetailsError(null);
@@ -1143,31 +1329,123 @@ export default function Installed() {
     setDetailsUpdateAvailable(updatesAvailable.has(m.id));
     setDetailsIgnoreUpdates(!!m.ignoreUpdates);
     setDetailsDates(null);
+    setDetailsOffline(false);
+    const cachedPromise = window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null);
     try {
-      const [details, cached] = await Promise.all([
-        getModDetails(m.gameBananaId, section, { includeSubmitter: true }),
-        window.electronAPI.getCachedMod(m.gameBananaId).catch(() => null),
-      ]);
+      const details = await getModDetails(m.gameBananaId, section, { includeSubmitter: true });
+      const cached = await cachedPromise;
+      if (detailsRequestIdRef.current !== requestId) return;
       setDetailsMod(details);
       if (cached) {
         setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
       }
     } catch (err) {
-      setDetailsError(String(err));
+      const cached = await cachedPromise;
+      if (detailsRequestIdRef.current !== requestId) return;
+      // For transient GameBanana failures, fall back to the local catalog
+      // record plus the installed mod's own name so the overlay still opens.
+      // Permanent and unexpected errors remain visible for diagnosis.
+      const fallback = canUseCachedModDetails(err)
+        ? buildCachedModDetails(m.gameBananaId, cached, m.name)
+        : null;
+      if (fallback) {
+        setDetailsMod(fallback);
+        setDetailsOffline(true);
+        if (cached) {
+          setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
+        }
+      } else {
+        setDetailsError(String(err));
+      }
     } finally {
-      setDetailsLoading(false);
+      if (detailsRequestIdRef.current === requestId) {
+        setDetailsLoading(false);
+      }
     }
   };
 
   const closeModDetails = () => {
     setDetailsMod(null);
     setDetailsError(null);
+    setDetailsOffline(false);
     setDetailsUpdateAvailable(false);
     setDetailsIgnoreUpdates(false);
     setDetailsSourceModId(null);
     setDetailsActiveFileIds(new Set());
     setDetailsDates(null);
   };
+
+  // Open a GameBanana item linked from description/changelog/comments inside
+  // the same details modal (in-app), rather than the OS browser. Works for
+  // mods that are not installed too.
+  const openLinkedGameBananaItem = useStableCallback(async (item: GameBananaItemRef) => {
+    if (detailsMod && item.id === detailsMod.id && item.section === detailsSection) {
+      return;
+    }
+
+    const requestId = detailsRequestIdRef.current + 1;
+    detailsRequestIdRef.current = requestId;
+
+    // Keep the current modal open while loading so we don't flash-close.
+    setDetailsError(null);
+    setDetailsSection(item.section);
+    setDetailsCategoryId(0);
+
+    const siblingFileIds = new Set<number>();
+    const activeFileIds = new Set<number>();
+    let sourceModId: string | null = null;
+    let ignoreUpdates = false;
+    let updateAvailable = false;
+    for (const candidate of mods) {
+      if (candidate.gameBananaId !== item.id) continue;
+      if (!sourceModId) sourceModId = candidate.id;
+      if (candidate.ignoreUpdates) ignoreUpdates = true;
+      if (updatesAvailable.has(candidate.id)) updateAvailable = true;
+      if (typeof candidate.gameBananaFileId !== 'number') continue;
+      siblingFileIds.add(candidate.gameBananaFileId);
+      if (candidate.enabled) activeFileIds.add(candidate.gameBananaFileId);
+    }
+    setDetailsInstalledFileIds(siblingFileIds);
+    setDetailsActiveFileIds(activeFileIds);
+    setDetailsSourceModId(sourceModId);
+    setDetailsIgnoreUpdates(ignoreUpdates);
+    setDetailsUpdateAvailable(updateAvailable);
+    setDetailsDates(null);
+
+    const cachedPromise = window.electronAPI.getCachedMod(item.id).catch(() => null);
+    try {
+      const details = await getModDetails(item.id, item.section, { includeSubmitter: true });
+      const cached = await cachedPromise;
+      if (detailsRequestIdRef.current !== requestId) return;
+      setDetailsMod(details);
+      setDetailsOffline(false);
+      setDetailsSection(item.section);
+      if (cached) {
+        setDetailsDates({ dateAdded: cached.dateAdded, dateModified: cached.dateModified });
+      }
+    } catch (err) {
+      const cached = await cachedPromise;
+      if (detailsRequestIdRef.current !== requestId) return;
+      // Linked items may not be installed, so the only offline fallback is the
+      // catalog cache; without a row there we still have to show the error.
+      const fallback = canUseCachedModDetails(err)
+        ? buildCachedModDetails(item.id, cached)
+        : null;
+      if (fallback) {
+        setDetailsMod(fallback);
+        setDetailsOffline(true);
+        setDetailsSection(item.section);
+        setDetailsDates({ dateAdded: cached!.dateAdded, dateModified: cached!.dateModified });
+      } else {
+        // The previous item remains mounted while a linked item loads. Clear it
+        // before setting the error so the error dialog is not suppressed by its
+        // `!detailsMod` guard.
+        setDetailsMod(null);
+        setDetailsOffline(false);
+        setDetailsError(String(err));
+      }
+    }
+  });
 
   const getUnknownCache = (mod: Mod) => unknownFilterCache[unknownModCacheKey(mod)];
 
@@ -1260,10 +1538,14 @@ export default function Installed() {
   const openUnknownModFix = (mod: Mod, mode: 'single' | 'bulk' = 'single') => {
     setUnknownFixMode(mode);
     setUnknownFilterGuess({ mod, loading: unknownFilterPendingIds.has(mod.id) });
-    // The modal opens to the manual search + view-files path. The CRC
-    // auto-matcher is no longer kicked automatically: it fans out a heavy
-    // burst of GameBanana requests that can hit rate limits, so it now waits
-    // for an explicit "Auto-detect" click inside the modal.
+    // The modal opens to the manual search + view-files path. The heavy CRC
+    // NETWORK auto-matcher still waits for an explicit "Auto-detect" click (it
+    // fans out GameBanana requests that can hit rate limits). But the OFFLINE
+    // pass runs on open: the mod's own imprint (embedded Grimoire metadata,
+    // always on and ungated) plus the local CRC cache. It issues no network
+    // requests, so a self-identifying VPK surfaces its imprint card the moment
+    // the modal opens, even with the experimental network matcher off.
+    void runUnknownCacheQueue([mod]);
   };
 
   const applyUnknownMatch = async (mod: Mod, match: FoundUnknownMatch) => {
@@ -1369,8 +1651,91 @@ export default function Installed() {
     );
   };
 
-  const openBulkUnknownFix = (unknowns: Mod[]) => {
-    const first = unknowns[0];
+  // Adopt any Deadlock Mod Manager install as the first step of the unknown-fix
+  // flow. DMM detection is purely local (reads DMM's on-disk data, no
+  // GameBanana, no rate limit), so it runs regardless of the auto-match toggle.
+  // Importing tags the matching unknown VPKs with GameBanana metadata, so they
+  // drop out of the unknown set before the manual modal opens. Returns the
+  // unknown mods that remain afterward (the input list unchanged when there's
+  // no DMM install or nothing new to adopt).
+  const autoImportDmmMods = async (currentUnknowns: Mod[]): Promise<Mod[]> => {
+    if (currentUnknowns.length === 0) return currentUnknowns;
+
+    // Probe for a DMM install. Scan throws when there's no DMM data on this
+    // machine (the common case): handled silently so the manual flow proceeds.
+    let scan;
+    try {
+      scan = await dmmMigrateScan({});
+    } catch {
+      return currentUnknowns;
+    }
+
+    // Only act on DMM mods Grimoire isn't already managing. Without this gate a
+    // user with DMM installed would see "detected, importing" on every Fix
+    // Unknown click, even after everything had already been adopted.
+    const managedGbIds = new Set(
+      useAppStore
+        .getState()
+        .mods.map((m) => m.gameBananaId)
+        .filter((id): id is number => !!id)
+    );
+    const freshEntries = scan.preview.filter((p) => !managedGbIds.has(p.submissionId));
+    if (freshEntries.length === 0) return currentUnknowns;
+
+    // Consent gate: importing writes mod identities in batch, so it never
+    // runs on a toast alone. The dialog says what was found; declining goes
+    // straight to manual identification.
+    const consent = await new Promise<boolean>((resolve) =>
+      setDmmConfirm({ count: freshEntries.length, profileName: scan.profileName, resolve })
+    );
+    if (!consent) return currentUnknowns;
+
+    showToast(t('installed.unknown.dmmDetected'), { tone: 'info', duration: 4000 });
+
+    let report;
+    try {
+      report = await dmmMigrateExecute({});
+    } catch (err) {
+      showToast(
+        t('installed.unknown.dmmImportFailed') + ': ' + (err instanceof Error ? err.message : String(err)),
+        { tone: 'error', duration: 8000, dismissable: true }
+      );
+      return currentUnknowns;
+    }
+
+    await loadMods();
+    const remaining = useAppStore
+      .getState()
+      .mods.filter((m) => m.isUnknown)
+      .sort((a, b) => a.priority - b.priority);
+
+    if (report.adopted.length > 0) {
+      showToast(t('installed.unknown.dmmImported', { count: report.adopted.length }), {
+        tone: 'success',
+        duration: 5000,
+      });
+    }
+    return remaining;
+  };
+
+  const openBulkUnknownFix = async (unknowns: Mod[]) => {
+    // Ignore re-entrant clicks while a DMM auto-import is mid-flight: the import
+    // mutates files + reloads mods, so a second concurrent run would race the
+    // first (main-process serialization keeps it safe, but it's wasted work and
+    // a double toast). The button also shows a loading state via dmmAutoImporting.
+    if (dmmAutoImportInFlightRef.current) return;
+    dmmAutoImportInFlightRef.current = true;
+    setDmmAutoImporting(true);
+    let remaining: Mod[];
+    try {
+      // First adopt any Deadlock Mod Manager mods automatically, then open the
+      // manual modal on whatever unknowns are left.
+      remaining = await autoImportDmmMods(unknowns);
+    } finally {
+      dmmAutoImportInFlightRef.current = false;
+      setDmmAutoImporting(false);
+    }
+    const first = remaining[0];
     if (!first) return;
     openUnknownModFix(first, 'bulk');
     // The heavy auto-detect sweep is no longer kicked on open. The bulk modal
@@ -1585,7 +1950,19 @@ export default function Installed() {
         !detailsInstalledFileIds.has(fileId) &&
         !pickedIsArchived;
       const replacing = isReinstall || isUpdate;
-      const restoreEnabled = replacing && !!sourceMod?.enabled;
+      let replacementTargets: typeof mods = [];
+      if (replacing && sourceMod) {
+        replacementTargets = mods.filter(
+          (mod) =>
+            mod.gameBananaId === sourceMod.gameBananaId &&
+            mod.gameBananaFileId === sourceMod.gameBananaFileId,
+        );
+      } else if (detailsInstalledFileIds.has(fileId)) {
+        replacementTargets = mods.filter(
+          (mod) => mod.gameBananaId === detailsMod.id && mod.gameBananaFileId === fileId,
+        );
+      }
+      const restoreEnabled = createEnabledVpkRestoreSnapshot(replacementTargets);
 
       if (replacing && sourceMod) {
         // Snapshot before the destructive delete so the user can roll back,
@@ -1596,22 +1973,23 @@ export default function Installed() {
         } catch (err) {
           console.warn('[Update] failed to capture pre-update snapshot:', err);
         }
-        await deleteMod(sourceMod.id);
+      }
+      for (const mod of replacementTargets) {
+        await deleteMod(mod.id);
       }
 
       await downloadMod(detailsMod.id, fileId, fileName, detailsSection, detailsCategoryId);
 
-      // Deleting the source removes the only enabled sibling, so the backend's
-      // auto-disable promotion never fires and the freshly downloaded file stays
-      // in /disabled. Re-enable it so an update/reinstall preserves the source's
-      // enabled state instead of silently turning the mod off. (Match by GB ids;
-      // the local mod id changes on reinstall.)
-      if (restoreEnabled) {
+      // Replacement downloads land disabled, so restore the enabled state after
+      // reloading. Match by GB ids because local ids change on reinstall.
+      if (restoreEnabled.hadEnabled) {
         await loadMods();
-        const newMod = useAppStore
+        const newMods = useAppStore
           .getState()
-          .mods.find((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
-        if (newMod && !newMod.enabled) {
+          .mods.filter((m) => m.gameBananaId === detailsMod.id && m.gameBananaFileId === fileId);
+        for (const newMod of newMods) {
+          if (!shouldRestoreVpkEnabled(newMod, newMods, restoreEnabled)) continue;
+          if (newMod.enabled) continue;
           try {
             await toggleMod(newMod.id);
           } catch (err) {
@@ -1645,6 +2023,7 @@ export default function Installed() {
         gameBananaId: m.gameBananaId!,
         gameBananaFileId: m.gameBananaFileId!,
         fileName: m.fileName,
+        vpkIndex: m.vpkIndex,
         section: m.sourceSection ?? 'Mod',
         categoryId: m.categoryId ?? 0,
         wasEnabled: m.enabled,
@@ -1671,7 +2050,12 @@ export default function Installed() {
     const needsPick: { id: string; name: string }[] = [];
     // Track the (gameBananaId, fileId) actually downloaded so re-enable can
     // still find the new install even when we redirected a stale snapshot.
-    const completed: { gameBananaId: number; gameBananaFileId: number; wasEnabled: boolean; fileName: string }[] = [];
+    const completed: {
+      gameBananaId: number;
+      gameBananaFileId: number;
+      restoreEnabled: EnabledVpkRestoreSnapshot;
+      fileName: string;
+    }[] = [];
     let progress = 0;
     // Guard so a multi-group update writes exactly one recovery snapshot, not
     // one per group.
@@ -1715,6 +2099,7 @@ export default function Installed() {
         | { ok: true; snapshot: (typeof snapshots)[number]; fileId: number; fileName: string }
         | { ok: false; snapshot: (typeof snapshots)[number]; reason: string };
       const resolutions: Resolution[] = [];
+      const resolvedByOldFileId = new Map<number, { fileId: number; fileName: string }>();
       // Seed claims with live files already installed as siblings outside this
       // run, so neither the fuzzy match nor the single-file fallback
       // re-downloads a variant the user already has.
@@ -1734,6 +2119,16 @@ export default function Installed() {
       }
       for (const s of group) {
         if (liveFileIds.has(s.gameBananaFileId)) continue;
+        const existingResolution = resolvedByOldFileId.get(s.gameBananaFileId);
+        if (existingResolution) {
+          resolutions.push({
+            ok: true,
+            snapshot: s,
+            fileId: existingResolution.fileId,
+            fileName: existingResolution.fileName,
+          });
+          continue;
+        }
         const match = resolveUpdateTarget(
           {
             installedFileId: s.gameBananaFileId,
@@ -1745,9 +2140,11 @@ export default function Installed() {
         );
         if (match) {
           resolutions.push({ ok: true, snapshot: s, fileId: match.id, fileName: match.fileName });
+          resolvedByOldFileId.set(s.gameBananaFileId, { fileId: match.id, fileName: match.fileName });
           claimedIds.add(match.id);
         } else if (liveFiles.length === 1 && !claimedIds.has(liveFiles[0].id)) {
           resolutions.push({ ok: true, snapshot: s, fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
+          resolvedByOldFileId.set(s.gameBananaFileId, { fileId: liveFiles[0].id, fileName: liveFiles[0].fileName });
           claimedIds.add(liveFiles[0].id);
         } else {
           resolutions.push({
@@ -1772,32 +2169,73 @@ export default function Installed() {
         }
       }
 
+      const okBatches = new Map<
+        string,
+        {
+          gameBananaId: number;
+          fileId: number;
+          fileName: string;
+          section: string;
+          categoryId: number;
+          snapshots: Array<(typeof snapshots)[number]>;
+        }
+      >();
+
       for (const r of resolutions) {
         if (!r.ok) {
           needsPick.push({ id: r.snapshot.oldId, name: r.snapshot.modName });
           console.warn(`[Update] ${r.snapshot.fileName}: ${r.reason}`);
         } else {
-          try {
-            await deleteMod(r.snapshot.oldId);
-            await downloadMod(
-              r.snapshot.gameBananaId,
-              r.fileId,
-              r.fileName,
-              r.snapshot.section,
-              r.snapshot.categoryId,
-            );
-            completed.push({
+          const batchKey = `${r.snapshot.gameBananaId}:${r.fileId}`;
+          const batch =
+            okBatches.get(batchKey) ??
+            {
               gameBananaId: r.snapshot.gameBananaId,
-              gameBananaFileId: r.fileId,
-              wasEnabled: r.snapshot.wasEnabled,
+              fileId: r.fileId,
               fileName: r.fileName,
-            });
-          } catch (err) {
-            failures.push(`${r.snapshot.fileName}: ${String(err)}`);
-          }
+              section: r.snapshot.section,
+              categoryId: r.snapshot.categoryId,
+              snapshots: [],
+            };
+          batch.snapshots.push(r.snapshot);
+          okBatches.set(batchKey, batch);
+          continue;
         }
         progress += 1;
         setUpdateAllProgress({ done: progress, total: snapshots.length });
+      }
+
+      for (const batch of okBatches.values()) {
+        try {
+          for (const snapshot of batch.snapshots) {
+            await deleteMod(snapshot.oldId);
+          }
+          await downloadMod(
+            batch.gameBananaId,
+            batch.fileId,
+            batch.fileName,
+            batch.section,
+            batch.categoryId,
+          );
+          completed.push({
+            gameBananaId: batch.gameBananaId,
+            gameBananaFileId: batch.fileId,
+            restoreEnabled: createEnabledVpkRestoreSnapshot(
+              batch.snapshots.map((snapshot) => ({
+                enabled: snapshot.wasEnabled,
+                vpkIndex: snapshot.vpkIndex,
+              })),
+            ),
+            fileName: batch.fileName,
+          });
+        } catch (err) {
+          for (const snapshot of batch.snapshots) {
+            failures.push(`${snapshot.fileName}: ${String(err)}`);
+          }
+        } finally {
+          progress += batch.snapshots.length;
+          setUpdateAllProgress({ done: progress, total: snapshots.length });
+        }
       }
     }
 
@@ -1817,11 +2255,13 @@ export default function Installed() {
     await loadMods();
     const refreshed = useAppStore.getState().mods;
     for (const c of completed) {
-      if (!c.wasEnabled) continue;
-      const newMod = refreshed.find(
+      if (!c.restoreEnabled.hadEnabled) continue;
+      const newMods = refreshed.filter(
         (m) => m.gameBananaId === c.gameBananaId && m.gameBananaFileId === c.gameBananaFileId,
       );
-      if (newMod && !newMod.enabled) {
+      for (const newMod of newMods) {
+        if (!shouldRestoreVpkEnabled(newMod, newMods, c.restoreEnabled)) continue;
+        if (newMod.enabled) continue;
         try {
           await toggleMod(newMod.id);
         } catch (err) {
@@ -1959,8 +2399,9 @@ export default function Installed() {
     }
     setBulkProgress({ verb: 'Disabling', done: 0, total: targets.length });
     for (let i = 0; i < targets.length; i++) {
-      await toggleMod(targets[i].id);
+      const ok = await toggleMod(targets[i].id);
       setBulkProgress({ verb: 'Disabling', done: i + 1, total: targets.length });
+      if (!ok) break;
     }
     setBulkProgress(null);
     exitSelectMode();
@@ -2049,6 +2490,57 @@ export default function Installed() {
     }
   };
 
+  // Open the imprint modal and run the no-network preflight dry-run. Classifies
+  // every installed candidate into buckets (eligible / already imprinted /
+  // loaded / auto-managed / anomalous) before the user commits, so the confirm
+  // step shows exactly what a bulk run would do. A preflight failure closes the
+  // modal and surfaces a toast rather than stranding an empty dialog.
+  const openImprintModal = useCallback(async () => {
+    setImprintState({ phase: 'preflight' });
+    try {
+      const preflight = await imprintPreflight();
+      setImprintState({ phase: 'review', preflight });
+    } catch (err) {
+      setImprintState(null);
+      showToast(
+        t('installed.imprintAll.error', { error: err instanceof Error ? err.message : String(err) }),
+        { tone: 'error' }
+      );
+    }
+  }, [t]);
+
+  // Commit the bulk imprint: embed a self-identifying addoninfo.txt into every
+  // eligible installed VPK the running game hasn't loaded. Streams progress into
+  // the modal, then shows the imprinted / skipped / failed report and refreshes
+  // the list so freshly-imprinted sizes update. A run-level failure closes the
+  // modal and surfaces a toast. The progress subscription is always torn down.
+  const handleImprintAllInstalled = useCallback(async () => {
+    setImprintState({ phase: 'running', progress: null });
+    const unsubscribe = onImprintAllInstalledProgress((progress) => {
+      if (!imprintMountedRef.current) return;
+      setImprintState({ phase: 'running', progress });
+    });
+    try {
+      const result = await imprintAllInstalled();
+      if (!imprintMountedRef.current) return;
+      setImprintState({ phase: 'done', result });
+      showToast(t('installed.imprintAll.imprintedSummary', { count: result.imprinted }), {
+        tone: 'success',
+        duration: 2200,
+      });
+      await loadMods({ silent: true });
+    } catch (err) {
+      if (!imprintMountedRef.current) return;
+      setImprintState(null);
+      showToast(
+        t('installed.imprintAll.error', { error: err instanceof Error ? err.message : String(err) }),
+        { tone: 'error' }
+      );
+    } finally {
+      unsubscribe();
+    }
+  }, [loadMods, t]);
+
   const openBulkDeleteConfirm = () => {
     if (selectedMods.length === 0) return;
     setModToDelete({
@@ -2119,7 +2611,12 @@ export default function Installed() {
       showToast(t('installed.merge.shareCodeCopiedToast'), { tone: 'success', duration: 2200 });
     } catch (err) {
       console.error('[Installed] clipboard write failed:', err);
-      showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' });
+      showToast(
+        t('installed.actions.copyFailed', {
+          error: err instanceof Error ? err.message : String(err),
+        }),
+        { tone: 'error' },
+      );
     }
   };
 
@@ -2161,16 +2658,15 @@ export default function Installed() {
     await toggleMod(target.id);
   };
 
-  const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean) => {
-    for (const v of group.variants) {
-      if (v.enabled !== enabled) {
-        await toggleMod(v.id);
+  const setGroupEnabled = async (group: Extract<ModEntry, { kind: 'group' }>, enabled: boolean): Promise<boolean> => {
+    const targets = group.variants.filter((v) => v.enabled !== enabled);
+    for (const v of targets) {
+      const ok = await toggleMod(v.id);
+      if (!ok) {
+        return false;
       }
     }
-  };
-
-  const disableEntireGroup = async (group: Extract<ModEntry, { kind: 'group' }>) => {
-    await setGroupEnabled(group, false);
+    return true;
   };
 
   /** Top-level toggle on a grouped card. If anything is enabled, disable the
@@ -2430,6 +2926,21 @@ export default function Installed() {
     [allEntries]
   );
 
+  // Per-entry hero/tag metadata, keyed by entry.key. entryHeroNames/entryTagKeys
+  // do real work per mod (canonicalHeroName, tag-label regex splits,
+  // inferHeroFromTitle for sounds), and the option-bucket + filter passes below
+  // hit them for every entry on every render - including drag-start renders that
+  // only flip draggingKey. Caching them here (rebuilt only when allEntries
+  // changes) keeps those passes to cheap Map lookups, so a drag pickup paints the
+  // overlay without rescanning the whole library. Mirrors entryConflicts.
+  const entryFacetMeta = useMemo(() => {
+    const byKey = new Map<string, { heroNames: string[]; tagKeys: string[] }>();
+    for (const entry of allEntries) {
+      byKey.set(entry.key, { heroNames: entryHeroNames(entry), tagKeys: entryTagKeys(entry) });
+    }
+    return byKey;
+  }, [allEntries]);
+
   // Conflict arrays per entry key, with identities that persist across
   // renders (plus the module-level EMPTY_CONFLICTS fallback) so memoized
   // cards only re-render when their own conflicts change.
@@ -2507,6 +3018,57 @@ export default function Installed() {
     if (entry.kind === 'group') void handleGroupToggle(entry);
     else void toggleMod(entry.mod.id);
   });
+  // "Start with only this mod enabled": solo the entry (disable everything else)
+  // then launch. For a group we keep its already-enabled variants, or enable
+  // every variant when the whole group is currently off. The prior enabled set
+  // is snapshotted by soloMod for the restore banner.
+  const soloLaunchEntry = useStableCallback(async (entry: ModEntry) => {
+    if (soloBusyRef.current) return;
+    soloBusyRef.current = true;
+    setSoloBusy(true);
+    try {
+      const targetMods =
+        entry.kind === 'group'
+          ? (entry.enabledVariants.length > 0 ? entry.enabledVariants : entry.variants)
+          : [entry.mod];
+      const targetKeys = targetMods.map(modRestoreKey);
+      const label = entry.kind === 'group' ? entry.primary.name : entry.mod.name;
+      const { applied, failures, reason } = await soloMod(targetKeys, label);
+      if (!applied) {
+        if (reason === 'missing') {
+          showToast(t('installed.solo.targetMissing'), { tone: 'error' });
+        } else if (reason === 'gameRunning') {
+          showToast(t('common.gameRunningWarning'), { tone: 'warning' });
+        }
+        return;
+      }
+      if (failures > 0) {
+        showToast(t('installed.solo.partial', { count: failures }), { tone: 'warning' });
+      }
+      try {
+        await launchModded();
+      } catch (err) {
+        showToast(String(err).replace(/^Error:\s*/, ''), { tone: 'error' });
+      }
+    } finally {
+      soloBusyRef.current = false;
+      setSoloBusy(false);
+    }
+  });
+  const restoreSolo = useStableCallback(async () => {
+    if (soloBusyRef.current) return;
+    soloBusyRef.current = true;
+    setSoloBusy(true);
+    try {
+      const { failures } = await restoreSoloMods();
+      if (failures > 0) {
+        showToast(t('installed.solo.restorePartial', { count: failures }), { tone: 'warning' });
+      }
+    } finally {
+      soloBusyRef.current = false;
+      setSoloBusy(false);
+    }
+  });
   const deleteEntry = useStableCallback((entry: ModEntry) => {
     if (entry.kind === 'group') {
       setModToDelete({
@@ -2519,6 +3081,7 @@ export default function Installed() {
     }
   });
   const editLocalEntry = useStableCallback((mod: Mod) => setLocalEditMod(mod));
+  const viewEntryImprint = useStableCallback((mod: Mod) => setImprintDetailsMod(mod));
   // Inline title rename (double-click). Reuses edit-local-mod but carries the
   // current thumbnail/NSFW flag through so renaming the name alone never wipes
   // them (the handler overwrites the full local-mod metadata triplet).
@@ -2616,19 +3179,33 @@ export default function Installed() {
         progress: unknownDetectionProgress[unknownFilterGuess.mod.id],
       }
     : null;
-  // Mod-type buckets present across every installed entry, with counts. Built
-  // from allEntries (not the filtered view) so the option list stays stable as
-  // selections change.
-  const typeOptionMap = new Map<string, number>();
+  // Cached per-entry hero/tag lookups (see entryFacetMeta); fall back to a live
+  // compute if an entry somehow isn't in the cache.
+  const heroNamesOf = (entry: ModEntry): string[] =>
+    entryFacetMeta.get(entry.key)?.heroNames ?? entryHeroNames(entry);
+  const tagKeysOf = (entry: ModEntry): string[] =>
+    entryFacetMeta.get(entry.key)?.tagKeys ?? entryTagKeys(entry);
+
+  // Hero and tag buckets are built from allEntries (not the filtered view) so
+  // the option lists stay stable as selections change.
+  const heroOptionMap = new Map<string, number>();
+  const tagOptionMap = new Map<string, number>();
   for (const entry of allEntries) {
-    const key = entryTypeKey(entry);
-    typeOptionMap.set(key, (typeOptionMap.get(key) ?? 0) + 1);
+    for (const heroName of heroNamesOf(entry)) {
+      heroOptionMap.set(heroName, (heroOptionMap.get(heroName) ?? 0) + 1);
+    }
+    for (const key of tagKeysOf(entry)) {
+      tagOptionMap.set(key, (tagOptionMap.get(key) ?? 0) + 1);
+    }
   }
-  const typeOptions = Array.from(typeOptionMap.entries())
-    .map(([key, count]) => ({ key, label: typeKeyLabel(key), count }))
+  const heroOptions = HERO_NAMES_SORTED
+    .filter((name) => heroOptionMap.has(name))
+    .map((name) => ({ name, count: heroOptionMap.get(name) ?? 0 }));
+  const tagOptions = Array.from(tagOptionMap.entries())
+    .map(([key, count]) => ({ key, label: tagKeyLabel(key), count }))
     .sort((a, b) => {
-      if (a.key === OTHER_TYPE_KEY) return 1;
-      if (b.key === OTHER_TYPE_KEY) return -1;
+      if (a.key === OTHER_TAG_KEY) return 1;
+      if (b.key === OTHER_TAG_KEY) return -1;
       return a.label.localeCompare(b.label);
     });
   const localCount = allEntries.filter(entryIsLocal).length;
@@ -2647,21 +3224,44 @@ export default function Installed() {
   const enabledModCount = enabledByLoadOrder.length;
   const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
 
+  const handleCopyEnabledMods = async () => {
+    // Use the same enabled list the UI shows (visibleMods / load order), not the
+    // raw store: that includes Locker-managed VPKs the Installed grid hides.
+    const names = enabledByLoadOrder.map((m) => m.name);
+    if (names.length === 0) return;
+    try {
+      await navigator.clipboard.writeText(names.join('\n'));
+      showToast(t('installed.actions.copyEnabledToast', { count: names.length }), {
+        tone: 'success',
+        duration: 2200,
+      });
+    } catch (err) {
+      showToast(
+        t('installed.actions.copyFailed', {
+          error: err instanceof Error ? err.message : String(err),
+        }),
+        { tone: 'error' },
+      );
+    }
+  };
+
   // Filter by search query (substring on name), source (GameBanana vs local
-  // import), and mod type, then optionally re-sort. Status (enabled/disabled) is
-  // applied per-section below. Drag-and-drop reorder is disabled whenever any of
-  // these is active (see viewIsReorderable) because the displayed order no longer
-  // maps to load-order priority; the canonical priority order lives on
+  // import), hero, and tags, then optionally re-sort. Status (enabled/disabled)
+  // is applied per-section below. Drag-and-drop reorder is disabled whenever any
+  // of these is active (see viewIsReorderable) because the displayed order no
+  // longer maps to load-order priority; the canonical priority order lives on
   // enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
   const matchesSearchEntry = (entry: ModEntry) =>
-    !searchNeedle || entryName(entry).toLowerCase().includes(searchNeedle);
+    !searchNeedle || entrySearchText(entry).toLowerCase().includes(searchNeedle);
   const matchesSourceEntry = (entry: ModEntry) =>
     entryIsLocal(entry) ? sourceSel.includes('local') : sourceSel.includes('gamebanana');
-  const matchesTypeEntry = (entry: ModEntry) =>
-    typeFilter.length === 0 || typeFilter.includes(entryTypeKey(entry));
+  const matchesHeroEntry = (entry: ModEntry) =>
+    heroFilter === 'all' || heroNamesOf(entry).includes(heroFilter);
+  const matchesTagEntry = (entry: ModEntry) =>
+    tagFilter.length === 0 || tagKeysOf(entry).some((key) => tagFilter.includes(key));
   const matchesAllFilters = (entry: ModEntry) =>
-    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesTypeEntry(entry);
+    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesHeroEntry(entry) && matchesTagEntry(entry);
   const sortEntries = (entries: ModEntry[]): ModEntry[] => {
     if (sortMode === 'name') {
       return [...entries].sort((a, b) =>
@@ -2676,11 +3276,12 @@ export default function Installed() {
   // Both toggles on (length 2) = no filtering on that axis.
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
-  const filtersActive = sourceActive || statusActive || typeFilter.length > 0;
+  const heroActive = heroFilter !== 'all';
+  const filtersActive = sourceActive || statusActive || heroActive || tagFilter.length > 0;
   const sortActive = sortMode !== 'priority';
   const viewIsReorderable = !searchNeedle && !filtersActive && !sortActive;
   const activeAdjustmentCount =
-    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + typeFilter.length + (sortActive ? 1 : 0);
+    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + (heroActive ? 1 : 0) + tagFilter.length + (sortActive ? 1 : 0);
   const visibleEnabled = statusSel.includes('enabled')
     ? sortEntries(enabledEntries.filter(matchesAllFilters))
     : [];
@@ -2891,7 +3492,7 @@ export default function Installed() {
   const cardPropsFor = (entry: ModEntry): InstalledEntryCardProps => ({
     entry,
     viewMode,
-    hideNsfwPreviews: settings?.hideNsfwPreviews ?? true,
+    hideNsfwPreviews: installedHideNsfwPreviews,
     soundVolume,
     conflicts: entryConflicts.get(entry.key) ?? EMPTY_CONFLICTS,
     updateAvailable:
@@ -2903,13 +3504,16 @@ export default function Installed() {
     loadCount: enabledModCount,
     selectMode,
     selected: isEntrySelected(entry),
+    soloBusy,
     onOpenDetails: openEntryDetails,
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
     onToggle: toggleEntry,
+    onSoloLaunch: soloLaunchEntry,
     onDelete: deleteEntry,
     onEditLocal: editLocalEntry,
     onRenameLocal: renameLocalMod,
+    onViewImprint: viewEntryImprint,
     onTagLocker: tagEntryLocker,
     onTagGlobal: tagEntryGlobal,
     onFixUnknown: fixUnknownEntry,
@@ -3059,6 +3663,8 @@ export default function Installed() {
               setFixUnknownHidden(true);
             }}
             icon={HelpCircle}
+            isLoading={dmmAutoImporting}
+            disabled={dmmAutoImporting}
             title={t('installed.unknown.fixButtonHint')}
           >
             {t('installed.unknown.fixButton', { count: unknownMods.length })}
@@ -3066,21 +3672,33 @@ export default function Installed() {
         ))}
     </div>
   ) : null;
-  const topStatusActions = hasStatusButtons || viewIsReorderable ? (
-    <div className="flex flex-wrap items-center gap-2">
-      {statusButtons}
-      {viewIsReorderable && (
-        <Button
-          variant="secondary"
-          onClick={fixOrder}
-          icon={Wrench}
-          className="!px-2.5"
-          aria-label={t('installed.actions.fixOrder')}
-          title={t('installed.actions.fixOrderHint')}
-        />
-      )}
-    </div>
-  ) : null;
+  const topStatusActions =
+    hasStatusButtons || viewIsReorderable || enabledModCount > 0 ? (
+      <div className="flex flex-wrap items-center gap-2">
+        {statusButtons}
+        {/* After Fix Unknown (last status button): copy enabled names in load order. */}
+        {enabledModCount > 0 && (
+          <Button
+            variant="secondary"
+            onClick={handleCopyEnabledMods}
+            icon={ClipboardList}
+            className="!px-2.5"
+            aria-label={t('installed.actions.copyEnabled')}
+            title={t('installed.actions.copyEnabledHint')}
+          />
+        )}
+        {viewIsReorderable && (
+          <Button
+            variant="secondary"
+            onClick={fixOrder}
+            icon={Wrench}
+            className="!px-2.5"
+            aria-label={t('installed.actions.fixOrder')}
+            title={t('installed.actions.fixOrderHint')}
+          />
+        )}
+      </div>
+    ) : null;
 
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
@@ -3112,10 +3730,32 @@ export default function Installed() {
           <div className="ml-auto flex flex-wrap items-center justify-end gap-2">
             {/* Contextual status + reorder actions ride the same row as the
                 view controls (wrapping together when cramped) instead of
-                claiming a second strip below the search. */}
+                claiming a second strip below the search. Copy-enabled sits
+                inside topStatusActions, immediately after Fix Unknown. */}
             {topStatusActions}
+            {/* Retroactive bulk imprint launcher (experimental, opt-in). Compact
+                secondary button so it rides the same cluster as the filter
+                control without claiming its own strip. Opens the preflight
+                modal. */}
+            {/* Hide-when-done: the button only exists while something could
+                still be imprinted. After a successful bulk run loadMods()
+                refreshes the list, the count reaches zero, and the button
+                unmounts; the result modal stays up (it renders on
+                imprintState, not on this condition). */}
+            {settings?.experimentalVpkImprinting && pendingImprintCount > 0 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                icon={Fingerprint}
+                onClick={() => { void openImprintModal(); }}
+                aria-label={t('installed.actions.imprintInstalledMods')}
+                title={t('installed.actions.imprintInstalledModsHint')}
+              >
+                {t('installed.actions.imprintInstalledMods')}
+              </Button>
+            )}
             {/* Sort + filter: load order / recent / name, GameBanana vs local
-                import, and mod-type buckets. The badge counts active
+                import, hero, and metadata tags. The badge counts active
                 adjustments; while any are on, the list is read-only (no drag
                 reorder) so it can't be mistaken for load order. order-last keeps
                 it grouped with card size and layout controls at the row end. */}
@@ -3228,16 +3868,49 @@ export default function Installed() {
                     </div>
                   </div>
 
-                  {typeOptions.length > 1 && (
+                  {heroOptions.length > 0 && (
                     <div className="mt-3 border-t border-border pt-3">
                       <div className="mb-1.5 flex items-center justify-between">
                         <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                          {t('installed.filters.modType')}
+                          {t('installed.filters.hero')}
                         </span>
-                        {typeFilter.length > 0 && (
+                        {heroFilter !== 'all' && (
                           <button
                             type="button"
-                            onClick={() => setTypeFilter([])}
+                            onClick={() => setHeroFilter('all')}
+                            className="text-[11px] text-accent hover:underline cursor-pointer"
+                          >
+                            {t('common.actions.clear')}
+                          </button>
+                        )}
+                      </div>
+                      <HeroSelect
+                        ariaLabel="Filter by hero"
+                        value={heroFilter}
+                        onChange={setHeroFilter}
+                        size="sm"
+                        options={[
+                          { value: 'all', label: t('browse.filters.allHeroes'), muted: true },
+                          ...heroOptions.map((hero) => ({
+                            value: hero.name,
+                            label: `${hero.name} (${hero.count})`,
+                            heroName: hero.name,
+                          })),
+                        ]}
+                      />
+                    </div>
+                  )}
+
+                  {tagOptions.length > 1 && (
+                    <div className="mt-3 border-t border-border pt-3">
+                      <div className="mb-1.5 flex items-center justify-between">
+                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
+                          {t('installed.filters.tags')}
+                        </span>
+                        {tagFilter.length > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => setTagFilter([])}
                             className="text-[11px] text-accent hover:underline cursor-pointer"
                           >
                             {t('common.actions.clear')}
@@ -3245,15 +3918,14 @@ export default function Installed() {
                         )}
                       </div>
                       <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                        {typeOptions.map((opt) => {
-                          const checked = typeFilter.includes(opt.key);
-                          const hero = heroNameForLabel(opt.label);
+                        {tagOptions.map((opt) => {
+                          const checked = tagFilter.includes(opt.key);
                           return (
                             <button
                               key={opt.key}
                               type="button"
                               onClick={() =>
-                                setTypeFilter((prev) =>
+                                setTagFilter((prev) =>
                                   checked ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
                                 )
                               }
@@ -3266,15 +3938,6 @@ export default function Installed() {
                               >
                                 {checked && <Check className="h-3 w-3" />}
                               </span>
-                              {hero && (
-                                <img
-                                  src={getHeroChipIconPath(hero)}
-                                  alt=""
-                                  aria-hidden="true"
-                                  className="h-4 w-4 flex-shrink-0 rounded-full object-cover"
-                                  loading="lazy"
-                                />
-                              )}
                               <span className="flex-1 truncate">{opt.label}</span>
                               <span className="text-[11px] opacity-60">{opt.count}</span>
                             </button>
@@ -3291,7 +3954,8 @@ export default function Installed() {
                         setSortMode('priority');
                         setSourceSel(['gamebanana', 'local']);
                         setStatusSel(['enabled', 'disabled']);
-                        setTypeFilter([]);
+                        setHeroFilter('all');
+                        setTagFilter([]);
                       }}
                       className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
                     >
@@ -3413,6 +4077,28 @@ export default function Installed() {
         </div>
       </div>
 
+      {soloRestore && (
+        <div className="mb-4 flex items-center gap-3 rounded-lg border border-accent/30 bg-accent/10 px-4 py-2.5">
+          <Beaker className="h-4 w-4 flex-shrink-0 text-accent" />
+          <span className="flex-1 text-sm text-text-primary">
+            {t('installed.solo.banner', { name: soloRestore.label })}
+          </span>
+          <Button variant="secondary" size="sm" disabled={soloBusy} onClick={() => void restoreSolo()}>
+            {t('installed.solo.restore')}
+          </Button>
+          <button
+            type="button"
+            disabled={soloBusy}
+            onClick={() => clearSoloRestore()}
+            title={t('common.actions.dismiss')}
+            aria-label={t('common.actions.dismiss')}
+            className="rounded-md p-1 text-text-secondary hover:bg-white/5 hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       {lockerOverridesOpen && (
         <LockerOverridesModal
           onClose={() => setLockerOverridesOpen(false)}
@@ -3431,24 +4117,27 @@ export default function Installed() {
               ? t('installed.empty.noSearchMatch', { query: search })
               : t('installed.empty.noFilterMatch')}
           </p>
-          <button
+          <Button
+            variant="primary"
+            size="sm"
+            className="mt-1"
             onClick={() => {
               setSearch('');
               setSourceSel(['gamebanana', 'local']);
               setStatusSel(['enabled', 'disabled']);
-              setTypeFilter([]);
+              setHeroFilter('all');
+              setTagFilter([]);
             }}
-            className="mt-1 px-3 py-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer text-sm"
           >
             {searchNeedle ? t('installed.filters.clearSearch') : t('installed.filters.clearFilters')}
-          </button>
+          </Button>
         </div>
       )}
 
       {visibleEnabled.length > 0 && (
         <div className="mb-6">
           <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.filters.enabled')}</SectionHeader>
+            <SectionHeader count={visibleEnabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.enabled', { count: visibleEnabled.length })}</SectionHeader>
           </div>
           {renderSortableSection('enabled')}
         </div>
@@ -3457,7 +4146,7 @@ export default function Installed() {
       {visibleDisabled.length > 0 && (
         <div>
           <div className="flex items-baseline justify-between mb-[14px]">
-            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('locker.global.disabledBadge')}</SectionHeader>
+            <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.disabled', { count: visibleDisabled.length })}</SectionHeader>
           </div>
           {renderSortableSection('disabled')}
         </div>
@@ -3654,7 +4343,6 @@ export default function Installed() {
             onReorderVariantTo={(source, neighbor, position) =>
               reorderVariantTo(source, neighbor, position)
             }
-            onDisableAll={() => disableEntireGroup(liveEntry)}
             onDeleteVariant={(variant) => deleteMod(variant.id)}
             onRenameVariant={(variant, label) => setVariantLabel(variant.id, label)}
             onOpenModDetails={
@@ -3705,7 +4393,7 @@ export default function Installed() {
             className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
             onClick={(e) => e.stopPropagation()}
           >
-            <h3 className="text-lg font-semibold text-red-400 mb-2">{t('installed.details.loadFailed')}</h3>
+            <h3 className="text-lg font-semibold text-state-danger mb-2">{t('installed.details.loadFailed')}</h3>
             <p className="text-sm text-text-secondary mb-4">{detailsError}</p>
             <div className="flex justify-end">
               <Button onClick={closeModDetails}>{t('common.actions.close')}</Button>
@@ -3719,18 +4407,21 @@ export default function Installed() {
         <ModDetailsModal
           mod={detailsMod}
           section={detailsSection}
-          installed={true}
+          installed={detailsInstalledFileIds.size > 0}
           installedFileIds={detailsInstalledFileIds}
           activeFileIds={detailsActiveFileIds}
           downloadingFileId={null}
           extracting={false}
           progress={null}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={installedHideNsfwPreviews}
           dateAdded={detailsDates?.dateAdded}
           dateModified={detailsDates?.dateModified}
+          offline={detailsOffline}
           updateAvailable={detailsUpdateAvailable}
           ignoreUpdates={detailsIgnoreUpdates}
-          onToggleIgnoreUpdates={handleToggleIgnoreUpdates}
+          onToggleIgnoreUpdates={
+            detailsSourceModId ? handleToggleIgnoreUpdates : undefined
+          }
           onClose={closeModDetails}
           onViewArtist={openArtistPage}
           onDownload={handleDetailsDownload}
@@ -3742,13 +4433,14 @@ export default function Installed() {
           }
           previousLabel={previousDetailsEntry ? entryName(previousDetailsEntry) : undefined}
           nextLabel={nextDetailsEntry ? entryName(nextDetailsEntry) : undefined}
+          onOpenGameBananaItem={openLinkedGameBananaItem}
         />
       )}
 
       {selectedUnknownState && unknownFixMode === 'single' && (
         <UnknownFilterGuessModal
           state={selectedUnknownState}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={installedHideNsfwPreviews}
           autoMatchEnabled={autoMatchEnabled}
           onApplyMatch={applyUnknownMatch}
           onAssociate={associateUnknownMatch}
@@ -3765,7 +4457,7 @@ export default function Installed() {
         <BulkUnknownFixModal
           unknownMods={unknownMods}
           state={selectedUnknownState}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={installedHideNsfwPreviews}
           autoMatchEnabled={autoMatchEnabled}
           cache={unknownFilterCacheById}
           pendingIds={unknownFilterPendingIds}
@@ -3783,6 +4475,26 @@ export default function Installed() {
           onClose={closeUnknownFix}
         />
       )}
+
+      {/* Consent gate for the DMM auto-import step of Fix Unknown Mods. */}
+      <ConfirmModal
+        isOpen={dmmConfirm !== null}
+        title={t('installed.unknown.dmmConfirmTitle')}
+        message={t('installed.unknown.dmmConfirmMessage', {
+          count: dmmConfirm?.count ?? 0,
+          profile: dmmConfirm?.profileName ?? '',
+        })}
+        confirmLabel={t('installed.unknown.dmmConfirmImport')}
+        cancelLabel={t('installed.unknown.dmmConfirmSkip')}
+        onConfirm={() => {
+          dmmConfirm?.resolve(true);
+          setDmmConfirm(null);
+        }}
+        onCancel={() => {
+          dmmConfirm?.resolve(false);
+          setDmmConfirm(null);
+        }}
+      />
 
       {customUnknownMod && (
         <ImportCustomModModal
@@ -3821,7 +4533,7 @@ export default function Installed() {
       {mergeSources && (
         <MergeModsModal
           sources={mergeSources}
-          hideNsfw={settings?.hideNsfwPreviews ?? true}
+          hideNsfw={installedHideNsfwPreviews}
           onCancel={() => setMergeSources(null)}
           onConfirm={handleMergeConfirm}
         />
@@ -3830,10 +4542,26 @@ export default function Installed() {
       {mergedContentsMod && (
         <MergedContentsModal
           mod={mergedContentsMod}
-          hideNsfw={settings?.hideNsfwPreviews ?? true}
+          hideNsfw={installedHideNsfwPreviews}
           onClose={() => setMergedContentsMod(null)}
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
           onExtractSource={handleExtractMergeSource}
+        />
+      )}
+
+      {imprintState && (
+        <ImprintModal
+          state={imprintState}
+          onConfirm={() => { void handleImprintAllInstalled(); }}
+          onClose={() => setImprintState(null)}
+        />
+      )}
+
+      {imprintDetailsMod && (
+        <ImprintDetailsModal
+          key={imprintDetailsMod.id}
+          mod={imprintDetailsMod}
+          onClose={() => setImprintDetailsMod(null)}
         />
       )}
 
@@ -3934,21 +4662,13 @@ export default function Installed() {
                   : t('installed.select.countSelected', { count: selectedMods.length })}
               </span>
               <span className="h-5 w-px bg-border" />
-              <button
-                type="button"
-                onClick={selectAllVisible}
-                className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
-              >
+              <Button variant="ghost" size="sm" onClick={selectAllVisible}>
                 {t('installed.select.selectAll')}
-              </button>
+              </Button>
               {selectedMods.length > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedIds(new Set())}
-                  className="text-sm text-text-secondary hover:text-text-primary px-2 py-1 rounded hover:bg-bg-tertiary cursor-pointer"
-                >
+                <Button variant="ghost" size="sm" onClick={() => setSelectedIds(new Set())}>
                   {t('common.actions.clear')}
-                </button>
+                </Button>
               )}
               <span className="h-5 w-px bg-border" />
               <Button
@@ -4057,15 +4777,12 @@ export default function Installed() {
                 {t('common.actions.delete')}{selectedMods.length > 0 ? ` (${selectedMods.length})` : ''}
               </Button>
               <span className="h-5 w-px bg-border" />
-              <button
-                type="button"
+              <IconButton
+                icon={X}
+                label={t('installed.actions.exitSelectionMode')}
+                size="sm"
                 onClick={exitSelectMode}
-                className="p-1.5 text-text-secondary hover:text-text-primary rounded hover:bg-bg-tertiary cursor-pointer"
-                aria-label={t('installed.actions.exitSelectionMode')}
-                title={t('installed.actions.exitSelectionMode')}
-              >
-                <X className="w-4 h-4" />
-              </button>
+              />
             </>
           )}
         </div>
@@ -4189,14 +4906,11 @@ function UnknownFilterGuessModal({
               {mod.fileName}
             </p>
           </div>
-          <button
-            type="button"
+          <IconButton
+            icon={X}
+            label={t('common.actions.close')}
             onClick={onClose}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-            aria-label={t('common.actions.close')}
-          >
-            <X className="w-5 h-5" />
-          </button>
+          />
         </div>
 
         <UnknownMatchPanel
@@ -4320,14 +5034,11 @@ function BulkUnknownFixModal({
                 </Button>
               </>
             )}
-            <button
-              type="button"
+            <IconButton
+              icon={X}
+              label={t('common.actions.close')}
               onClick={onClose}
-              className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-              aria-label={t('common.actions.close')}
-            >
-              <X className="w-5 h-5" />
-            </button>
+            />
           </div>
         </div>
 
@@ -4450,7 +5161,15 @@ function UnknownMatchPanel({
   const [applying, setApplying] = useState(false);
   const [applyError, setApplyError] = useState<string | null>(null);
   const match = result?.crcMatch;
-  const foundMatch = isFoundUnknownMatch(match) ? match : null;
+  // An embedded-provenance result is self-reported by the VPK's own imprint
+  // (offline, ungated): surface it prominently at the top via its own card, and
+  // keep it out of the gated CRC auto-matcher card below (which is reserved for
+  // verified upstream CRC-32 hits). The union values stay 'embedded-*' on the
+  // wire even though the card renders "imprint" to the user.
+  const isEmbedProvenance =
+    match?.provenance === 'embedded-metadata' || match?.provenance === 'embedded-merge';
+  const embeddedMatch = isEmbedProvenance && isFoundUnknownMatch(match) ? match : null;
+  const foundMatch = isFoundUnknownMatch(match) && !isEmbedProvenance ? match : null;
 
   const handleApply = async (matchToApply: FoundUnknownMatch) => {
     if (applying) return;
@@ -4485,6 +5204,19 @@ function UnknownMatchPanel({
 
   return (
     <div className="p-5 overflow-y-auto space-y-4">
+      {/* Self-identifying VPK: identity read offline from the file's own imprint
+          (addoninfo.txt / grimoire_meta.json), never gated behind the network
+          matcher. Shown ahead of everything else. */}
+      {embeddedMatch && (
+        <UnknownEmbeddedCard
+          mod={mod}
+          match={embeddedMatch}
+          hideNsfwPreviews={hideNsfwPreviews}
+          onAssociate={onAssociate}
+          onView={() => onViewMatch(mod, embeddedMatch)}
+        />
+      )}
+
       {/* Primary path: find the mod on GameBanana and link this local file to
           it. Light on the API (one search, optional file list) versus the CRC
           auto-matcher below, which downloads candidate archives. */}
@@ -4503,7 +5235,7 @@ function UnknownMatchPanel({
       />
 
       {applyError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
           <span>{applyError}</span>
         </div>
@@ -4556,7 +5288,7 @@ function UnknownMatchPanel({
           )}
 
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-red-400 flex items-start gap-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-3 text-sm text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -4866,7 +5598,7 @@ function UnknownManualSearch({
       </div>
 
       {searchError && (
-        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+        <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
           <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
           <span>{searchError}</span>
         </div>
@@ -4934,18 +5666,20 @@ function UnknownManualSearch({
                     {files && files.length > 0 && (
                       <label className="block text-xs text-text-secondary">
                         {t('installed.unknown.pinExactFile')}
-                        <select
-                          value={fileId ?? ''}
-                          onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
-                          className="mt-1 w-full bg-bg-primary border border-white/10 rounded-md px-2 py-1.5 text-sm text-text-primary focus:outline-none focus:border-accent/50"
-                        >
-                          <option value="">{t('installed.unknown.dontPinFile')}</option>
-                          {files.map((f) => (
-                            <option key={f.id} value={f.id}>
-                              {f.fileName}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="mt-1">
+                          <Select
+                            inputSize="sm"
+                            value={fileId ?? ''}
+                            onChange={(e) => setFileId(e.target.value ? Number(e.target.value) : undefined)}
+                          >
+                            <option value="">{t('installed.unknown.dontPinFile')}</option>
+                            {files.map((f) => (
+                              <option key={f.id} value={f.id}>
+                                {f.fileName}
+                              </option>
+                            ))}
+                          </Select>
+                        </div>
                       </label>
                     )}
                     <div className="flex justify-end">
@@ -5166,7 +5900,7 @@ function UnknownFileList({
             </div>
           )}
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-red-400 flex items-start gap-2">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-md p-2.5 text-xs text-state-danger flex items-start gap-2">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
               <span>{error}</span>
             </div>
@@ -5190,10 +5924,610 @@ function UnknownFileList({
   );
 }
 
+// One preflight bucket line: a count + its one-line consequence (the full copy,
+// which leads with {{count}}). A small tone-colored dot flags the buckets that
+// need attention. Hidden when the bucket is empty. Rendered in a fixed order so
+// the eligible line always leads and the anomaly line trails.
+function ImprintBucketLine({ count, label, tone = 'muted' }: {
+  count: number;
+  label: string;
+  tone?: 'muted' | 'accent' | 'warning' | 'danger';
+}) {
+  if (count <= 0) return null;
+  const dotTones: Record<string, string> = {
+    muted: 'bg-text-tertiary/50',
+    accent: 'bg-accent',
+    warning: 'bg-state-warning',
+    danger: 'bg-state-danger',
+  };
+  return (
+    <div className="flex items-center gap-2 text-sm text-text-secondary">
+      <span aria-hidden className={`h-1.5 w-1.5 flex-shrink-0 rounded-full ${dotTones[tone]}`} />
+      <span className="tabular-nums">{label}</span>
+    </div>
+  );
+}
+
+// A collapsible per-item report list (Skipped / Failed) for the result phase.
+// Defaults collapsed so a clean run stays tidy; the count sits in the summary.
+function ImprintReportList({ title, items }: {
+  title: string;
+  items: Array<{ key: string; name: string; reason: string }>;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <details className="rounded-md border border-white/5 bg-bg-tertiary/40 overflow-hidden">
+      <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
+        {title}
+      </summary>
+      <ul className="divide-y divide-white/5 border-t border-white/5">
+        {items.map((item) => (
+          <li key={item.key} className="flex items-center justify-between gap-3 px-3 py-2">
+            <span className="min-w-0 truncate text-sm text-text-primary" title={item.name}>{item.name}</span>
+            <span className="flex-shrink-0 text-xs text-text-tertiary">{item.reason}</span>
+          </li>
+        ))}
+      </ul>
+    </details>
+  );
+}
+
+// The retroactive bulk-imprint modal: a preflight dry-run, a commit + live
+// progress phase, and a final report, all in one shared Modal. Dismissal is
+// blocked while a run is in flight (the game has the VPKs, so an interrupted
+// swap would strand a temp file). No new IPC: it reads the preflight buckets and
+// streams progress from the channels wired in Stage B.
+function ImprintModal({ state, onConfirm, onClose }: {
+  state: NonNullable<ImprintModalState>;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  const { t } = useTranslation();
+  const titleId = 'imprint-modal-title';
+  const running = state.phase === 'running';
+
+  const anomalyReason = (reason: ImprintAnomalousMod['reason']): string => {
+    switch (reason) {
+      case 'unparseable': return t('installed.imprintAll.anomalyUnparseable');
+      case 'empty': return t('installed.imprintAll.anomalyEmpty');
+      case 'chunked': return t('installed.imprintAll.anomalyChunked');
+      case 'hash-drift': return t('installed.imprintAll.anomalyHashDrift');
+      case 'foreign-embed': return t('installed.imprintAll.anomalyForeignEmbed');
+      case 'orphan-merge': return t('installed.imprintAll.anomalyOrphanMerge');
+      case 'unidentified': return t('installed.imprintAll.anomalyUnidentified');
+    }
+  };
+  // The bulk run reports anomalies as their raw reason tokens (they flow into
+  // failed[] alongside free-form error messages); localize the known tokens so
+  // the result list reads the same as the preflight list.
+  const isAnomalyReason = (reason: string): reason is ImprintAnomalousMod['reason'] =>
+    reason === 'unparseable' || reason === 'empty' || reason === 'chunked' ||
+    reason === 'hash-drift' || reason === 'foreign-embed' || reason === 'orphan-merge' ||
+    reason === 'unidentified';
+
+  let body: ReactNode;
+  let footer: ReactNode;
+
+  if (state.phase === 'preflight') {
+    body = <LoadingState label={t('installed.imprintAll.checking')} className="min-h-40" />;
+    footer = (
+      <Button variant="secondary" onClick={onClose}>{t('common.actions.cancel')}</Button>
+    );
+  } else if (state.phase === 'review') {
+    const { counts } = state.preflight;
+    const autoManaged = counts.merged + counts.lockerManaged;
+    const eligible = counts.eligible;
+    body = (
+      <>
+        <p className="text-sm text-text-secondary">{t('installed.imprintAll.description')}</p>
+        {eligible === 0 &&
+        counts.alreadyImprinted === 0 &&
+        counts.blockedLoaded === 0 &&
+        autoManaged === 0 &&
+        counts.anomalous === 0 ? (
+          <EmptyState
+            icon={Fingerprint}
+            title={t('installed.imprintAll.empty')}
+            className="min-h-40"
+          />
+        ) : (
+          <div className="space-y-1.5 rounded-md border border-white/5 bg-bg-tertiary/40 p-3">
+            <ImprintBucketLine count={eligible} label={t('installed.imprintAll.eligible', { count: eligible })} tone="accent" />
+            <ImprintBucketLine count={counts.alreadyImprinted} label={t('installed.imprintAll.alreadyImprinted', { count: counts.alreadyImprinted })} />
+            <ImprintBucketLine count={counts.blockedLoaded} label={t('installed.imprintAll.blockedLoaded', { count: counts.blockedLoaded })} tone="warning" />
+            <ImprintBucketLine count={autoManaged} label={t('installed.imprintAll.autoManaged', { count: autoManaged })} />
+            <ImprintBucketLine count={counts.anomalous} label={t('installed.imprintAll.anomalies', { count: counts.anomalous })} tone="danger" />
+          </div>
+        )}
+        {state.preflight.anomalous.length > 0 && (
+          <ImprintReportList
+            title={t('installed.imprintAll.anomalies', { count: state.preflight.anomalous.length })}
+            items={state.preflight.anomalous.map((a: ImprintAnomalousMod) => ({
+              key: a.fileName,
+              name: a.modName || a.fileName,
+              reason: anomalyReason(a.reason),
+            }))}
+          />
+        )}
+        {eligible > 0 && (
+          <p className="text-xs text-text-tertiary">{t('installed.imprintAll.repackNote')}</p>
+        )}
+      </>
+    );
+    footer = (
+      <>
+        <Button variant="secondary" onClick={onClose}>{t('common.actions.cancel')}</Button>
+        <Button variant="primary" icon={Fingerprint} disabled={eligible === 0} onClick={onConfirm}>
+          {t('installed.imprintAll.startImprinting', { count: eligible })}
+        </Button>
+      </>
+    );
+  } else if (state.phase === 'running') {
+    const p = state.progress;
+    const done = p?.done ?? 0;
+    const total = p?.total ?? 0;
+    body = (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <Loader2 className="h-5 w-5 flex-shrink-0 animate-spin text-accent" />
+          <div className="min-w-0">
+            <div className="text-sm text-text-primary">
+              {t('installed.imprintAll.progress', { done, total })}
+            </div>
+            {p?.fileName && (
+              <div className="mt-0.5 truncate text-xs text-text-tertiary" title={p.fileName}>
+                {t('installed.imprintAll.currentFile', { fileName: p.modName || p.fileName })}
+              </div>
+            )}
+          </div>
+          <span className="ml-auto flex-shrink-0 text-sm tabular-nums text-text-secondary">
+            {done}/{total}
+          </span>
+        </div>
+      </div>
+    );
+    footer = (
+      <Button variant="primary" isLoading disabled>
+        {t('installed.imprintAll.progress', { done, total })}
+      </Button>
+    );
+  } else {
+    const { result } = state;
+    const skipped = result.skipped.map((s: ImprintSkippedMod) => ({
+      key: s.fileName,
+      name: s.modName || s.fileName,
+      reason: t('installed.imprintAll.skipReasonLoaded'),
+    }));
+    const failed = result.failed.map((f: ImprintFailedMod) => ({
+      key: f.fileName,
+      name: f.modName || f.fileName,
+      reason: isAnomalyReason(f.reason) ? anomalyReason(f.reason) : f.reason,
+    }));
+    body = (
+      <>
+        <div className="flex items-center gap-2 text-sm text-text-primary">
+          <Fingerprint className="h-4 w-4 flex-shrink-0 text-accent" />
+          {t('installed.imprintAll.imprintedSummary', { count: result.imprinted })}
+        </div>
+        <ImprintReportList title={t('installed.imprintAll.skippedTitle', { count: skipped.length })} items={skipped} />
+        <ImprintReportList title={t('installed.imprintAll.failedTitle', { count: failed.length })} items={failed} />
+      </>
+    );
+    footer = (
+      <Button variant="secondary" onClick={onClose}>{t('common.actions.close')}</Button>
+    );
+  }
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="lg"
+      labelledBy={titleId}
+      dismissable={!running}
+      panelClassName="flex max-h-[85vh] flex-col"
+    >
+      <ModalHeader
+        title={t('installed.imprintAll.title')}
+        titleId={titleId}
+        onClose={onClose}
+        closeLabel={t('common.actions.close')}
+        closeDisabled={running}
+      />
+      <div className="flex-1 space-y-4 overflow-y-auto p-5">{body}</div>
+      <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border p-4">{footer}</div>
+    </Modal>
+  );
+}
+
+// One labeled row of the imprint detail sheet: a fixed-width muted label and a
+// wrapping value column, so the sheet reads like a spec table.
+function ImprintDetailRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline gap-3 text-sm">
+      <span className="w-32 flex-shrink-0 text-xs text-text-tertiary">{label}</span>
+      <span className="min-w-0 flex-1 break-words text-text-primary">{children}</span>
+    </div>
+  );
+}
+
+// A monospace hash value with a copy-to-clipboard button, for the identity rows.
+function ImprintHashValue({ value, copyLabel, onCopy }: {
+  value: string;
+  copyLabel: string;
+  onCopy: (value: string) => void;
+}) {
+  return (
+    <span className="flex items-center gap-2">
+      <code className="min-w-0 flex-1 break-all font-mono text-xs">{value}</code>
+      <IconButton size="sm" icon={Copy} label={copyLabel} onClick={() => onCopy(value)} />
+    </span>
+  );
+}
+
+// "View imprint" details modal: shows the FULL embedded imprint of one
+// installed VPK (the parsed addoninfo.txt fields, the original identity
+// triple, the grimoire_meta.json merge companion for merged VPKs, and the raw
+// addoninfo.txt text). Strictly read-only and offline. Deliberately NOT gated
+// on experimentalVpkImprinting: like the provenance card, reading an imprint
+// back is recognition of data already inside the file, not writing, so files
+// imprinted elsewhere or before the flag was toggled off stay inspectable.
+function ImprintDetailsModal({ mod, onClose }: { mod: Mod; onClose: () => void }) {
+  const { t } = useTranslation();
+  const titleId = 'imprint-details-modal-title';
+  // undefined = fetch in flight; null = the file carries no valid imprint
+  // (reachable when the local `imprinted` flag is stale).
+  const [details, setDetails] = useState<ImprintDetails | null | undefined>(undefined);
+  const [error, setError] = useState<string | null>(null);
+  // Same unmount guard as handleImprintAllInstalled: no setState after the
+  // modal unmounts mid-fetch.
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+    };
+  }, []);
+  // No synchronous state reset here: the render site keys this modal by
+  // mod.id, so switching mods remounts it with fresh loading state.
+  useEffect(() => {
+    readImprintDetails(mod.id)
+      .then((result) => {
+        if (mountedRef.current) setDetails(result);
+      })
+      .catch((err) => {
+        if (mountedRef.current) setError(err instanceof Error ? err.message : String(err));
+      });
+  }, [mod.id]);
+
+  // Matches the file's clipboard pattern (copyEntryShareCode): writeText +
+  // success toast, error toast on refusal.
+  const copyValue = (value: string) => {
+    navigator.clipboard.writeText(value).then(
+      () => showToast(t('installed.imprintDetails.copied'), { tone: 'success', duration: 2200 }),
+      (err) => showToast(`Couldn't copy: ${err instanceof Error ? err.message : String(err)}`, { tone: 'error' })
+    );
+  };
+
+  const sectionHeading = 'text-xs font-semibold uppercase tracking-wider text-text-tertiary';
+  const sectionBox = 'space-y-1.5 rounded-md border border-white/5 bg-bg-tertiary/40 p-3';
+
+  let body: ReactNode;
+  if (error) {
+    body = <p className="text-sm text-state-danger">{t('installed.imprintDetails.error', { error })}</p>;
+  } else if (details === undefined) {
+    body = <LoadingState label={t('installed.imprintDetails.loading')} className="min-h-40" />;
+  } else if (details === null) {
+    body = (
+      <EmptyState
+        icon={Fingerprint}
+        title={t('installed.imprintDetails.empty')}
+        className="min-h-40"
+      />
+    );
+  } else {
+    const modinfo = details.modinfo;
+    const merge = modinfo?.kind === 'merge' ? modinfo : null;
+    body = (
+      <>
+        <div className={sectionBox}>
+          <ImprintDetailRow label={t('installed.imprintDetails.modTitle')}>
+            {details.title ?? mod.name}
+          </ImprintDetailRow>
+          {details.author && (
+            <ImprintDetailRow label={t('installed.imprintDetails.author')}>
+              {details.author}
+            </ImprintDetailRow>
+          )}
+          {modinfo?.description && (
+            <ImprintDetailRow label={t('installed.imprintDetails.description')}>
+              {modinfo.description}
+            </ImprintDetailRow>
+          )}
+          {details.gamebananaId && (
+            <ImprintDetailRow label={t('installed.imprintDetails.gamebananaId')}>
+              <span className="tabular-nums">#{details.gamebananaId}</span>
+            </ImprintDetailRow>
+          )}
+          {details.gamebananaFileId && (
+            <ImprintDetailRow label={t('installed.imprintDetails.gamebananaFileId')}>
+              <span className="tabular-nums">#{details.gamebananaFileId}</span>
+            </ImprintDetailRow>
+          )}
+          {details.sourceUrl && (
+            <ImprintDetailRow label={t('installed.imprintDetails.sourceUrl')}>
+              <a
+                href={details.sourceUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex max-w-full items-baseline gap-1 break-all text-accent hover:underline"
+              >
+                <span className="min-w-0">{details.sourceUrl}</span>
+                <ExternalLink className="h-3 w-3 flex-shrink-0 self-center" aria-hidden />
+              </a>
+            </ImprintDetailRow>
+          )}
+          {modinfo?.packaging?.variantLabel && (
+            <ImprintDetailRow label={t('installed.imprintDetails.variant')}>
+              {modinfo.packaging.variantLabel}
+            </ImprintDetailRow>
+          )}
+          {typeof modinfo?.packaging?.vpkIndex === 'number' && (
+            <ImprintDetailRow label={t('installed.imprintDetails.vpkIndex')}>
+              <span className="tabular-nums">{modinfo.packaging.vpkIndex}</span>
+            </ImprintDetailRow>
+          )}
+          {/* Current-format imprints carry both timestamps; a legacy imprint
+              only has its addoninfo buildDate. */}
+          {modinfo ? (
+            <>
+              <ImprintDetailRow label={t('installed.imprintDetails.firstImprinted')}>
+                {formatAbsoluteDate(modinfo.firstImprintedAt)}
+              </ImprintDetailRow>
+              <ImprintDetailRow label={t('installed.imprintDetails.lastWritten')}>
+                {formatAbsoluteDate(modinfo.writtenAt)}
+              </ImprintDetailRow>
+            </>
+          ) : (
+            details.buildDate && (
+              <ImprintDetailRow label={t('installed.imprintDetails.buildDate')}>
+                {formatAbsoluteDate(details.buildDate)}
+              </ImprintDetailRow>
+            )
+          )}
+        </div>
+
+        <div className="space-y-2">
+          <div className={sectionHeading}>{t('installed.imprintDetails.identityTitle')}</div>
+          <div className={sectionBox}>
+            <ImprintDetailRow label={t('installed.imprintDetails.sha256')}>
+              <ImprintHashValue
+                value={details.originalSha256}
+                copyLabel={t('installed.imprintDetails.copyValue')}
+                onCopy={copyValue}
+              />
+            </ImprintDetailRow>
+            {details.originalCrc32 && (
+              <ImprintDetailRow label={t('installed.imprintDetails.crc32')}>
+                <ImprintHashValue
+                  value={details.originalCrc32}
+                  copyLabel={t('installed.imprintDetails.copyValue')}
+                  onCopy={copyValue}
+                />
+              </ImprintDetailRow>
+            )}
+            {typeof details.originalSize === 'number' && (
+              <ImprintDetailRow label={t('installed.imprintDetails.size')}>
+                <span className="tabular-nums">{formatBytes(details.originalSize)}</span>
+              </ImprintDetailRow>
+            )}
+          </div>
+        </div>
+
+        {merge && (
+          <div className="space-y-2">
+            <div className={sectionHeading}>{t('installed.imprintDetails.mergeTitle')}</div>
+            <div className={sectionBox}>
+              <ImprintDetailRow label={t('installed.imprintDetails.mergeName')}>
+                {merge.merge.title}
+              </ImprintDetailRow>
+              <ImprintDetailRow label={t('installed.imprintDetails.createdAt')}>
+                {formatAbsoluteDate(merge.writtenAt)}
+              </ImprintDetailRow>
+              <ImprintDetailRow label={t('installed.imprintDetails.createdBy')}>
+                {`${merge.writtenBy.tool} ${merge.writtenBy.version}`}
+              </ImprintDetailRow>
+              <ImprintDetailRow label={t('installed.imprintDetails.schemaVersion')}>
+                <span className="tabular-nums">{merge.schemaVersion}</span>
+              </ImprintDetailRow>
+            </div>
+            {merge.sources.length > 0 && (
+              <>
+                <div className={sectionHeading}>
+                  {t('installed.imprintDetails.sourcesTitle', { count: merge.sources.length })}
+                </div>
+                {/* Tag rows consistent with UnknownEmbeddedCard's source list. */}
+                <div className={sectionBox}>
+                  {merge.sources.map((source, i) => (
+                    <div
+                      key={`${source.fileNameAtMergeTime}-${i}`}
+                      className="flex flex-wrap items-center gap-2"
+                    >
+                      <Tag tone="neutral" title={source.fileNameAtMergeTime}>
+                        {source.title}
+                        {typeof source.gamebananaId === 'number' ? ` (#${source.gamebananaId})` : ''}
+                      </Tag>
+                      <span className="text-xs tabular-nums text-text-tertiary">
+                        {t('installed.imprintDetails.sourcePriority', { priority: source.priorityAtMergeTime })}
+                      </span>
+                      <span className="text-xs text-text-tertiary">
+                        {source.enabledAtMergeTime
+                          ? t('installed.imprintDetails.sourceEnabled')
+                          : t('installed.imprintDetails.sourceDisabled')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
+        {/* Same collapsible pattern as ImprintReportList: details/summary,
+            collapsed by default so the sheet stays tidy. */}
+        <details className="overflow-hidden rounded-md border border-white/5 bg-bg-tertiary/40">
+          <summary className="cursor-pointer select-none px-3 py-2 text-sm font-medium text-text-secondary hover:text-text-primary">
+            {t('installed.imprintDetails.rawToggle')}
+          </summary>
+          <pre className="max-h-64 overflow-auto border-t border-white/5 p-3 font-mono text-xs leading-relaxed text-text-secondary">
+            {details.rawAddonInfo}
+          </pre>
+        </details>
+      </>
+    );
+  }
+
+  return (
+    <Modal
+      onClose={onClose}
+      size="lg"
+      labelledBy={titleId}
+      panelClassName="flex max-h-[85vh] flex-col"
+    >
+      <ModalHeader
+        title={t('installed.imprintDetails.title')}
+        titleId={titleId}
+        subtitle={mod.fileName}
+        subtitleTitle={mod.fileName}
+        onClose={onClose}
+        closeLabel={t('common.actions.close')}
+      />
+      <div className="flex-1 space-y-4 overflow-y-auto p-5">{body}</div>
+      <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border p-4">
+        <Button variant="secondary" onClick={onClose}>{t('common.actions.close')}</Button>
+      </div>
+    </Modal>
+  );
+}
+
 type FoundUnknownMatch = UnknownModFilterGuess['crcMatch'] & { status: 'found' };
 
 function isFoundUnknownMatch(match: UnknownModFilterGuess['crcMatch'] | undefined): match is FoundUnknownMatch {
   return match?.status === 'found';
+}
+
+// Self-identifying VPK card: the mod's identity was read offline from its own
+// Grimoire imprint (addoninfo.txt / grimoire_meta.json), not matched over the
+// network. Distinct from UnknownMatchCard so an imprint is never confused with a
+// verified upstream CRC-32 hit, and so a merge can list its reconstructed
+// sources. For a single imprinted mod it offers a zero-download "Link in place"
+// (link the existing file) instead of a re-download Apply. The wire provenance
+// keeps the 'embedded-*' union values; the copy says "imprint".
+function UnknownEmbeddedCard({
+  mod,
+  match,
+  hideNsfwPreviews,
+  onAssociate,
+  onView,
+}: {
+  mod: Mod;
+  match: FoundUnknownMatch;
+  hideNsfwPreviews: boolean;
+  onAssociate: (mod: Mod, args: AssociateUnknownModArgs) => Promise<void>;
+  onView: () => void;
+}) {
+  const { t } = useTranslation();
+  const [linking, setLinking] = useState(false);
+  const [linkError, setLinkError] = useState<string | null>(null);
+  const isMerge = match.provenance === 'embedded-merge';
+  const mergeSources = match.mergeSources ?? [];
+
+  const handleLink = async () => {
+    if (linking || typeof match.modId !== 'number') return;
+    setLinking(true);
+    setLinkError(null);
+    try {
+      await onAssociate(mod, {
+        gameBananaId: match.modId,
+        modName: match.modName ?? mod.name,
+        gameBananaFileId: match.fileId,
+        thumbnailUrl: match.thumbnailUrl,
+        nsfw: match.nsfw,
+        categoryName: match.categoryName,
+        sourceSection: match.section,
+      });
+    } catch (err) {
+      setLinkError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setLinking(false);
+    }
+  };
+
+  return (
+    <div className="rounded-md border border-state-success/35 bg-state-success/10 overflow-hidden">
+      <div className="p-4">
+        <div className="flex items-start gap-4">
+          {!isMerge && (
+            <ModThumbnail
+              src={match.thumbnailUrl}
+              alt={match.modName ?? t('installed.unknown.gamebananaMod')}
+              nsfw={match.nsfw}
+              hideNsfw={hideNsfwPreviews}
+              className="w-24 h-16 rounded-md bg-bg-primary border border-white/10 flex-shrink-0"
+            />
+          )}
+          <div className="min-w-0 flex-1">
+            <Tag tone="success" icon={Fingerprint}>
+              {isMerge ? t('installed.provenance.fromMergeImprint') : t('installed.provenance.fromImprint')}
+            </Tag>
+            <h3 className="text-base font-semibold text-text-primary mt-2 truncate" title={match.modName}>
+              {match.modName ?? t('installed.unknown.gamebananaMod')}
+            </h3>
+            <p className="text-sm text-text-secondary mt-1">
+              {isMerge
+                ? t('installed.unknown.embeddedMergeDesc', { count: mergeSources.length })
+                : t('installed.unknown.embeddedMetadataDesc')}
+            </p>
+          </div>
+        </div>
+
+        {!isMerge && (
+          <div className="flex flex-wrap items-center gap-2 mt-3">
+            {match.section && (
+              <Tag tone="neutral">
+                {match.section === 'Mod' ? t('installed.unknown.sectionMods') : match.section === 'Sound' ? t('installed.unknown.sectionSounds') : match.section}
+              </Tag>
+            )}
+            {match.categoryName && <Tag tone="neutral">{match.categoryName}</Tag>}
+            {typeof match.modId === 'number' && <Tag tone="neutral">{t('installed.unknown.modIdTag', { id: match.modId })}</Tag>}
+          </div>
+        )}
+
+        {isMerge && mergeSources.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-3">
+            {mergeSources.map((source, i) => (
+              <Tag key={`${source.fileName ?? source.modName}-${i}`} tone="neutral" title={source.modName}>
+                {source.modName}
+                {typeof source.gameBananaId === 'number' ? ` (#${source.gameBananaId})` : ''}
+              </Tag>
+            ))}
+          </div>
+        )}
+
+        {linkError && <p className="text-xs text-state-danger mt-3">{linkError}</p>}
+      </div>
+
+      {!isMerge && typeof match.modId === 'number' && (
+        <div className="border-t border-state-success/20 px-4 py-3 bg-black/10 flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" size="sm" icon={Info} disabled={linking} onClick={onView}>
+            {t('installed.unknown.viewMod')}
+          </Button>
+          <Button variant="primary" size="sm" icon={Link2} isLoading={linking} onClick={() => void handleLink()}>
+            {t('installed.unknown.linkInPlace')}
+          </Button>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function UnknownMatchCard({
@@ -5324,11 +6658,19 @@ interface ModCardProps {
    *  local mods with no GameBanana source. */
   onViewAuthor?: () => void;
   onToggle: () => void;
+  /** Disable every other mod, enable only this one, and launch the game. Used
+   *  for A/B testing a single skin. */
+  onSoloLaunch?: () => void;
+  soloBusy?: boolean;
   onDelete: () => void;
   onEditLocal?: () => void;
   /** Inline rename of a local mod's name (double-click the title). Undefined
    *  for GameBanana-sourced mods, which can't be renamed. */
   onRenameLocal?: (newName: string) => Promise<void>;
+  /** Open the imprint details modal. Passed only when the mod's wire
+   *  `imprinted` flag is true (the parent gates on it); shown in the card's
+   *  right-click menu and the thumbnail image menus. */
+  onViewImprint?: () => void;
   onTagLocker?: (heroName: string | null) => void | Promise<void>;
   onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
   onFixUnknown?: () => void;
@@ -5375,6 +6717,7 @@ interface ModMediaPreviewProps {
   onOpenDetails?: () => void;
   isGroupCard: boolean;
   onRevealInFolder?: () => void;
+  onViewImprint?: () => void;
 }
 
 function SoundPlaceholder() {
@@ -5415,6 +6758,7 @@ function ModMediaPreview({
   onOpenDetails,
   isGroupCard,
   onRevealInFolder,
+  onViewImprint,
 }: ModMediaPreviewProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -5442,18 +6786,19 @@ function ModMediaPreview({
       nsfw={mod.nsfw}
       hideNsfw={hideNsfwPreviews}
       className="w-full h-full"
-      imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+      imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
       mergedSources={mod.merged?.sources}
       onRevealInFolder={onRevealInFolder}
+      onViewImprint={onViewImprint}
     />
   );
   const soundMedia = mod.thumbnailUrl ? image : soundHeroRenderUrl ? (
-    <ImageContextMenu src={soundHeroRenderUrl} alt={soundHeroName ?? mod.name} onRevealInFolder={onRevealInFolder}>
+    <ImageContextMenu src={soundHeroRenderUrl} alt={soundHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
       <img
         src={soundHeroRenderUrl}
         alt={soundHeroName ?? mod.name}
         draggable={false}
-        className="block h-full w-full object-cover origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+        className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
         style={{ objectPosition: `${soundHeroFacePosX}% 25%` }}
       />
     </ImageContextMenu>
@@ -5553,6 +6898,7 @@ interface ModListRowContentProps {
   technicalMetaClasses: string;
   actions: ReactNode;
   onRevealInFolder?: () => void;
+  onViewImprint?: () => void;
 }
 
 function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
@@ -5768,7 +7114,7 @@ function EditableModTitle({
       }}
       onBlur={() => void commit()}
       data-card-action="true"
-      className={`${className} w-full rounded-[4px] border border-accent/70 bg-bg-primary/90 px-1 outline-none focus:border-accent disabled:opacity-60`}
+      className={`${className} premium-inline-rename-input disabled:opacity-60`}
     />
   );
 }
@@ -5794,6 +7140,7 @@ function ModListRowContent({
   technicalMetaClasses,
   actions,
   onRevealInFolder,
+  onViewImprint,
 }: ModListRowContentProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -5831,7 +7178,7 @@ function ModListRowContent({
           onOpenDetails?.();
         }}
         disabled={!canOpen}
-        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-md bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
+        className={`group relative h-10 w-14 flex-shrink-0 overflow-hidden rounded-lg bg-bg-tertiary border border-white/[0.08] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 disabled:cursor-default enabled:cursor-pointer transition-[filter,opacity] duration-200 ${
           mod.enabled ? '' : 'grayscale-[0.6] opacity-[0.7]'
         }`}
         aria-label={canOpen ? (isGroupCard ? t('installed.card.chooseFilesFor', { name: mod.name }) : t('installed.card.viewDetailsFor', { name: mod.name })) : undefined}
@@ -5840,7 +7187,7 @@ function ModListRowContent({
         onDragStart={stopMediaDrag}
       >
         {listHeroRenderUrl ? (
-          <ImageContextMenu src={listHeroRenderUrl} alt={listHeroName ?? mod.name} onRevealInFolder={onRevealInFolder}>
+          <ImageContextMenu src={listHeroRenderUrl} alt={listHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
             <img
               src={listHeroRenderUrl}
               alt={listHeroName ?? mod.name}
@@ -5859,7 +7206,8 @@ function ModListRowContent({
             hideNsfw={hideNsfwPreviews}
             className="w-full h-full"
             onRevealInFolder={onRevealInFolder}
-            imageClassName="origin-center transform-gpu will-change-transform transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            onViewImprint={onViewImprint}
+            imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
             mergedSources={mod.merged?.sources}
           />
         )}
@@ -5945,9 +7293,12 @@ function ModCard({
   onOpenDetails,
   onViewAuthor,
   onToggle,
+  onSoloLaunch,
+  soloBusy = false,
   onDelete,
   onEditLocal,
   onRenameLocal,
+  onViewImprint,
   onTagLocker,
   onTagGlobal,
   onFixUnknown,
@@ -5974,6 +7325,9 @@ function ModCard({
     });
   };
   const revealAction = selectMode ? undefined : handleRevealInFolder;
+  // "View imprint" mirrors reveal-in-folder: offered on the card's right-click
+  // menu and the image menus (which swallow right-clicks), hidden in select mode.
+  const imprintAction = selectMode ? undefined : onViewImprint;
   const variantStatusLabel = group ? `${group.enabledCount}/${group.variantCount}` : null;
   const enabledTitle = group?.enabledLabels.join(', ') ?? '';
   const variantStatusTitle = group
@@ -6081,17 +7435,17 @@ function ModCard({
   const stateClasses = hasConflicts
     ? 'bg-state-warning/5 border-state-warning/45'
     : mod.enabled
-      ? 'bg-[#242424] border-white/[0.08] hover:border-white/[0.14] hover:bg-bg-secondary'
-      : 'bg-[#242424]/85 border-white/[0.08] text-text-primary/80 hover:border-white/[0.14] hover:bg-bg-secondary hover:text-text-primary';
+      ? 'bg-bg-tertiary border-white/[0.08] hover:border-white/[0.14] hover:bg-bg-secondary'
+      : 'bg-bg-tertiary/85 border-white/[0.08] text-text-primary/80 hover:border-white/[0.14] hover:bg-bg-secondary hover:text-text-primary';
 
   // Glass surface for grid/compact cards: a translucent base over which a
   // blurred copy of the cover art (see glassBackdropUrl) bleeds, so the card
   // is tinted by its own thumbnail. List view keeps the solid stateClasses.
   const glassStateClasses = hasConflicts
-    ? 'border-state-warning/45 bg-state-warning/[0.07]'
+    ? 'border-state-warning/45 bg-state-warning/[0.07] premium-card-glow premium-card-glow-warning'
     : mod.enabled
-      ? 'border-white/[0.12] bg-[#141414]/65 shadow-[inset_0_1px_0_0_rgba(255,255,255,0.06)] hover:border-white/[0.2]'
-      : 'border-white/[0.08] bg-[#141414]/55 text-text-primary/75 hover:border-white/[0.16] hover:text-text-primary';
+      ? 'premium-glass-card premium-card-glow-active'
+      : 'premium-glass-card opacity-85';
 
   // Merged mods get a "stacked card" silhouette via two offset box-shadows
   // that read as cards-behind-the-card. Uses only neutral surface/border
@@ -6144,8 +7498,8 @@ function ModCard({
   const mediaSpacingClasses = isCompact ? 'mb-2' : 'mb-1.5';
   const mediaFrameClasses = isCompact ? 'h-[116px]' : 'aspect-video';
   const audioOverlayClasses = isCompact
-    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer'
-    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/75 px-2.5 shadow-sm backdrop-blur-sm [&_*]:cursor-pointer';
+    ? 'absolute bottom-2 left-2 right-2 z-20 flex h-[30px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/85 px-2 shadow-sm [&_*]:cursor-pointer'
+    : 'absolute bottom-2.5 left-3 right-3 z-20 flex h-[34px] cursor-pointer items-center rounded-md border border-white/[0.10] bg-bg-secondary/85 px-2.5 shadow-sm [&_*]:cursor-pointer';
   const audioPlayerClassName = isCompact
     ? 'w-full gap-2 [&>button:first-of-type]:h-6 [&>button:first-of-type]:w-6 [&>div]:h-1 [&>span]:text-[10px]'
     : 'w-full gap-2.5 [&>button:first-of-type]:h-7 [&>button:first-of-type]:w-7 [&>div]:h-1 [&>span]:text-[10px]';
@@ -6283,6 +7637,22 @@ function ModCard({
               >
                 <Banana className="w-3.5 h-3.5" />
                 {t('installed.card.viewAuthorPage')}
+              </button>
+            )}
+            {onSoloLaunch && (
+              <button
+                type="button"
+                role="menuitem"
+                disabled={soloBusy}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setMenuOpen(false);
+                  onSoloLaunch();
+                }}
+                className={menuItemClasses}
+              >
+                <Beaker className="w-3.5 h-3.5" />
+                {t('installed.card.soloLaunch')}
               </button>
             )}
             {(onTagLocker || onTagGlobal) && (
@@ -6471,7 +7841,7 @@ function ModCard({
       <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
-      className={`group/card relative rounded-[10px] border transform-gpu transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ${isList ? stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
+      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {selectMode && (
@@ -6520,11 +7890,12 @@ function ModCard({
             technicalMetaClasses={technicalMetaClasses}
             actions={actions}
             onRevealInFolder={revealAction}
+            onViewImprint={imprintAction}
           />
         ) : (
         <>
         {glassBackdropUrl && (
-          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-[10px]">
+          <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden rounded-xl">
             <img
               src={glassBackdropUrl}
               alt=""
@@ -6534,7 +7905,7 @@ function ModCard({
                 mod.enabled ? 'opacity-55' : 'opacity-30 grayscale-[0.4]'
               }`}
             />
-            <div className="absolute inset-0 bg-gradient-to-b from-[#0f0f0f]/45 via-[#0f0f0f]/65 to-[#0f0f0f]/[0.88]" />
+            <div className="absolute inset-0 scrim-bottom" />
           </div>
         )}
         {(() => {
@@ -6600,6 +7971,16 @@ function ModCard({
                   {t('installed.card.mergedBadge', { count: mod.merged.sources.length })}
                 </Tag>
               )}
+              {group && group.variantCount > 1 && (
+                <Tag
+                  variant="overlay"
+                  icon={Files}
+                  title={variantStatusTitle}
+                  className="border-white/20 text-white/90 tabular-nums"
+                >
+                  {variantStatusLabel}
+                </Tag>
+              )}
             </div>
           </>
         );
@@ -6617,6 +7998,7 @@ function ModCard({
             onOpenDetails={onOpenDetails}
             isGroupCard={isGroupCard}
             onRevealInFolder={revealAction}
+            onViewImprint={imprintAction}
           />
         );
         })()}
@@ -6693,6 +8075,11 @@ function ModCard({
         <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
           {t('installed.card.revealInFolder')}
         </MenuItem>
+        {onViewImprint && (
+          <MenuItem icon={Fingerprint} onSelect={onViewImprint}>
+            {t('installed.imprintDetails.menuEntry')}
+          </MenuItem>
+        )}
       </MenuContent>
     </MenuRoot>
   );
@@ -6799,21 +8186,18 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
           </div>
         </div>
 
-        <label className="mt-5 block text-sm font-medium text-text-primary" htmlFor="local-mod-name">
-          {t('locker.soulImport.fields.name')}
-        </label>
-        <input
-          id="local-mod-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') void submit();
-            if (e.key === 'Escape') onClose();
-          }}
-          autoFocus
-          className="mt-2 w-full rounded-md border border-border bg-bg-primary px-3 py-2 text-sm text-text-primary outline-none transition-colors placeholder:text-text-secondary/60 focus:border-accent focus:ring-2 focus:ring-accent/25"
-          placeholder={t('installed.edit.modNamePlaceholder')}
-        />
+        <FormField className="mt-5" label={t('locker.soulImport.fields.name')}>
+          <Input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') void submit();
+              if (e.key === 'Escape') onClose();
+            }}
+            autoFocus
+            placeholder={t('installed.edit.modNamePlaceholder')}
+          />
+        </FormField>
         <p className="mt-2 truncate text-xs text-text-secondary" title={mod.fileName}>
           {t('installed.edit.fileLabel', { fileName: mod.fileName })}
         </p>
@@ -6923,10 +8307,14 @@ interface ImportCustomModModalProps {
 }
 
 const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
+// Local mod import accepts a bare VPK or an archive we extract on the main side.
+const VPK_IMPORT_EXTS = ['vpk', 'zip', '7z', 'rar'];
+const VPK_IMPORT_RE = /\.(vpk|zip|7z|rar)$/i;
 
 function deriveModNameFromPath(p: string): string {
   const base = p.split(/[\\/]/).pop() ?? '';
   return base
+    .replace(/\.(zip|7z|rar)$/i, '')
     .replace(/_dir\.vpk$/i, '')
     .replace(/\.vpk$/i, '')
     .replace(/^pak\d{2}_/, '')
@@ -6957,11 +8345,38 @@ function ImportCustomModModal({
   const [error, setError] = useState<string | null>(null);
   const [vpkDragActive, setVpkDragActive] = useState(false);
   const [imgDragActive, setImgDragActive] = useState(false);
+  // Whether the CURRENT name field value came from the user actually typing,
+  // vs. an auto-fill (filename-derived, or an imprint recognition prefill).
+  // Recognition only prefills over an auto-filled name, never over one the
+  // user actually edited.
+  const nameTouchedRef = useRef(!!initialName);
+  // Imprint recognition for a single picked .vpk (archives skip the peek:
+  // extraction happens later, at which point every extracted VPK still goes
+  // through adoption at import time, so nothing is lost by not peeking here).
+  const [recognized, setRecognized] = useState<PeekImprintResult | null>(null);
+  const peekRequestRef = useRef(0);
 
   const acceptVpkPath = (picked: string) => {
     setVpkPath(picked);
     setError(null);
-    if (!name) setName(deriveModNameFromPath(picked));
+    setRecognized(null);
+    if (!nameTouchedRef.current) setName(deriveModNameFromPath(picked));
+
+    if (!picked.toLowerCase().endsWith('.vpk')) return;
+    const requestId = ++peekRequestRef.current;
+    void peekImprint(picked)
+      .then((result) => {
+        // Stale response guard: the user may have picked a different file
+        // (or closed the modal) while this was in flight.
+        if (peekRequestRef.current !== requestId) return;
+        setRecognized(result);
+        if (result?.title && !nameTouchedRef.current) {
+          setName(result.title);
+        }
+      })
+      .catch(() => {
+        // Best-effort recognition only; a failed peek just shows no note.
+      });
   };
 
   const acceptImagePath = async (picked: string) => {
@@ -6980,7 +8395,7 @@ function ImportCustomModModal({
     if (lockVpk) return;
     const picked = await showOpenDialog({
       title: t('installed.import.selectVpk'),
-      filters: [{ name: 'VPK files', extensions: ['vpk'] }],
+      filters: [{ name: 'VPK or archive', extensions: VPK_IMPORT_EXTS }],
     });
     if (picked) acceptVpkPath(picked);
   };
@@ -7000,13 +8415,15 @@ function ImportCustomModModal({
     if (lockVpk) return;
     const file = e.dataTransfer.files?.[0];
     if (!file) return;
-    if (!/\.vpk$/i.test(file.name)) {
+    if (!VPK_IMPORT_RE.test(file.name)) {
       setError(t('installed.import.expectedVpk', { name: file.name }));
       return;
     }
     const path = window.electronAPI.getDroppedFilePath(file);
     if (!path) {
-      setError(t('locker.soulImport.errors.dropPathUnresolved'));
+      // No real on-disk path: almost always a file dragged out of Windows'
+      // built-in zip viewer (a virtual shell file). Point them at the zip itself.
+      setError(t('installed.import.dropUnresolved'));
       return;
     }
     acceptVpkPath(path);
@@ -7058,27 +8475,40 @@ function ImportCustomModModal({
     }
   };
 
-  return createPortal(
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-bg-secondary border border-border rounded-xl w-full max-w-lg">
-        <div className="flex items-center justify-between p-5 border-b border-border">
-          <h3 className="text-lg font-semibold text-text-primary flex items-center gap-2">
-            <FilePlus className="w-5 h-5" />
-            {title}
-          </h3>
+  return (
+    <Modal
+      onClose={onClose}
+      labelledBy="import-custom-mod-title"
+      size="lg"
+      dismissable={!submitting}
+      panelClassName="flex max-h-[80vh] flex-col overflow-hidden"
+    >
+        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
+          <div className="flex items-center gap-2.5">
+            <FilePlus className="h-5 w-5 text-accent" />
+            <h2 id="import-custom-mod-title" className="text-base font-semibold text-text-primary">
+              {title}
+            </h2>
+          </div>
           <button
-            onClick={onClose}
-            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer"
+            type="button"
+            onClick={() => !submitting && onClose()}
+            disabled={submitting}
             aria-label={t('common.actions.close')}
+            className="rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
-            <X className="w-5 h-5" />
+            <X className="h-5 w-5" />
           </button>
         </div>
 
-        <div className="p-5 space-y-4">
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3.5">
+          <p className="text-xs leading-5 text-text-secondary">
+            {vpkHelpText}
+          </p>
+
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.vpkFile')} <span className="text-red-400">*</span>
+              {t('installed.import.vpkFile')} <span className="text-state-danger">*</span>
             </label>
             <div
               role="button"
@@ -7090,7 +8520,7 @@ function ImportCustomModModal({
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = lockVpk ? 'none' : 'copy'; if (!lockVpk) setVpkDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(false); }}
               onDrop={handleVpkDrop}
-              className={`relative flex flex-col items-center justify-center gap-1.5 px-4 py-5 rounded-lg border border-dashed text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`relative flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 vpkDragActive
                   ? 'border-accent bg-accent/10'
                   : vpkPath
@@ -7120,23 +8550,31 @@ function ImportCustomModModal({
                 </>
               )}
             </div>
-            <p className="mt-1 text-xs text-text-secondary">
-              {vpkHelpText}
-            </p>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.modName')} <span className="text-red-400">*</span>
-            </label>
-            <input
-              type="text"
+          <FormField label={t('installed.import.modName')} required>
+            <Input
               value={name}
-              onChange={(e) => setName(e.target.value)}
+              onChange={(e) => {
+                nameTouchedRef.current = true;
+                setName(e.target.value);
+              }}
               placeholder={t('installed.import.modNamePlaceholder')}
-              className="w-full px-3 py-2 bg-bg-tertiary border border-border rounded-lg text-sm text-text-primary placeholder:text-text-secondary focus:outline-none focus:border-accent"
             />
-          </div>
+            {recognized && (
+              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+                <Tag tone="success" icon={Fingerprint}>
+                  {t('installed.import.recognizedFromImprint')}
+                </Tag>
+                {recognized.title && <Tag tone="neutral">{recognized.title}</Tag>}
+                {recognized.gamebananaId && (
+                  <Tag tone="neutral">
+                    {t('installed.import.recognizedGameBananaId', { id: recognized.gamebananaId })}
+                  </Tag>
+                )}
+              </div>
+            )}
+          </FormField>
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
@@ -7152,7 +8590,7 @@ function ImportCustomModModal({
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
               onDrop={handleImageDrop}
-              className={`flex items-center gap-3 p-3 rounded-lg border border-dashed cursor-pointer transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
+              className={`flex cursor-pointer items-center gap-3 rounded-lg border border-dashed p-2.5 transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
                 imgDragActive
                   ? 'border-accent bg-accent/10'
                   : thumbnailDataUrl
@@ -7184,42 +8622,35 @@ function ImportCustomModModal({
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-text-primary cursor-pointer select-none">
+          <label className="group flex items-center gap-2 text-sm font-medium text-text-primary cursor-pointer select-none">
             <input
               type="checkbox"
               checked={nsfw}
               onChange={(e) => setNsfw(e.target.checked)}
-              className="w-4 h-4 accent-accent cursor-pointer"
+              className="peer sr-only"
             />
+            <CheckboxMark checked={nsfw} />
             {t('locker.soulImport.fields.nsfw')}
           </label>
 
           {error && (
-            <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/30 rounded-lg p-2">
+            <div className="text-sm text-state-danger bg-red-500/10 border border-red-500/30 rounded-lg p-2">
               {error}
             </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-3 p-5 border-t border-border">
-          <button
-            onClick={onClose}
-            disabled={submitting}
-            className="px-4 py-2 bg-bg-tertiary border border-border rounded-lg hover:bg-bg-secondary transition-colors cursor-pointer disabled:opacity-50"
-          >
-            {t('common.actions.cancel')}
-          </button>
-          <button
+        <div className="flex justify-center border-t border-border px-5 py-3">
+          <Button
+            variant="primary"
             onClick={handleSubmit}
             disabled={!canSubmit}
-            className="px-4 py-2 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 text-text-primary rounded-lg transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+            isLoading={submitting}
+            className="!px-10 !py-1.5"
           >
-            {submitting && <Loader2 className="w-4 h-4 animate-spin" />}
             {submitLabel}
-          </button>
+          </Button>
         </div>
-      </div>
-    </div>,
-    document.body
+    </Modal>
   );
 }

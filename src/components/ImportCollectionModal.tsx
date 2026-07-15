@@ -20,6 +20,7 @@ import {
   createProfileFromGameBananaIds,
 } from '../lib/api';
 import { Button } from './common/ui';
+import { Input } from './common/forms';
 import { Modal } from './common/Modal';
 import ModThumbnail from './ModThumbnail';
 import type {
@@ -39,7 +40,7 @@ import {
 const DEADLOCK_GAME_ID = 20948;
 
 // Item types Grimoire can install. Matches Browse.tsx SECTION_WHITELIST.
-const SUPPORTED_MODEL_NAMES = new Set(['Mod', 'Sound']);
+const SUPPORTED_MODEL_NAMES = new Set(['Mod', 'Sound', 'Wip']);
 
 interface ImportCollectionModalProps {
   hideNsfwPreviews: boolean;
@@ -820,20 +821,20 @@ export default function ImportCollectionModal({
             }}
             className="flex items-stretch gap-2"
           >
-            <input
+            <Input
               type="text"
               value={input}
               onChange={(e) => setInput(e.target.value)}
               placeholder="https://gamebanana.com/collections/164637"
               disabled={loadingItems}
-              className="flex-1 px-3 py-2 bg-bg-tertiary border border-border rounded-md text-sm text-text-primary placeholder:text-text-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50"
+              className="flex-1"
             />
             <Button type="submit" disabled={loadingItems || !input.trim()}>
               {loadingItems ? <Loader2 className="w-4 h-4 animate-spin" /> : t('importCollection.actions.fetch')}
             </Button>
           </form>
           {resolveError && (
-            <p className="mt-2 text-xs text-red-400 flex items-center gap-1.5">
+            <p className="mt-2 text-xs text-state-danger flex items-center gap-1.5">
               <AlertTriangle className="w-3.5 h-3.5 flex-shrink-0" />
               {resolveError}
             </p>
@@ -1063,7 +1064,7 @@ export default function ImportCollectionModal({
                         <button
                           type="button"
                           onClick={() => cancelRow(row)}
-                          className="text-accent inline-flex items-center gap-1.5 justify-end hover:text-red-400 cursor-pointer"
+                          className="text-accent inline-flex items-center gap-1.5 justify-end hover:text-state-danger cursor-pointer"
                           title={t('downloadQueue.removeFromQueue')}
                         >
                           <Ban className="w-4 h-4" /> {t('importCollection.status.queued')}
@@ -1078,7 +1079,7 @@ export default function ImportCollectionModal({
                         </span>
                       ) : row.status === 'failed' ? (
                         <span
-                          className="text-red-400 inline-flex items-center gap-1.5 justify-end"
+                          className="text-state-danger inline-flex items-center gap-1.5 justify-end"
                           title={row.statusMessage}
                         >
                           <AlertTriangle className="w-4 h-4" /> {t('importCollection.status.failed')}
@@ -1097,7 +1098,7 @@ export default function ImportCollectionModal({
                         </div>
                       )}
                       {row.detailsError && (
-                        <div className="text-xs text-red-400 flex items-center gap-1.5">
+                        <div className="text-xs text-state-danger flex items-center gap-1.5">
                           <AlertTriangle className="w-3.5 h-3.5" />
                           {row.detailsError}
                         </div>
@@ -1214,7 +1215,7 @@ export default function ImportCollectionModal({
                 )}
                 {profileStatus.kind === 'failed' && (
                   <span
-                    className="text-red-400 inline-flex items-center gap-1.5 text-xs"
+                    className="text-state-danger inline-flex items-center gap-1.5 text-xs"
                     title={profileStatus.message}
                   >
                     <AlertTriangle className="w-3.5 h-3.5" />

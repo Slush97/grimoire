@@ -48,7 +48,7 @@ linux:
     - AppImage
     - deb
   category: Game
-  icon: resources/icon.png
+  icon: resources/icons
   maintainer: esoc
 win:
   target:

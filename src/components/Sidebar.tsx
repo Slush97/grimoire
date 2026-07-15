@@ -7,6 +7,7 @@ import {
   Globe2,
   Server,
   Vault,
+  Hammer,
   Target,
   ScrollText,
   Activity,
@@ -130,6 +131,7 @@ export default function Sidebar() {
   const appearanceImages = useAppStore((state) => state.appearanceImages);
   const mods = useAppStore((state) => state.mods);
   const loadMods = useAppStore((state) => state.loadMods);
+  const runLaunchShuffle = useAppStore((state) => state.runLaunchShuffle);
   const soundVolume = useAppStore((state) => state.soundVolume);
   const setSoundVolume = useAppStore((state) => state.setSoundVolume);
   const previewAudioPlaying = useAppStore((state) => state.previewAudioPlaying);
@@ -461,7 +463,7 @@ export default function Sidebar() {
       labelKey: string;
       label: string;
       tooltip: string;
-      experimental?: 'crosshair' | 'stats' | 'social' | 'servers';
+      experimental?: 'crosshair' | 'stats' | 'social' | 'servers' | 'foundry';
       tone?: 'test';
       badge?: number;
       badgeTone?: BadgeTone;
@@ -483,6 +485,7 @@ export default function Sidebar() {
       },
       { to: '/servers', icon: Server, labelKey: 'nav.servers', label: t('nav.servers'), tooltip: t('sidebar.tooltip.servers'), experimental: 'servers' },
       { to: '/locker', icon: Vault, labelKey: 'nav.locker', label: t('nav.locker'), tooltip: t('sidebar.tooltip.locker') },
+      { to: '/foundry', icon: Hammer, labelKey: 'nav.foundry', label: t('nav.foundry'), tooltip: t('sidebar.tooltip.foundry'), experimental: 'foundry' },
       { to: '/crosshair', icon: Target, labelKey: 'nav.crosshair', label: t('nav.crosshair'), tooltip: t('sidebar.tooltip.crosshair'), experimental: 'crosshair' },
       { to: '/autoexec', icon: ScrollText, labelKey: 'nav.autoexec', label: t('nav.autoexec'), tooltip: t('sidebar.tooltip.autoexec') },
       { to: '/stats', icon: Activity, labelKey: 'nav.stats', label: t('nav.stats'), tooltip: t('sidebar.tooltip.stats'), experimental: 'stats' },
@@ -495,9 +498,10 @@ export default function Sidebar() {
       if (item.experimental === 'crosshair') return settings?.experimentalCrosshair;
       if (item.experimental === 'social') return settings?.experimentalSocial;
       if (item.experimental === 'servers') return settings?.experimentalDeadworksServers;
+      if (item.experimental === 'foundry') return settings?.experimentalFoundry;
       return true;
     });
-  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, conflictCount, discoverNotificationCount, installedCount]);
+  }, [t, settings?.experimentalStats, settings?.experimentalCrosshair, settings?.experimentalSocial, settings?.experimentalDeadworksServers, settings?.experimentalFoundry, conflictCount, discoverNotificationCount, installedCount]);
 
   // Optimistic nav highlight. The router wraps navigation in startTransition,
   // so location.pathname (and any highlight derived from it) only updates
@@ -615,6 +619,24 @@ export default function Sidebar() {
     setLaunchPending('modded');
     setToast(null);
     try {
+      // Re-roll the shuffled skins (no-op unless "Shuffle on launch" is armed)
+      // before the game mounts addons. Skipped when a vanilla stash is pending:
+      // launchModded restores that stash first, so a shuffle here would operate
+      // on the stashed-out files and get overwritten by the restore. Guarded so
+      // a failed shuffle never blocks the launch.
+      if (!stashStatus.active) {
+        try {
+          const { failures } = await runLaunchShuffle();
+          if (failures > 0) {
+            // The shuffle half-applied (a locked VPK, antivirus, the enable
+            // cap). Warn so a hero that silently fell back to vanilla isn't a
+            // mystery; the launch still proceeds.
+            setToast({ kind: 'error', text: t('sidebar.toast.shufflePartial', { count: failures }) });
+          }
+        } catch (err) {
+          console.warn('[launch] shuffle skipped:', err);
+        }
+      }
       await launchModded();
       if (stashStatus.active) {
         // Modded path did an auto-restore as part of the launch.

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Layers, Plus, Trash2, Play, Save, RefreshCw, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check, Pencil, X, Upload, Share2, Globe, History, RotateCcw, Camera } from 'lucide-react';
+import { Layers, Plus, Trash2, Play, Save, AlertTriangle, User, ChevronDown, ChevronUp, Terminal, Check, Pencil, X, Upload, Share2, Globe, History, RotateCcw, Camera } from 'lucide-react';
 import {
   getProfiles,
   createProfile,
@@ -8,6 +8,7 @@ import {
   updateProfile,
   deleteProfile,
   renameProfile,
+  removeProfileCrosshair,
   getSettings,
   createSnapshot,
   listSnapshots,
@@ -22,7 +23,8 @@ import { useAppStore } from '../stores/appStore';
 import { useCrosshairStore } from '../stores/crosshairStore';
 import { useSocialStore } from '../stores/socialStore';
 import { Card, Badge, Button, CheckboxMark } from '../components/common/ui';
-import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
+import { Input } from '../components/common/forms';
+import { ConfirmModal, EmptyState, PageLayout, LoadingState } from '../components/common/PageComponents';
 import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
@@ -105,9 +107,14 @@ export default function Profiles() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [newProfileName, setNewProfileName] = useState('');
+  // Opt-in: whether a newly created profile should bake in the currently applied
+  // crosshair. Off by default so a profile only carries a crosshair when the
+  // user explicitly asks for it (and only when one is actually set).
+  const [includeCrosshairOnCreate, setIncludeCrosshairOnCreate] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
   const [applyingId, setApplyingId] = useState<string | null>(null);
   const [updatingId, setUpdatingId] = useState<string | null>(null);
+  const [removingCrosshairId, setRemovingCrosshairId] = useState<string | null>(null);
   // Profile id pending an "overwrite this profile?" confirmation. Gated on the
   // confirmProfileUpdate setting (on by default) so Update isn't a one-click,
   // no-undo overwrite sitting right next to Apply.
@@ -133,7 +140,7 @@ export default function Profiles() {
   const [bulkDeletingSnapshots, setBulkDeletingSnapshots] = useState(false);
 
   const { mods, loadMods } = useAppStore();
-  const { getSettings: getCrosshairSettings, loadSettingsFromPreset } = useCrosshairStore();
+  const { loadSettingsFromPreset, loadPresets, presets, activePresetId } = useCrosshairStore();
   const socialSignedIn = useSocialStore((s) => s.status.signedIn);
 
   const modByFileName = new Map(mods.map((m) => [m.fileName, m]));
@@ -172,7 +179,18 @@ export default function Profiles() {
   useEffect(() => {
     loadProfileList();
     void loadSnapshotList();
-  }, [loadSnapshotList]);
+    // Populate presets + activePresetId so we know whether a crosshair is
+    // actually applied (the store's editor settings aren't hydrated here).
+    void loadPresets();
+  }, [loadSnapshotList, loadPresets]);
+
+  // The crosshair currently applied to the game, as structured settings, or null
+  // if none is set. Sourced from the active preset (the persisted "applied"
+  // signal) rather than the editor store, which is often just defaults here.
+  const activeCrosshair =
+    crosshairEnabled
+      ? (presets.find((p) => p.id === activePresetId)?.settings ?? null)
+      : null;
 
   const handleRestoreSnapshot = useCallback(async (snapshotId: string) => {
     setRestoringSnapshotId(snapshotId);
@@ -284,11 +302,14 @@ export default function Profiles() {
 
     setIsCreating(true);
     try {
-      // Only include crosshair settings if the experimental crosshair feature is enabled
-      const crosshair = crosshairEnabled ? getCrosshairSettings() : undefined;
+      // Bake in the crosshair only when the user opted in AND one is actually
+      // applied. No crosshair set (or not opted in) means the profile carries
+      // no crosshair at all.
+      const crosshair = includeCrosshairOnCreate && activeCrosshair ? activeCrosshair : undefined;
       const newProfile = await createProfile(newProfileName.trim(), crosshair as unknown as ProfileCrosshairSettings | undefined);
 
       setNewProfileName('');
+      setIncludeCrosshairOnCreate(false);
       setActiveProfileId(newProfile.id);
       await loadProfileList();
     } catch (err) {
@@ -301,7 +322,7 @@ export default function Profiles() {
   const handleApplyProfile = async (profileId: string) => {
     setApplyingId(profileId);
     try {
-      const profile = await applyProfile(profileId);
+      const { profile, failures } = await applyProfile(profileId);
 
       // Update local crosshair store if profile has settings
       if (profile.crosshair) {
@@ -312,6 +333,14 @@ export default function Profiles() {
 
       setActiveProfileId(profileId);
       await loadMods();
+
+      // The apply is best-effort: per-mod enable/disable ops that couldn't
+      // complete (typically a VPK locked by the running game) are counted, not
+      // thrown. Surface that count so the profile doesn't silently launch with
+      // missing mods.
+      if (failures.length > 0) {
+        setError(t('profiles.errors.applyPartial', { count: failures.length }));
+      }
     } catch (err) {
       setError(String(err));
     } finally {
@@ -322,14 +351,31 @@ export default function Profiles() {
   const handleUpdateProfile = async (profileId: string) => {
     setUpdatingId(profileId);
     try {
-      // Only include crosshair settings if the experimental crosshair feature is enabled
-      const crosshair = crosshairEnabled ? getCrosshairSettings() : undefined;
-      await updateProfile(profileId, crosshair as unknown as ProfileCrosshairSettings | undefined);
+      // Preserve whatever crosshair the profile already has (set at creation or
+      // cleared via Remove). Update refreshes mods/autoexec but must not silently
+      // re-bake the editor's crosshair, which would undo a Remove.
+      const existingCrosshair = profiles.find((p) => p.id === profileId)?.crosshair;
+      await updateProfile(profileId, existingCrosshair);
       await loadProfileList();
     } catch (err) {
       setError(String(err));
     } finally {
       setUpdatingId(null);
+    }
+  };
+
+  // Drops the crosshair from a single profile without touching its mods. Update
+  // preserves the profile's existing crosshair (it no longer re-bakes editor
+  // state), so clearing one needs this dedicated op.
+  const handleRemoveCrosshair = async (profileId: string) => {
+    setRemovingCrosshairId(profileId);
+    try {
+      await removeProfileCrosshair(profileId);
+      await loadProfileList();
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setRemovingCrosshairId(null);
     }
   };
 
@@ -378,22 +424,15 @@ export default function Profiles() {
   };
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center h-full text-text-secondary">
-        <RefreshCw className="w-8 h-8 animate-spin mb-4 text-accent" />
-        <p>
-          <Tx k="profiles.loading" fallback="Loading profiles..." />
-        </p>
-      </div>
-    );
+    return <LoadingState label={<Tx k="profiles.loading" fallback="Loading profiles..." />} />;
   }
 
   return (
-    <div className="p-6 h-full max-w-5xl mx-auto w-full flex flex-col overflow-hidden animate-fade-in">
+    <PageLayout variant="fill" maxWidth="5xl">
       <div className="flex flex-col gap-6 flex-1 overflow-auto px-1">
         <div className="space-y-6 pr-1">
           {error && (
-            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-red-400">
+            <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4 flex items-center gap-2 text-state-danger">
               <AlertTriangle className="w-5 h-5" />
               <p>{error}</p>
             </div>
@@ -402,14 +441,14 @@ export default function Profiles() {
           {/* Create New Profile */}
           <Card title={<Tx k="profiles.create.title" fallback="Create New Profile" />} icon={Plus}>
             <div className="flex flex-wrap gap-3">
-              <input
+              <Input
                 type="text"
                 value={newProfileName}
                 onChange={(e) => setNewProfileName(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateProfile()}
                 placeholder={t('profiles.create.placeholder')}
                 aria-label={t('profiles.create.profileName')}
-                className="flex-1 px-4 py-2.5 bg-bg-tertiary border border-white/5 rounded-lg text-text-primary placeholder-text-secondary focus:outline-none focus:ring-2 focus:ring-accent transition-all"
+                className="flex-1"
               />
               <Button
                 onClick={handleCreateProfile}
@@ -428,6 +467,19 @@ export default function Profiles() {
                 <Tx k="profiles.actions.import" fallback="Import" />
               </Button>
             </div>
+            {/* Opt-in: only offered when a crosshair is actually applied. */}
+            {activeCrosshair && (
+              <label className="flex items-center gap-2 mt-3 cursor-pointer select-none text-sm text-text-secondary w-fit">
+                <input
+                  type="checkbox"
+                  checked={includeCrosshairOnCreate}
+                  onChange={(e) => setIncludeCrosshairOnCreate(e.target.checked)}
+                  className="peer sr-only"
+                />
+                <CheckboxMark checked={includeCrosshairOnCreate} />
+                <Tx k="profiles.create.includeCrosshair" fallback="Include current crosshair" />
+              </label>
+            )}
           </Card>
 
           {/* Snapshots — automatic recovery points captured before
@@ -545,7 +597,7 @@ export default function Profiles() {
                           variant="ghost"
                           icon={Trash2}
                           onClick={() => setBulkDeleteSnapshotsOpen(true)}
-                          className="ml-auto text-red-400 hover:text-red-300"
+                          className="ml-auto text-state-danger hover:text-red-300"
                           title={t('profiles.snapshots.deleteSelectedTitle', { count: selectedSnapshotIds.size })}
                         >
                           <Tx
@@ -567,12 +619,16 @@ export default function Profiles() {
                       ? t('profiles.snapshots.trigger.preUpdate')
                       : snap.trigger === 'pre-apply-profile'
                       ? t('profiles.snapshots.trigger.preApplyProfile')
+                      : snap.trigger === 'pre-dmm-import'
+                      ? t('profiles.snapshots.trigger.preDmmImport')
                       : t('profiles.snapshots.trigger.manual');
                   const triggerExplanation =
                     snap.trigger === 'pre-update'
                       ? t('profiles.snapshots.explanation.preUpdate')
                       : snap.trigger === 'pre-apply-profile'
                       ? t('profiles.snapshots.explanation.preApplyProfile')
+                      : snap.trigger === 'pre-dmm-import'
+                      ? t('profiles.snapshots.explanation.preDmmImport')
                       : t('profiles.snapshots.explanation.manual');
                   return (
                     <li
@@ -903,8 +959,22 @@ export default function Profiles() {
                           {/* Crosshair Preview */}
                           {profile.crosshair && (
                             <div className="pt-3 border-t border-white/5">
-                              <div className="text-xs font-bold text-text-secondary mb-2 uppercase tracking-wider">
-                                <Tx k="nav.crosshair" fallback="Crosshair" />
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="text-xs font-bold text-text-secondary uppercase tracking-wider">
+                                  <Tx k="nav.crosshair" fallback="Crosshair" />
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleRemoveCrosshair(profile.id)}
+                                  disabled={isApplying || isUpdating || removingCrosshairId === profile.id}
+                                  icon={X}
+                                  title={t('profiles.crosshair.removeTitle')}
+                                  aria-label={t('profiles.crosshair.remove')}
+                                  className="px-1.5"
+                                >
+                                  <Tx k="profiles.crosshair.remove" fallback="Remove" />
+                                </Button>
                               </div>
                               <div className="flex items-center gap-4">
                                 <CrosshairPreview size={56} scale={1.3} settings={profile.crosshair} />
@@ -1078,6 +1148,6 @@ export default function Profiles() {
         }
         variant="danger"
       />
-    </div>
+    </PageLayout>
   );
 }

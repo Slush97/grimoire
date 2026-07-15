@@ -12,6 +12,7 @@ import type {
     TrackedPlayer,
     MMRSnapshot,
     StoredMatch,
+    PlayerMatch,
     HeroStatsSnapshot,
     AggregatedStats,
 } from '../../../src/types/deadlock-stats'
@@ -167,6 +168,15 @@ ipcMain.handle('stats:getLocalMatchCount', (_, accountId: number): number => {
     return statsDb.getMatchCount(accountId)
 })
 
+// Persist already-fetched live matches into the local recorded history. Called
+// on player load so the recorded Match History tab stays in lockstep with the
+// live recent-matches feed (otherwise the newest game shows in Overview but not
+// in the Matches tab until a manual Refresh).
+ipcMain.handle('stats:recordMatches', (_, accountId: number, matches: PlayerMatch[]): void => {
+    if (!Array.isArray(matches) || matches.length === 0) return
+    statsDb.saveMatches(accountId, matches)
+})
+
 ipcMain.handle(
     'stats:getLocalHeroStats',
     (_, accountId: number, heroId?: number): HeroStatsSnapshot[] => {
@@ -310,6 +320,16 @@ ipcMain.handle('stats:syncPlayerData', async (_, accountId: number) => {
         }
     } catch (err) {
         results.errors.push(`Match history: ${err}`)
+    }
+
+    // Refresh cached Steam persona name + avatar
+    try {
+        const profiles = await statsApi.getPlayerSteamProfiles([accountId])
+        if (profiles.length > 0) {
+            statsDb.updatePlayerProfile(profiles[0])
+        }
+    } catch (err) {
+        results.errors.push(`Profile: ${err}`)
     }
 
     return results

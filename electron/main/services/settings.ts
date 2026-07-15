@@ -13,6 +13,8 @@ const DEFAULT_SETTINGS: AppSettings = {
     devMode: false,
     devDeadlockPath: null,
     hideNsfwPreviews: true,
+    browseNsfwContentMode: 'blur',
+    installedHideNsfwPreviews: true,
     hideOutdatedMods: false,
     lockerCardsExpandedByDefault: false,
     autoDisableSiblingVariants: true,
@@ -24,9 +26,13 @@ const DEFAULT_SETTINGS: AppSettings = {
     experimentalCrosshair: false,
     experimentalSocial: false,
     experimentalUnknownModMatching: false,
+    experimentalVpkImprinting: false,
     hasCompletedSetup: false,
     ignoredConflicts: [],
     ignoreConflictsByDefault: false,
+    ignoredConflictFiles: {},
+    ignoredConflictFilesGlobal: [],
+    ignoredConflictMods: [],
     accentColor: '#f97316',
     sidebarHeroHighlight: 'Abrams',
     dateFormat: 'MM/DD/YYYY',
@@ -35,6 +41,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     discordRpcEnabled: false,
     contributeMatchSalts: false,
     unifiedLaunchButton: false,
+    verboseModTrace: false,
 };
 
 /**
@@ -51,7 +58,23 @@ export function loadSettings(): AppSettings {
     try {
         const content = readFileSync(path, 'utf-8');
         const settings = JSON.parse(content) as Partial<AppSettings>;
-        return { ...DEFAULT_SETTINGS, ...settings };
+        return {
+            ...DEFAULT_SETTINGS,
+            ...settings,
+            browseNsfwContentMode:
+                settings.browseNsfwContentMode ??
+                (settings.hideNsfwPreviews === false ? 'show' : DEFAULT_SETTINGS.browseNsfwContentMode),
+            installedHideNsfwPreviews:
+                settings.installedHideNsfwPreviews ??
+                settings.hideNsfwPreviews ??
+                DEFAULT_SETTINGS.installedHideNsfwPreviews,
+            // PRE-RELEASE SHIM: delete before first release. Migrate the
+            // pre-rename flag id so an existing opt-in survives.
+            experimentalVpkImprinting:
+                settings.experimentalVpkImprinting ??
+                (settings as { experimentalVpkTagging?: boolean }).experimentalVpkTagging ??
+                DEFAULT_SETTINGS.experimentalVpkImprinting,
+        };
     } catch (error) {
         console.warn('[Settings] Failed to load settings, resetting to defaults:', error);
         return { ...DEFAULT_SETTINGS };

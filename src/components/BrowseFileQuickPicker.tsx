@@ -90,14 +90,22 @@ export default function BrowseFileQuickPicker({
     return () => anchor.focus();
   }, [anchor]);
 
-  // Dismiss on any scroll/resize so the popover never drifts from its anchor.
-  // Outside clicks are caught by the backdrop; Escape/arrow keys live on the
-  // menu element itself (roving focus).
+  // Dismiss when the background page scrolls or the window resizes so the
+  // popover never drifts from its anchor. The scroll listener is in the capture
+  // phase (scroll events don't bubble), so it also sees scrolls from the
+  // popover's own file list: skip those, or scrolling the list would instantly
+  // close the picker (issue: file picker scroll does nothing). Outside clicks
+  // are caught by the backdrop; Escape/arrow keys live on the menu element.
   useEffect(() => {
-    window.addEventListener('scroll', onClose, true);
+    const onScroll = (e: Event) => {
+      const target = e.target as Node | null;
+      if (popoverRef.current && target && popoverRef.current.contains(target)) return;
+      onClose();
+    };
+    window.addEventListener('scroll', onScroll, true);
     window.addEventListener('resize', onClose);
     return () => {
-      window.removeEventListener('scroll', onClose, true);
+      window.removeEventListener('scroll', onScroll, true);
       window.removeEventListener('resize', onClose);
     };
   }, [onClose]);

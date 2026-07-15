@@ -153,7 +153,7 @@ function ParamSliders({
             </div>
             <div className="flex items-center justify-between">
                 <span className="text-[9px] text-text-secondary/70">
-                    {saving ? t('lockerOverrides.saving') : t('lockerOverrides.appliesOnRelease')}
+                    {saving ? t('lockerOverrides.saving') : ''}
                 </span>
                 {dirty && !disabled && (
                     <button

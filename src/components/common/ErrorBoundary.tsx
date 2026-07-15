@@ -56,7 +56,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
             return (
                 <div className="flex flex-col items-center justify-center h-full p-8 text-center">
                     <div className="p-4 bg-red-500/10 rounded-full mb-4">
-                        <AlertTriangle className="w-12 h-12 text-red-400" />
+                        <AlertTriangle className="w-12 h-12 text-state-danger" />
                     </div>
                     <h2 className="text-xl font-bold text-text-primary mb-2">
                         <Tx k="common.errorBoundary.title" fallback="Something went wrong" />
@@ -68,7 +68,7 @@ export class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundarySt
                         />
                     </p>
                     {this.state.error && (
-                        <pre className="text-xs text-red-400 bg-red-500/5 border border-red-500/20 rounded-lg p-3 mb-4 max-w-lg overflow-auto">
+                        <pre className="text-xs text-state-danger bg-red-500/5 border border-red-500/20 rounded-lg p-3 mb-4 max-w-lg overflow-auto">
                             {this.state.error.message}
                         </pre>
                     )}

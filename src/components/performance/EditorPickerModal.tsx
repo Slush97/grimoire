@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { AppWindow, FolderOpen, MonitorCog, X } from 'lucide-react';
 import { listEditorCandidates, showOpenDialog } from '../../lib/api';
 import type { EditorCandidate } from '../../types/electron';
+import { Modal } from '../common/Modal';
 
 interface Props {
   onClose: () => void;
@@ -30,14 +31,6 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
     };
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
   const browse = async () => {
     const path = await showOpenDialog({
       title: t('performance.editor.chooseTitle'),
@@ -52,65 +45,54 @@ export default function EditorPickerModal({ onClose, onChoose }: Props) {
     'w-full flex items-center gap-3 text-left px-3 py-2 rounded-lg border border-white/10 bg-bg-tertiary hover:border-accent transition-colors cursor-pointer';
 
   return (
-    <div
-      className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="editor-picker-title"
-      onClick={onClose}
-    >
-      <div
-        className="bg-bg-secondary border border-white/10 rounded-2xl w-full max-w-md shadow-2xl p-5 space-y-4"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h2 id="editor-picker-title" className="text-base font-semibold text-text-primary">
-              {t('performance.editor.title')}
-            </h2>
-            <p className="text-xs text-text-secondary mt-1">
-              {t('performance.editor.description')}
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            aria-label={t('common.actions.close')}
-            className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
-          >
-            <X className="w-4 h-4" aria-hidden="true" />
-          </button>
+    <Modal onClose={onClose} size="sm" labelledBy="editor-picker-title" panelClassName="p-5 space-y-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <h2 id="editor-picker-title" className="text-base font-semibold text-text-primary">
+            {t('performance.editor.title')}
+          </h2>
+          <p className="text-xs text-text-secondary mt-1">
+            {t('performance.editor.description')}
+          </p>
         </div>
-        <div className="space-y-2">
-          <button type="button" className={rowClass} onClick={() => onChoose(null)}>
-            <MonitorCog className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label={t('common.actions.close')}
+          className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary flex-shrink-0"
+        >
+          <X className="w-4 h-4" aria-hidden="true" />
+        </button>
+      </div>
+      <div className="space-y-2">
+        <button type="button" className={rowClass} onClick={() => onChoose(null)}>
+          <MonitorCog className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
+          <span className="min-w-0">
+            <span className="block text-sm text-text-primary">{t('settings.language.systemDefault')}</span>
+            <span className="block text-xs text-text-secondary">
+              {t('performance.editor.systemDefaultHint')}
+            </span>
+          </span>
+        </button>
+        {candidates.map((candidate) => (
+          <button
+            key={candidate.path}
+            type="button"
+            className={rowClass}
+            onClick={() => onChoose(candidate.path)}
+          >
+            <AppWindow className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
             <span className="min-w-0">
-              <span className="block text-sm text-text-primary">{t('settings.language.systemDefault')}</span>
-              <span className="block text-xs text-text-secondary">
-                {t('performance.editor.systemDefaultHint')}
-              </span>
+              <span className="block text-sm text-text-primary">{candidate.name}</span>
+              <span className="block text-xs text-text-secondary truncate">{candidate.path}</span>
             </span>
           </button>
-          {candidates.map((candidate) => (
-            <button
-              key={candidate.path}
-              type="button"
-              className={rowClass}
-              onClick={() => onChoose(candidate.path)}
-            >
-              <AppWindow className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
-              <span className="min-w-0">
-                <span className="block text-sm text-text-primary">{candidate.name}</span>
-                <span className="block text-xs text-text-secondary truncate">{candidate.path}</span>
-              </span>
-            </button>
-          ))}
-          <button type="button" className={rowClass} onClick={() => void browse()}>
-            <FolderOpen className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
-            <span className="block text-sm text-text-primary">{t('performance.editor.browse')}</span>
-          </button>
-        </div>
+        ))}
+        <button type="button" className={rowClass} onClick={() => void browse()}>
+          <FolderOpen className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
+          <span className="block text-sm text-text-primary">{t('performance.editor.browse')}</span>
+        </button>
       </div>
-    </div>
+    </Modal>
   );
 }

@@ -1,16 +1,21 @@
 import { createHash } from 'crypto';
-import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync } from 'fs';
+import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync, mkdirSync, copyFileSync, readdirSync } from 'fs';
 import { promises as fs } from 'fs';
-import { join } from 'path';
+import { join, dirname } from 'path';
 import { getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
+import { resolveVpkIdentity } from './vpkIdentity';
 import { getMetadataPath } from '../utils/paths';
 
 export interface ModMetadata {
     modName?: string;      // The human-readable mod name from GameBanana
+    /** GameBanana submitter name, captured at download time. Absent for local
+     *  mods. Embedded into the imprint (addonauthor / modinfo.author). */
+    author?: string;
     thumbnailUrl?: string;
     audioUrl?: string;     // GameBanana audio preview URL (Sound mods)
     gameBananaId?: number;
     gameBananaFileId?: number; // The specific file ID that was downloaded
+    vpkIndex?: number;      // Size-sorted index inside a multi-VPK GameBanana file
     categoryId?: number;
     categoryName?: string; // Hero/category name from GameBanana
     sourceSection?: string;
@@ -78,12 +83,33 @@ export interface ModMetadata {
      *  import. The orientation/glow transform + tracking status; presence marks
      *  the slot for idempotent re-import (replace the previous build). */
     soulImport?: import('../../../src/types/mod').SoulContainerImportInfo;
+    /** Set when this VPK was built from a user GLB via the Spirit Urn import.
+     *  The orientation/span transform + tracking status; presence marks the slot
+     *  for idempotent re-import (replace the previous build). */
+    urnImport?: import('../../../src/types/mod').UrnImportInfo;
+    /** Set when this VPK was built via the Foundry hero sound-swap (drop your own
+     *  MP3 onto a hero sound event). Labels the mod and records what was swapped;
+     *  presence marks the slot as a local sound swap. */
+    soundSwap?: import('../../../src/types/mod').SoundSwapInfo;
     /** Load-order slot this mod last held while enabled. Disabled mods now
      *  get free-form filenames (no pakNN), so the priority is no longer encoded
      *  in the name; we stash it here on disable and try to restore it on enable
      *  when that slot is still free, so re-enabling returns the mod to roughly
      *  where it was in load order. */
     lastPriority?: number;
+    /** Set once this VPK has been re-packed in place with a self-identifying
+     *  `addoninfo.txt` embed (path B imprinting, see imprintMods.ts). A UI / idempotency
+     *  hint only: it does NOT affect canonical identity (metadata.sha256 stays the
+     *  original) and the authoritative imprinted-state is the embed itself, read via
+     *  resolveVpkIdentity. */
+    imprinted?: boolean;
+    /** Meaningful only alongside `imprinted`: the embed exists but is legacy
+     *  format or has drifted from this sidecar entry, so a re-imprint is
+     *  pending work. A UI hint for the toolbar button's pending count, kept
+     *  honest by the startup reconcile (backfillImprintedFlags) and cleared by
+     *  every successful (re)imprint; the preflight modal stays the source of
+     *  truth for what a bulk run actually does. */
+    imprintStale?: boolean;
     /** Manual opt-out from update detection. When true, the renderer
      *  excludes this mod from the "update available" check even if the
      *  installed gameBananaFileId is gone from the live file list. Useful
@@ -185,6 +211,13 @@ export function setModMetadata(fileName: string, data: ModMetadata): void {
  * Set metadata and attach a SHA-256 fingerprint for the installed VPK.
  * Callers pass the path because metadata is keyed by logical pak filename and
  * the same filename may exist in either addons or .disabled.
+ *
+ * The stored hash is the CANONICAL identity (the original, pre-imprint
+ * whole-file sha256), resolved via resolveVpkIdentity: an imprinted VPK yields
+ * its embedded original hash, a pristine VPK yields its live hash (which IS
+ * the original). Hashing live bytes here would re-stamp an imprinted file's
+ * identity to post-imprint bytes and break every record on the original axis
+ * (sha256AtMergeTime, sha256AtApplyTime, absorbed-source hiding).
  */
 export async function setModMetadataWithHash(
     fileName: string,
@@ -193,7 +226,7 @@ export async function setModMetadataWithHash(
 ): Promise<void> {
     setModMetadata(fileName, {
         ...data,
-        sha256: await hashFileSha256(filePath),
+        sha256: (await resolveVpkIdentity(filePath)).sha256,
     });
 }
 
@@ -215,7 +248,9 @@ export async function backfillMissingMetadataHashes(deadlockPath: string): Promi
         if (!filePath) continue;
 
         try {
-            data.sha256 = await hashFileSha256(filePath);
+            // Canonical (embed-aware) identity: an imprinted file backfills its
+            // embedded original hash, never the post-imprint live bytes.
+            data.sha256 = (await resolveVpkIdentity(filePath)).sha256;
             updated++;
         } catch (error) {
             console.warn(`[Metadata] Failed to backfill SHA-256 for ${key}:`, error);
@@ -252,7 +287,45 @@ function isValidSha256(value: string | undefined): boolean {
     return typeof value === 'string' && /^[a-f0-9]{64}$/i.test(value);
 }
 
-async function hashFileSha256(filePath: string): Promise<string> {
+/**
+ * Copy the metadata sidecar into mod-metadata.backups/<timestamp>_<tag>.json
+ * before a batch identity mutation (e.g. the DMM import), so a bad batch can
+ * be rolled back by restoring the file. Keeps the newest `keep` backups.
+ * Returns the backup path, or null when there is no sidecar yet. Never
+ * throws: a failed backup must not block the operation itself, so failures
+ * log a warning and return null.
+ */
+export function backupMetadataSidecar(tag: string, keep = 5): string | null {
+    const path = getMetadataPath();
+    if (!existsSync(path)) return null;
+
+    try {
+        const dir = join(dirname(path), 'mod-metadata.backups');
+        mkdirSync(dir, { recursive: true });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const backupPath = join(dir, `${stamp}_${tag}.json`);
+        copyFileSync(path, backupPath);
+
+        // Prune old backups: ISO-stamped names sort chronologically, so a
+        // descending sort puts the newest first.
+        const stale = readdirSync(dir)
+            .filter((name) => name.endsWith('.json'))
+            .sort()
+            .reverse()
+            .slice(keep);
+        for (const name of stale) {
+            try {
+                unlinkSync(join(dir, name));
+            } catch { /* ignore prune failure */ }
+        }
+        return backupPath;
+    } catch (error) {
+        console.warn('[Metadata] Sidecar backup failed:', error);
+        return null;
+    }
+}
+
+export async function hashFileSha256(filePath: string): Promise<string> {
     const hash = createHash('sha256');
 
     await new Promise<void>((resolve, reject) => {

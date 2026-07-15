@@ -326,7 +326,11 @@ export async function getPlayerMatchHistory(
     const matches = (rawMatches || []).map(match => ({
         ...match,
         hero_name: HERO_NAMES[match.hero_id] || `Hero ${match.hero_id}`,
-        match_outcome: (match.match_result === 1 ? 'Win' : 'Loss') as 'Win' | 'Loss',
+        // match_result is the WINNING TEAM id (0 or 1), not the player's result.
+        // The player won iff their team matches the winning team. (Treating
+        // match_result === 1 as a win inverted every team-0 game, roughly half
+        // of all matches.)
+        match_outcome: (match.match_result === match.player_team ? 'Win' : 'Loss') as 'Win' | 'Loss',
         duration_s: match.match_duration_s,
         kills: match.player_kills,
         deaths: match.player_deaths,

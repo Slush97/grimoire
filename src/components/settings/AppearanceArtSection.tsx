@@ -658,7 +658,7 @@ export default function AppearanceArtSection() {
                 </div>
               )}
 
-              {error && <p className="mt-3 text-xs text-red-400">{error}</p>}
+              {error && <p className="mt-3 text-xs text-state-danger">{error}</p>}
             </div>
 
             {/* Footer (pinned). Image kinds commit through the cropper's own button,

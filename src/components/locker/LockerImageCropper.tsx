@@ -343,7 +343,7 @@ export default function LockerImageCropper({
   return (
     <div className="flex flex-col gap-3">
       {error && (
-        <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-red-400">
+        <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-xs text-state-danger">
           <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" />
           <span className="break-words">{error}</span>
         </div>
