@@ -1,6 +1,13 @@
 import { describe, it, expect } from 'vitest';
 import type { Mod } from '../types/mod';
-import { planRandomization, planLaunchShuffle, shuffleSkinKey, readStoredShuffleIncluded } from './lockerRandomizer';
+import {
+  planRandomization,
+  planLaunchShuffle,
+  shuffleSkinKey,
+  readStoredShuffleIncluded,
+  readStoredShuffleVariants,
+  type VariantChoice,
+} from './lockerRandomizer';
 
 /**
  * Minimal Mod factory. Only the fields the randomizer + lockerUtils grouping
@@ -24,6 +31,11 @@ function mod(over: Partial<Mod> & { id: string }): Mod {
 
 /** rng stub returning a fixed value (picks pool[floor(value * len)]). */
 const fixedRng = (value: number) => () => value;
+
+const sequenceRng = (...values: number[]) => {
+  let index = 0;
+  return () => values[Math.min(index++, values.length - 1)] ?? 0;
+};
 
 describe('shuffleSkinKey', () => {
   it('prefers gameBananaId, then sha256, then mod id', () => {
@@ -249,6 +261,60 @@ describe('planRandomization', () => {
     expect(plan.disableIds).toEqual(['b']);
   });
 
+  it('enables the specifically selected variant by GameBanana file id', () => {
+    const heroSkins = new Map<number, Mod[]>([
+      [1, [
+        mod({ id: 'a1', gameBananaId: 1, gameBananaFileId: 11, priority: 1 }),
+        mod({ id: 'a2', gameBananaId: 1, gameBananaFileId: 12, priority: 2 }),
+      ]],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1']),
+      variants: new Map([['gamebanana:1', { fileId: 12 }]]),
+      rng: fixedRng(0),
+    });
+
+    expect(plan.enableIds).toEqual(['a2']);
+  });
+
+  it('selects a random installed variant when configured for random', () => {
+    const heroSkins = new Map<number, Mod[]>([
+      [1, [
+        mod({ id: 'a1', gameBananaId: 1, gameBananaFileId: 11, priority: 1 }),
+        mod({ id: 'a2', gameBananaId: 1, gameBananaFileId: 12, priority: 2 }),
+      ]],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1']),
+      variants: new Map([['gamebanana:1', 'random']]),
+      rng: sequenceRng(0, 0.99),
+    });
+
+    expect(plan.enableIds).toEqual(['a2']);
+  });
+
+  it('falls back to a random installed variant when a specific file is missing', () => {
+    const heroSkins = new Map<number, Mod[]>([
+      [1, [
+        mod({ id: 'a1', gameBananaId: 1, gameBananaFileId: 11, priority: 1 }),
+        mod({ id: 'a2', gameBananaId: 1, gameBananaFileId: 12, priority: 2 }),
+      ]],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1']),
+      variants: new Map([['gamebanana:1', { fileId: 999 }]]),
+      rng: sequenceRng(0, 0.99),
+    });
+
+    expect(plan.enableIds).toEqual(['a2']);
+  });
+
   it('honors scope: only shuffles heroes in heroIds', () => {
     const heroSkins = new Map<number, Mod[]>([
       [1, [mod({ id: 'a', gameBananaId: 1, enabled: false, priority: 1 })]],
@@ -355,6 +421,39 @@ describe('readStoredShuffleIncluded', () => {
   it('filters out non-string entries', () => {
     withLocalStorage(JSON.stringify(['ok', 42, null, 'ok2']), () =>
       expect(readStoredShuffleIncluded()).toEqual(new Set(['ok', 'ok2']))
+    );
+  });
+});
+
+describe('readStoredShuffleVariants', () => {
+  const withLocalStorage = (value: string | null, fn: () => void) => {
+    const g = globalThis as unknown as { localStorage?: { getItem: (k: string) => string | null } };
+    const original = g.localStorage;
+    g.localStorage = { getItem: () => value };
+    try {
+      fn();
+    } finally {
+      if (original === undefined) delete g.localStorage;
+      else g.localStorage = original;
+    }
+  };
+
+  it('loads valid choices and ignores malformed entries', () => {
+    withLocalStorage(
+      JSON.stringify({
+        a: 'primary',
+        b: 'random',
+        c: { fileId: 12 },
+        bad: { fileId: '12' },
+      }),
+      () =>
+        expect(readStoredShuffleVariants()).toEqual(
+          new Map<string, VariantChoice>([
+            ['a', 'primary'],
+            ['b', 'random'],
+            ['c', { fileId: 12 }],
+          ])
+        )
     );
   });
 });

@@ -1206,7 +1206,6 @@
       "disableCount_other": "Disable {{count}} mods",
       "merge": "Merge",
       "mergeMinHint": "Select 2+ mods to merge",
-      "mergeAlreadyMergedHint": "Cannot merge an already-merged mod. Unmerge it first.",
       "mergeCombineHint_one": "Combine {{count}} mod into one VPK",
       "mergeCombineHint_other": "Combine {{count}} mods into one VPK",
       "tag": "Tag",
@@ -1227,6 +1226,8 @@
       "viewDetailsFor": "View details for {{name}}",
       "off": "Off",
       "deleteNamed": "Delete {{name}}",
+      "addDisabledFavorite": "Pin {{name}} to the top of disabled mods",
+      "removeDisabledFavorite": "Unpin {{name}} from the top of disabled mods",
       "moreActions": "More actions",
       "moreActionsFor": "More actions for {{name}}",
       "edit": "Edit",
@@ -1298,7 +1299,10 @@
       "onLaunchHint": "When on, each time you launch from Grimoire one of your chosen skins is equipped per hero. Add skins to the pool with the shuffle button on each skin.",
       "addToShuffle": "Add {{name}} to the shuffle",
       "removeFromShuffle": "Remove {{name}} from the shuffle",
-      "inPool": "In shuffle"
+      "inPool": "In shuffle",
+      "variantChoiceFor": "Choose the shuffle variant for {{name}}",
+      "primaryVariant": "Primary variant",
+      "anyVariant": "Any variant"
     },
     "modImage": {
       "set": "Set Locker image for {{name}}",
@@ -2077,7 +2081,10 @@
     "merging": "Merging...",
     "merge": "Merge",
     "localModsIncluded_one": "{{count}} local mod included",
-    "localModsIncluded_other": "{{count}} local mods included"
+    "localModsIncluded_other": "{{count}} local mods included",
+    "flattenCount_one": "{{count}} merged mod will be flattened into this one",
+    "flattenCount_other": "{{count}} merged mods will be flattened into this one",
+    "flattenDescription": "Only the original source mods are included. Parent merges are removed after the new merge succeeds."
   },
   "mergedContents": {
     "disabledAtMerge": "Disabled at merge time",
@@ -2088,6 +2095,15 @@
     "extractingDissolves": "Extracting one dissolves the merge",
     "priorityCaptured": "Priority captured at merge time",
     "extractTitle": "Extract: pull this out as its own mod",
+    "addMods": "Add mods",
+    "addModsDescription": "Choose installed standalone mods to rebuild into this merge. Added originals stay in the disabled folder.",
+    "noEligibleMods": "No eligible standalone mods are installed.",
+    "addingMods": "Adding...",
+    "addSelected_one": "Add {{count}} mod",
+    "addSelected_other": "Add {{count}} mods",
+    "addComplete_one": "Added {{count}} mod to the merge",
+    "addComplete_other": "Added {{count}} mods to the merge",
+    "addCompleteWithSkipped": "Merge updated: {{added}} added, {{skipped}} missing existing sources skipped",
     "copyShareCode": "Copy share code",
     "unmerge": "Unmerge"
   },

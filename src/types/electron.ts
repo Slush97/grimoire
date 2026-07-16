@@ -13,6 +13,7 @@ import type {
     MergeModsArgs,
     UnmergeModResult,
     ExtractMergeSourceResult,
+    AddMergeSourcesResult,
     ImprintAllInstalledResult,
     ImprintInstalledProgress,
     ImprintPreflightResult,
@@ -739,6 +740,7 @@ export interface ElectronAPI {
     mergeMods: (args: MergeModsArgs) => Promise<Mod>;
     unmergeMod: (mergedModId: string) => Promise<UnmergeModResult>;
     extractMergeSource: (mergedModId: string, sourceFileName: string) => Promise<ExtractMergeSourceResult>;
+    addMergeSources: (mergedModId: string, addModIds: string[], strict?: boolean) => Promise<AddMergeSourcesResult>;
     imprintOneMod: (modId: string) => Promise<Mod>;
     imprintAllInstalled: () => Promise<ImprintAllInstalledResult>;
     imprintPreflight: () => Promise<ImprintPreflightResult>;

@@ -312,6 +312,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     unmergeMod: (mergedModId: string) => ipcRenderer.invoke('unmerge-mod', mergedModId),
     extractMergeSource: (mergedModId: string, sourceFileName: string) =>
         ipcRenderer.invoke('extract-merge-source', mergedModId, sourceFileName),
+    addMergeSources: (mergedModId: string, addModIds: string[], strict = false) =>
+        ipcRenderer.invoke('add-merge-sources', mergedModId, addModIds, strict),
     imprintOneMod: (modId: string) => ipcRenderer.invoke('imprint-one-mod', modId),
     imprintAllInstalled: () => ipcRenderer.invoke('imprint-all-installed'),
     imprintPreflight: () => ipcRenderer.invoke('imprint-preflight'),

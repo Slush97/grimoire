@@ -696,6 +696,17 @@ export interface ExtractMergeSourceResult {
   restored: Mod[];
 }
 
+export interface AddMergeSourcesResult {
+  /** Updated merge manifest. The merge keeps its existing on-disk mod id,
+   *  load-order slot, metadata key, and stable merge id. */
+  merged: MergedModInfo;
+  /** Final on-disk filenames of the newly absorbed source VPKs. */
+  addedFileNames: string[];
+  /** Existing manifest sources that could no longer be found on disk and were
+   *  therefore omitted from the rebuilt merge. */
+  skipped: string[];
+}
+
 export interface UnknownModFilterGuess {
   modId: string;
   fileName: string;

@@ -33,6 +33,7 @@ import {
   getLockerSkinKey,
   type HeroCategory,
 } from '../lib/lockerUtils';
+import type { VariantChoice } from '../lib/lockerRandomizer';
 
 interface LockerHeroViewProps {
   hero: HeroCategory;
@@ -57,6 +58,8 @@ interface LockerHeroViewProps {
   /** Launch-shuffle pool set + toggle, threaded to the skins panel cards. */
   includedSkinKeys?: Set<string>;
   onToggleShuffleIncluded?: (skinKey: string) => void;
+  shuffleVariantChoices?: ReadonlyMap<string, VariantChoice>;
+  onSetShuffleVariant?: (skinKey: string, choice: VariantChoice) => void;
   /** Whether the master shuffle switch is armed (keeps per-skin toggles visible). */
   shuffleArmed?: boolean;
 }
@@ -91,6 +94,8 @@ export function LockerHeroView({
   hideNsfwPreviews = false,
   includedSkinKeys,
   onToggleShuffleIncluded,
+  shuffleVariantChoices,
+  onSetShuffleVariant,
   shuffleArmed,
 }: LockerHeroViewProps) {
   const { t } = useTranslation();
@@ -258,6 +263,8 @@ export function LockerHeroView({
         layout="cards"
         includedSkinKeys={includedSkinKeys}
         onToggleShuffleIncluded={onToggleShuffleIncluded}
+        shuffleVariantChoices={shuffleVariantChoices}
+        onSetShuffleVariant={onSetShuffleVariant}
         shuffleArmed={shuffleArmed}
       />
     );
