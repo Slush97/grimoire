@@ -238,7 +238,7 @@ export default function MergedContentsModal({
             </ul>
 
             {addPickerOpen && (
-              <div className="mt-3 rounded-lg border border-border bg-bg-secondary p-3 space-y-3">
+              <div className="mt-3 space-y-3 rounded-sm border border-border bg-bg-secondary p-3">
                 <div>
                   <div className="text-sm font-medium text-text-primary">
                     {t('mergedContents.addMods')}

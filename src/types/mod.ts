@@ -702,9 +702,6 @@ export interface AddMergeSourcesResult {
   merged: MergedModInfo;
   /** Final on-disk filenames of the newly absorbed source VPKs. */
   addedFileNames: string[];
-  /** Existing manifest sources that could no longer be found on disk and were
-   *  therefore omitted from the rebuilt merge. */
-  skipped: string[];
 }
 
 export interface UnknownModFilterGuess {

@@ -279,6 +279,25 @@ describe('planRandomization', () => {
     expect(plan.enableIds).toEqual(['a2']);
   });
 
+  it('disables an enabled sibling when a specific variant is selected', () => {
+    const heroSkins = new Map<number, Mod[]>([
+      [1, [
+        mod({ id: 'a1', gameBananaId: 1, gameBananaFileId: 11, enabled: true, priority: 1 }),
+        mod({ id: 'a2', gameBananaId: 1, gameBananaFileId: 12, priority: 2 }),
+      ]],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1']),
+      variants: new Map([['gamebanana:1', { fileId: 12 }]]),
+      rng: fixedRng(0),
+    });
+
+    expect(plan.enableIds).toEqual(['a2']);
+    expect(plan.disableIds).toEqual(['a1']);
+  });
+
   it('selects a random installed variant when configured for random', () => {
     const heroSkins = new Map<number, Mod[]>([
       [1, [
@@ -295,6 +314,25 @@ describe('planRandomization', () => {
     });
 
     expect(plan.enableIds).toEqual(['a2']);
+  });
+
+  it('makes an explicit primary choice exclusive', () => {
+    const heroSkins = new Map<number, Mod[]>([
+      [1, [
+        mod({ id: 'a1', gameBananaId: 1, gameBananaFileId: 11, enabled: true, priority: 1 }),
+        mod({ id: 'a2', gameBananaId: 1, gameBananaFileId: 12, enabled: true, priority: 2 }),
+      ]],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1']),
+      variants: new Map([['gamebanana:1', 'primary']]),
+      rng: fixedRng(0),
+    });
+
+    expect(plan.enableIds).toEqual([]);
+    expect(plan.disableIds).toEqual(['a2']);
   });
 
   it('falls back to a random installed variant when a specific file is missing', () => {

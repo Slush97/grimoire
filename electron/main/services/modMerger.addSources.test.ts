@@ -105,7 +105,10 @@ vi.mock('./gameSessionMods', () => sessionMocks);
 vi.mock('./vpk', () => ({
     parseVpkEntryStats: vi.fn(() => [{ path: 'materials/example.vmat_c', size: 12 }]),
 }));
-vi.mock('./portableProfile', () => ({ encodeShareCode: vi.fn(() => 'mp1:updated') }));
+const portableMocks = vi.hoisted(() => ({
+    encodeShareCode: vi.fn((_payload: string) => 'mp1:updated'),
+}));
+vi.mock('./portableProfile', () => portableMocks);
 
 import { addMergeSources } from './modMerger';
 
@@ -128,7 +131,7 @@ const sourceA = {
     path: '/game/addons/.disabled/source-a_dir.vpk',
     metaKey: 'source-a_dir.vpk',
     enabled: false,
-    priority: 3,
+    priority: 50,
     size: 10,
     installedAt: '2026-01-01',
 };
@@ -139,7 +142,7 @@ const sourceB = {
     path: '/game/addons/.disabled/source-b_dir.vpk',
     metaKey: 'source-b_dir.vpk',
     enabled: false,
-    priority: 8,
+    priority: 50,
     size: 10,
     installedAt: '2026-01-01',
 };
@@ -170,6 +173,7 @@ const oldManifest = {
         {
             fileName: sourceA.fileName,
             modName: sourceA.name,
+            gameBananaId: 41,
             gameBananaFileId: 101,
             enabledAtMergeTime: true,
             priorityAtMergeTime: 3,
@@ -178,6 +182,7 @@ const oldManifest = {
         {
             fileName: sourceB.fileName,
             modName: sourceB.name,
+            gameBananaId: 42,
             gameBananaFileId: 102,
             enabledAtMergeTime: true,
             priorityAtMergeTime: 8,
@@ -238,19 +243,34 @@ describe('addMergeSources', () => {
         );
         expect(result.merged).toEqual(sidecarPatch.merged);
         expect(result.addedFileNames).toEqual([disabledAddition.fileName]);
-        expect(result.skipped).toEqual([]);
+
+        const portable = JSON.parse(portableMocks.encodeShareCode.mock.calls[0]?.[0] ?? '{}') as {
+            mods: Array<{ priority: number }>;
+        };
+        expect(portable.mods.map((entry) => entry.priority)).toEqual([8, 4, 3]);
     });
 
-    it('reports missing existing sources while rebuilding from the sources still present', async () => {
+    it('leaves the merge untouched when an existing source is missing', async () => {
         modMocks.scanMods.mockResolvedValue([target, sourceA, addition]);
 
-        const result = await addMergeSources('/game', target.id, [addition.id]);
+        await expect(
+            addMergeSources('/game', target.id, [addition.id])
+        ).rejects.toThrow(/source-b_dir\.vpk.*no longer on disk/);
 
-        expect(result.skipped).toEqual([sourceB.fileName]);
-        expect(result.merged.sources.map((source) => source.fileName)).toEqual([
-            disabledAddition.fileName,
-            sourceA.fileName,
-        ]);
+        expect(modMocks.disableModUnlocked).not.toHaveBeenCalled();
+        expect(processMocks.spawnArgs).toEqual([]);
+        expect(fsMocks.rename).not.toHaveBeenCalledWith(expect.any(String), target.path);
+        expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();
+    });
+
+    it('rejects an absorbed source passed directly as an addition', async () => {
+        await expect(
+            addMergeSources('/game', target.id, [sourceA.id])
+        ).rejects.toThrow(/already present in this merge/);
+
+        expect(modMocks.disableModUnlocked).not.toHaveBeenCalled();
+        expect(processMocks.spawnArgs).toEqual([]);
+        expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();
     });
 
     it('restores newly disabled sources and never swaps or stamps metadata on strict failure', async () => {

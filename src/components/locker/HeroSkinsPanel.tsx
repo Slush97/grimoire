@@ -26,6 +26,7 @@ import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { LockerModImagePicker } from './LockerModImagePicker';
+import { Select } from '../common/forms';
 
 interface SkinGroup {
   key: string;
@@ -72,32 +73,35 @@ function ShuffleVariantSelect({
         {t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
       </span>
       <Shuffle className="h-3 w-3 flex-shrink-0 text-accent" aria-hidden />
-      <select
-        value={value}
-        onMouseDown={(event) => event.stopPropagation()}
-        onClick={(event) => event.stopPropagation()}
-        onChange={(event) => {
-          const next = event.target.value;
-          onChange(
-            next.startsWith('file:')
-              ? { fileId: Number(next.slice('file:'.length)) }
-              : (next as 'primary' | 'random')
-          );
-        }}
-        aria-label={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
-        title={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
-        className="min-w-0 flex-1 cursor-pointer rounded-md border border-white/[0.10] bg-bg-primary/75 px-1.5 py-1 text-[11px] text-text-primary outline-none focus:border-accent/60 focus:ring-1 focus:ring-accent/40"
-      >
-        <option value="primary">{t('locker.randomize.primaryVariant')}</option>
-        <option value="random">{t('locker.randomize.anyVariant')}</option>
-        {group.variants.map((variant) =>
-          typeof variant.gameBananaFileId === 'number' ? (
-            <option key={variant.id} value={`file:${variant.gameBananaFileId}`}>
-              {variantPillLabel(variant)}
-            </option>
-          ) : null
-        )}
-      </select>
+      <div className="min-w-0 flex-1">
+        <Select
+          inputSize="sm"
+          value={value}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const next = event.target.value;
+            onChange(
+              next.startsWith('file:')
+                ? { fileId: Number(next.slice('file:'.length)) }
+                : (next as 'primary' | 'random')
+            );
+          }}
+          aria-label={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
+          title={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
+          className="py-1 pl-2 pr-8 text-[11px]"
+        >
+          <option value="primary">{t('locker.randomize.primaryVariant')}</option>
+          <option value="random">{t('locker.randomize.anyVariant')}</option>
+          {group.variants.map((variant) =>
+            typeof variant.gameBananaFileId === 'number' ? (
+              <option key={variant.id} value={`file:${variant.gameBananaFileId}`}>
+                {variantPillLabel(variant)}
+              </option>
+            ) : null
+          )}
+        </Select>
+      </div>
     </label>
   );
 }
@@ -627,12 +631,14 @@ function SkinGroupCard({
               className={`h-3 w-3 transition-transform duration-200 ${variantsOpen ? 'rotate-180' : ''}`}
             />
           </div>
-          <ShuffleVariantSelect
-            group={group}
-            choice={shuffleVariantChoice}
-            onChange={onSetShuffleVariant}
-            className="mt-1 px-0.5"
-          />
+          {isIncluded && (
+            <ShuffleVariantSelect
+              group={group}
+              choice={shuffleVariantChoice}
+              onChange={onSetShuffleVariant}
+              className="mt-1 px-0.5"
+            />
+          )}
           {variantsOpen && (
             <div
               className="absolute left-2 right-2 top-full z-30 mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-white/[0.12] bg-bg-secondary/95 px-2 py-2 shadow-xl shadow-black/50 backdrop-blur-md"
@@ -868,12 +874,14 @@ function SkinGroupRow({
           role="group"
           aria-label={t('locker.skins.variantToggles')}
         >
-          <ShuffleVariantSelect
-            group={group}
-            choice={shuffleVariantChoice}
-            onChange={onSetShuffleVariant}
-            className="w-full pb-0.5"
-          />
+          {isIncluded && (
+            <ShuffleVariantSelect
+              group={group}
+              choice={shuffleVariantChoice}
+              onChange={onSetShuffleVariant}
+              className="w-full pb-0.5"
+            />
+          )}
           {group.variants.map((variant) => {
             const label = variantPillLabel(variant);
             return (

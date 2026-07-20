@@ -2681,13 +2681,8 @@ export default function Installed() {
     const refreshed = useAppStore.getState().mods.find((mod) => mod.id === targetId) ?? null;
     setMergedContentsMod(refreshed);
     showToast(
-      result.skipped.length > 0
-        ? t('mergedContents.addCompleteWithSkipped', {
-            added: result.addedFileNames.length,
-            skipped: result.skipped.length,
-          })
-        : t('mergedContents.addComplete', { count: result.addedFileNames.length }),
-      { tone: result.skipped.length > 0 ? 'warning' : 'success', duration: 2800 },
+      t('mergedContents.addComplete', { count: result.addedFileNames.length }),
+      { tone: 'success', duration: 2800 },
     );
   };
 
@@ -7624,7 +7619,7 @@ function ModCard({
             event.stopPropagation();
             onToggleFavorite();
           }}
-          className={`${utilityActionClasses} ${selectMode ? 'hidden' : favorite ? 'text-amber-300 hover:text-amber-200' : 'text-text-tertiary hover:text-amber-300'}`}
+          className={`${utilityActionClasses} ${selectMode ? 'hidden' : favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
           title={favorite
             ? t('installed.card.removeDisabledFavorite', { name: mod.name })
             : t('installed.card.addDisabledFavorite', { name: mod.name })}

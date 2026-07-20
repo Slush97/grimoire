@@ -2103,7 +2103,6 @@
     "addSelected_other": "Add {{count}} mods",
     "addComplete_one": "Added {{count}} mod to the merge",
     "addComplete_other": "Added {{count}} mods to the merge",
-    "addCompleteWithSkipped": "Merge updated: {{added}} added, {{skipped}} missing existing sources skipped",
     "copyShareCode": "Copy share code",
     "unmerge": "Unmerge"
   },

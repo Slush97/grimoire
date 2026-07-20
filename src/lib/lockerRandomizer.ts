@@ -106,7 +106,8 @@ export interface RandomizePlanOptions {
   heroIds: number[];
   /** Skin keys (shuffleSkinKey) the user opted INTO the shuffle pool. */
   included: Set<string>;
-  /** Per-skin variant preference. Unset preserves current primary behavior. */
+  /** Per-skin variant preference. Unset preserves the legacy behavior that
+   *  keeps already-enabled sibling files from the chosen submission loaded. */
   variants?: ReadonlyMap<string, VariantChoice>;
   /** Injectable RNG returning [0, 1); defaults to Math.random. */
   rng?: () => number;
@@ -127,9 +128,10 @@ export interface RandomizePlan {
 /**
  * Compute the enable/disable set for a skin shuffle. For each in-scope hero,
  * picks one of the skins the user opted into the pool at random and makes it the
- * hero's single active skin: enable its configured variant and disable every other
- * currently-enabled skin VPK for that hero, sparing only the chosen skin's own
- * variant VPKs so a multi-file submission loads whole. Heroes with no opted-in
+ * hero's single active skin. Without a saved variant preference, already-enabled
+ * sibling files from the chosen submission stay loaded for backward compatibility
+ * with multi-file skins. Once the user explicitly chooses primary, random, or a
+ * specific file, only that selected file remains enabled. Heroes with no opted-in
  * skins (or no installed skins) are left untouched - that is the per-hero
  * opt-out: don't add any of a hero's skins and it never shuffles. Sounds, cards
  * and ability effects are separate axes and are never touched.
@@ -172,7 +174,8 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
     const index = Math.min(pool.length - 1, Math.floor(rng() * pool.length));
     const chosen = pool[index];
     const chosenKey = shuffleSkinKey(chosen.primary);
-    const variantChoice = variants.get(chosenKey) ?? 'primary';
+    const configuredVariantChoice = variants.get(chosenKey);
+    const variantChoice = configuredVariantChoice ?? 'primary';
     let chosenVariant = chosen.primary;
     if (variantChoice === 'random') {
       const variantIndex = Math.min(
@@ -200,12 +203,14 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
       enableIds.push(chosenVariant.id);
       heroChanged = true;
     }
-    // Make the chosen skin the hero's single active skin: disable every other
-    // enabled skin VPK for this hero. We spare ONLY the chosen skin's own
-    // variant VPKs (same submission) so a skin that ships several required files
-    // isn't left half-loaded. Sounds, cards and ability effects live on other
-    // Locker axes and are never in this list, so they stay exactly as set.
-    const chosenVariantIds = new Set(chosen.variants.map((v) => v.id));
+    // Preserve the historical multi-file behavior until the user explicitly
+    // chooses a variant policy. An explicit selection is exclusive: random and
+    // file-specific choices must not leave a previously enabled sibling active.
+    const chosenVariantIds = new Set(
+      configuredVariantChoice === undefined
+        ? chosen.variants.map((variant) => variant.id)
+        : [chosenVariant.id]
+    );
     for (const mod of mods) {
       if (mod.enabled && !chosenVariantIds.has(mod.id)) {
         disableIds.push(mod.id);

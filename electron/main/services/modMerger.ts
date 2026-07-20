@@ -459,9 +459,6 @@ export interface MergeOptions {
 export interface MergeResult {
     mod: Mod;
     disabledSources: Mod[];
-    /** Manifest sources that could not be resolved while flattening selected
-     *  parent merges. The merge proceeds when at least two unique leaves remain. */
-    skipped: string[];
 }
 
 export async function mergeMods(
@@ -497,7 +494,7 @@ async function mergeModsLocked(
         .map((entry) => entry.mod);
     const parentIds = new Set(parentMerges.map((parent) => parent.id));
     const locatedSources: LocatedMergeSource[] = [];
-    const skipped: string[] = [];
+    const missingSources: string[] = [];
 
     const addUniqueSource = (source: LocatedMergeSource): void => {
         if (locatedSources.some((candidate) =>
@@ -540,7 +537,7 @@ async function mergeModsLocked(
         for (const snapshot of manifest.sources) {
             const onDisk = await locator.locate(snapshot);
             if (!onDisk) {
-                skipped.push(snapshot.fileName);
+                missingSources.push(snapshot.fileName);
                 continue;
             }
             const identity = await resolveVpkIdentity(onDisk.path);
@@ -556,6 +553,15 @@ async function mergeModsLocked(
         }
         mergeTrace(
             `flatten parent ${manifest.id} "${metadata.modName || parent.name}": ${manifest.sources.length} manifest sources`
+        );
+    }
+
+    if (missingSources.length > 0) {
+        const missing = Array.from(new Set(missingSources));
+        throw new Error(
+            `Can't flatten the selected merge: ${missing.join(', ')} `
+            + `${missing.length === 1 ? 'is' : 'are'} no longer on disk. `
+            + 'The original merges were left unchanged. Unmerge first to recover the missing sources.'
         );
     }
 
@@ -736,7 +742,7 @@ async function mergeModsLocked(
     if (!newMod) {
         throw new Error('Merged mod was created on disk but could not be located in the rescan.');
     }
-    return { mod: newMod, disabledSources, skipped: Array.from(new Set(skipped)) };
+    return { mod: newMod, disabledSources };
 }
 
 function buildPortableForSources(
@@ -890,6 +896,10 @@ function makeSourceLocator(candidates: Mod[]): SourceLocator {
             let onDisk: Mod | undefined = disabledCandidates.find(
                 (m) => !consumedIds.has(m.id) && m.fileName === src.fileName
             );
+            if (onDisk && src.sha256AtMergeTime) {
+                const wanted = src.sha256AtMergeTime.toLowerCase();
+                if ((await getHash(onDisk)) !== wanted) onDisk = undefined;
+            }
             if (!onDisk && src.sha256AtMergeTime) {
                 const wanted = src.sha256AtMergeTime.toLowerCase();
                 onDisk = (await matchBySha(disabledCandidates, wanted))
@@ -1033,35 +1043,10 @@ async function addMergeSourcesLocked(
         return mod;
     });
 
-    // Resolve the existing sources without letting a newly selected mod be
-    // accidentally claimed by a legacy filename-only manifest entry.
-    const additionIds = new Set(additions.map((mod) => mod.id));
-    const locator = makeSourceLocator(
-        installed.filter((mod) => mod.id !== target.id && !additionIds.has(mod.id))
-    );
-    const existing: LocatedMergeSource[] = [];
-    const skipped: string[] = [];
-    for (const source of oldManifest.sources) {
-        const onDisk = await locator.locate(source);
-        if (!onDisk) {
-            skipped.push(source.fileName);
-            continue;
-        }
-        const identity = await resolveVpkIdentity(onDisk.path);
-        existing.push({
-            mod: onDisk,
-            snapshot: {
-                ...source,
-                fileName: onDisk.fileName,
-                sha256AtMergeTime: source.sha256AtMergeTime || identity.sha256,
-            },
-            vpkIndex: getModMetadata(onDisk.metaKey)?.vpkIndex,
-        });
-    }
-
-    // Capture every addition before any move. These snapshots retain the
-    // original enabled state/priority while their filenames are updated after
-    // the temporary disable below.
+    // Capture and validate every addition before resolving existing leaves.
+    // Comparing against the manifest itself rejects a hidden absorbed source
+    // passed directly over IPC, even though it is intentionally excluded from
+    // the source locator below.
     const additionSnapshots: LocatedMergeSource[] = [];
     for (const mod of additions) {
         const metadata = getModMetadata(mod.metaKey);
@@ -1077,13 +1062,50 @@ async function addMergeSourcesLocked(
             priorityAtMergeTime: mod.priority,
             sha256AtMergeTime: identity.sha256,
         };
-        const duplicate = [...existing, ...additionSnapshots].find((candidate) =>
-            sameMergeSourceIdentity(candidate.snapshot, snapshot)
+        const duplicate = oldManifest.sources.some((source) =>
+            sameMergeSourceIdentity(source, snapshot)
+        ) || additionSnapshots.some((source) =>
+            sameMergeSourceIdentity(source.snapshot, snapshot)
         );
         if (duplicate) {
             throw new Error(`"${snapshot.modName}" is already present in this merge.`);
         }
         additionSnapshots.push({ mod, snapshot, vpkIndex: metadata?.vpkIndex });
+    }
+
+    // Resolve the existing sources without letting a newly selected mod be
+    // accidentally claimed by a legacy filename-only manifest entry.
+    const additionIds = new Set(additions.map((mod) => mod.id));
+    const locator = makeSourceLocator(
+        installed.filter((mod) => mod.id !== target.id && !additionIds.has(mod.id))
+    );
+    const existing: LocatedMergeSource[] = [];
+    const missingSources: string[] = [];
+    for (const source of oldManifest.sources) {
+        const onDisk = await locator.locate(source);
+        if (!onDisk) {
+            missingSources.push(source.fileName);
+            continue;
+        }
+        const identity = await resolveVpkIdentity(onDisk.path);
+        existing.push({
+            mod: onDisk,
+            snapshot: {
+                ...source,
+                fileName: onDisk.fileName,
+                sha256AtMergeTime: source.sha256AtMergeTime || identity.sha256,
+            },
+            vpkIndex: getModMetadata(onDisk.metaKey)?.vpkIndex,
+        });
+    }
+
+    if (missingSources.length > 0) {
+        const missing = Array.from(new Set(missingSources));
+        throw new Error(
+            `Can't add mods to this merge: ${missing.join(', ')} `
+            + `${missing.length === 1 ? 'is' : 'are'} no longer on disk. `
+            + 'The merge was left unchanged. Unmerge first to recover the missing sources.'
+        );
     }
 
     if (existing.length + additionSnapshots.length < 2) {
@@ -1122,8 +1144,8 @@ async function addMergeSourcesLocked(
         args.push(buildPath, ...ordered.map((source) => source.mod.path));
 
         mergeTrace(
-            `add-sources start merge=${oldManifest.id} key=${target.metaKey}: +${additionSnapshots.length}, `
-            + `${skipped.length} missing -> ${basename(buildPath)}`
+            `add-sources start merge=${oldManifest.id} key=${target.metaKey}: `
+            + `+${additionSnapshots.length} -> ${basename(buildPath)}`
         );
         await runVpkmerge(args);
         await verifyVpkOutput(buildPath);
@@ -1132,7 +1154,8 @@ async function addMergeSourcesLocked(
         const snapshots = ordered.map((source) => source.snapshot);
         const portable = buildPortableForSources(
             ordered.map((source) => source.mod),
-            targetMeta.modName || target.name
+            targetMeta.modName || target.name,
+            snapshots
         );
         const newManifest: MergedModInfo = {
             id: oldManifest.id,
@@ -1179,7 +1202,6 @@ async function addMergeSourcesLocked(
         return {
             merged: newManifest,
             addedFileNames: additionSnapshots.map((source) => source.snapshot.fileName),
-            skipped,
         };
     } catch (err) {
         if (!swapped) {

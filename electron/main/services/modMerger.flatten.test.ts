@@ -218,7 +218,6 @@ describe('mergeMods flattening', () => {
         expect(processMocks.spawnArgs[0]).not.toContain(parentA.path);
         expect(processMocks.spawnArgs[0]).not.toContain(parentB.path);
         expect(result.disabledSources).toEqual([sourceC, sourceB, sourceA]);
-        expect(result.skipped).toEqual([]);
 
         const sidecar = metadataMocks.setModMetadata.mock.calls[0]?.[1] as {
             merged: { sources: Array<{ fileName: string }> };
@@ -260,29 +259,17 @@ describe('mergeMods flattening', () => {
         expect(metadataMocks.removeModMetadata).not.toHaveBeenCalledWith(parentB.metaKey);
     });
 
-    it('reports missing parent leaves and continues when two unique sources remain', async () => {
+    it('leaves parent merges intact when any original leaf is missing', async () => {
         modMocks.scanMods.mockReset()
-            .mockResolvedValueOnce([parentA, parentB, sourceA, sourceB])
-            .mockResolvedValueOnce([flattened, sourceA, sourceB]);
+            .mockResolvedValueOnce([parentA, parentB, sourceA, sourceB]);
 
-        const result = await mergeMods('/game', [parentA.id, parentB.id], {
-            name: 'Flattened',
-        });
+        await expect(
+            mergeMods('/game', [parentA.id, parentB.id], { name: 'Flattened' })
+        ).rejects.toThrow(/source-c_dir\.vpk.*no longer on disk/);
 
-        expect(processMocks.spawnArgs[0]).toEqual([
-            flattened.path,
-            sourceB.path,
-            sourceA.path,
-        ]);
-        expect(result.skipped).toEqual([sourceC.fileName]);
-        const sidecar = metadataMocks.setModMetadata.mock.calls[0]?.[1] as {
-            merged: { sources: Array<{ fileName: string }> };
-        };
-        expect(sidecar.merged.sources.map((entry) => entry.fileName)).toEqual([
-            sourceB.fileName,
-            sourceA.fileName,
-        ]);
-        expect(fsMocks.unlink).toHaveBeenCalledWith(parentA.path);
-        expect(fsMocks.unlink).toHaveBeenCalledWith(parentB.path);
+        expect(processMocks.spawnArgs).toEqual([]);
+        expect(metadataMocks.setModMetadata).not.toHaveBeenCalled();
+        expect(fsMocks.unlink).not.toHaveBeenCalledWith(parentA.path);
+        expect(fsMocks.unlink).not.toHaveBeenCalledWith(parentB.path);
     });
 });
