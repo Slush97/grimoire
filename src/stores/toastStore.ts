@@ -14,12 +14,17 @@ export interface Toast {
   duration: number;
   /** show an explicit Dismiss button (sticky warnings) */
   dismissable?: boolean;
+  /** Optional one-shot action such as restoring a just-hidden creator. */
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface ToastOptions {
   tone?: ToastTone;
   duration?: number;
   dismissable?: boolean;
+  actionLabel?: string;
+  onAction?: () => void;
 }
 
 interface ToastState {
@@ -40,6 +45,8 @@ export const useToastStore = create<ToastState>((set) => ({
       tone: opts.tone ?? 'info',
       duration: opts.duration ?? 5000,
       dismissable: opts.dismissable,
+      actionLabel: opts.actionLabel,
+      onAction: opts.onAction,
     };
     set((s) => ({ toasts: [...s.toasts, toast] }));
     return id;

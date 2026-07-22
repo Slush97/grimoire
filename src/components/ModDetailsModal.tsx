@@ -25,6 +25,7 @@ import {
   Coffee,
   Link2,
   CloudOff,
+  EyeOff,
 } from 'lucide-react';
 import DOMPurify from 'dompurify';
 import type {
@@ -105,6 +106,9 @@ interface ModDetailsModalProps {
   /** When provided, clicking the artist opens "artist mode" (a grid of all the
    *  artist's mods) instead of their GameBanana profile. */
   onViewArtist?: (artist: { id: number; name: string; avatarUrl?: string; profileUrl?: string; kofiUrl?: string }) => void;
+  /** Browse-only visibility action. Installed details intentionally omit it so
+   *  hiding a creator never implies hiding content the user already owns. */
+  onHideArtist?: (artist: { id: number; name: string }) => void;
   /**
    * When provided, primary-clicks on GameBanana *item* links inside HTML bodies
    * (description, changelog, comments) open that mod in-app instead of the
@@ -147,6 +151,7 @@ function ModDetailsModal({
   variant = 'modal',
   onChangeView,
   onViewArtist,
+  onHideArtist,
   onOpenGameBananaItem,
 }: ModDetailsModalProps) {
   const { t } = useTranslation();
@@ -466,6 +471,10 @@ function ModDetailsModal({
             profileUrl: submitterProfileUrl,
             kofiUrl: submitterKofiUrl,
           })
+      : undefined;
+  const hideArtist =
+    submitter && submitter.id > 0 && onHideArtist
+      ? () => onHideArtist({ id: submitter.id, name: submitter.name })
       : undefined;
   const avatarVisual = submitter ? (
     submitter.avatarUrl && !avatarFailed ? (
@@ -1451,6 +1460,18 @@ function ModDetailsModal({
                         <Coffee className="h-4 w-4" />
                         {t('modDetails.meta.koFi')}
                       </a>
+                    )}
+                    {hideArtist && (
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        icon={EyeOff}
+                        onClick={hideArtist}
+                        className="flex-shrink-0"
+                      >
+                        {t('hiddenCreators.hideCreator')}
+                      </Button>
                     )}
                   </div>
                 </section>

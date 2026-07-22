@@ -1,7 +1,7 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation, Trans } from 'react-i18next';
-import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github, Globe, FileText, Bug, Copy } from 'lucide-react';
+import { FolderOpen, Check, X, Loader2, RefreshCw, Database, Trash2, Shield, Wrench, HardDrive, Beaker, Download, Sparkles, ArrowDownCircle, Palette, Pipette, LifeBuoy, Github, Globe, FileText, Bug, Copy, EyeOff } from 'lucide-react';
 import { HexColorPicker, HexColorInput } from 'react-colorful';
 import DOMPurify from 'dompurify';
 import { useAppStore } from '../stores/appStore';
@@ -30,6 +30,8 @@ import SocialAccountSection from '../components/social/SocialAccountSection';
 import PerformanceConfigCard from '../components/performance/PerformanceConfigCard';
 import KofiSupportButton from '../components/KofiSupportButton';
 import type { SaltIngestStatus } from '../types/electron';
+import type { HiddenCreator } from '../types/mod';
+import { HiddenCreatorsManager } from '../components/HiddenCreatorsManager';
 
 // GitHub Releases is the source of truth for changelogs. When we have local
 // release notes (an update is pending) we show them in-app; otherwise we link
@@ -284,6 +286,15 @@ export default function Settings() {
     if (settings) {
       await saveSettings({ ...settings, installedHideNsfwPreviews: checked });
     }
+  };
+
+  const handleShowCreator = async (creator: HiddenCreator) => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      hiddenCreators: (settings.hiddenCreators ?? []).filter((entry) => entry.id !== creator.id),
+    });
+    showToast(t('hiddenCreators.shownToast', { name: creator.name }), { tone: 'success' });
   };
 
   const handleAutoDisableSiblingsChange = async (checked: boolean) => {
@@ -1179,6 +1190,17 @@ export default function Settings() {
               onChange={handleLanguageChange}
             />
           </div>
+        </Card>
+
+        <Card
+          title={<Tx k="settings.sections.browseContent" fallback="Browse Content" />}
+          description={<Tx k="hiddenCreators.description" fallback="Hide uploads from selected GameBanana creators in Browse." />}
+          icon={EyeOff}
+        >
+          <HiddenCreatorsManager
+            creators={settings?.hiddenCreators ?? []}
+            onRemove={handleShowCreator}
+          />
         </Card>
 
         {/* Experimental Features */}

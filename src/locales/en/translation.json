@@ -18,6 +18,7 @@
       "reset": "Reset",
       "retry": "Retry",
       "save": "Save",
+      "undo": "Undo",
       "collapseDetails": "Collapse details",
       "expandDetails": "Expand details",
       "tryAgain": "Try again"
@@ -637,6 +638,21 @@
       "list": "List view"
     }
   },
+  "hiddenCreators": {
+    "title": "Hidden creators",
+    "description": "Hide uploads from selected GameBanana creators in Browse. Installed mods remain visible.",
+    "manage": "Manage hidden creators",
+    "emptyTitle": "No hidden creators",
+    "emptyDescription": "Use Hide creator from a mod's artist details or artist page to add someone here.",
+    "gamebananaId": "GameBanana member #{{id}}",
+    "showCreator": "Show creator",
+    "hideCreator": "Hide creator",
+    "hideNamedCreator": "Hide {{name}} from Browse",
+    "confirmTitle": "Hide this creator?",
+    "confirmMessage": "Hide all Mods, Sounds, and WiPs uploaded by {{name}} from Browse? Installed content will not be affected.",
+    "hiddenToast": "Uploads from {{name}} are now hidden.",
+    "shownToast": "Uploads from {{name}} are visible again."
+  },
   "settings": {
     "header": {
       "description": "Game paths, preferences, and maintenance"
@@ -647,6 +663,7 @@
       "appearance": "Appearance",
       "grimoireSocial": "Grimoire Social",
       "preferences": "Preferences",
+      "browseContent": "Browse Content",
       "experimentalFeatures": "Experimental Features",
       "support": "Support",
       "maintenance": "Maintenance",
