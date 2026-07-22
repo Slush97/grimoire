@@ -718,7 +718,7 @@
         "applyError": "Could not apply that image.",
         "defaultHint": "Use Grimoire's built-in look for this surface.",
         "noneHint": "Hide this surface's background entirely.",
-        "heroHint": "Pick a hero, then frame their render below.",
+        "heroHint": "Pick a hero. Grimoire frames each hero automatically; use Adjust framing to customize.",
         "changeHero": "Choose a different hero",
         "preview": "Preview",
         "surface": {
@@ -732,7 +732,8 @@
           "hero": "Hero",
           "custom": "Custom image",
           "none": "None"
-        }
+        },
+        "adjustFraming": "Adjust framing"
       }
     },
     "preferences": {
