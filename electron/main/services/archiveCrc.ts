@@ -1,6 +1,7 @@
 import { createReadStream } from 'fs';
 import { validateDownloadUrl } from './security';
 import { GRIMOIRE_USER_AGENT } from './userAgent';
+import { gamebananaRateLimiter } from './rateLimiter';
 
 export interface ArchiveVpkCrcEntry {
     name: string;
@@ -192,6 +193,11 @@ async function fetchArchiveRange(
     validateDownloadUrl(url);
 
     const expected = end - start + 1;
+    // These ranged GETs hit GameBanana's file hosts and unknown-mod detection
+    // fires many of them per archive at PROBE_CONCURRENCY. Claim the same 10
+    // req/sec budget the JSON client uses, otherwise that client thinks it is
+    // inside the limit while the real request rate is well over it.
+    await gamebananaRateLimiter.acquire();
     const response = await fetch(url, {
         headers: {
             Range: `bytes=${start}-${end}`,
@@ -243,6 +249,7 @@ async function fetchArchiveSuffixRange(
     throwIfAborted(signal);
     validateDownloadUrl(url);
 
+    await gamebananaRateLimiter.acquire();
     const response = await fetch(url, {
         headers: {
             Range: `bytes=-${suffixBytes}`,
