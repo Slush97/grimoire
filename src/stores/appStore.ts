@@ -301,7 +301,9 @@ interface AppState {
   reorderMods: (orderedIds: string[]) => Promise<void>;
   setShuffleOnLaunch: (enabled: boolean) => void;
   toggleShuffleIncluded: (skinKey: string) => void;
-  setShuffleVariant: (skinKey: string, choice: VariantChoice) => void;
+  /** Store an explicit per-skin variant policy, or clear it back to the unset
+   *  default (keep the currently loaded files) with null. */
+  setShuffleVariant: (skinKey: string, choice: VariantChoice | null) => void;
   runLaunchShuffle: () => Promise<{ failures: number }>;
   /** Disable every other mod and enable only `enableKeys` (one card's file(s)),
    *  snapshotting the prior enabled set for one-click restore. `applied` is
@@ -708,9 +710,12 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ shuffleIncluded: next });
   },
 
-  setShuffleVariant: (skinKey: string, choice: VariantChoice) => {
+  setShuffleVariant: (skinKey: string, choice: VariantChoice | null) => {
     const next = new Map(get().shuffleVariants);
-    next.set(skinKey, choice);
+    // An absent entry IS the default (keep the loaded files), so clearing means
+    // deleting the key rather than storing a sentinel.
+    if (choice === null) next.delete(skinKey);
+    else next.set(skinKey, choice);
     writeStoredShuffleVariants(next);
     set({ shuffleVariants: next });
   },

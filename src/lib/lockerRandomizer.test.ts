@@ -316,7 +316,11 @@ describe('planRandomization', () => {
     expect(plan.enableIds).toEqual(['a2']);
   });
 
-  it('makes an explicit primary choice exclusive', () => {
+  it('ignores a legacy primary choice and stays non-exclusive', () => {
+    // 'primary' is no longer an offered policy. readStoredShuffleVariants drops
+    // it, but a map handed straight to the planner must not resurrect it as an
+    // explicit (exclusive) choice: both co-required VPKs stay loaded, exactly as
+    // if nothing were stored for this skin.
     const heroSkins = new Map<number, Mod[]>([
       [1, [
         mod({ id: 'a1', gameBananaId: 1, gameBananaFileId: 11, enabled: true, priority: 1 }),
@@ -327,12 +331,13 @@ describe('planRandomization', () => {
       heroSkins,
       heroIds: [1],
       included: new Set(['gamebanana:1']),
-      variants: new Map([['gamebanana:1', 'primary']]),
+      variants: new Map([['gamebanana:1', 'primary' as unknown as VariantChoice]]),
       rng: fixedRng(0),
     });
 
     expect(plan.enableIds).toEqual([]);
-    expect(plan.disableIds).toEqual(['a2']);
+    expect(plan.disableIds).toEqual([]);
+    expect(plan.changedHeroes).toEqual([]);
   });
 
   it('falls back to a random installed variant when a specific file is missing', () => {
@@ -476,10 +481,14 @@ describe('readStoredShuffleVariants', () => {
     }
   };
 
-  it('loads valid choices and ignores malformed entries', () => {
+  it('loads valid choices and drops legacy or malformed entries', () => {
+    // This is the whole 'primary' migration: the guard rejects it, the reader's
+    // filter drops it, and that skin reverts to the unset default. No versioned
+    // migration code, and the next write persists the cleaned map because the
+    // writer serializes the entire in-memory map.
     withLocalStorage(
       JSON.stringify({
-        a: 'primary',
+        legacyPrimary: 'primary',
         b: 'random',
         c: { fileId: 12 },
         bad: { fileId: '12' },
@@ -487,7 +496,6 @@ describe('readStoredShuffleVariants', () => {
       () =>
         expect(readStoredShuffleVariants()).toEqual(
           new Map<string, VariantChoice>([
-            ['a', 'primary'],
             ['b', 'random'],
             ['c', { fileId: 12 }],
           ])

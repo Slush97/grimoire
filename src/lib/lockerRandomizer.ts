@@ -5,6 +5,7 @@ import {
   groupLockerSkins,
   groupModsByCategory,
   isLockerManagedMod,
+  type LockerSkin,
 } from './lockerUtils';
 
 /** localStorage key for the set of skin keys opted INTO the launch shuffle. */
@@ -14,7 +15,16 @@ export const SHUFFLE_ON_LAUNCH_KEY = 'lockerShuffleOnLaunch';
 /** localStorage key for per-skin variant choices. */
 export const SHUFFLE_VARIANT_KEY = 'lockerShuffleVariant';
 
-export type VariantChoice = 'primary' | 'random' | { fileId: number };
+/**
+ * An explicit per-skin variant policy for the shuffle. Absence of a choice (no
+ * map entry) is the default and means "keep whatever files are already loaded".
+ *
+ * There is deliberately no 'primary' option: a skin's primary is whichever
+ * variant is currently enabled (or has the lowest pakNN), so as a shuffle policy
+ * it is neither a stable pin nor a source of variety. It was offered briefly and
+ * is now dropped on read (see isVariantChoice).
+ */
+export type VariantChoice = 'random' | { fileId: number };
 
 /**
  * Stable identity for a skin used by the shuffle for the opt-in pool. Prefers
@@ -63,8 +73,14 @@ export function readStoredShuffleOnLaunch(): boolean {
   }
 }
 
+/**
+ * Legacy 'primary' entries written by an earlier build fail this guard and are
+ * dropped by the reader's filter, which is the whole migration: a dropped entry
+ * reverts that skin to the unset default, and the next write persists the
+ * cleaned map (the writer serializes the entire in-memory map).
+ */
 function isVariantChoice(value: unknown): value is VariantChoice {
-  if (value === 'primary' || value === 'random') return true;
+  if (value === 'random') return true;
   return (
     typeof value === 'object' &&
     value !== null &&
@@ -106,8 +122,8 @@ export interface RandomizePlanOptions {
   heroIds: number[];
   /** Skin keys (shuffleSkinKey) the user opted INTO the shuffle pool. */
   included: Set<string>;
-  /** Per-skin variant preference. Unset preserves the legacy behavior that
-   *  keeps already-enabled sibling files from the chosen submission loaded. */
+  /** Per-skin variant preference. Unset (the default) keeps already-enabled
+   *  sibling files from the chosen submission loaded. */
   variants?: ReadonlyMap<string, VariantChoice>;
   /** Injectable RNG returning [0, 1); defaults to Math.random. */
   rng?: () => number;
@@ -129,9 +145,11 @@ export interface RandomizePlan {
  * Compute the enable/disable set for a skin shuffle. For each in-scope hero,
  * picks one of the skins the user opted into the pool at random and makes it the
  * hero's single active skin. Without a saved variant preference, already-enabled
- * sibling files from the chosen submission stay loaded for backward compatibility
- * with multi-file skins. Once the user explicitly chooses primary, random, or a
- * specific file, only that selected file remains enabled. Heroes with no opted-in
+ * sibling files from the chosen submission stay loaded: that is what keeps a
+ * submission shipping co-required VPKs (model plus voice lines) from being
+ * half-loaded, and it is why the unset state stays the default. Once the user
+ * explicitly chooses random or a specific file, only that one file remains
+ * enabled for the chosen skin. Heroes with no opted-in
  * skins (or no installed skins) are left untouched - that is the per-hero
  * opt-out: don't add any of a hero's skins and it never shuffles. Sounds, cards
  * and ability effects are separate axes and are never touched.
@@ -140,6 +158,12 @@ export interface RandomizePlan {
  * returned ids are renderer-current; they stay valid because the apply runs them
  * as one batch under the main-process mutation lock (see setModsEnabledBatch).
  */
+/** One of the skin's installed variant VPKs, uniformly at random. */
+function pickRandomVariant(skin: LockerSkin, rng: () => number): Mod {
+  const index = Math.min(skin.variants.length - 1, Math.floor(rng() * skin.variants.length));
+  return skin.variants[index] ?? skin.primary;
+}
+
 export function planRandomization(options: RandomizePlanOptions): RandomizePlan {
   const {
     heroSkins,
@@ -174,28 +198,22 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
     const index = Math.min(pool.length - 1, Math.floor(rng() * pool.length));
     const chosen = pool[index];
     const chosenKey = shuffleSkinKey(chosen.primary);
-    const configuredVariantChoice = variants.get(chosenKey);
-    const variantChoice = configuredVariantChoice ?? 'primary';
+    const variantChoice = variants.get(chosenKey);
     let chosenVariant = chosen.primary;
+    // Only 'random' and a file id count as an explicit policy. Anything else,
+    // including a legacy 'primary' handed straight to the planner rather than
+    // through the storage reader, falls through to the unset default.
+    let explicitChoice = false;
     if (variantChoice === 'random') {
-      const variantIndex = Math.min(
-        chosen.variants.length - 1,
-        Math.floor(rng() * chosen.variants.length)
-      );
-      chosenVariant = chosen.variants[variantIndex] ?? chosen.primary;
+      chosenVariant = pickRandomVariant(chosen, rng);
+      explicitChoice = true;
     } else if (typeof variantChoice === 'object') {
-      const specific = chosen.variants.find(
-        (variant) => variant.gameBananaFileId === variantChoice.fileId
-      );
-      if (specific) {
-        chosenVariant = specific;
-      } else {
-        const variantIndex = Math.min(
-          chosen.variants.length - 1,
-          Math.floor(rng() * chosen.variants.length)
-        );
-        chosenVariant = chosen.variants[variantIndex] ?? chosen.primary;
-      }
+      // A specific file that is no longer installed degrades to random rather
+      // than silently pinning the primary.
+      chosenVariant =
+        chosen.variants.find((variant) => variant.gameBananaFileId === variantChoice.fileId) ??
+        pickRandomVariant(chosen, rng);
+      explicitChoice = true;
     }
 
     let heroChanged = false;
@@ -204,12 +222,12 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
       heroChanged = true;
     }
     // Preserve the historical multi-file behavior until the user explicitly
-    // chooses a variant policy. An explicit selection is exclusive: random and
-    // file-specific choices must not leave a previously enabled sibling active.
+    // chooses a variant policy: without one, every sibling of the chosen skin is
+    // spared, so a submission shipping co-required VPKs is never half-loaded. An
+    // explicit selection is exclusive: random and file-specific choices must not
+    // leave a previously enabled sibling active.
     const chosenVariantIds = new Set(
-      configuredVariantChoice === undefined
-        ? chosen.variants.map((variant) => variant.id)
-        : [chosenVariant.id]
+      explicitChoice ? [chosenVariant.id] : chosen.variants.map((variant) => variant.id)
     );
     for (const mod of mods) {
       if (mod.enabled && !chosenVariantIds.has(mod.id)) {

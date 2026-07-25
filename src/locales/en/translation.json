@@ -1303,7 +1303,7 @@
       "removeFromShuffle": "Remove {{name}} from the shuffle",
       "inPool": "In shuffle",
       "variantChoiceFor": "Choose the shuffle variant for {{name}}",
-      "primaryVariant": "Primary variant",
+      "defaultVariant": "Keep current files",
       "anyVariant": "Any variant"
     },
     "modImage": {

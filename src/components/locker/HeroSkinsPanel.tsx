@@ -48,24 +48,33 @@ function variantPillLabel(mod: Mod): string {
 
 function ShuffleVariantSelect({
   group,
-  choice = 'primary',
+  choice,
   onChange,
   className = '',
 }: {
   group: SkinGroup;
+  /** Undefined is the unset default: the shuffle keeps the currently loaded
+   *  files for this skin. */
   choice?: VariantChoice;
-  onChange?: (choice: VariantChoice) => void;
+  onChange?: (choice: VariantChoice | null) => void;
   className?: string;
 }) {
   const { t } = useTranslation();
-  if (group.variants.length <= 1 || !onChange) return null;
+  // gameBananaFileId is optional on Mod, so a multi-variant group can still have
+  // nothing selectable (local imports, legacy installs). Fewer than two file
+  // options means the select would offer no real choice, so render nothing.
+  const fileOptions = group.variants.filter(
+    (variant): variant is Mod & { gameBananaFileId: number } =>
+      typeof variant.gameBananaFileId === 'number'
+  );
+  if (!onChange || fileOptions.length < 2) return null;
 
   const specificValue =
     typeof choice === 'object' &&
-    group.variants.some((variant) => variant.gameBananaFileId === choice.fileId)
+    fileOptions.some((variant) => variant.gameBananaFileId === choice.fileId)
       ? `file:${choice.fileId}`
       : null;
-  const value = specificValue ?? (typeof choice === 'string' ? choice : 'random');
+  const value = specificValue ?? (choice === 'random' ? 'random' : 'default');
 
   return (
     <label className={`relative z-30 flex min-w-0 items-center gap-1.5 ${className}`}>
@@ -81,25 +90,22 @@ function ShuffleVariantSelect({
           onClick={(event) => event.stopPropagation()}
           onChange={(event) => {
             const next = event.target.value;
-            onChange(
-              next.startsWith('file:')
-                ? { fileId: Number(next.slice('file:'.length)) }
-                : (next as 'primary' | 'random')
-            );
+            if (next.startsWith('file:')) onChange({ fileId: Number(next.slice('file:'.length)) });
+            else if (next === 'random') onChange('random');
+            // 'default' clears the stored choice back to the unset state.
+            else onChange(null);
           }}
           aria-label={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
           title={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
           className="py-1 pl-2 pr-8 text-[11px]"
         >
-          <option value="primary">{t('locker.randomize.primaryVariant')}</option>
+          <option value="default">{t('locker.randomize.defaultVariant')}</option>
           <option value="random">{t('locker.randomize.anyVariant')}</option>
-          {group.variants.map((variant) =>
-            typeof variant.gameBananaFileId === 'number' ? (
-              <option key={variant.id} value={`file:${variant.gameBananaFileId}`}>
-                {variantPillLabel(variant)}
-              </option>
-            ) : null
-          )}
+          {fileOptions.map((variant) => (
+            <option key={variant.id} value={`file:${variant.gameBananaFileId}`}>
+              {variantPillLabel(variant)}
+            </option>
+          ))}
         </Select>
       </div>
     </label>
@@ -178,7 +184,7 @@ interface HeroSkinsPanelProps {
   includedSkinKeys?: Set<string>;
   onToggleShuffleIncluded?: (skinKey: string) => void;
   shuffleVariantChoices?: ReadonlyMap<string, VariantChoice>;
-  onSetShuffleVariant?: (skinKey: string, choice: VariantChoice) => void;
+  onSetShuffleVariant?: (skinKey: string, choice: VariantChoice | null) => void;
   /** When the master "shuffle on launch" switch is armed, the per-skin toggles
    *  are always visible (not hover-only) so the pool is easy to curate. */
   shuffleArmed?: boolean;
@@ -394,7 +400,7 @@ function SkinGroupCard({
   /** Toggle this skin's launch-shuffle membership. When omitted, no toggle is shown. */
   onToggleIncluded?: () => void;
   shuffleVariantChoice?: VariantChoice;
-  onSetShuffleVariant?: (choice: VariantChoice) => void;
+  onSetShuffleVariant?: (choice: VariantChoice | null) => void;
   /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
   shuffleArmed?: boolean;
 }) {
@@ -710,7 +716,7 @@ function SkinGroupRow({
   /** Toggle this skin's launch-shuffle membership. When omitted, no toggle is shown. */
   onToggleIncluded?: () => void;
   shuffleVariantChoice?: VariantChoice;
-  onSetShuffleVariant?: (choice: VariantChoice) => void;
+  onSetShuffleVariant?: (choice: VariantChoice | null) => void;
   /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
   shuffleArmed?: boolean;
 }) {

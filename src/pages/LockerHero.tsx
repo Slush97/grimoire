@@ -59,7 +59,7 @@ interface LockerHeroViewProps {
   includedSkinKeys?: Set<string>;
   onToggleShuffleIncluded?: (skinKey: string) => void;
   shuffleVariantChoices?: ReadonlyMap<string, VariantChoice>;
-  onSetShuffleVariant?: (skinKey: string, choice: VariantChoice) => void;
+  onSetShuffleVariant?: (skinKey: string, choice: VariantChoice | null) => void;
   /** Whether the master shuffle switch is armed (keeps per-skin toggles visible). */
   shuffleArmed?: boolean;
 }
