@@ -60,8 +60,6 @@
     "sections": {
       "Mod": "Mods",
       "Sound": "Sounds",
-      "Gui": "GUI",
-      "Model": "Models",
       "Wip": "WiPs"
     }
   },

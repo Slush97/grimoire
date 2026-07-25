@@ -8,9 +8,9 @@ interface SyncIndicatorProps {
     className?: string;
 }
 
-// The section names ('Mod', 'Sound', 'Gui', 'Model', 'Wip') arrive from the
-// main process as raw English identifiers; map them to localized labels, falling
-// back to the raw value for anything unmapped.
+// The section names ('Mod', 'Sound', 'Wip') arrive from the main process as raw
+// English identifiers; map them to localized labels, falling back to the raw
+// value for anything unmapped.
 function localizedSection(section: string, t: TFunction): string {
     return t(`sync.sections.${section}`, { defaultValue: section });
 }
