@@ -20,12 +20,13 @@ import {
 import { CSS } from '@dnd-kit/utilities';
 import type { Mod } from '../../types/mod';
 import { getLockerSkinKey, modLoadOrder } from '../../lib/lockerUtils';
-import { shuffleSkinKey } from '../../lib/lockerRandomizer';
+import { shuffleSkinKey, type VariantChoice } from '../../lib/lockerRandomizer';
 import { useAppStore } from '../../stores/appStore';
 import ModThumbnail from '../ModThumbnail';
 import AudioPreviewPlayer from '../AudioPreviewPlayer';
 import DownloadableSkinsSection from './DownloadableSkinsSection';
 import { LockerModImagePicker } from './LockerModImagePicker';
+import { Select } from '../common/forms';
 
 interface SkinGroup {
   key: string;
@@ -42,6 +43,72 @@ function variantPillLabel(mod: Mod): string {
     mod.fileDescription ??
     mod.sourceFileName ??
     mod.fileName
+  );
+}
+
+function ShuffleVariantSelect({
+  group,
+  choice,
+  onChange,
+  className = '',
+}: {
+  group: SkinGroup;
+  /** Undefined is the unset default: the shuffle keeps the currently loaded
+   *  files for this skin. */
+  choice?: VariantChoice;
+  onChange?: (choice: VariantChoice | null) => void;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  // gameBananaFileId is optional on Mod, so a multi-variant group can still have
+  // nothing selectable (local imports, legacy installs). Fewer than two file
+  // options means the select would offer no real choice, so render nothing.
+  const fileOptions = group.variants.filter(
+    (variant): variant is Mod & { gameBananaFileId: number } =>
+      typeof variant.gameBananaFileId === 'number'
+  );
+  if (!onChange || fileOptions.length < 2) return null;
+
+  const specificValue =
+    typeof choice === 'object' &&
+    fileOptions.some((variant) => variant.gameBananaFileId === choice.fileId)
+      ? `file:${choice.fileId}`
+      : null;
+  const value = specificValue ?? (choice === 'random' ? 'random' : 'default');
+
+  return (
+    <label className={`relative z-30 flex min-w-0 items-center gap-1.5 ${className}`}>
+      <span className="sr-only">
+        {t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
+      </span>
+      <Shuffle className="h-3 w-3 flex-shrink-0 text-accent" aria-hidden />
+      <div className="min-w-0 flex-1">
+        <Select
+          inputSize="sm"
+          value={value}
+          onMouseDown={(event) => event.stopPropagation()}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => {
+            const next = event.target.value;
+            if (next.startsWith('file:')) onChange({ fileId: Number(next.slice('file:'.length)) });
+            else if (next === 'random') onChange('random');
+            // 'default' clears the stored choice back to the unset state.
+            else onChange(null);
+          }}
+          aria-label={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
+          title={t('locker.randomize.variantChoiceFor', { name: group.primary.name })}
+          className="py-1 pl-2 pr-8 text-[11px]"
+        >
+          <option value="default">{t('locker.randomize.defaultVariant')}</option>
+          <option value="random">{t('locker.randomize.anyVariant')}</option>
+          {fileOptions.map((variant) => (
+            <option key={variant.id} value={`file:${variant.gameBananaFileId}`}>
+              {variantPillLabel(variant)}
+            </option>
+          ))}
+        </Select>
+      </div>
+    </label>
   );
 }
 
@@ -116,6 +183,8 @@ interface HeroSkinsPanelProps {
    *  shuffle toggle. Skins-only; the Sounds panel leaves both undefined. */
   includedSkinKeys?: Set<string>;
   onToggleShuffleIncluded?: (skinKey: string) => void;
+  shuffleVariantChoices?: ReadonlyMap<string, VariantChoice>;
+  onSetShuffleVariant?: (skinKey: string, choice: VariantChoice | null) => void;
   /** When the master "shuffle on launch" switch is armed, the per-skin toggles
    *  are always visible (not hover-only) so the pool is easy to curate. */
   shuffleArmed?: boolean;
@@ -307,6 +376,8 @@ function SkinGroupCard({
   onPickImage,
   isIncluded,
   onToggleIncluded,
+  shuffleVariantChoice,
+  onSetShuffleVariant,
   shuffleArmed,
 }: {
   group: SkinGroup;
@@ -328,6 +399,8 @@ function SkinGroupCard({
   isIncluded?: boolean;
   /** Toggle this skin's launch-shuffle membership. When omitted, no toggle is shown. */
   onToggleIncluded?: () => void;
+  shuffleVariantChoice?: VariantChoice;
+  onSetShuffleVariant?: (choice: VariantChoice | null) => void;
   /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
   shuffleArmed?: boolean;
 }) {
@@ -564,6 +637,14 @@ function SkinGroupCard({
               className={`h-3 w-3 transition-transform duration-200 ${variantsOpen ? 'rotate-180' : ''}`}
             />
           </div>
+          {isIncluded && (
+            <ShuffleVariantSelect
+              group={group}
+              choice={shuffleVariantChoice}
+              onChange={onSetShuffleVariant}
+              className="mt-1 px-0.5"
+            />
+          )}
           {variantsOpen && (
             <div
               className="absolute left-2 right-2 top-full z-30 mt-1 flex flex-wrap items-center gap-1.5 rounded-md border border-white/[0.12] bg-bg-secondary/95 px-2 py-2 shadow-xl shadow-black/50 backdrop-blur-md"
@@ -614,6 +695,8 @@ function SkinGroupRow({
   onPickImage,
   isIncluded,
   onToggleIncluded,
+  shuffleVariantChoice,
+  onSetShuffleVariant,
   shuffleArmed,
 }: {
   group: SkinGroup;
@@ -632,6 +715,8 @@ function SkinGroupRow({
   isIncluded?: boolean;
   /** Toggle this skin's launch-shuffle membership. When omitted, no toggle is shown. */
   onToggleIncluded?: () => void;
+  shuffleVariantChoice?: VariantChoice;
+  onSetShuffleVariant?: (choice: VariantChoice | null) => void;
   /** Keep the toggle visible (not hover-only) while the shuffle switch is armed. */
   shuffleArmed?: boolean;
 }) {
@@ -795,6 +880,14 @@ function SkinGroupRow({
           role="group"
           aria-label={t('locker.skins.variantToggles')}
         >
+          {isIncluded && (
+            <ShuffleVariantSelect
+              group={group}
+              choice={shuffleVariantChoice}
+              onChange={onSetShuffleVariant}
+              className="w-full pb-0.5"
+            />
+          )}
           {group.variants.map((variant) => {
             const label = variantPillLabel(variant);
             return (
@@ -837,6 +930,8 @@ export default function HeroSkinsPanel({
   layout = 'list',
   includedSkinKeys,
   onToggleShuffleIncluded,
+  shuffleVariantChoices,
+  onSetShuffleVariant,
   shuffleArmed,
 }: HeroSkinsPanelProps) {
   const hasMods = mods.length > 0;
@@ -908,6 +1003,12 @@ export default function HeroSkinsPanel({
                       ? () => onToggleShuffleIncluded(shuffleSkinKey(group.primary))
                       : undefined
                   }
+                  shuffleVariantChoice={shuffleVariantChoices?.get(shuffleSkinKey(group.primary))}
+                  onSetShuffleVariant={
+                    onSetShuffleVariant
+                      ? (choice) => onSetShuffleVariant(shuffleSkinKey(group.primary), choice)
+                      : undefined
+                  }
                   shuffleArmed={shuffleArmed}
                   {...groupProps}
                 />
@@ -924,6 +1025,12 @@ export default function HeroSkinsPanel({
                 onToggleIncluded={
                   onToggleShuffleIncluded
                     ? () => onToggleShuffleIncluded(shuffleSkinKey(group.primary))
+                    : undefined
+                }
+                shuffleVariantChoice={shuffleVariantChoices?.get(shuffleSkinKey(group.primary))}
+                onSetShuffleVariant={
+                  onSetShuffleVariant
+                    ? (choice) => onSetShuffleVariant(shuffleSkinKey(group.primary), choice)
                     : undefined
                 }
                 shuffleArmed={shuffleArmed}

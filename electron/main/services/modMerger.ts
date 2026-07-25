@@ -49,6 +49,7 @@ import type {
     MergedModSource,
     UnmergeModResult,
     ExtractMergeSourceResult,
+    AddMergeSourcesResult,
 } from '../../../src/types/mod';
 
 const DEADLOCK_STEAM_APP_ID = 1422450;
@@ -468,6 +469,9 @@ export async function mergeMods(
     const trimmedName = options.name.trim();
     if (!trimmedName) throw new Error('A name is required for the merged mod.');
     if (modIds.length < 2) throw new Error('Select at least two mods to merge.');
+    if (new Set(modIds).size !== modIds.length) {
+        throw new Error('The same mod was selected more than once.');
+    }
 
     return runExclusiveModMutation(() => mergeModsLocked(deadlockPath, modIds, options, trimmedName));
 }
@@ -480,25 +484,104 @@ async function mergeModsLocked(
 ): Promise<MergeResult> {
     const installed = await scanMods(deadlockPath);
     await syncRunningGameModSnapshotFromMods(installed);
-    const sources: Mod[] = [];
-    for (const id of modIds) {
-        const found = installed.find((m) => m.id === id);
-        if (!found) throw new Error(`Selected mod not found (id: ${id}).`);
-        const meta = getModMetadata(found.metaKey);
-        if (meta?.merged) {
-            throw new Error(
-                `"${meta.modName || found.name}" is already a merged mod. Unmerge it first.`
-            );
-        }
-        sources.push(found);
+    const selected = modIds.map((id) => {
+        const mod = installed.find((candidate) => candidate.id === id);
+        if (!mod) throw new Error(`Selected mod not found (id: ${id}).`);
+        return { mod, metadata: getModMetadata(mod.metaKey) };
+    });
+    const parentMerges = selected
+        .filter((entry) => !!entry.metadata?.merged)
+        .map((entry) => entry.mod);
+    const parentIds = new Set(parentMerges.map((parent) => parent.id));
+    const locatedSources: LocatedMergeSource[] = [];
+    const missingSources: string[] = [];
+
+    const addUniqueSource = (source: LocatedMergeSource): void => {
+        if (locatedSources.some((candidate) =>
+            sameMergeSourceIdentity(candidate.snapshot, source.snapshot)
+        )) return;
+        locatedSources.push(source);
+    };
+
+    // Standalone selections become leaves directly. Capture their provenance
+    // before any source is disabled or renamed.
+    for (const { mod, metadata } of selected) {
+        if (metadata?.merged) continue;
+        const identity = await resolveVpkIdentity(mod.path);
+        addUniqueSource({
+            mod,
+            snapshot: {
+                fileName: mod.fileName,
+                modName: metadata?.modName || mod.name,
+                thumbnailUrl: metadata?.thumbnailUrl,
+                gameBananaId: metadata?.gameBananaId ?? mod.gameBananaId,
+                gameBananaFileId: metadata?.gameBananaFileId ?? mod.gameBananaFileId,
+                section: metadata?.sourceSection ?? mod.sourceSection,
+                enabledAtMergeTime: mod.enabled,
+                priorityAtMergeTime: mod.priority,
+                sha256AtMergeTime: identity.sha256,
+            },
+            vpkIndex: metadata?.vpkIndex,
+        });
     }
-    assertCanMoveLoadedGameMods(sources.filter((source) => source.enabled));
+
+    // A merged selection contributes its real leaf VPKs, never the parent VPK
+    // itself. Use a fresh one-shot locator for each parent so a source shared
+    // by two merges is recognized as a duplicate rather than reported missing.
+    for (const { mod: parent, metadata } of selected) {
+        const manifest = metadata?.merged;
+        if (!manifest) continue;
+        const locator = makeSourceLocator(
+            installed.filter((candidate) => !parentIds.has(candidate.id))
+        );
+        for (const snapshot of manifest.sources) {
+            const onDisk = await locator.locate(snapshot);
+            if (!onDisk) {
+                missingSources.push(snapshot.fileName);
+                continue;
+            }
+            const identity = await resolveVpkIdentity(onDisk.path);
+            addUniqueSource({
+                mod: onDisk,
+                snapshot: {
+                    ...snapshot,
+                    fileName: onDisk.fileName,
+                    sha256AtMergeTime: snapshot.sha256AtMergeTime || identity.sha256,
+                },
+                vpkIndex: getModMetadata(onDisk.metaKey)?.vpkIndex,
+            });
+        }
+        mergeTrace(
+            `flatten parent ${manifest.id} "${metadata.modName || parent.name}": ${manifest.sources.length} manifest sources`
+        );
+    }
+
+    if (missingSources.length > 0) {
+        const missing = Array.from(new Set(missingSources));
+        throw new Error(
+            `Can't flatten the selected merge: ${missing.join(', ')} `
+            + `${missing.length === 1 ? 'is' : 'are'} no longer on disk. `
+            + 'The original merges were left unchanged. Unmerge first to recover the missing sources.'
+        );
+    }
+
+    if (locatedSources.length < 2) {
+        throw new Error("Can't create the flattened merge: too few unique source VPKs remain on disk.");
+    }
+
+    assertCanMoveLoadedGameMods([
+        ...parentMerges,
+        ...locatedSources.filter((source) => source.mod.enabled).map((source) => source.mod),
+    ]);
 
     // In Deadlock a LOWER pakNN wins a file collision (pak09 overrides pak10),
-    // so the lowest-pakNN source is the highest priority. vpkmerge is
-    // last-input-wins, so sort DESCENDING to put that highest-priority
-    // (lowest-pakNN) source LAST in the argv and reproduce the in-game winner.
-    sources.sort((a, b) => b.priority - a.priority);
+    // so the lowest-priority-number leaf must be last for vpkmerge's
+    // last-input-wins behavior. Parent merge VPKs never enter this list, which
+    // also prevents their embedded modinfo.json/addoninfo.txt from nesting.
+    locatedSources.sort(
+        (a, b) => b.snapshot.priorityAtMergeTime - a.snapshot.priorityAtMergeTime
+    );
+    const sources = locatedSources.map((source) => source.mod);
 
     mergeTrace(
         `merge start "${trimmedName}": ${sources.length} sources -> ${sources
@@ -506,15 +589,14 @@ async function mergeModsLocked(
             .join(', ')}`
     );
 
-    // Hash every source BEFORE any filesystem mutation. sha256AtMergeTime
-    // is the content-identity fallback unmerge uses when the manifest
-    // fileName lookup misses (file renamed by reconcile, partial-disable
-    // recovery, etc). Parallel because the files are independent.
-    const sourceHashes = await Promise.all(
-        sources.map((src) => resolveVpkIdentity(src.path).then((id) => id.sha256))
-    );
-
-    const portable = buildPortableForSources(sources, trimmedName);
+    // Keep the resolved manifest snapshots aligned with the sorted leaf paths.
+    // Their captured priority and provenance, rather than the disabled files'
+    // current fallback priority, must drive both the manifest and share code.
+    const preDisableSnapshot: MergedModSource[] = locatedSources.map((source) => ({
+        ...source.snapshot,
+        fileName: source.mod.fileName,
+    }));
+    const portable = buildPortableForSources(sources, trimmedName, preDisableSnapshot);
     const shareCode = encodeShareCode(JSON.stringify(portable));
 
     // The merged VPK installs ENABLED, so reserve a slot via the overflow-aware
@@ -557,22 +639,7 @@ async function mergeModsLocked(
     // Each source's stamped vpkIndex, captured BEFORE the disable loop renames
     // files (and migrates their metadata keys). Embedded into the modinfo
     // record's source list so a shared profile can rebind multi-VPK variants.
-    const sourceVpkIndexes = sources.map((src) => getModMetadata(src.metaKey)?.vpkIndex);
-
-    const preDisableSnapshot: MergedModSource[] = sources.map((src, i) => {
-        const meta = getModMetadata(src.metaKey);
-        return {
-            fileName: src.fileName,
-            modName: meta?.modName || src.name,
-            thumbnailUrl: meta?.thumbnailUrl,
-            gameBananaId: meta?.gameBananaId,
-            gameBananaFileId: meta?.gameBananaFileId,
-            section: meta?.sourceSection,
-            enabledAtMergeTime: src.enabled,
-            priorityAtMergeTime: src.priority,
-            sha256AtMergeTime: sourceHashes[i],
-        };
-    });
+    const sourceVpkIndexes = locatedSources.map((source) => source.vpkIndex);
 
     const merged: MergedModInfo = {
         id: randomUUID(),
@@ -662,6 +729,14 @@ async function mergeModsLocked(
         console.warn(`[modMerger] Failed to embed identity into merged VPK ${mergedPath}:`, err);
     }
 
+    // Only consume selected parent merges after the new flattened VPK has
+    // built, verified, been stamped, and completed its embed attempt. Their
+    // leaf sources are already represented above and remain disabled.
+    for (const parent of parentMerges) {
+        await fs.unlink(parent.path);
+        removeModMetadata(parent.metaKey);
+    }
+
     const finalMods = await scanMods(deadlockPath);
     const newMod = finalMods.find((m) => m.metaKey === mergedMetaKey);
     if (!newMod) {
@@ -670,18 +745,25 @@ async function mergeModsLocked(
     return { mod: newMod, disabledSources };
 }
 
-function buildPortableForSources(sources: Mod[], profileName: string): PortableProfile {
-    const entries: PortableMergeSourceEntry[] = sources.map((src) => {
+function buildPortableForSources(
+    sources: Mod[],
+    profileName: string,
+    snapshots?: MergedModSource[]
+): PortableProfile {
+    const entries: PortableMergeSourceEntry[] = sources.map((src, index) => {
         const meta = getModMetadata(src.metaKey);
+        const snapshot = snapshots?.[index];
         return {
-            fileName: src.fileName,
-            modName: meta?.modName || src.name,
-            thumbnailUrl: meta?.thumbnailUrl,
-            gameBananaId: meta?.gameBananaId ?? src.gameBananaId,
-            gameBananaFileId: meta?.gameBananaFileId ?? src.gameBananaFileId,
-            section: meta?.sourceSection,
-            enabledAtMergeTime: true,
-            priorityAtMergeTime: src.priority,
+            fileName: snapshot?.fileName ?? src.fileName,
+            modName: snapshot?.modName ?? meta?.modName ?? src.name,
+            thumbnailUrl: snapshot?.thumbnailUrl ?? meta?.thumbnailUrl,
+            gameBananaId: snapshot?.gameBananaId ?? meta?.gameBananaId ?? src.gameBananaId,
+            gameBananaFileId:
+                snapshot?.gameBananaFileId ?? meta?.gameBananaFileId ?? src.gameBananaFileId,
+            section: snapshot?.section ?? meta?.sourceSection,
+            enabledAtMergeTime: snapshot?.enabledAtMergeTime ?? true,
+            priorityAtMergeTime: snapshot?.priorityAtMergeTime ?? src.priority,
+            sha256AtMergeTime: snapshot?.sha256AtMergeTime,
             // Hint extras the snapshot shape cannot carry: the merge-time
             // caller has full metadata, so the share code keeps the same hint
             // a plain (non-merge) export would. nsfw in particular drives the
@@ -814,6 +896,10 @@ function makeSourceLocator(candidates: Mod[]): SourceLocator {
             let onDisk: Mod | undefined = disabledCandidates.find(
                 (m) => !consumedIds.has(m.id) && m.fileName === src.fileName
             );
+            if (onDisk && src.sha256AtMergeTime) {
+                const wanted = src.sha256AtMergeTime.toLowerCase();
+                if ((await getHash(onDisk)) !== wanted) onDisk = undefined;
+            }
             if (!onDisk && src.sha256AtMergeTime) {
                 const wanted = src.sha256AtMergeTime.toLowerCase();
                 onDisk = (await matchBySha(disabledCandidates, wanted))
@@ -882,6 +968,257 @@ async function unmergeModLocked(
         missingSourceFileNames,
         shareCode: manifest.shareCode,
     };
+}
+
+export interface AddMergeSourcesOptions {
+    /** Pass --strict to vpkmerge so any file collision aborts before the
+     *  existing merge is replaced. */
+    strict?: boolean;
+}
+
+interface LocatedMergeSource {
+    mod: Mod;
+    snapshot: MergedModSource;
+    vpkIndex?: number;
+}
+
+function sameMergeSourceIdentity(
+    left: Pick<MergedModSource, 'sha256AtMergeTime' | 'gameBananaFileId'>,
+    right: Pick<MergedModSource, 'sha256AtMergeTime' | 'gameBananaFileId'>
+): boolean {
+    const leftSha = left.sha256AtMergeTime?.toLowerCase();
+    const rightSha = right.sha256AtMergeTime?.toLowerCase();
+    if (leftSha && rightSha && leftSha === rightSha) return true;
+    return typeof left.gameBananaFileId === 'number'
+        && typeof right.gameBananaFileId === 'number'
+        && left.gameBananaFileId === right.gameBananaFileId;
+}
+
+/**
+ * Add standalone VPKs to an existing merge without changing the merge's slot,
+ * metadata key, or stable manifest id. All expensive/fallible work targets a
+ * dotfile first; the original merged VPK is replaced only after vpkmerge,
+ * verification, identity capture, and the updated embed have succeeded.
+ */
+export async function addMergeSources(
+    deadlockPath: string,
+    mergedModId: string,
+    addModIds: string[],
+    options: AddMergeSourcesOptions = {}
+): Promise<AddMergeSourcesResult> {
+    if (addModIds.length === 0) throw new Error('Select at least one mod to add.');
+    if (new Set(addModIds).size !== addModIds.length) {
+        throw new Error('The same mod was selected more than once.');
+    }
+    return runExclusiveModMutation(() =>
+        addMergeSourcesLocked(deadlockPath, mergedModId, addModIds, options)
+    );
+}
+
+async function addMergeSourcesLocked(
+    deadlockPath: string,
+    mergedModId: string,
+    addModIds: string[],
+    options: AddMergeSourcesOptions
+): Promise<AddMergeSourcesResult> {
+    const installed = await scanMods(deadlockPath);
+    await syncRunningGameModSnapshotFromMods(installed);
+
+    const target = installed.find((mod) => mod.id === mergedModId);
+    if (!target) throw new Error(`Merged mod not found (id: ${mergedModId}).`);
+    const targetMeta = getModMetadata(target.metaKey);
+    if (!targetMeta?.merged) {
+        throw new Error(`"${targetMeta?.modName || target.name}" is not a merged mod.`);
+    }
+    const oldManifest = targetMeta.merged;
+
+    const additions: Mod[] = addModIds.map((id) => {
+        const mod = installed.find((candidate) => candidate.id === id);
+        if (!mod) throw new Error(`Selected mod not found (id: ${id}).`);
+        if (mod.id === target.id) throw new Error('A merge cannot be added to itself.');
+        const metadata = getModMetadata(mod.metaKey);
+        if (metadata?.merged) {
+            throw new Error(`"${metadata.modName || mod.name}" is already a merged mod.`);
+        }
+        return mod;
+    });
+
+    // Capture and validate every addition before resolving existing leaves.
+    // Comparing against the manifest itself rejects a hidden absorbed source
+    // passed directly over IPC, even though it is intentionally excluded from
+    // the source locator below.
+    const additionSnapshots: LocatedMergeSource[] = [];
+    for (const mod of additions) {
+        const metadata = getModMetadata(mod.metaKey);
+        const identity = await resolveVpkIdentity(mod.path);
+        const snapshot: MergedModSource = {
+            fileName: mod.fileName,
+            modName: metadata?.modName || mod.name,
+            thumbnailUrl: metadata?.thumbnailUrl,
+            gameBananaId: metadata?.gameBananaId ?? mod.gameBananaId,
+            gameBananaFileId: metadata?.gameBananaFileId ?? mod.gameBananaFileId,
+            section: metadata?.sourceSection ?? mod.sourceSection,
+            enabledAtMergeTime: mod.enabled,
+            priorityAtMergeTime: mod.priority,
+            sha256AtMergeTime: identity.sha256,
+        };
+        const duplicate = oldManifest.sources.some((source) =>
+            sameMergeSourceIdentity(source, snapshot)
+        ) || additionSnapshots.some((source) =>
+            sameMergeSourceIdentity(source.snapshot, snapshot)
+        );
+        if (duplicate) {
+            throw new Error(`"${snapshot.modName}" is already present in this merge.`);
+        }
+        additionSnapshots.push({ mod, snapshot, vpkIndex: metadata?.vpkIndex });
+    }
+
+    // Resolve the existing sources without letting a newly selected mod be
+    // accidentally claimed by a legacy filename-only manifest entry.
+    const additionIds = new Set(additions.map((mod) => mod.id));
+    const locator = makeSourceLocator(
+        installed.filter((mod) => mod.id !== target.id && !additionIds.has(mod.id))
+    );
+    const existing: LocatedMergeSource[] = [];
+    const missingSources: string[] = [];
+    for (const source of oldManifest.sources) {
+        const onDisk = await locator.locate(source);
+        if (!onDisk) {
+            missingSources.push(source.fileName);
+            continue;
+        }
+        const identity = await resolveVpkIdentity(onDisk.path);
+        existing.push({
+            mod: onDisk,
+            snapshot: {
+                ...source,
+                fileName: onDisk.fileName,
+                sha256AtMergeTime: source.sha256AtMergeTime || identity.sha256,
+            },
+            vpkIndex: getModMetadata(onDisk.metaKey)?.vpkIndex,
+        });
+    }
+
+    if (missingSources.length > 0) {
+        const missing = Array.from(new Set(missingSources));
+        throw new Error(
+            `Can't add mods to this merge: ${missing.join(', ')} `
+            + `${missing.length === 1 ? 'is' : 'are'} no longer on disk. `
+            + 'The merge was left unchanged. Unmerge first to recover the missing sources.'
+        );
+    }
+
+    if (existing.length + additionSnapshots.length < 2) {
+        throw new Error("Can't rebuild the merge: too few source VPKs remain on disk.");
+    }
+
+    // Both the existing merge and enabled additions will move/change below.
+    // Refuse before touching disk when the running game has any of them loaded.
+    assertCanMoveLoadedGameMods([
+        target,
+        ...additionSnapshots.filter((source) => source.mod.enabled).map((source) => source.mod),
+    ]);
+
+    const targetDir = dirname(target.path);
+    const buildPath = join(targetDir, `.merge-rebuild-${randomUUID()}.vpk`);
+    const disabledForRollback: Mod[] = [];
+    let swapped = false;
+
+    try {
+        // Move enabled additions out of their live slots before building. On
+        // any pre-swap failure they are restored, so --strict remains atomic
+        // from the user's point of view.
+        for (const source of additionSnapshots) {
+            if (!source.mod.enabled) continue;
+            const disabled = await disableModUnlocked(deadlockPath, source.mod.id);
+            disabledForRollback.push(disabled);
+            source.mod = disabled;
+            source.snapshot.fileName = disabled.fileName;
+        }
+
+        const ordered = [...existing, ...additionSnapshots].sort(
+            (a, b) => b.snapshot.priorityAtMergeTime - a.snapshot.priorityAtMergeTime
+        );
+        const args: string[] = [];
+        if (options.strict) args.push('--strict');
+        args.push(buildPath, ...ordered.map((source) => source.mod.path));
+
+        mergeTrace(
+            `add-sources start merge=${oldManifest.id} key=${target.metaKey}: `
+            + `+${additionSnapshots.length} -> ${basename(buildPath)}`
+        );
+        await runVpkmerge(args);
+        await verifyVpkOutput(buildPath);
+
+        const rebuiltOriginal = await computeOriginalIdentity(buildPath);
+        const snapshots = ordered.map((source) => source.snapshot);
+        const portable = buildPortableForSources(
+            ordered.map((source) => source.mod),
+            targetMeta.modName || target.name,
+            snapshots
+        );
+        const newManifest: MergedModInfo = {
+            id: oldManifest.id,
+            createdAt: oldManifest.createdAt,
+            shareCode: encodeShareCode(JSON.stringify(portable)),
+            sources: snapshots,
+        };
+
+        // Embed before the swap so sidecar and in-VPK provenance advance as a
+        // unit. An embed/parity failure leaves the original merge untouched.
+        await embedMergeIdentity(
+            buildPath,
+            targetMeta.modName || target.name,
+            newManifest.createdAt,
+            rebuiltOriginal,
+            ordered.map((source) => ({
+                title: source.snapshot.modName,
+                identity: { sha256: source.snapshot.sha256AtMergeTime },
+                gamebananaId: source.snapshot.gameBananaId,
+                gamebananaFileId: source.snapshot.gameBananaFileId,
+                section: source.snapshot.section,
+                priorityAtMergeTime: source.snapshot.priorityAtMergeTime,
+                enabledAtMergeTime: source.snapshot.enabledAtMergeTime,
+                fileNameAtMergeTime: source.snapshot.fileName,
+                vpkIndex: source.vpkIndex,
+            }))
+        );
+        await verifyVpkOutput(buildPath);
+
+        // Atomic same-directory replacement preserves filename, slot, mod id,
+        // and metaKey. The metadata setter merges this patch with unrelated
+        // fields already stored for the merge.
+        await fs.rename(buildPath, target.path);
+        swapped = true;
+        setModMetadata(target.metaKey, {
+            modName: targetMeta.modName,
+            thumbnailUrl: targetMeta.thumbnailUrl,
+            sha256: rebuiltOriginal.sha256,
+            merged: newManifest,
+        });
+        mergeTrace(
+            `add-sources done merge=${oldManifest.id} key=${target.metaKey}: ${describeSources(snapshots)}`
+        );
+        return {
+            merged: newManifest,
+            addedFileNames: additionSnapshots.map((source) => source.snapshot.fileName),
+        };
+    } catch (err) {
+        if (!swapped) {
+            try { await fs.unlink(buildPath); } catch { /* best-effort temp cleanup */ }
+            // Restore only additions that this operation moved. Reverse order
+            // minimizes load-slot churn when several sources were enabled.
+            for (const disabled of disabledForRollback.reverse()) {
+                try {
+                    await enableModUnlocked(deadlockPath, disabled.id);
+                } catch (restoreErr) {
+                    console.error(`[modMerger] Failed to restore ${disabled.fileName} after add-source failure:`, restoreErr);
+                }
+            }
+        }
+        mergeTrace(`add-sources FAILED merge=${oldManifest.id}: ${String(err)}`);
+        throw err;
+    }
 }
 
 /**

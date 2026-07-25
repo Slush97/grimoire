@@ -237,13 +237,15 @@ export async function setModMetadataWithHash(
  */
 export async function backfillMissingMetadataHashes(deadlockPath: string): Promise<number> {
     const metadata = loadMetadata();
-    const missing = Object.entries(metadata).filter(([, data]) => !isValidSha256(data.sha256));
-    if (missing.length === 0) return 0;
-
     const filesByKey = await collectInstalledVpkPaths(deadlockPath);
+    const metadataKeysByLower = new Map(
+        Object.keys(metadata).map((key) => [key.toLowerCase(), key])
+    );
     let updated = 0;
 
-    for (const [key, data] of missing) {
+    // First repair pre-hash metadata entries that still have a VPK on disk.
+    for (const [key, data] of Object.entries(metadata)) {
+        if (isValidSha256(data.sha256)) continue;
         const filePath = filesByKey.get(key.toLowerCase());
         if (!filePath) continue;
 
@@ -254,6 +256,22 @@ export async function backfillMissingMetadataHashes(deadlockPath: string): Promi
             updated++;
         } catch (error) {
             console.warn(`[Metadata] Failed to backfill SHA-256 for ${key}:`, error);
+        }
+    }
+
+    // A VPK dropped straight into addons has no sidecar entry at all. Give it
+    // the smallest useful row so renderer features can use content identity
+    // across enable/disable renames. Unknown-mod semantics remain unchanged:
+    // callers classify on gameBananaId/modName, not metadata-row existence.
+    for (const [lowerKey, filePath] of filesByKey) {
+        if (metadataKeysByLower.has(lowerKey)) continue;
+        const key = metaKeyFor(filePath);
+        try {
+            metadata[key] = { sha256: (await resolveVpkIdentity(filePath)).sha256 };
+            metadataKeysByLower.set(lowerKey, key);
+            updated++;
+        } catch (error) {
+            console.warn(`[Metadata] Failed to create SHA-256 metadata for ${key}:`, error);
         }
     }
 

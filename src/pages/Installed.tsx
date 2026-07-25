@@ -66,6 +66,7 @@ import {
   Fingerprint,
   Copy,
   ExternalLink,
+  Star,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
@@ -73,7 +74,7 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint, launchModded } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint, launchModded } from '../lib/api';
 import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
@@ -96,6 +97,15 @@ import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
 import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
+import {
+  createDisabledEntryComparator,
+  modPreferenceKey,
+  readStoredDisabledFavorites,
+  readStoredDisabledOrder,
+  toggleFavoriteKey,
+  writeStoredDisabledFavorites,
+  writeStoredDisabledOrder,
+} from '../lib/disabledModPrefs';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -396,6 +406,10 @@ function entryRepresentativeId(entry: ModEntry): string {
   return entry.kind === 'single' ? entry.mod.id : entry.primary.id;
 }
 
+function entryDisabledPreferenceKey(entry: ModEntry): string {
+  return modPreferenceKey(entry.kind === 'single' ? entry.mod : entry.primary);
+}
+
 /**
  * Sortable grid item: useSortable wrapper + the memoized card, merged into a
  * single memo boundary. Keeping useSortable inside the memo matters: with the
@@ -470,6 +484,7 @@ interface InstalledEntryCardProps {
   selectMode: boolean;
   selected: boolean;
   soloBusy: boolean;
+  favorite: boolean;
   onOpenDetails: (mod: Mod) => void;
   onViewAuthor: (mod: Mod) => void;
   onOpenPicker: (gameBananaId: number) => void;
@@ -490,6 +505,7 @@ interface InstalledEntryCardProps {
   onUnmerge: (mod: Mod) => void;
   onCopyShareCode: (mod: Mod) => void;
   onSelectToggle: (entry: ModEntry) => void;
+  onToggleFavorite: (entry: ModEntry) => void;
 }
 
 /**
@@ -514,6 +530,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   selectMode,
   selected,
   soloBusy,
+  favorite,
   onOpenDetails,
   onViewAuthor,
   onOpenPicker,
@@ -530,6 +547,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onUnmerge,
   onCopyShareCode,
   onSelectToggle,
+  onToggleFavorite,
 }: InstalledEntryCardProps) {
   if (entry.kind === 'single') {
     const mod = entry.mod;
@@ -570,6 +588,11 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         selectMode={selectMode}
         selected={selected}
         onSelectToggle={() => onSelectToggle(entry)}
+        favorite={favorite}
+        // Settable in both sections: starring while enabled pre-pins the entry
+        // for the moment it later gets disabled. On an enabled card the star is
+        // a marker only, it never reorders the (load-order) enabled section.
+        onToggleFavorite={() => onToggleFavorite(entry)}
       />
     );
   }
@@ -612,6 +635,8 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       selectMode={selectMode}
       selected={selected}
       onSelectToggle={() => onSelectToggle(entry)}
+      favorite={favorite}
+      onToggleFavorite={() => onToggleFavorite(entry)}
       group={{
         variantCount: entry.variants.length,
         // Display friendly names for enabled files when possible.
@@ -733,6 +758,8 @@ export default function Installed() {
     setBrowseUi,
   } = useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
+  const [disabledFavorites, setDisabledFavorites] = useState(readStoredDisabledFavorites);
+  const [disabledOrder, setDisabledOrder] = useState(readStoredDisabledOrder);
 
   // Source mods absorbed into a merged VPK still live on disk (disabled) so
   // unmerge can restore them, but the user shouldn't see them as separate
@@ -965,6 +992,21 @@ export default function Installed() {
   // Merged mod whose contents are currently being inspected. Non-null means
   // the contents modal is open.
   const [mergedContentsMod, setMergedContentsMod] = useState<Mod | null>(null);
+  const eligibleMergeAdditions = useMemo(() => {
+    const sources = mergedContentsMod?.merged?.sources;
+    if (!sources) return [];
+    return visibleMods.filter((candidate) => {
+      if (candidate.id === mergedContentsMod.id || candidate.merged) return false;
+      return !sources.some((source) => {
+        const sourceSha = source.sha256AtMergeTime?.toLowerCase();
+        const candidateSha = candidate.sha256?.toLowerCase();
+        if (sourceSha && candidateSha && sourceSha === candidateSha) return true;
+        return typeof source.gameBananaFileId === 'number'
+          && typeof candidate.gameBananaFileId === 'number'
+          && source.gameBananaFileId === candidate.gameBananaFileId;
+      });
+    });
+  }, [mergedContentsMod, visibleMods]);
   // Pending unmerge confirmation. Non-null means the confirm dialog is open.
   const [unmergeTarget, setUnmergeTarget] = useState<Mod | null>(null);
   // Result of the most recent unmerge — surfaced when sources were missing on
@@ -2551,10 +2593,8 @@ export default function Installed() {
     });
   };
 
-  // Open the merge modal with the current selection. Skips sources that are
-  // themselves merged mods (the backend rejects those anyway) — surfacing it
-  // in the disabled state of the button is cleaner than letting the user
-  // submit and get an error.
+  // Open the merge modal with the current selection. Existing merges are
+  // accepted and flattened to their original source VPKs by the backend.
   const openBulkMerge = () => {
     if (selectedMods.length < 2) return;
     setMergeSources(selectedMods);
@@ -2635,6 +2675,19 @@ export default function Installed() {
     }
     setMergedContentsMod(result.merged);
     showToast(`Extracted ${source.modName}`, { tone: 'success', duration: 2200 });
+  };
+
+  const handleAddMergeSources = async (modIds: string[], strict: boolean) => {
+    if (!mergedContentsMod) return;
+    const targetId = mergedContentsMod.id;
+    const result = await addMergeSources(targetId, modIds, strict);
+    await loadMods({ silent: true });
+    const refreshed = useAppStore.getState().mods.find((mod) => mod.id === targetId) ?? null;
+    setMergedContentsMod(refreshed);
+    showToast(
+      t('mergedContents.addComplete', { count: result.addedFileNames.length }),
+      { tone: 'success', duration: 2800 },
+    );
   };
 
 
@@ -3018,6 +3071,13 @@ export default function Installed() {
     if (entry.kind === 'group') void handleGroupToggle(entry);
     else void toggleMod(entry.mod.id);
   });
+  // Persist outside the setState updater: StrictMode double-invokes an updater,
+  // and a write is a side effect even when it happens to be idempotent.
+  const toggleEntryFavorite = useStableCallback((entry: ModEntry) => {
+    const next = toggleFavoriteKey(disabledFavorites, entryDisabledPreferenceKey(entry));
+    writeStoredDisabledFavorites(next);
+    setDisabledFavorites(next);
+  });
   // "Start with only this mod enabled": solo the entry (disable everything else)
   // then launch. For a group we keep its already-enabled variants, or enable
   // every variant when the whole group is currently off. The prior enabled set
@@ -3285,8 +3345,18 @@ export default function Installed() {
   const visibleEnabled = statusSel.includes('enabled')
     ? sortEntries(enabledEntries.filter(matchesAllFilters))
     : [];
+  const defaultSortedDisabled = sortEntries(disabledEntries.filter(matchesAllFilters));
+  const disabledDefaultIndex = new Map(
+    defaultSortedDisabled.map((entry, index) => [entry.key, index])
+  );
   const visibleDisabled = statusSel.includes('disabled')
-    ? sortEntries(disabledEntries.filter(matchesAllFilters))
+    ? [...defaultSortedDisabled].sort(createDisabledEntryComparator({
+        favorites: disabledFavorites,
+        manualOrder: disabledOrder,
+        keyOf: entryDisabledPreferenceKey,
+        fallback: (left, right) =>
+          (disabledDefaultIndex.get(left.key) ?? 0) - (disabledDefaultIndex.get(right.key) ?? 0),
+      }))
     : [];
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
   const detailsNavigationEntries = [...visibleEnabled, ...visibleDisabled].filter(
@@ -3434,6 +3504,13 @@ export default function Installed() {
     if (!sourceEntry || !targetEntry || sourceEntry.key === targetEntry.key) return false;
 
     const orderedEntries = orderEntriesByKeys(entries, draftKeys);
+    if (section === 'disabled') {
+      const nextOrder = orderedEntries.map(entryDisabledPreferenceKey);
+      writeStoredDisabledOrder(nextOrder);
+      setDisabledOrder(nextOrder);
+      return true;
+    }
+
     const next = flattenEntries(orderedEntries);
     const prev = flattenEntries(entries);
     if (next.length !== prev.length) return false;
@@ -3505,6 +3582,7 @@ export default function Installed() {
     selectMode,
     selected: isEntrySelected(entry),
     soloBusy,
+    favorite: disabledFavorites.has(entryDisabledPreferenceKey(entry)),
     onOpenDetails: openEntryDetails,
     onViewAuthor: viewEntryAuthor,
     onOpenPicker: openEntryPicker,
@@ -3521,6 +3599,7 @@ export default function Installed() {
     onUnmerge: unmergeEntry,
     onCopyShareCode: copyEntryShareCode,
     onSelectToggle: selectToggleEntry,
+    onToggleFavorite: toggleEntryFavorite,
   });
 
   const renderEntryCard = (entry: ModEntry) => <InstalledEntryCard {...cardPropsFor(entry)} />;
@@ -4546,6 +4625,8 @@ export default function Installed() {
           onClose={() => setMergedContentsMod(null)}
           onUnmerge={() => setUnmergeTarget(mergedContentsMod)}
           onExtractSource={handleExtractMergeSource}
+          eligibleMods={eligibleMergeAdditions}
+          onAddSources={handleAddMergeSources}
         />
       )}
 
@@ -4692,18 +4773,13 @@ export default function Installed() {
               <Button
                 variant="secondary"
                 size="sm"
-                disabled={
-                  selectedMods.length < 2 ||
-                  selectedMods.some((m) => !!m.merged)
-                }
+                disabled={selectedMods.length < 2}
                 icon={Layers}
                 onClick={openBulkMerge}
                 title={
                   selectedMods.length < 2
                     ? t('installed.select.mergeMinHint')
-                    : selectedMods.some((m) => !!m.merged)
-                      ? t('installed.select.mergeAlreadyMergedHint')
-                      : t('installed.select.mergeCombineHint', { count: selectedMods.length })
+                    : t('installed.select.mergeCombineHint', { count: selectedMods.length })
                 }
               >
                 {t('installed.select.merge')}{selectedMods.length >= 2 ? ` (${selectedMods.length})` : ''}
@@ -6692,6 +6768,12 @@ interface ModCardProps {
   selectMode?: boolean;
   selected?: boolean;
   onSelectToggle?: () => void;
+  /** Personal pin, settable from either section, but it only reorders the
+   *  disabled section (favorites sort ahead of other disabled entries). The
+   *  enabled section is real load order, so starring an enabled card is a pure
+   *  marker: it takes effect once the entry is disabled. */
+  favorite?: boolean;
+  onToggleFavorite?: () => void;
   entryKey?: string;
   /** Present when this card represents grouped files from the same
    *  GameBanana mod. Swaps the filename meta for an enabled/total count and
@@ -7311,6 +7393,8 @@ function ModCard({
   selectMode,
   selected,
   onSelectToggle,
+  favorite = false,
+  onToggleFavorite,
   entryKey,
   group,
 }: ModCardProps) {
@@ -7473,9 +7557,22 @@ function ModCard({
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
-  const hoverActionVisibilityClasses = selectMode
-    ? 'hidden'
-    : 'opacity-0 group-hover/card:opacity-90 focus:opacity-100';
+  // Hover-revealed card action. `pointer-events-none` while transparent is
+  // load-bearing: opacity-0 alone still accepts clicks, so an unrevealed button
+  // is a mis-click straight into a real action (delete, or a persisted
+  // favorite). pointer-events does not gate keyboard focus, so tab-then-Enter
+  // still reaches the button, and the focus: pair keeps it visible once there.
+  const hoverRevealClasses = 'opacity-0 pointer-events-none group-hover/card:opacity-90 group-hover/card:pointer-events-auto focus:opacity-100 focus:pointer-events-auto';
+  const hoverActionVisibilityClasses = selectMode ? 'hidden' : hoverRevealClasses;
+  // A set star stays permanently visible in both sections, so there is always an
+  // affordance to unpin. An unset star is hover-only like its delete / overflow
+  // siblings, in both sections: an always-on outline star on every card is visual
+  // noise. Reveal via opacity, never `hidden` plus another display utility:
+  // utilityActionClasses already sets inline-flex and two display utilities
+  // resolve by stylesheet order, not by attribute order.
+  const favoriteVisibilityClasses = favorite
+    ? (selectMode ? 'hidden' : '')
+    : hoverActionVisibilityClasses;
   const menuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary focus:outline-none focus-visible:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50';
   const dangerMenuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-state-danger hover:bg-state-danger/10 focus:outline-none focus-visible:bg-state-danger/10 disabled:cursor-not-allowed disabled:opacity-50';
   const toggleHitboxClasses = 'inline-flex h-7 w-12 items-center justify-center rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary';
@@ -7529,8 +7626,35 @@ function ModCard({
   const compactChipCount = compactBaseChipCount + (showGlobalChip ? 1 : 0);
   const showNsfwChip = !!mod.nsfw && (!isCompact || compactChipCount < 2);
   const showGroupChip = !!group && (!isCompact || compactChipCount + (showNsfwChip ? 1 : 0) < 2);
+  // Enabled cards get their own copy: pinning only takes effect once the mod is
+  // disabled, and the disabled section's "top of disabled mods" wording would be
+  // a lie there.
+  const favoriteLabel = mod.enabled
+    ? favorite
+      ? t('installed.card.removeFavoriteWhenDisabled', { name: mod.name })
+      : t('installed.card.addFavoriteWhenDisabled', { name: mod.name })
+    : favorite
+      ? t('installed.card.removeDisabledFavorite', { name: mod.name })
+      : t('installed.card.addDisabledFavorite', { name: mod.name });
   const actions = (
     <div className="ml-auto flex items-center gap-1">
+      {onToggleFavorite && (
+        <button
+          type="button"
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggleFavorite();
+          }}
+          className={`${utilityActionClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
+          title={favoriteLabel}
+          aria-label={favoriteLabel}
+          aria-pressed={favorite}
+          data-card-action="true"
+        >
+          <Star className={`h-4 w-4 ${favorite ? 'fill-current' : ''}`} />
+        </button>
+      )}
       {!mod.merged && (
         <button
           type="button"
@@ -7567,7 +7691,7 @@ function ModCard({
             setTagPickerOpen(false);
             setMenuError(null);
           }}
-          className={`${utilityActionClasses} ${selectMode ? 'hidden' : `${isList ? '' : 'opacity-0 group-hover/card:opacity-90 focus:opacity-100'} aria-expanded:opacity-100`}`}
+          className={`${utilityActionClasses} ${selectMode ? 'hidden' : `${isList ? '' : hoverRevealClasses} aria-expanded:opacity-100 aria-expanded:pointer-events-auto`}`}
           title={t('installed.card.moreActions')}
           aria-label={t('installed.card.moreActionsFor', { name: mod.name })}
           aria-expanded={menuOpen}

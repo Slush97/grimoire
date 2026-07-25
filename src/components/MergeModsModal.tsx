@@ -61,8 +61,9 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
   }));
 
   const localSourceCount = effectiveSources.filter(
-    (s) => !s.gameBananaId || !s.gameBananaFileId
+    (s) => !s.merged && (!s.gameBananaId || !s.gameBananaFileId)
   ).length;
+  const mergedSourceCount = effectiveSources.filter((source) => !!source.merged).length;
 
   const canSubmit = !!liveName.trim() && !submitting && effectiveSources.length >= 2;
 
@@ -232,6 +233,18 @@ export default function MergeModsModal({ sources, hideNsfw, onCancel, onConfirm 
                   {t('mergeMods.localModsIncluded', { count: localSourceCount })}
                 </div>
                 {t('mergeMods.localNote')}
+              </div>
+            </div>
+          )}
+
+          {mergedSourceCount > 0 && (
+            <div className="flex items-start gap-2 rounded-sm border border-accent/30 bg-accent/5 p-2.5 text-xs text-text-secondary">
+              <Info className="w-4 h-4 text-accent flex-shrink-0 mt-0.5" />
+              <div>
+                <div className="text-text-primary font-medium">
+                  {t('mergeMods.flattenCount', { count: mergedSourceCount })}
+                </div>
+                {t('mergeMods.flattenDescription')}
               </div>
             </div>
           )}

@@ -33,7 +33,7 @@ import {
 import { downloadMod } from '../services/download';
 import { fetchAdoptedThumbnail, type AdoptedThumbnailTarget } from '../services/adoptedThumbnail';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
-import { mergeMods, unmergeMod, extractMergeSource } from '../services/modMerger';
+import { mergeMods, unmergeMod, extractMergeSource, addMergeSources } from '../services/modMerger';
 import {
     imprintOneMod,
     imprintAllInstalled,
@@ -53,7 +53,7 @@ import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport
 import { getMainWindow } from '../index';
 import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
-import type { AbilitySoundClassification, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
+import type { AbilitySoundClassification, AddMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
 const unknownDetectionControllers = new Map<string, AbortController>();
 
@@ -1620,6 +1620,25 @@ ipcMain.handle(
             merged: result.merged ? enrichMod(result.merged) : null,
             restored: result.restored.map(enrichMod),
         };
+    }
+);
+
+// add-merge-sources - rebuild an existing merged VPK in its current slot with
+// additional standalone source mods. Strict failures leave the original merge
+// untouched because the service builds and embeds to a dotfile before swap.
+ipcMain.handle(
+    'add-merge-sources',
+    async (
+        _,
+        mergedModId: string,
+        addModIds: string[],
+        strict = false
+    ): Promise<AddMergeSourcesResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        return addMergeSources(deadlockPath, mergedModId, addModIds, { strict });
     }
 );
 

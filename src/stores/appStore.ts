@@ -12,6 +12,9 @@ import {
   planLaunchShuffle,
   readStoredShuffleIncluded,
   readStoredShuffleOnLaunch,
+  readStoredShuffleVariants,
+  writeStoredShuffleVariants,
+  type VariantChoice,
 } from '../lib/lockerRandomizer';
 
 // Cache entry with timestamp for TTL support
@@ -221,11 +224,12 @@ interface AppState {
 
   // Skin shuffle: the user opts skins into a per-hero pool, then on each launch
   // (via Grimoire) one chosen skin per hero is equipped at random. Master switch
-  // + the opted-in skin keys (shuffleSkinKey), both mirrored to localStorage so
-  // the Locker and the launch path share one source of truth. See
+  // + the opted-in skin keys (shuffleSkinKey) + per-skin variant choices, all
+  // mirrored to localStorage so the Locker and launch path share one source of truth. See
   // src/lib/lockerRandomizer.ts.
   shuffleOnLaunch: boolean;
   shuffleIncluded: Set<string>;
+  shuffleVariants: Map<string, VariantChoice>;
 
   // Browse-page UI state (preserved across page nav)
   browseUi: BrowseUiState;
@@ -297,6 +301,9 @@ interface AppState {
   reorderMods: (orderedIds: string[]) => Promise<void>;
   setShuffleOnLaunch: (enabled: boolean) => void;
   toggleShuffleIncluded: (skinKey: string) => void;
+  /** Store an explicit per-skin variant policy, or clear it back to the unset
+   *  default (keep the currently loaded files) with null. */
+  setShuffleVariant: (skinKey: string, choice: VariantChoice | null) => void;
   runLaunchShuffle: () => Promise<{ failures: number }>;
   /** Disable every other mod and enable only `enableKeys` (one card's file(s)),
    *  snapshotting the prior enabled set for one-click restore. `applied` is
@@ -379,6 +386,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   previewAudioPlaying: false,
   shuffleOnLaunch: readStoredShuffleOnLaunch(),
   shuffleIncluded: readStoredShuffleIncluded(),
+  shuffleVariants: readStoredShuffleVariants(),
   browseUi: { ...DEFAULT_BROWSE_UI },
   browseSession: null,
   installedScrollTop: 0,
@@ -702,6 +710,16 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ shuffleIncluded: next });
   },
 
+  setShuffleVariant: (skinKey: string, choice: VariantChoice | null) => {
+    const next = new Map(get().shuffleVariants);
+    // An absent entry IS the default (keep the loaded files), so clearing means
+    // deleting the key rather than storing a sentinel.
+    if (choice === null) next.delete(skinKey);
+    else next.set(skinKey, choice);
+    writeStoredShuffleVariants(next);
+    set({ shuffleVariants: next });
+  },
+
   // Re-roll skins for the launch. No-op unless the master switch is on and at
   // least one skin is in the pool. Groups the live mod list by hero (cached
   // categories, the same grouping the Locker shows), picks one opted-in skin per
@@ -728,8 +746,8 @@ export const useAppStore = create<AppState>((set, get) => ({
     // derived from the mods state after any in-flight manual toggle has settled,
     // not from a pre-launch snapshot that a concurrent rename could invalidate.
     return enqueueToggle(async () => {
-      const { mods, shuffleIncluded: included } = get();
-      const plan = planLaunchShuffle({ mods, heroList, included });
+      const { mods, shuffleIncluded: included, shuffleVariants: variants } = get();
+      const plan = planLaunchShuffle({ mods, heroList, included, variants });
       if (plan.enableIds.length === 0 && plan.disableIds.length === 0) return { failures: 0 };
       try {
         const { mods: updated, failures } = await api.applyModToggleBatch(plan.enableIds, plan.disableIds);

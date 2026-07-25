@@ -62,7 +62,7 @@ import {
   type GlobalModGroups,
   type HeroCategory,
 } from '../lib/lockerUtils';
-import { shuffleSkinKey } from '../lib/lockerRandomizer';
+import { shuffleSkinKey, type VariantChoice } from '../lib/lockerRandomizer';
 
 // Route changes flip the overlay state instantly, which unmounts the hero or
 // global panel on the next frame with no exit transition. Retain the last
@@ -215,7 +215,7 @@ function FacetSheenDefs() {
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, shuffleVariants, setShuffleVariant } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -1043,6 +1043,8 @@ export default function Locker() {
               onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
               includedSkinKeys={shuffleIncluded}
               onToggleShuffleIncluded={toggleShuffleIncluded}
+              shuffleVariantChoices={shuffleVariants}
+              onSetShuffleVariant={setShuffleVariant}
               shuffleArmed={shuffleOnLaunch}
               isFavorite={favoriteHeroes.includes(hero.id)}
               onToggleFavorite={() =>
@@ -1154,6 +1156,8 @@ export default function Locker() {
             hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
             includedSkinKeys={shuffleIncluded}
             onToggleShuffleIncluded={toggleShuffleIncluded}
+            shuffleVariantChoices={shuffleVariants}
+            onSetShuffleVariant={setShuffleVariant}
             shuffleArmed={shuffleOnLaunch}
           />
         </div>
@@ -1253,6 +1257,8 @@ interface HeroCardProps {
   onRequestDelete: (modIds: string[], name: string) => void;
   includedSkinKeys: Set<string>;
   onToggleShuffleIncluded: (skinKey: string) => void;
+  shuffleVariantChoices: ReadonlyMap<string, VariantChoice>;
+  onSetShuffleVariant: (skinKey: string, choice: VariantChoice | null) => void;
   shuffleArmed: boolean;
   isFavorite: boolean;
   onToggleFavorite: () => void;
@@ -2161,6 +2167,8 @@ function HeroCard({
   onRequestDelete,
   includedSkinKeys,
   onToggleShuffleIncluded,
+  shuffleVariantChoices,
+  onSetShuffleVariant,
   shuffleArmed,
   isFavorite,
   onToggleFavorite,
@@ -2329,6 +2337,8 @@ function HeroCard({
           onRequestDelete={onRequestDelete}
           includedSkinKeys={activeSection === 'skins' ? includedSkinKeys : undefined}
           onToggleShuffleIncluded={activeSection === 'skins' ? onToggleShuffleIncluded : undefined}
+          shuffleVariantChoices={activeSection === 'skins' ? shuffleVariantChoices : undefined}
+          onSetShuffleVariant={activeSection === 'skins' ? onSetShuffleVariant : undefined}
           shuffleArmed={shuffleArmed}
           hideNsfwPreviews={hideNsfwPreviews}
           showDownloadable={activeSection === 'skins'}

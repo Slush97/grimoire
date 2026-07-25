@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Layers, X, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle } from 'lucide-react';
+import { Layers, X, Share2, Scissors, Check, PackageOpen, Loader2, AlertTriangle, Plus } from 'lucide-react';
 import type { Mod, MergedModSource } from '../types/mod';
 import ModThumbnail from './ModThumbnail';
 import { Button, Tag } from './common/ui';
@@ -15,6 +15,9 @@ interface Props {
   /** Pull one source out of the merge, restoring it as a standalone mod.
    *  Omitted to render the list read-only. */
   onExtractSource?: (source: MergedModSource) => Promise<void>;
+  /** Standalone installed mods that are not already represented by this merge. */
+  eligibleMods?: Mod[];
+  onAddSources?: (modIds: string[], strict: boolean) => Promise<void>;
 }
 
 /**
@@ -23,22 +26,35 @@ interface Props {
  * can be extracted back to a standalone mod; the footer surfaces the share code
  * (with a copy button) and an Unmerge shortcut.
  */
-export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge, onExtractSource }: Props) {
+export default function MergedContentsModal({
+  mod,
+  hideNsfw,
+  onClose,
+  onUnmerge,
+  onExtractSource,
+  eligibleMods = [],
+  onAddSources,
+}: Props) {
   const { t } = useTranslation();
   const [copied, setCopied] = useState(false);
   // The fileName of the source row currently being extracted, and the last
   // error surfaced by an extract.
   const [busyFileName, setBusyFileName] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [addPickerOpen, setAddPickerOpen] = useState(false);
+  const [selectedAddIds, setSelectedAddIds] = useState<Set<string>>(new Set());
+  const [strict, setStrict] = useState(false);
+  const [addingSources, setAddingSources] = useState(false);
   const merged = mod.merged;
   // Render nothing if the prop is malformed rather than throwing; the parent
   // only opens this modal when `mod.merged` is truthy so this is defensive.
   if (!merged) return null;
 
   const canExtract = !!onExtractSource;
+  const canAdd = !!onAddSources;
 
   const handleExtract = async (src: MergedModSource) => {
-    if (!onExtractSource || busyFileName) return;
+    if (!onExtractSource || busyFileName || addingSources) return;
     setActionError(null);
     setBusyFileName(src.fileName);
     try {
@@ -50,6 +66,30 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
       setActionError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusyFileName(null);
+    }
+  };
+
+  const toggleAddSelection = (modId: string) => {
+    setSelectedAddIds((current) => {
+      const next = new Set(current);
+      if (next.has(modId)) next.delete(modId);
+      else next.add(modId);
+      return next;
+    });
+  };
+
+  const handleAddSources = async () => {
+    if (!onAddSources || selectedAddIds.size === 0 || addingSources || busyFileName) return;
+    setActionError(null);
+    setAddingSources(true);
+    try {
+      await onAddSources([...selectedAddIds], strict);
+      setSelectedAddIds(new Set());
+      setAddPickerOpen(false);
+    } catch (err) {
+      setActionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setAddingSources(false);
     }
   };
 
@@ -88,7 +128,8 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
           </h3>
           <button
             onClick={onClose}
-            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer flex-shrink-0"
+            disabled={addingSources || busyFileName !== null}
+            className="p-1 text-text-secondary hover:text-text-primary rounded cursor-pointer flex-shrink-0 disabled:opacity-40 disabled:cursor-not-allowed"
             aria-label={t('common.actions.close')}
           >
             <X className="w-5 h-5" />
@@ -138,7 +179,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
               {orderedSources.map((src) => {
                 const busy = busyFileName === src.fileName;
                 // Dim and lock other rows while an extract is in flight.
-                const rowLocked = busyFileName !== null && !busy;
+                const rowLocked = addingSources || (busyFileName !== null && !busy);
                 return (
                   <li
                     key={src.fileName}
@@ -196,6 +237,94 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
               })}
             </ul>
 
+            {addPickerOpen && (
+              <div className="mt-3 space-y-3 rounded-sm border border-border bg-bg-secondary p-3">
+                <div>
+                  <div className="text-sm font-medium text-text-primary">
+                    {t('mergedContents.addMods')}
+                  </div>
+                  <p className="text-xs text-text-secondary mt-0.5">
+                    {t('mergedContents.addModsDescription')}
+                  </p>
+                </div>
+                {eligibleMods.length === 0 ? (
+                  <div className="text-sm text-text-secondary py-2">
+                    {t('mergedContents.noEligibleMods')}
+                  </div>
+                ) : (
+                  <ul className="space-y-1.5 max-h-52 overflow-y-auto pr-1">
+                    {eligibleMods.map((eligible) => (
+                      <li key={eligible.id}>
+                        <label className="flex items-center gap-3 rounded border border-border/60 bg-bg-tertiary/50 px-2.5 py-2 cursor-pointer hover:border-border">
+                          <input
+                            type="checkbox"
+                            checked={selectedAddIds.has(eligible.id)}
+                            disabled={addingSources}
+                            onChange={() => toggleAddSelection(eligible.id)}
+                            className="accent-accent"
+                          />
+                          <div className="w-9 h-9 flex-shrink-0 rounded overflow-hidden bg-bg-tertiary">
+                            <ModThumbnail
+                              src={eligible.thumbnailUrl}
+                              alt={eligible.name}
+                              hideNsfw={hideNsfw}
+                              nsfw={eligible.nsfw}
+                              className="w-full h-full"
+                            />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-sm text-text-primary truncate">{eligible.name}</div>
+                            <div className="text-[11px] text-text-secondary font-mono truncate">
+                              {eligible.fileName}
+                            </div>
+                          </div>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+                <label className="flex items-start gap-2 text-sm text-text-primary cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={strict}
+                    disabled={addingSources}
+                    onChange={(event) => setStrict(event.target.checked)}
+                    className="w-4 h-4 mt-0.5 accent-accent cursor-pointer flex-shrink-0"
+                  />
+                  <span>
+                    {t('mergeMods.strictMode')}
+                    <span className="block text-xs text-text-secondary mt-0.5">
+                      {t('mergeMods.strictDescription')}
+                    </span>
+                  </span>
+                </label>
+                <div className="flex justify-end gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    disabled={addingSources}
+                    onClick={() => {
+                      setSelectedAddIds(new Set());
+                      setAddPickerOpen(false);
+                    }}
+                  >
+                    {t('common.actions.cancel')}
+                  </Button>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    icon={addingSources ? Loader2 : Plus}
+                    disabled={selectedAddIds.size === 0 || addingSources}
+                    onClick={() => void handleAddSources()}
+                  >
+                    {addingSources
+                      ? t('mergedContents.addingMods')
+                      : t('mergedContents.addSelected', { count: selectedAddIds.size })}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {actionError && (
               <div className="flex items-start gap-2 text-sm text-red-200 bg-red-500/10 border border-red-500/30 rounded-lg p-2.5 mt-2">
                 <AlertTriangle className="w-4 h-4 text-state-danger flex-shrink-0 mt-0.5" />
@@ -206,10 +335,22 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
         </div>
 
         <div className="flex flex-wrap items-center gap-2 justify-end p-4 border-t border-border">
+          {canAdd && (
+            <Button
+              variant="secondary"
+              size="sm"
+              icon={Plus}
+              disabled={addingSources || busyFileName !== null}
+              onClick={() => setAddPickerOpen((open) => !open)}
+            >
+              {t('mergedContents.addMods')}
+            </Button>
+          )}
           <Button
             variant="secondary"
             size="sm"
             icon={copied ? Check : Share2}
+            disabled={addingSources || busyFileName !== null}
             onClick={() => void handleCopy()}
           >
             {copied ? t('common.status.copied') : t('mergedContents.copyShareCode')}
@@ -219,6 +360,7 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
               variant="secondary"
               size="sm"
               icon={Scissors}
+              disabled={addingSources || busyFileName !== null}
               onClick={() => {
                 onClose();
                 onUnmerge();
@@ -227,7 +369,12 @@ export default function MergedContentsModal({ mod, hideNsfw, onClose, onUnmerge,
               {t('mergedContents.unmerge')}
             </Button>
           )}
-          <Button variant="primary" size="sm" onClick={onClose}>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={addingSources || busyFileName !== null}
+            onClick={onClose}
+          >
             {t('common.actions.close')}
           </Button>
         </div>
