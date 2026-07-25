@@ -293,20 +293,25 @@ export default function AppearanceArtSection() {
     setDraftHero(hero);
     setCropSource(null);
     setRestoredCrop(undefined);
-    // Restore framing for the saved selection (image kinds only).
-    if (config) void seedForKind(surface, config, current.kind, hero, true);
+    // Restore framing for the saved selection (image kinds only). A saved hero
+    // reopens in the cropper only when the user explicitly framed it; otherwise
+    // the calibrated per-hero framing is in effect and the grid + preview show.
+    if (config) void seedForKind(surface, config, current.kind, hero, true, current.kind !== 'hero');
   };
 
   // Seed the cropper with the source for a kind: the stored original + crop when
   // it matches the saved selection (so reopening restores the exact framing), or
   // the fresh source for that kind (built-in art / hero render). `custom` waits
   // for an upload; `none` and the activeTab accent-glow `default` have no source.
+  // With `seedFresh` false only a stored crop seeds the cropper; nothing else is
+  // loaded (heroes keep their calibrated framing instead of being force-baked).
   const seedForKind = async (
     surface: AppearanceSurface,
     config: SurfaceConfig,
     kind: AppearanceBgKind,
     hero: string,
-    restore: boolean
+    restore: boolean,
+    seedFresh = true
   ) => {
     setError(null);
     const loadId = ++editLoadId.current;
@@ -333,6 +338,7 @@ export default function AppearanceArtSection() {
           return;
         }
       }
+      if (!seedFresh) return;
       // Fresh source for the kind.
       const url = kind === 'default' ? config.defaultSrc! : getHeroRenderPath(hero);
       const dataUrl = await urlToDataUrl(url);
@@ -382,7 +388,7 @@ export default function AppearanceArtSection() {
     setDraftKind(kind);
     setError(null);
     if (kind === 'hero') {
-      // Show the hero grid first; picking a hero loads it into the cropper.
+      // Show the hero grid; the preview applies the calibrated per-hero framing.
       editLoadId.current++;
       setCropSource(null);
       setRestoredCrop(undefined);
@@ -392,14 +398,13 @@ export default function AppearanceArtSection() {
   };
 
   const selectHero = (hero: string) => {
-    if (!editing || !editingConfig) return;
     setDraftHero(hero);
-    void seedForKind(editing, editingConfig, 'hero', hero, false);
   };
 
-  // Commit a non-image draft (none, or the activeTab accent-glow default). Drops
-  // any baked image so the live/glow render takes over. Image kinds commit through
-  // the cropper's own "use image" button (it has to bake first).
+  // Commit a draft that doesn't bake an image (none, the activeTab accent-glow
+  // default, or a hero using its calibrated framing). Drops any baked image (and
+  // its stored crop) so the live/glow render takes over. Framed image kinds commit
+  // through the cropper's own "use image" button (it has to bake first).
   const applyDraft = async () => {
     if (!editing || busy) return;
     if (appearanceImages[editing]) await removeAppearanceImage(editing);
@@ -481,7 +486,7 @@ export default function AppearanceArtSection() {
   const showHeroGrid = draftKind === 'hero' && !cropSource;
   const showCropper =
     draftKind === 'custom' || (draftKind === 'default' && hasDefaultArt) || (draftKind === 'hero' && !!cropSource);
-  const showFooter = !showCropper && !showHeroGrid; // none, or the activeTab accent-glow default
+  const showFooter = !showCropper; // none, accent-glow default, or a hero (calibrated framing)
   // The preview header reflects the live draft (used when no cropper is shown).
   const draftBg: AppearanceBg = draftKind === 'hero' ? { kind: 'hero', hero: draftHero } : { kind: draftKind };
 
@@ -582,10 +587,19 @@ export default function AppearanceArtSection() {
                   <span className="mb-1 block text-[11px] font-medium uppercase tracking-wide text-text-secondary">
                     {t('settings.appearance.art.preview')}
                   </span>
-                  <SurfacePreview bg={draftBg} config={editingConfig} customSrc={appearanceImages[editing]} className="h-16 w-full" />
-                  <p className="mt-3 text-center text-sm text-text-secondary">
-                    {t(draftKind === 'none' ? 'settings.appearance.art.noneHint' : 'settings.appearance.art.defaultHint')}
-                  </p>
+                  {/* A hero draft previews the live calibrated render, never a
+                      previously baked image (Apply will drop it). */}
+                  <SurfacePreview
+                    bg={draftBg}
+                    config={editingConfig}
+                    customSrc={draftKind === 'hero' ? undefined : appearanceImages[editing]}
+                    className="h-16 w-full"
+                  />
+                  {!showHeroGrid && (
+                    <p className="mt-3 text-center text-sm text-text-secondary">
+                      {t(draftKind === 'none' ? 'settings.appearance.art.noneHint' : 'settings.appearance.art.defaultHint')}
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -625,6 +639,15 @@ export default function AppearanceArtSection() {
                       );
                     })}
                   </div>
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="mt-3"
+                    onClick={() => void seedForKind(editing, editingConfig, 'hero', draftHero, true)}
+                    disabled={busy}
+                  >
+                    {t('settings.appearance.art.adjustFraming')}
+                  </Button>
                 </>
               )}
 
@@ -661,8 +684,9 @@ export default function AppearanceArtSection() {
               {error && <p className="mt-3 text-xs text-state-danger">{error}</p>}
             </div>
 
-            {/* Footer (pinned). Image kinds commit through the cropper's own button,
-                so only the non-image states (none / accent-glow default) get Apply. */}
+            {/* Footer (pinned). Framed images commit through the cropper's own
+                button; everything else (none, accent-glow default, hero with
+                calibrated framing) commits here. */}
             {showFooter && (
               <div className="flex flex-shrink-0 justify-end gap-2 border-t border-border px-5 py-4">
                 <Button variant="secondary" size="sm" onClick={close} disabled={busy}>
