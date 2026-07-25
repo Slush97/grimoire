@@ -775,6 +775,10 @@
       "dateFormat": "Date Format",
       "dateFormatDescription": "How upload and update dates are shown on mods and files."
     },
+    "errors": {
+      "loadFailed": "Could not load your settings: {{error}}",
+      "saveFailed": "Could not save that setting: {{error}}"
+    },
     "experimental": {
       "description": "These features are still in development and may be incomplete or buggy.",
       "statsDashboard": "Stats Dashboard",
