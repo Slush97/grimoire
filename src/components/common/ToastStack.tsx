@@ -59,6 +59,18 @@ function ToastItem({ toast }: { toast: Toast }) {
     >
       {icon}
       <span className="min-w-0 flex-1">{toast.message}</span>
+      {toast.actionLabel && toast.onAction && (
+        <button
+          type="button"
+          onClick={() => {
+            toast.onAction?.();
+            dismissToast(toast.id);
+          }}
+          className="flex-shrink-0 cursor-pointer font-semibold underline decoration-current/50 underline-offset-2 transition-opacity hover:opacity-80"
+        >
+          {toast.actionLabel}
+        </button>
+      )}
       {toast.dismissable && (
         <button
           type="button"

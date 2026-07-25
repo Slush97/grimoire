@@ -84,7 +84,7 @@ import {
   useAppStore,
 } from '../stores/appStore';
 import type { BrowseNsfwFilter, BrowseTimeRange, BrowseLayout, BrowseArtistRef } from '../stores/appStore';
-import type { BrowseNsfwContentMode } from '../types/mod';
+import type { BrowseNsfwContentMode, HiddenCreator } from '../types/mod';
 import ModThumbnail from '../components/ModThumbnail';
 import BrowseFileQuickPicker from '../components/BrowseFileQuickPicker';
 import ImageContextMenu from '../components/ImageContextMenu';
@@ -94,12 +94,14 @@ import { HeroSelect } from '../components/common/HeroSelect';
 import { Button, IconButton, Tag } from '../components/common/ui';
 import { Select } from '../components/common/forms';
 import { IconText } from '../components/common/IconText';
-import { EmptyState } from '../components/common/PageComponents';
+import { ConfirmModal, EmptyState } from '../components/common/PageComponents';
 import ModDetailsModal from '../components/ModDetailsModal';
+import { HiddenCreatorsModal } from '../components/HiddenCreatorsManager';
 import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, findCategoryByName } from '../lib/lockerUtils';
 import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates';
+import { showToast } from '../stores/toastStore';
 
 const DEFAULT_PER_PAGE = 36;
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
@@ -133,6 +135,10 @@ const BROWSE_SIDEBAR_GRID_RESERVE = 360;
 // slide-out can play, then unmount it (no reflow: the grid already widened at
 // close-start).
 const BROWSE_DOCK_ANIM_MS = 220;
+
+function hiddenCreatorIdsStamp(creators: readonly HiddenCreator[]): string {
+  return creators.map((creator) => creator.id).sort((a, b) => a - b).join(',');
+}
 
 // Filled brand glyphs (see common/BrandIcons). Platform keys come from
 // GameBanana's contact icon classes, lowercased by normalizeContactPlatform
@@ -1089,6 +1095,10 @@ export default function Browse() {
   const browseSession = useAppStore((s) => s.browseSession);
   const setBrowseSession = useAppStore((s) => s.setBrowseSession);
   const activeDeadlockPath = getActiveDeadlockPath(settings);
+  const hiddenCreators = useMemo(() => settings?.hiddenCreators ?? [], [settings?.hiddenCreators]);
+  const hiddenCreatorIds = useMemo(() => hiddenCreators.map((creator) => creator.id), [hiddenCreators]);
+  const hiddenCreatorIdSet = useMemo(() => new Set(hiddenCreatorIds), [hiddenCreatorIds]);
+  const hiddenCreatorsStamp = useMemo(() => hiddenCreatorIdsStamp(hiddenCreators), [hiddenCreators]);
   // Filter inputs are mirrored from the store so they survive page nav.
   // `setBrowseUi({...})` is the write path; reads come straight from `browseUi`.
   const { search, layout, sort, section, nsfw, addedWithin, addedFrom, addedTo, heroCategoryId, categoryId, submitter } = browseUi;
@@ -1136,7 +1146,7 @@ export default function Browse() {
   // wipe loaded results or scroll position. The cache stamp encodes current
   // filters; if filters changed in between (impossible today since they only
   // change on Browse, but defensive) we ignore the stale cache.
-  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}`;
+  const initialFilterStamp = `${browseUi.section}|${browseUi.search}|${browseUi.sort}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${hiddenCreatorsStamp}`;
   const initialCache = browseSession && browseSession.stamp === initialFilterStamp
     ? browseSession
     : null;
@@ -1186,7 +1196,7 @@ export default function Browse() {
   // double effect run in dev — the second setup compares stamps and short-
   // circuits, instead of consuming a one-shot skip flag.
   const lastFetchedStampRef = useRef<string | null>(
-    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}` : null
+    initialCache ? `${initialCache.page}|${browseUi.search}|${browseUi.sort}|${browseUi.section}|${browseUi.categoryId}|${browseUi.heroCategoryId}|${browseUi.nsfw}|${browseUi.addedWithin}|${browseUi.addedFrom}|${browseUi.addedTo}|${browseUi.submitter?.id ?? ''}|${hiddenCreatorsStamp}` : null
   );
   // Monotonic guard for browse/search requests. Filter changes and newer
   // requests invalidate older responses so they cannot append stale pages into
@@ -1240,6 +1250,8 @@ export default function Browse() {
   const importMenuRef = useRef<HTMLDivElement>(null);
   const [viewMenuOpen, setViewMenuOpen] = useState(false);
   const viewMenuRef = useRef<HTMLDivElement>(null);
+  const [hiddenCreatorsOpen, setHiddenCreatorsOpen] = useState(false);
+  const [creatorToHide, setCreatorToHide] = useState<HiddenCreator | null>(null);
   const [browseCardDesign, setBrowseCardDesignState] = useState<BrowseCardDesign>(() => {
     if (typeof window === 'undefined') return 'readable';
     return window.localStorage.getItem(BROWSE_CARD_DESIGN_STORAGE_KEY) === 'classic' ? 'classic' : 'readable';
@@ -1463,7 +1475,7 @@ export default function Browse() {
     return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
   }, [addedWithin, addedTo]);
 
-  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}`;
+  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorsStamp}`;
   const browseResultsCacheRef = useRef<Map<string, BrowseResultCacheEntry>>(new Map());
   const browseScrollCacheRef = useRef<Map<string, number>>(new Map());
   const activeFetchFilterStampRef = useRef(fetchFilterStamp);
@@ -1624,7 +1636,8 @@ export default function Browse() {
   useEffect(() => {
     return () => {
       const ui = useAppStore.getState().browseUi;
-      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${ui.nsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}|${ui.submitter?.id ?? ''}`;
+      const liveHiddenCreators = useAppStore.getState().settings?.hiddenCreators ?? [];
+      const stamp = `${ui.section}|${ui.search}|${ui.sort}|${ui.categoryId}|${ui.heroCategoryId}|${ui.nsfw}|${ui.addedWithin}|${ui.addedFrom}|${ui.addedTo}|${ui.submitter?.id ?? ''}|${hiddenCreatorIdsStamp(liveHiddenCreators)}`;
       const cachedMods = modsRef.current;
       // Don't cache an empty state — would just bypass the next fetch
       // unhelpfully. Clear instead so the next mount starts fresh.
@@ -1659,18 +1672,18 @@ export default function Browse() {
     // NSFW and recency filters only the local catalog mirror can satisfy: the
     // live API enriches NSFW after the fact and doesn't window by date, so route
     // those through local search (the cache is a full mirror of the index).
-    const hasContentFilter = nsfw !== 'all' || addedWithin !== 'all';
+    const hasContentFilter = nsfw !== 'all' || addedWithin !== 'all' || hiddenCreatorIds.length > 0;
     // The v11 API has no alphabetical sort token, so name ordering also has to
     // come from the local mirror (which sorts name COLLATE NOCASE ASC).
     const needsLocalSort = sort === 'name';
     return (hasSearchQuery || hasHeroFilter || hasContentFilter || needsLocalSort) && hasLocalCache && !localSearchFailed;
-  }, [submitter, debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, hasLocalCache, localSearchFailed]);
+  }, [submitter, debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, hiddenCreatorIds.length, hasLocalCache, localSearchFailed]);
 
   // Reset the failure flag whenever the user changes filters so a one-off
   // backend error doesn't permanently disable local search.
   useEffect(() => {
     setLocalSearchFailed(false);
-  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section, sort]);
+  }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section, sort, hiddenCreatorsStamp]);
 
   const fetchMods = useCallback(async () => {
     // Don't fetch from API if we're using local search
@@ -1739,6 +1752,13 @@ export default function Browse() {
         }
       }
 
+      // Remote fallback paths cannot express a negative submitter filter in
+      // GameBanana's API. Filter defensively here; normal browsing routes to
+      // the local catalog above so pagination remains full and accurate.
+      enrichedRecords = enrichedRecords.filter(
+        (mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id)
+      );
+
       if (requestGeneration !== requestGenerationRef.current || lastFetchedStampRef.current !== stamp) {
         return;
       }
@@ -1796,6 +1816,7 @@ export default function Browse() {
     fetchFilterStamp,
     useLocalSearch,
     submitter,
+    hiddenCreatorIdSet,
   ]);
 
   // Local search function using SQLite cache
@@ -1860,6 +1881,7 @@ export default function Browse() {
         addedWithin,
         addedFrom: customAddedFrom,
         addedTo: customAddedTo,
+        hiddenCreatorIds,
         limit: perPage,
         offset: (page - 1) * perPage,
       });
@@ -1934,7 +1956,7 @@ export default function Browse() {
         setLoadingMore(false);
       }
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, modCategories, fetchFilterStamp]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, modCategories, fetchFilterStamp]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
@@ -2682,9 +2704,12 @@ export default function Browse() {
   // Just use all loaded mods - infinite scroll handles pagination.
   // Hide outdated mods if the user has opted in.
   const displayMods = useMemo(() => {
-    let nextMods = settings?.hideOutdatedMods
-      ? mods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified))
+    let nextMods = hiddenCreatorIdSet.size > 0
+      ? mods.filter((mod) => !mod.submitter?.id || !hiddenCreatorIdSet.has(mod.submitter.id))
       : mods;
+    if (settings?.hideOutdatedMods) {
+      nextMods = nextMods.filter((m) => !m.dateModified || !isModOutdated(m.dateModified));
+    }
     // "(No hero)" Sound filter: GameBanana Sound categories don't carry hero
     // metadata, so hero association is inferred from the title.
     if (section === 'Sound' && heroCategoryId === 'none') {
@@ -2704,7 +2729,7 @@ export default function Browse() {
     }
 
     return nextMods;
-  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, browseNsfwContentMode, nsfw]);
+  }, [mods, settings?.hideOutdatedMods, section, heroCategoryId, browseNsfwContentMode, nsfw, hiddenCreatorIdSet]);
   const selectedModIndex = selectedMod
     ? displayMods.findIndex((mod) => mod.id === selectedMod.id)
     : -1;
@@ -2782,6 +2807,58 @@ export default function Browse() {
     scrollContainerRef.current?.scrollTo({ top: 0 });
   });
   const clearArtist = () => setBrowseUi({ submitter: undefined });
+
+  const updateHiddenCreators = useStableCallback(async (
+    updater: (current: HiddenCreator[]) => HiddenCreator[]
+  ) => {
+    const currentSettings = useAppStore.getState().settings;
+    if (!currentSettings) return;
+    await saveSettings({
+      ...currentSettings,
+      hiddenCreators: updater(currentSettings.hiddenCreators ?? []),
+    });
+  });
+
+  const requestHideCreator = useStableCallback((creator: HiddenCreator) => {
+    if (!creator.id || hiddenCreatorIdSet.has(creator.id)) return;
+    setCreatorToHide(creator);
+  });
+
+  const confirmHideCreator = useStableCallback(async () => {
+    const creator = creatorToHide;
+    if (!creator) return;
+    setCreatorToHide(null);
+
+    await updateHiddenCreators((current) => [
+      ...current.filter((entry) => entry.id !== creator.id),
+      creator,
+    ]);
+    if (selectedMod?.submitter?.id === creator.id) closeSelectedMod();
+    if (submitter?.id === creator.id) clearArtist();
+
+    showToast(t('hiddenCreators.hiddenToast', { name: creator.name }), {
+      tone: 'success',
+      duration: 8000,
+      actionLabel: t('common.actions.undo'),
+      onAction: () => {
+        void updateHiddenCreators((current) => current.filter((entry) => entry.id !== creator.id));
+      },
+    });
+  });
+
+  const showHiddenCreator = useStableCallback(async (creator: HiddenCreator) => {
+    await updateHiddenCreators((current) => current.filter((entry) => entry.id !== creator.id));
+    showToast(t('hiddenCreators.shownToast', { name: creator.name }), { tone: 'success' });
+  });
+
+  // Artist mode can be entered from Installed as well as Browse. If that
+  // submitter is already hidden, return to the normal catalog instead of
+  // presenting an empty artist page that cannot explain why it is empty.
+  useEffect(() => {
+    if (submitter?.id && hiddenCreatorIdSet.has(submitter.id)) {
+      setBrowseUi({ submitter: undefined });
+    }
+  }, [submitter?.id, hiddenCreatorIdSet, setBrowseUi]);
 
   const readableCardTargetWidth = getReadableCardTargetWidth(browseCardSize);
   const gridGap =
@@ -2898,6 +2975,7 @@ export default function Browse() {
         nextLabel={nextSelectedMod?.name}
         onDeleteFile={deleteMod}
         onViewArtist={viewArtist}
+        onHideArtist={requestHideCreator}
         onOpenGameBananaItem={handleOpenGameBananaItem}
       />
     ) : null;
@@ -2991,6 +3069,11 @@ export default function Browse() {
                   {t('browse.artist.kofi')}
                 </a>
               )}
+              <IconButton
+                icon={EyeOff}
+                label={t('hiddenCreators.hideNamedCreator', { name: submitter.name })}
+                onClick={() => requestHideCreator({ id: submitter.id, name: submitter.name })}
+              />
             </div>
             <div className="hidden flex-shrink-0 items-center gap-1 rounded-lg border border-border bg-bg-secondary p-0.5 sm:flex">
               {(['Mod', 'Sound', 'Wip'] as const).map((s) => (
@@ -3233,6 +3316,24 @@ export default function Browse() {
                           { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
                         ]}
                       />
+                    </div>
+
+                    <div className="border-t border-border pt-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        icon={EyeOff}
+                        onClick={() => {
+                          setViewMenuOpen(false);
+                          setHiddenCreatorsOpen(true);
+                        }}
+                        className="w-full justify-start px-2 text-text-primary"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
+                        <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                          {hiddenCreators.length}
+                        </span>
+                      </Button>
                     </div>
 
                   </div>
@@ -3679,6 +3780,23 @@ export default function Browse() {
           onImported={() => { void loadMods(); }}
         />
       )}
+
+      <HiddenCreatorsModal
+        open={hiddenCreatorsOpen}
+        onClose={() => setHiddenCreatorsOpen(false)}
+        creators={hiddenCreators}
+        onRemove={showHiddenCreator}
+      />
+
+      <ConfirmModal
+        isOpen={creatorToHide !== null}
+        title={t('hiddenCreators.confirmTitle')}
+        message={t('hiddenCreators.confirmMessage', { name: creatorToHide?.name ?? '' })}
+        confirmLabel={t('hiddenCreators.hideCreator')}
+        variant="danger"
+        onConfirm={() => { void confirmHideCreator(); }}
+        onCancel={() => setCreatorToHide(null)}
+      />
       </div>
 
       {/* Docked details sidebar. While OPEN it's an in-flow flex child, so the

@@ -559,7 +559,7 @@ export default function ImportProfileDialog({
           fileName,
           ref.section || 'Mod',
           undefined,
-          row.details?.name ?? row.mod.entry.hint?.name
+          row.details?.name ?? row.mod.entry.hint?.name ?? row.mod.resolvedName
         ).catch((err: unknown) => {
           const message = err instanceof Error ? err.message : String(err);
           setRows((prev) =>
@@ -954,6 +954,12 @@ export default function ImportProfileDialog({
                 {rows.map((r, idx) => {
                   const mod = r.mod;
                   const hint = mod.entry.hint;
+                  // Prefer the shared hint name; fall back to the live name the
+                  // resolver fetched from GameBanana so hint-less profiles (e.g.
+                  // DMM imports exported without a modName) still show real names
+                  // instead of "Submission #NNN".
+                  const displayName =
+                    hint?.name ?? mod.resolvedName ?? `Submission #${gbSubmissionId(mod) ?? '?'}`;
                   const isUnresolvable = mod.status === 'unresolvable';
                   const nsfwBlocked = skipNsfw && !!hint?.nsfw && !isUnresolvable;
                   const blocked = isRowBlocked(r);
@@ -998,20 +1004,20 @@ export default function ImportProfileDialog({
                             onChange={() => toggleRow(idx)}
                             disabled={blocked || importing}
                             className="peer sr-only"
-                            aria-label={`Toggle ${hint?.name ?? 'mod'}`}
+                            aria-label={`Toggle ${hint?.name ?? mod.resolvedName ?? 'mod'}`}
                           />
                           <CheckboxMark checked={r.selected && !blocked} disabled={blocked || importing} />
                         </label>
                         <ModThumbnail
                           src={hint?.thumbnailUrl}
-                          alt={hint?.name ?? 'Mod'}
+                          alt={hint?.name ?? mod.resolvedName ?? 'Mod'}
                           nsfw={hint?.nsfw}
                           hideNsfw={hideNsfwPreviews}
                           className="w-14 h-10 sm:w-20 sm:h-14 flex-shrink-0 rounded-sm bg-bg-tertiary"
                         />
                         <div className="min-w-0 flex-1">
                           <div className="text-sm font-medium text-text-primary truncate">
-                            {hint?.name ?? `Submission #${gbSubmissionId(mod) ?? '?'}`}
+                            {displayName}
                           </div>
                           <div className="text-xs text-text-secondary flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                             {hint?.category && <span className="truncate max-w-[12rem]">{hint.category}</span>}

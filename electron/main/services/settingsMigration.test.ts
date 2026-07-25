@@ -51,3 +51,47 @@ describe('loadSettings legacy experimentalVpkTagging migration', () => {
     expect(loadSettings().experimentalVpkImprinting).toBe(true);
   });
 });
+
+describe('loadSettings hidden creator normalization', () => {
+  it('defaults hidden creators to an empty list for existing settings', () => {
+    writeFileSync(settingsPath(), JSON.stringify({}));
+    expect(loadSettings().hiddenCreators).toEqual([]);
+  });
+
+  it('keeps valid ids, trims names, and deduplicates by stable id', () => {
+    writeFileSync(
+      settingsPath(),
+      JSON.stringify({
+        hiddenCreators: [
+          { id: 42, name: ' First name ' },
+          { id: 7, name: 'Another creator' },
+          { id: 42, name: 'Renamed creator' },
+        ],
+      })
+    );
+
+    expect(loadSettings().hiddenCreators).toEqual([
+      { id: 42, name: 'Renamed creator' },
+      { id: 7, name: 'Another creator' },
+    ]);
+  });
+
+  it('drops malformed entries from hand-edited settings', () => {
+    writeFileSync(
+      settingsPath(),
+      JSON.stringify({
+        hiddenCreators: [
+          null,
+          { id: 0, name: 'Zero' },
+          { id: -1, name: 'Negative' },
+          { id: 1.5, name: 'Fractional' },
+          { id: 9, name: '   ' },
+          { id: '12', name: 'String id' },
+          { id: 12, name: 'Valid' },
+        ],
+      })
+    );
+
+    expect(loadSettings().hiddenCreators).toEqual([{ id: 12, name: 'Valid' }]);
+  });
+});

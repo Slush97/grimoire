@@ -131,6 +131,12 @@ export interface PortableResolvedMod {
   resolvedFileId?: number;
   /** Filename of the resolved file, used by the download pipeline. */
   resolvedFileName?: string;
+  /** Live mod name from the GameBanana lookup done during resolution. Used as
+   *  the display-name fallback when the shared profile carries no hint name
+   *  (e.g. profiles exported from installs whose metadata sidecar lacked a
+   *  modName, such as DMM imports resolved against an incomplete catalog).
+   *  Only set for resolvable entries. */
+  resolvedName?: string;
   /** Human-readable reason for unresolvable status (e.g. "submission 404"). */
   reason?: string;
   /** True when the resolved (submissionId, resolvedFileId) pair is already

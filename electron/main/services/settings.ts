@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS: AppSettings = {
     browseNsfwContentMode: 'blur',
     installedHideNsfwPreviews: true,
     hideOutdatedMods: false,
+    hiddenCreators: [],
     lockerCardsExpandedByDefault: false,
     autoDisableSiblingVariants: true,
     autoEnableDownloads: false,
@@ -44,6 +45,25 @@ const DEFAULT_SETTINGS: AppSettings = {
     verboseModTrace: false,
 };
 
+/** Normalize user-editable settings.json data into a small, deterministic
+ *  creator list. Invalid ids are ignored and duplicate ids keep the most
+ *  recently listed display name. */
+function normalizeHiddenCreators(value: unknown): AppSettings['hiddenCreators'] {
+    if (!Array.isArray(value)) return [];
+
+    const byId = new Map<number, string>();
+    for (const candidate of value) {
+        if (!candidate || typeof candidate !== 'object') continue;
+        const { id, name } = candidate as { id?: unknown; name?: unknown };
+        if (!Number.isSafeInteger(id) || (id as number) <= 0 || typeof name !== 'string') continue;
+        const trimmedName = name.trim();
+        if (!trimmedName) continue;
+        byId.set(id as number, trimmedName.slice(0, 200));
+    }
+
+    return [...byId.entries()].map(([id, name]) => ({ id, name }));
+}
+
 /**
  * Load settings from disk
  * If settings are corrupted, resets to defaults and logs warning (P2 fix #21)
@@ -61,6 +81,7 @@ export function loadSettings(): AppSettings {
         return {
             ...DEFAULT_SETTINGS,
             ...settings,
+            hiddenCreators: normalizeHiddenCreators(settings.hiddenCreators),
             browseNsfwContentMode:
                 settings.browseNsfwContentMode ??
                 (settings.hideNsfwPreviews === false ? 'show' : DEFAULT_SETTINGS.browseNsfwContentMode),

@@ -1000,6 +1000,14 @@ export interface AppearanceBg {
   hero?: string | null;
 }
 
+/** A GameBanana submitter whose uploads the user has hidden from Browse.
+ *  The numeric id is the durable identity; name is retained only so Settings
+ *  can render a useful management list if the submitter later renames. */
+export interface HiddenCreator {
+  id: number;
+  name: string;
+}
+
 export interface AppSettings {
   deadlockPath: string | null;
   devMode: boolean;
@@ -1018,6 +1026,9 @@ export interface AppSettings {
   installedHideNsfwPreviews: boolean;
   /** Hide GameBanana mods flagged as outdated in Browse. */
   hideOutdatedMods: boolean;
+  /** GameBanana submitters whose Mods, Sounds, and WiPs are excluded from
+   *  Browse. This does not hide or disable content already installed. */
+  hiddenCreators: HiddenCreator[];
   /** Open Locker list-view hero cards expanded on first load. */
   lockerCardsExpandedByDefault: boolean;
   /** Installing a different file of an already-enabled mod disables the

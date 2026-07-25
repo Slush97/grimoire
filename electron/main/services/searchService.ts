@@ -82,6 +82,32 @@ function applyContentFilters(
     }
 }
 
+/** Exclude hidden GameBanana submitters at query time so counts and pagination
+ *  describe the visible catalog. Null submitter ids remain visible because
+ *  there is no stable creator identity to compare against. */
+export function normalizeHiddenCreatorIds(hiddenCreatorIds: SearchOptions['hiddenCreatorIds']): number[] {
+    if (!hiddenCreatorIds?.length) return [];
+    return [...new Set(hiddenCreatorIds)]
+        .filter((id) => Number.isSafeInteger(id) && id > 0)
+        .slice(0, 1000);
+}
+
+function applyHiddenCreatorFilter(
+    conditions: string[],
+    params: Record<string, unknown>,
+    hiddenCreatorIds: SearchOptions['hiddenCreatorIds']
+): void {
+    const ids = normalizeHiddenCreatorIds(hiddenCreatorIds);
+    if (ids.length === 0) return;
+
+    const placeholders = ids.map((id, index) => {
+        const key = `hidden_creator_${index}`;
+        params[key] = id;
+        return `@${key}`;
+    });
+    conditions.push(`(mods.submitter_id IS NULL OR mods.submitter_id NOT IN (${placeholders.join(', ')}))`);
+}
+
 /**
  * Fallback search used when the FTS5 path returns zero results. FTS5 is
  * tokenized and prefix-only, so creative names ("MìnaMod-v2", typos, partial
@@ -101,6 +127,7 @@ function runFallbackSubstringSearch(
     addedWithin: SearchOptions['addedWithin'],
     addedFrom: number | undefined,
     addedTo: number | undefined,
+    hiddenCreatorIds: SearchOptions['hiddenCreatorIds'],
     limit: number,
     offset: number
 ): SearchResult {
@@ -137,6 +164,7 @@ function runFallbackSubstringSearch(
     }
 
     applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
+    applyHiddenCreatorFilter(conditions, params, hiddenCreatorIds);
 
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
     const orderBy = buildOrderBy(sortBy, false); // no FTS rank in fallback
@@ -178,6 +206,7 @@ export function searchMods(options: SearchOptions): SearchResult {
         addedWithin = 'all',
         addedFrom,
         addedTo,
+        hiddenCreatorIds,
     } = options;
 
     // Validate and cap pagination values
@@ -235,6 +264,7 @@ export function searchMods(options: SearchOptions): SearchResult {
     }
 
     applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
+    applyHiddenCreatorFilter(conditions, params, hiddenCreatorIds);
 
     // Build WHERE clause
     const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
@@ -274,6 +304,7 @@ export function searchMods(options: SearchOptions): SearchResult {
             addedWithin,
             addedFrom,
             addedTo,
+            hiddenCreatorIds,
             limit,
             offset
         );

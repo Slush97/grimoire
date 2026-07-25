@@ -368,6 +368,9 @@ export interface SearchLocalModsOptions {
     addedWithin?: 'all' | 'today' | 'week' | 'month' | 'custom';
     addedFrom?: number;
     addedTo?: number;
+    /** GameBanana submitter ids to exclude before count/limit/offset are
+     *  applied, keeping hidden creators from producing sparse result pages. */
+    hiddenCreatorIds?: number[];
     limit?: number;
     offset?: number;
 }
