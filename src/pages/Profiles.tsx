@@ -29,7 +29,7 @@ import CrosshairPreview from '../components/crosshair/CrosshairPreview';
 import ExportProfileModal from '../components/profiles/ExportProfileModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import PublishDialog from '../components/social/PublishDialog';
-import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import Tx from '../components/translation/Tx';
 import type { Mod } from '../types/mod';
 
@@ -1095,7 +1095,7 @@ export default function Profiles() {
       {showImport && (
         <ImportProfileDialog
           activeDeadlockPath={getActiveDeadlockPath(settings)}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={shouldBlurNsfw(settings)}
           onClose={() => setShowImport(false)}
           onImported={() => { void loadProfileList({ silent: true }); void loadMods(); }}
         />
@@ -1106,7 +1106,7 @@ export default function Profiles() {
       {restoringSnapshotJson !== null && (
         <ImportProfileDialog
           activeDeadlockPath={getActiveDeadlockPath(settings)}
-          hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+          hideNsfwPreviews={shouldBlurNsfw(settings)}
           initialInput={restoringSnapshotJson}
           onClose={() => setRestoringSnapshotJson(null)}
           onImported={() => { void loadProfileList({ silent: true }); void loadMods(); }}

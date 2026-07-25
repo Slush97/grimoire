@@ -41,6 +41,7 @@ import {
   type VanillaRestoreResult,
 } from '../lib/api';
 
+import { shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import { rollMemeTooltip } from '../lib/easterEggs';
 import { DEFAULT_SIDEBAR_HERO, getSidebarHeroImageStyle, getHeroRenderPath, resolveAppearanceBg } from '../lib/lockerUtils';
@@ -327,6 +328,11 @@ export default function Sidebar() {
     }
   }, []);
 
+  // Hoisted out of the callback below so its dep array can stay narrow: reading
+  // the whole `settings` object inside would make the callback churn on every
+  // unrelated settings change.
+  const blurNsfw = shouldBlurNsfw(settings);
+
   const refreshDiscoverNotifications = useCallback(async () => {
     if (!settings?.experimentalSocial) {
       setDiscoverNotificationCount(0);
@@ -336,7 +342,7 @@ export default function Sidebar() {
     try {
       const res = await socialListProfiles({
         sort: 'new',
-        hideNsfw: settings.hideNsfwPreviews ?? true,
+        hideNsfw: blurNsfw,
         page: 1,
       });
       const newest = newestCreatedAt(res.profiles);
@@ -364,7 +370,7 @@ export default function Sidebar() {
     } catch {
       // Keep the previous badge value during transient social API failures.
     }
-  }, [discoverActive, settings?.experimentalSocial, settings?.hideNsfwPreviews]);
+  }, [discoverActive, settings?.experimentalSocial, blurNsfw]);
 
   useEffect(() => {
     void refreshConflictCount();

@@ -30,7 +30,7 @@ import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import MyPublishedSection from '../components/social/MyPublishedSection';
 import PublishPickerDialog from '../components/social/PublishPickerDialog';
 import PublishDialog from '../components/social/PublishDialog';
-import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { formatRelativeDate } from '../lib/dates';
 
 // 'mine' is a client-side view, not a backend sort. We branch on it before
@@ -51,7 +51,7 @@ function isoFromUnix(unixSec: number): string {
 export default function Discover() {
   const { t } = useTranslation();
   const settings = useAppStore((s) => s.settings);
-  const hideNsfw = settings?.hideNsfwPreviews ?? true;
+  const hideNsfw = shouldBlurNsfw(settings);
   const signedIn = useSocialStore((s) => s.status.signedIn);
   const user = useSocialStore((s) => s.status.user);
   const signInBusy = useSocialStore((s) => s.loading);

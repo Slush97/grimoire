@@ -17,7 +17,7 @@ import {
   openPerformanceConfigFile,
 } from '../lib/api';
 import { showToast } from '../stores/toastStore';
-import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { formatDateParts } from '../lib/dateFormat';
 import { Card, Badge, Toggle, Button } from '../components/common/ui';
 import { Input, Textarea } from '../components/common/forms';
@@ -1053,10 +1053,10 @@ export default function Settings() {
         <Card title={<Tx k="settings.sections.preferences" fallback="Preferences" />} icon={Shield}>
           <div className="space-y-6">
             <Toggle
-              checked={settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true}
+              checked={shouldBlurNsfw(settings)}
               onChange={handleInstalledHideNsfwChange}
-              label={<Tx k="settings.preferences.blurInstalledNsfw" fallback="Blur Installed NSFW Content" />}
-              description={<Tx k="settings.preferences.blurInstalledNsfwDescription" fallback="Blur thumbnail images for installed mods marked as NSFW." />}
+              label={<Tx k="settings.preferences.hideNsfw" fallback="Hide NSFW Content" />}
+              description={<Tx k="settings.preferences.hideNsfwDescription" fallback="Blur thumbnail images for mods marked as NSFW." />}
             />
 
             <div className="h-px bg-white/5" />
