@@ -757,8 +757,6 @@
       "hideNsfw": "Hide NSFW Content",
       "hideNsfwDescription": "Blur thumbnail images for mods marked as NSFW.",
       "hideOutdated": "Hide Outdated Mods",
-      "blurInstalledNsfw": "Blur Installed NSFW Content",
-      "blurInstalledNsfwDescription": "Blur thumbnail images for installed mods marked as NSFW.",
       "expandLocker": "Expand Locker cards by default",
       "switchVariants": "Switch variants instead of stacking them",
       "enableAfterDownload": "Enable mods after download",
