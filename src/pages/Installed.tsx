@@ -1406,7 +1406,22 @@ export default function Installed() {
     }
   };
 
-  const closeModDetails = () => {
+  // Stable identities for ModDetailsModal's prev/next props. Inline arrows there
+  // broke the modal's memo AND, because it lists these two in its keydown effect
+  // deps, re-registered four window listeners on every Installed render (which
+  // happens on drag, hover-intent and selection). Declared up here with the
+  // other detail-overlay hooks so they stay above this component's early
+  // returns; the entries and navigateToDetailsEntry they close over are read at
+  // click time, not render time. The props still flip to undefined when
+  // navigation is unavailable, so the effect re-runs exactly when it should.
+  const navigateToPreviousDetails = useStableCallback(() => {
+    if (previousDetailsEntry) navigateToDetailsEntry(previousDetailsEntry);
+  });
+  const navigateToNextDetails = useStableCallback(() => {
+    if (nextDetailsEntry) navigateToDetailsEntry(nextDetailsEntry);
+  });
+
+  const closeModDetails = useStableCallback(() => {
     setDetailsMod(null);
     setDetailsError(null);
     setDetailsOffline(false);
@@ -1415,7 +1430,7 @@ export default function Installed() {
     setDetailsSourceModId(null);
     setDetailsActiveFileIds(new Set());
     setDetailsDates(null);
-  };
+  });
 
   // Open a GameBanana item linked from description/changelog/comments inside
   // the same details modal (in-app), rather than the OS browser. Works for
@@ -1496,7 +1511,7 @@ export default function Installed() {
   // the [mods] useEffect) picks the new flag up. Optimistically toggle the
   // local state first so the pill flips immediately even if the IPC + scan
   // round-trip is slow.
-  const handleToggleIgnoreUpdates = async () => {
+  const handleToggleIgnoreUpdates = useStableCallback(async () => {
     if (!detailsSourceModId) return;
     const next = !detailsIgnoreUpdates;
     setDetailsIgnoreUpdates(next);
@@ -1507,7 +1522,7 @@ export default function Installed() {
       console.error('[Installed] toggle ignoreUpdates failed:', err);
       setDetailsIgnoreUpdates(!next);
     }
-  };
+  });
 
   const inspectUnknownModFilters = async (
     mod: Mod,
@@ -1967,7 +1982,7 @@ export default function Installed() {
     });
   };
 
-  const handleDetailsDownload = async (fileId: number, fileName: string) => {
+  const handleDetailsDownload = useStableCallback(async (fileId: number, fileName: string) => {
     if (!detailsMod) return;
     try {
       // Decide whether this pick replaces the source install or adds a sibling:
@@ -2045,7 +2060,7 @@ export default function Installed() {
     } catch (err) {
       setDetailsError(String(err));
     }
-  };
+  });
 
   /**
    * Re-download each target mod and restore its pre-update enabled state.
@@ -4504,12 +4519,8 @@ export default function Installed() {
           onClose={closeModDetails}
           onViewArtist={openArtistPage}
           onDownload={handleDetailsDownload}
-          onNavigatePrevious={
-            previousDetailsEntry ? () => navigateToDetailsEntry(previousDetailsEntry) : undefined
-          }
-          onNavigateNext={
-            nextDetailsEntry ? () => navigateToDetailsEntry(nextDetailsEntry) : undefined
-          }
+          onNavigatePrevious={previousDetailsEntry ? navigateToPreviousDetails : undefined}
+          onNavigateNext={nextDetailsEntry ? navigateToNextDetails : undefined}
           previousLabel={previousDetailsEntry ? entryName(previousDetailsEntry) : undefined}
           nextLabel={nextDetailsEntry ? entryName(nextDetailsEntry) : undefined}
           onOpenGameBananaItem={openLinkedGameBananaItem}
@@ -7155,6 +7166,11 @@ function EditableModTitle({
   }
 
   const commit = async () => {
+    // Enter commits, which sets `saving` and disables the input below. Disabling
+    // a focused input makes the browser fire focusout, so onBlur re-entered
+    // commit and renamed twice (the parent has not reloaded yet, so the
+    // trimmed !== name check still passed on the second pass).
+    if (saving) return;
     const trimmed = value.trim();
     if (!trimmed || trimmed === name) {
       setEditing(false);
