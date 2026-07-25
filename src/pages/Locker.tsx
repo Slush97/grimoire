@@ -10,7 +10,7 @@ import {
   setModGlobalType,
   setModLockerHero,
 } from '../lib/api';
-import { getActiveDeadlockPath } from '../lib/appSettings';
+import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
 import { LockerHeroView } from './LockerHero';
@@ -1054,7 +1054,7 @@ export default function Locker() {
                     : [...prev, hero.id]
                 )
               }
-              hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+              hideNsfwPreviews={shouldBlurNsfw(settings)}
             />
           ))}
         </div>
@@ -1085,7 +1085,7 @@ export default function Locker() {
                       src={mod.thumbnailUrl}
                       alt={mod.name}
                       nsfw={mod.nsfw}
-                      hideNsfw={settings?.hideNsfwPreviews ?? true}
+                      hideNsfw={shouldBlurNsfw(settings)}
                       className="w-full h-full"
                       fallback={
                         <div className="w-full h-full flex items-center justify-center text-text-secondary text-xs">
@@ -1153,7 +1153,7 @@ export default function Locker() {
             onToggleVariant={(modId) => toggleHeroVariant(overlayHero.id, modId)}
             onReorderSkins={(orderedModIds) => reorderHeroSkins(overlayHero.id, orderedModIds)}
             onRequestDeleteSkin={(ids, name) => setDeletePrompt({ ids, name })}
-            hideNsfwPreviews={settings?.hideNsfwPreviews ?? true}
+            hideNsfwPreviews={shouldBlurNsfw(settings)}
             includedSkinKeys={shuffleIncluded}
             onToggleShuffleIncluded={toggleShuffleIncluded}
             shuffleVariantChoices={shuffleVariants}
@@ -1192,7 +1192,7 @@ export default function Locker() {
         >
           <LockerGlobalView
             groups={globalGroups}
-            hideNsfw={settings?.hideNsfwPreviews ?? true}
+            hideNsfw={shouldBlurNsfw(settings)}
             onBack={() => navigate('/locker')}
             onToggle={selectGlobalMod}
             onSetGlobalType={tagModGlobalType}

@@ -63,6 +63,14 @@ jobs:
         working-directory: grimoire
         run: pnpm exec tsc -b --noEmit
 
+      # Vitest covers the FeModel parser, cloth fit math + solver stability,
+      # Source 2 / NPR material reconstruction, the dynamic-scalar evaluator and
+      # the profiles vpkIndex resolver. Nothing gated these until now, so a PR
+      # could break every one of them and still go green.
+      - name: Test
+        working-directory: grimoire
+        run: pnpm exec vitest run
+
       # Every referenced t()/Tx key must exist in the English catalog, and the
       # committed locale manifest (what the app fetches from `main` to populate
       # the language picker) must match the catalogs on disk.

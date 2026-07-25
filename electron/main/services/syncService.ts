@@ -4,7 +4,22 @@ import { upsertMods, getSyncState, updateSyncState, getModCount, type CachedMod 
 import type { GameBananaMod } from '../../../src/types/gamebanana';
 
 const SYNC_PER_PAGE = 50;
-const SECTIONS = ['Mod', 'Sound', 'Gui', 'Model', 'Wip'] as const;
+// Deadlock only has these three submission sections. 'Gui' and 'Model' were
+// listed here once and both failed without losing any content, so don't add
+// them back: GameBanana's Game/20948 record (_aSections) has no Gui or Model
+// entry at all. What they look like they cover is already synced as Mod root
+// categories ('HUD' and 'Model Replacement' respectively).
+//
+// They also failed in two different ways, the second one silently:
+//   Gui   -> apiv11 500s server-side (missing classes/Model/Gui.php) and
+//            returns HTML, so fetchJson throws and spams the log every sync.
+//   Model -> apiv11 rejects _aFilters[Generic_Game] as UNKNOWN_FILTER. That
+//            error body is valid JSON, so fetchSubmissions does not throw; it
+//            just reports 0 records and syncSection writes a success state for
+//            an empty section. Dropping the filter is NOT the fix: /Model/Index
+//            returns the same 3136 site-wide records for any _idGameRow, so
+//            without it the catalog fills with non-Deadlock content.
+const SECTIONS = ['Mod', 'Sound', 'Wip'] as const;
 type SectionType = typeof SECTIONS[number];
 
 export interface SyncProgress {

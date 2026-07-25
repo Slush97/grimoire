@@ -24,6 +24,7 @@ import type {
     BuildSearchParams,
 } from '../../../src/types/deadlock-stats'
 import { GRIMOIRE_USER_AGENT } from './userAgent'
+import { statsApiRateLimiter } from './rateLimiter'
 
 // Local flat types for counter/synergy stats (API returns flat arrays, not nested)
 export interface FlatHeroCounterStats {
@@ -83,6 +84,11 @@ async function fetchFromAPI<T>(
     if (options?.apiKey) {
         headers['X-API-KEY'] = options.apiKey
     }
+
+    // Every deadlock-api call in this service funnels through here, so this is
+    // the one place the 5 req/sec budget has to be claimed. It was missing: the
+    // limiter existed but nothing outside saltIngest ever acquired it.
+    await statsApiRateLimiter.acquire()
 
     const response = await fetch(url.toString(), {
         headers,

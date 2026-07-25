@@ -33,7 +33,13 @@ import {
 import { downloadMod } from '../services/download';
 import { fetchAdoptedThumbnail, type AdoptedThumbnailTarget } from '../services/adoptedThumbnail';
 import { extractArchive, isArchive, type ExtractedVpk } from '../services/extract';
-import { mergeMods, unmergeMod, extractMergeSource, addMergeSources } from '../services/modMerger';
+import {
+    mergeMods,
+    unmergeMod,
+    extractMergeSource,
+    addMergeSources,
+    reserveOutputSlot,
+} from '../services/modMerger';
 import {
     imprintOneMod,
     imprintAllInstalled,
@@ -60,6 +66,38 @@ const unknownDetectionControllers = new Map<string, AbortController>();
 interface UnknownCacheBulkRequest {
     modId: string;
     requestId?: string;
+}
+
+/**
+ * Copy a built or extracted VPK into an ENABLED slot.
+ *
+ * `allocateEnabledVpkPath` reserves nothing on disk, so between the allocate and
+ * the copy a concurrent enable or download scans the folder, sees the same pakNN
+ * as free, and renames its own VPK in: the copy then overwrites it and that mod
+ * silently loses its file. Claiming the slot exclusively first closes that
+ * window, the same way mergeMods does via reserveOutputSlot. A failed copy
+ * removes the reservation so no 0-byte VPK is left for scanMods to pick up.
+ *
+ * `freshlyAllocated` is false when replacing one of our own earlier imports
+ * (resolveModVpk returned an existing path), where the slot is already ours and
+ * an exclusive create would fail with EEXIST.
+ */
+async function copyIntoModSlot(
+    sourcePath: string,
+    destPath: string,
+    freshlyAllocated: boolean
+): Promise<void> {
+    if (!freshlyAllocated) {
+        await fs.copyFile(sourcePath, destPath);
+        return;
+    }
+    await reserveOutputSlot(destPath);
+    try {
+        await fs.copyFile(sourcePath, destPath);
+    } catch (err) {
+        try { await fs.unlink(destPath); } catch { /* ignore partial-output cleanup */ }
+        throw err;
+    }
 }
 
 /**
@@ -1058,7 +1096,7 @@ ipcMain.handle(
                 const destPath = await allocateEnabledVpkPath(deadlockPath);
                 const destMetaKey = metaKeyFor(destPath);
 
-                await fs.copyFile(sourceVpks[i].path, destPath);
+                await copyIntoModSlot(sourceVpks[i].path, destPath, true);
 
                 // Scrub any orphan metadata at this slot before writing.
                 // setModMetadata merges into the existing entry, so stale fields
@@ -1208,7 +1246,7 @@ ipcMain.handle(
             const destPath = await allocateEnabledVpkPath(deadlockPath);
             const destMetaKey = metaKeyFor(destPath);
 
-            await fs.copyFile(built.vpkPath, destPath);
+            await copyIntoModSlot(built.vpkPath, destPath, true);
 
             const soundSwap: SoundSwapInfo = {
                 heroCodename: built.soundCodename,
@@ -1327,12 +1365,14 @@ ipcMain.handle(
                 destPath = await resolveModVpk(deadlockPath, replaceMetaKey);
                 if (destPath) destMetaKey = replaceMetaKey;
             }
+            let freshSlot = false;
             if (!destPath) {
                 destPath = await allocateEnabledVpkPath(deadlockPath);
                 destMetaKey = metaKeyFor(destPath);
+                freshSlot = true;
             }
 
-            await fs.copyFile(built.vpkPath, destPath);
+            await copyIntoModSlot(built.vpkPath, destPath, freshSlot);
             // A reused slot may have a stale exported-GLB cache; drop it so the
             // Locker tile re-exports the new model.
             await clearSoulModelCache(destMetaKey!);
@@ -1481,12 +1521,14 @@ ipcMain.handle(
                 destPath = await resolveModVpk(deadlockPath, replaceMetaKey);
                 if (destPath) destMetaKey = replaceMetaKey;
             }
+            let freshSlot = false;
             if (!destPath) {
                 destPath = await allocateEnabledVpkPath(deadlockPath);
                 destMetaKey = metaKeyFor(destPath);
+                freshSlot = true;
             }
 
-            await fs.copyFile(built.vpkPath, destPath);
+            await copyIntoModSlot(built.vpkPath, destPath, freshSlot);
             // A reused slot may have a stale exported-GLB cache; drop it so the
             // Locker tile re-exports the new model.
             await clearSoulModelCache(destMetaKey!);

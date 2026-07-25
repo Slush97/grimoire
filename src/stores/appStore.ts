@@ -2,8 +2,9 @@ import { create } from 'zustand';
 import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType } from '../types/mod';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
-import { applyLanguagePreference } from '../i18n';
+import i18n, { applyLanguagePreference } from '../i18n';
 import * as api from '../lib/api';
+import { showToast } from './toastStore';
 import { buildHeroList } from '../lib/lockerUtils';
 import { modRestoreKey, planSoloByKeys, planRestore } from '../lib/soloRestore';
 import {
@@ -408,7 +409,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       applyLanguagePreference(settings.language);
       set({ settings, settingsLoading: false });
     } catch (err) {
+      // settingsError is kept for any surface that wants to render it inline,
+      // but toast it too: nothing rendered this field, so a failed load used to
+      // leave the app looking unconfigured with no explanation.
       set({ settingsError: String(err), settingsLoading: false });
+      showToast(i18n.t('settings.errors.loadFailed', { error: String(err) }), {
+        tone: 'error',
+        duration: 8000,
+      });
     }
   },
 
@@ -425,7 +433,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         get().loadMods();
       }
     } catch (err) {
+      // A failed write deliberately leaves `settings` untouched, so the control
+      // snaps back to its old value. Without this toast that read as "the
+      // toggle doesn't work" for every one of Settings' save call sites.
       set({ settingsError: String(err), settingsLoading: false });
+      showToast(i18n.t('settings.errors.saveFailed', { error: String(err) }), {
+        tone: 'error',
+        duration: 8000,
+      });
     }
   },
 

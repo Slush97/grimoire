@@ -60,8 +60,6 @@
     "sections": {
       "Mod": "Mods",
       "Sound": "Sounds",
-      "Gui": "GUI",
-      "Model": "Models",
       "Wip": "WiPs"
     }
   },
@@ -757,8 +755,6 @@
       "hideNsfw": "Hide NSFW Content",
       "hideNsfwDescription": "Blur thumbnail images for mods marked as NSFW.",
       "hideOutdated": "Hide Outdated Mods",
-      "blurInstalledNsfw": "Blur Installed NSFW Content",
-      "blurInstalledNsfwDescription": "Blur thumbnail images for installed mods marked as NSFW.",
       "expandLocker": "Expand Locker cards by default",
       "switchVariants": "Switch variants instead of stacking them",
       "enableAfterDownload": "Enable mods after download",
@@ -774,6 +770,10 @@
       "developerModeDescription": "Use a dummy Deadlock directory for local testing without game files.",
       "dateFormat": "Date Format",
       "dateFormatDescription": "How upload and update dates are shown on mods and files."
+    },
+    "errors": {
+      "loadFailed": "Could not load your settings: {{error}}",
+      "saveFailed": "Could not save that setting: {{error}}"
     },
     "experimental": {
       "description": "These features are still in development and may be incomplete or buggy.",
