@@ -56,6 +56,13 @@ function detectFromNavigator(): string {
   // i18n.init (before the resource store exists, so hasResourceBundle would
   // throw), and later only as the system-default fallback. Downloaded languages
   // are explicit user choices, applied via applyLanguagePreference, not detected.
+  //
+  // The global is guarded because this runs at module load (i18n.init below),
+  // so every importer of this module inherits the assumption. Electron always
+  // has a navigator, but Node only defines one from v21, and the tests import
+  // this transitively (api.ts) under vitest's node environment. The sibling
+  // localStorage read is already defensive for the same reason.
+  if (typeof navigator === 'undefined') return FALLBACK_LANGUAGE;
   const candidates = [navigator.language, ...(navigator.languages ?? [])];
   for (const raw of candidates) {
     if (!raw) continue;
