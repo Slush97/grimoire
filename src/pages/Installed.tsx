@@ -7557,9 +7557,13 @@ function ModCard({
   const dangerInlineChipClasses = `${baseChipClasses} flex-shrink-0 border border-state-danger/40 bg-state-danger/10 text-state-danger`;
   const technicalMetaClasses = 'min-w-0 truncate font-mono text-[11px] text-text-secondary/55 hover:text-text-secondary cursor-help';
   const utilityActionClasses = 'inline-flex h-7 w-7 items-center justify-center rounded-md text-text-secondary transition-all duration-200 hover:bg-bg-tertiary hover:text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 cursor-pointer disabled:opacity-60';
-  const hoverActionVisibilityClasses = selectMode
-    ? 'hidden'
-    : 'opacity-0 group-hover/card:opacity-90 focus:opacity-100';
+  // Hover-revealed card action. `pointer-events-none` while transparent is
+  // load-bearing: opacity-0 alone still accepts clicks, so an unrevealed button
+  // is a mis-click straight into a real action (delete, or a persisted
+  // favorite). pointer-events does not gate keyboard focus, so tab-then-Enter
+  // still reaches the button, and the focus: pair keeps it visible once there.
+  const hoverRevealClasses = 'opacity-0 pointer-events-none group-hover/card:opacity-90 group-hover/card:pointer-events-auto focus:opacity-100 focus:pointer-events-auto';
+  const hoverActionVisibilityClasses = selectMode ? 'hidden' : hoverRevealClasses;
   // A set star stays permanently visible in both sections, so there is always an
   // affordance to unpin. An unset star is hover-only like its delete / overflow
   // siblings, in both sections: an always-on outline star on every card is visual
@@ -7687,7 +7691,7 @@ function ModCard({
             setTagPickerOpen(false);
             setMenuError(null);
           }}
-          className={`${utilityActionClasses} ${selectMode ? 'hidden' : `${isList ? '' : 'opacity-0 group-hover/card:opacity-90 focus:opacity-100'} aria-expanded:opacity-100`}`}
+          className={`${utilityActionClasses} ${selectMode ? 'hidden' : `${isList ? '' : hoverRevealClasses} aria-expanded:opacity-100 aria-expanded:pointer-events-auto`}`}
           title={t('installed.card.moreActions')}
           aria-label={t('installed.card.moreActionsFor', { name: mod.name })}
           aria-expanded={menuOpen}
