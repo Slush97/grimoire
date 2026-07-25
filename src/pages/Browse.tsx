@@ -3319,20 +3319,21 @@ export default function Browse() {
                     </div>
 
                     <div className="border-t border-border pt-3">
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        icon={EyeOff}
                         onClick={() => {
                           setViewMenuOpen(false);
                           setHiddenCreatorsOpen(true);
                         }}
-                        className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-text-primary transition-colors hover:bg-bg-tertiary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                        className="w-full justify-start px-2 text-text-primary"
                       >
-                        <EyeOff className="h-4 w-4 flex-shrink-0 text-text-secondary" />
-                        <span className="min-w-0 flex-1 truncate">{t('hiddenCreators.manage')}</span>
+                        <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
                         <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
                           {hiddenCreators.length}
                         </span>
-                      </button>
+                      </Button>
                     </div>
 
                   </div>

@@ -24,7 +24,7 @@ export function HiddenCreatorsManager({ creators, onRemove, className = '' }: Hi
 
   if (sortedCreators.length === 0) {
     return (
-      <div className={`flex flex-col items-center justify-center rounded-lg border border-dashed border-border px-5 py-8 text-center ${className}`}>
+      <div className={`flex flex-col items-center justify-center rounded-sm border border-dashed border-border px-5 py-8 text-center ${className}`}>
         <EyeOff className="mb-3 h-8 w-8 text-text-tertiary" aria-hidden />
         <p className="text-sm font-medium text-text-primary">{t('hiddenCreators.emptyTitle')}</p>
         <p className="mt-1 max-w-sm text-xs text-text-secondary">{t('hiddenCreators.emptyDescription')}</p>
@@ -37,7 +37,7 @@ export function HiddenCreatorsManager({ creators, onRemove, className = '' }: Hi
       {sortedCreators.map((creator) => (
         <div
           key={creator.id}
-          className="flex items-center gap-3 rounded-lg border border-border bg-bg-tertiary/45 px-3 py-2.5"
+          className="flex items-center gap-3 rounded-sm border border-border bg-bg-tertiary/45 px-3 py-2.5"
         >
           <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-accent/25 bg-accent/10 font-semibold uppercase text-accent">
             {creator.name.charAt(0)}

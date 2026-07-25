@@ -31,7 +31,7 @@ import PerformanceConfigCard from '../components/performance/PerformanceConfigCa
 import KofiSupportButton from '../components/KofiSupportButton';
 import type { SaltIngestStatus } from '../types/electron';
 import type { HiddenCreator } from '../types/mod';
-import { HiddenCreatorsManager } from '../components/HiddenCreatorsManager';
+import { HiddenCreatorsManager, HiddenCreatorsModal } from '../components/HiddenCreatorsManager';
 
 // GitHub Releases is the source of truth for changelogs. When we have local
 // release notes (an update is pending) we show them in-app; otherwise we link
@@ -94,6 +94,7 @@ export default function Settings() {
   const [resetConfirmOpen, setResetConfirmOpen] = useState(false);
   const [resetResult, setResetResult] = useState<string | null>(null);
   const [saltIngestStatus, setSaltIngestStatus] = useState<SaltIngestStatus | null>(null);
+  const [hiddenCreatorsOpen, setHiddenCreatorsOpen] = useState(false);
 
   // Updater state
   const [appVersion, setAppVersion] = useState<string>('');
@@ -1060,6 +1061,32 @@ export default function Settings() {
 
             <div className="h-px bg-white/5" />
 
+            <div>
+              <label className="text-sm font-medium text-text-primary block">
+                <Tx k="hiddenCreators.title" fallback="Hidden creators" />
+              </label>
+              <p className="text-xs text-text-secondary mt-0.5 mb-2">
+                <Tx
+                  k="hiddenCreators.description"
+                  fallback="Hide uploads from selected GameBanana creators in Browse. Installed mods remain visible."
+                />
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  icon={EyeOff}
+                  onClick={() => setHiddenCreatorsOpen(true)}
+                >
+                  <Tx k="hiddenCreators.manage" fallback="Manage hidden creators" />
+                </Button>
+                <Badge>{settings?.hiddenCreators?.length ?? 0}</Badge>
+              </div>
+            </div>
+
+            <div className="h-px bg-white/5" />
+
             <Toggle
               checked={settings?.lockerCardsExpandedByDefault ?? false}
               onChange={handleLockerCardsExpandedByDefaultChange}
@@ -1192,17 +1219,6 @@ export default function Settings() {
           </div>
         </Card>
 
-        <Card
-          title={<Tx k="settings.sections.browseContent" fallback="Browse Content" />}
-          description={<Tx k="hiddenCreators.description" fallback="Hide uploads from selected GameBanana creators in Browse." />}
-          icon={EyeOff}
-        >
-          <HiddenCreatorsManager
-            creators={settings?.hiddenCreators ?? []}
-            onRemove={handleShowCreator}
-          />
-        </Card>
-
         {/* Experimental Features */}
         <Card title={<Tx k="settings.sections.experimentalFeatures" fallback="Experimental Features" />} icon={Beaker}>
           <div className="space-y-6">
@@ -1283,6 +1299,22 @@ export default function Settings() {
             />
           </div>
         </Card>
+
+        {/* Hidden creators. Only rendered once there is a list to show: the
+            always-available entry point is the Manage button in Preferences. */}
+        {(settings?.hiddenCreators?.length ?? 0) > 0 && (
+          <Card
+            title={<Tx k="settings.sections.hiddenCreators" fallback="Hidden creators" />}
+            description={<Tx k="hiddenCreators.description" fallback="Hide uploads from selected GameBanana creators in Browse. Installed mods remain visible." />}
+            icon={EyeOff}
+            className="lg:col-span-2"
+          >
+            <HiddenCreatorsManager
+              creators={settings?.hiddenCreators ?? []}
+              onRemove={handleShowCreator}
+            />
+          </Card>
+        )}
 
         {settings?.experimentalPerformanceConfig && <PerformanceConfigCard />}
 
@@ -1682,6 +1714,13 @@ export default function Settings() {
           </div>
         </div>
       )}
+
+      <HiddenCreatorsModal
+        open={hiddenCreatorsOpen}
+        onClose={() => setHiddenCreatorsOpen(false)}
+        creators={settings?.hiddenCreators ?? []}
+        onRemove={handleShowCreator}
+      />
 
       <ConfirmModal
         isOpen={wipeConfirmOpen}
