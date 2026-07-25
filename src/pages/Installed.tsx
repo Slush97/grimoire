@@ -7560,13 +7560,13 @@ function ModCard({
   const hoverActionVisibilityClasses = selectMode
     ? 'hidden'
     : 'opacity-0 group-hover/card:opacity-90 focus:opacity-100';
-  // The star stays permanently visible on a disabled card (it is that section's
-  // pin control) and on any card where it is already set, so there is always an
-  // affordance to unpin. An unset star on an enabled card is hover-only like its
-  // delete / overflow siblings. Reveal via opacity, never `hidden` plus another
-  // display utility: utilityActionClasses already sets inline-flex and two
-  // display utilities resolve by stylesheet order, not by attribute order.
-  const favoriteVisibilityClasses = !mod.enabled || favorite
+  // A set star stays permanently visible in both sections, so there is always an
+  // affordance to unpin. An unset star is hover-only like its delete / overflow
+  // siblings, in both sections: an always-on outline star on every card is visual
+  // noise. Reveal via opacity, never `hidden` plus another display utility:
+  // utilityActionClasses already sets inline-flex and two display utilities
+  // resolve by stylesheet order, not by attribute order.
+  const favoriteVisibilityClasses = favorite
     ? (selectMode ? 'hidden' : '')
     : hoverActionVisibilityClasses;
   const menuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary focus:outline-none focus-visible:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50';
