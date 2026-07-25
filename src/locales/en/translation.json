@@ -1228,6 +1228,8 @@
       "deleteNamed": "Delete {{name}}",
       "addDisabledFavorite": "Pin {{name}} to the top of disabled mods",
       "removeDisabledFavorite": "Unpin {{name}} from the top of disabled mods",
+      "addFavoriteWhenDisabled": "Favorite {{name}}: pins it to the top once you disable it",
+      "removeFavoriteWhenDisabled": "Unfavorite {{name}}",
       "moreActions": "More actions",
       "moreActionsFor": "More actions for {{name}}",
       "edit": "Edit",

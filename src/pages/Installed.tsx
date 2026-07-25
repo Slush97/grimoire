@@ -99,9 +99,10 @@ import { modRestoreKey } from '../lib/soloRestore';
 import { buildCachedModDetails, canUseCachedModDetails } from '../lib/cachedModDetails';
 import {
   createDisabledEntryComparator,
-  disabledModPreferenceKey,
+  modPreferenceKey,
   readStoredDisabledFavorites,
   readStoredDisabledOrder,
+  toggleFavoriteKey,
   writeStoredDisabledFavorites,
   writeStoredDisabledOrder,
 } from '../lib/disabledModPrefs';
@@ -406,7 +407,7 @@ function entryRepresentativeId(entry: ModEntry): string {
 }
 
 function entryDisabledPreferenceKey(entry: ModEntry): string {
-  return disabledModPreferenceKey(entry.kind === 'single' ? entry.mod : entry.primary);
+  return modPreferenceKey(entry.kind === 'single' ? entry.mod : entry.primary);
 }
 
 /**
@@ -588,7 +589,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         selected={selected}
         onSelectToggle={() => onSelectToggle(entry)}
         favorite={favorite}
-        onToggleFavorite={!mod.enabled ? () => onToggleFavorite(entry) : undefined}
+        // Settable in both sections: starring while enabled pre-pins the entry
+        // for the moment it later gets disabled. On an enabled card the star is
+        // a marker only, it never reorders the (load-order) enabled section.
+        onToggleFavorite={() => onToggleFavorite(entry)}
       />
     );
   }
@@ -632,7 +636,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       selected={selected}
       onSelectToggle={() => onSelectToggle(entry)}
       favorite={favorite}
-      onToggleFavorite={entry.enabledVariants.length === 0 ? () => onToggleFavorite(entry) : undefined}
+      onToggleFavorite={() => onToggleFavorite(entry)}
       group={{
         variantCount: entry.variants.length,
         // Display friendly names for enabled files when possible.
@@ -3067,15 +3071,12 @@ export default function Installed() {
     if (entry.kind === 'group') void handleGroupToggle(entry);
     else void toggleMod(entry.mod.id);
   });
-  const toggleDisabledFavorite = useStableCallback((entry: ModEntry) => {
-    const key = entryDisabledPreferenceKey(entry);
-    setDisabledFavorites((current) => {
-      const next = new Set(current);
-      if (next.has(key)) next.delete(key);
-      else next.add(key);
-      writeStoredDisabledFavorites(next);
-      return next;
-    });
+  // Persist outside the setState updater: StrictMode double-invokes an updater,
+  // and a write is a side effect even when it happens to be idempotent.
+  const toggleEntryFavorite = useStableCallback((entry: ModEntry) => {
+    const next = toggleFavoriteKey(disabledFavorites, entryDisabledPreferenceKey(entry));
+    writeStoredDisabledFavorites(next);
+    setDisabledFavorites(next);
   });
   // "Start with only this mod enabled": solo the entry (disable everything else)
   // then launch. For a group we keep its already-enabled variants, or enable
@@ -3598,7 +3599,7 @@ export default function Installed() {
     onUnmerge: unmergeEntry,
     onCopyShareCode: copyEntryShareCode,
     onSelectToggle: selectToggleEntry,
-    onToggleFavorite: toggleDisabledFavorite,
+    onToggleFavorite: toggleEntryFavorite,
   });
 
   const renderEntryCard = (entry: ModEntry) => <InstalledEntryCard {...cardPropsFor(entry)} />;
@@ -6767,7 +6768,10 @@ interface ModCardProps {
   selectMode?: boolean;
   selected?: boolean;
   onSelectToggle?: () => void;
-  /** Disabled-only personal pin. Favorites sort ahead of other disabled entries. */
+  /** Personal pin, settable from either section, but it only reorders the
+   *  disabled section (favorites sort ahead of other disabled entries). The
+   *  enabled section is real load order, so starring an enabled card is a pure
+   *  marker: it takes effect once the entry is disabled. */
   favorite?: boolean;
   onToggleFavorite?: () => void;
   entryKey?: string;
@@ -7556,6 +7560,15 @@ function ModCard({
   const hoverActionVisibilityClasses = selectMode
     ? 'hidden'
     : 'opacity-0 group-hover/card:opacity-90 focus:opacity-100';
+  // The star stays permanently visible on a disabled card (it is that section's
+  // pin control) and on any card where it is already set, so there is always an
+  // affordance to unpin. An unset star on an enabled card is hover-only like its
+  // delete / overflow siblings. Reveal via opacity, never `hidden` plus another
+  // display utility: utilityActionClasses already sets inline-flex and two
+  // display utilities resolve by stylesheet order, not by attribute order.
+  const favoriteVisibilityClasses = !mod.enabled || favorite
+    ? (selectMode ? 'hidden' : '')
+    : hoverActionVisibilityClasses;
   const menuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary focus:outline-none focus-visible:bg-bg-tertiary disabled:cursor-not-allowed disabled:opacity-50';
   const dangerMenuItemClasses = 'flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs text-state-danger hover:bg-state-danger/10 focus:outline-none focus-visible:bg-state-danger/10 disabled:cursor-not-allowed disabled:opacity-50';
   const toggleHitboxClasses = 'inline-flex h-7 w-12 items-center justify-center rounded-md cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 focus-visible:ring-offset-2 focus-visible:ring-offset-bg-primary';
@@ -7609,6 +7622,16 @@ function ModCard({
   const compactChipCount = compactBaseChipCount + (showGlobalChip ? 1 : 0);
   const showNsfwChip = !!mod.nsfw && (!isCompact || compactChipCount < 2);
   const showGroupChip = !!group && (!isCompact || compactChipCount + (showNsfwChip ? 1 : 0) < 2);
+  // Enabled cards get their own copy: pinning only takes effect once the mod is
+  // disabled, and the disabled section's "top of disabled mods" wording would be
+  // a lie there.
+  const favoriteLabel = mod.enabled
+    ? favorite
+      ? t('installed.card.removeFavoriteWhenDisabled', { name: mod.name })
+      : t('installed.card.addFavoriteWhenDisabled', { name: mod.name })
+    : favorite
+      ? t('installed.card.removeDisabledFavorite', { name: mod.name })
+      : t('installed.card.addDisabledFavorite', { name: mod.name });
   const actions = (
     <div className="ml-auto flex items-center gap-1">
       {onToggleFavorite && (
@@ -7619,13 +7642,9 @@ function ModCard({
             event.stopPropagation();
             onToggleFavorite();
           }}
-          className={`${utilityActionClasses} ${selectMode ? 'hidden' : favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
-          title={favorite
-            ? t('installed.card.removeDisabledFavorite', { name: mod.name })
-            : t('installed.card.addDisabledFavorite', { name: mod.name })}
-          aria-label={favorite
-            ? t('installed.card.removeDisabledFavorite', { name: mod.name })
-            : t('installed.card.addDisabledFavorite', { name: mod.name })}
+          className={`${utilityActionClasses} ${favoriteVisibilityClasses} ${favorite ? 'text-accent hover:text-accent/80' : 'text-text-tertiary hover:text-accent'}`}
+          title={favoriteLabel}
+          aria-label={favoriteLabel}
           aria-pressed={favorite}
           data-card-action="true"
         >
