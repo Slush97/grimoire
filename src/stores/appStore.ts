@@ -244,6 +244,13 @@ interface AppState {
   // tab can restore the page without persisting UI session state to disk.
   installedScrollTop: number;
 
+  // Whether the batch local-import dialog is open. Lives here, and the dialog
+  // is mounted by Layout, because Installed early-returns an empty state when
+  // it has no mods: hosting the dialog there would unmount it (losing the rows
+  // a partly-failed batch still needs to retry) the instant a first-ever import
+  // made the list non-empty.
+  batchImportOpen: boolean;
+
   // Display name of the hero currently open in the Locker (e.g. "Abrams"), or
   // null. Published by the Locker page and read by DiscordPresence so Rich
   // Presence can show the viewed hero. Renderer-only, never persisted.
@@ -339,6 +346,7 @@ interface AppState {
   // Browse session cache (loaded mods + scroll position)
   setBrowseSession: (cache: BrowseSessionCache | null) => void;
   setInstalledScrollTop: (scrollTop: number) => void;
+  setBatchImportOpen: (open: boolean) => void;
   setLockerHeroName: (name: string | null) => void;
   loadLockerModImages: () => Promise<void>;
   /** `source` is a `data:` URL (custom upload) or an `http(s)` gallery URL. */
@@ -393,6 +401,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   browseUi: { ...DEFAULT_BROWSE_UI },
   browseSession: null,
   installedScrollTop: 0,
+  batchImportOpen: false,
   lockerHeroName: null,
   lockerModImages: {},
   lockerHideHeroName: {},
@@ -954,6 +963,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setInstalledScrollTop: (scrollTop: number) => {
     set({ installedScrollTop: Math.max(0, scrollTop) });
+  },
+
+  setBatchImportOpen: (open: boolean) => {
+    set({ batchImportOpen: open });
   },
 
   setLockerHeroName: (name: string | null) => {

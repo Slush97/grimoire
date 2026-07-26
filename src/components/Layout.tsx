@@ -17,6 +17,8 @@ import { applyAccentColor } from '../lib/accentColor';
 import { useAppStore } from '../stores/appStore';
 import type { OneClickSuspiciousFilesData, MultiVpkPickData } from '../types/electron';
 import MultiVpkPickerModal from './MultiVpkPickerModal';
+import ImportCustomModsModal from './ImportCustomModsModal';
+import type { ImportCustomModResult } from '../lib/api';
 import DiscordPresence from './DiscordPresence';
 
 export default function Layout() {
@@ -42,6 +44,14 @@ export default function Layout() {
   const accentColor = useAppStore((s) => s.settings?.accentColor);
   const loadStoreSettings = useAppStore((s) => s.loadSettings);
   const loadAppearanceImages = useAppStore((s) => s.loadAppearanceImages);
+
+  // Batch local import. Hosted here rather than on Installed because that page
+  // early-returns an empty state with no mods: a first-ever import flips it to
+  // non-empty mid-batch, which would unmount the dialog and throw away the rows
+  // a partly-failed batch still needs in order to retry just the leftovers.
+  const batchImportOpen = useAppStore((s) => s.batchImportOpen);
+  const setBatchImportOpen = useAppStore((s) => s.setBatchImportOpen);
+  const importCustomMods = useAppStore((s) => s.importCustomMods);
   useEffect(() => {
     loadStoreSettings();
     loadAppearanceImages();
@@ -171,6 +181,26 @@ export default function Layout() {
     }
   };
 
+  // Summary toast for a finished batch. The dialog keeps the failed rows and
+  // their per-row reasons; this is the at-a-glance count, and the only feedback
+  // at all when every source landed and the dialog closed itself.
+  const reportBatchImport = (results: ImportCustomModResult[]) => {
+    const imported = results.reduce((total, r) => total + (r.ok ? r.imported : 0), 0);
+    const failed = results.filter((r) => !r.ok);
+    if (imported > 0) {
+      showToast(t('installed.batchImport.importedToast', { count: imported }), { tone: 'success' });
+    }
+    if (failed.length > 0) {
+      showToast(
+        t('installed.batchImport.failedToast', {
+          count: failed.length,
+          error: failed[0].error ?? '',
+        }),
+        { tone: 'error', duration: 9000 }
+      );
+    }
+  };
+
   const handleSetupComplete = async () => {
     try {
       const settings = await getSettings();
@@ -277,6 +307,13 @@ export default function Layout() {
           data={multiVpkPrompt}
           onConfirm={(selected) => respondToMultiVpk(selected)}
           onCancel={() => respondToMultiVpk(null)}
+        />
+      )}
+      {batchImportOpen && (
+        <ImportCustomModsModal
+          onClose={() => setBatchImportOpen(false)}
+          onImport={importCustomMods}
+          onFinished={reportBatchImport}
         />
       )}
       {showWelcome && <WelcomeModal onComplete={handleSetupComplete} />}

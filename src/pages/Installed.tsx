@@ -74,7 +74,7 @@ import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
 import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
-import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, ImportCustomModResult } from '../lib/api';
+import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
 import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef } from '../types/gamebanana';
@@ -87,7 +87,6 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
-import ImportCustomModsModal from '../components/ImportCustomModsModal';
 import { IMAGE_EXTS, deriveModNameFromPath } from '../lib/customModImport';
 import { Modal } from '../components/common/Modal';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
@@ -753,7 +752,6 @@ export default function Installed() {
     setModLockerHero,
     setModGlobalType,
     setVariantLabel,
-    importCustomMods,
     soundVolume,
     setInstalledScrollTop,
     setBrowseUi,
@@ -1127,7 +1125,11 @@ export default function Installed() {
   // derived from live `mods` each render so per-file deletes inside the
   // picker reflect immediately without juggling a separate snapshot.
   const [pickerGroupId, setPickerGroupId] = useState<number | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
+  // The batch local-import dialog is mounted by Layout, not here: this page
+  // early-returns an empty state when it has no mods, so hosting the dialog
+  // would unmount it mid-batch on a first-ever import. Only the open flag lives
+  // on the page's buttons.
+  const setImportOpen = useAppStore((s) => s.setBatchImportOpen);
   const [unknownFilterGuess, setUnknownFilterGuess] = useState<{
     mod: Mod;
     loading: boolean;
@@ -1954,26 +1956,6 @@ export default function Installed() {
       nsfw: match.nsfw,
     });
   };
-
-  // Batch local import outcome. Toasted from the page (not just shown as inline
-  // row errors) because a first-ever import flips this page out of its empty
-  // state, which remounts the dialog and clears those rows.
-  const reportBatchImport = useStableCallback((results: ImportCustomModResult[]) => {
-    const imported = results.reduce((total, r) => total + (r.ok ? r.imported : 0), 0);
-    const failed = results.filter((r) => !r.ok);
-    if (imported > 0) {
-      showToast(t('installed.batchImport.importedToast', { count: imported }), { tone: 'success' });
-    }
-    if (failed.length > 0) {
-      showToast(
-        t('installed.batchImport.failedToast', {
-          count: failed.length,
-          error: failed[0].error ?? '',
-        }),
-        { tone: 'error', duration: 9000 }
-      );
-    }
-  });
 
   const makeUnknownCustomMod = (mod: Mod) => {
     closeUnknownFix();
@@ -3706,13 +3688,6 @@ export default function Installed() {
             </div>
           }
         />
-        {importOpen && (
-          <ImportCustomModsModal
-            onClose={() => setImportOpen(false)}
-            onImport={importCustomMods}
-            onFinished={reportBatchImport}
-          />
-        )}
       </>
     );
   }
@@ -4395,15 +4370,6 @@ export default function Installed() {
         onConfirm={handleDeleteConfirm}
         onCancel={() => setModToDelete(null)}
       />
-
-      {importOpen && (
-        <ImportCustomModsModal
-          onClose={() => setImportOpen(false)}
-          onImport={importCustomMods}
-          onFinished={reportBatchImport}
-        />
-      )}
-
 
       {localEditMod && (
         <EditLocalModModal

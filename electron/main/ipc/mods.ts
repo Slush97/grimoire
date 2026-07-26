@@ -1040,12 +1040,16 @@ ipcMain.handle('read-renderer-asset', async (_, relPath: string): Promise<string
  * virtual shell file with no on-disk path and locks the window while the OS
  * materializes it.
  *
- * LOCKING: the caller must run this inside runExclusiveModMutation. It allocates
- * pakNN slots through the unlocked allocator, so without the lock a concurrent
- * Locker/Installed toggle can pick the same free slot and clobber the copy (the
- * same race the mutation queue exists to kill). Adopted-thumbnail fetches are
- * queued onto `thumbnailFetchTargets` rather than fired here, so the network work
- * happens after the lock is released.
+ * LOCKING: the caller must run ONE call to this inside runExclusiveModMutation.
+ * It allocates pakNN slots through the unlocked allocator, so without the lock a
+ * concurrent Locker/Installed toggle can pick the same free slot and clobber the
+ * copy (the same race the mutation queue exists to kill). One call is the whole
+ * atomicity requirement: allocate -> copy must not interleave, but successive
+ * calls may, since each re-scans for a free slot. A batch caller must therefore
+ * take the lock per source, not around the loop, so a long batch doesn't stall
+ * every other mod mutation in the app. Adopted-thumbnail fetches are queued onto
+ * `thumbnailFetchTargets` rather than fired here, so the network work happens
+ * after the lock is released.
  */
 async function importCustomModSource(
     deadlockPath: string,
@@ -1191,13 +1195,20 @@ function fireAdoptedThumbnailFetches(targets: AdoptedThumbnailTarget[]): void {
 
 // import-custom-mods - batch local import.
 //
-// Every source is imported inside ONE exclusive mod mutation, so a batch of 30
-// VPKs allocates 30 distinct pakNN slots without a stray Locker toggle slipping
-// between two of them and stealing one. Per-source failures are collected, never
-// thrown: one corrupt archive (or hitting the 99-active cap partway) must not
-// discard the sources that already landed, and the renderer needs to know which
-// rows survived. Progress is streamed to the requesting renderer via
-// 'import-custom-mods-progress' so long copies aren't a frozen dialog.
+// LOCK SCOPE: each source takes the exclusive mod mutation on its own, NOT the
+// batch as a whole. Atomicity is only needed across allocate -> copy, which is
+// one source's worth of work: if a Locker toggle claims a slot between two
+// sources, the next allocateEnabledVpkPath simply scans and picks another free
+// one. Holding the queue for the whole batch would buy nothing but contiguous
+// pak numbering (cosmetic) while blocking every other mod mutation in the app
+// (toggle, reorder, delete, profile apply, merge, imprint) for the minutes a
+// 30-archive batch can take.
+//
+// Per-source failures are collected, never thrown: one corrupt archive (or
+// hitting the 99-active cap partway) must not discard the sources that already
+// landed, and the renderer needs to know which rows survived. Progress is
+// streamed to the requesting renderer via 'import-custom-mods-progress' so long
+// copies aren't a frozen dialog.
 ipcMain.handle(
     'import-custom-mods',
     async (event, args: ImportCustomModsBatchArgs): Promise<ImportCustomModsBatchResult> => {
@@ -1221,26 +1232,22 @@ ipcMain.handle(
             if (!event.sender.isDestroyed()) event.sender.send('import-custom-mods-progress', progress);
         };
 
-        await runExclusiveModMutation(async () => {
-            for (let index = 0; index < total; index++) {
-                const item = items[index];
-                report({ index, total, vpkPath: item.vpkPath, phase: 'importing' });
-                try {
-                    const imported = await importCustomModSource(
-                        deadlockPath,
-                        item,
-                        thumbnailFetchTargets
-                    );
-                    results.push({ vpkPath: item.vpkPath, ok: true, imported });
-                    report({ index, total, vpkPath: item.vpkPath, phase: 'done', imported });
-                } catch (err) {
-                    const error = err instanceof Error ? err.message : String(err);
-                    results.push({ vpkPath: item.vpkPath, ok: false, imported: 0, error });
-                    console.warn(`[mods] Batch import failed for ${item.vpkPath}: ${error}`);
-                    report({ index, total, vpkPath: item.vpkPath, phase: 'failed', error });
-                }
+        for (let index = 0; index < total; index++) {
+            const item = items[index];
+            report({ index, total, vpkPath: item.vpkPath, phase: 'importing' });
+            try {
+                const imported = await runExclusiveModMutation(() =>
+                    importCustomModSource(deadlockPath, item, thumbnailFetchTargets)
+                );
+                results.push({ vpkPath: item.vpkPath, ok: true, imported });
+                report({ index, total, vpkPath: item.vpkPath, phase: 'done', imported });
+            } catch (err) {
+                const error = err instanceof Error ? err.message : String(err);
+                results.push({ vpkPath: item.vpkPath, ok: false, imported: 0, error });
+                console.warn(`[mods] Batch import failed for ${item.vpkPath}: ${error}`);
+                report({ index, total, vpkPath: item.vpkPath, phase: 'failed', error });
             }
-        });
+        }
 
         const mods = await scanMods(deadlockPath);
         const result = mods.map(enrichMod);

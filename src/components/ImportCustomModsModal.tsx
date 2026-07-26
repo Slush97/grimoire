@@ -32,13 +32,14 @@ import {
   VPK_IMPORT_EXTS,
   VPK_IMPORT_RE,
   deriveModNameFromPath,
+  fileNameOf,
+  pathDedupeKey,
 } from '../lib/customModImport';
 
 type RowStatus = 'pending' | 'importing' | 'done' | 'failed';
 
 interface ImportRow {
-  /** Stable key, independent of the path (which is also the dedupe key). */
-  id: string;
+  /** Identity AND dedupe key: one row per source file, so the path is both. */
   path: string;
   name: string;
   /** The current name came from the user typing, not from a parse/peek fill. */
@@ -56,17 +57,22 @@ interface ImportCustomModsModalProps {
   onClose: () => void;
   /** Runs the batch. Resolves with one result per item, in the order given. */
   onImport: (items: ImportCustomModArgs[]) => Promise<ImportCustomModResult[]>;
-  /** Fired once after a batch, with every source's outcome. The page reports
-   *  these as toasts too: on a first-ever import the mod list flips from empty
-   *  to non-empty, which re-renders this dialog from the page's other branch
-   *  and resets it, so the inline row errors alone can't be the only channel. */
+  /** Fired once after a batch, with every source's outcome, so the host can
+   *  toast a summary. Failed rows stay listed in the dialog either way. */
   onFinished?: (results: ImportCustomModResult[]) => void;
 }
 
-let rowSeq = 0;
-const nextRowId = (): string => `row-${++rowSeq}`;
-
-const fileNameOf = (p: string): string => p.split(/[\\/]/).pop() ?? p;
+const newRow = (path: string): ImportRow => ({
+  path,
+  name: deriveModNameFromPath(path),
+  nameTouched: false,
+  imagePath: '',
+  thumbnailDataUrl: '',
+  nsfw: false,
+  recognized: null,
+  status: 'pending',
+  imported: 0,
+});
 
 /**
  * Batch local import: pick or drop any number of `.vpk` files and archives, get
@@ -77,7 +83,10 @@ const fileNameOf = (p: string): string => p.split(/[\\/]/).pop() ?? p;
  * Failures are per row, not per batch: the main process keeps going after a bad
  * source, so a corrupt archive in the middle of 20 files doesn't cost the other
  * 19. Rows that landed disappear; rows that failed stay put with the reason, so
- * the button retries exactly what's left.
+ * the button retries exactly what's left. That retry only holds because this
+ * dialog is hosted by Layout, not by Installed: mounting it under a page that
+ * early-returns on an empty mod list would unmount it the moment a first-ever
+ * import made the list non-empty, taking the failed rows with it.
  */
 export default function ImportCustomModsModal({
   onClose,
@@ -85,15 +94,16 @@ export default function ImportCustomModsModal({
   onFinished,
 }: ImportCustomModsModalProps) {
   const { t } = useTranslation();
+  const platform = window.electronAPI.platform;
   const [rows, setRows] = useState<ImportRow[]>([]);
   const [dragActive, setDragActive] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Row ids in submit order, so a progress event's index maps back to a row.
-  const submittedIdsRef = useRef<string[]>([]);
+  // Row paths in submit order, so a progress event's index maps back to a row.
+  const submittedPathsRef = useRef<string[]>([]);
 
-  const patchRow = useCallback((id: string, patch: Partial<ImportRow>) => {
-    setRows((prev) => prev.map((row) => (row.id === id ? { ...row, ...patch } : row)));
+  const patchRow = useCallback((path: string, patch: Partial<ImportRow>) => {
+    setRows((prev) => prev.map((row) => (row.path === path ? { ...row, ...patch } : row)));
   }, []);
 
   // Progress is streamed while the batch runs so a long copy shows movement
@@ -101,14 +111,14 @@ export default function ImportCustomModsModal({
   // main process only emits during our own invoke.
   useEffect(() => {
     return onImportCustomModsProgress((progress) => {
-      const id = submittedIdsRef.current[progress.index];
-      if (!id) return;
+      const path = submittedPathsRef.current[progress.index];
+      if (!path) return;
       if (progress.phase === 'importing') {
-        patchRow(id, { status: 'importing', error: undefined });
+        patchRow(path, { status: 'importing', error: undefined });
       } else if (progress.phase === 'done') {
-        patchRow(id, { status: 'done', imported: progress.imported ?? 1 });
+        patchRow(path, { status: 'done', imported: progress.imported ?? 1 });
       } else {
-        patchRow(id, { status: 'failed', error: progress.error });
+        patchRow(path, { status: 'failed', error: progress.error });
       }
     });
   }, [patchRow]);
@@ -119,58 +129,57 @@ export default function ImportCustomModsModal({
    * in main, and every extracted VPK still goes through adoption at import time,
    * so nothing is lost). Only fills a name the user hasn't typed over.
    */
-  const peekRow = useCallback(
-    (id: string, path: string) => {
-      if (!path.toLowerCase().endsWith('.vpk')) return;
-      void peekImprint(path)
-        .then((result) => {
-          if (!result) return;
-          setRows((prev) =>
-            prev.map((row) =>
-              row.id === id
-                ? {
-                    ...row,
-                    recognized: result,
-                    name: result.title && !row.nameTouched ? result.title : row.name,
-                  }
-                : row
-            )
-          );
-        })
-        .catch(() => {
-          // Recognition is a nicety; a failed peek just shows no note.
-        });
-    },
-    []
-  );
+  const peekRow = useCallback((path: string) => {
+    if (!path.toLowerCase().endsWith('.vpk')) return;
+    void peekImprint(path)
+      .then((result) => {
+        if (!result) return;
+        setRows((prev) =>
+          prev.map((row) =>
+            row.path === path
+              ? {
+                  ...row,
+                  recognized: result,
+                  name: result.title && !row.nameTouched ? result.title : row.name,
+                }
+              : row
+          )
+        );
+      })
+      .catch(() => {
+        // Recognition is a nicety; a failed peek just shows no note.
+      });
+  }, []);
+
+  // Peek every row exactly once, from an effect rather than from addPaths: a
+  // state updater must be pure, and StrictMode double-invokes it in dev, so
+  // firing IPC (or minting ids) inside one duplicates the work. The ref
+  // survives StrictMode's simulated remount, so the second pass is a no-op.
+  const peekedRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    for (const row of rows) {
+      if (peekedRef.current.has(row.path)) continue;
+      peekedRef.current.add(row.path);
+      peekRow(row.path);
+    }
+  }, [rows, peekRow]);
 
   const addPaths = useCallback(
     (paths: string[]) => {
       if (paths.length === 0) return;
-      const fresh: ImportRow[] = [];
       setRows((prev) => {
-        const seen = new Set(prev.map((row) => row.path));
+        const seen = new Set(prev.map((row) => pathDedupeKey(row.path, platform)));
+        const fresh: ImportRow[] = [];
         for (const path of paths) {
-          if (seen.has(path)) continue;
-          seen.add(path);
-          fresh.push({
-            id: nextRowId(),
-            path,
-            name: deriveModNameFromPath(path),
-            nameTouched: false,
-            imagePath: '',
-            thumbnailDataUrl: '',
-            nsfw: false,
-            recognized: null,
-            status: 'pending',
-            imported: 0,
-          });
+          const key = pathDedupeKey(path, platform);
+          if (seen.has(key)) continue;
+          seen.add(key);
+          fresh.push(newRow(path));
         }
         return fresh.length > 0 ? [...prev, ...fresh] : prev;
       });
-      for (const row of fresh) peekRow(row.id, row.path);
     },
-    [peekRow]
+    [platform]
   );
 
   const pickFiles = async () => {
@@ -221,10 +230,10 @@ export default function ImportCustomModsModal({
     if (!picked) return;
     try {
       const dataUrl = await readImageDataUrl(picked);
-      patchRow(row.id, { imagePath: picked, thumbnailDataUrl: dataUrl });
+      patchRow(row.path, { imagePath: picked, thumbnailDataUrl: dataUrl });
       setError(null);
     } catch (err) {
-      patchRow(row.id, { imagePath: '', thumbnailDataUrl: '' });
+      patchRow(row.path, { imagePath: '', thumbnailDataUrl: '' });
       setError(t('installed.imageField.readFailed', { error: String(err) }));
     }
   };
@@ -247,7 +256,7 @@ export default function ImportCustomModsModal({
     }
     try {
       const dataUrl = await readImageDataUrl(path);
-      patchRow(row.id, { imagePath: path, thumbnailDataUrl: dataUrl });
+      patchRow(row.path, { imagePath: path, thumbnailDataUrl: dataUrl });
       setError(null);
     } catch (err) {
       setError(t('installed.imageField.readFailed', { error: String(err) }));
@@ -255,15 +264,15 @@ export default function ImportCustomModsModal({
   };
 
   const allNsfw = rows.length > 0 && rows.every((row) => row.nsfw);
-  const namedRows = rows.filter((row) => row.name.trim().length > 0);
-  const canSubmit = rows.length > 0 && namedRows.length === rows.length && !submitting;
+  const unnamedCount = rows.filter((row) => row.name.trim().length === 0).length;
+  const canSubmit = rows.length > 0 && unnamedCount === 0 && !submitting;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     const batch = rows;
-    submittedIdsRef.current = batch.map((row) => row.id);
+    submittedPathsRef.current = batch.map((row) => row.path);
     setRows((prev) => prev.map((row) => ({ ...row, status: 'pending', error: undefined })));
 
     try {
@@ -276,34 +285,33 @@ export default function ImportCustomModsModal({
         }))
       );
 
-      const failedIds = new Set<string>();
+      const failed = new Map<string, string | undefined>();
       results.forEach((result, index) => {
-        const id = batch[index]?.id;
-        if (id && !result.ok) failedIds.add(id);
+        const path = batch[index]?.path;
+        if (path && !result.ok) failed.set(path, result.error);
       });
       onFinished?.(results);
 
       // Drop what landed, keep what didn't (with its reason) so the button
       // retries exactly the leftovers.
-      if (failedIds.size === 0) {
+      if (failed.size === 0) {
         onClose();
         return;
       }
       setRows((prev) =>
         prev
-          .filter((row) => failedIds.has(row.id))
-          .map((row) => {
-            const index = batch.findIndex((b) => b.id === row.id);
-            const result = index >= 0 ? results[index] : undefined;
-            return { ...row, status: 'failed' as const, error: result?.error };
-          })
+          .filter((row) => failed.has(row.path))
+          .map((row) => ({ ...row, status: 'failed' as const, error: failed.get(row.path) }))
       );
-      setError(t('installed.batchImport.someFailed', { count: failedIds.size }));
+      setError(t('installed.batchImport.someFailed', { count: failed.size }));
       setSubmitting(false);
     } catch (err) {
-      // The batch never ran (no game path, empty list): nothing landed.
+      // The batch never ran (no game path, empty list): nothing landed, so no
+      // row carries a reason. Clear any error left from an earlier attempt.
       setError(String(err));
-      setRows((prev) => prev.map((row) => ({ ...row, status: 'pending' as const })));
+      setRows((prev) =>
+        prev.map((row) => ({ ...row, status: 'pending' as const, error: undefined }))
+      );
       setSubmitting(false);
     }
   };
@@ -342,7 +350,15 @@ export default function ImportCustomModsModal({
         className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3.5"
         onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (!submitting) setDragActive(true); }}
         onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = submitting ? 'none' : 'copy'; if (!submitting) setDragActive(true); }}
-        onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); }}
+        onDragLeave={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          // Moving onto a child fires dragleave on this container too, which
+          // would strobe the highlight across the row list. Only clear when the
+          // pointer has actually left the drop surface.
+          if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+          setDragActive(false);
+        }}
         onDrop={handleDrop}
       >
         <p className="text-xs leading-5 text-text-secondary">{t('installed.batchImport.help')}</p>
@@ -407,9 +423,11 @@ export default function ImportCustomModsModal({
             </div>
 
             <ul className="space-y-1.5">
-              {rows.map((row) => (
+              {rows.map((row) => {
+                const nameMissing = row.name.trim().length === 0;
+                return (
                 <li
-                  key={row.id}
+                  key={row.path}
                   className={`flex items-center gap-2.5 rounded-lg border p-2 transition-colors ${
                     row.status === 'failed'
                       ? 'border-state-danger/40 bg-red-500/5'
@@ -441,15 +459,22 @@ export default function ImportCustomModsModal({
                     <Input
                       inputSize="sm"
                       value={row.name}
-                      onChange={(e) => patchRow(row.id, { name: e.target.value, nameTouched: true })}
+                      onChange={(e) => patchRow(row.path, { name: e.target.value, nameTouched: true })}
                       placeholder={t('installed.import.modNamePlaceholder')}
                       disabled={submitting}
                       aria-label={t('installed.batchImport.nameFor', { file: fileNameOf(row.path) })}
+                      aria-invalid={nameMissing || undefined}
+                      className={nameMissing ? 'ring-1 ring-state-danger/60' : ''}
                     />
                     <div className="mt-1 flex flex-wrap items-center gap-1.5">
                       <span className="truncate font-mono text-[11px] text-text-secondary" title={row.path}>
                         {fileNameOf(row.path)}
                       </span>
+                      {nameMissing && (
+                        <span className="text-[11px] text-state-danger">
+                          {t('installed.batchImport.nameRequired')}
+                        </span>
+                      )}
                       {row.recognized && (
                         <Tag tone="success" icon={Fingerprint}>
                           {t('installed.import.recognizedFromImprint')}
@@ -473,7 +498,7 @@ export default function ImportCustomModsModal({
 
                   <button
                     type="button"
-                    onClick={() => patchRow(row.id, { nsfw: !row.nsfw })}
+                    onClick={() => patchRow(row.path, { nsfw: !row.nsfw })}
                     disabled={submitting}
                     aria-pressed={row.nsfw}
                     title={t('installed.imageField.nsfw')}
@@ -490,11 +515,12 @@ export default function ImportCustomModsModal({
                     icon={X}
                     size="sm"
                     label={t('installed.batchImport.removeFile', { file: fileNameOf(row.path) })}
-                    onClick={() => setRows((prev) => prev.filter((r) => r.id !== row.id))}
+                    onClick={() => setRows((prev) => prev.filter((r) => r.path !== row.path))}
                     disabled={submitting}
                   />
                 </li>
-              ))}
+                );
+              })}
             </ul>
 
             <div
@@ -514,7 +540,7 @@ export default function ImportCustomModsModal({
         )}
       </div>
 
-      <div className="flex flex-shrink-0 items-center justify-center border-t border-border px-5 py-3">
+      <div className="flex flex-shrink-0 flex-col items-center gap-1.5 border-t border-border px-5 py-3">
         <Button
           variant="primary"
           icon={FilePlus}
@@ -527,6 +553,11 @@ export default function ImportCustomModsModal({
             ? t('installed.batchImport.importCount', { count: rows.length })
             : t('profiles.actions.import')}
         </Button>
+        {unnamedCount > 0 && (
+          <span className="text-[11px] text-state-danger">
+            {t('installed.batchImport.unnamedBlocked', { count: unnamedCount })}
+          </span>
+        )}
       </div>
     </Modal>
   );
