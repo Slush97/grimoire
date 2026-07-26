@@ -159,6 +159,37 @@ export interface ImportCustomModArgs {
     nsfw?: boolean;
 }
 
+/** Batch local import: one entry per picked file, imported in array order. */
+export interface ImportCustomModsBatchArgs {
+    items: ImportCustomModArgs[];
+}
+
+/** Per-source outcome of a batch import. Failures never abort the batch. */
+export interface ImportCustomModResult {
+    vpkPath: string;
+    ok: boolean;
+    /** Mod slots this source produced (an archive can yield several). */
+    imported: number;
+    error?: string;
+}
+
+export interface ImportCustomModsBatchResult {
+    /** The full enriched mod list after the batch (whatever landed). */
+    mods: Mod[];
+    /** One entry per requested source, in request order. */
+    results: ImportCustomModResult[];
+}
+
+/** Streamed while a batch import runs, keyed by the request-order index. */
+export interface ImportCustomModsProgress {
+    index: number;
+    total: number;
+    vpkPath: string;
+    phase: 'importing' | 'done' | 'failed';
+    imported?: number;
+    error?: string;
+}
+
 export interface ImportSoulContainerGlbArgs {
     /** Path to the source `.glb` on disk. */
     glbPath: string;
@@ -657,7 +688,10 @@ export interface ElectronAPI {
         disableIds: string[]
     ) => Promise<{ mods: Mod[]; failures: string[] }>;
     swapModPriority: (modIdA: string, modIdB: string) => Promise<Mod[]>;
-    importCustomMod: (args: ImportCustomModArgs) => Promise<Mod[]>;
+    importCustomMods: (args: ImportCustomModsBatchArgs) => Promise<ImportCustomModsBatchResult>;
+    onImportCustomModsProgress: (
+        callback: (progress: ImportCustomModsProgress) => void
+    ) => () => void;
     importSoulContainerGlb: (args: ImportSoulContainerGlbArgs) => Promise<Mod[]>;
     exportSoulContainerGlb: (
         args: ImportSoulContainerGlbArgs
@@ -802,6 +836,8 @@ export interface ElectronAPI {
 
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => Promise<string | null>;
+    /** Multi-select open dialog. Returns [] when the user cancels. */
+    showOpenDialogMulti: (options: OpenDialogOptions) => Promise<string[]>;
     showSaveDialog: (options: SaveDialogOptions) => Promise<string | null>;
     revealPath: (targetPath: string) => Promise<void>;
 

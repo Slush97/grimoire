@@ -13,6 +13,7 @@ import {
     swapModPriority,
     setModsEnabledBatch,
     allocateEnabledVpkPath,
+    runExclusiveModMutation,
     type Mod,
 } from '../services/mods';
 import { metaKeyFor } from '../services/deadlock';
@@ -57,7 +58,7 @@ import { buildSpiritUrnVpk, cleanupSpiritUrnBuild, previewSpiritUrnGlb } from '.
 import { resolveModVpk, clearSoulModelCache } from '../services/soulContainerModels';
 import { exportVpkViaDialog, exportVpkFileName } from '../services/foundryExport';
 import { getMainWindow } from '../index';
-import type { ImportCustomModArgs, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
+import type { ImportCustomModArgs, ImportCustomModsBatchArgs, ImportCustomModsBatchResult, ImportCustomModResult, ImportCustomModsProgress, ImportSoulContainerGlbArgs, PreviewSoulContainerGlbArgs, SoulContainerPreview, ImportSpiritUrnGlbArgs, PreviewSpiritUrnGlbArgs, SpiritUrnPreview } from '../../../src/types/electron';
 import type { VpkExportResult, HeroSoundSwapRequest } from '../../../src/types/foundry';
 import type { AbilitySoundClassification, AddMergeSourcesResult, ApplyUnknownCustomModArgs, ApplyUnknownModMatchArgs, AssociateUnknownModArgs, EditLocalModArgs, GlobalModType, LockerHeroSource, MergeModsArgs, Mod as WireMod, SoulContainerImportInfo, SoundSwapInfo, UrnImportInfo, UnmergeModResult, ExtractMergeSourceResult, UnknownModFileList, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../../../src/types/mod';
 
@@ -1023,164 +1024,228 @@ ipcMain.handle('read-renderer-asset', async (_, relPath: string): Promise<string
     return readImageAsDataUrl(resolved);
 });
 
-// import-custom-mod
-// The Deadlock engine requires strict `pakXX_dir.vpk` naming (see apply-mina-variant),
-// so custom imports always get a naked `pakNN_dir.vpk` filename - no slug. The
-// human-readable name lives in metadata.modName and is shown in the UI instead.
+/**
+ * Import ONE local source (a bare `.vpk`, or an archive whose every contained
+ * `.vpk` becomes its own slot) as tracked local mods. Returns how many mod slots
+ * it wrote.
+ *
+ * The Deadlock engine requires strict `pakXX_dir.vpk` naming (see
+ * apply-mina-variant), so custom imports always get a naked `pakNN_dir.vpk`
+ * filename - no slug. The human-readable name lives in metadata.modName and is
+ * shown in the UI instead.
+ *
+ * Archives are extracted to a temp dir and every contained `.vpk` is imported as
+ * its own slot. This lets users drag the whole zip in (the reliable path) instead
+ * of dragging a `.vpk` out of Windows' built-in zip viewer, which hands over a
+ * virtual shell file with no on-disk path and locks the window while the OS
+ * materializes it.
+ *
+ * LOCKING: the caller must run this inside runExclusiveModMutation. It allocates
+ * pakNN slots through the unlocked allocator, so without the lock a concurrent
+ * Locker/Installed toggle can pick the same free slot and clobber the copy (the
+ * same race the mutation queue exists to kill). Adopted-thumbnail fetches are
+ * queued onto `thumbnailFetchTargets` rather than fired here, so the network work
+ * happens after the lock is released.
+ */
+async function importCustomModSource(
+    deadlockPath: string,
+    args: ImportCustomModArgs,
+    thumbnailFetchTargets: AdoptedThumbnailTarget[]
+): Promise<number> {
+    const { vpkPath, name, thumbnailDataUrl, nsfw } = args;
+
+    if (!vpkPath || !existsSync(vpkPath)) {
+        throw new Error('File not found');
+    }
+    if (!name?.trim()) {
+        throw new Error('A name is required');
+    }
+    const trimmedName = name.trim();
+
+    const lower = vpkPath.toLowerCase();
+    const isVpk = lower.endsWith('.vpk');
+    if (!isVpk && !isArchive(vpkPath)) {
+        throw new Error('Selected file is not a .vpk or supported archive (.zip, .7z, .rar)');
+    }
+
+    // Resolve the list of source VPKs to import. A bare .vpk is a single
+    // source; an archive is extracted to a temp dir first and every VPK it
+    // contains becomes its own import (extractArchive already filters to .vpk).
+    let sourceVpks: ExtractedVpk[];
+    let tempDir: string | undefined;
+    if (isVpk) {
+        sourceVpks = [{ path: vpkPath, fileName: basename(vpkPath) }];
+    } else {
+        tempDir = await fs.mkdtemp(join(tmpdir(), 'grimoire-import-'));
+        try {
+            sourceVpks = await extractArchive(vpkPath, tempDir);
+        } catch (err) {
+            await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            throw err;
+        }
+        if (sourceVpks.length === 0) {
+            await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            throw new Error('No .vpk file was found inside the archive.');
+        }
+    }
+
+    try {
+        // Imports install ENABLED, so reserve a slot via the overflow-aware
+        // allocator: it fills base addons first and spills into an overflow
+        // folder (creating one + patching gameinfo) when base is full, instead
+        // of failing once a >99 user has filled citadel/addons. Metadata is
+        // keyed by the destination's metaKey (folder-prefixed for an overflow
+        // slot). Copying before the next allocate marks the slot taken, so a
+        // multi-VPK archive lands in distinct slots.
+        for (let i = 0; i < sourceVpks.length; i++) {
+            const destPath = await allocateEnabledVpkPath(deadlockPath);
+            const destMetaKey = metaKeyFor(destPath);
+
+            await copyIntoModSlot(sourceVpks[i].path, destPath, true);
+
+            // Scrub any orphan metadata at this slot before writing.
+            // setModMetadata merges into the existing entry, so stale fields
+            // (gameBananaId, categoryName, etc.) from a prior occupant would
+            // otherwise stick to the new local mod and visually merge it with
+            // unrelated mods.
+            removeModMetadata(destMetaKey);
+            const stampedName = sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName;
+            await setModMetadataWithHash(destMetaKey, {
+                modName: stampedName,
+                thumbnailUrl: thumbnailDataUrl,
+                nsfw: !!nsfw,
+            }, destPath);
+
+            // ADOPTION: the just-copied VPK may already carry a Grimoire
+            // imprint (the user re-imported an already-imprinted file, or
+            // extracted one from an archive). Fill in whatever the embed
+            // knows that the freshly-stamped sidecar above doesn't -
+            // gamebananaId/author/category/etc. - so a later bulk imprint
+            // classifies against a sidecar that already agrees with the
+            // embed instead of one that looks impoverished by comparison
+            // (the live bug this build fixes: without this, the next bulk
+            // run would re-imprint FROM the impoverished sidecar and wipe
+            // the embed's real identity). The user-typed name always wins
+            // (setModMetadataWithHash already wrote it above; adoption's
+            // own modName fill-in only fires when the sidecar has none,
+            // which never happens here since stampedName is always set).
+            const adoptionPatch = computeAdoptionPatchAt(destPath, getModMetadata(destMetaKey));
+            if (hasAdoptionFields(adoptionPatch)) {
+                setModMetadata(destMetaKey, adoptionPatch);
+            }
+
+            // Stamp imprinted/imprintStale from the embed truth immediately,
+            // so the toolbar button's pending count is honest without
+            // waiting for a restart (backfillImprintedFlags would otherwise
+            // be the only thing to notice). Classify AFTER adoption so a
+            // richer embed that adoption just caught the sidecar up to
+            // reads fresh, not stale. hasAnyImprint (not
+            // readAdoptionEmbedFields) is the right "is this file imprinted
+            // at all" check: it also counts a re-imported merge embed,
+            // which adoption itself deliberately never reads fields from.
+            const finalMeta = getModMetadata(destMetaKey);
+            if (hasAnyImprint(destPath)) {
+                setModMetadata(destMetaKey, {
+                    imprinted: true,
+                    imprintStale: classifyEmbedFreshnessAt(destPath, stampedName, finalMeta) === 'stale',
+                });
+            }
+
+            // THUMBNAIL FETCH: adoption may have just learned a gamebananaId
+            // for a mod whose sidecar has no thumbnail (a local import of an
+            // already-imprinted file never had a chance to fetch one). Queue
+            // it; the actual network fetch runs after this handler returns
+            // (best-effort, never blocks or fails the import).
+            const adoptedGbId = finalMeta?.gameBananaId;
+            if (adoptedGbId && !finalMeta?.thumbnailUrl) {
+                thumbnailFetchTargets.push({
+                    metaKey: destMetaKey,
+                    gameBananaId: adoptedGbId,
+                    section: finalMeta?.sourceSection || 'Mod',
+                    // The hash setModMetadataWithHash just stamped: pins the
+                    // fetch to THIS file, so a recycled slot is never stamped.
+                    expectedSha256: finalMeta?.sha256,
+                });
+            }
+        }
+    } finally {
+        if (tempDir) {
+            await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
+        }
+    }
+
+    return sourceVpks.length;
+}
+
+/**
+ * Fire the adopted-thumbnail fetches a just-finished import queued up.
+ * Fire-and-forget: never awaited, so a network failure can't affect the import
+ * result already being returned to the renderer. Each fetch re-verifies slot
+ * identity before writing (see services/adoptedThumbnail.ts).
+ */
+function fireAdoptedThumbnailFetches(targets: AdoptedThumbnailTarget[]): void {
+    for (const target of targets) {
+        void fetchAdoptedThumbnail(target);
+    }
+}
+
+// import-custom-mods - batch local import.
 //
-// The source can be a bare `.vpk` or an archive (`.zip`/`.7z`/`.rar`). Archives are
-// extracted to a temp dir and every contained `.vpk` is imported as its own slot.
-// This lets users drag the whole zip in (the reliable path) instead of dragging a
-// `.vpk` out of Windows' built-in zip viewer, which hands over a virtual shell file
-// with no on-disk path and locks the window while the OS materializes it.
+// Every source is imported inside ONE exclusive mod mutation, so a batch of 30
+// VPKs allocates 30 distinct pakNN slots without a stray Locker toggle slipping
+// between two of them and stealing one. Per-source failures are collected, never
+// thrown: one corrupt archive (or hitting the 99-active cap partway) must not
+// discard the sources that already landed, and the renderer needs to know which
+// rows survived. Progress is streamed to the requesting renderer via
+// 'import-custom-mods-progress' so long copies aren't a frozen dialog.
 ipcMain.handle(
-    'import-custom-mod',
-    async (_, args: ImportCustomModArgs): Promise<Mod[]> => {
+    'import-custom-mods',
+    async (event, args: ImportCustomModsBatchArgs): Promise<ImportCustomModsBatchResult> => {
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) {
             throw new Error('No Deadlock path configured');
         }
-
-        const { vpkPath, name, thumbnailDataUrl, nsfw } = args;
-
-        if (!vpkPath || !existsSync(vpkPath)) {
-            throw new Error('File not found');
-        }
-        if (!name?.trim()) {
-            throw new Error('A name is required');
-        }
-        const trimmedName = name.trim();
-
-        const lower = vpkPath.toLowerCase();
-        const isVpk = lower.endsWith('.vpk');
-        if (!isVpk && !isArchive(vpkPath)) {
-            throw new Error('Selected file is not a .vpk or supported archive (.zip, .7z, .rar)');
+        const items = args?.items ?? [];
+        if (items.length === 0) {
+            // Do NOT end this message with the bare word "import": electron-vite's
+            // CJS-shim plugin scans the bundled chunk with an ESM-import regex, and
+            // `import"` (word + closing quote) makes it match on through to the next
+            // quote, splicing the shim into whatever string literal follows.
+            throw new Error('No files were selected');
         }
 
-        // Resolve the list of source VPKs to import. A bare .vpk is a single
-        // source; an archive is extracted to a temp dir first and every VPK it
-        // contains becomes its own import (extractArchive already filters to .vpk).
-        let sourceVpks: ExtractedVpk[];
-        let tempDir: string | undefined;
-        if (isVpk) {
-            sourceVpks = [{ path: vpkPath, fileName: basename(vpkPath) }];
-        } else {
-            tempDir = await fs.mkdtemp(join(tmpdir(), 'grimoire-import-'));
-            try {
-                sourceVpks = await extractArchive(vpkPath, tempDir);
-            } catch (err) {
-                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-                throw err;
-            }
-            if (sourceVpks.length === 0) {
-                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-                throw new Error('No .vpk file was found inside the archive.');
-            }
-        }
-
-        // Adoption targets: destMetaKeys whose embed adopted a gamebananaId but
-        // has no thumbnail yet, collected during the copy loop so the
-        // best-effort background thumbnail fetch (fired after the lock/import
-        // fully completes) knows which slots to enrich.
         const thumbnailFetchTargets: AdoptedThumbnailTarget[] = [];
+        const results: ImportCustomModResult[] = [];
+        const total = items.length;
+        const report = (progress: ImportCustomModsProgress): void => {
+            if (!event.sender.isDestroyed()) event.sender.send('import-custom-mods-progress', progress);
+        };
 
-        try {
-            // Imports install ENABLED, so reserve a slot via the overflow-aware
-            // allocator: it fills base addons first and spills into an overflow
-            // folder (creating one + patching gameinfo) when base is full, instead
-            // of failing once a >99 user has filled citadel/addons. Metadata is
-            // keyed by the destination's metaKey (folder-prefixed for an overflow
-            // slot). Copying before the next allocate marks the slot taken, so a
-            // multi-VPK archive lands in distinct slots.
-            for (let i = 0; i < sourceVpks.length; i++) {
-                const destPath = await allocateEnabledVpkPath(deadlockPath);
-                const destMetaKey = metaKeyFor(destPath);
-
-                await copyIntoModSlot(sourceVpks[i].path, destPath, true);
-
-                // Scrub any orphan metadata at this slot before writing.
-                // setModMetadata merges into the existing entry, so stale fields
-                // (gameBananaId, categoryName, etc.) from a prior occupant would
-                // otherwise stick to the new local mod and visually merge it with
-                // unrelated mods.
-                removeModMetadata(destMetaKey);
-                const stampedName = sourceVpks.length > 1 ? `${trimmedName} (${i + 1})` : trimmedName;
-                await setModMetadataWithHash(destMetaKey, {
-                    modName: stampedName,
-                    thumbnailUrl: thumbnailDataUrl,
-                    nsfw: !!nsfw,
-                }, destPath);
-
-                // ADOPTION: the just-copied VPK may already carry a Grimoire
-                // imprint (the user re-imported an already-imprinted file, or
-                // extracted one from an archive). Fill in whatever the embed
-                // knows that the freshly-stamped sidecar above doesn't -
-                // gamebananaId/author/category/etc. - so a later bulk imprint
-                // classifies against a sidecar that already agrees with the
-                // embed instead of one that looks impoverished by comparison
-                // (the live bug this build fixes: without this, the next bulk
-                // run would re-imprint FROM the impoverished sidecar and wipe
-                // the embed's real identity). The user-typed name always wins
-                // (setModMetadataWithHash already wrote it above; adoption's
-                // own modName fill-in only fires when the sidecar has none,
-                // which never happens here since stampedName is always set).
-                const adoptionPatch = computeAdoptionPatchAt(destPath, getModMetadata(destMetaKey));
-                if (hasAdoptionFields(adoptionPatch)) {
-                    setModMetadata(destMetaKey, adoptionPatch);
-                }
-
-                // Stamp imprinted/imprintStale from the embed truth immediately,
-                // so the toolbar button's pending count is honest without
-                // waiting for a restart (backfillImprintedFlags would otherwise
-                // be the only thing to notice). Classify AFTER adoption so a
-                // richer embed that adoption just caught the sidecar up to
-                // reads fresh, not stale. hasAnyImprint (not
-                // readAdoptionEmbedFields) is the right "is this file imprinted
-                // at all" check: it also counts a re-imported merge embed,
-                // which adoption itself deliberately never reads fields from.
-                const finalMeta = getModMetadata(destMetaKey);
-                if (hasAnyImprint(destPath)) {
-                    setModMetadata(destMetaKey, {
-                        imprinted: true,
-                        imprintStale: classifyEmbedFreshnessAt(destPath, stampedName, finalMeta) === 'stale',
-                    });
-                }
-
-                // THUMBNAIL FETCH: adoption may have just learned a gamebananaId
-                // for a mod whose sidecar has no thumbnail (a local import of an
-                // already-imprinted file never had a chance to fetch one). Queue
-                // it; the actual network fetch runs after this handler returns
-                // (best-effort, never blocks or fails the import).
-                const adoptedGbId = finalMeta?.gameBananaId;
-                if (adoptedGbId && !finalMeta?.thumbnailUrl) {
-                    thumbnailFetchTargets.push({
-                        metaKey: destMetaKey,
-                        gameBananaId: adoptedGbId,
-                        section: finalMeta?.sourceSection || 'Mod',
-                        // The hash setModMetadataWithHash just stamped: pins the
-                        // fetch to THIS file, so a recycled slot is never stamped.
-                        expectedSha256: finalMeta?.sha256,
-                    });
+        await runExclusiveModMutation(async () => {
+            for (let index = 0; index < total; index++) {
+                const item = items[index];
+                report({ index, total, vpkPath: item.vpkPath, phase: 'importing' });
+                try {
+                    const imported = await importCustomModSource(
+                        deadlockPath,
+                        item,
+                        thumbnailFetchTargets
+                    );
+                    results.push({ vpkPath: item.vpkPath, ok: true, imported });
+                    report({ index, total, vpkPath: item.vpkPath, phase: 'done', imported });
+                } catch (err) {
+                    const error = err instanceof Error ? err.message : String(err);
+                    results.push({ vpkPath: item.vpkPath, ok: false, imported: 0, error });
+                    console.warn(`[mods] Batch import failed for ${item.vpkPath}: ${error}`);
+                    report({ index, total, vpkPath: item.vpkPath, phase: 'failed', error });
                 }
             }
-        } finally {
-            if (tempDir) {
-                await fs.rm(tempDir, { recursive: true, force: true }).catch(() => {});
-            }
-        }
+        });
 
         const mods = await scanMods(deadlockPath);
         const result = mods.map(enrichMod);
-
-        // Fire-and-forget: never await, never let a network failure affect the
-        // import result already being returned to the renderer. The fetch
-        // itself re-verifies slot identity before writing (see
-        // services/adoptedThumbnail.ts).
-        for (const target of thumbnailFetchTargets) {
-            void fetchAdoptedThumbnail(target);
-        }
-
-        return result;
+        fireAdoptedThumbnailFetches(thumbnailFetchTargets);
+        return { mods: result, results };
     }
 );
 

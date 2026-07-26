@@ -53,6 +53,22 @@ ipcMain.handle(
     }
 );
 
+// show-open-dialog-multi - same options, multi-selection. Kept separate from
+// show-open-dialog rather than flagged onto it so the return type stays honest
+// per channel (one path vs. many). Returns [] on cancel.
+ipcMain.handle(
+    'show-open-dialog-multi',
+    async (_, options: OpenDialogOptions): Promise<string[]> => {
+        const result = await dialog.showOpenDialog({
+            properties: ['openFile', 'multiSelections'],
+            title: options.title,
+            defaultPath: options.defaultPath,
+            filters: options.filters,
+        });
+        return result.canceled ? [] : result.filePaths;
+    }
+);
+
 // show-save-dialog
 ipcMain.handle(
     'show-save-dialog',

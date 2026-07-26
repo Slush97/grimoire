@@ -22,6 +22,12 @@ import type {
   GameBananaArtistLink,
 } from '../types/gamebanana';
 import type { DownloadedLocale, LocaleManifest } from '../types/locales';
+import type {
+  ImportCustomModArgs,
+  ImportCustomModResult,
+  ImportCustomModsBatchResult,
+  ImportCustomModsProgress,
+} from '../types/electron';
 import { parseFeModel, type ClothModel } from './feModel';
 import { showToast } from '../stores/toastStore';
 import i18n from '../i18n';
@@ -456,14 +462,23 @@ export async function swapModPriority(modIdA: string, modIdB: string): Promise<M
   return withGameRunningWarning(() => window.electronAPI.swapModPriority(modIdA, modIdB));
 }
 
-export async function importCustomMod(args: {
-  vpkPath: string;
-  name: string;
-  thumbnailDataUrl?: string;
-  nsfw?: boolean;
-}): Promise<Mod[]> {
-  return window.electronAPI.importCustomMod(args);
+/** Import several local sources in one exclusive mutation. Per-source failures
+ *  come back in `results` instead of throwing, so a bad file can't discard the
+ *  ones that landed. */
+export async function importCustomMods(
+  items: ImportCustomModArgs[]
+): Promise<ImportCustomModsBatchResult> {
+  return window.electronAPI.importCustomMods({ items });
 }
+
+/** Subscribe to batch-import progress. Returns an unsubscribe function. */
+export function onImportCustomModsProgress(
+  callback: (progress: ImportCustomModsProgress) => void
+): () => void {
+  return window.electronAPI.onImportCustomModsProgress(callback);
+}
+
+export type { ImportCustomModArgs, ImportCustomModResult, ImportCustomModsBatchResult, ImportCustomModsProgress };
 
 /** Build a soul-container override VPK from a user GLB and install it as a
  *  tracked local mod. Returns the full enriched mod list after install. */
@@ -910,6 +925,15 @@ export async function showOpenDialog(options: {
   filters?: Array<{ name: string; extensions: string[] }>;
 }): Promise<string | null> {
   return window.electronAPI.showOpenDialog(options);
+}
+
+/** Multi-select open dialog. Resolves to [] when the user cancels. */
+export async function showOpenDialogMulti(options: {
+  title?: string;
+  defaultPath?: string;
+  filters?: Array<{ name: string; extensions: string[] }>;
+}): Promise<string[]> {
+  return window.electronAPI.showOpenDialogMulti(options);
 }
 
 export async function showSaveDialog(options: {

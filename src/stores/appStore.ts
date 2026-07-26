@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType } from '../types/mod';
+import type { ImportCustomModArgs, ImportCustomModResult } from '../types/electron';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
@@ -319,7 +320,8 @@ interface AppState {
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
-  importCustomMod: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
+  /** Batch local import. Resolves with one result per source, in request order. */
+  importCustomMods: (items: ImportCustomModArgs[]) => Promise<ImportCustomModResult[]>;
 
   // Download counts cache actions
   getDownloadCount: (modId: number) => number | undefined;
@@ -864,18 +866,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  importCustomMod: async (args) => {
+  importCustomMods: async (items) => {
     try {
-      const updated = await api.importCustomMod(args);
-      // Bump the generation so any in-flight silent reload (e.g. the focus
-      // refresh from the just-closed file picker) can't overwrite this with a
-      // scan taken before the new VPK landed.
+      const { mods, results } = await api.importCustomMods(items);
+      // Same generation bump as the single import: whatever landed must not be
+      // overwritten by a scan taken before the copies finished.
       modsGeneration++;
-      set({ mods: updated });
+      set({ mods });
+      // Per-source failures come back in `results`, not as a throw, so the cap
+      // check runs over them. The dialog shows each failed row inline; the
+      // notice is what explains the cap itself (which no row-level message can).
+      if (results.some((r) => !r.ok && isEnableCapError(r.error))) {
+        set({ modsNotice: ENABLE_CAP_NOTICE });
+      }
+      return results;
     } catch (err) {
-      // At the 99-active cap, importing (which lands enabled) can't claim a
-      // slot. Toast it rather than blanking the page; still rethrow so the
-      // import dialog knows it failed.
+      // A throw here means the whole batch never ran (no game path, empty list).
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else { set({ modsError: String(err) }); }
       throw err;
