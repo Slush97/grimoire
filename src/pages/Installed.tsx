@@ -3797,11 +3797,12 @@ export default function Installed() {
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
       <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 bg-bg-primary/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80 sm:-mx-6 sm:px-6">
-        {/* Row 1: search + view controls. The search shrinks (min-w) instead of
-            pushing the controls onto a right-aligned orphan row, which used to
-            leave a dead gap at common window widths. */}
+        {/* Row 1: search + view controls. The search takes every pixel the
+            controls don't need (uncapped flex-1) so there's no dead gap at wide
+            window widths, and shrinks to min-w instead of pushing the controls
+            onto a right-aligned orphan row when cramped. */}
         <div className="flex items-center gap-2 lg:gap-3">
-          <div className="relative min-w-[11rem] max-w-md flex-1">
+          <div className="relative min-w-[11rem] flex-1">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-4 h-4 text-text-secondary pointer-events-none" />
             <input
               type="text"
