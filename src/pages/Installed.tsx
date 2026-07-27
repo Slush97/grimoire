@@ -122,6 +122,7 @@ import {
 } from '../lib/modLists';
 import { CreateModListModal, ModListSubmenu } from '../components/installed/ModListMenu';
 import { ManageModListsModal } from '../components/installed/ManageModListsModal';
+import { FilterCheckList } from '../components/installed/FilterCheckList';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -493,6 +494,9 @@ const SortableEntryCard = memo(function SortableEntryCard({
 // Stable fallback for cards with no conflicts; a fresh [] per render would
 // defeat InstalledEntryCard's memo on every page-level state change.
 const EMPTY_CONFLICTS: ModConflict[] = [];
+/** Floor for the measured sort/filter popover height, so a very short window
+ *  leaves it scrollable rather than collapsing it to nothing. */
+const MIN_FILTER_PANEL_HEIGHT = 160;
 /** Shared identity for "belongs to no list", so memoized cards don't re-render. */
 const EMPTY_LIST_IDS: string[] = [];
 
@@ -954,6 +958,7 @@ export default function Installed() {
   // order no longer maps to load-order priority.
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
   // Retroactive "Imprint installed mods" (path B). A single state machine drives
   // the shared modal through four phases: an up-front preflight dry-run that
   // classifies every candidate into buckets before the user commits, a live
@@ -1038,6 +1043,28 @@ export default function Installed() {
       window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('keydown', onKey);
     };
+  }, [filterOpen]);
+  // Cap the sort/filter popover to whatever room is left below the toolbar:
+  // uncapped, at short window heights everything below TAGS was cut off with no
+  // way to reach it (the inner lists scroll, the popover itself did not).
+  //
+  // Measured rather than a `calc(100vh - <constant>)`, because the toolbar's
+  // distance from the top of the viewport is not a constant: it moves with the
+  // header, the batch-import bar, browser zoom, and the native window frame on
+  // Windows. A stale constant either wastes space or lets the panel run off the
+  // bottom, which is the bug this is fixing.
+  useLayoutEffect(() => {
+    if (!filterOpen) return;
+    const panel = filterPanelRef.current;
+    if (!panel) return;
+    const applyMaxHeight = () => {
+      // Top-anchored, so this stays correct across repeated applications.
+      const { top } = panel.getBoundingClientRect();
+      panel.style.maxHeight = `${Math.max(MIN_FILTER_PANEL_HEIGHT, window.innerHeight - top - 12)}px`;
+    };
+    applyMaxHeight();
+    window.addEventListener('resize', applyMaxHeight);
+    return () => window.removeEventListener('resize', applyMaxHeight);
   }, [filterOpen]);
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   // Raw pair count from detectConflicts. conflictMap.size / 2 only works when
@@ -3113,6 +3140,11 @@ export default function Installed() {
     () => countLiveMembers(modLists, new Set(allEntries.map(entryDisabledPreferenceKey))),
     [modLists, allEntries]
   );
+  // Shaped for FilterCheckList, which the TAGS block uses too.
+  const listFilterOptions = useMemo(
+    () => modLists.map((list) => ({ key: list.id, label: list.name, count: listCounts.get(list.id) ?? 0 })),
+    [modLists, listCounts]
+  );
 
   // Conflict arrays per entry key, with identities that persist across
   // renders (plus the module-level EMPTY_CONFLICTS fallback) so memoized
@@ -4032,13 +4064,13 @@ export default function Installed() {
                 </span>
               )}
               {filterOpen && (
-                // Capped to the viewport: at short window heights everything
-                // below TAGS used to be cut off unreachably (the inner lists
-                // scroll, the popover itself did not). Trade-off: the HERO
-                // listbox is absolutely positioned, so it now clips at the
-                // popover edge rather than overlaying the page, but scrolling
-                // brings it into view and it also scrolls internally.
-                <div className="absolute right-0 top-full z-40 mt-2 max-h-[calc(100vh-5.5rem)] w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans">
+                // max-height is measured, not declared: see the layout effect
+                // above. HeroSelect portals its listbox, so the HERO dropdown
+                // overlays the page instead of clipping at this scroll edge.
+                <div
+                  ref={filterPanelRef}
+                  className="absolute right-0 top-full z-40 mt-2 w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans"
+                >
                   <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                     <ArrowDownUp className="h-3.5 w-3.5" /> {t('installed.filters.sort')}
                   </div>
@@ -4166,106 +4198,42 @@ export default function Installed() {
                   )}
 
                   {tagOptions.length > 1 && (
-                    <div className="mt-3 border-t border-border pt-3">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                          {t('installed.filters.tags')}
-                        </span>
-                        {tagFilter.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setTagFilter([])}
-                            className="text-[11px] text-accent hover:underline cursor-pointer"
-                          >
-                            {t('common.actions.clear')}
-                          </button>
-                        )}
-                      </div>
-                      <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                        {tagOptions.map((opt) => {
-                          const checked = tagFilter.includes(opt.key);
-                          return (
-                            <button
-                              key={opt.key}
-                              type="button"
-                              onClick={() =>
-                                setTagFilter((prev) =>
-                                  checked ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
-                                )
-                              }
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
-                            >
-                              <span
-                                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
-                                  checked ? 'border-accent bg-accent text-accent-foreground' : 'border-border'
-                                }`}
-                              >
-                                {checked && <Check className="h-3 w-3" />}
-                              </span>
-                              <span className="flex-1 truncate">{opt.label}</span>
-                              <span className="text-[11px] opacity-60">{opt.count}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <FilterCheckList
+                      label={t('installed.filters.tags')}
+                      options={tagOptions}
+                      selected={tagFilter}
+                      onToggle={(key) =>
+                        setTagFilter((prev) =>
+                          prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                        )
+                      }
+                      onClear={() => setTagFilter([])}
+                    />
                   )}
 
                   {/* Rendered from modLists, not from the entry tag buckets, so
                       a list you just created stays visible while it is empty. */}
                   {modLists.length > 0 && (
-                    <div className="mt-3 border-t border-border pt-3">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                          {t('installed.filters.lists')}
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {listFilter.length > 0 && (
-                            <button
-                              type="button"
-                              onClick={() => setListFilter([])}
-                              className="text-[11px] text-accent hover:underline cursor-pointer"
-                            >
-                              {t('common.actions.clear')}
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => setManagingLists(true)}
-                            className="text-[11px] text-text-secondary hover:text-text-primary hover:underline cursor-pointer"
-                          >
-                            {t('installed.lists.manage')}
-                          </button>
-                        </div>
-                      </div>
-                      <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                        {modLists.map((list) => {
-                          const checked = listFilter.includes(list.id);
-                          return (
-                            <button
-                              key={list.id}
-                              type="button"
-                              onClick={() =>
-                                setListFilter((prev) =>
-                                  checked ? prev.filter((id) => id !== list.id) : [...prev, list.id]
-                                )
-                              }
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
-                            >
-                              <span
-                                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
-                                  checked ? 'border-accent bg-accent text-accent-foreground' : 'border-border'
-                                }`}
-                              >
-                                {checked && <Check className="h-3 w-3" />}
-                              </span>
-                              <span className="flex-1 truncate">{list.name}</span>
-                              <span className="text-[11px] opacity-60">{listCounts.get(list.id) ?? 0}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <FilterCheckList
+                      label={t('installed.filters.lists')}
+                      options={listFilterOptions}
+                      selected={listFilter}
+                      onToggle={(id) =>
+                        setListFilter((prev) =>
+                          prev.includes(id) ? prev.filter((selected) => selected !== id) : [...prev, id]
+                        )
+                      }
+                      onClear={() => setListFilter([])}
+                      action={
+                        <button
+                          type="button"
+                          onClick={() => setManagingLists(true)}
+                          className="text-[11px] text-text-secondary hover:text-text-primary hover:underline cursor-pointer"
+                        >
+                          {t('installed.lists.manage')}
+                        </button>
+                      }
+                    />
                   )}
 
                   {activeAdjustmentCount > 0 && (

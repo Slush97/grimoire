@@ -9,7 +9,11 @@
  *
  * Membership is keyed by `modPreferenceKey` (see disabledModPrefs.ts), so it
  * survives the pakNN rename that enabling/disabling performs, and a GameBanana
- * group shares a key with singletons from the same submission.
+ * group shares a key with singletons from the same submission. The one gap is
+ * that key's last-resort `mod:<id>` form, which is derived from the pakNN
+ * filename and so is not rename-stable: it only applies to a mod with neither a
+ * GameBanana id nor a sha256, which the metadata sidecar backfills for every
+ * installed VPK. Favorites have carried the same caveat since they shipped.
  *
  * Orphans are kept, never pruned, including when a mod is deleted. A key with no
  * matching installed mod can come back: reinstalling a GameBanana mod produces
@@ -223,9 +227,17 @@ export function buildListMembershipIndex(lists: readonly ModList[]): Map<string,
 
 /**
  * Live member count per list id, counted from the keys actually present in the
- * library. Orphaned keys are excluded so a list that reads "3" always has three
- * cards behind it. Lists with no live members are still present with a 0, which
- * is what keeps a freshly created (empty) list visible in the filter popover.
+ * library. Orphaned keys are excluded, so the count tracks what is installed
+ * rather than what was ever filed.
+ *
+ * It counts distinct keys, not cards. Those differ only when two physically
+ * distinct installs share content identity (the same local VPK installed twice
+ * => one sha256 key, two cards), in which case the count reads low by the
+ * duplicate. Filing one of them files both, so a per-card count would be the
+ * more confusing of the two numbers.
+ *
+ * Lists with no live members are still present with a 0, which is what keeps a
+ * freshly created (empty) list visible in the filter popover.
  */
 export function countLiveMembers(
   lists: readonly ModList[],

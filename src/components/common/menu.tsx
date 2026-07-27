@@ -124,8 +124,6 @@ interface MenuCheckboxItemProps {
   children: ReactNode;
   checked: boolean;
   disabled?: boolean;
-  /** Trailing text (a count, a hint). Never truncates before the label does. */
-  hint?: ReactNode;
   onCheckedChange: (checked: boolean) => void;
 }
 
@@ -137,7 +135,6 @@ export function MenuCheckboxItem({
   children,
   checked,
   disabled,
-  hint,
   onCheckedChange,
 }: MenuCheckboxItemProps) {
   return (
@@ -161,9 +158,6 @@ export function MenuCheckboxItem({
         </RadixContextMenu.ItemIndicator>
       </span>
       <span className="min-w-0 flex-1 truncate">{children}</span>
-      {hint !== undefined && (
-        <span className="flex-shrink-0 text-[11px] tabular-nums opacity-60">{hint}</span>
-      )}
     </RadixContextMenu.CheckboxItem>
   );
 }
