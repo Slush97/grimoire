@@ -110,6 +110,7 @@ import {
 } from '../lib/disabledModPrefs';
 import {
   type ModList,
+  addListMembership,
   buildListMembershipIndex,
   countLiveMembers,
   createList,
@@ -3211,18 +3212,20 @@ export default function Installed() {
   // Create, and file the entry the dialog was opened from into the new list.
   // createList reuses an existing list when the name matches, so typing the
   // name of a list you already have files it there instead of duplicating.
+  // Filing is add-only for exactly that reason: a toggle here would un-file a
+  // mod that is already in the list whose name was typed.
   const createListForEntry = useStableCallback((name: string) => {
     const entry = creatingListFor;
     const { lists, id } = createList(modLists, name);
     if (!id) return;
-    commitModLists(entry ? toggleListMembership(lists, id, entryDisabledPreferenceKey(entry)) : lists);
+    commitModLists(entry ? addListMembership(lists, id, entryDisabledPreferenceKey(entry)) : lists);
   });
   const renameModList = useStableCallback((id: string, name: string) => {
-    const next = renameList(modLists, id, name);
-    // renameList no-ops on a rejected name (blank, or taken by another list);
-    // the dialog uses this to restore the field and explain why.
-    const applied = next.some((list) => list.id === id && list.name === name.trim().slice(0, 80));
-    if (applied) commitModLists(next);
+    // renameList no-ops on a rejected name (blank, or taken by another list)
+    // and reports which happened; the dialog uses this to restore the field
+    // and explain why.
+    const { lists, applied } = renameList(modLists, id, name);
+    if (applied) commitModLists(lists);
     return applied;
   });
   const deleteModList = useStableCallback((id: string) => {

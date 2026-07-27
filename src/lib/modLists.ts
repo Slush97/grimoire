@@ -136,20 +136,56 @@ export function createList(
  * Rename in place. A blank name, an unknown id, or a name already used by a
  * *different* list all no-op, so the caller can bind this straight to an input
  * without validating first. Re-casing a list's own name is allowed.
+ *
+ * `applied` reports whether the rename took, because the caller needs to tell a
+ * rejected name from an accepted one to restore the field and explain why.
+ * Reported here rather than re-derived by the caller: comparing against the
+ * normalized name outside this module means duplicating the trim-and-clamp
+ * rules, which then rot silently the moment MAX_NAME_LENGTH changes.
  */
-export function renameList(lists: readonly ModList[], id: string, rawName: string): ModList[] {
+export function renameList(
+  lists: readonly ModList[],
+  id: string,
+  rawName: string
+): { lists: ModList[]; applied: boolean } {
   const name = normalizeName(rawName);
-  if (!name) return [...lists];
-  if (!lists.some((list) => list.id === id)) return [...lists];
+  if (!name) return { lists: [...lists], applied: false };
+  if (!lists.some((list) => list.id === id)) return { lists: [...lists], applied: false };
 
   const token = nameToken(name);
-  if (lists.some((list) => list.id !== id && nameToken(list.name) === token)) return [...lists];
+  if (lists.some((list) => list.id !== id && nameToken(list.name) === token)) {
+    return { lists: [...lists], applied: false };
+  }
 
-  return lists.map((list) => (list.id === id ? { ...list, name } : list));
+  return {
+    lists: lists.map((list) => (list.id === id ? { ...list, name } : list)),
+    applied: true,
+  };
 }
 
 export function deleteList(lists: readonly ModList[], id: string): ModList[] {
   return lists.filter((list) => list.id !== id);
+}
+
+/**
+ * File one mod into one list, idempotently. Unknown ids and blank keys no-op.
+ *
+ * Separate from toggleListMembership because the create-a-list flow must never
+ * un-file: createList reuses an existing list when the name matches, so typing
+ * the name of a list the mod is already in would otherwise toggle it back out,
+ * which is the opposite of what "New list" asks for.
+ */
+export function addListMembership(
+  lists: readonly ModList[],
+  id: string,
+  prefKey: string
+): ModList[] {
+  if (!prefKey) return [...lists];
+  return lists.map((list) =>
+    list.id === id && !list.keys.includes(prefKey)
+      ? { ...list, keys: [...list.keys, prefKey] }
+      : list
+  );
 }
 
 /** Add or remove one mod from one list. Unknown ids no-op. */

@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import {
   MOD_LISTS_KEY,
   type ModList,
+  addListMembership,
   buildListMembershipIndex,
   countLiveMembers,
   createList,
@@ -161,26 +162,39 @@ describe('renameList', () => {
   it('renames in place, preserving id and membership', () => {
     // The id is what an active filter selection references, so a rename must
     // not change it.
-    const lists = renameList([list('ivy', 'Ivy', ['gamebanana:1'])], 'ivy', 'Ivy Skins');
+    const { lists, applied } = renameList([list('ivy', 'Ivy', ['gamebanana:1'])], 'ivy', 'Ivy Skins');
 
+    expect(applied).toBe(true);
     expect(lists).toEqual([list('ivy', 'Ivy Skins', ['gamebanana:1'])]);
   });
 
   it('no-ops on a blank name or an unknown id', () => {
     const original = [list('a', 'A')];
 
-    expect(renameList(original, 'a', '  ')).toEqual(original);
-    expect(renameList(original, 'missing', 'B')).toEqual(original);
+    expect(renameList(original, 'a', '  ')).toEqual({ lists: original, applied: false });
+    expect(renameList(original, 'missing', 'B')).toEqual({ lists: original, applied: false });
   });
 
   it('no-ops when another list already uses the name', () => {
     const original = [list('a', 'A'), list('b', 'B')];
 
-    expect(renameList(original, 'b', 'a')).toEqual(original);
+    expect(renameList(original, 'b', 'a')).toEqual({ lists: original, applied: false });
   });
 
   it('allows a list to re-case its own name', () => {
-    expect(renameList([list('a', 'ivy')], 'a', 'Ivy')).toEqual([list('a', 'Ivy')]);
+    expect(renameList([list('a', 'ivy')], 'a', 'Ivy')).toEqual({
+      lists: [list('a', 'Ivy')],
+      applied: true,
+    });
+  });
+
+  it('reports applied for a name that survives trimming and clamping', () => {
+    // The dialog keys its rejection message off `applied`, so it must not be
+    // re-derived from a normalization rule duplicated outside this module.
+    const { lists, applied } = renameList([list('a', 'A')], 'a', `  ${'x'.repeat(200)}  `);
+
+    expect(applied).toBe(true);
+    expect(lists[0].name).toHaveLength(80);
   });
 });
 
@@ -192,6 +206,62 @@ describe('deleteList', () => {
   it('no-ops on an unknown id', () => {
     const original = [list('a', 'A')];
     expect(deleteList(original, 'missing')).toEqual(original);
+  });
+});
+
+describe('addListMembership', () => {
+  it('adds the key when absent and is a no-op when already present', () => {
+    const added = addListMembership([list('a', 'A')], 'a', 'gamebanana:1');
+    expect(added).toEqual([list('a', 'A', ['gamebanana:1'])]);
+
+    expect(addListMembership(added, 'a', 'gamebanana:1')).toEqual(added);
+  });
+
+  it('no-ops on an unknown id or a blank key', () => {
+    const original = [list('a', 'A')];
+
+    expect(addListMembership(original, 'missing', 'k')).toEqual(original);
+    expect(addListMembership(original, 'a', '')).toEqual(original);
+  });
+
+  it('does not mutate the input list or its keys array', () => {
+    const keys: string[] = [];
+    const original = [list('a', 'A', keys)];
+
+    addListMembership(original, 'a', 'k');
+
+    expect(keys).toEqual([]);
+    expect(original[0].keys).toBe(keys);
+  });
+});
+
+describe('create-then-file (the "New list..." dialog flow)', () => {
+  // Mirrors createListForEntry in Installed.tsx. createList reuses a list whose
+  // name already matches, so this composition has to be add-only: toggling here
+  // un-filed a mod that was already in the list whose name the user typed.
+  const createAndFile = (lists: readonly ModList[], name: string, prefKey: string) => {
+    const created = createList(lists, name);
+    return created.id ? addListMembership(created.lists, created.id, prefKey) : created.lists;
+  };
+
+  it('files the mod into a newly created list', () => {
+    expect(createAndFile([], 'Ivy', 'gamebanana:1')).toEqual([
+      list('ivy', 'Ivy', ['gamebanana:1']),
+    ]);
+  });
+
+  it('keeps the mod filed when the typed name matches a list it is already in', () => {
+    const existing = [list('ivy', 'Ivy', ['gamebanana:1'])];
+
+    expect(createAndFile(existing, 'IVY', 'gamebanana:1')).toEqual(existing);
+  });
+
+  it('files into the matched list rather than duplicating it', () => {
+    const existing = [list('ivy', 'Ivy', ['gamebanana:1'])];
+
+    expect(createAndFile(existing, 'ivy', 'gamebanana:2')).toEqual([
+      list('ivy', 'Ivy', ['gamebanana:1', 'gamebanana:2']),
+    ]);
   });
 });
 
