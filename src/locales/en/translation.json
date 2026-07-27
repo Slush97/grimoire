@@ -1054,7 +1054,24 @@
       "status": "Status",
       "enabled": "Enabled",
       "hero": "Hero",
-      "tags": "Tags"
+      "tags": "Tags",
+      "lists": "Lists"
+    },
+    "lists": {
+      "menuTrigger": "Add to list",
+      "newList": "New list...",
+      "createTitle": "New list",
+      "create": "Create",
+      "nameLabel": "List name",
+      "namePlaceholder": "e.g. Ivy skins",
+      "manage": "Manage",
+      "manageTitle": "Manage lists",
+      "manageSubtitle": "Lists only group mods for browsing. Deleting one never deletes any mods.",
+      "emptyHint": "No lists yet. Right-click a mod and choose Add to list.",
+      "memberCount_one": "{{count}} mod",
+      "memberCount_other": "{{count}} mods",
+      "duplicateName": "Another list already uses that name.",
+      "deleteList": "Delete {{name}}"
     },
     "sections": {
       "enabled_one": "Enabled",

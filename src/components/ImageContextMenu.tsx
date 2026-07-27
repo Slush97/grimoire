@@ -15,12 +15,17 @@ interface ImageContextMenuProps {
    *  as onRevealInFolder: mod cards offer this on right-click, and the image
    *  menu swallows those clicks. Callers pass it only for imprinted mods. */
   onViewImprint?: () => void;
+  /** Extra menu items appended below the reveal/imprint block (the Installed
+   *  card's "Add to list" submenu). Same rationale as onRevealInFolder: this
+   *  menu swallows the card's right-clicks, so card-level actions have to be
+   *  threaded through to stay reachable from the thumbnail. */
+  extraItems?: ReactNode;
   children: ReactNode;
 }
 
 type CopyState = 'idle' | 'copying' | 'copied' | 'failed';
 
-export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, onViewImprint, children }: ImageContextMenuProps) {
+export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, onViewImprint, extraItems, children }: ImageContextMenuProps) {
   const { t } = useTranslation();
   const [imageCopyState, setImageCopyState] = useState<CopyState>('idle');
   const [urlCopyState, setUrlCopyState] = useState<CopyState>('idle');
@@ -163,6 +168,12 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
                   {t('installed.imprintDetails.menuEntry')}
                 </MenuItem>
               )}
+            </>
+          )}
+          {extraItems && (
+            <>
+              <MenuSeparator />
+              {extraItems}
             </>
           )}
       </MenuContent>
