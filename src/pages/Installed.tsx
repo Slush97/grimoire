@@ -52,6 +52,7 @@ import {
   MoreHorizontal,
   Wand2,
   SlidersHorizontal,
+  ArrowDownAZ,
   ArrowDownUp,
   Link2,
   ChevronDown,
@@ -458,7 +459,14 @@ const SortableEntryCard = memo(function SortableEntryCard({
       // on hover we lift containment (-> visible) and raise z so the expanded card
       // renders whole and on top. The has-menu-open lift does the same for an open
       // action menu that would otherwise paint behind the next card.
-      className={`flex flex-col has-[[data-card-menu-open]]:z-20 [content-visibility:auto] ${isList ? '' : 'hover:[content-visibility:visible] hover:z-10'} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
+      // overflow-anchor:none opts every card out of the browser's scroll
+      // anchoring. Without it, pinning a card near the bottom of a long library
+      // dragged the viewport along with it: Chrome had picked that card as the
+      // scroll anchor, so when the star moved it to the top of the disabled
+      // section the scroller "helpfully" followed it thousands of pixels up.
+      // Excluding cards leaves the grid container as the anchor, which never
+      // moves on a reorder, so the view stays put through pin / unpin / delete.
+      className={`flex flex-col has-[[data-card-menu-open]]:z-20 [overflow-anchor:none] [content-visibility:auto] ${isList ? '' : 'hover:[content-visibility:visible] hover:z-10'} ${sortableDisabled ? '' : 'cursor-grab active:cursor-grabbing'}`}
       style={style}
       {...attributes}
       {...listeners}
@@ -949,9 +957,22 @@ export default function Installed() {
   const [tagFilter, setTagFilter] = useState<string[]>([]);
   const installedHideNsfwPreviews =
     settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true;
+  // Disabled-section sort, deliberately separate from the top-bar sort above.
+  // That one spans both sections and turns the whole page read-only (a sorted
+  // enabled list no longer maps to load order). The disabled library is a
+  // shelf, not load order, so it can be alphabetized on its own without
+  // costing the enabled section its drag handles. 'custom' is the shipped
+  // behavior (pinned first, then the manual drag order); 'name' sorts A to Z
+  // inside those same pin bands.
+  const [disabledSortMode, setDisabledSortMode] = useState<'custom' | 'name'>(() =>
+    localStorage.getItem('installedDisabledSort') === 'name' ? 'name' : 'custom'
+  );
   useEffect(() => {
     localStorage.setItem('installedSortMode', sortMode);
   }, [sortMode]);
+  useEffect(() => {
+    localStorage.setItem('installedDisabledSort', disabledSortMode);
+  }, [disabledSortMode]);
   useEffect(() => {
     localStorage.setItem('installedSourceSel', JSON.stringify(sourceSel));
   }, [sourceSel]);
@@ -3379,13 +3400,20 @@ export default function Installed() {
   const disabledDefaultIndex = new Map(
     defaultSortedDisabled.map((entry, index) => [entry.key, index])
   );
+  // A-Z drops the saved drag order (that's the point of asking for it) but
+  // keeps the pinned band: the star's promise is "pins it to the top", so
+  // favorites sort A-Z among themselves, then everything else does.
+  const disabledAlphabetical = disabledSortMode === 'name';
   const visibleDisabled = statusSel.includes('disabled')
     ? [...defaultSortedDisabled].sort(createDisabledEntryComparator({
         favorites: disabledFavorites,
-        manualOrder: disabledOrder,
+        manualOrder: disabledAlphabetical ? [] : disabledOrder,
         keyOf: entryDisabledPreferenceKey,
-        fallback: (left, right) =>
-          (disabledDefaultIndex.get(left.key) ?? 0) - (disabledDefaultIndex.get(right.key) ?? 0),
+        fallback: disabledAlphabetical
+          ? (left, right) =>
+              entryName(left).localeCompare(entryName(right), undefined, { sensitivity: 'base' })
+          : (left, right) =>
+              (disabledDefaultIndex.get(left.key) ?? 0) - (disabledDefaultIndex.get(right.key) ?? 0),
       }))
     : [];
   const totalMatches = visibleEnabled.length + visibleDisabled.length;
@@ -3636,6 +3664,10 @@ export default function Installed() {
 
   const renderSortableSection = (section: DragSection) => {
     const entries = previewEntriesForSection(section);
+    // A-Z is a display order, so a drop in the disabled section would have
+    // nowhere to be saved. The enabled section keeps its handles either way.
+    const sectionSortable =
+      sortableEnabled && !(section === 'disabled' && disabledAlphabetical);
     const activeEntry = draggingSection === section
       ? entries.find((entry) => entry.key === draggingKey)
       : undefined;
@@ -3664,7 +3696,7 @@ export default function Installed() {
             {(gridWarm ? entries : entries.slice(0, INITIAL_MOUNT_COUNT)).map((entry) => (
               <SortableEntryCard
                 key={entry.key}
-                sortableDisabled={!sortableEnabled}
+                sortableDisabled={!sectionSortable}
                 {...cardPropsFor(entry)}
               />
             ))}
@@ -4247,8 +4279,29 @@ export default function Installed() {
 
       {visibleDisabled.length > 0 && (
         <div>
-          <div className="flex items-baseline justify-between mb-[14px]">
+          <div className="flex items-center justify-between gap-3 mb-[14px]">
             <SectionHeader count={visibleDisabled.length} className="!mb-0 !text-xs !font-semibold !tracking-[0.06em]">{t('installed.sections.disabled', { count: visibleDisabled.length })}</SectionHeader>
+            {/* Sort toggle for the disabled shelf only, parked on the header
+                row so it reads as belonging to this section and not to the
+                top bar's page-wide sort. */}
+            <button
+              type="button"
+              onClick={() => setDisabledSortMode(disabledAlphabetical ? 'custom' : 'name')}
+              aria-pressed={disabledAlphabetical}
+              title={
+                disabledAlphabetical
+                  ? t('installed.sections.sortCustomHint')
+                  : t('installed.sections.sortAlphabeticalHint')
+              }
+              className={`inline-flex flex-shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.06em] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 ${
+                disabledAlphabetical
+                  ? 'border-accent/40 bg-accent/10 text-accent'
+                  : 'border-white/[0.08] bg-bg-tertiary/50 text-text-secondary hover:border-white/20 hover:text-text-primary'
+              }`}
+            >
+              <ArrowDownAZ className="h-3.5 w-3.5" />
+              {t('installed.sections.sortAlphabetical')}
+            </button>
           </div>
           {renderSortableSection('disabled')}
         </div>

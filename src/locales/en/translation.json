@@ -1060,7 +1060,10 @@
       "enabled_one": "Enabled",
       "enabled_other": "Enabled",
       "disabled_one": "Disabled",
-      "disabled_other": "Disabled"
+      "disabled_other": "Disabled",
+      "sortAlphabetical": "A-Z",
+      "sortAlphabeticalHint": "Sort disabled mods A to Z. Pinned mods stay on top.",
+      "sortCustomHint": "Back to your own order (pinned first, then how you arranged them)."
     },
     "view": {
       "viewOptions": "View options",
