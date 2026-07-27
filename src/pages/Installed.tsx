@@ -89,6 +89,7 @@ import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
 import { Modal } from '../components/common/Modal';
+import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
@@ -1431,6 +1432,17 @@ export default function Installed() {
     setDetailsActiveFileIds(new Set());
     setDetailsDates(null);
   });
+
+  // Backdrops for the details loading/error overlays. Selecting the error text
+  // to copy it and releasing outside the panel used to dismiss the error.
+  const detailsLoadingBackdropRef = useBackdropDismiss<HTMLDivElement>(
+    closeModDetails,
+    detailsLoading
+  );
+  const detailsErrorBackdropRef = useBackdropDismiss<HTMLDivElement>(
+    closeModDetails,
+    !!detailsError && !detailsMod
+  );
 
   // Open a GameBanana item linked from description/changelog/comments inside
   // the same details modal (in-app), rather than the OS browser. Works for
@@ -4465,8 +4477,8 @@ export default function Installed() {
 
       {detailsLoading && createPortal(
         <div
+          ref={detailsLoadingBackdropRef}
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-fade-in"
-          onClick={closeModDetails}
         >
           <div
             className="bg-bg-secondary border border-border rounded-xl p-6 flex items-center gap-3"
@@ -4481,8 +4493,8 @@ export default function Installed() {
 
       {detailsError && !detailsMod && createPortal(
         <div
+          ref={detailsErrorBackdropRef}
           className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-          onClick={closeModDetails}
         >
           <div
             className="bg-bg-secondary border border-border rounded-xl p-6 max-w-md"
@@ -4967,14 +4979,15 @@ function UnknownFilterGuessModal({
 }) {
   const { t } = useTranslation();
   const { mod } = state;
+  const backdropRef = useBackdropDismiss<HTMLDivElement>(onClose);
 
   return createPortal(
     <div
+      ref={backdropRef}
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="unknown-filter-title"
-      onClick={onClose}
     >
       <div
         className="bg-bg-secondary border border-white/10 rounded-xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
@@ -5073,15 +5086,16 @@ function BulkUnknownFixModal({
     (mod) => !pendingIds.has(mod.id) && cache[mod.id]?.crcMatch.status === 'not-found'
   ).length;
   const [confirmFindAll, setConfirmFindAll] = useState(false);
+  const backdropRef = useBackdropDismiss<HTMLDivElement>(onClose);
 
   return createPortal(
     <>
     <div
+      ref={backdropRef}
       className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4 animate-fade-in"
       role="dialog"
       aria-modal="true"
       aria-labelledby="bulk-unknown-title"
-      onClick={onClose}
     >
       <div
         className="bg-bg-secondary border border-white/10 rounded-xl w-full max-w-5xl max-h-[85vh] flex flex-col overflow-hidden shadow-2xl"
@@ -8234,6 +8248,9 @@ interface EditLocalModModalProps {
 
 function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
   const { t } = useTranslation();
+  // Drag-selecting the name field and releasing outside the panel used to
+  // close this dialog and drop the edit.
+  const backdropRef = useBackdropDismiss<HTMLDivElement>(onClose);
   const [name, setName] = useState(mod.name);
   const [imagePath, setImagePath] = useState('');
   const [thumbnailDataUrl, setThumbnailDataUrl] = useState(mod.thumbnailUrl ?? '');
@@ -8308,8 +8325,8 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
 
   return createPortal(
     <div
+      ref={backdropRef}
       className="fixed inset-0 z-50 flex items-center justify-center bg-bg-primary/75 p-4 backdrop-blur-sm"
-      onClick={onClose}
     >
       <div
         className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl"
