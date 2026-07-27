@@ -69,7 +69,7 @@ import {
   Star,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from '../components/common/menu';
+import { MenuContent, MenuItem, MenuRoot, MenuSeparator, MenuTrigger } from '../components/common/menu';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
@@ -108,6 +108,21 @@ import {
   writeStoredDisabledFavorites,
   writeStoredDisabledOrder,
 } from '../lib/disabledModPrefs';
+import {
+  type ModList,
+  addListMembership,
+  buildListMembershipIndex,
+  countLiveMembers,
+  createList,
+  deleteList,
+  readStoredModLists,
+  renameList,
+  toggleListMembership,
+  writeStoredModLists,
+} from '../lib/modLists';
+import { CreateModListModal, ModListSubmenu } from '../components/installed/ModListMenu';
+import { ManageModListsModal } from '../components/installed/ManageModListsModal';
+import { FilterCheckList } from '../components/installed/FilterCheckList';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
 import { FormField, Input, Select } from '../components/common/forms';
 import { HeroSelect } from '../components/common/HeroSelect';
@@ -479,6 +494,11 @@ const SortableEntryCard = memo(function SortableEntryCard({
 // Stable fallback for cards with no conflicts; a fresh [] per render would
 // defeat InstalledEntryCard's memo on every page-level state change.
 const EMPTY_CONFLICTS: ModConflict[] = [];
+/** Floor for the measured sort/filter popover height, so a very short window
+ *  leaves it scrollable rather than collapsing it to nothing. */
+const MIN_FILTER_PANEL_HEIGHT = 160;
+/** Shared identity for "belongs to no list", so memoized cards don't re-render. */
+const EMPTY_LIST_IDS: string[] = [];
 
 interface InstalledEntryCardProps {
   entry: ModEntry;
@@ -515,6 +535,12 @@ interface InstalledEntryCardProps {
   onCopyShareCode: (mod: Mod) => void;
   onSelectToggle: (entry: ModEntry) => void;
   onToggleFavorite: (entry: ModEntry) => void;
+  /** All user lists, for the card's "Add to list" submenu. */
+  lists: readonly ModList[];
+  /** Ids of the lists this entry belongs to (EMPTY_LIST_IDS when none). */
+  listIds: readonly string[];
+  onToggleList: (entry: ModEntry, listId: string) => void;
+  onCreateList: (entry: ModEntry) => void;
 }
 
 /**
@@ -557,6 +583,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onCopyShareCode,
   onSelectToggle,
   onToggleFavorite,
+  lists,
+  listIds,
+  onToggleList,
+  onCreateList,
 }: InstalledEntryCardProps) {
   if (entry.kind === 'single') {
     const mod = entry.mod;
@@ -602,6 +632,10 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         // for the moment it later gets disabled. On an enabled card the star is
         // a marker only, it never reorders the (load-order) enabled section.
         onToggleFavorite={() => onToggleFavorite(entry)}
+        lists={lists}
+        listIds={listIds}
+        onToggleList={(listId) => onToggleList(entry, listId)}
+        onCreateList={() => onCreateList(entry)}
       />
     );
   }
@@ -646,6 +680,12 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onSelectToggle={() => onSelectToggle(entry)}
       favorite={favorite}
       onToggleFavorite={() => onToggleFavorite(entry)}
+      // A group shares one preference key with its variants, so filing the card
+      // files the whole submission. That matches how the star already behaves.
+      lists={lists}
+      listIds={listIds}
+      onToggleList={(listId) => onToggleList(entry, listId)}
+      onCreateList={() => onCreateList(entry)}
       group={{
         variantCount: entry.variants.length,
         // Display friendly names for enabled files when possible.
@@ -768,6 +808,12 @@ export default function Installed() {
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [disabledFavorites, setDisabledFavorites] = useState(readStoredDisabledFavorites);
   const [disabledOrder, setDisabledOrder] = useState(readStoredDisabledOrder);
+  // User-authored lists (see lib/modLists.ts). Purely an organization axis:
+  // membership never changes what is enabled, only which cards are shown.
+  const [modLists, setModLists] = useState(readStoredModLists);
+  // Entry the "New list" dialog was opened from, so creating also files it.
+  const [creatingListFor, setCreatingListFor] = useState<ModEntry | null>(null);
+  const [managingLists, setManagingLists] = useState(false);
 
   // Source mods absorbed into a merged VPK still live on disk (disabled) so
   // unmerge can restore them, but the user shouldn't see them as separate
@@ -912,6 +958,7 @@ export default function Installed() {
   // order no longer maps to load-order priority.
   const [filterOpen, setFilterOpen] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+  const filterPanelRef = useRef<HTMLDivElement>(null);
   // Retroactive "Imprint installed mods" (path B). A single state machine drives
   // the shared modal through four phases: an up-front preflight dry-run that
   // classifies every candidate into buckets before the user commits, a live
@@ -955,6 +1002,10 @@ export default function Installed() {
   const [statusSel, setStatusSel] = useState<('enabled' | 'disabled')[]>(['enabled', 'disabled']);
   const [heroFilter, setHeroFilter] = useState('all');
   const [tagFilter, setTagFilter] = useState<string[]>([]);
+  // Selected list ids. A separate axis from tagFilter (which holds derived
+  // category keys) so the two AND together: "in my Ivy list AND tagged Skins"
+  // is the useful reading, where folding lists into tagFilter would OR them.
+  const [listFilter, setListFilter] = useState<string[]>([]);
   const installedHideNsfwPreviews =
     settings?.installedHideNsfwPreviews ?? settings?.hideNsfwPreviews ?? true;
   // Disabled-section sort, deliberately separate from the top-bar sort above.
@@ -992,6 +1043,28 @@ export default function Installed() {
       window.removeEventListener('mousedown', onMouseDown);
       window.removeEventListener('keydown', onKey);
     };
+  }, [filterOpen]);
+  // Cap the sort/filter popover to whatever room is left below the toolbar:
+  // uncapped, at short window heights everything below TAGS was cut off with no
+  // way to reach it (the inner lists scroll, the popover itself did not).
+  //
+  // Measured rather than a `calc(100vh - <constant>)`, because the toolbar's
+  // distance from the top of the viewport is not a constant: it moves with the
+  // header, the batch-import bar, browser zoom, and the native window frame on
+  // Windows. A stale constant either wastes space or lets the panel run off the
+  // bottom, which is the bug this is fixing.
+  useLayoutEffect(() => {
+    if (!filterOpen) return;
+    const panel = filterPanelRef.current;
+    if (!panel) return;
+    const applyMaxHeight = () => {
+      // Top-anchored, so this stays correct across repeated applications.
+      const { top } = panel.getBoundingClientRect();
+      panel.style.maxHeight = `${Math.max(MIN_FILTER_PANEL_HEIGHT, window.innerHeight - top - 12)}px`;
+    };
+    applyMaxHeight();
+    window.addEventListener('resize', applyMaxHeight);
+    return () => window.removeEventListener('resize', applyMaxHeight);
   }, [filterOpen]);
   const [conflictMap, setConflictMap] = useState<Map<string, ModConflict[]>>(new Map());
   // Raw pair count from detectConflicts. conflictMap.size / 2 only works when
@@ -3045,6 +3118,34 @@ export default function Installed() {
     return byKey;
   }, [allEntries]);
 
+  // List membership, deliberately kept OUT of entryFacetMeta: that cache is
+  // rebuilt only when allEntries changes, so folding list ids into it would
+  // either show stale membership after an assignment or force the whole facet
+  // cache to be thrown away on every click. A separate index keyed the same way
+  // stays correct and costs one Map lookup.
+  const listMembership = useMemo(() => buildListMembershipIndex(modLists), [modLists]);
+  // Per-entry list ids with identities that persist across renders (plus the
+  // module-level EMPTY_LIST_IDS fallback), same contract as entryConflicts.
+  const entryListIds = useMemo(() => {
+    const byKey = new Map<string, string[]>();
+    for (const entry of allEntries) {
+      const ids = listMembership.get(entryDisabledPreferenceKey(entry));
+      if (ids?.length) byKey.set(entry.key, ids);
+    }
+    return byKey;
+  }, [allEntries, listMembership]);
+  // Counts shown in the filter popover and the manage dialog. Live entries only,
+  // so an orphaned key (uninstalled mod) never inflates a list's count.
+  const listCounts = useMemo(
+    () => countLiveMembers(modLists, new Set(allEntries.map(entryDisabledPreferenceKey))),
+    [modLists, allEntries]
+  );
+  // Shaped for FilterCheckList, which the TAGS block uses too.
+  const listFilterOptions = useMemo(
+    () => modLists.map((list) => ({ key: list.id, label: list.name, count: listCounts.get(list.id) ?? 0 })),
+    [modLists, listCounts]
+  );
+
   // Conflict arrays per entry key, with identities that persist across
   // renders (plus the module-level EMPTY_CONFLICTS fallback) so memoized
   // cards only re-render when their own conflicts change.
@@ -3128,6 +3229,42 @@ export default function Installed() {
     const next = toggleFavoriteKey(disabledFavorites, entryDisabledPreferenceKey(entry));
     writeStoredDisabledFavorites(next);
     setDisabledFavorites(next);
+  });
+
+  // List mutations follow the same persist-outside-the-updater rule as the
+  // favorite toggle above: modLists.ts is pure, this commits the result.
+  const commitModLists = useStableCallback((next: ModList[]) => {
+    writeStoredModLists(next);
+    setModLists(next);
+  });
+  const toggleEntryList = useStableCallback((entry: ModEntry, listId: string) => {
+    commitModLists(toggleListMembership(modLists, listId, entryDisabledPreferenceKey(entry)));
+  });
+  const openCreateListFor = useStableCallback((entry: ModEntry) => setCreatingListFor(entry));
+  // Create, and file the entry the dialog was opened from into the new list.
+  // createList reuses an existing list when the name matches, so typing the
+  // name of a list you already have files it there instead of duplicating.
+  // Filing is add-only for exactly that reason: a toggle here would un-file a
+  // mod that is already in the list whose name was typed.
+  const createListForEntry = useStableCallback((name: string) => {
+    const entry = creatingListFor;
+    const { lists, id } = createList(modLists, name);
+    if (!id) return;
+    commitModLists(entry ? addListMembership(lists, id, entryDisabledPreferenceKey(entry)) : lists);
+  });
+  const renameModList = useStableCallback((id: string, name: string) => {
+    // renameList no-ops on a rejected name (blank, or taken by another list)
+    // and reports which happened; the dialog uses this to restore the field
+    // and explain why.
+    const { lists, applied } = renameList(modLists, id, name);
+    if (applied) commitModLists(lists);
+    return applied;
+  });
+  const deleteModList = useStableCallback((id: string) => {
+    commitModLists(deleteList(modLists, id));
+    // Drop the selection too, or the grid keeps filtering on a list that no
+    // longer exists and shows an empty shelf with no visible cause.
+    setListFilter((prev) => prev.filter((selected) => selected !== id));
   });
   // "Start with only this mod enabled": solo the entry (disable everything else)
   // then launch. For a group we keep its already-enabled variants, or enable
@@ -3357,11 +3494,11 @@ export default function Installed() {
   };
 
   // Filter by search query (substring on name), source (GameBanana vs local
-  // import), hero, and tags, then optionally re-sort. Status (enabled/disabled)
-  // is applied per-section below. Drag-and-drop reorder is disabled whenever any
-  // of these is active (see viewIsReorderable) because the displayed order no
-  // longer maps to load-order priority; the canonical priority order lives on
-  // enabledEntries/compactOrder and is untouched.
+  // import), hero, tags, and user lists, then optionally re-sort. Status
+  // (enabled/disabled) is applied per-section below. Drag-and-drop reorder is
+  // disabled whenever any of these is active (see viewIsReorderable) because the
+  // displayed order no longer maps to load-order priority; the canonical
+  // priority order lives on enabledEntries/compactOrder and is untouched.
   const searchNeedle = search.trim().toLowerCase();
   const matchesSearchEntry = (entry: ModEntry) =>
     !searchNeedle || entrySearchText(entry).toLowerCase().includes(searchNeedle);
@@ -3371,8 +3508,17 @@ export default function Installed() {
     heroFilter === 'all' || heroNamesOf(entry).includes(heroFilter);
   const matchesTagEntry = (entry: ModEntry) =>
     tagFilter.length === 0 || tagKeysOf(entry).some((key) => tagFilter.includes(key));
+  // Selecting several lists unions them (same as tags), but the list axis as a
+  // whole ANDs with the others.
+  const matchesListEntry = (entry: ModEntry) =>
+    listFilter.length === 0 ||
+    (entryListIds.get(entry.key) ?? EMPTY_LIST_IDS).some((id) => listFilter.includes(id));
   const matchesAllFilters = (entry: ModEntry) =>
-    matchesSearchEntry(entry) && matchesSourceEntry(entry) && matchesHeroEntry(entry) && matchesTagEntry(entry);
+    matchesSearchEntry(entry) &&
+    matchesSourceEntry(entry) &&
+    matchesHeroEntry(entry) &&
+    matchesTagEntry(entry) &&
+    matchesListEntry(entry);
   const sortEntries = (entries: ModEntry[]): ModEntry[] => {
     if (sortMode === 'name') {
       return [...entries].sort((a, b) =>
@@ -3388,11 +3534,17 @@ export default function Installed() {
   const sourceActive = sourceSel.length !== 2;
   const statusActive = statusSel.length !== 2;
   const heroActive = heroFilter !== 'all';
-  const filtersActive = sourceActive || statusActive || heroActive || tagFilter.length > 0;
+  const filtersActive =
+    sourceActive || statusActive || heroActive || tagFilter.length > 0 || listFilter.length > 0;
   const sortActive = sortMode !== 'priority';
   const viewIsReorderable = !searchNeedle && !filtersActive && !sortActive;
   const activeAdjustmentCount =
-    (sourceActive ? 1 : 0) + (statusActive ? 1 : 0) + (heroActive ? 1 : 0) + tagFilter.length + (sortActive ? 1 : 0);
+    (sourceActive ? 1 : 0) +
+    (statusActive ? 1 : 0) +
+    (heroActive ? 1 : 0) +
+    tagFilter.length +
+    listFilter.length +
+    (sortActive ? 1 : 0);
   const visibleEnabled = statusSel.includes('enabled')
     ? sortEntries(enabledEntries.filter(matchesAllFilters))
     : [];
@@ -3658,6 +3810,10 @@ export default function Installed() {
     onCopyShareCode: copyEntryShareCode,
     onSelectToggle: selectToggleEntry,
     onToggleFavorite: toggleEntryFavorite,
+    lists: modLists,
+    listIds: entryListIds.get(entry.key) ?? EMPTY_LIST_IDS,
+    onToggleList: toggleEntryList,
+    onCreateList: openCreateListFor,
   });
 
   const renderEntryCard = (entry: ModEntry) => <InstalledEntryCard {...cardPropsFor(entry)} />;
@@ -3908,7 +4064,13 @@ export default function Installed() {
                 </span>
               )}
               {filterOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-64 rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans">
+                // max-height is measured, not declared: see the layout effect
+                // above. HeroSelect portals its listbox, so the HERO dropdown
+                // overlays the page instead of clipping at this scroll edge.
+                <div
+                  ref={filterPanelRef}
+                  className="absolute right-0 top-full z-40 mt-2 w-64 overflow-y-auto overscroll-contain rounded-lg border border-border bg-bg-secondary p-3 text-sm font-sans shadow-xl shadow-black/40 [&_button]:font-sans"
+                >
                   <div className="mb-1.5 flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
                     <ArrowDownUp className="h-3.5 w-3.5" /> {t('installed.filters.sort')}
                   </div>
@@ -4036,49 +4198,42 @@ export default function Installed() {
                   )}
 
                   {tagOptions.length > 1 && (
-                    <div className="mt-3 border-t border-border pt-3">
-                      <div className="mb-1.5 flex items-center justify-between">
-                        <span className="text-[11px] font-semibold uppercase tracking-wider text-text-secondary">
-                          {t('installed.filters.tags')}
-                        </span>
-                        {tagFilter.length > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => setTagFilter([])}
-                            className="text-[11px] text-accent hover:underline cursor-pointer"
-                          >
-                            {t('common.actions.clear')}
-                          </button>
-                        )}
-                      </div>
-                      <div className="max-h-48 space-y-0.5 overflow-y-auto pr-1">
-                        {tagOptions.map((opt) => {
-                          const checked = tagFilter.includes(opt.key);
-                          return (
-                            <button
-                              key={opt.key}
-                              type="button"
-                              onClick={() =>
-                                setTagFilter((prev) =>
-                                  checked ? prev.filter((k) => k !== opt.key) : [...prev, opt.key]
-                                )
-                              }
-                              className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-text-secondary transition-colors hover:bg-white/5 hover:text-text-primary cursor-pointer"
-                            >
-                              <span
-                                className={`flex h-4 w-4 flex-shrink-0 items-center justify-center rounded border ${
-                                  checked ? 'border-accent bg-accent text-accent-foreground' : 'border-border'
-                                }`}
-                              >
-                                {checked && <Check className="h-3 w-3" />}
-                              </span>
-                              <span className="flex-1 truncate">{opt.label}</span>
-                              <span className="text-[11px] opacity-60">{opt.count}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
+                    <FilterCheckList
+                      label={t('installed.filters.tags')}
+                      options={tagOptions}
+                      selected={tagFilter}
+                      onToggle={(key) =>
+                        setTagFilter((prev) =>
+                          prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key]
+                        )
+                      }
+                      onClear={() => setTagFilter([])}
+                    />
+                  )}
+
+                  {/* Rendered from modLists, not from the entry tag buckets, so
+                      a list you just created stays visible while it is empty. */}
+                  {modLists.length > 0 && (
+                    <FilterCheckList
+                      label={t('installed.filters.lists')}
+                      options={listFilterOptions}
+                      selected={listFilter}
+                      onToggle={(id) =>
+                        setListFilter((prev) =>
+                          prev.includes(id) ? prev.filter((selected) => selected !== id) : [...prev, id]
+                        )
+                      }
+                      onClear={() => setListFilter([])}
+                      action={
+                        <button
+                          type="button"
+                          onClick={() => setManagingLists(true)}
+                          className="text-[11px] text-text-secondary hover:text-text-primary hover:underline cursor-pointer"
+                        >
+                          {t('installed.lists.manage')}
+                        </button>
+                      }
+                    />
                   )}
 
                   {activeAdjustmentCount > 0 && (
@@ -4090,6 +4245,7 @@ export default function Installed() {
                         setStatusSel(['enabled', 'disabled']);
                         setHeroFilter('all');
                         setTagFilter([]);
+                        setListFilter([]);
                       }}
                       className="mt-3 w-full rounded-md border border-border px-2 py-1.5 text-[11px] uppercase tracking-wider text-text-secondary transition-colors hover:border-white/20 hover:text-text-primary cursor-pointer"
                     >
@@ -4444,6 +4600,25 @@ export default function Installed() {
             await editLocalInstalledMod(localEditMod, args);
             setLocalEditMod(null);
           }}
+        />
+      )}
+
+      {/* Conditionally rendered so each opening is a fresh mount: draft names
+          and armed delete confirmations reset without a sync effect. */}
+      {creatingListFor && (
+        <CreateModListModal
+          modName={entryName(creatingListFor)}
+          onClose={() => setCreatingListFor(null)}
+          onCreate={createListForEntry}
+        />
+      )}
+      {managingLists && (
+        <ManageModListsModal
+          lists={modLists}
+          counts={listCounts}
+          onClose={() => setManagingLists(false)}
+          onRename={renameModList}
+          onDelete={deleteModList}
         />
       )}
 
@@ -6834,6 +7009,12 @@ interface ModCardProps {
    *  marker: it takes effect once the entry is disabled. */
   favorite?: boolean;
   onToggleFavorite?: () => void;
+  /** User lists, for the right-click "Add to list" submenu. Organization only:
+   *  membership never enables, disables, or reorders anything. */
+  lists?: readonly ModList[];
+  listIds?: readonly string[];
+  onToggleList?: (listId: string) => void;
+  onCreateList?: () => void;
   entryKey?: string;
   /** Present when this card represents grouped files from the same
    *  GameBanana mod. Swaps the filename meta for an enabled/total count and
@@ -6860,6 +7041,9 @@ interface ModMediaPreviewProps {
   isGroupCard: boolean;
   onRevealInFolder?: () => void;
   onViewImprint?: () => void;
+  /** The card's "Add to list" submenu, threaded down because the image menu
+   *  rendered here swallows the right-clicks that would reach the card. */
+  listMenu?: ReactNode;
 }
 
 function SoundPlaceholder() {
@@ -6901,6 +7085,7 @@ function ModMediaPreview({
   isGroupCard,
   onRevealInFolder,
   onViewImprint,
+  listMenu,
 }: ModMediaPreviewProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -6935,7 +7120,7 @@ function ModMediaPreview({
     />
   );
   const soundMedia = mod.thumbnailUrl ? image : soundHeroRenderUrl ? (
-    <ImageContextMenu src={soundHeroRenderUrl} alt={soundHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
+    <ImageContextMenu src={soundHeroRenderUrl} alt={soundHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint} extraItems={listMenu}>
       <img
         src={soundHeroRenderUrl}
         alt={soundHeroName ?? mod.name}
@@ -7041,6 +7226,9 @@ interface ModListRowContentProps {
   actions: ReactNode;
   onRevealInFolder?: () => void;
   onViewImprint?: () => void;
+  /** The card's "Add to list" submenu, threaded down for the same reason as in
+   *  ModMediaPreview: the thumbnail's image menu swallows the card's clicks. */
+  listMenu?: ReactNode;
 }
 
 function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
@@ -7288,6 +7476,7 @@ function ModListRowContent({
   actions,
   onRevealInFolder,
   onViewImprint,
+  listMenu,
 }: ModListRowContentProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -7334,7 +7523,7 @@ function ModListRowContent({
         onDragStart={stopMediaDrag}
       >
         {listHeroRenderUrl ? (
-          <ImageContextMenu src={listHeroRenderUrl} alt={listHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
+          <ImageContextMenu src={listHeroRenderUrl} alt={listHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint} extraItems={listMenu}>
             <img
               src={listHeroRenderUrl}
               alt={listHeroName ?? mod.name}
@@ -7460,6 +7649,10 @@ function ModCard({
   onSelectToggle,
   favorite = false,
   onToggleFavorite,
+  lists,
+  listIds = EMPTY_LIST_IDS,
+  onToggleList,
+  onCreateList,
   entryKey,
   group,
 }: ModCardProps) {
@@ -7477,6 +7670,17 @@ function ModCard({
   // "View imprint" mirrors reveal-in-folder: offered on the card's right-click
   // menu and the image menus (which swallow right-clicks), hidden in select mode.
   const imprintAction = selectMode ? undefined : onViewImprint;
+  // "Add to list" follows the same rules: shared across the card menu and both
+  // image menus, and stood down in select mode where clicks belong to selection.
+  const listSubmenu =
+    !selectMode && lists && onToggleList && onCreateList ? (
+      <ModListSubmenu
+        lists={lists}
+        memberIds={listIds}
+        onToggle={onToggleList}
+        onCreateNew={onCreateList}
+      />
+    ) : null;
   const variantStatusLabel = group ? `${group.enabledCount}/${group.variantCount}` : null;
   const enabledTitle = group?.enabledLabels.join(', ') ?? '';
   const variantStatusTitle = group
@@ -8080,6 +8284,7 @@ function ModCard({
             actions={actions}
             onRevealInFolder={revealAction}
             onViewImprint={imprintAction}
+            listMenu={listSubmenu}
           />
         ) : (
         <>
@@ -8188,6 +8393,7 @@ function ModCard({
             isGroupCard={isGroupCard}
             onRevealInFolder={revealAction}
             onViewImprint={imprintAction}
+            listMenu={listSubmenu}
           />
         );
         })()}
@@ -8261,6 +8467,12 @@ function ModCard({
     </div>
       </MenuTrigger>
       <MenuContent>
+        {listSubmenu && (
+          <>
+            {listSubmenu}
+            <MenuSeparator />
+          </>
+        )}
         <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
           {t('installed.card.revealInFolder')}
         </MenuItem>

@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { ChevronDown } from 'lucide-react';
 import { getHeroChipIconPath } from '../../lib/lockerUtils';
 
@@ -18,6 +19,12 @@ interface HeroSelectProps {
   className?: string;
   size?: 'sm' | 'md';
 }
+
+const LISTBOX_GAP = 4;
+const VIEWPORT_PADDING = 8;
+const MAX_LISTBOX_HEIGHT = 288;
+/** Below this much room underneath the trigger, flipping up beats scrolling. */
+const MIN_DOWNWARD_SPACE = 160;
 
 function HeroIcon({ heroName }: { heroName?: string }) {
   if (!heroName) return null;
@@ -45,6 +52,7 @@ export function HeroSelect({
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement | null>(null);
   const buttonRef = useRef<HTMLButtonElement | null>(null);
+  const listRef = useRef<HTMLDivElement | null>(null);
   const optionRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const typeaheadRef = useRef('');
   const typeaheadTimerRef = useRef<number | null>(null);
@@ -61,13 +69,67 @@ export function HeroSelect({
   useEffect(() => {
     if (!open) return;
     const onPointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
+      const target = event.target as Node;
+      // The listbox is portaled to <body>, so it is not inside rootRef any
+      // more: without checking it too, clicking an option would read as an
+      // outside click and close the menu before the option could fire.
+      if (!rootRef.current?.contains(target) && !listRef.current?.contains(target)) {
         setOpen(false);
       }
     };
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
   }, [open]);
+
+  /**
+   * Measure the trigger and write the listbox's fixed position straight to the
+   * node. Imperative on purpose: holding the rect in state would re-render the
+   * whole select on every scroll tick, and the position is display-only.
+   */
+  const positionListbox = useCallback(() => {
+    const button = buttonRef.current;
+    const listbox = listRef.current;
+    if (!button || !listbox) return;
+
+    const rect = button.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - rect.bottom - LISTBOX_GAP - VIEWPORT_PADDING;
+    const spaceAbove = rect.top - LISTBOX_GAP - VIEWPORT_PADDING;
+    const flipUp = spaceBelow < MIN_DOWNWARD_SPACE && spaceAbove > spaceBelow;
+
+    listbox.style.left = `${rect.left}px`;
+    listbox.style.width = `${rect.width}px`;
+    if (flipUp) {
+      listbox.style.top = 'auto';
+      listbox.style.bottom = `${window.innerHeight - rect.top + LISTBOX_GAP}px`;
+    } else {
+      listbox.style.bottom = 'auto';
+      listbox.style.top = `${rect.bottom + LISTBOX_GAP}px`;
+    }
+    const available = Math.max(0, flipUp ? spaceAbove : spaceBelow);
+    listbox.style.maxHeight = `${Math.min(available, MAX_LISTBOX_HEIGHT)}px`;
+  }, []);
+
+  /**
+   * The listbox renders in a portal rather than as an absolutely-positioned
+   * child, so no ancestor's `overflow` can clip it (the Installed sort/filter
+   * popover scrolls, and an in-flow listbox was cut off at its edge). The cost
+   * of leaving the trigger's containing block is that position has to be
+   * measured and kept in sync with anything that can move the trigger.
+   *
+   * Layout effect, not a plain effect: this runs after the portal is in the DOM
+   * but before paint, so the listbox is never visible at an unpositioned spot.
+   */
+  useLayoutEffect(() => {
+    if (!open) return;
+    positionListbox();
+    // Capture phase so scrolling any ancestor (not just the window) is caught.
+    window.addEventListener('scroll', positionListbox, true);
+    window.addEventListener('resize', positionListbox);
+    return () => {
+      window.removeEventListener('scroll', positionListbox, true);
+      window.removeEventListener('resize', positionListbox);
+    };
+  }, [open, positionListbox]);
 
   useEffect(() => {
     if (!open) return;
@@ -221,11 +283,17 @@ export function HeroSelect({
         <ChevronDown className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
       </button>
 
-      {open && (
+      {open && createPortal(
         <div
+          ref={listRef}
           role="listbox"
           aria-label={ariaLabel}
-          className="absolute z-50 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-border bg-bg-secondary shadow-xl py-1"
+          // z-80 is the context-menu/popover rung of the ladder in index.css:
+          // portaled to <body>, this has to clear modals and page chrome alike.
+          // Positioned by positionListbox before paint; the inline top/left are
+          // only a starting point so the node has a box to measure against.
+          className="fixed z-[80] overflow-y-auto overscroll-contain rounded-md border border-border bg-bg-secondary shadow-xl py-1"
+          style={{ top: 0, left: 0 }}
         >
           {options.map((option, index) => {
             const active = option.value === value;
@@ -257,7 +325,8 @@ export function HeroSelect({
               </button>
             );
           })}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
