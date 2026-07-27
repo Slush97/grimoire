@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import { createPortal } from 'react-dom';
+import { useBackdropDismiss } from './common/useBackdropDismiss';
 import {
   Volume2,
   Loader2,
@@ -246,6 +247,17 @@ function ModDetailsModal({
   const [imageRatios, setImageRatios] = useState<Record<number, number>>({});
   const [deleteCandidate, setDeleteCandidate] = useState<{ modId: string; fileName: string } | null>(null);
   const [deleteInProgress, setDeleteInProgress] = useState(false);
+  // Backdrop dismissal for the two nested overlays. The hook ignores drags
+  // that only end on the backdrop, so releasing a text selection (or the
+  // lightbox drag) outside the panel no longer closes them.
+  const lightboxBackdropRef = useBackdropDismiss<HTMLDivElement>(
+    () => setLightboxOpen(false),
+    lightboxOpen
+  );
+  const deleteBackdropRef = useBackdropDismiss<HTMLDivElement>(
+    () => setDeleteCandidate(null),
+    !!deleteCandidate && !deleteInProgress
+  );
 
   // Default the archived section open when the file you currently have installed
   // lives there. That's the common update case: an author archives the old
@@ -1064,14 +1076,11 @@ function ModDetailsModal({
 
         {deleteCandidate && (
           <div
+            ref={deleteBackdropRef}
             className="fixed inset-0 z-[60] flex items-center justify-center bg-black/65 p-4"
             role="alertdialog"
             aria-modal="true"
             aria-labelledby="delete-file-title"
-            onClick={(e) => {
-              e.stopPropagation();
-              if (!deleteInProgress) setDeleteCandidate(null);
-            }}
           >
             <div
               className="w-full max-w-md rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl"
@@ -1717,11 +1726,8 @@ function ModDetailsModal({
           the global keydown listener so users can flip pictures while zoomed. */}
       {lightboxOpen && currentImageFullUrl && (
         <div
+          ref={lightboxBackdropRef}
           className="fixed inset-0 z-[60] bg-black/95 flex items-center justify-center p-4 animate-fade-in"
-          onClick={(e) => {
-            e.stopPropagation();
-            setLightboxOpen(false);
-          }}
           role="dialog"
           aria-modal="true"
           aria-label={`${mod.name} - full size image`}

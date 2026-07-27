@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { useBackdropDismiss } from './useBackdropDismiss';
 
 // Standard modal shell: portal to body, dimmed backdrop, Escape and
 // backdrop-click dismissal, focus hand-off into the panel and restore on
@@ -50,6 +51,7 @@ export function Modal({
 }: ModalProps) {
     const panelRef = useRef<HTMLDivElement>(null);
     const restoreFocusRef = useRef<HTMLElement | null>(null);
+    const backdropRef = useBackdropDismiss<HTMLDivElement>(onClose, open && dismissable);
     const [mounted, setMounted] = useState(open);
     // Render-time adjustment so opening re-mounts on the same commit.
     if (open && !mounted) setMounted(true);
@@ -129,15 +131,13 @@ export function Modal({
 
     return createPortal(
         <div
+            ref={backdropRef}
             className={`fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 ${
                 closing ? 'animate-fade-out pointer-events-none' : 'animate-fade-in'
             } ${backdropClassName}`}
             role="dialog"
             aria-modal="true"
             aria-labelledby={labelledBy}
-            onClick={(e) => {
-                if (dismissable && e.target === e.currentTarget) onClose();
-            }}
         >
             <div
                 ref={panelRef}
