@@ -44,7 +44,8 @@ import type {
     GetCategoriesArgs,
     OpenDialogOptions,
     SaveDialogOptions,
-    ImportCustomModArgs,
+    ImportCustomModsBatchArgs,
+    ImportCustomModsProgress,
     ImportSoulContainerGlbArgs,
     PreviewSoulContainerGlbArgs,
     ImportSpiritUrnGlbArgs,
@@ -245,8 +246,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('apply-mod-toggle-batch', enableIds, disableIds),
     swapModPriority: (modIdA: string, modIdB: string) =>
         ipcRenderer.invoke('swap-mod-priority', modIdA, modIdB),
-    importCustomMod: (args: ImportCustomModArgs) =>
-        ipcRenderer.invoke('import-custom-mod', args),
+    importCustomMods: (args: ImportCustomModsBatchArgs) =>
+        ipcRenderer.invoke('import-custom-mods', args),
+    onImportCustomModsProgress: (callback: (progress: ImportCustomModsProgress) => void) => {
+        const handler = (_event: Electron.IpcRendererEvent, progress: ImportCustomModsProgress) =>
+            callback(progress);
+        ipcRenderer.on('import-custom-mods-progress', handler);
+        return () => ipcRenderer.removeListener('import-custom-mods-progress', handler);
+    },
     importSoulContainerGlb: (args: ImportSoulContainerGlbArgs) =>
         ipcRenderer.invoke('import-soul-container-glb', args),
     exportSoulContainerGlb: (args: ImportSoulContainerGlbArgs) =>
@@ -379,6 +386,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     // Dialogs
     showOpenDialog: (options: OpenDialogOptions) => ipcRenderer.invoke('show-open-dialog', options),
+    showOpenDialogMulti: (options: OpenDialogOptions) =>
+        ipcRenderer.invoke('show-open-dialog-multi', options),
     showSaveDialog: (options: SaveDialogOptions) => ipcRenderer.invoke('show-save-dialog', options),
     revealPath: (targetPath: string) => ipcRenderer.invoke('reveal-path', targetPath),
 

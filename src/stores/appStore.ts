@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType } from '../types/mod';
+import type { ImportCustomModArgs, ImportCustomModResult } from '../types/electron';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
 import i18n, { applyLanguagePreference } from '../i18n';
@@ -243,6 +244,13 @@ interface AppState {
   // tab can restore the page without persisting UI session state to disk.
   installedScrollTop: number;
 
+  // Whether the batch local-import dialog is open. Lives here, and the dialog
+  // is mounted by Layout, because Installed early-returns an empty state when
+  // it has no mods: hosting the dialog there would unmount it (losing the rows
+  // a partly-failed batch still needs to retry) the instant a first-ever import
+  // made the list non-empty.
+  batchImportOpen: boolean;
+
   // Display name of the hero currently open in the Locker (e.g. "Abrams"), or
   // null. Published by the Locker page and read by DiscordPresence so Rich
   // Presence can show the viewed hero. Renderer-only, never persisted.
@@ -319,7 +327,8 @@ interface AppState {
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
-  importCustomMod: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
+  /** Batch local import. Resolves with one result per source, in request order. */
+  importCustomMods: (items: ImportCustomModArgs[]) => Promise<ImportCustomModResult[]>;
 
   // Download counts cache actions
   getDownloadCount: (modId: number) => number | undefined;
@@ -337,6 +346,7 @@ interface AppState {
   // Browse session cache (loaded mods + scroll position)
   setBrowseSession: (cache: BrowseSessionCache | null) => void;
   setInstalledScrollTop: (scrollTop: number) => void;
+  setBatchImportOpen: (open: boolean) => void;
   setLockerHeroName: (name: string | null) => void;
   loadLockerModImages: () => Promise<void>;
   /** `source` is a `data:` URL (custom upload) or an `http(s)` gallery URL. */
@@ -391,6 +401,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   browseUi: { ...DEFAULT_BROWSE_UI },
   browseSession: null,
   installedScrollTop: 0,
+  batchImportOpen: false,
   lockerHeroName: null,
   lockerModImages: {},
   lockerHideHeroName: {},
@@ -864,18 +875,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  importCustomMod: async (args) => {
+  importCustomMods: async (items) => {
     try {
-      const updated = await api.importCustomMod(args);
-      // Bump the generation so any in-flight silent reload (e.g. the focus
-      // refresh from the just-closed file picker) can't overwrite this with a
-      // scan taken before the new VPK landed.
+      const { mods, results } = await api.importCustomMods(items);
+      // Same generation bump as the single import: whatever landed must not be
+      // overwritten by a scan taken before the copies finished.
       modsGeneration++;
-      set({ mods: updated });
+      set({ mods });
+      // Per-source failures come back in `results`, not as a throw, so the cap
+      // check runs over them. The dialog shows each failed row inline; the
+      // notice is what explains the cap itself (which no row-level message can).
+      if (results.some((r) => !r.ok && isEnableCapError(r.error))) {
+        set({ modsNotice: ENABLE_CAP_NOTICE });
+      }
+      return results;
     } catch (err) {
-      // At the 99-active cap, importing (which lands enabled) can't claim a
-      // slot. Toast it rather than blanking the page; still rethrow so the
-      // import dialog knows it failed.
+      // A throw here means the whole batch never ran (no game path, empty list).
       if (isEnableCapError(err)) { set({ modsNotice: ENABLE_CAP_NOTICE }); }
       else { set({ modsError: String(err) }); }
       throw err;
@@ -948,6 +963,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   setInstalledScrollTop: (scrollTop: number) => {
     set({ installedScrollTop: Math.max(0, scrollTop) });
+  },
+
+  setBatchImportOpen: (open: boolean) => {
+    set({ batchImportOpen: open });
   },
 
   setLockerHeroName: (name: string | null) => {

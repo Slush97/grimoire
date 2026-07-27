@@ -35,7 +35,6 @@ import {
   Search,
   Download,
   Info,
-  UploadCloud,
   List,
   LayoutGrid,
   Grid3x3,
@@ -74,8 +73,8 @@ import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { isImprintPending } from '../lib/imprintPending';
-import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, peekImprint, launchModded } from '../lib/api';
-import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult } from '../lib/api';
+import { getConflicts, openModsFolder, readImageDataUrl, showOpenDialog, getModDetails, getModFileList, downloadMod, createSnapshot, detectUnknownModFilters, detectUnknownModCacheBulk, cancelUnknownModDetection, onUnknownModDetectionProgress, applyUnknownModMatch, applyUnknownCustomMod, associateUnknownMod, listUnknownModFiles, browseMods, mergeMods, unmergeMod, extractMergeSource, addMergeSources, reorderMods as apiReorderMods, setModIgnoreUpdates, getLockerOverview, revealModInFolder, dmmMigrateScan, dmmMigrateExecute, imprintAllInstalled, onImprintAllInstalledProgress, imprintPreflight, readImprintDetails, launchModded } from '../lib/api';
+import type { UnmergeModResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails } from '../lib/api';
 import type { ModConflict } from '../lib/api';
 import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterGuess, MergedModSource, AssociateUnknownModArgs, ImprintAnomalousMod, ImprintSkippedMod, ImprintFailedMod } from '../types/mod';
 import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef } from '../types/gamebanana';
@@ -88,6 +87,7 @@ import VariantPickerModal from '../components/VariantPickerModal';
 import MergeModsModal from '../components/MergeModsModal';
 import MergedContentsModal from '../components/MergedContentsModal';
 import PriorityEditor from '../components/PriorityEditor';
+import { IMAGE_EXTS, deriveModNameFromPath } from '../lib/customModImport';
 import { Modal } from '../components/common/Modal';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
@@ -753,7 +753,6 @@ export default function Installed() {
     setModLockerHero,
     setModGlobalType,
     setVariantLabel,
-    importCustomMod,
     soundVolume,
     setInstalledScrollTop,
     setBrowseUi,
@@ -1127,7 +1126,11 @@ export default function Installed() {
   // derived from live `mods` each render so per-file deletes inside the
   // picker reflect immediately without juggling a separate snapshot.
   const [pickerGroupId, setPickerGroupId] = useState<number | null>(null);
-  const [importOpen, setImportOpen] = useState(false);
+  // The batch local-import dialog is mounted by Layout, not here: this page
+  // early-returns an empty state when it has no mods, so hosting the dialog
+  // would unmount it mid-batch on a first-ever import. Only the open flag lives
+  // on the page's buttons.
+  const setImportOpen = useAppStore((s) => s.setBatchImportOpen);
   const [unknownFilterGuess, setUnknownFilterGuess] = useState<{
     mod: Mod;
     loading: boolean;
@@ -3697,14 +3700,6 @@ export default function Installed() {
             </div>
           }
         />
-        {importOpen && (
-          <ImportCustomModModal
-            onClose={() => setImportOpen(false)}
-            onImport={async (args) => {
-              await importCustomMod(args);
-            }}
-          />
-        )}
       </>
     );
   }
@@ -4388,16 +4383,6 @@ export default function Installed() {
         onCancel={() => setModToDelete(null)}
       />
 
-      {importOpen && (
-        <ImportCustomModModal
-          onClose={() => setImportOpen(false)}
-          onImport={async (args) => {
-            await importCustomMod(args);
-          }}
-        />
-      )}
-
-
       {localEditMod && (
         <EditLocalModModal
           mod={localEditMod}
@@ -4600,15 +4585,11 @@ export default function Installed() {
       />
 
       {customUnknownMod && (
-        <ImportCustomModModal
-          title={t('installed.import.makeCustomTitle')}
-          submitLabel={t('installed.import.saveCustom')}
-          initialVpkPath={customUnknownMod.path}
+        <MakeCustomModModal
+          vpkPath={customUnknownMod.path}
           initialName={deriveModNameFromPath(customUnknownMod.fileName)}
-          lockVpk
-          vpkHelpText={t('installed.import.alreadyInstalledHint')}
           onClose={() => setCustomUnknownMod(null)}
-          onImport={async ({ name, thumbnailDataUrl, nsfw }) => {
+          onSave={async ({ name, thumbnailDataUrl, nsfw }) => {
             await applyUnknownCustomMod(customUnknownMod.id, { name, thumbnailDataUrl, nsfw });
             await loadMods();
             setUnknownFilterCache((prev) => clearUnknownCacheForMod(prev, customUnknownMod));
@@ -8453,89 +8434,29 @@ function EditLocalModModal({ mod, onClose, onSave }: EditLocalModModalProps) {
   );
 }
 
-interface ImportCustomModModalProps {
+interface MakeCustomModModalProps {
   onClose: () => void;
-  onImport: (args: { vpkPath: string; name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
-  title?: string;
-  submitLabel?: string;
-  initialVpkPath?: string;
-  initialName?: string;
-  lockVpk?: boolean;
-  vpkHelpText?: string;
+  onSave: (args: { name: string; thumbnailDataUrl?: string; nsfw?: boolean }) => Promise<void>;
+  /** The already-installed VPK the metadata attaches to. Display only. */
+  vpkPath: string;
+  initialName: string;
 }
 
-const IMAGE_EXTS = ['png', 'jpg', 'jpeg', 'gif', 'webp'];
-// Local mod import accepts a bare VPK or an archive we extract on the main side.
-const VPK_IMPORT_EXTS = ['vpk', 'zip', '7z', 'rar'];
-const VPK_IMPORT_RE = /\.(vpk|zip|7z|rar)$/i;
-
-function deriveModNameFromPath(p: string): string {
-  const base = p.split(/[\\/]/).pop() ?? '';
-  return base
-    .replace(/\.(zip|7z|rar)$/i, '')
-    .replace(/_dir\.vpk$/i, '')
-    .replace(/\.vpk$/i, '')
-    .replace(/^pak\d{2}_/, '')
-    .replace(/[_-]+/g, ' ')
-    .trim();
-}
-
-function ImportCustomModModal({
-  onClose,
-  onImport,
-  title: titleProp,
-  submitLabel: submitLabelProp,
-  initialVpkPath = '',
-  initialName = '',
-  lockVpk = false,
-  vpkHelpText: vpkHelpTextProp,
-}: ImportCustomModModalProps) {
+/**
+ * Attach custom metadata (name, thumbnail, NSFW) to a VPK that is ALREADY on
+ * disk: the "make this unknown mod custom" flow. The file is fixed, so there is
+ * no picker and nothing is copied. Importing fresh files from disk goes through
+ * ImportCustomModsModal instead.
+ */
+function MakeCustomModModal({ onClose, onSave, vpkPath, initialName }: MakeCustomModModalProps) {
   const { t } = useTranslation();
-  const title = titleProp ?? t('installed.import.title');
-  const submitLabel = submitLabelProp ?? t('profiles.actions.import');
-  const vpkHelpText = vpkHelpTextProp ?? t('installed.import.vpkHelp');
-  const [vpkPath, setVpkPath] = useState<string>(initialVpkPath);
-  const [name, setName] = useState<string>(initialName || (initialVpkPath ? deriveModNameFromPath(initialVpkPath) : ''));
+  const [name, setName] = useState<string>(initialName);
   const [imagePath, setImagePath] = useState<string>('');
   const [thumbnailDataUrl, setThumbnailDataUrl] = useState<string>('');
   const [nsfw, setNsfw] = useState<boolean>(false);
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
-  const [vpkDragActive, setVpkDragActive] = useState(false);
   const [imgDragActive, setImgDragActive] = useState(false);
-  // Whether the CURRENT name field value came from the user actually typing,
-  // vs. an auto-fill (filename-derived, or an imprint recognition prefill).
-  // Recognition only prefills over an auto-filled name, never over one the
-  // user actually edited.
-  const nameTouchedRef = useRef(!!initialName);
-  // Imprint recognition for a single picked .vpk (archives skip the peek:
-  // extraction happens later, at which point every extracted VPK still goes
-  // through adoption at import time, so nothing is lost by not peeking here).
-  const [recognized, setRecognized] = useState<PeekImprintResult | null>(null);
-  const peekRequestRef = useRef(0);
-
-  const acceptVpkPath = (picked: string) => {
-    setVpkPath(picked);
-    setError(null);
-    setRecognized(null);
-    if (!nameTouchedRef.current) setName(deriveModNameFromPath(picked));
-
-    if (!picked.toLowerCase().endsWith('.vpk')) return;
-    const requestId = ++peekRequestRef.current;
-    void peekImprint(picked)
-      .then((result) => {
-        // Stale response guard: the user may have picked a different file
-        // (or closed the modal) while this was in flight.
-        if (peekRequestRef.current !== requestId) return;
-        setRecognized(result);
-        if (result?.title && !nameTouchedRef.current) {
-          setName(result.title);
-        }
-      })
-      .catch(() => {
-        // Best-effort recognition only; a failed peek just shows no note.
-      });
-  };
 
   const acceptImagePath = async (picked: string) => {
     setImagePath(picked);
@@ -8549,42 +8470,12 @@ function ImportCustomModModal({
     }
   };
 
-  const pickVpk = async () => {
-    if (lockVpk) return;
-    const picked = await showOpenDialog({
-      title: t('installed.import.selectVpk'),
-      filters: [{ name: 'VPK or archive', extensions: VPK_IMPORT_EXTS }],
-    });
-    if (picked) acceptVpkPath(picked);
-  };
-
   const pickImage = async () => {
     const picked = await showOpenDialog({
       title: t('installed.imageField.selectImage'),
       filters: [{ name: 'Images', extensions: IMAGE_EXTS }],
     });
     if (picked) await acceptImagePath(picked);
-  };
-
-  const handleVpkDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setVpkDragActive(false);
-    if (lockVpk) return;
-    const file = e.dataTransfer.files?.[0];
-    if (!file) return;
-    if (!VPK_IMPORT_RE.test(file.name)) {
-      setError(t('installed.import.expectedVpk', { name: file.name }));
-      return;
-    }
-    const path = window.electronAPI.getDroppedFilePath(file);
-    if (!path) {
-      // No real on-disk path: almost always a file dragged out of Windows'
-      // built-in zip viewer (a virtual shell file). Point them at the zip itself.
-      setError(t('installed.import.dropUnresolved'));
-      return;
-    }
-    acceptVpkPath(path);
   };
 
   const handleImageDrop = async (e: React.DragEvent<HTMLDivElement>) => {
@@ -8606,22 +8497,14 @@ function ImportCustomModModal({
     await acceptImagePath(path);
   };
 
-  const onZoneKeyDown = (e: React.KeyboardEvent, action: () => void) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      action();
-    }
-  };
-
-  const canSubmit = !!vpkPath && !!name.trim() && !submitting;
+  const canSubmit = !!name.trim() && !submitting;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
     setSubmitting(true);
     setError(null);
     try {
-      await onImport({
-        vpkPath,
+      await onSave({
         name: name.trim(),
         thumbnailDataUrl: thumbnailDataUrl || undefined,
         nsfw,
@@ -8636,102 +8519,43 @@ function ImportCustomModModal({
   return (
     <Modal
       onClose={onClose}
-      labelledBy="import-custom-mod-title"
+      labelledBy="make-custom-mod-title"
       size="lg"
       dismissable={!submitting}
       panelClassName="flex max-h-[80vh] flex-col overflow-hidden"
     >
-        <div className="flex items-start justify-between gap-3 border-b border-border px-5 py-4">
-          <div className="flex items-center gap-2.5">
-            <FilePlus className="h-5 w-5 text-accent" />
-            <h2 id="import-custom-mod-title" className="text-base font-semibold text-text-primary">
-              {title}
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => !submitting && onClose()}
-            disabled={submitting}
-            aria-label={t('common.actions.close')}
-            className="rounded-md p-1 text-text-secondary hover:bg-bg-tertiary hover:text-text-primary disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        <ModalHeader
+          title={t('installed.import.makeCustomTitle')}
+          titleId="make-custom-mod-title"
+          onClose={onClose}
+          closeLabel={t('common.actions.close')}
+          closeDisabled={submitting}
+        />
 
         <div className="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-3.5">
           <p className="text-xs leading-5 text-text-secondary">
-            {vpkHelpText}
+            {t('installed.import.alreadyInstalledHint')}
           </p>
 
           <div>
             <label className="block text-sm font-medium text-text-primary mb-1.5">
-              {t('installed.import.vpkFile')} <span className="text-state-danger">*</span>
+              {t('installed.import.vpkFile')}
             </label>
-            <div
-              role="button"
-              tabIndex={0}
-              aria-label={vpkPath ? (lockVpk ? t('installed.import.vpkSelectedLocked', { path: vpkPath }) : t('installed.import.vpkSelected', { path: vpkPath })) : t('installed.import.vpkAriaBrowse')}
-              onClick={pickVpk}
-              onKeyDown={(e) => onZoneKeyDown(e, pickVpk)}
-              onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); if (!lockVpk) setVpkDragActive(true); }}
-              onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = lockVpk ? 'none' : 'copy'; if (!lockVpk) setVpkDragActive(true); }}
-              onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setVpkDragActive(false); }}
-              onDrop={handleVpkDrop}
-              className={`relative flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed px-4 py-4 text-center transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary ${
-                vpkDragActive
-                  ? 'border-accent bg-accent/10'
-                  : vpkPath
-                    ? `border-accent/40 bg-bg-tertiary/60 ${lockVpk ? 'cursor-default' : 'cursor-pointer hover:bg-bg-tertiary'}`
-                    : 'border-border bg-bg-tertiary/40 hover:bg-bg-tertiary hover:border-white/20'
-              }`}
-            >
-              {vpkPath ? (
-                <>
-                  <FilePlus className="w-5 h-5 text-accent" aria-hidden />
-                  <span className="text-sm text-text-primary font-medium truncate max-w-full">
-                    {vpkPath.split(/[\\/]/).pop()}
-                  </span>
-                  <span className="text-xs text-text-secondary font-mono truncate max-w-full">{vpkPath}</span>
-                  {!lockVpk && <span className="text-xs text-accent">{t('installed.imageField.clickToReplaceAnother')}</span>}
-                </>
-              ) : (
-                <>
-                  <UploadCloud className="w-6 h-6 text-text-secondary" aria-hidden />
-                  <span className="text-sm text-text-primary font-medium">
-                    <Trans
-                      i18nKey="installed.import.dropVpkHere"
-                      components={{ code: <code className="font-mono text-accent" /> }}
-                    />
-                  </span>
-                  <span className="text-xs text-text-secondary">{t('installed.import.orClickToBrowse')}</span>
-                </>
-              )}
+            <div className="flex flex-col items-center gap-1 rounded-lg border border-border bg-bg-tertiary/40 px-4 py-3 text-center">
+              <FilePlus className="w-5 h-5 text-accent" aria-hidden />
+              <span className="text-sm text-text-primary font-medium truncate max-w-full">
+                {vpkPath.split(/[\\/]/).pop()}
+              </span>
+              <span className="text-xs text-text-secondary font-mono truncate max-w-full">{vpkPath}</span>
             </div>
           </div>
 
           <FormField label={t('installed.import.modName')} required>
             <Input
               value={name}
-              onChange={(e) => {
-                nameTouchedRef.current = true;
-                setName(e.target.value);
-              }}
+              onChange={(e) => setName(e.target.value)}
               placeholder={t('installed.import.modNamePlaceholder')}
             />
-            {recognized && (
-              <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                <Tag tone="success" icon={Fingerprint}>
-                  {t('installed.import.recognizedFromImprint')}
-                </Tag>
-                {recognized.title && <Tag tone="neutral">{recognized.title}</Tag>}
-                {recognized.gamebananaId && (
-                  <Tag tone="neutral">
-                    {t('installed.import.recognizedGameBananaId', { id: recognized.gamebananaId })}
-                  </Tag>
-                )}
-              </div>
-            )}
           </FormField>
 
           <div>
@@ -8743,7 +8567,12 @@ function ImportCustomModModal({
               tabIndex={0}
               aria-label={imagePath ? t('installed.import.thumbnailSelected', { path: imagePath }) : t('installed.imageField.ariaBrowse')}
               onClick={pickImage}
-              onKeyDown={(e) => onZoneKeyDown(e, pickImage)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  void pickImage();
+                }
+              }}
               onDragEnter={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(true); }}
               onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'copy'; setImgDragActive(true); }}
               onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setImgDragActive(false); }}
@@ -8806,7 +8635,7 @@ function ImportCustomModModal({
             isLoading={submitting}
             className="!px-10 !py-1.5"
           >
-            {submitLabel}
+            {t('installed.import.saveCustom')}
           </Button>
         </div>
     </Modal>
