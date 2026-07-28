@@ -12,6 +12,11 @@ import { app } from 'electron';
 import { promises as fs } from 'fs';
 import os from 'os';
 import { getInstallSource } from './updater';
+// Static, not dynamic: ipc/modDatabase already imports both of these at
+// startup, so a dynamic import saved nothing and only drew a rollup
+// "dynamically imported but also statically imported" warning.
+import { getSyncStatus, isSyncInProgress, needsSync } from './syncService';
+import { getModCount } from './modDatabase';
 
 // Tail size for the diagnostic report. 256 KB is ~3-5k log lines: plenty of
 // context for the typical "I just hit a bug" report without ballooning the
@@ -128,11 +133,41 @@ export async function buildReportText(
     if (sanitizedDesc) {
         parts.push('--- what happened ---', sanitizedDesc);
     }
+    // Sanitized like every other body in the report: the failure path below
+    // surfaces errno messages from initDatabase(), which carry the full
+    // userData path (and therefore the OS username) on EACCES/ENOENT.
+    parts.push('--- catalog ---', sanitize(buildCatalogSection()));
     const logLabel = includeFullLog
         ? '--- full main.log (sanitized) ---'
         : `--- last ${Math.round(REPORT_TAIL_BYTES / 1024)} KB of main.log (sanitized) ---`;
     parts.push(logLabel, sanitizedLog || '<log file empty>');
     return parts.join('\n\n');
+}
+
+/** State of the local catalog mirror.
+ *
+ *  Browse routes its content-rating, date-added, A-Z and full-text filters
+ *  through this mirror and silently falls back to the (much less capable)
+ *  remote API when it is thin or missing. Reports used to carry no trace of
+ *  that at all, which made "my filters do nothing" undiagnosable. */
+function buildCatalogSection(): string {
+    try {
+        const lines = [
+            `Total cached mods: ${getModCount()}`,
+            `Sync in progress:  ${isSyncInProgress()}`,
+            `Needs sync:        ${needsSync()}`,
+        ];
+        for (const [section, state] of Object.entries(getSyncStatus())) {
+            lines.push(
+                state
+                    ? `  ${section}: ${state.count} mods, last sync ${new Date(state.lastSync * 1000).toISOString()}`
+                    : `  ${section}: never synced`
+            );
+        }
+        return lines.join('\n');
+    } catch (err) {
+        return `<could not read catalog state: ${err instanceof Error ? err.message : String(err)}>`;
+    }
 }
 
 async function readFullLog(path: string): Promise<string> {

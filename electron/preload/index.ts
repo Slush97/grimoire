@@ -531,6 +531,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
         return () => ipcRenderer.removeListener('sync-progress', handler);
     },
 
+    // Write a renderer-side trace line into main.log so it reaches diagnostic
+    // reports. Deliberately one-way and unawaited; see ipc/diagnostics.ts.
+    traceDiagnostic: (scope: string, message: string) => ipcRenderer.send('diagnostics:trace', scope, message),
+
     // Crosshair Presets
     getCrosshairPresets: () => ipcRenderer.invoke('crosshair:getPresets'),
     saveCrosshairPreset: (name: string, settings: CrosshairSettings, thumbnail: string) =>

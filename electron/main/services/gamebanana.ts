@@ -668,6 +668,14 @@ export async function fetchSubmissions(
         updated: 'Generic_LatestModified',
     };
 
+    // 'name' (A-Z) has no apiv11 token and is served from the local mirror.
+    // Reaching here with it means Browse routed remote, and the caller is
+    // about to get default ordering back with no indication anything was
+    // dropped. Say so, rather than leaving it to look like a sort bug.
+    if (sort && sort !== 'default' && !sortMap[sort]) {
+        console.warn(`[GameBanana] browse: sort "${sort}" has no apiv11 token; returning default order`);
+    }
+
     // Fields to request from GameBanana API (including NSFW flag)
     const fields = '_idRow,_sName,_sProfileUrl,_tsDateAdded,_tsDateModified,_nLikeCount,_nViewCount,_nDownloadCount,_bHasFiles,_bIsNsfw,_aSubmitter,_aPreviewMedia,_aRootCategory';
 

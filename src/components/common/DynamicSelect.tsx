@@ -4,7 +4,7 @@ import { ChevronDown } from 'lucide-react';
 interface DynamicSelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, 'onChange'> {
     value: string | number;
     onChange: (value: string) => void;
-    options: Array<{ value: string | number; label: string }>;
+    options: Array<{ value: string | number; label: string; disabled?: boolean }>;
     className?: string;
     disabled?: boolean;
 }
@@ -51,7 +51,7 @@ export function DynamicSelect({
                 {...props}
             >
                 {options.map((opt) => (
-                    <option key={opt.value} value={opt.value}>
+                    <option key={opt.value} value={opt.value} disabled={opt.disabled}>
                         {opt.label}
                     </option>
                 ))}
