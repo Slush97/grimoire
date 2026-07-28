@@ -288,6 +288,10 @@ export function HeroSelect({
           ref={listRef}
           role="listbox"
           aria-label={ariaLabel}
+          // The listbox is portaled outside any popover containing HeroSelect.
+          // Keep its mouse gesture inside this logical boundary so an ancestor's
+          // window-level outside-click listener cannot unmount us before click.
+          onMouseDown={(event) => event.stopPropagation()}
           // z-80 is the context-menu/popover rung of the ladder in index.css:
           // portaled to <body>, this has to clear modals and page chrome alike.
           // Positioned by positionListbox before paint; the inline top/left are
