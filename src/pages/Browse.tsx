@@ -91,6 +91,7 @@ import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import { DynamicSelect } from '../components/common/DynamicSelect';
 import { HeroSelect } from '../components/common/HeroSelect';
+import { AnchoredPopover } from '../components/common/AnchoredPopover';
 import { Button, IconButton, Tag } from '../components/common/ui';
 import { Select } from '../components/common/forms';
 import { IconText } from '../components/common/IconText';
@@ -1366,62 +1367,15 @@ export default function Browse() {
     loadSettings();
   }, [loadSettings]);
 
-  // Close the filters popover on outside click or Escape
-  useEffect(() => {
-    if (!filtersOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (filtersRef.current && !filtersRef.current.contains(e.target as Node)) {
-        setFiltersOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setFiltersOpen(false);
-    };
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [filtersOpen]);
+  // Outside-click and Escape for the filters popover live in AnchoredPopover:
+  // the panel is portaled to <body>, so a containment check against filtersRef
+  // alone would read every click inside the panel as an outside click.
+  const closeFilters = useCallback(() => setFiltersOpen(false), []);
 
-  // Close the import menu on outside click or Escape.
-  useEffect(() => {
-    if (!importMenuOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (importMenuRef.current && !importMenuRef.current.contains(e.target as Node)) {
-        setImportMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setImportMenuOpen(false);
-    };
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [importMenuOpen]);
+  const closeImportMenu = useCallback(() => setImportMenuOpen(false), []);
 
-  // Close the view menu on outside click or Escape.
-  useEffect(() => {
-    if (!viewMenuOpen) return;
-    const onMouseDown = (e: MouseEvent) => {
-      if (viewMenuRef.current && !viewMenuRef.current.contains(e.target as Node)) {
-        setViewMenuOpen(false);
-      }
-    };
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setViewMenuOpen(false);
-    };
-    window.addEventListener('mousedown', onMouseDown);
-    window.addEventListener('keydown', onKey);
-    return () => {
-      window.removeEventListener('mousedown', onMouseDown);
-      window.removeEventListener('keydown', onKey);
-    };
-  }, [viewMenuOpen]);
+  // Same as the filters panel: dismissal is AnchoredPopover's job now.
+  const closeViewMenu = useCallback(() => setViewMenuOpen(false), []);
 
   // Availability of the local catalog mirror. Content rating, date-added, A-Z
   // sort and FTS search can ONLY be served from it, so this one flag decides
@@ -3212,10 +3166,18 @@ export default function Browse() {
             </div>
           </div>
         ) : (
-        <form onSubmit={handleSearch}>
+        <form onSubmit={handleSearch} className="@container">
+          {/* @container: the toolbar collapses against its OWN width, not the
+              viewport's, so a collapsed sidebar buys the controls real room.
+              The controls used to wrap one at a time, dropping a lone Filters
+              button onto a second line. Now they are a fixed, never-shrinking
+              set: what gives as the toolbar tightens is label text, then the
+              search field's width, and only below @620px does the search take
+              a full row of its own (a deliberate two-row toolbar, rather than
+              whichever control happened to be last). */}
           <div className="flex flex-wrap items-center gap-2">
             {/* Search Input with integrated submit */}
-            <div className="relative flex-1 min-w-[200px]">
+            <div className="relative min-w-0 flex-1 @max-[620px]:basis-full">
               <input
                 type="text"
                 value={search}
@@ -3253,7 +3215,7 @@ export default function Browse() {
             </div>
 
             {/* Import menu: GameBanana collection or portable profile. */}
-            <div className="relative" ref={importMenuRef}>
+            <div className="relative flex-shrink-0" ref={importMenuRef}>
               <button
                 type="button"
                 onClick={() => setImportMenuOpen((v) => !v)}
@@ -3266,44 +3228,46 @@ export default function Browse() {
                 <ChevronDown className="w-3.5 h-3.5 opacity-70" />
               </button>
 
-              {importMenuOpen && (
-                <div
-                  className="absolute right-0 top-full mt-2 z-20 w-64 bg-bg-secondary border border-border rounded-lg shadow-xl p-1 animate-fade-in"
-                  role="menu"
-                  aria-label={t('profiles.actions.import')}
+              <AnchoredPopover
+                open={importMenuOpen}
+                onClose={closeImportMenu}
+                anchorRef={importMenuRef}
+                width={256}
+                role="menu"
+                ariaLabel={t('profiles.actions.import')}
+                className="p-1"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setImportMenuOpen(false);
+                    setCollectionModalOpen(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
                 >
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setImportMenuOpen(false);
-                      setCollectionModalOpen(true);
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
-                  >
-                    <Library className="w-4 h-4 text-text-secondary shrink-0" />
-                    <div className="flex flex-col min-w-0">
-                      <span>{t('browse.import.gamebananaCollection')}</span>
-                      <span className="text-[11px] text-text-secondary truncate">{t('browse.import.gamebananaCollectionHint')}</span>
-                    </div>
-                  </button>
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => {
-                      setImportMenuOpen(false);
-                      setImportProfileOpen(true);
-                    }}
-                    className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
-                  >
-                    <Upload className="w-4 h-4 text-text-secondary shrink-0" />
-                    <div className="flex flex-col min-w-0">
-                      <span>{t('browse.import.grimoireProfile')}</span>
-                      <span className="text-[11px] text-text-secondary truncate">{t('browse.import.grimoireProfileHint')}</span>
-                    </div>
-                  </button>
-                </div>
-              )}
+                  <Library className="w-4 h-4 text-text-secondary shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <span>{t('browse.import.gamebananaCollection')}</span>
+                    <span className="text-[11px] text-text-secondary truncate">{t('browse.import.gamebananaCollectionHint')}</span>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={() => {
+                    setImportMenuOpen(false);
+                    setImportProfileOpen(true);
+                  }}
+                  className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
+                >
+                  <Upload className="w-4 h-4 text-text-secondary shrink-0" />
+                  <div className="flex flex-col min-w-0">
+                    <span>{t('browse.import.grimoireProfile')}</span>
+                    <span className="text-[11px] text-text-secondary truncate">{t('browse.import.grimoireProfileHint')}</span>
+                  </div>
+                </button>
+              </AnchoredPopover>
             </div>
 
             {/* Refresh Icon Button */}
@@ -3311,7 +3275,7 @@ export default function Browse() {
               type="button"
               onClick={handleRefresh}
               disabled={syncing}
-              className="h-10 w-10 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
+              className="h-10 w-10 flex-shrink-0 flex items-center justify-center bg-bg-secondary hover:bg-bg-tertiary border border-border text-text-secondary hover:text-text-primary rounded-lg transition-colors disabled:opacity-50 cursor-pointer disabled:cursor-not-allowed"
               title={t('browse.refreshFromGameBanana')}
             >
               {syncing ? (
@@ -3321,7 +3285,7 @@ export default function Browse() {
               )}
             </button>
 
-            <div className="relative" ref={viewMenuRef}>
+            <div className="relative flex-shrink-0" ref={viewMenuRef}>
               <button
                 type="button"
                 onClick={() => setViewMenuOpen((v) => !v)}
@@ -3331,136 +3295,136 @@ export default function Browse() {
                 title={t('browse.viewOptions.title')}
               >
                 <LayoutGrid className="h-4 w-4 text-text-secondary" />
-                <span>{t('common.view')}</span>
+                <span className="@max-[760px]:hidden">{t('common.view')}</span>
                 <ChevronDown className="h-3.5 w-3.5 text-text-secondary" />
               </button>
 
-              {viewMenuOpen && (
-                <div
-                  className="absolute right-0 top-full z-50 mt-2 w-72 rounded-lg border border-border bg-bg-secondary p-3 shadow-xl animate-fade-in"
-                  role="dialog"
-                  aria-label={t('browse.viewOptions.title')}
-                >
-                  <div className="space-y-4">
-                    <div>
-                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
-                      <BrowseViewOptionControl<BrowseLayout>
-                        label={t('browse.viewOptions.layout')}
-                        value={layout}
-                        onChange={setLayout}
-                        options={[
-                          { value: 'grid', label: t('browse.viewOptions.grid'), icon: LayoutGrid },
-                          { value: 'list', label: t('browse.viewOptions.list'), icon: List },
-                        ]}
-                      />
-                    </div>
+              <AnchoredPopover
+                open={viewMenuOpen}
+                onClose={closeViewMenu}
+                anchorRef={viewMenuRef}
+                width={288}
+                ariaLabel={t('browse.viewOptions.title')}
+                className="p-3"
+              >
+                <div className="space-y-4">
+                  <div>
+                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.layout')}</div>
+                    <BrowseViewOptionControl<BrowseLayout>
+                      label={t('browse.viewOptions.layout')}
+                      value={layout}
+                      onChange={setLayout}
+                      options={[
+                        { value: 'grid', label: t('browse.viewOptions.grid'), icon: LayoutGrid },
+                        { value: 'list', label: t('browse.viewOptions.list'), icon: List },
+                      ]}
+                    />
+                  </div>
 
-                    <div className={layout === 'list' ? 'opacity-45' : ''}>
-                      <div className="mb-2 flex items-center justify-between gap-3">
-                        <span className="text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</span>
-                        <span className="inline-flex items-center gap-1 text-[11px] text-text-tertiary">
-                          <Grid3x3 className="h-3.5 w-3.5" />
-                          {t('browse.viewOptions.gridOnly')}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
-                        <input
-                          type="range"
-                          min={BROWSE_CARD_SIZE_MULTIPLIER_MIN}
-                          max={BROWSE_CARD_SIZE_MULTIPLIER_MAX}
-                          step={BROWSE_CARD_SIZE_MULTIPLIER_STEP}
-                          value={browseCardSizeMultiplier}
-                          disabled={layout === 'list'}
-                          onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
-                          aria-label={t('browse.viewOptions.cardSize')}
-                          aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
-                          className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
-                        />
-                        <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
-                      </div>
+                  <div className={layout === 'list' ? 'opacity-45' : ''}>
+                    <div className="mb-2 flex items-center justify-between gap-3">
+                      <span className="text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardSize')}</span>
+                      <span className="inline-flex items-center gap-1 text-[11px] text-text-tertiary">
+                        <Grid3x3 className="h-3.5 w-3.5" />
+                        {t('browse.viewOptions.gridOnly')}
+                      </span>
                     </div>
-
-                    <div className={layout === 'list' ? 'opacity-45' : ''}>
-                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
-                      <BrowseViewOptionControl<BrowseCardDesign>
+                    <div className="flex items-center gap-2">
+                      <Grid3x3 className="h-4 w-4 flex-shrink-0 text-text-secondary" aria-hidden="true" />
+                      <input
+                        type="range"
+                        min={BROWSE_CARD_SIZE_MULTIPLIER_MIN}
+                        max={BROWSE_CARD_SIZE_MULTIPLIER_MAX}
+                        step={BROWSE_CARD_SIZE_MULTIPLIER_STEP}
+                        value={browseCardSizeMultiplier}
                         disabled={layout === 'list'}
-                        label={t('browse.viewOptions.cardDesign')}
-                        value={browseCardDesign}
-                        onChange={setBrowseCardDesign}
-                        options={[
-                          { value: 'readable', label: t('browse.cardStyle.default') },
-                          { value: 'classic', label: t('browse.cardStyle.classic') },
-                        ]}
+                        onChange={(e) => setBrowseCardSizeMultiplier(Number(e.currentTarget.value))}
+                        aria-label={t('browse.viewOptions.cardSize')}
+                        aria-valuetext={`${browseCardSizeMultiplier.toFixed(2)}x card size`}
+                        className="h-1.5 min-w-0 flex-1 cursor-pointer accent-accent disabled:cursor-default"
                       />
+                      <LayoutGrid className="h-5 w-5 flex-shrink-0 text-text-secondary" aria-hidden="true" />
                     </div>
+                  </div>
 
-                    <div>
-                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
-                      <BrowseViewOptionControl<BrowseDetailsView>
-                        label={t('browse.viewOptions.modDetailsView')}
-                        value={browseDetailsView}
-                        onChange={setBrowseDetailsView}
-                        options={[
-                          { value: 'modal', label: t('browse.detailsView.window'), icon: Maximize2 },
-                          { value: 'sidebar', label: t('browse.detailsView.sidebar'), icon: PanelRight },
-                        ]}
-                      />
-                    </div>
+                  <div className={layout === 'list' ? 'opacity-45' : ''}>
+                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.cardStyle')}</div>
+                    <BrowseViewOptionControl<BrowseCardDesign>
+                      disabled={layout === 'list'}
+                      label={t('browse.viewOptions.cardDesign')}
+                      value={browseCardDesign}
+                      onChange={setBrowseCardDesign}
+                      options={[
+                        { value: 'readable', label: t('browse.cardStyle.default') },
+                        { value: 'classic', label: t('browse.cardStyle.classic') },
+                      ]}
+                    />
+                  </div>
 
-                    <div>
-                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.nsfwContent')}</div>
-                      <BrowseViewOptionControl<BrowseNsfwContentMode>
-                        label={t('browse.viewOptions.nsfwContent')}
-                        value={browseNsfwContentMode}
-                        onChange={setBrowseNsfwContentMode}
-                        options={[
-                          { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
-                          { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
-                          { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
-                        ]}
-                      />
-                    </div>
+                  <div>
+                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.detailsView')}</div>
+                    <BrowseViewOptionControl<BrowseDetailsView>
+                      label={t('browse.viewOptions.modDetailsView')}
+                      value={browseDetailsView}
+                      onChange={setBrowseDetailsView}
+                      options={[
+                        { value: 'modal', label: t('browse.detailsView.window'), icon: Maximize2 },
+                        { value: 'sidebar', label: t('browse.detailsView.sidebar'), icon: PanelRight },
+                      ]}
+                    />
+                  </div>
 
-                    <div>
-                      <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.outdatedContent')}</div>
-                      <BrowseViewOptionControl<'show' | 'hide'>
-                        label={t('browse.viewOptions.outdatedContent')}
-                        value={(settings?.hideOutdatedMods ?? false) ? 'hide' : 'show'}
-                        onChange={(mode) => setBrowseHideOutdated(mode === 'hide')}
-                        options={[
-                          { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
-                          { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
-                        ]}
-                      />
-                    </div>
+                  <div>
+                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.nsfwContent')}</div>
+                    <BrowseViewOptionControl<BrowseNsfwContentMode>
+                      label={t('browse.viewOptions.nsfwContent')}
+                      value={browseNsfwContentMode}
+                      onChange={setBrowseNsfwContentMode}
+                      options={[
+                        { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                        { value: 'blur', label: t('browse.viewOptions.blur'), icon: EyeClosed },
+                        { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                      ]}
+                    />
+                  </div>
 
-                    <div className="border-t border-border pt-3">
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        icon={EyeOff}
-                        onClick={() => {
-                          setViewMenuOpen(false);
-                          setHiddenCreatorsOpen(true);
-                        }}
-                        className="w-full justify-start px-2 text-text-primary"
-                      >
-                        <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
-                        <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
-                          {hiddenCreators.length}
-                        </span>
-                      </Button>
-                    </div>
+                  <div>
+                    <div className="mb-2 text-xs font-medium text-text-secondary">{t('browse.viewOptions.outdatedContent')}</div>
+                    <BrowseViewOptionControl<'show' | 'hide'>
+                      label={t('browse.viewOptions.outdatedContent')}
+                      value={(settings?.hideOutdatedMods ?? false) ? 'hide' : 'show'}
+                      onChange={(mode) => setBrowseHideOutdated(mode === 'hide')}
+                      options={[
+                        { value: 'show', label: t('browse.viewOptions.show'), icon: Eye },
+                        { value: 'hide', label: t('browse.viewOptions.hide'), icon: EyeOff },
+                      ]}
+                    />
+                  </div>
 
+                  <div className="border-t border-border pt-3">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      icon={EyeOff}
+                      onClick={() => {
+                        setViewMenuOpen(false);
+                        setHiddenCreatorsOpen(true);
+                      }}
+                      className="w-full justify-start px-2 text-text-primary"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-left">{t('hiddenCreators.manage')}</span>
+                      <span className="rounded-full bg-bg-tertiary px-2 py-0.5 text-[11px] font-semibold text-text-secondary">
+                        {hiddenCreators.length}
+                      </span>
+                    </Button>
                   </div>
                 </div>
-              )}
+              </AnchoredPopover>
             </div>
 
-            {/* Section toggle — Mods vs Sounds as icon buttons */}
+            {/* Section toggle: Mods vs Sounds as icon buttons */}
             {sections.length > 1 && (
-              <div className="flex items-center h-10 rounded-lg border border-border bg-bg-secondary p-1" role="tablist" aria-label={t('browse.section.label')}>
+              <div className="flex flex-shrink-0 items-center h-10 rounded-lg border border-border bg-bg-secondary p-1" role="tablist" aria-label={t('browse.section.label')}>
                 {sections.map((entry) => {
                   const Icon =
                     entry.modelName === 'Sound'
@@ -3476,7 +3440,7 @@ export default function Browse() {
                       role="tab"
                       aria-selected={active}
                       onClick={() => setSection(entry.modelName)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition-colors cursor-pointer ${
+                      className={`flex items-center gap-1.5 px-3 py-1.5 @max-[980px]:px-2.5 rounded-md transition-colors cursor-pointer ${
                         active
                           ? 'bg-bg-tertiary text-text-primary'
                           : 'text-text-secondary hover:text-text-primary'
@@ -3484,7 +3448,10 @@ export default function Browse() {
                       title={entry.pluralTitle}
                     >
                       <Icon className="w-4 h-4" />
-                      <span className="text-sm">{entry.pluralTitle}</span>
+                      {/* The three section labels are the widest thing in the
+                          toolbar; they are the first to go when it tightens.
+                          The icon plus the title tooltip carries the meaning. */}
+                      <span className="text-sm @max-[980px]:hidden">{entry.pluralTitle}</span>
                     </button>
                   );
                 })}
@@ -3527,12 +3494,13 @@ export default function Browse() {
                 (nsfw !== 'all' ? 1 : 0) +
                 (addedWithin !== 'all' ? 1 : 0);
               return (
-                <div className="relative" ref={filtersRef}>
+                <div className="relative flex-shrink-0" ref={filtersRef}>
                   <button
                     type="button"
                     onClick={() => setFiltersOpen((v) => !v)}
                     aria-haspopup="dialog"
                     aria-expanded={filtersOpen}
+                    title={t('browse.filters.title')}
                     className={`flex items-center h-10 gap-2 px-3 rounded-lg border text-sm transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${
                       filterCount > 0
                         ? 'bg-accent/10 border-accent/40 text-accent hover:bg-accent/20'
@@ -3548,158 +3516,159 @@ export default function Browse() {
                     )}
                   </button>
 
-                  {filtersOpen && (
-                    <div
-                      className="absolute right-0 top-full mt-2 z-50 w-72 bg-bg-secondary border border-border rounded-lg shadow-xl p-4 animate-fade-in"
-                      role="dialog"
-                      aria-label={t('browse.filters.title')}
-                    >
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="text-sm font-semibold text-text-primary">{t('browse.filters.title')}</h4>
-                        {filterCount > 0 && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setHeroCategoryId('all');
-                              setCategoryId('all');
-                              setNsfw('all');
-                              setAddedWithin('all');
-                              setAddedFrom('');
-                              setAddedTo('');
+                  <AnchoredPopover
+                    open={filtersOpen}
+                    onClose={closeFilters}
+                    anchorRef={filtersRef}
+                    width={288}
+                    ariaLabel={t('browse.filters.title')}
+                    className="p-4"
+                  >
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-semibold text-text-primary">{t('browse.filters.title')}</h4>
+                      {filterCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setHeroCategoryId('all');
+                            setCategoryId('all');
+                            setNsfw('all');
+                            setAddedWithin('all');
+                            setAddedFrom('');
+                            setAddedTo('');
+                          }}
+                          className="text-xs text-text-secondary hover:text-accent cursor-pointer"
+                        >
+                          {t('browse.filters.clearAll')}
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="space-y-3">
+                      {heroOptions.length > 0 && (
+                        <div className="block">
+                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.hero')}</span>
+                          <HeroSelect
+                            ariaLabel="Filter by hero"
+                            value={String(heroCategoryId)}
+                            placeholder={t('browse.filters.allHeroes')}
+                            onChange={(v) => {
+                              if (v === 'all') setHeroCategoryId('all');
+                              else if (v === 'none') setHeroCategoryId('none');
+                              else setHeroCategoryId(Number(v));
                             }}
-                            className="text-xs text-text-secondary hover:text-accent cursor-pointer"
-                          >
-                            {t('browse.filters.clearAll')}
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="space-y-3">
-                        {heroOptions.length > 0 && (
-                          <div className="block">
-                            <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.hero')}</span>
-                            <HeroSelect
-                              ariaLabel="Filter by hero"
-                              value={String(heroCategoryId)}
-                              placeholder={t('browse.filters.allHeroes')}
-                              onChange={(v) => {
-                                if (v === 'all') setHeroCategoryId('all');
-                                else if (v === 'none') setHeroCategoryId('none');
-                                else setHeroCategoryId(Number(v));
-                              }}
-                              options={[
-                                ...(section === 'Sound'
-                                  ? [{ value: 'none', label: t('browse.filters.noHero'), muted: true }]
-                                  : []),
-                                ...heroOptions.map((hero) => ({
-                                  value: String(hero.id),
-                                  label: hero.label,
-                                  heroName: hero.label,
-                                })),
-                              ]}
-                              search={{
-                                ariaLabel: t('browse.filters.searchHeroesAria'),
-                                placeholder: t('browse.filters.heroFilterPlaceholder'),
-                                getEmptyMessage: (query) =>
-                                  t('browse.filters.noHeroesMatch', { query }),
-                                clearLabel: t('browse.filters.clearHeroSearch'),
-                              }}
-                            />
-                          </div>
-                        )}
-
-                        {categoryOptions.length > 0 && (
-                          <div className="block">
-                            <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.category')}</span>
-                            <Select
-                              aria-label={t('browse.filters.filterByCategory')}
-                              value={String(categoryId)}
-                              onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
-                              disabled={heroCategoryId !== 'all'}
-                            >
-                              <option value="all">{t('browse.filters.allCategories')}</option>
-                              {categoryOptions.map((cat) => (
-                                <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
-                              ))}
-                            </Select>
-                            {heroCategoryId !== 'all' && (
-                              <span className="block text-[11px] text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
-                            )}
-                          </div>
-                        )}
-
-                        {/* Recency can only be answered by the local catalog
-                            mirror, and content rating is only enforced there
-                            at query time (displayMods still post-filters nsfw
-                            for the remote paths, but on an already-truncated
-                            page). These used to be hidden entirely without a
-                            catalog, so a cold cache looked like "the filters
-                            are missing/broken" with no explanation. Render
-                            them disabled and say why. */}
-                        {!hasLocalCache && (
-                          <p className="rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-[11px] text-text-secondary">
-                            {catalogSyncing
-                              ? t('browse.filters.catalogSyncing')
-                              : t('browse.filters.catalogUnavailable')}
-                          </p>
-                        )}
-
-                        <div className="block">
-                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
-                          <Select
-                            aria-label={t('browse.filters.filterByContentRating')}
-                            value={nsfw}
-                            disabled={!hasLocalCache}
-                            onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
-                          >
-                            <option value="all">{t('browse.filters.contentAll')}</option>
-                            <option value="sfw">{t('browse.filters.sfwOnly')}</option>
-                            <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
-                          </Select>
+                            options={[
+                              ...(section === 'Sound'
+                                ? [{ value: 'none', label: t('browse.filters.noHero'), muted: true }]
+                                : []),
+                              ...heroOptions.map((hero) => ({
+                                value: String(hero.id),
+                                label: hero.label,
+                                heroName: hero.label,
+                              })),
+                            ]}
+                            search={{
+                              ariaLabel: t('browse.filters.searchHeroesAria'),
+                              placeholder: t('browse.filters.heroFilterPlaceholder'),
+                              getEmptyMessage: (query) =>
+                                t('browse.filters.noHeroesMatch', { query }),
+                              clearLabel: t('browse.filters.clearHeroSearch'),
+                            }}
+                          />
                         </div>
+                      )}
 
+                      {categoryOptions.length > 0 && (
                         <div className="block">
-                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
+                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.category')}</span>
                           <Select
-                            aria-label={t('browse.filters.filterByDateAdded')}
-                            value={addedWithin}
-                            disabled={!hasLocalCache}
-                            onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
+                            aria-label={t('browse.filters.filterByCategory')}
+                            value={String(categoryId)}
+                            onChange={(e) => setCategoryId(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                            disabled={heroCategoryId !== 'all'}
                           >
-                            <option value="all">{t('browse.filters.anyTime')}</option>
-                            <option value="today">{t('browse.filters.today')}</option>
-                            <option value="week">{t('browse.filters.thisWeek')}</option>
-                            <option value="month">{t('browse.filters.thisMonth')}</option>
-                            <option value="custom">{t('browse.filters.customRange')}</option>
+                            <option value="all">{t('browse.filters.allCategories')}</option>
+                            {categoryOptions.map((cat) => (
+                              <option key={cat.id} value={String(cat.id)}>{cat.label}</option>
+                            ))}
                           </Select>
-                          {addedWithin === 'custom' && (
-                            <div className="mt-2 grid grid-cols-2 gap-2">
-                              <label className="block">
-                                <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.from')}</span>
-                                <input
-                                  type="date"
-                                  value={addedFrom}
-                                  max={addedTo || undefined}
-                                  onChange={(e) => setAddedFrom(e.target.value)}
-                                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
-                                />
-                              </label>
-                              <label className="block">
-                                <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.to')}</span>
-                                <input
-                                  type="date"
-                                  value={addedTo}
-                                  min={addedFrom || undefined}
-                                  onChange={(e) => setAddedTo(e.target.value)}
-                                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
-                                />
-                              </label>
-                            </div>
+                          {heroCategoryId !== 'all' && (
+                            <span className="block text-[11px] text-text-tertiary mt-1">{t('browse.filters.heroOverridesCategories')}</span>
                           )}
                         </div>
+                      )}
+
+                      {/* Recency can only be answered by the local catalog
+                          mirror, and content rating is only enforced there
+                          at query time (displayMods still post-filters nsfw
+                          for the remote paths, but on an already-truncated
+                          page). These used to be hidden entirely without a
+                          catalog, so a cold cache looked like "the filters
+                          are missing/broken" with no explanation. Render
+                          them disabled and say why. */}
+                      {!hasLocalCache && (
+                        <p className="rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-[11px] text-text-secondary">
+                          {catalogSyncing
+                            ? t('browse.filters.catalogSyncing')
+                            : t('browse.filters.catalogUnavailable')}
+                        </p>
+                      )}
+
+                      <div className="block">
+                        <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
+                        <Select
+                          aria-label={t('browse.filters.filterByContentRating')}
+                          value={nsfw}
+                          disabled={!hasLocalCache}
+                          onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
+                        >
+                          <option value="all">{t('browse.filters.contentAll')}</option>
+                          <option value="sfw">{t('browse.filters.sfwOnly')}</option>
+                          <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
+                        </Select>
+                      </div>
+
+                      <div className="block">
+                        <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
+                        <Select
+                          aria-label={t('browse.filters.filterByDateAdded')}
+                          value={addedWithin}
+                          disabled={!hasLocalCache}
+                          onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
+                        >
+                          <option value="all">{t('browse.filters.anyTime')}</option>
+                          <option value="today">{t('browse.filters.today')}</option>
+                          <option value="week">{t('browse.filters.thisWeek')}</option>
+                          <option value="month">{t('browse.filters.thisMonth')}</option>
+                          <option value="custom">{t('browse.filters.customRange')}</option>
+                        </Select>
+                        {addedWithin === 'custom' && (
+                          <div className="mt-2 grid grid-cols-2 gap-2">
+                            <label className="block">
+                              <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.from')}</span>
+                              <input
+                                type="date"
+                                value={addedFrom}
+                                max={addedTo || undefined}
+                                onChange={(e) => setAddedFrom(e.target.value)}
+                                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.to')}</span>
+                              <input
+                                type="date"
+                                value={addedTo}
+                                min={addedFrom || undefined}
+                                onChange={(e) => setAddedTo(e.target.value)}
+                                className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                              />
+                            </label>
+                          </div>
+                        )}
                       </div>
                     </div>
-                  )}
+                  </AnchoredPopover>
                 </div>
               );
             })()}
