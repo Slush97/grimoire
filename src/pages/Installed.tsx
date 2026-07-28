@@ -4023,10 +4023,11 @@ export default function Installed() {
                 claiming a second strip below the search. Copy-enabled sits
                 inside topStatusActions, immediately after Fix Unknown. */}
             {topStatusActions}
-            {/* Retroactive bulk imprint launcher (experimental, opt-in). Compact
-                secondary button so it rides the same cluster as the filter
-                control without claiming its own strip. Opens the preflight
-                modal. */}
+            {/* Retroactive bulk imprint launcher (experimental, opt-in).
+                Icon-only, same shape/height as the other toolbar icon buttons
+                (copy enabled, fix order, filter) so it rides the cluster
+                without claiming its own strip. Name lives in the tooltip /
+                aria-label. Opens the preflight modal. */}
             {/* Hide-when-done: the button only exists while something could
                 still be imprinted. After a successful bulk run loadMods()
                 refreshes the list, the count reaches zero, and the button
@@ -4035,14 +4036,12 @@ export default function Installed() {
             {settings?.experimentalVpkImprinting && pendingImprintCount > 0 && (
               <Button
                 variant="secondary"
-                size="sm"
                 icon={Fingerprint}
+                className="!px-2.5"
                 onClick={() => { void openImprintModal(); }}
                 aria-label={t('installed.actions.imprintInstalledMods')}
                 title={t('installed.actions.imprintInstalledModsHint')}
-              >
-                {t('installed.actions.imprintInstalledMods')}
-              </Button>
+              />
             )}
             {/* Sort + filter: load order / recent / name, GameBanana vs local
                 import, hero, and metadata tags. The badge counts active
