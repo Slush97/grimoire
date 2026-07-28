@@ -936,6 +936,9 @@ export interface ElectronAPI {
     updateModNsfw: (modId: number, isNsfw: boolean) => Promise<void>;
     updateModDownloadCount: (modId: number, downloadCount: number) => Promise<void>;
     onSyncProgress: (callback: (data: SyncProgressData) => void) => () => void;
+    /** Write a renderer-side trace line into main.log (and therefore into
+     *  diagnostic reports). Fire-and-forget, returns nothing. */
+    traceDiagnostic: (scope: string, message: string) => void;
 
     // Crosshair Presets
     getCrosshairPresets: () => Promise<{ presets: CrosshairPreset[]; activePresetId: string | null }>;

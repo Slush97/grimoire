@@ -128,11 +128,44 @@ export async function buildReportText(
     if (sanitizedDesc) {
         parts.push('--- what happened ---', sanitizedDesc);
     }
+    parts.push('--- catalog ---', await buildCatalogSection());
     const logLabel = includeFullLog
         ? '--- full main.log (sanitized) ---'
         : `--- last ${Math.round(REPORT_TAIL_BYTES / 1024)} KB of main.log (sanitized) ---`;
     parts.push(logLabel, sanitizedLog || '<log file empty>');
     return parts.join('\n\n');
+}
+
+/** State of the local catalog mirror.
+ *
+ *  Browse routes its content-rating, date-added, A-Z and full-text filters
+ *  through this mirror and silently falls back to the (much less capable)
+ *  remote API when it is thin or missing. Reports used to carry no trace of
+ *  that at all, which made "my filters do nothing" undiagnosable. Imported
+ *  lazily so initLogger() does not drag the sync/database graph in at startup. */
+async function buildCatalogSection(): Promise<string> {
+    try {
+        const [{ getSyncStatus, isSyncInProgress, needsSync }, { getModCount }] = await Promise.all([
+            import('./syncService'),
+            import('./modDatabase'),
+        ]);
+
+        const lines = [
+            `Total cached mods: ${getModCount()}`,
+            `Sync in progress:  ${isSyncInProgress()}`,
+            `Needs sync:        ${needsSync()}`,
+        ];
+        for (const [section, state] of Object.entries(getSyncStatus())) {
+            lines.push(
+                state
+                    ? `  ${section}: ${state.count} mods, last sync ${new Date(state.lastSync * 1000).toISOString()}`
+                    : `  ${section}: never synced`
+            );
+        }
+        return lines.join('\n');
+    } catch (err) {
+        return `<could not read catalog state: ${err instanceof Error ? err.message : String(err)}>`;
+    }
 }
 
 async function readFullLog(path: string): Promise<string> {

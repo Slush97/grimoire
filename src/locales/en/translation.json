@@ -2346,7 +2346,9 @@
       "recentlyAdded": "Recently Added",
       "recentlyUpdated": "Recently Updated",
       "mostViewed": "Most Viewed",
-      "nameAZ": "Name (A-Z)"
+      "nameAZ": "Name (A-Z)",
+      "nameAZSyncing": "Name (A-Z, syncing)",
+      "nameAZNeedsCatalog": "Name (A-Z, needs catalog)"
     },
     "filters": {
       "title": "Filters",
@@ -2372,7 +2374,9 @@
       "thisMonth": "This month",
       "customRange": "Custom range",
       "from": "From",
-      "to": "To"
+      "to": "To",
+      "catalogSyncing": "Syncing the mod catalog. Content and date filters will be ready shortly.",
+      "catalogUnavailable": "Content and date filters need the local mod catalog. Sync it from Settings."
     },
     "previewVolume": "Preview volume",
     "loadMore": {

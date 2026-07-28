@@ -104,6 +104,21 @@ import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates';
 import { showToast } from '../stores/toastStore';
 
 const DEFAULT_PER_PAGE = 36;
+// Row count below which the local catalog mirror is treated as unusable. A
+// part-synced catalog returns misleadingly thin results, so the filters that
+// depend on it stay disabled until it is worth querying.
+const LOCAL_CACHE_MIN_ROWS = 100;
+
+// Trace into main.log (and therefore into diagnostic reports). The renderer's
+// own console never reaches that file, so filter routing decisions were
+// invisible in every bug report; these are the points worth reconstructing
+// after the fact. Guarded because the bridge is absent in unit tests.
+function traceBrowse(message: string): void {
+  try {
+    window.electronAPI?.traceDiagnostic?.('Browse', message);
+  } catch { /* tracing must never break the page */ }
+}
+
 type SortOption = 'default' | 'popular' | 'recent' | 'updated' | 'views' | 'name';
 // Effective render mode derived from layout + card size. 'compact' is no
 // longer a user choice: it's what small cards become below the size threshold.
@@ -1408,19 +1423,61 @@ export default function Browse() {
     };
   }, [viewMenuOpen]);
 
-  // Check if local cache is available for search
+  // Availability of the local catalog mirror. Content rating, date-added, A-Z
+  // sort and FTS search can ONLY be served from it, so this one flag decides
+  // whether those filters do anything at all.
+  //
+  // It used to be read once per mount with no way to change afterwards, which
+  // meant landing on Browse before the background sync crossed the threshold
+  // left the page in remote mode for the entire mount: the content/date
+  // controls stayed hidden and A-Z silently returned default order, with
+  // nothing logged. Now the sync-progress stream re-checks it, and
+  // `catalogSyncing` lets the UI say why a filter is unavailable instead of
+  // quietly dropping it.
   const [hasLocalCache, setHasLocalCache] = useState(false);
-  useEffect(() => {
-    const checkLocalCache = async () => {
-      try {
-        const count = await window.electronAPI.getLocalModCount();
-        setHasLocalCache(count > 100);
-      } catch {
-        setHasLocalCache(false);
-      }
-    };
-    checkLocalCache();
+  const [catalogSyncing, setCatalogSyncing] = useState(false);
+
+  const refreshLocalCacheState = useCallback(async (reason: string) => {
+    try {
+      const count = await window.electronAPI.getLocalModCount();
+      const ready = count >= LOCAL_CACHE_MIN_ROWS;
+      setHasLocalCache(ready);
+      traceBrowse(`catalog check (${reason}): count=${count} threshold=${LOCAL_CACHE_MIN_ROWS} ready=${ready}`);
+    } catch (err) {
+      setHasLocalCache(false);
+      traceBrowse(`catalog check (${reason}) failed: ${String(err)}`);
+    }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void refreshLocalCacheState('mount');
+    window.electronAPI.isSyncInProgress()
+      .then((inProgress) => {
+        if (cancelled) return;
+        setCatalogSyncing(inProgress);
+        if (inProgress) traceBrowse('catalog sync already in progress at mount');
+      })
+      .catch(() => { /* indicator only; routing still works off the count */ });
+
+    const unsub = window.electronAPI.onSyncProgress((data) => {
+      if (cancelled) return;
+      if (data.phase === 'fetching') {
+        setCatalogSyncing(true);
+        return;
+      }
+      setCatalogSyncing(false);
+      // A finished section can push the catalog over the usable threshold.
+      // Re-checking here is what stops a cold start from disabling the
+      // catalog-backed filters for the rest of the mount.
+      void refreshLocalCacheState(`sync ${data.phase} ${data.section}`);
+    });
+
+    return () => {
+      cancelled = true;
+      unsub();
+    };
+  }, [refreshLocalCacheState]);
 
   // Fetch initial download queue state on mount
   useEffect(() => {
@@ -1684,6 +1741,30 @@ export default function Browse() {
   useEffect(() => {
     setLocalSearchFailed(false);
   }, [debouncedSearch, heroCategoryId, nsfw, addedWithin, section, sort, hiddenCreatorsStamp]);
+
+  // The single most useful line for diagnosing "my filters do nothing": which
+  // backend the current filter set routes to, and when it routes remote, which
+  // of the active filters the remote API cannot express.
+  useEffect(() => {
+    if (useLocalSearch) {
+      traceBrowse(`route=local section=${section} search="${debouncedSearch}" hero=${heroCategoryId} nsfw=${nsfw} added=${addedWithin} sort=${sort}`);
+      return;
+    }
+    const unsupported: string[] = [];
+    if (addedWithin !== 'all') unsupported.push(`added=${addedWithin}`);
+    if (sort === 'name') unsupported.push('sort=name');
+    const because = submitter
+      ? 'artist mode'
+      : !hasLocalCache
+        ? 'no local catalog'
+        : localSearchFailed
+          ? 'local search failed'
+          : 'no catalog-only filter active';
+    traceBrowse(
+      `route=remote (${because}) section=${section} search="${debouncedSearch}" hero=${heroCategoryId} nsfw=${nsfw} added=${addedWithin} sort=${sort}` +
+      (unsupported.length ? ` DROPPED=[${unsupported.join(', ')}]` : '')
+    );
+  }, [useLocalSearch, section, debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, submitter, hasLocalCache, localSearchFailed]);
 
   const fetchMods = useCallback(async () => {
     // Don't fetch from API if we're using local search
@@ -3374,6 +3455,9 @@ export default function Browse() {
               </div>
             )}
 
+            {/* A-Z has no apiv11 sort token, so it can only come from the local
+                mirror. Offering it against a cold catalog meant picking it
+                silently returned default order. Mark it unavailable instead. */}
             <DynamicSelect
               value={sort}
               onChange={(val) => setSort(val as SortOption)}
@@ -3383,13 +3467,24 @@ export default function Browse() {
                 { value: 'recent', label: t('browse.sort.recentlyAdded') },
                 { value: 'updated', label: t('browse.sort.recentlyUpdated') },
                 { value: 'views', label: t('browse.sort.mostViewed') },
-                { value: 'name', label: t('browse.sort.nameAZ') },
+                {
+                  value: 'name',
+                  label: hasLocalCache
+                    ? t('browse.sort.nameAZ')
+                    : catalogSyncing
+                      ? t('browse.sort.nameAZSyncing')
+                      : t('browse.sort.nameAZNeedsCatalog'),
+                  disabled: !hasLocalCache,
+                },
               ]}
             />
 
-            {/* Filters popover — houses hero + category selectors. Collapses two
-                always-visible dropdowns into one control with an active-count badge. */}
-            {(heroOptions.length > 0 || categoryOptions.length > 0 || hasLocalCache) && (() => {
+            {/* Filters popover: hero + category selectors, plus the
+                catalog-backed content/recency filters. Always rendered now.
+                It used to be conditional on there being something to show,
+                which meant a cold catalog could remove the control entirely
+                rather than explain itself. */}
+            {(() => {
               const filterCount =
                 (heroCategoryId !== 'all' ? 1 : 0) +
                 (categoryId !== 'all' ? 1 : 0) +
@@ -3490,63 +3585,72 @@ export default function Browse() {
                           </div>
                         )}
 
-                        {/* Content rating + recency are served by the local catalog
-                            mirror, so they only show once it's available. */}
-                        {hasLocalCache && (
-                          <div className="block">
-                            <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
-                            <Select
-                              aria-label={t('browse.filters.filterByContentRating')}
-                              value={nsfw}
-                              onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
-                            >
-                              <option value="all">{t('browse.filters.contentAll')}</option>
-                              <option value="sfw">{t('browse.filters.sfwOnly')}</option>
-                              <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
-                            </Select>
-                          </div>
+                        {/* Content rating + recency can only be answered by the
+                            local catalog mirror. These used to be hidden
+                            entirely without it, so a cold cache looked like
+                            "the filters are missing/broken" with no
+                            explanation. Render them disabled and say why. */}
+                        {!hasLocalCache && (
+                          <p className="rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-[11px] text-text-secondary">
+                            {catalogSyncing
+                              ? t('browse.filters.catalogSyncing')
+                              : t('browse.filters.catalogUnavailable')}
+                          </p>
                         )}
 
-                        {hasLocalCache && (
-                          <div className="block">
-                            <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
-                            <Select
-                              aria-label={t('browse.filters.filterByDateAdded')}
-                              value={addedWithin}
-                              onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
-                            >
-                              <option value="all">{t('browse.filters.anyTime')}</option>
-                              <option value="today">{t('browse.filters.today')}</option>
-                              <option value="week">{t('browse.filters.thisWeek')}</option>
-                              <option value="month">{t('browse.filters.thisMonth')}</option>
-                              <option value="custom">{t('browse.filters.customRange')}</option>
-                            </Select>
-                            {addedWithin === 'custom' && (
-                              <div className="mt-2 grid grid-cols-2 gap-2">
-                                <label className="block">
-                                  <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.from')}</span>
-                                  <input
-                                    type="date"
-                                    value={addedFrom}
-                                    max={addedTo || undefined}
-                                    onChange={(e) => setAddedFrom(e.target.value)}
-                                    className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
-                                  />
-                                </label>
-                                <label className="block">
-                                  <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.to')}</span>
-                                  <input
-                                    type="date"
-                                    value={addedTo}
-                                    min={addedFrom || undefined}
-                                    onChange={(e) => setAddedTo(e.target.value)}
-                                    className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
-                                  />
-                                </label>
-                              </div>
-                            )}
-                          </div>
-                        )}
+                        <div className="block">
+                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.content')}</span>
+                          <Select
+                            aria-label={t('browse.filters.filterByContentRating')}
+                            value={nsfw}
+                            disabled={!hasLocalCache}
+                            onChange={(e) => setNsfw(e.target.value as BrowseNsfwFilter)}
+                          >
+                            <option value="all">{t('browse.filters.contentAll')}</option>
+                            <option value="sfw">{t('browse.filters.sfwOnly')}</option>
+                            <option value="nsfw">{t('browse.filters.nsfwOnly')}</option>
+                          </Select>
+                        </div>
+
+                        <div className="block">
+                          <span className="block text-xs font-medium text-text-secondary mb-1.5">{t('browse.filters.added')}</span>
+                          <Select
+                            aria-label={t('browse.filters.filterByDateAdded')}
+                            value={addedWithin}
+                            disabled={!hasLocalCache}
+                            onChange={(e) => setAddedWithin(e.target.value as BrowseTimeRange)}
+                          >
+                            <option value="all">{t('browse.filters.anyTime')}</option>
+                            <option value="today">{t('browse.filters.today')}</option>
+                            <option value="week">{t('browse.filters.thisWeek')}</option>
+                            <option value="month">{t('browse.filters.thisMonth')}</option>
+                            <option value="custom">{t('browse.filters.customRange')}</option>
+                          </Select>
+                          {addedWithin === 'custom' && (
+                            <div className="mt-2 grid grid-cols-2 gap-2">
+                              <label className="block">
+                                <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.from')}</span>
+                                <input
+                                  type="date"
+                                  value={addedFrom}
+                                  max={addedTo || undefined}
+                                  onChange={(e) => setAddedFrom(e.target.value)}
+                                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                                />
+                              </label>
+                              <label className="block">
+                                <span className="block text-[11px] text-text-tertiary mb-1">{t('browse.filters.to')}</span>
+                                <input
+                                  type="date"
+                                  value={addedTo}
+                                  min={addedFrom || undefined}
+                                  onChange={(e) => setAddedTo(e.target.value)}
+                                  className="w-full px-2 py-1.5 bg-bg-tertiary border border-border rounded-md text-xs text-text-primary focus:outline-none focus-visible:ring-2 focus-visible:ring-accent cursor-pointer"
+                                />
+                              </label>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
