@@ -3581,13 +3581,13 @@ export default function Browse() {
                             <HeroSelect
                               ariaLabel="Filter by hero"
                               value={String(heroCategoryId)}
+                              placeholder={t('browse.filters.allHeroes')}
                               onChange={(v) => {
                                 if (v === 'all') setHeroCategoryId('all');
                                 else if (v === 'none') setHeroCategoryId('none');
                                 else setHeroCategoryId(Number(v));
                               }}
                               options={[
-                                { value: 'all', label: t('browse.filters.allHeroes'), muted: true },
                                 ...(section === 'Sound'
                                   ? [{ value: 'none', label: t('browse.filters.noHero'), muted: true }]
                                   : []),
@@ -3597,6 +3597,13 @@ export default function Browse() {
                                   heroName: hero.label,
                                 })),
                               ]}
+                              search={{
+                                ariaLabel: t('browse.filters.searchHeroesAria'),
+                                placeholder: t('browse.filters.heroFilterPlaceholder'),
+                                getEmptyMessage: (query) =>
+                                  t('browse.filters.noHeroesMatch', { query }),
+                                clearLabel: t('browse.filters.clearHeroSearch'),
+                              }}
                             />
                           </div>
                         )}
