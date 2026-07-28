@@ -75,6 +75,15 @@ export const statsApiRateLimiter = new RateLimiter({
     burstSize: 10,
 });
 
+// Steam Community rate limiter: 1 request per second.
+// steamcommunity.com is a public web endpoint with no documented budget and a
+// habit of soft-blocking bursts, and we only ever read a handful of tracked
+// players, so keep it slow and polite.
+export const steamCommunityRateLimiter = new RateLimiter({
+    maxRequestsPerSecond: 1,
+    burstSize: 3,
+});
+
 // Grimoire Social API rate limiter: 5 requests per second.
 // Defensive client-side throttle. The worker enforces strict per-action
 // limits (publish 1/10min via DO, like 30/min via RL API, etc.) on its
