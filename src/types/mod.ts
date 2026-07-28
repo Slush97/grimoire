@@ -1103,6 +1103,15 @@ export interface AppSettings {
    *  opts in from Appearance. The chosen mode for the combined button is UI
    *  state persisted in localStorage, not here. */
   unifiedLaunchButton?: boolean;
+  /** Ambient background glow: two large radial gradients bleeding in from the
+   *  top-left and bottom-right corners behind every page. A pair of hex colors
+   *  (top-left, bottom-right) rather than a preset id, so a custom pick and a
+   *  preset are the same shape. Null/absent leaves the flat background. */
+  backgroundGradient?: { from: string; to: string } | null;
+  /** Drop the sidebar's own panel background so it sits flush with the page
+   *  background instead of reading as a separate dark grey column. The divider,
+   *  nav art, and launch buttons are unaffected. Off by default. */
+  sidebarTransparent?: boolean;
   /** Per-surface launcher / sidebar background art (issue: unify launcher
    *  backgrounds). Each of the four surfaces independently chooses default art,
    *  a hero render, a custom upload, or none. Custom image bytes live out-of-band

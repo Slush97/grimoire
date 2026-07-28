@@ -655,6 +655,17 @@
     "header": {
       "description": "Game paths, preferences, and maintenance"
     },
+    "nav": {
+      "label": "Settings categories",
+      "groups": {
+        "game": "Game",
+        "application": "Application",
+        "advanced": "Advanced"
+      },
+      "game": "Game setup",
+      "privacy": "Privacy & Content",
+      "language": "Language & region"
+    },
     "sections": {
       "gameConfiguration": "Game Configuration",
       "updates": "Updates",
@@ -749,6 +760,23 @@
           "none": "None"
         },
         "adjustFraming": "Adjust framing"
+      },
+      "sidebar": {
+        "transparent": "Transparent sidebar",
+        "transparentDescription": "Drop the sidebar's dark panel so it sits flush with the page background. Icons, art, and the divider stay as they are."
+      },
+      "background": {
+        "title": "Background glow",
+        "description": "Tint the app background with light bleeding in from the top-left and bottom-right corners.",
+        "none": "No glow",
+        "custom": "Custom glow",
+        "customTitle": "Custom background glow",
+        "topLeft": "Top left",
+        "bottomRight": "Bottom right"
+      },
+      "accent": {
+        "title": "Accent color",
+        "description": "Used for buttons, links, highlights, and focus rings throughout the app."
       }
     },
     "preferences": {
@@ -858,6 +886,9 @@
       "vpkImprint": "Give each newly installed mod a small identity imprint so an orphaned file can be recognized offline. Adds an Imprint installed mods button on the Installed page to imprint mods you already have.",
       "deadworks": "Add a Servers tab to browse and join Deadworks community servers. Required content downloads before connecting.",
       "performanceConfig": "One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time."
+    },
+    "privacy": {
+      "noHiddenCreators": "No creators are hidden right now."
     }
   },
   "crosshair": {
