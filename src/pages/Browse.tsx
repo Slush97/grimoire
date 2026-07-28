@@ -1436,6 +1436,11 @@ export default function Browse() {
   // quietly dropping it.
   const [hasLocalCache, setHasLocalCache] = useState(false);
   const [catalogSyncing, setCatalogSyncing] = useState(false);
+  // `hasLocalCache` starts false and only becomes true once an async count
+  // comes back, so it is indistinguishable from "genuinely no catalog" until
+  // then. Fetching before the answer arrives would always open remote and
+  // then need a corrective second request. Gate the first fetch on this.
+  const [catalogChecked, setCatalogChecked] = useState(false);
 
   const refreshLocalCacheState = useCallback(async (reason: string) => {
     try {
@@ -1446,19 +1451,28 @@ export default function Browse() {
     } catch (err) {
       setHasLocalCache(false);
       traceBrowse(`catalog check (${reason}) failed: ${String(err)}`);
+    } finally {
+      setCatalogChecked(true);
     }
   }, []);
 
   useEffect(() => {
     let cancelled = false;
     void refreshLocalCacheState('mount');
-    window.electronAPI.isSyncInProgress()
-      .then((inProgress) => {
-        if (cancelled) return;
-        setCatalogSyncing(inProgress);
-        if (inProgress) traceBrowse('catalog sync already in progress at mount');
-      })
-      .catch(() => { /* indicator only; routing still works off the count */ });
+
+    // Terminal phases arrive once per section (Mod, Sound, Wip) and the run
+    // continues after a failed one, so a phase alone cannot say whether the
+    // whole sync is done. Ask, rather than assuming this was the last section.
+    const refreshSyncingFlag = (reason: string) => {
+      window.electronAPI.isSyncInProgress()
+        .then((inProgress) => {
+          if (cancelled) return;
+          setCatalogSyncing(inProgress);
+          if (inProgress) traceBrowse(`catalog sync in progress (${reason})`);
+        })
+        .catch(() => { /* indicator only; routing runs off the count */ });
+    };
+    refreshSyncingFlag('mount');
 
     const unsub = window.electronAPI.onSyncProgress((data) => {
       if (cancelled) return;
@@ -1466,7 +1480,7 @@ export default function Browse() {
         setCatalogSyncing(true);
         return;
       }
-      setCatalogSyncing(false);
+      refreshSyncingFlag(`after ${data.phase} ${data.section}`);
       // A finished section can push the catalog over the usable threshold.
       // Re-checking here is what stops a cold start from disabling the
       // catalog-backed filters for the rest of the mount.
@@ -2185,13 +2199,35 @@ export default function Browse() {
     };
   }, [sections, section, setCategoryId, setHeroCategoryId]);
 
+  // fetchMods and searchLocal share `lastFetchedStampRef`, and its key
+  // (`page` + fetchFilterStamp) describes the FILTERS only, not which backend
+  // answered them. So when the catalog becomes usable mid-session the fetch
+  // effect below re-runs, calls searchLocal instead of fetchMods, and the
+  // shared gate sees an identical stamp and early-returns: the grid keeps the
+  // remote, default-ordered results and the local mirror is never queried
+  // until the user happens to touch a filter. Worse, the route trace would
+  // report `route=local` over remote data, which is exactly backwards in the
+  // state the tracing exists to explain. Dropping the stamp on a routing flip
+  // lets the pending query re-run against the backend that can actually
+  // serve it. Declared before the fetch effect so it clears the gate first.
+  const lastRoutedLocalRef = useRef(useLocalSearch);
   useEffect(() => {
+    if (lastRoutedLocalRef.current === useLocalSearch) return;
+    lastRoutedLocalRef.current = useLocalSearch;
+    lastFetchedStampRef.current = null;
+    traceBrowse(`routing flipped to ${useLocalSearch ? 'local' : 'remote'}; re-running current query`);
+  }, [useLocalSearch]);
+
+  useEffect(() => {
+    // Wait for the first catalog answer so the opening request goes straight
+    // to the right backend instead of always starting remote and correcting.
+    if (!catalogChecked) return;
     if (useLocalSearch) {
       searchLocal();
     } else {
       fetchMods();
     }
-  }, [fetchMods, searchLocal, useLocalSearch, refreshKey]);
+  }, [fetchMods, searchLocal, useLocalSearch, refreshKey, catalogChecked]);
 
   useEffect(() => {
     if (activeDeadlockPath) {
@@ -3585,11 +3621,14 @@ export default function Browse() {
                           </div>
                         )}
 
-                        {/* Content rating + recency can only be answered by the
-                            local catalog mirror. These used to be hidden
-                            entirely without it, so a cold cache looked like
-                            "the filters are missing/broken" with no
-                            explanation. Render them disabled and say why. */}
+                        {/* Recency can only be answered by the local catalog
+                            mirror, and content rating is only enforced there
+                            at query time (displayMods still post-filters nsfw
+                            for the remote paths, but on an already-truncated
+                            page). These used to be hidden entirely without a
+                            catalog, so a cold cache looked like "the filters
+                            are missing/broken" with no explanation. Render
+                            them disabled and say why. */}
                         {!hasLocalCache && (
                           <p className="rounded-md border border-border bg-bg-tertiary px-2 py-1.5 text-[11px] text-text-secondary">
                             {catalogSyncing
