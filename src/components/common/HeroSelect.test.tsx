@@ -35,10 +35,18 @@ function BrowseFilterHarness() {
             ariaLabel="Filter by hero"
             value={hero}
             onChange={setHero}
+            placeholder="All heroes"
             options={[
-              { value: 'all', label: 'All heroes' },
               { value: 'abrams', label: 'Abrams', heroName: 'Abrams' },
+              { value: 'haze', label: 'Haze', heroName: 'Haze' },
+              { value: 'shiv', label: 'Shiv', heroName: 'Shiv' },
             ]}
+            search={{
+              ariaLabel: 'Search heroes',
+              placeholder: 'Filter...',
+              getEmptyMessage: (query) => `No matches for “${query}”`,
+              clearLabel: 'Clear',
+            }}
           />
         </div>
       )}
@@ -66,14 +74,35 @@ describe('HeroSelect inside a dismissable popover', () => {
     vi.restoreAllMocks();
   });
 
-  it('keeps the parent popover open and applies a hero selected with the mouse', () => {
-    act(() => root.render(<BrowseFilterHarness />));
-
+  const openHeroSelect = () => {
     const trigger = document.querySelector<HTMLButtonElement>(
       'button[aria-label="Filter by hero"]'
     );
     expect(trigger).not.toBeNull();
     act(() => trigger!.click());
+    return trigger!;
+  };
+
+  const enterSearch = (query: string) => {
+    const input = document.querySelector<HTMLInputElement>(
+      'input[aria-label="Search heroes"]'
+    );
+    expect(input).not.toBeNull();
+    act(() => {
+      const valueSetter = Object.getOwnPropertyDescriptor(
+        HTMLInputElement.prototype,
+        'value'
+      )?.set;
+      valueSetter?.call(input, query);
+      input!.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    return input!;
+  };
+
+  it('keeps the parent popover open and applies a hero selected with the mouse', () => {
+    act(() => root.render(<BrowseFilterHarness />));
+
+    openHeroSelect();
 
     const abrams = Array.from(
       document.querySelectorAll<HTMLButtonElement>('[role="option"]')
@@ -88,5 +117,71 @@ describe('HeroSelect inside a dismissable popover', () => {
 
     expect(document.querySelector('[data-testid="filter-popover"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="selected-hero"]')?.textContent).toBe('abrams');
+  });
+
+  it('filters heroes as the user types and offers a useful empty state', () => {
+    act(() => root.render(<BrowseFilterHarness />));
+
+    openHeroSelect();
+    const input = enterSearch('shi');
+    expect(document.activeElement).toBe(input);
+    expect(
+      Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent)
+    ).toEqual(['Shiv']);
+
+    enterSearch('nobody');
+    expect(
+      Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent)
+    ).toEqual([]);
+    expect(document.body.textContent).toContain('No matches for “nobody”');
+
+    const clearSearch = Array.from(document.querySelectorAll<HTMLButtonElement>('button')).find(
+      (button) => button.textContent === 'Clear'
+    );
+    expect(clearSearch).toBeDefined();
+    act(() => clearSearch!.click());
+
+    expect(input.value).toBe('');
+    expect(
+      Array.from(document.querySelectorAll('[role="option"]')).map((option) => option.textContent)
+    ).toEqual(['Abrams', 'Haze', 'Shiv']);
+    expect(document.activeElement).toBe(input);
+  });
+
+  it('supports keyboard selection in filtered results and clears search on close', () => {
+    act(() => root.render(<BrowseFilterHarness />));
+
+    const trigger = openHeroSelect();
+    const input = enterSearch('sh');
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    expect(document.activeElement?.textContent).toBe('Shiv');
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'i', bubbles: true })
+      );
+    });
+    expect(input.value).toBe('shi');
+    expect(document.activeElement).toBe(input);
+    act(() => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    expect(document.activeElement?.textContent).toBe('Shiv');
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+      );
+    });
+
+    expect(document.querySelector('[data-testid="selected-hero"]')?.textContent).toBe('shiv');
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+
+    act(() => trigger.click());
+    const reopenedInput = document.querySelector<HTMLInputElement>(
+      'input[aria-label="Search heroes"]'
+    );
+    expect(reopenedInput?.value).toBe('');
+    expect(document.activeElement).toBe(reopenedInput);
   });
 });
