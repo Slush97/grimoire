@@ -24,7 +24,7 @@ import type {
     BuildSearchParams,
 } from '../../../src/types/deadlock-stats'
 import { GRIMOIRE_USER_AGENT } from './userAgent'
-import { statsApiRateLimiter } from './rateLimiter'
+import { statsApiRateLimiter, steamCommunityRateLimiter } from './rateLimiter'
 
 // Local flat types for counter/synergy stats (API returns flat arrays, not nested)
 export interface FlatHeroCounterStats {
@@ -376,6 +376,77 @@ export async function getPlayerSteamProfiles(
         steam_id: String(profile.account_id),
         is_private: false,
     }))
+}
+
+// ============================================
+// Steam Community (persona name + avatar, straight from the source)
+// ============================================
+
+const STEAM_COMMUNITY_BASE = 'https://steamcommunity.com/profiles'
+
+// Deadlock account ids are Steam "account ids": the low 32 bits of a 64-bit
+// SteamID. Adding the base back is exact only in BigInt, since the result is
+// well past Number.MAX_SAFE_INTEGER.
+const STEAM_ID64_BASE = 76561197960265728n
+
+export function toSteamId64(accountId: number): string {
+    return (BigInt(accountId) + STEAM_ID64_BASE).toString()
+}
+
+export interface SteamCommunityProfile {
+    persona_name?: string
+    avatar_url?: string
+}
+
+// The profile's own steamID/avatarFull are emitted before the <groups> block,
+// and every group carries an avatarFull of its own, so parsing has to stop at
+// the first group.
+function firstTag(xml: string, tag: string): string | undefined {
+    const match = new RegExp(`<${tag}>(?:<!\\[CDATA\\[)?(.*?)(?:\\]\\]>)?</${tag}>`, 's').exec(xml)
+    const value = match?.[1]?.trim()
+    return value ? value : undefined
+}
+
+/**
+ * Read a player's current persona name + avatar from the public Steam
+ * Community XML.
+ *
+ * deadlock-api serves its own periodic scrape of Steam, and that snapshot can
+ * sit weeks behind: a player who changes their avatar sees the old one in
+ * Grimoire indefinitely, because no amount of refreshing changes what the
+ * upstream cache holds. Steam itself is the authority, needs no API key, and
+ * answers for private profiles too (the avatar is public either way).
+ *
+ * Returns null on any failure so callers can fall back to the deadlock-api
+ * copy rather than losing the profile entirely.
+ */
+export async function getSteamCommunityProfile(
+    accountId: number
+): Promise<SteamCommunityProfile | null> {
+    try {
+        await steamCommunityRateLimiter.acquire()
+
+        const response = await fetch(`${STEAM_COMMUNITY_BASE}/${toSteamId64(accountId)}?xml=1`, {
+            headers: {
+                Accept: 'text/xml,application/xml',
+                'User-Agent': GRIMOIRE_USER_AGENT,
+            },
+            signal: AbortSignal.timeout(10000),
+        })
+        if (!response.ok) return null
+
+        const xml = await response.text()
+        const profileOnly = xml.split('<groups>')[0]
+        if (!profileOnly.includes('<steamID64>')) return null
+
+        const profile: SteamCommunityProfile = {
+            persona_name: firstTag(profileOnly, 'steamID'),
+            avatar_url: firstTag(profileOnly, 'avatarFull'),
+        }
+        return profile.persona_name || profile.avatar_url ? profile : null
+    } catch {
+        return null
+    }
 }
 
 /**

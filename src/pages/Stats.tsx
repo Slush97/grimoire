@@ -26,6 +26,10 @@ import { LeaderboardTab } from '../components/stats/tabs/LeaderboardTab'
 
 type Tab = 'overview' | 'matches' | 'social' | 'leaderboard'
 
+// Opening the tab re-pulls Steam personas + avatars that are older than this.
+// Refresh forces the pull regardless.
+const PROFILE_MAX_AGE_S = 30 * 60
+
 const TABS: { id: Tab; icon: LucideIcon; playerScoped: boolean }[] = [
     { id: 'overview', icon: BarChart3, playerScoped: true },
     { id: 'matches', icon: Gamepad2, playerScoped: true },
@@ -39,6 +43,7 @@ export default function Stats() {
 
     const detectSteamUsers = usePlayerStore((s) => s.detectSteamUsers)
     const loadTrackedPlayers = usePlayerStore((s) => s.loadTrackedPlayers)
+    const refreshTrackedProfiles = usePlayerStore((s) => s.refreshTrackedProfiles)
     const trackedPlayers = usePlayerStore((s) => s.trackedPlayers)
     const selectedAccountId = usePlayerStore((s) => s.selectedAccountId)
     const selectPlayer = usePlayerStore((s) => s.selectPlayer)
@@ -52,7 +57,8 @@ export default function Stats() {
         if (usePlayerStore.getState().trackedPlayers.status === 'idle') {
             loadTrackedPlayers()
         }
-    }, [detectSteamUsers, loadHeroes, loadTrackedPlayers])
+        refreshTrackedProfiles(PROFILE_MAX_AGE_S)
+    }, [detectSteamUsers, loadHeroes, loadTrackedPlayers, refreshTrackedProfiles])
 
     // Auto-select the primary (or first) tracked player.
     useEffect(() => {
@@ -63,7 +69,7 @@ export default function Stats() {
     }, [trackedPlayers.data, selectedAccountId, selectPlayer])
 
     const handleRefresh = () => {
-        loadTrackedPlayers()
+        refreshTrackedProfiles(0)
         if (selectedAccountId) {
             syncPlayerData(selectedAccountId)
             const social = useSocialStore.getState()

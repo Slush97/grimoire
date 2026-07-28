@@ -44,6 +44,7 @@ interface PlayerState {
 
     detectSteamUsers: () => Promise<void>
     loadTrackedPlayers: () => Promise<void>
+    refreshTrackedProfiles: (maxAgeSeconds?: number) => Promise<void>
     addTrackedPlayer: (accountId: number, isPrimary?: boolean) => Promise<void>
     removeTrackedPlayer: (accountId: number) => Promise<void>
     setPrimaryPlayer: (accountId: number) => Promise<void>
@@ -113,6 +114,20 @@ export const usePlayerStore = create<PlayerState>((set, get) => ({
             set({ trackedPlayers: asyncLoaded(players) })
         } catch (err) {
             set((s) => ({ trackedPlayers: asyncError(s.trackedPlayers, err) }))
+        }
+    },
+
+    // Pulls a fresh persona name + avatar for every tracked player, not just the
+    // selected one, so a Steam avatar change shows up on all of them. Silent by
+    // design: the cached profile is a perfectly good fallback.
+    refreshTrackedProfiles: async (maxAgeSeconds = 0) => {
+        try {
+            const players = (await window.electronAPI.stats.refreshTrackedProfiles(
+                maxAgeSeconds
+            )) as TrackedPlayer[]
+            set({ trackedPlayers: asyncLoaded(players) })
+        } catch {
+            // Keep whatever is already on screen.
         }
     },
 

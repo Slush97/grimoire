@@ -1067,6 +1067,7 @@ export interface ElectronAPI {
         getPlayerHeroStats: (accountId: number) => Promise<unknown>;
         getPlayerMatchHistory: (accountId: number, limit?: number, minMatchId?: number) => Promise<unknown>;
         getPlayerSteamProfiles: (accountIds: number[]) => Promise<unknown[]>;
+        refreshTrackedProfiles: (maxAgeSeconds?: number) => Promise<unknown[]>;
 
         // Local Database
         getLocalMMRHistory: (accountId: number, limit?: number) => Promise<unknown[]>;

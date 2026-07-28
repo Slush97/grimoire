@@ -10,6 +10,7 @@ import type {
     HeroStatsParams,
     BuildSearchParams,
     TrackedPlayer,
+    PlayerSteamProfile,
     MMRSnapshot,
     StoredMatch,
     PlayerMatch,
@@ -44,7 +45,12 @@ ipcMain.handle('stats:addTrackedPlayer', async (_, accountId: number, isPrimary 
         throw new Error('Player not found')
     }
 
+    // Prefer Steam's live persona + avatar over deadlock-api's cached scrape.
     const profile = profiles[0]
+    const live = await statsApi.getSteamCommunityProfile(accountId)
+    if (live?.persona_name) profile.persona_name = live.persona_name
+    if (live?.avatar_url) profile.avatar_url = live.avatar_url
+
     statsDb.addTrackedPlayer(profile, isPrimary)
 
     // Also fetch and save initial MMR
@@ -75,6 +81,78 @@ ipcMain.handle('stats:getPrimaryPlayer', (): TrackedPlayer | null => {
 ipcMain.handle('stats:setPrimaryPlayer', (_, accountId: number) => {
     statsDb.setPrimaryPlayer(accountId)
 })
+
+/**
+ * Refresh the cached Steam persona name + avatar for every tracked player.
+ *
+ * The only other refresh lives in stats:syncPlayerData, which covers the
+ * selected player alone, so a second tracked account kept whatever avatar it
+ * had when it was added. One batched request covers all of them. maxAgeSeconds
+ * skips the call when every row was already refreshed that recently; pass 0 to
+ * force it. Returns the rows as stored, refreshed or not.
+ */
+ipcMain.handle(
+    'stats:refreshTrackedProfiles',
+    async (_, maxAgeSeconds = 0): Promise<TrackedPlayer[]> => {
+        const tracked = statsDb.getTrackedPlayers()
+        if (tracked.length === 0) return tracked
+
+        if (maxAgeSeconds > 0) {
+            const cutoff = Math.floor(Date.now() / 1000) - maxAgeSeconds
+            if (tracked.every((p) => (p.last_updated ?? 0) > cutoff)) return tracked
+        }
+
+        // deadlock-api covers every tracked player in one request, but it serves
+        // its own periodic scrape of Steam, so it is the fallback rather than
+        // the source of truth. Steam Community is asked per player below.
+        let apiProfiles: PlayerSteamProfile[] = []
+        try {
+            apiProfiles = await statsApi.getPlayerSteamProfiles(tracked.map((p) => p.account_id))
+        } catch (err) {
+            console.warn('[stats:refreshTrackedProfiles] deadlock-api fetch failed:', err)
+        }
+
+        for (const player of tracked) {
+            const apiProfile = apiProfiles.find((p) => p.account_id === player.account_id)
+            const live = await statsApi.getSteamCommunityProfile(player.account_id)
+
+            if (!live && !apiProfile) {
+                console.warn(
+                    `[stats:refreshTrackedProfiles] ${player.account_id}: no profile from Steam or deadlock-api`
+                )
+                continue
+            }
+
+            const personaName = live?.persona_name ?? apiProfile?.persona_name
+            const avatarUrl = live?.avatar_url ?? apiProfile?.avatar_url
+
+            try {
+                statsDb.updatePlayerProfile({
+                    account_id: player.account_id,
+                    steam_id: apiProfile?.steam_id,
+                    persona_name: personaName,
+                    avatar_url: avatarUrl,
+                })
+                console.log(
+                    `[stats:refreshTrackedProfiles] ${player.account_id}: avatar ${
+                        player.avatar_url === avatarUrl ? 'unchanged' : 'updated'
+                    } from ${live ? 'Steam' : 'deadlock-api'}${
+                        live && apiProfile && live.avatar_url !== apiProfile.avatar_url
+                            ? ` (deadlock-api is behind, its snapshot says ${apiProfile.last_updated})`
+                            : ''
+                    }`
+                )
+            } catch (err) {
+                console.warn(
+                    `[stats:refreshTrackedProfiles] Failed to store profile ${player.account_id}:`,
+                    err
+                )
+            }
+        }
+
+        return statsDb.getTrackedPlayers()
+    }
+)
 
 // ============================================
 // Player Data (API)
@@ -322,13 +400,23 @@ ipcMain.handle('stats:syncPlayerData', async (_, accountId: number) => {
         results.errors.push(`Match history: ${err}`)
     }
 
-    // Refresh cached Steam persona name + avatar
+    // Refresh cached Steam persona name + avatar, Steam first
     try {
+        const live = await statsApi.getSteamCommunityProfile(accountId)
         const profiles = await statsApi.getPlayerSteamProfiles([accountId])
-        if (profiles.length > 0) {
-            statsDb.updatePlayerProfile(profiles[0])
+        const apiProfile = profiles[0]
+        if (live || apiProfile) {
+            statsDb.updatePlayerProfile({
+                account_id: accountId,
+                steam_id: apiProfile?.steam_id,
+                persona_name: live?.persona_name ?? apiProfile?.persona_name,
+                avatar_url: live?.avatar_url ?? apiProfile?.avatar_url,
+            })
         }
     } catch (err) {
+        // Nothing reads results.errors, so log it too: a silent failure here is
+        // exactly what a frozen avatar looks like.
+        console.warn('[stats:syncPlayerData] Profile refresh failed:', err)
         results.errors.push(`Profile: ${err}`)
     }
 

@@ -239,9 +239,9 @@ export function addTrackedPlayer(profile: PlayerSteamProfile, isPrimary = false)
     `)
     stmt.run({
         account_id: profile.account_id,
-        steam_id: profile.steam_id,
-        persona_name: profile.persona_name,
-        avatar_url: profile.avatar_url,
+        steam_id: profile.steam_id ?? null,
+        persona_name: profile.persona_name ?? profile.personaname ?? null,
+        avatar_url: profile.avatar_url ?? profile.avatarfull ?? profile.avatar ?? null,
         is_primary: isPrimary ? 1 : 0,
     })
 
@@ -304,21 +304,34 @@ export function setPrimaryPlayer(accountId: number): void {
 
 /**
  * Update player profile
+ *
+ * Fields the API leaves out are kept rather than overwritten. A partial
+ * profile (an account deadlock-api has not fully scraped) used to take the
+ * whole update down with it, since better-sqlite3 refuses to bind undefined,
+ * and one throw here froze that player's cached persona name and avatar for
+ * good.
  */
-export function updatePlayerProfile(profile: PlayerSteamProfile): void {
+export type PlayerProfileUpdate = Partial<PlayerSteamProfile> & { account_id: number }
+
+export function updatePlayerProfile(profile: PlayerProfileUpdate): void {
     const database = initDatabase()
     database
         .prepare(
             `
         UPDATE players SET
-            steam_id = ?,
-            persona_name = ?,
-            avatar_url = ?,
+            steam_id = COALESCE(?, steam_id),
+            persona_name = COALESCE(?, persona_name),
+            avatar_url = COALESCE(?, avatar_url),
             last_updated = unixepoch()
         WHERE account_id = ?
     `
         )
-        .run(profile.steam_id, profile.persona_name, profile.avatar_url, profile.account_id)
+        .run(
+            profile.steam_id ?? null,
+            profile.persona_name ?? profile.personaname ?? null,
+            profile.avatar_url ?? profile.avatarfull ?? profile.avatar ?? null,
+            profile.account_id
+        )
 }
 
 // ============================================
