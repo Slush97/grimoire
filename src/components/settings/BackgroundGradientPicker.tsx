@@ -46,8 +46,10 @@ function GradientTile({
       style={{ background: gradient ? backgroundGradientPreviewCss(gradient) : BACKGROUND_BASE }}
     >
       {children}
+      {/* Ringed badge: it is accent-colored and the swatch under it can be any
+          hue, so on the warm presets it would otherwise sit orange-on-amber. */}
       {active && (
-        <span className="absolute right-1 top-1 rounded-sm bg-accent p-0.5 text-accent-foreground">
+        <span className="absolute right-1 top-1 rounded-sm bg-accent p-0.5 text-accent-foreground ring-1 ring-black/40">
           <Check className="h-2.5 w-2.5" aria-hidden />
         </span>
       )}
@@ -176,7 +178,7 @@ export default function BackgroundGradientPicker() {
             aria-hidden
           />
           {isCustomActive && (
-            <span className="absolute right-1 top-1 rounded-sm bg-accent p-0.5 text-accent-foreground">
+            <span className="absolute right-1 top-1 rounded-sm bg-accent p-0.5 text-accent-foreground ring-1 ring-black/40">
               <Check className="h-2.5 w-2.5" aria-hidden />
             </span>
           )}

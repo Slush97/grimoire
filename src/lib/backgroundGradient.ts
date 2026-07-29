@@ -24,7 +24,10 @@ export const BACKGROUND_GRADIENT_PRESETS: BackgroundGradientPreset[] = [
   { id: 'verdant', name: 'Verdant', from: '#10b981', to: '#84cc16' },
   { id: 'nebula',  name: 'Nebula',  from: '#6366f1', to: '#f43f5e' },
   { id: 'gold',    name: 'Gold',    from: '#f59e0b', to: '#eab308' },
-  { id: 'ash',     name: 'Ash',     from: '#64748b', to: '#1e293b' },
+  // Slate rather than slate-into-navy: #1e293b over a #0f0f0f base lands about
+  // seven points off the background, so the old pairing rendered as a single
+  // grey smudge and its swatch was indistinguishable from "No glow".
+  { id: 'ash',     name: 'Ash',     from: '#94a3b8', to: '#64748b' },
 ];
 
 /** Peak alpha at each corner. Low enough that body text over the glow keeps
@@ -48,26 +51,43 @@ function rgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-/**
- * The `background` shorthand for a gradient. Sizes are percentages so the same
- * string works on a full window and on a 56px preview tile.
- *
- * `intensity` scales the peak alpha: the preview tiles run a little hotter than
- * the real layer, because at thumbnail size a whisper of color reads as nothing.
- */
-export function backgroundGradientCss(gradient: BackgroundGradient, intensity = 1): string {
-  const alpha = GLOW_ALPHA * intensity;
-  // Radii stay well under half the viewport so the two glows hug their corners
-  // and never meet in the middle: the center of the page stays neutral.
+interface GlowGeometry {
+  /** Peak alpha at each corner. */
+  alpha: number;
+  /** Radial-gradient size, as percentages of the painted box. */
+  size: string;
+  /** Where the color has faded out entirely. */
+  stop: string;
+}
+
+/** The real layer. Radii stay well under half the viewport so the two glows hug
+ *  their corners and never meet in the middle: the center of the page stays
+ *  neutral, and text over it keeps its contrast. */
+const LAYER: GlowGeometry = { alpha: GLOW_ALPHA, size: '55% 50%', stop: '70%' };
+
+/** Swatches identify a preset; they do not simulate it. Reusing the layer's
+ *  geometry on an 80x48 tile tints only about a quarter of it and leaves the
+ *  rest flat #0f0f0f, so every preset read as the same near-black rectangle
+ *  sitting under a row of vivid accent chips. Swatches therefore get much
+ *  larger radii and a higher alpha: both colors are legible at thumbnail size
+ *  and the two glows meet in the middle instead of hugging opposite corners. */
+const SWATCH: GlowGeometry = { alpha: 0.7, size: '120% 110%', stop: '88%' };
+
+function glowLayers(gradient: BackgroundGradient, { alpha, size, stop }: GlowGeometry): string {
   return [
-    `radial-gradient(55% 50% at 0% 0%, ${rgba(gradient.from, alpha)} 0%, transparent 70%)`,
-    `radial-gradient(55% 50% at 100% 100%, ${rgba(gradient.to, alpha)} 0%, transparent 70%)`,
+    `radial-gradient(${size} at 0% 0%, ${rgba(gradient.from, alpha)} 0%, transparent ${stop})`,
+    `radial-gradient(${size} at 100% 100%, ${rgba(gradient.to, alpha)} 0%, transparent ${stop})`,
   ].join(', ');
 }
 
-/** Preview tile background: the glow over the app's own base color. */
+/** The `background` shorthand for the real, full-window glow layer. */
+export function backgroundGradientCss(gradient: BackgroundGradient): string {
+  return glowLayers(gradient, LAYER);
+}
+
+/** Swatch background: the bolder preview glow over the app's own base color. */
 export function backgroundGradientPreviewCss(gradient: BackgroundGradient): string {
-  return `${backgroundGradientCss(gradient, 1.6)}, ${BACKGROUND_BASE}`;
+  return `${glowLayers(gradient, SWATCH)}, ${BACKGROUND_BASE}`;
 }
 
 /** True when both corners match, ignoring hex case. */
