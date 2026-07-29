@@ -53,6 +53,17 @@ export default function MaintenanceSection() {
       .catch(() => setPreviewCacheBytes(null));
   }, []);
 
+  // A sync outlives this component: it runs in main, and switching settings
+  // panes unmounts us. Ask main whether one is already running so we come back
+  // showing the spinner instead of an idle button that quietly no-ops (main
+  // refuses a second sync while one is in flight).
+  useEffect(() => {
+    window.electronAPI
+      .isSyncInProgress()
+      .then(setIsSyncing)
+      .catch(() => {});
+  }, []);
+
   // Listen for sync progress
   useEffect(() => {
     const unsub = window.electronAPI.onSyncProgress((data) => {
@@ -60,6 +71,9 @@ export default function MaintenanceSection() {
         setSyncProgress({ section: data.section, modsProcessed: data.modsProcessed, totalMods: data.totalMods });
       } else if (data.phase === 'complete') {
         setSyncProgress(null);
+        // Also clears the button for a sync we adopted on mount rather than
+        // started ourselves: that one has no handler waiting on it to finish.
+        setIsSyncing(false);
         // Reload sync status after completion
         window.electronAPI.getSyncStatus().then(setSyncStatus);
       }
