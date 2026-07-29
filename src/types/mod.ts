@@ -1149,11 +1149,20 @@ export interface AppSettings {
    *  to the official Deadworks registry (api.deadworks.net) and can be repointed
    *  via settings.json at any deadworks-shaped relay (e.g. a future grimoire-relay). */
   deadworksRelayUrl?: string;
-  /** OptimizationLock performance config: apply Sqooky's community fps preset
-   *  onto gameinfo.gi from a Settings card. Applied-state lives in a sidecar
-   *  file next to gameinfo.gi (main-process owned), not in settings, so a
-   *  renderer settings save can never clobber it. */
+  /** Performance config: apply one of the bundled community fps presets onto
+   *  gameinfo.gi from a Settings card. Applied-state lives in a sidecar file
+   *  next to gameinfo.gi (main-process owned), not in settings, so a renderer
+   *  settings save can never clobber it. */
   experimentalPerformanceConfig?: boolean;
+  /** Which bundled performance preset the user has selected. Undefined = the
+   *  generated default. This is the pre-apply choice; what is actually in
+   *  gameinfo.gi right now comes from the file's own marker. */
+  performanceConfigPresetId?: string;
+  /** Gameplay/visibility convar keys the user opted into, per preset id.
+   *  These are held out of the presets by default (a performance preset must
+   *  not silently enable enemy outlines or change FOV), so an empty or missing
+   *  list means none are applied. */
+  performanceConfigOptIns?: Record<string, string[]>;
   /** Editor binary used to open gameinfo.gi for hand edits. null = the OS
    *  default app; undefined = never chosen, so the picker is shown first.
    *  (.gi maps to text/plain, which often resolves to a word processor, so

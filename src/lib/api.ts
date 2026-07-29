@@ -877,16 +877,26 @@ export async function getPerformanceConfigStatus(): Promise<PerformanceConfigSta
   return window.electronAPI.getPerformanceConfigStatus();
 }
 
-export async function applyPerformanceConfig(): Promise<PerformanceConfigStatus> {
-  return window.electronAPI.applyPerformanceConfig();
+export async function listPerformancePresets(): Promise<PerformancePresetSummary[]> {
+  return window.electronAPI.listPerformancePresets();
+}
+
+export async function applyPerformanceConfig(
+  presetId?: string,
+  optIns?: string[]
+): Promise<PerformanceConfigStatus> {
+  return window.electronAPI.applyPerformanceConfig(presetId, optIns);
 }
 
 export async function removePerformanceConfig(): Promise<PerformanceConfigStatus> {
   return window.electronAPI.removePerformanceConfig();
 }
 
-export async function resetPerformanceConfigOverrides(): Promise<PerformanceConfigStatus> {
-  return window.electronAPI.resetPerformanceConfigOverrides();
+export async function resetPerformanceConfigOverrides(
+  presetId?: string,
+  optIns?: string[]
+): Promise<PerformanceConfigStatus> {
+  return window.electronAPI.resetPerformanceConfigOverrides(presetId, optIns);
 }
 
 export async function restorePerformanceConfigBackup(): Promise<PerformanceConfigStatus> {
@@ -1054,7 +1064,7 @@ export function conflictPairKey(a: string, b: string): string {
 // Profile wire types are single-sourced in types/electron.ts; re-exported
 // here to preserve this module's existing import surface.
 export type { Profile, ProfileMod, ProfileCrosshairSettings, ApplyProfileResult } from '../types/electron';
-import type { Profile, ProfileCrosshairSettings, ApplyProfileResult, PerformanceConfigStatus, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
+import type { Profile, ProfileCrosshairSettings, ApplyProfileResult, PerformanceConfigStatus, PerformancePresetSummary, EditorCandidate, LockerImageVariant, LockerImageEdit, CropRect } from '../types/electron';
 
 export async function getProfiles(): Promise<Profile[]> {
   return window.electronAPI.getProfiles();

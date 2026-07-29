@@ -1,0 +1,157 @@
+{
+  "$comment": [
+    "Pin manifest for the bundled performance presets. Every upstream file is",
+    "pinned to an immutable commit SHA and verified by sha256 at generation",
+    "time, so a moved tag, a force-push, or a tampered mirror fails loudly",
+    "instead of silently changing what Grimoire writes into gameinfo.gi.",
+    "",
+    "`ref` records the human-facing upstream version (a git tag where the",
+    "project publishes them, otherwise the version the author used in prose)",
+    "and is documentation only: `commit` is what is actually fetched.",
+    "",
+    "To update a pin deliberately:  pnpm perf:presets --refresh <presetId|all>",
+    "then  pnpm perf:presets  to regenerate, and review the diff.",
+    "Never hand-edit electron/main/services/performanceConfigData.ts."
+  ],
+  "baseline": {
+    "$comment": "Stock gameinfo.gi. Every preset is stored as a diff against this, which is what lets Grimoire patch in place instead of replacing the user's file.",
+    "repo": "Sqooky/OptimizationLock",
+    "commit": "005ca7741fb98c9793dc80ec28a703b3bc47fff1",
+    "path": "clean gameinfo.gi/gameinfo.gi",
+    "sha256": "2e6c4d4184383e8db97df172b7203089116bd93c4a3a9971b4d231009cf9e238"
+  },
+  "sources": {
+    "optimizationlock": {
+      "repo": "Sqooky/OptimizationLock",
+      "url": "https://github.com/Sqooky/OptimizationLock",
+      "license": "GPL-3.0",
+      "credit": "OptimizationLock by Sqooky and contributors",
+      "commit": "005ca7741fb98c9793dc80ec28a703b3bc47fff1",
+      "ref": "2.7",
+      "refKind": "prose",
+      "$comment": "Upstream publishes no git tags or releases; 'ref' is the version from the 2026-07-25 release commit message. Pin is the commit SHA. If Sqooky starts tagging, switch refKind to 'tag' and pin the tag's resolved SHA."
+    },
+    "optilock": {
+      "repo": "dacooderr/OptiLock",
+      "url": "https://github.com/dacooderr/OptiLock",
+      "license": "GPL-3.0",
+      "credit": "OptiLock by dacooder and contributors",
+      "commit": "fdfce93a95db176c539d3dbcb601238e181008b9",
+      "ref": "v4.2",
+      "refKind": "tag",
+      "$comment": "Tag v4.2 resolved to this commit on 2026-07-29. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate."
+    }
+  },
+  "presets": [
+    {
+      "id": "sqooky-default",
+      "name": "Sqooky's Default",
+      "tier": "balanced",
+      "default": true,
+      "source": "optimizationlock",
+      "path": "Sqooky's .gi/gameinfo.gi",
+      "sha256": "4472f50c2925b99bf907d6d6444a08d0ef26a7586b74f575820ec8ffcf265333",
+      "author": "Sqooky"
+    },
+    {
+      "id": "sqooky-testing",
+      "name": "Sqooky's Testing",
+      "tier": "preview",
+      "source": "optimizationlock",
+      "path": "test_cfg/gameinfo.gi",
+      "sha256": "b8e2e34ae293d9a6d3a5bd115d6f92626d19662684033beb906401f6a7b6f0bf",
+      "author": "Sqooky",
+      "unstable": true
+    },
+    {
+      "id": "boot-max-fps",
+      "name": "boot's Max FPS",
+      "tier": "aggressive",
+      "source": "optimizationlock",
+      "path": "boot's maxium fps config/gameinfo.gi",
+      "sha256": "6dbc82150afe2ec409646025b2437b093aab18d852a7329b80aded2ffb7cf0e5",
+      "author": "boot"
+    },
+    {
+      "id": "kaizu-min-spec",
+      "name": "kaizuchanerus Minimum Spec",
+      "tier": "potato",
+      "source": "optimizationlock",
+      "path": "kaizuchanerus minimum spec/gameinfo.gi",
+      "sha256": "f27e7d6fd479472f4aa127d4dd5eadb8ec6805e71e3f561e6f02ff879354c1c9",
+      "author": "kaizuchanerus"
+    },
+    {
+      "id": "optilock-fps",
+      "name": "OptiLock FPS",
+      "tier": "competitive",
+      "source": "optilock",
+      "path": "OptiLock FPS Preset/gameinfo.gi",
+      "sha256": "34873789e25b552829cff843b111b7c5f7f3127651a31d6e3f7fd1d67a2e1291",
+      "author": "dacooder"
+    },
+    {
+      "id": "optilock-max",
+      "name": "OptiLock Max FPS",
+      "tier": "maximum",
+      "source": "optilock",
+      "path": "OptiLock Max FPS Preset/gameinfo.gi",
+      "sha256": "69032638fda021655d21e5ff8aaf8c53f903c32d55853a576575efd4dfe13326",
+      "author": "dacooder"
+    }
+  ],
+  "exclude": {
+    "$comment": "Never emitted into a preset, whatever upstream sets.",
+    "sections": [
+      ["FileSystem"],
+      ["Hammer"],
+      ["pulse"],
+      ["ResourceCompiler"],
+      ["ContentBuilder"],
+      ["SteamAudio"]
+    ],
+    "keys": [
+      {
+        "key": "AllowKeyChordBindings",
+        "why": "Author-personal keybinding preference, not a performance setting."
+      }
+    ]
+  },
+  "optIn": {
+    "$comment": [
+      "Convars that change what the player can see or how the camera frames the",
+      "world rather than how fast it renders. Stripped from every preset and",
+      "offered as explicit opt-ins instead, so Grimoire never silently turns on",
+      "enemy visibility or changes someone's FOV under a 'performance' label.",
+      "Each entry's default value is whatever the selected preset set it to;",
+      "presets that do not set it simply do not offer the toggle.",
+      "`group` buckets them in the UI."
+    ],
+    "groups": {
+      "visibility": "Enemy and unit visibility",
+      "camera": "Camera and field of view",
+      "devtools": "Developer and testing tools"
+    },
+    "keys": [
+      { "key": "citadel_player_outline_enemies", "group": "visibility" },
+      { "key": "citadel_trooper_outline_enabled", "group": "visibility" },
+      { "key": "citadel_trooper_friendly_glow_disabled", "group": "visibility" },
+      { "key": "citadel_trooper_glow_disabled", "group": "visibility" },
+      { "key": "citadel_player_glow_disabled", "group": "visibility" },
+      { "key": "citadel_boss_glow_disabled", "group": "visibility" },
+      { "key": "citadel_unit_status_allies_see_thru_walls", "group": "visibility" },
+      { "key": "citadel_unit_status_allies_see_thru_walls_max_distance", "group": "visibility" },
+      { "key": "cl_glow_brightness", "group": "visibility" },
+      { "key": "r_citadel_outlines", "group": "visibility" },
+      { "key": "r_citadel_npr_outlines", "group": "visibility" },
+      { "key": "r_citadel_npr_outlines_max_dist", "group": "visibility" },
+      { "key": "r_citadel_glow_health_bars", "group": "visibility" },
+      { "key": "r_citadel_selection_outline2_alpha", "group": "visibility" },
+      { "key": "r_citadel_selection_outline2_offset", "group": "visibility" },
+      { "key": "r_citadel_selection_outline2_width", "group": "visibility" },
+      { "key": "r_aspectratio", "group": "camera" },
+      { "key": "citadel_camera_hero_fov", "group": "camera" },
+      { "key": "citadel_hideout_enable_testing_tools", "group": "devtools" }
+    ]
+  }
+}

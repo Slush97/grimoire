@@ -1,23 +1,27 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
-import { Gauge, ExternalLink, RefreshCw, RotateCcw, Settings2, SquarePen } from 'lucide-react';
+import { Gauge, RefreshCw, RotateCcw, Settings2, SquarePen } from 'lucide-react';
 import { Card, Badge, Button } from '../common/ui';
 import EditorPickerModal from './EditorPickerModal';
+import PresetPicker from './PresetPicker';
+import GameplayOptIns from './GameplayOptIns';
 import { useAppStore, type BrowseArtistRef } from '../../stores/appStore';
 import {
   applyPerformanceConfig,
   getPerformanceConfigStatus,
+  listPerformancePresets,
   openPerformanceConfigFile,
   removePerformanceConfig,
   resetPerformanceConfigOverrides,
   restorePerformanceConfigBackup,
 } from '../../lib/api';
-import type { PerformanceConfigStatus } from '../../types/electron';
+import type { PerformanceConfigStatus, PerformancePresetSummary } from '../../types/electron';
 
-const OPTIMIZATIONLOCK_URL = 'https://github.com/Sqooky/OptimizationLock';
 const SQOOKY_KOFI_URL = 'https://ko-fi.com/sqooky';
+/** Presets sourced from this repo get the in-app artist link for its author. */
+const SQOOKY_REPO = 'Sqooky/OptimizationLock';
 
 // Sqooky's GameBanana identity, so the credit opens the in-app artist view
 // (Browse scoped to their submissions) like any other artist link.
@@ -35,14 +39,21 @@ const SQOOKY_ARTIST: BrowseArtistRef = {
  * composes. Mirrors the message logic in performanceConfig.ts; falls back to
  * the backend message for the error state (which carries a raw error detail).
  */
-function performanceStatusMessage(status: PerformanceConfigStatus, t: TFunction): string {
+function performanceStatusMessage(
+  status: PerformanceConfigStatus,
+  t: TFunction,
+  presets: PerformancePresetSummary[]
+): string {
   const overrideCount = status.overrideCount ?? 0;
+  const appliedName =
+    presets.find((p) => p.id === status.appliedPresetId)?.name ?? status.appliedPresetId ?? '';
   switch (status.state) {
     case 'applied': {
       const base =
         status.appliedVersion === status.bundledVersion
-          ? t('performance.status.applied', { version: status.appliedVersion })
+          ? t('performance.status.applied', { preset: appliedName, version: status.appliedVersion })
           : t('performance.status.appliedOutdated', {
+              preset: appliedName,
               version: status.appliedVersion,
               latest: status.bundledVersion,
             });
@@ -66,17 +77,33 @@ function performanceStatusMessage(status: PerformanceConfigStatus, t: TFunction)
   }
 }
 
-// Settings card for the OptimizationLock performance preset (experimental).
-// Applies Sqooky's community fps config onto gameinfo.gi in place, shows
-// whether a game update wiped it, and credits the upstream project.
+// Settings card for the bundled performance presets (experimental). Applies a
+// selected community fps config onto gameinfo.gi in place, shows whether a game
+// update wiped it, and credits the upstream project the preset came from.
 export default function PerformanceConfigCard() {
   const { t } = useTranslation();
   const [status, setStatus] = useState<PerformanceConfigStatus | null>(null);
+  const [presets, setPresets] = useState<PerformancePresetSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [openError, setOpenError] = useState<string | null>(null);
   const { settings, saveSettings, setBrowseUi } = useAppStore();
   const navigate = useNavigate();
+
+  // Which preset the user has chosen for the next apply. Falls back to the
+  // generated default; what is in gameinfo.gi right now is status.appliedPresetId.
+  const selectedId =
+    settings?.performanceConfigPresetId ??
+    presets.find((p) => p.isDefault)?.id ??
+    presets[0]?.id ??
+    '';
+  const selected = presets.find((p) => p.id === selectedId) ?? null;
+
+  const selectedOptIns = useMemo(() => {
+    const saved = settings?.performanceConfigOptIns?.[selectedId] ?? [];
+    // Drop keys the preset no longer defines (an upstream bump can retire one).
+    return selected ? saved.filter((key) => selected.optIn.some((c) => c.key === key)) : [];
+  }, [settings?.performanceConfigOptIns, selectedId, selected]);
 
   const viewSqookyInBrowse = () => {
     setBrowseUi({ submitter: SQOOKY_ARTIST });
@@ -98,6 +125,9 @@ export default function PerformanceConfigCard() {
 
   useEffect(() => {
     void refresh();
+    void listPerformancePresets()
+      .then(setPresets)
+      .catch(() => setPresets([]));
   }, [refresh]);
 
   // Re-check when the window regains focus so hand edits made in an external
@@ -117,6 +147,19 @@ export default function PerformanceConfigCard() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const onSelectPreset = async (presetId: string) => {
+    if (!settings) return;
+    await saveSettings({ ...settings, performanceConfigPresetId: presetId });
+  };
+
+  const onChangeOptIns = async (keys: string[]) => {
+    if (!settings) return;
+    await saveSettings({
+      ...settings,
+      performanceConfigOptIns: { ...settings.performanceConfigOptIns, [selectedId]: keys },
+    });
   };
 
   const openFile = async () => {
@@ -147,6 +190,19 @@ export default function PerformanceConfigCard() {
   // gameinfo.gi is empty/corrupt but we hold a backup: offer one-click recovery
   // so a manually cleared file is never a dead-end.
   const canRestore = status?.canRestoreBackup === true;
+  // A different preset than the one in the file is selected, so the primary
+  // action switches rather than reapplies.
+  const willSwitch = applied && status?.appliedPresetId !== selectedId;
+  const appliedName =
+    presets.find((p) => p.id === status?.appliedPresetId)?.name ?? status?.appliedPresetId ?? '';
+
+  const primaryLabel = willSwitch
+    ? t('performance.switchTo', { preset: selected?.name ?? '' })
+    : applied
+      ? t('performance.reapply')
+      : wiped
+        ? t('performance.reapplyConfig')
+        : t('performance.applyConfig');
 
   return (
     <Card
@@ -166,94 +222,122 @@ export default function PerformanceConfigCard() {
         )
       }
     >
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div className="min-w-0 space-y-1">
-          <p className="text-sm text-text-secondary">{status ? performanceStatusMessage(status, t) : t('performance.checkingGameinfo')}</p>
-          <p className="text-xs text-text-secondary">
-            <Trans
-              i18nKey="performance.credit"
-              components={{
-                sqooky: (
-                  <button
-                    type="button"
-                    onClick={viewSqookyInBrowse}
-                    className="text-accent hover:underline"
-                  />
-                ),
-                contributors: (
-                  <a
-                    href={OPTIMIZATIONLOCK_URL}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-accent hover:underline inline-flex items-center gap-0.5"
-                  />
-                ),
-                extlink: <ExternalLink className="w-3 h-3" aria-hidden="true" />,
-                kofi: (
-                  <a
-                    href={SQOOKY_KOFI_URL}
-                    target="_blank"
-                    rel="noreferrer noopener"
-                    className="text-accent hover:underline"
-                  />
-                ),
-              }}
-            />
-          </p>
-          {openError && <p className="text-xs text-state-danger">{openError}</p>}
-        </div>
-        <div className="flex items-center gap-2 shrink-0">
-          {canRestore && (
+      <div className="space-y-4">
+        {presets.length > 0 && (
+          <PresetPicker
+            presets={presets}
+            selectedId={selectedId}
+            onSelect={(id) => void onSelectPreset(id)}
+            disabled={busy}
+            creditSlot={
+              selected?.upstream.repo === SQOOKY_REPO ? (
+                <Trans
+                  i18nKey="performance.creditSqooky"
+                  components={{
+                    sqooky: (
+                      <button
+                        type="button"
+                        onClick={viewSqookyInBrowse}
+                        className="text-accent hover:underline"
+                      />
+                    ),
+                    kofi: (
+                      <a
+                        href={SQOOKY_KOFI_URL}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="text-accent hover:underline"
+                      />
+                    ),
+                  }}
+                />
+              ) : null
+            }
+          />
+        )}
+
+        {selected && (
+          <GameplayOptIns
+            preset={selected}
+            selected={selectedOptIns}
+            onChange={(keys) => void onChangeOptIns(keys)}
+            disabled={busy}
+          />
+        )}
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="min-w-0 space-y-1">
+            <p className="text-sm text-text-secondary">
+              {status
+                ? performanceStatusMessage(status, t, presets)
+                : t('performance.checkingGameinfo')}
+            </p>
+            {willSwitch && (
+              <p className="text-xs text-state-info">
+                {t('performance.switchNote', {
+                  current: appliedName,
+                  next: selected?.name ?? '',
+                })}
+              </p>
+            )}
+            <p className="text-xs text-text-secondary">{t('performance.shadowsHint')}</p>
+            {openError && <p className="text-xs text-state-danger">{openError}</p>}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {canRestore && (
+              <Button
+                onClick={() => run(restorePerformanceConfigBackup)}
+                disabled={busy}
+                icon={RotateCcw}
+                size="sm"
+              >
+                {t('performance.restoreBackup')}
+              </Button>
+            )}
             <Button
-              onClick={() => run(restorePerformanceConfigBackup)}
-              disabled={busy}
-              icon={RotateCcw}
+              onClick={() => run(() => applyPerformanceConfig(selectedId, selectedOptIns))}
+              isLoading={busy}
+              icon={wiped || willSwitch ? RefreshCw : undefined}
+              variant={canRestore ? 'secondary' : 'primary'}
               size="sm"
             >
-              {t('performance.restoreBackup')}
+              {primaryLabel}
             </Button>
-          )}
-          <Button
-            onClick={() => run(applyPerformanceConfig)}
-            isLoading={busy}
-            icon={wiped ? RefreshCw : undefined}
-            variant={canRestore ? 'secondary' : 'primary'}
-            size="sm"
-          >
-            {applied ? t('performance.reapply') : wiped ? t('performance.reapplyConfig') : t('performance.applyConfig')}
-          </Button>
-          {(applied || wiped) && (
-            <Button onClick={() => run(removePerformanceConfig)} disabled={busy} variant="secondary" size="sm">
-              {t('common.actions.remove')}
-            </Button>
-          )}
-          {applied && (
-            <Button onClick={onEditFile} disabled={busy} variant="ghost" size="sm" icon={SquarePen}>
-              {t('performance.editFile')}
-            </Button>
-          )}
-          {applied && settings?.externalEditorPath !== undefined && (
-            <button
-              type="button"
-              onClick={() => setPickerOpen(true)}
-              disabled={busy}
-              title={t('performance.changeEditor')}
-              aria-label={t('performance.changeEditor')}
-              className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary"
-            >
-              <Settings2 className="w-4 h-4" aria-hidden="true" />
-            </button>
-          )}
-          {applied && (status?.overrideCount ?? 0) > 0 && (
-            <Button
-              onClick={() => run(resetPerformanceConfigOverrides)}
-              disabled={busy}
-              variant="ghost"
-              size="sm"
-            >
-              {t('performance.resetOverrides')}
-            </Button>
-          )}
+            {(applied || wiped) && (
+              <Button onClick={() => run(removePerformanceConfig)} disabled={busy} variant="secondary" size="sm">
+                {t('common.actions.remove')}
+              </Button>
+            )}
+            {applied && (
+              <Button onClick={onEditFile} disabled={busy} variant="ghost" size="sm" icon={SquarePen}>
+                {t('performance.editFile')}
+              </Button>
+            )}
+            {applied && settings?.externalEditorPath !== undefined && (
+              <button
+                type="button"
+                onClick={() => setPickerOpen(true)}
+                disabled={busy}
+                title={t('performance.changeEditor')}
+                aria-label={t('performance.changeEditor')}
+                className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary"
+              >
+                <Settings2 className="w-4 h-4" aria-hidden="true" />
+              </button>
+            )}
+            {applied && (status?.overrideCount ?? 0) > 0 && (
+              <Button
+                onClick={() =>
+                  run(() => resetPerformanceConfigOverrides(selectedId, selectedOptIns))
+                }
+                disabled={busy}
+                variant="ghost"
+                size="sm"
+              >
+                {t('performance.resetOverrides')}
+              </Button>
+            )}
+          </div>
         </div>
       </div>
       {pickerOpen && (
