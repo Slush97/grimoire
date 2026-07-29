@@ -1,4 +1,5 @@
 import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type ComponentType, type SVGProps } from 'react';
+import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Images, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
@@ -63,11 +64,25 @@ import {
   type HeroCategory,
 } from '../lib/lockerUtils';
 import { shuffleSkinKey, type VariantChoice } from '../lib/lockerRandomizer';
+import {
+  appendHeroTypeaheadCharacter,
+  backspaceHeroTypeahead,
+  expireHeroTypeaheadQuery,
+  isHeroTypeaheadKey,
+  reconcileHeroTypeaheadHeroes,
+  type HeroTypeaheadState,
+} from '../lib/lockerHeroTypeahead';
 
 // Route changes flip the overlay state instantly, which unmounts the hero or
 // global panel on the next frame with no exit transition. Retain the last
 // value for the fade-out duration so the panel can animate away first.
 const OVERLAY_EXIT_MS = 200;
+const HERO_TYPEAHEAD_FADE_DELAY_MS = 700;
+const HERO_TYPEAHEAD_EXPIRE_MS = 2_200;
+const EMPTY_HERO_TYPEAHEAD: HeroTypeaheadState = {
+  query: '',
+  highlightedHeroIds: null,
+};
 
 function useOverlayExit<T>(value: T | null): { item: T | null; closing: boolean } {
   const [retained, setRetained] = useState<T | null>(null);
@@ -233,6 +248,9 @@ export default function Locker() {
   const [hideEmptyHeroes, setHideEmptyHeroes] = useState(
     () => localStorage.getItem('lockerHideEmpty') === 'true'
   );
+  const [heroTypeahead, setHeroTypeahead] =
+    useState<HeroTypeaheadState>(EMPTY_HERO_TYPEAHEAD);
+  const [heroTypeaheadFading, setHeroTypeaheadFading] = useState(false);
   const [abilityRecolorSupport, setAbilityRecolorSupport] = useState<Record<string, boolean>>({});
   // Soul-container GLB import (lazy three.js modal), openable from the global
   // Locker tab. Mirrors the Installed-page trigger.
@@ -286,6 +304,9 @@ export default function Locker() {
   }, []);
   const lockerScrollRef = useRef<HTMLDivElement | null>(null);
   const latestLockerScrollTopRef = useRef(lockerPageScrollTop);
+  const heroTypeaheadRef = useRef(heroTypeahead);
+  const heroTypeaheadFadeTimerRef = useRef<number | null>(null);
+  const heroTypeaheadExpireTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     loadSettings();
@@ -595,6 +616,138 @@ export default function Locker() {
     });
   }, [heroList, hideEmptyHeroes, favoriteHeroes, heroMods, heroSounds]);
 
+  const applyHeroTypeaheadState = useCallback((next: HeroTypeaheadState) => {
+    heroTypeaheadRef.current = next;
+    setHeroTypeahead(next);
+  }, []);
+
+  const clearHeroTypeaheadTimers = useCallback(() => {
+    if (heroTypeaheadFadeTimerRef.current !== null) {
+      window.clearTimeout(heroTypeaheadFadeTimerRef.current);
+      heroTypeaheadFadeTimerRef.current = null;
+    }
+    if (heroTypeaheadExpireTimerRef.current !== null) {
+      window.clearTimeout(heroTypeaheadExpireTimerRef.current);
+      heroTypeaheadExpireTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleHeroTypeaheadFade = useCallback(() => {
+    clearHeroTypeaheadTimers();
+    setHeroTypeaheadFading(false);
+    heroTypeaheadFadeTimerRef.current = window.setTimeout(() => {
+      setHeroTypeaheadFading(true);
+    }, HERO_TYPEAHEAD_FADE_DELAY_MS);
+    heroTypeaheadExpireTimerRef.current = window.setTimeout(() => {
+      applyHeroTypeaheadState(expireHeroTypeaheadQuery(heroTypeaheadRef.current));
+      setHeroTypeaheadFading(false);
+      heroTypeaheadFadeTimerRef.current = null;
+      heroTypeaheadExpireTimerRef.current = null;
+    }, HERO_TYPEAHEAD_EXPIRE_MS);
+  }, [applyHeroTypeaheadState, clearHeroTypeaheadTimers]);
+
+  const clearHeroTypeahead = useCallback(() => {
+    clearHeroTypeaheadTimers();
+    applyHeroTypeaheadState(EMPTY_HERO_TYPEAHEAD);
+    setHeroTypeaheadFading(false);
+  }, [applyHeroTypeaheadState, clearHeroTypeaheadTimers]);
+
+  useEffect(() => {
+    const next = reconcileHeroTypeaheadHeroes(
+      heroTypeaheadRef.current,
+      displayedHeroList
+    );
+    if (next !== heroTypeaheadRef.current) applyHeroTypeaheadState(next);
+  }, [applyHeroTypeaheadState, displayedHeroList]);
+
+  useEffect(() => {
+    if (selectedHeroId !== null || globalSelected) {
+      clearHeroTypeahead();
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented ||
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        event.isComposing
+      ) {
+        return;
+      }
+
+      const target = event.target;
+      if (
+        target instanceof HTMLElement &&
+        target.closest(
+          'input, textarea, select, button, a, [contenteditable="true"], [role="textbox"], [role="button"], [role="menuitem"], [role="option"], [role="listbox"]'
+        )
+      ) {
+        return;
+      }
+      if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
+
+      const current = heroTypeaheadRef.current;
+      let next: HeroTypeaheadState | null = null;
+      if (
+        event.key === 'Backspace' &&
+        (current.query.length > 0 || current.highlightedHeroIds !== null)
+      ) {
+        next = backspaceHeroTypeahead(current, displayedHeroList);
+      } else if (
+        isHeroTypeaheadKey(event.key, current.query.length > 0)
+      ) {
+        next = appendHeroTypeaheadCharacter(current, event.key, displayedHeroList);
+      }
+
+      if (!next) return;
+      event.preventDefault();
+      applyHeroTypeaheadState(next);
+      if (next.query.length > 0) {
+        scheduleHeroTypeaheadFade();
+      } else {
+        clearHeroTypeaheadTimers();
+        setHeroTypeaheadFading(false);
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [
+    applyHeroTypeaheadState,
+    clearHeroTypeahead,
+    clearHeroTypeaheadTimers,
+    displayedHeroList,
+    globalSelected,
+    scheduleHeroTypeaheadFade,
+    selectedHeroId,
+  ]);
+
+  useEffect(
+    () => () => {
+      clearHeroTypeaheadTimers();
+    },
+    [clearHeroTypeaheadTimers]
+  );
+
+  const highlightedHeroIds = useMemo(
+    () =>
+      heroTypeahead.highlightedHeroIds
+        ? new Set(heroTypeahead.highlightedHeroIds)
+        : null,
+    [heroTypeahead.highlightedHeroIds]
+  );
+  const heroTypeaheadCardState = useCallback(
+    (heroId?: number) => {
+      if (!highlightedHeroIds) return '';
+      return heroId !== undefined && highlightedHeroIds.has(heroId)
+        ? 'relative z-10 opacity-100 ring-2 ring-accent/90 shadow-lg shadow-accent/20'
+        : 'opacity-20';
+    },
+    [highlightedHeroIds]
+  );
+
   const lockerCardsExpandedByDefault = settings?.lockerCardsExpandedByDefault ?? false;
 
   useEffect(() => {
@@ -869,6 +1022,20 @@ export default function Locker() {
     <div ref={lockerScrollRef} className="h-full overflow-y-auto">
       {/* Shared gradient def for the active hero-card customization glyphs. */}
       <FacetSheenDefs />
+      {heroTypeahead.query &&
+        createPortal(
+          <div
+            aria-hidden
+            className={`pointer-events-none fixed bottom-10 right-12 z-[100] max-w-[45vw] truncate text-right font-reaver text-6xl uppercase tracking-wider text-text-primary drop-shadow-[0_2px_20px_rgba(0,0,0,0.75)] transition-opacity ease-out ${
+              heroTypeaheadFading
+                ? 'duration-[1500ms] opacity-0'
+                : 'duration-[0ms] opacity-90'
+            }`}
+          >
+            {heroTypeahead.query}
+          </div>,
+          document.body,
+        )}
       <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="text-sm text-text-secondary">
@@ -967,30 +1134,38 @@ export default function Locker() {
           {/* Always rendered: soul containers & spirit urns are imported from
               inside this drill-in, so the card must stay reachable even with
               nothing installed yet (otherwise the importer is unreachable). */}
-          <GlobalGalleryCard
-            count={globalCount}
-            typeCount={globalTypeCount}
-            onNavigate={() => navigate('/locker/global')}
-          />
-          {displayedHeroList.map((hero) => (
-            <HeroGalleryCard
-              key={hero.id}
-              hero={hero}
-              facets={heroFacets(hero.id, hero.name)}
-              inShufflePool={shuffleOnLaunch && shufflePoolHeroes.has(hero.id)}
-              cardImage={heroCardImage(hero.id)}
-              hideHeroName={heroHideName(hero.id)}
-              isFavorite={favoriteHeroes.includes(hero.id)}
-              onNavigate={() => goToHero(hero)}
-              onBrowse={() => openHeroInBrowse(hero)}
-              onToggleFavorite={() =>
-                setFavoriteHeroes((prev) =>
-                  prev.includes(hero.id)
-                    ? prev.filter((id) => id !== hero.id)
-                    : [...prev, hero.id]
-                )
-              }
+          <div
+            className={`rounded-2xl ${heroTypeaheadCardState()}`}
+          >
+            <GlobalGalleryCard
+              count={globalCount}
+              typeCount={globalTypeCount}
+              onNavigate={() => navigate('/locker/global')}
             />
+          </div>
+          {displayedHeroList.map((hero) => (
+            <div
+              key={hero.id}
+              className={`rounded-2xl ${heroTypeaheadCardState(hero.id)}`}
+            >
+              <HeroGalleryCard
+                hero={hero}
+                facets={heroFacets(hero.id, hero.name)}
+                inShufflePool={shuffleOnLaunch && shufflePoolHeroes.has(hero.id)}
+                cardImage={heroCardImage(hero.id)}
+                hideHeroName={heroHideName(hero.id)}
+                isFavorite={favoriteHeroes.includes(hero.id)}
+                onNavigate={() => goToHero(hero)}
+                onBrowse={() => openHeroInBrowse(hero)}
+                onToggleFavorite={() =>
+                  setFavoriteHeroes((prev) =>
+                    prev.includes(hero.id)
+                      ? prev.filter((id) => id !== hero.id)
+                      : [...prev, hero.id]
+                  )
+                }
+              />
+            </div>
           ))}
         </div>
       ) : (
@@ -1000,7 +1175,7 @@ export default function Locker() {
           <button
             type="button"
             onClick={() => navigate('/locker/global')}
-            className="group relative flex items-center gap-3 overflow-hidden rounded-lg border border-accent/40 bg-bg-secondary p-4 text-left transition-colors hover:border-accent/70"
+            className={`group relative flex items-center gap-3 overflow-hidden rounded-lg border border-accent/40 bg-bg-secondary p-4 text-left transition-colors hover:border-accent/70 ${heroTypeaheadCardState()}`}
           >
             {/* Environment art bleeds behind the card; the left-to-right
                 gradient keeps the text side dark, mirroring the list-view
@@ -1028,34 +1203,38 @@ export default function Locker() {
             <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
           </button>
           {displayedHeroList.map((hero) => (
-            <HeroCard
+            <div
               key={hero.id}
-              hero={hero}
-              mods={heroMods.map.get(hero.id) ?? []}
-              sounds={heroSounds.map.get(hero.id) ?? []}
-              hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
-              cardImage={heroCardImage(hero.id)}
-              expanded={expandedHeroes.has(hero.id)}
-              onToggleExpanded={() => toggleHeroExpanded(hero.id)}
-              onBrowseSkins={() => openHeroInBrowse(hero)}
-              onSelect={(modId) => setActiveSkin(hero.id, modId)}
-              onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
-              onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
-              includedSkinKeys={shuffleIncluded}
-              onToggleShuffleIncluded={toggleShuffleIncluded}
-              shuffleVariantChoices={shuffleVariants}
-              onSetShuffleVariant={setShuffleVariant}
-              shuffleArmed={shuffleOnLaunch}
-              isFavorite={favoriteHeroes.includes(hero.id)}
-              onToggleFavorite={() =>
-                setFavoriteHeroes((prev) =>
-                  prev.includes(hero.id)
-                    ? prev.filter((id) => id !== hero.id)
-                    : [...prev, hero.id]
-                )
-              }
-              hideNsfwPreviews={shouldBlurNsfw(settings)}
-            />
+              className={`rounded-lg ${heroTypeaheadCardState(hero.id)}`}
+            >
+              <HeroCard
+                hero={hero}
+                mods={heroMods.map.get(hero.id) ?? []}
+                sounds={heroSounds.map.get(hero.id) ?? []}
+                hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
+                cardImage={heroCardImage(hero.id)}
+                expanded={expandedHeroes.has(hero.id)}
+                onToggleExpanded={() => toggleHeroExpanded(hero.id)}
+                onBrowseSkins={() => openHeroInBrowse(hero)}
+                onSelect={(modId) => setActiveSkin(hero.id, modId)}
+                onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
+                onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
+                includedSkinKeys={shuffleIncluded}
+                onToggleShuffleIncluded={toggleShuffleIncluded}
+                shuffleVariantChoices={shuffleVariants}
+                onSetShuffleVariant={setShuffleVariant}
+                shuffleArmed={shuffleOnLaunch}
+                isFavorite={favoriteHeroes.includes(hero.id)}
+                onToggleFavorite={() =>
+                  setFavoriteHeroes((prev) =>
+                    prev.includes(hero.id)
+                      ? prev.filter((id) => id !== hero.id)
+                      : [...prev, hero.id]
+                  )
+                }
+                hideNsfwPreviews={shouldBlurNsfw(settings)}
+              />
+            </div>
           ))}
         </div>
       )}
