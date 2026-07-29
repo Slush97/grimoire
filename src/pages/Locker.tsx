@@ -652,6 +652,17 @@ export default function Locker() {
     setHeroTypeaheadFading(false);
   }, [applyHeroTypeaheadState, clearHeroTypeaheadTimers]);
 
+  // The roster is 39 heroes deep and only a couple of gallery rows are on
+  // screen at once, so a match below the fold would otherwise dim everything
+  // visible and show nothing. Cards are always mounted (highlighting only
+  // changes classes), so the element is there to scroll to. Instant, not
+  // smooth: rapid typing would otherwise queue animations that fight.
+  const scrollHeroIntoView = useCallback((heroId: number) => {
+    lockerScrollRef.current
+      ?.querySelector(`[data-locker-hero-id="${heroId}"]`)
+      ?.scrollIntoView({ block: 'nearest' });
+  }, []);
+
   useEffect(() => {
     const next = reconcileHeroTypeaheadHeroes(
       heroTypeaheadRef.current,
@@ -677,23 +688,41 @@ export default function Locker() {
         return;
       }
 
-      const target = event.target;
+      const target = event.target instanceof HTMLElement ? event.target : null;
+      // Only text-entry surfaces and list widgets with their own typeahead
+      // semantics swallow the keys. Buttons and links deliberately do NOT:
+      // clicking the Gallery/List toggle or a list-view hero row leaves that
+      // button focused, and bailing on it would deaden the roster for the
+      // exact moment a user is most likely to start typing.
       if (
-        target instanceof HTMLElement &&
-        target.closest(
-          'input, textarea, select, button, a, [contenteditable="true"], [role="textbox"], [role="button"], [role="menuitem"], [role="option"], [role="listbox"]'
+        target?.closest(
+          'input, textarea, select, [contenteditable=""], [contenteditable="true"], [role="textbox"], [role="menuitem"], [role="option"], [role="listbox"]'
         )
       ) {
+        return;
+      }
+      // Space is still a focused button's activation key, so leave that one to
+      // the button. Every other character belongs to the typeahead.
+      if (event.key === ' ' && target?.closest('button, a, [role="button"]')) {
         return;
       }
       if (document.querySelector('[role="dialog"], [aria-modal="true"]')) return;
 
       const current = heroTypeaheadRef.current;
+      const hasTypeahead =
+        current.query.length > 0 || current.highlightedHeroIds !== null;
+
+      // Escape is the way out of a persisted highlight: the query text fades
+      // after HERO_TYPEAHEAD_EXPIRE_MS but the dimming stays, so without this
+      // the only exits are Backspace or leaving the page.
+      if (event.key === 'Escape' && hasTypeahead) {
+        event.preventDefault();
+        clearHeroTypeahead();
+        return;
+      }
+
       let next: HeroTypeaheadState | null = null;
-      if (
-        event.key === 'Backspace' &&
-        (current.query.length > 0 || current.highlightedHeroIds !== null)
-      ) {
+      if (event.key === 'Backspace' && hasTypeahead) {
         next = backspaceHeroTypeahead(current, displayedHeroList);
       } else if (
         isHeroTypeaheadKey(event.key, current.query.length > 0)
@@ -704,6 +733,8 @@ export default function Locker() {
       if (!next) return;
       event.preventDefault();
       applyHeroTypeaheadState(next);
+      const firstMatch = next.highlightedHeroIds?.[0];
+      if (firstMatch !== undefined) scrollHeroIntoView(firstMatch);
       if (next.query.length > 0) {
         scheduleHeroTypeaheadFade();
       } else {
@@ -712,8 +743,22 @@ export default function Locker() {
       }
     };
 
+    // Clicking anywhere also drops a persisted highlight. Someone who typed by
+    // accident has no reason to know Backspace or Escape is the way out, but
+    // clicking is what they will try.
+    const onPointerDown = () => {
+      const current = heroTypeaheadRef.current;
+      if (current.query.length > 0 || current.highlightedHeroIds !== null) {
+        clearHeroTypeahead();
+      }
+    };
+
     window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
+    window.addEventListener('pointerdown', onPointerDown);
+    return () => {
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('pointerdown', onPointerDown);
+    };
   }, [
     applyHeroTypeaheadState,
     clearHeroTypeahead,
@@ -721,6 +766,7 @@ export default function Locker() {
     displayedHeroList,
     globalSelected,
     scheduleHeroTypeaheadFade,
+    scrollHeroIntoView,
     selectedHeroId,
   ]);
 
@@ -1022,11 +1068,17 @@ export default function Locker() {
     <div ref={lockerScrollRef} className="h-full overflow-y-auto">
       {/* Shared gradient def for the active hero-card customization glyphs. */}
       <FacetSheenDefs />
+      {/* Bottom-LEFT of the content pane, not bottom-right: Layout pins the
+          download-queue and sync indicators to bottom-right and they grow
+          upward, so a 60px query would paint straight over them mid-download.
+          Offset by the sidebar the same way the hero overlay is. z-30 is the
+          ladder's "page-level overlay inside the content area" (index.css). */}
       {heroTypeahead.query &&
         createPortal(
           <div
             aria-hidden
-            className={`pointer-events-none fixed bottom-10 right-12 z-[100] max-w-[45vw] truncate text-right font-reaver text-6xl uppercase tracking-wider text-text-primary drop-shadow-[0_2px_20px_rgba(0,0,0,0.75)] transition-opacity ease-out ${
+            style={{ left: 'var(--grimoire-sidebar-width, 14rem)' }}
+            className={`pointer-events-none fixed bottom-10 z-30 max-w-[45vw] truncate pl-12 font-reaver text-6xl uppercase tracking-wider text-text-primary drop-shadow-[0_2px_20px_rgba(0,0,0,0.75)] transition-opacity ease-out ${
               heroTypeaheadFading
                 ? 'duration-[1500ms] opacity-0'
                 : 'duration-[0ms] opacity-90'
@@ -1134,38 +1186,32 @@ export default function Locker() {
           {/* Always rendered: soul containers & spirit urns are imported from
               inside this drill-in, so the card must stay reachable even with
               nothing installed yet (otherwise the importer is unreachable). */}
-          <div
-            className={`rounded-2xl ${heroTypeaheadCardState()}`}
-          >
-            <GlobalGalleryCard
-              count={globalCount}
-              typeCount={globalTypeCount}
-              onNavigate={() => navigate('/locker/global')}
-            />
-          </div>
+          <GlobalGalleryCard
+            count={globalCount}
+            typeCount={globalTypeCount}
+            onNavigate={() => navigate('/locker/global')}
+            typeaheadClassName={heroTypeaheadCardState()}
+          />
           {displayedHeroList.map((hero) => (
-            <div
+            <HeroGalleryCard
               key={hero.id}
-              className={`rounded-2xl ${heroTypeaheadCardState(hero.id)}`}
-            >
-              <HeroGalleryCard
-                hero={hero}
-                facets={heroFacets(hero.id, hero.name)}
-                inShufflePool={shuffleOnLaunch && shufflePoolHeroes.has(hero.id)}
-                cardImage={heroCardImage(hero.id)}
-                hideHeroName={heroHideName(hero.id)}
-                isFavorite={favoriteHeroes.includes(hero.id)}
-                onNavigate={() => goToHero(hero)}
-                onBrowse={() => openHeroInBrowse(hero)}
-                onToggleFavorite={() =>
-                  setFavoriteHeroes((prev) =>
-                    prev.includes(hero.id)
-                      ? prev.filter((id) => id !== hero.id)
-                      : [...prev, hero.id]
-                  )
-                }
-              />
-            </div>
+              hero={hero}
+              facets={heroFacets(hero.id, hero.name)}
+              inShufflePool={shuffleOnLaunch && shufflePoolHeroes.has(hero.id)}
+              cardImage={heroCardImage(hero.id)}
+              hideHeroName={heroHideName(hero.id)}
+              isFavorite={favoriteHeroes.includes(hero.id)}
+              typeaheadClassName={heroTypeaheadCardState(hero.id)}
+              onNavigate={() => goToHero(hero)}
+              onBrowse={() => openHeroInBrowse(hero)}
+              onToggleFavorite={() =>
+                setFavoriteHeroes((prev) =>
+                  prev.includes(hero.id)
+                    ? prev.filter((id) => id !== hero.id)
+                    : [...prev, hero.id]
+                )
+              }
+            />
           ))}
         </div>
       ) : (
@@ -1203,38 +1249,35 @@ export default function Locker() {
             <ChevronDown className="relative z-10 h-4 w-4 -rotate-90 text-text-secondary" />
           </button>
           {displayedHeroList.map((hero) => (
-            <div
+            <HeroCard
               key={hero.id}
-              className={`rounded-lg ${heroTypeaheadCardState(hero.id)}`}
-            >
-              <HeroCard
-                hero={hero}
-                mods={heroMods.map.get(hero.id) ?? []}
-                sounds={heroSounds.map.get(hero.id) ?? []}
-                hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
-                cardImage={heroCardImage(hero.id)}
-                expanded={expandedHeroes.has(hero.id)}
-                onToggleExpanded={() => toggleHeroExpanded(hero.id)}
-                onBrowseSkins={() => openHeroInBrowse(hero)}
-                onSelect={(modId) => setActiveSkin(hero.id, modId)}
-                onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
-                onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
-                includedSkinKeys={shuffleIncluded}
-                onToggleShuffleIncluded={toggleShuffleIncluded}
-                shuffleVariantChoices={shuffleVariants}
-                onSetShuffleVariant={setShuffleVariant}
-                shuffleArmed={shuffleOnLaunch}
-                isFavorite={favoriteHeroes.includes(hero.id)}
-                onToggleFavorite={() =>
-                  setFavoriteHeroes((prev) =>
-                    prev.includes(hero.id)
-                      ? prev.filter((id) => id !== hero.id)
-                      : [...prev, hero.id]
-                  )
-                }
-                hideNsfwPreviews={shouldBlurNsfw(settings)}
-              />
-            </div>
+              hero={hero}
+              mods={heroMods.map.get(hero.id) ?? []}
+              sounds={heroSounds.map.get(hero.id) ?? []}
+              hasAbilityRecolor={Boolean(abilityRecolorSupport[hero.name])}
+              cardImage={heroCardImage(hero.id)}
+              expanded={expandedHeroes.has(hero.id)}
+              typeaheadClassName={heroTypeaheadCardState(hero.id)}
+              onToggleExpanded={() => toggleHeroExpanded(hero.id)}
+              onBrowseSkins={() => openHeroInBrowse(hero)}
+              onSelect={(modId) => setActiveSkin(hero.id, modId)}
+              onToggleVariant={(modId) => toggleHeroVariant(hero.id, modId)}
+              onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
+              includedSkinKeys={shuffleIncluded}
+              onToggleShuffleIncluded={toggleShuffleIncluded}
+              shuffleVariantChoices={shuffleVariants}
+              onSetShuffleVariant={setShuffleVariant}
+              shuffleArmed={shuffleOnLaunch}
+              isFavorite={favoriteHeroes.includes(hero.id)}
+              onToggleFavorite={() =>
+                setFavoriteHeroes((prev) =>
+                  prev.includes(hero.id)
+                    ? prev.filter((id) => id !== hero.id)
+                    : [...prev, hero.id]
+                )
+              }
+              hideNsfwPreviews={shouldBlurNsfw(settings)}
+            />
           ))}
         </div>
       )}
@@ -1442,6 +1485,9 @@ interface HeroCardProps {
   isFavorite: boolean;
   onToggleFavorite: () => void;
   hideNsfwPreviews: boolean;
+  /** Typeahead highlight/dim classes, merged into the card root. Applied to the
+   *  card itself rather than a wrapper so the ring tracks the hover transform. */
+  typeaheadClassName?: string;
 }
 
 interface HeroGalleryCardProps {
@@ -1463,6 +1509,9 @@ interface HeroGalleryCardProps {
   onNavigate: () => void;
   onBrowse: () => void;
   onToggleFavorite: () => void;
+  /** Typeahead highlight/dim classes, merged into the card root. Applied to the
+   *  card itself rather than a wrapper so the ring tracks the hover transform. */
+  typeaheadClassName?: string;
 }
 
 const GLOBAL_BG = getAssetPath('/locker/global-bg.webp');
@@ -1471,6 +1520,9 @@ interface GlobalGalleryCardProps {
   count: number;
   typeCount: number;
   onNavigate: () => void;
+  /** Typeahead dim class. The Global tile never matches a hero query, so this
+   *  only ever dims it alongside the nonmatching heroes. */
+  typeaheadClassName?: string;
 }
 
 /**
@@ -1478,13 +1530,13 @@ interface GlobalGalleryCardProps {
  * cards. Heroes have render art; Global leans on the environment backdrop +
  * an icon for its own identity. Clicking drills into LockerGlobalView.
  */
-function GlobalGalleryCard({ count, typeCount, onNavigate }: GlobalGalleryCardProps) {
+function GlobalGalleryCard({ count, typeCount, onNavigate, typeaheadClassName = '' }: GlobalGalleryCardProps) {
   const { t } = useTranslation();
   const isEmpty = count === 0;
   return (
     <div
       onClick={onNavigate}
-      className="group relative w-full cursor-pointer overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70"
+      className={`group relative w-full cursor-pointer overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 ${typeaheadClassName}`}
     >
       <div className="relative aspect-[3/4]">
         <img
@@ -2128,6 +2180,7 @@ function HeroGalleryCard({
   onNavigate,
   onBrowse,
   onToggleFavorite,
+  typeaheadClassName = '',
 }: HeroGalleryCardProps) {
   const { t } = useTranslation();
   // The customization axes this hero actually has, in display order. Drives the
@@ -2195,7 +2248,8 @@ function HeroGalleryCard({
   return (
     <div
       onClick={onNavigate}
-      className="group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer"
+      data-locker-hero-id={hero.id}
+      className={`group relative w-full overflow-hidden rounded-2xl border border-border bg-bg-secondary text-left shadow-sm transition-transform duration-300 hover:-translate-y-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/70 cursor-pointer ${typeaheadClassName}`}
     >
       <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-black/10 to-transparent opacity-80" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top,_rgba(255,255,255,0.06),_transparent_55%)] opacity-60 transition-opacity duration-300 group-hover:opacity-100" />
@@ -2352,6 +2406,7 @@ function HeroCard({
   isFavorite,
   onToggleFavorite,
   hideNsfwPreviews,
+  typeaheadClassName = '',
 }: HeroCardProps) {
   const { t } = useTranslation();
   const localUrl = getHeroRenderPath(hero.name);
@@ -2404,7 +2459,10 @@ function HeroCard({
           .join(' · ');
 
   return (
-    <div className="group relative overflow-hidden rounded-lg border border-border bg-bg-secondary">
+    <div
+      data-locker-hero-id={hero.id}
+      className={`group relative overflow-hidden rounded-lg border border-border bg-bg-secondary ${typeaheadClassName}`}
+    >
       {/* Hero art bleeds behind the whole card; a gradient keeps the left side
           (where the text sits) dark enough to read, fading toward the portrait
           on the right. The expanded body lays a frosted-glass panel over it. */}
