@@ -1527,7 +1527,10 @@ export default function Browse() {
     return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
   }, [addedWithin, addedTo]);
 
-  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorsStamp}`;
+  // The root name resolves asynchronously with the category tree. Keep it in
+  // the request identity so an early id-only local query cannot suppress the
+  // corrected name-based query when that tree arrives.
+  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${effectiveCategoryName ?? ''}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorsStamp}`;
   const browseResultsCacheRef = useRef<Map<string, BrowseResultCacheEntry>>(new Map());
   const browseScrollCacheRef = useRef<Map<string, number>>(new Map());
   const activeFetchFilterStampRef = useRef(fetchFilterStamp);
