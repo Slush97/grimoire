@@ -287,11 +287,6 @@ export function HeroSelect({
         event.preventDefault();
         focusOption(visibleOptions.length - 1);
         break;
-      case 'Escape':
-        event.preventDefault();
-        closeSelect();
-        buttonRef.current?.focus();
-        break;
       case 'Enter':
       case ' ':
         event.preventDefault();
@@ -310,12 +305,25 @@ export function HeroSelect({
         event.preventDefault();
         focusOption(visibleOptions.length - 1);
         break;
-      case 'Escape':
-        event.preventDefault();
-        closeSelect();
-        buttonRef.current?.focus();
-        break;
     }
+  };
+
+  /**
+   * Escape is handled once, at the portal root, rather than per control.
+   *
+   * Two reasons. Focus can sit on things with no key handler of their own (the
+   * clear-search button, the empty-state button), and those used to leak the
+   * key. More importantly the native keydown must stop here: an ancestor
+   * popover dismisses on a window-level Escape listener (see AnchoredPopover),
+   * so a key that only closed this listbox was collapsing the whole filter
+   * panel with it.
+   */
+  const handleListboxKeyDown = (event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'Escape') return;
+    event.preventDefault();
+    event.stopPropagation();
+    closeSelect();
+    buttonRef.current?.focus();
   };
 
   const clearSearch = () => {
@@ -356,6 +364,7 @@ export function HeroSelect({
           // Keep its mouse gesture inside this logical boundary so an ancestor's
           // window-level outside-click listener cannot unmount us before click.
           onMouseDown={(event) => event.stopPropagation()}
+          onKeyDown={handleListboxKeyDown}
           // z-80 is the context-menu/popover rung of the ladder in index.css:
           // portaled to <body>, this has to clear modals and page chrome alike.
           // Positioned by positionListbox before paint; the inline top/left are

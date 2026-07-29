@@ -22,8 +22,17 @@ function BrowseFilterHarness() {
         setFiltersOpen(false);
       }
     };
+    // Mirrors AnchoredPopover's dismiss-on-Escape. One Escape has to back out
+    // of the hero listbox without taking the popover hosting it down too.
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setFiltersOpen(false);
+    };
     window.addEventListener('mousedown', onMouseDown);
-    return () => window.removeEventListener('mousedown', onMouseDown);
+    window.addEventListener('keydown', onKeyDown);
+    return () => {
+      window.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('keydown', onKeyDown);
+    };
   }, [filtersOpen]);
 
   return (
@@ -117,6 +126,53 @@ describe('HeroSelect inside a dismissable popover', () => {
 
     expect(document.querySelector('[data-testid="filter-popover"]')).not.toBeNull();
     expect(document.querySelector('[data-testid="selected-hero"]')?.textContent).toBe('abrams');
+  });
+
+  it('closes only the listbox on Escape, leaving the parent popover open', () => {
+    act(() => root.render(<BrowseFilterHarness />));
+
+    openHeroSelect();
+    expect(document.querySelector('[role="listbox"]')).not.toBeNull();
+
+    // Focus lands on the search box when the listbox opens, so that is where a
+    // real Escape originates.
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
+    });
+
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(document.querySelector('[data-testid="filter-popover"]')).not.toBeNull();
+
+    // A second Escape, now that the listbox is gone, belongs to the popover.
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
+    });
+
+    expect(document.querySelector('[data-testid="filter-popover"]')).toBeNull();
+  });
+
+  it('closes only the listbox on Escape from an option, not the parent popover', () => {
+    act(() => root.render(<BrowseFilterHarness />));
+
+    openHeroSelect();
+    const input = document.querySelector<HTMLInputElement>('input[aria-label="Search heroes"]');
+    act(() => {
+      input!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    expect(document.activeElement?.getAttribute('role')).toBe('option');
+
+    act(() => {
+      document.activeElement?.dispatchEvent(
+        new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })
+      );
+    });
+
+    expect(document.querySelector('[role="listbox"]')).toBeNull();
+    expect(document.querySelector('[data-testid="filter-popover"]')).not.toBeNull();
   });
 
   it('filters heroes as the user types and offers a useful empty state', () => {
