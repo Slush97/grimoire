@@ -3062,12 +3062,17 @@ export default function Browse() {
       <div className="flex-1 min-w-0 h-full overflow-y-auto" ref={scrollContainerRef}>
       {/* Header: artist banner in artist mode, otherwise the search/filter row. */}
       {/* Solid by default. A solid bg-primary band would read as a flat patch
-          over an active background glow, so only then does it go translucent:
-          backdrop-blur over this (large, frequently scrolled) grid is not a cost
-          worth paying for users who never turned a glow on. */}
+          over an active background glow, so only then does it go translucent.
+          The transparent-sidebar option repaints the same fixed app background
+          inside the band. That preserves the corner glow at its viewport
+          position while hiding content that scrolls beneath the sticky header. */}
       <div
         className={`sticky top-0 z-40 p-4 border-b border-border ${
-          settings?.backgroundGradient ? 'bg-bg-primary/80 backdrop-blur-md' : 'bg-bg-primary'
+          settings?.sidebarTransparent
+            ? 'app-background-fixed'
+            : settings?.backgroundGradient
+              ? 'bg-bg-primary/80 backdrop-blur-md'
+              : 'bg-bg-primary'
         }`}
       >
         {artistMode && submitter ? (
