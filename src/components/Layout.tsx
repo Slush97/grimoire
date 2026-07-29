@@ -14,6 +14,7 @@ import { showToast } from '../stores/toastStore';
 import { getSettings, setSettings, getGameinfoStatus, fixGameinfo } from '../lib/api';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { applyAccentColor } from '../lib/accentColor';
+import { applyBackgroundGradient } from '../lib/backgroundGradient';
 import { useAppStore } from '../stores/appStore';
 import type { OneClickSuspiciousFilesData, MultiVpkPickData } from '../types/electron';
 import MultiVpkPickerModal from './MultiVpkPickerModal';
@@ -42,6 +43,7 @@ export default function Layout() {
   // any page renders — otherwise the first paint flashes the default orange
   // even when the user has picked a different accent.
   const accentColor = useAppStore((s) => s.settings?.accentColor);
+  const backgroundGradient = useAppStore((s) => s.settings?.backgroundGradient);
   const loadStoreSettings = useAppStore((s) => s.loadSettings);
   const loadAppearanceImages = useAppStore((s) => s.loadAppearanceImages);
 
@@ -59,6 +61,9 @@ export default function Layout() {
   useEffect(() => {
     applyAccentColor(accentColor);
   }, [accentColor]);
+  useEffect(() => {
+    applyBackgroundGradient(backgroundGradient);
+  }, [backgroundGradient]);
 
   useEffect(() => {
     const checkFirstRun = async () => {
@@ -228,11 +233,20 @@ export default function Layout() {
 
   return (
     <div className="flex h-screen flex-col">
-      <div className="flex min-h-0 flex-1">
+      {/* Ambient corner glow. Always mounted and driven purely by CSS vars (empty
+          when no gradient is picked), so Settings can live-preview a color while
+          dragging the picker. `main` stays transparent for it: body already
+          paints the same bg-primary base underneath. */}
+      <div
+        aria-hidden
+        className="pointer-events-none fixed inset-0 z-0"
+        style={{ background: 'var(--app-bg-glow, none)', opacity: 'var(--app-bg-glow-opacity, 0)' }}
+      />
+      <div className="relative z-10 flex min-h-0 flex-1">
       {/* Headless: drives opt-in Discord Rich Presence from the active route. */}
       <DiscordPresence />
       <Sidebar />
-      <main className="flex min-w-0 flex-1 flex-col overflow-hidden bg-bg-primary">
+      <main className="flex min-w-0 flex-1 flex-col overflow-hidden">
         {gameinfoAlert && (
           <div className="sticky top-0 z-40 border-b border-yellow-500/30 bg-yellow-500/10 backdrop-blur-sm">
             <div className="mx-auto flex w-full max-w-6xl items-center gap-3 px-4 py-3 text-yellow-200">

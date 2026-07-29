@@ -3061,7 +3061,15 @@ export default function Browse() {
           start/stop never re-renders this (large) component. */}
       <div className="flex-1 min-w-0 h-full overflow-y-auto" ref={scrollContainerRef}>
       {/* Header: artist banner in artist mode, otherwise the search/filter row. */}
-      <div className="sticky top-0 z-40 p-4 border-b border-border bg-bg-primary">
+      {/* Solid by default. A solid bg-primary band would read as a flat patch
+          over an active background glow, so only then does it go translucent:
+          backdrop-blur over this (large, frequently scrolled) grid is not a cost
+          worth paying for users who never turned a glow on. */}
+      <div
+        className={`sticky top-0 z-40 p-4 border-b border-border ${
+          settings?.backgroundGradient ? 'bg-bg-primary/80 backdrop-blur-md' : 'bg-bg-primary'
+        }`}
+      >
         {artistMode && submitter ? (
           <div className="flex items-center gap-3">
             <IconButton

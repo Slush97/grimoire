@@ -741,6 +741,11 @@ export default function Sidebar() {
   // buttons unless the user turns this on from Appearance.
   const unifiedLaunch = settings?.unifiedLaunchButton ?? false;
 
+  // Opt-in: drop the sidebar's panel background so the rail sits flush with the
+  // page. Anything that fakes a cutout against that panel (the collapsed status
+  // dot's ring) has to follow, or it leaves a halo on the darker background.
+  const transparentSidebar = settings?.sidebarTransparent ?? false;
+
   // Single dual-use launch button (issue: unify launch buttons): one persisted
   // mode drives the icon, label, art, handler, and enable/disable rules. The
   // trailing swap control and right-click both flip between Modded and Vanilla.
@@ -799,7 +804,9 @@ export default function Sidebar() {
     <aside
       ref={asideRef}
       data-collapsed={collapsed}
-      className="grimoire-sidebar relative bg-bg-secondary border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden"
+      className={`grimoire-sidebar relative border-r border-border flex flex-col h-full min-h-0 shrink-0 overflow-hidden ${
+        transparentSidebar ? 'bg-transparent' : 'bg-bg-secondary'
+      }`}
     >
       {/* Single sliding highlight, positioned against the <aside> so it can glide
           between a nav tab and the footer Settings button. Sits at z-0 behind the
@@ -922,9 +929,9 @@ export default function Sidebar() {
                           badgeTone !== 'muted' ? (
                             <span
                               aria-hidden
-                              className={`absolute top-1 right-1 w-2 h-2 rounded-sm ring-2 ring-bg-secondary ${
-                                badgeTone === 'warning' ? 'bg-state-warning' : 'bg-accent'
-                              }`}
+                              className={`absolute top-1 right-1 w-2 h-2 rounded-sm ring-2 ${
+                                transparentSidebar ? 'ring-bg-primary' : 'ring-bg-secondary'
+                              } ${badgeTone === 'warning' ? 'bg-state-warning' : 'bg-accent'}`}
                             />
                           ) : null
                         ) : (

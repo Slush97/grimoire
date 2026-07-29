@@ -502,8 +502,9 @@ export default function AppearanceArtSection() {
             fallback="Use a single launch button and switch between Modded and Vanilla with the swap icon or right-click, instead of two stacked buttons."
           />
         }
-        className="mb-5"
       />
+
+      <div className="my-5 h-px bg-white/5" />
 
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-text-primary">
@@ -546,6 +547,19 @@ export default function AppearanceArtSection() {
           );
         })}
       </div>
+
+      <Toggle
+        checked={settings?.sidebarTransparent ?? false}
+        onChange={(checked) => settings && void saveSettings({ ...settings, sidebarTransparent: checked })}
+        label={<Tx k="settings.appearance.sidebar.transparent" fallback="Transparent sidebar" />}
+        description={
+          <Tx
+            k="settings.appearance.sidebar.transparentDescription"
+            fallback="Drop the sidebar's dark panel so it sits flush with the page background. Icons, art, and the divider stay as they are."
+          />
+        }
+        className="mt-5"
+      />
 
       {editing && editingConfig && (
         <Modal
