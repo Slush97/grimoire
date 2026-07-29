@@ -814,6 +814,7 @@
       "vpkImprint": "Imprint installed mods",
       "deadworksServers": "Deadworks Servers",
       "performanceConfig": "Performance Config",
+      "performanceConfigWhere": "Open its controls in Game setup",
       "foundry": "Door Stuck"
     },
     "support": {

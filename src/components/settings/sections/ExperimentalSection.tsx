@@ -1,14 +1,21 @@
 import { useState } from 'react';
-import { Beaker, Wrench } from 'lucide-react';
+import { ArrowRight, Beaker, Wrench } from 'lucide-react';
 import { useAppStore } from '../../../stores/appStore';
 import { createDevDeadlockPath } from '../../../lib/api';
 import { Card, Toggle } from '../../common/ui';
 import Tx from '../../translation/Tx';
 import type { AppSettings } from '../../../types/mod';
 
+interface ExperimentalSectionProps {
+  /** Jump to the pane that actually holds the Performance Config controls.
+   *  Named for the intent rather than the destination so this section never
+   *  has to know the page's section ids. */
+  onShowPerformanceConfig?: () => void;
+}
+
 // Feature flags plus the dev-only dummy game directory. Both are "you asked
 // for it" territory, so they live away from the everyday preferences.
-export default function ExperimentalSection() {
+export default function ExperimentalSection({ onShowPerformanceConfig }: ExperimentalSectionProps) {
   const { settings, saveSettings } = useAppStore();
   const [isCreatingDevPath, setIsCreatingDevPath] = useState(false);
 
@@ -102,12 +109,34 @@ export default function ExperimentalSection() {
 
           <div className="h-px bg-white/5" />
 
-          <Toggle
-            checked={settings?.experimentalPerformanceConfig ?? false}
-            onChange={(checked) => update({ experimentalPerformanceConfig: checked })}
-            label={<Tx k="settings.experimental.performanceConfig" fallback="Performance Config" />}
-            description={<Tx k="settings.toggles.performanceConfig" fallback="One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time." />}
-          />
+          {/* This is the one flag whose payload lands in a different pane: the
+              card it unlocks renders under Game setup, so without a pointer the
+              toggle looks like it did nothing. Wrapped with the toggle so the
+              two are a single child of the space-y-6 stack (a negative margin
+              would lose to space-y's higher-specificity rule). */}
+          <div>
+            <Toggle
+              checked={settings?.experimentalPerformanceConfig ?? false}
+              onChange={(checked) => update({ experimentalPerformanceConfig: checked })}
+              label={<Tx k="settings.experimental.performanceConfig" fallback="Performance Config" />}
+              description={<Tx k="settings.toggles.performanceConfig" fallback="One-click fps boost using Sqooky's community preset. Mods keep working. Remove any time." />}
+            />
+            {settings?.experimentalPerformanceConfig && onShowPerformanceConfig && (
+              <div className="mt-2 pl-14">
+                <button
+                  type="button"
+                  onClick={onShowPerformanceConfig}
+                  className="inline-flex items-center gap-1 rounded-sm text-xs text-accent transition-colors cursor-pointer hover:text-accent-hover focus:outline-none focus-visible:ring-1 focus-visible:ring-accent/60"
+                >
+                  <Tx
+                    k="settings.experimental.performanceConfigWhere"
+                    fallback="Open its controls in Game setup"
+                  />
+                  <ArrowRight className="h-3 w-3" aria-hidden />
+                </button>
+              </div>
+            )}
+          </div>
 
           <div className="h-px bg-white/5" />
 

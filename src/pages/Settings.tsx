@@ -120,7 +120,9 @@ export default function Settings() {
             </Card>
           )}
           {section === 'updates' && <UpdatesSection />}
-          {section === 'experimental' && <ExperimentalSection />}
+          {section === 'experimental' && (
+            <ExperimentalSection onShowPerformanceConfig={() => setActiveSection('game')} />
+          )}
           {section === 'maintenance' && <MaintenanceSection />}
           {section === 'support' && <SupportSection />}
         </div>
