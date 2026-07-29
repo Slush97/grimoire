@@ -3991,7 +3991,13 @@ export default function Installed() {
 
   return (
     <div ref={installedScrollRef} className="h-full overflow-y-auto px-4 pb-5 sm:px-6">
-      <div className="sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 bg-bg-primary/95 px-4 py-3 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80 sm:-mx-6 sm:px-6">
+      <div
+        className={`sticky top-0 z-30 -mx-4 mb-4 border-b border-white/5 px-4 py-3 sm:-mx-6 sm:px-6 ${
+          settings?.sidebarTransparent
+            ? 'app-background-fixed'
+            : 'bg-bg-primary/95 backdrop-blur supports-[backdrop-filter]:bg-bg-primary/80'
+        }`}
+      >
         {/* Row 1: search + view controls. The search takes every pixel the
             controls don't need (uncapped flex-1) so there's no dead gap at wide
             window widths, and shrinks to min-w instead of pushing the controls
