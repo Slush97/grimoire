@@ -193,6 +193,22 @@ body {
   background: var(--color-accent);
 }
 
+/* A transparent surface must not inherit the default solid scrollbar track.
+   Keep the normal themed thumb, but let the app background continue beneath
+   the gutter instead of painting a bg-secondary strip. */
+.scrollbar-track-transparent {
+  scrollbar-color: var(--color-border) transparent;
+}
+
+.scrollbar-track-transparent::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-track-transparent::-webkit-scrollbar-thumb {
+  border-color: transparent;
+  background-clip: padding-box;
+}
+
 /* Scrollbar variant for panels that sit over imagery (the Locker hero detail
    and Global drill-in shells use a feathered frosted-glass background with a
    transparent panel). The default solid bg-secondary track would paint a hard
