@@ -82,6 +82,56 @@ function applyContentFilters(
     }
 }
 
+/**
+ * Category/hero scoping, shared by the FTS and fallback paths.
+ *
+ * The cached catalog has no usable `category_id`. GameBanana's list endpoint
+ * returns `_aRootCategory` with a name but no `_idRow`, so sync writes null for
+ * every row (6625 of 6625 on a full mirror). Matching on it therefore returned
+ * nothing, silently: no rows, no error, no fallback. It stayed hidden because a
+ * category filter only routes to the local catalog when some *other*
+ * catalog-only filter is already active (a search, an NSFW or date window, or
+ * any hidden creator), so most installs never saw it, and the ones that did saw
+ * an empty grid rather than a failure.
+ *
+ * `category_name` is stored, so the renderer resolves the picked category to its
+ * root name and we match on that instead. A root-level pick is exact; a
+ * subcategory pick widens to its root rather than returning nothing, which is
+ * the best the cached columns allow. The id comparison stays as a last resort
+ * for the day rows carry real ids.
+ */
+function applyCategoryFilter(
+    conditions: string[],
+    params: Record<string, unknown>,
+    categoryId: SearchOptions['categoryId'],
+    categoryName: SearchOptions['categoryName'],
+    heroName: SearchOptions['heroName'],
+    skinsCategoryId: SearchOptions['skinsCategoryId']
+): void {
+    if (categoryId === undefined) return;
+
+    if (heroName && skinsCategoryId !== undefined) {
+        // Hero search: find ALL mods with the hero name in the title, whatever
+        // their category. Same missing-id constraint as above, which is why this
+        // cannot simply scope to the hero's subcategory.
+        params.heroNamePattern = `%${heroName.toLowerCase()}%`;
+        conditions.push('LOWER(mods.name) LIKE @heroNamePattern');
+        console.log(`[searchMods] Hero search: heroName="${heroName}" (searching all categories)`);
+        return;
+    }
+
+    if (categoryName) {
+        params.categoryName = categoryName;
+        conditions.push('mods.category_name = @categoryName COLLATE NOCASE');
+        console.log(`[searchMods] Category search: categoryName="${categoryName}" (root category of ${categoryId})`);
+        return;
+    }
+
+    conditions.push('mods.category_id = @categoryId');
+    params.categoryId = categoryId;
+    console.log(`[searchMods] Category search: falling back to category_id=${categoryId} (no root name resolved)`);
+}
+
 /** Exclude hidden GameBanana submitters at query time so counts and pagination
  *  describe the visible catalog. Null submitter ids remain visible because
  *  there is no stable creator identity to compare against. */
@@ -118,19 +168,26 @@ function applyHiddenCreatorFilter(
 function runFallbackSubstringSearch(
     database: ReturnType<typeof initDatabase>,
     rawQuery: string,
-    section: string | undefined,
-    categoryId: number | undefined,
-    heroName: string | undefined,
-    skinsCategoryId: number | undefined,
-    sortBy: SearchOptions['sortBy'],
-    nsfw: SearchOptions['nsfw'],
-    addedWithin: SearchOptions['addedWithin'],
-    addedFrom: number | undefined,
-    addedTo: number | undefined,
-    hiddenCreatorIds: SearchOptions['hiddenCreatorIds'],
+    // Every scoping value here is forwarded verbatim from the caller's options.
+    // Passing the object rather than fourteen positional arguments is what stops
+    // a new filter from being silently threaded into the wrong slot.
+    options: SearchOptions,
     limit: number,
     offset: number
 ): SearchResult {
+    const {
+        section,
+        categoryId,
+        categoryName,
+        heroName,
+        skinsCategoryId,
+        sortBy,
+        nsfw,
+        addedWithin,
+        addedFrom,
+        addedTo,
+        hiddenCreatorIds,
+    } = options;
     const conditions: string[] = [];
     const params: Record<string, unknown> = {};
 
@@ -153,16 +210,7 @@ function runFallbackSubstringSearch(
         params.section = section;
     }
 
-    if (categoryId !== undefined) {
-        if (heroName && skinsCategoryId !== undefined) {
-            params.heroNamePattern = `%${heroName.toLowerCase()}%`;
-            conditions.push('LOWER(mods.name) LIKE @heroNamePattern');
-        } else {
-            conditions.push('mods.category_id = @categoryId');
-            params.categoryId = categoryId;
-        }
-    }
-
+    applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, skinsCategoryId);
     applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
     applyHiddenCreatorFilter(conditions, params, hiddenCreatorIds);
 
@@ -199,6 +247,7 @@ export function searchMods(options: SearchOptions): SearchResult {
         query,
         section,
         categoryId,
+        categoryName,
         heroName,
         skinsCategoryId,
         sortBy = 'relevance',
@@ -248,21 +297,7 @@ export function searchMods(options: SearchOptions): SearchResult {
         params.section = section;
     }
 
-    // Filter by category/hero with name-based search for hero filtering
-    if (categoryId !== undefined) {
-        if (heroName && skinsCategoryId !== undefined) {
-            // Hero search: Find ALL mods with hero name in title, regardless of category.
-            // This catches mods in Skins, Skins/Mina, and even mods in other categories.
-            params.heroNamePattern = `%${heroName.toLowerCase()}%`;
-            conditions.push('LOWER(mods.name) LIKE @heroNamePattern');
-            console.log(`[searchMods] Hero search: heroName="${heroName}" (searching all categories)`);
-        } else {
-            // Standard category filter
-            conditions.push('mods.category_id = @categoryId');
-            params.categoryId = categoryId;
-        }
-    }
-
+    applyCategoryFilter(conditions, params, categoryId, categoryName, heroName, skinsCategoryId);
     applyContentFilters(conditions, params, nsfw, addedWithin, addedFrom, addedTo);
     applyHiddenCreatorFilter(conditions, params, hiddenCreatorIds);
 
@@ -295,16 +330,7 @@ export function searchMods(options: SearchOptions): SearchResult {
         return runFallbackSubstringSearch(
             database,
             query.slice(0, 500),
-            section,
-            categoryId,
-            heroName,
-            skinsCategoryId,
-            sortBy,
-            nsfw,
-            addedWithin,
-            addedFrom,
-            addedTo,
-            hiddenCreatorIds,
+            { ...options, sortBy, nsfw, addedWithin },
             limit,
             offset
         );

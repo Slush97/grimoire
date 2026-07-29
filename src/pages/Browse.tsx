@@ -1474,6 +1474,33 @@ export default function Browse() {
       ? (categoryId === 'all' ? undefined : categoryId)
       : heroCategoryId;
 
+  // Category id -> the name of its ROOT category.
+  //
+  // The local catalog cannot be filtered by category id at all: GameBanana's
+  // list endpoint omits `_aRootCategory._idRow`, so every cached row has a null
+  // `category_id` and the id comparison matched nothing. Only the root category
+  // *name* is stored, so resolving the picked category to that name here is what
+  // lets a local-route category filter return anything.
+  //
+  // Walks the whole tree rather than reading `categoryOptions` so that ids which
+  // never reach the dropdown still map: hero subcategories, entries dropped for
+  // having no items, and stale ids restored from a previous session.
+  const rootCategoryNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    const walk = (nodes: GameBananaCategoryNode[], rootName: string | null) => {
+      for (const node of nodes) {
+        const root = rootName ?? node.name;
+        map.set(node.id, root);
+        if (node.children?.length) walk(node.children, root);
+      }
+    };
+    walk(categories, null);
+    return map;
+  }, [categories]);
+
+  const effectiveCategoryName =
+    effectiveCategoryId === undefined ? undefined : rootCategoryNameById.get(effectiveCategoryId);
+
   // Debounce the search input: every keystroke previously fired a full FTS5
   // query + count + render, which felt slow even when the DB was fast. 250ms
   // is short enough that typing-to-results still feels responsive but long
@@ -1922,6 +1949,10 @@ export default function Browse() {
         query: effectiveSearch.trim() || undefined,
         section: section,
         categoryId: effectiveCategoryId,
+        // The cached rows have no category id, only a root category name; see
+        // rootCategoryNameById. Ignored when a hero is selected, which scopes by
+        // title instead.
+        categoryName: effectiveCategoryName,
         // Enhanced hero search: pass hero name and skins parent ID
         heroName: selectedHeroName,
         skinsCategoryId: skinsCat?.id,
@@ -2005,7 +2036,7 @@ export default function Browse() {
         setLoadingMore(false);
       }
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, modCategories, fetchFilterStamp]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, effectiveCategoryName, heroCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, modCategories, fetchFilterStamp]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
