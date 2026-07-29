@@ -80,15 +80,29 @@ Offline-first and no telemetry: a fresh install phones home for nothing.
 
 ## Development
 
+Grimoire shares wire-format types with its companion service,
+[grimoire-social](https://github.com/Slush97/grimoire-social), through a
+workspace package resolved from `../grimoire-social`. Clone both side by side,
+or `pnpm install` fails with `ERR_PNPM_WORKSPACE_PKG_NOT_FOUND`. Needs Node 20+
+and pnpm 10+.
+
 ```bash
 git clone https://github.com/Slush97/grimoire.git
-cd grimoire
+git clone https://github.com/Slush97/grimoire-social.git
+
+cd grimoire-social
+pnpm install
+
+cd ../grimoire
 pnpm install
 pnpm exec electron-rebuild -f -w better-sqlite3
 pnpm dev
 ```
 
-Package builds: `pnpm package:win` or `pnpm package:linux`.
+Package builds: `pnpm package:win` or `pnpm package:linux` (both require
+`GRIMOIRE_SOCIAL_BASE_URL` set to an https URL).
+
+More detail in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security
 
