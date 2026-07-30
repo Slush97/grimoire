@@ -5,17 +5,19 @@ strategy is "curate one upstream" rather than "ingest any config from
 GameBanana." Read this before touching `performanceConfig.ts`,
 `performanceConfigData.ts`, or building the planned manifest/preset UI.
 
-Status: Phase 1 shipped (single bundled Sqooky preset). This doc covers the
-Phase 2 design (id-keyed multi-preset applier + manifest) and records the
-research that drove the scope decision.
+Status: six selectable presets shipped, generated from pinned upstream commits.
+The research that drove the scope decision is recorded below and still holds;
+"What shipped" records where the delivered design differs from the plan it
+replaced.
 
 ## TL;DR decision
 
-- **Integrate with Sqooky's OptimizationLock as the single curated upstream.**
-  It is already wired, GPL-3.0, maintained by a collaborator, ships a tiered
-  set of configs (Sqooky / boot / Kaizu) plus three perf-addon VPKs, and is the
-  only source where an external author can own the manifest that keeps presets
-  safe across Deadlock patches.
+- **Curate a small set of pinned upstreams.** Two projects publish real
+  `gameinfo.gi` configs under a bundle-able license: `Sqooky/OptimizationLock`
+  (GPL-3.0, a collaborator, ships Sqooky / boot / Kaizu tiers plus three
+  perf-addon VPKs) and `dacooderr/OptiLock` (GPL-3.0, genuinely different
+  tuning, publishes git tags). Everything else is unlicensed, stale, or a
+  dormant fork.
 - **Do NOT build a generic "apply any GameBanana gameinfo.gi config" ingester.**
   The research below shows it cannot be made safe or low-maintenance.
 - **Do nothing for QOL Lock.** The single most popular optimization mod is a
@@ -84,7 +86,8 @@ Sqooky, boot). Findings:
    nuke-everything end; Deadlock Competitive is conservative. Visible author
    errors exist (`sc_instanced_mesh_lod_bias` is `0.15` in Sqooky vs `10`/`15`
    elsewhere; `r_size_cull_threshold_shadow` is `200` in boot vs `1`) - the same
-   class as the upstream `r_aspectratio` bug already excluded from our preset.
+   class as the upstream `r_aspectratio` bug, which is now offered as an opt-in
+   rather than hardcoded out.
    Where configs differ, there is no "correct" universal value; that is
    inherently a preset/slider choice, not something auto-derivable.
 
@@ -93,56 +96,88 @@ to the same value (disable shadows/SSAO/bloom/DoF/grass/hair AO, panorama blur
 and box-shadow off, phys threading on, particle batch mode, etc.). That
 intersection is extractable and safe; everything beyond it is author-specific.
 
-## The design
+## What shipped
 
-### 1. Generalize the applier to id-keyed multi-preset
+Six presets selected by id: `sqooky-default` (balanced, default), `sqooky-testing`
+(preview), `boot-max-fps` (aggressive), `kaizu-min-spec` (potato), `optilock-fps`
+(competitive), `optilock-max` (maximum). Each is a section/key diff of a pinned
+upstream `gameinfo.gi` against the stock baseline, generated into
+`performanceConfigData.ts` (never hand-edited) by `pnpm perf:presets` from the
+pins in `scripts/performance-presets.json`.
 
-`performanceConfig.ts` is already a config-agnostic, marker-based, reversible KV
-patcher driven by `{CONVARS, SECTION_OPS}` data. Generalize it so a preset is
-selected by id, with Sqooky / boot / Kaizu (and a conservative "consensus core"
-default) as entries:
+Where this differs from the plan it replaced:
 
-```
-PRESETS: Record<PresetId, { id, version, convars, sectionOps, requires? }>
-```
+- **Pins, not a fetched manifest.** Values come from commit-pinned upstream files
+  verified by sha256 at generation time, not from a JSON manifest fetched at
+  apply time. An upstream-owned manifest is still the right answer for
+  *user-exposed sliders*; it is not needed to ship presets, and a network fetch
+  in the apply path would have been a new failure mode. See "Still open".
+- **Two upstreams, not one.** OptiLock is not a re-skin: roughly 58% of its delta
+  is keys Sqooky never touches, and the two disagree on ~91 shared keys.
+- **No consensus-core tier.** The default is Sqooky's own balanced config. The
+  ~50-key intersection is still the right shape for a "safe FPS, no surprises"
+  tier if one is wanted later.
 
-The applied-state sidecar (`grimoire-performance.json`) records which preset id
-is active. Switching presets = remove current (marker-driven, byte-for-byte) then
-apply the new one. The override/harvest layer and wiped-detection are unchanged.
-
-Invariants that stay:
+Invariants that hold:
 - Patch in place, never replace the file.
 - Never touch FileSystem/SearchPaths (`fixGameinfo` in `system.ts` owns it).
 - Markers record stock values so Remove restores the original regardless of
   preset or overrides.
 - LF-normalize before patching, restore EOL on write.
+- Switching preset removes the applied one by its markers first, so the file
+  always goes stock -> preset and never accumulates two presets' markers.
 
-### 2. Manifest-driven values (Sqooky-owned)
+### Marker grammar
 
-Preset values and which keys are user-exposed come from a JSON manifest, ideally
-hosted in the OptimizationLock repo, fetched at apply time with a bundled pinned
-fallback, Zod-validated. This is the only thing that survives per-patch drift
-safely, because the upstream author maintains it. Controls:
-`key / section / type / range / presetValues / description / warning / requires`.
+The block header is the authoritative record of what is in the file; the sidecar
+can be stale, absent, or from a hand-copied install.
 
-### 3. Boolean normalization
+```
+// ==== Grimoire Performance Config BEGIN (preset=<id> v<version> @<commit12>) ====
+```
 
-Add a `normalizeConvarValue` helper (`1<->true`, `0<->false`) and use it
-wherever convar values are compared: override harvesting and any cross-preset or
-conflict comparison. Single-preset Phase 1 did not need this; multi-preset does.
+`@<commit12>` is the upstream commit the preset was generated from, and it is
+load-bearing, not decoration: these upstreams version in prose (Sqooky publishes
+no git tags at all), so a regenerated preset can carry the same `version` string
+and a different body. The commit is what makes "is the body in this file the body
+this build generates?" answerable. It parses as optional so markers written
+before it existed still read; a missing commit counts as "cannot prove it
+matches".
 
-### 4. Perf-addon VPKs as optional installs
+Per-line markers are unchanged: injected lines end `// grimoire-perf added`,
+edited stock lines end `// grimoire-perf was "<orig>"`, removed stock lines
+become `// grimoire-perf removed: <line>`.
 
-Upstream bundles three perf addons (Optimized Soul Container, Sinner Light Fix,
-Vindicta Scope Downscale). Surface them as optional one-click installs through
-the normal VPK mod pipeline, not the gameinfo patcher. Encode the known
-dependency `video.txt mip_bias >= 4 -> Sinner Light Fix` as a `requires` field.
+### Override harvesting and preset drift
 
-### 5. Consensus-core default tier
+Reapply harvests the user's deviations from the marker lines and layers them back
+on. That inference is only valid while the definition in the file matches the
+definition being applied. When the marker says otherwise (a Grimoire update moved
+the preset), only a marker line the user commented out is unambiguous:
 
-Ship the boolean-normalized ~50-key intersection as the conservative default
-preset, so a user who wants "safe FPS, no surprises" gets the keys every author
-agrees on, with the aggressive tiers (boot, Kaizu) as opt-in.
+- a value differing from the preset value may be a value the bump changed
+- a marker-added key the preset no longer lists is a key the bump dropped
+- a preset key with no line in the file is a key the bump added
+
+Reading those as user intent pinned retired upstream values forever, suppressed
+every key the new version added, and re-applied gameplay convars the opt-in split
+exists to hold back. Overrides banked while the definitions matched are still
+layered on; only fresh inference is suspended.
+
+### Gameplay convars are opt-in
+
+Convars that change what the player can see or how the camera is framed (enemy /
+trooper / boss outlines and glows, see-thru-walls, `cl_glow_brightness`,
+`r_citadel_*outline*`, `r_aspectratio`, FOV keys, camera pitch limits, hideout
+and debug-draw tooling) are stripped from every preset body at generation time
+and written only when the user turns them on. Choosing a performance preset does
+not change what someone can see.
+
+The enforcement is in the generator, not in a hand-audited list:
+`optIn.patterns` in the pin manifest describes what a visibility or framing key
+looks like, and any matching key that is not classified (`optIn.keys`,
+`exclude.keys`, or `optIn.allowInBody` with a stated reason) is a hard failure.
+A list alone would rot on the first `--refresh`.
 
 ## Explicitly out of scope
 
@@ -152,19 +187,54 @@ agrees on, with the aggressive tiers (boot, Kaizu) as opt-in.
 - dyson and other full-file replacement configs (no manifest, no relationship,
   per-patch churn; would force the unsafe auto-diff path).
 
+## Still open
+
+- **Boolean normalization.** Nothing normalizes `1<->true` / `0<->false` when
+  comparing convar values, so a config that writes `true` where the baseline
+  writes `1` shows up as a change. Harmless today (the written value is the
+  author's own), but a cross-preset or conflict comparison needs a
+  `normalizeConvarValue` helper first.
+- **User-exposed sliders from an upstream-owned manifest**, ideally hosted in the
+  OptimizationLock repo, Zod-validated, with a bundled pinned fallback. Controls:
+  `key / section / type / range / presetValues / description / warning /
+  requires`.
+- **Perf-addon VPKs as optional installs.** Upstream bundles three (Optimized
+  Soul Container, Sinner Light Fix, Vindicta Scope Downscale). They belong in the
+  normal VPK pipeline, not the gameinfo patcher. Encode the known dependency
+  `video.txt mip_bias >= 4 -> Sinner Light Fix` as a `requires` field.
+- **Ask Sqooky to cut git tags.** It costs him one command and upgrades four of
+  the six pins from a bare SHA to a real release.
+
 ## Updating presets
 
-Re-download the upstream config + clean baseline, re-run the section/key diff,
-regenerate the tables in `performanceConfigData.ts`. Upstream is the source of
-truth for preset contents; do not hand-tune values. Bumping a preset means
-bumping its `version` so wiped-detection and reapply behave.
+```bash
+pnpm perf:presets                    # regenerate from the current pins
+pnpm perf:presets --check            # verify the committed data matches the pins
+pnpm perf:presets --refresh all      # move pins deliberately, then regenerate
+pnpm perf:presets --refresh optilock-fps
+```
+
+Upstream is the source of truth for preset contents; never hand-tune values and
+never hand-edit `performanceConfigData.ts`. A sha256 mismatch is a hard failure
+by design: it means a tag moved, a branch was force-pushed, or the fetch was
+tampered with, and none of those should quietly change what Grimoire writes into
+someone's `gameinfo.gi`. A tag-pinned source is also checked against the tag it
+claims, so the release the UI credits cannot drift from the code shipped.
+
+`--check` is deliberately NOT wired into CI: it needs network access to
+raw.githubusercontent.com, and a third-party outage failing CI is a bad trade
+when the vitest suite already gates behavior offline.
 
 ## References
 
-- Upstream: https://github.com/Sqooky/OptimizationLock (GPL-3.0)
-- Phase 1 implementation: `electron/main/services/performanceConfig.ts`,
-  `performanceConfigData.ts`, `ipc/performanceConfig.ts`,
-  `src/components/performance/PerformanceConfigCard.tsx`
+- Upstreams: https://github.com/Sqooky/OptimizationLock and
+  https://github.com/dacooderr/OptiLock (both GPL-3.0)
+- Implementation: `electron/main/services/performanceConfig.ts`,
+  `performanceConfigData.ts` (generated), `ipc/performanceConfig.ts`,
+  `scripts/gen-performance-presets.mjs`, `scripts/performance-presets.json`,
+  `src/components/performance/` (`PerformanceConfigCard`, `PresetPicker`,
+  `GameplayOptIns`)
+- Round-trip and drift tests: `electron/main/services/performanceConfig.test.ts`
 - SearchPaths ownership: `electron/main/services/system.ts` (`fixGameinfo`),
   `deadworks-servers.md`
 - GameBanana API: `gamebanana_api_reference.md` (Deadlock game id 20948)
