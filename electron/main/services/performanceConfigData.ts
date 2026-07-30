@@ -699,7 +699,6 @@ const SqookyTesting: PerformancePreset = {
         ['citadel_fibonnaci_sphere_trace_los_max', '80'],
         ['citadel_melee_shake_amplitude', '0'],
         ['citadel_portrait_unit_ag2_enable', 'false'],
-        ['citadel_unit_status_hide_names', 'true'],
         ['cl_clockdrift_max_ticks', '1'],
         ['cl_globallight_freeze', 'true'],
         ['cl_skel_constraints_enable', 'false'],
@@ -775,6 +774,7 @@ const SqookyTesting: PerformancePreset = {
         { key: 'citadel_player_outline_enemies', value: 'false', group: 'visibility' },
         { key: 'citadel_hideout_enable_testing_tools', value: 'true', group: 'devtools' },
         { key: 'citadel_orb_debug_draw_state', value: '1', group: 'devtools' },
+        { key: 'citadel_unit_status_hide_names', value: 'true', group: 'visibility' },
         { key: 'movement_stats_debug_draw', value: 'true', group: 'devtools' },
         { key: 'music_hideout_debug_enabled', value: 'true', group: 'devtools' },
     ],
@@ -1613,7 +1613,6 @@ const KaizuMinSpec: PerformancePreset = {
         ['panorama_hsbc_through_fast_path', '1'],
         ['panorama_use_backbuffer_directly', '1'],
         ['panorama_script_cache_enabled', '1'],
-        ['citadel_unit_status_hide_names', '1'],
         ['citadel_hud_objective_health_idle_timeout', '0'],
         ['citadel_camera_parrot_smoothing_rate', '0'],
         ['steam_inputhandler_enabled', '0'],
@@ -1645,6 +1644,7 @@ const KaizuMinSpec: PerformancePreset = {
         { key: 'r_citadel_selection_outline2_offset', value: '2', group: 'visibility' },
         { key: 'r_citadel_selection_outline2_alpha', value: '255', group: 'visibility' },
         { key: 'r_citadel_selection_outline2_width', value: '50', group: 'visibility' },
+        { key: 'citadel_unit_status_hide_names', value: '1', group: 'visibility' },
     ],
 };
 
@@ -2098,7 +2098,6 @@ const OptilockFps: PerformancePreset = {
         ['panorama_async_compute_mipgen', '1'],
         ['panorama_transition_time_factor', '2'],
         ['panorama_clear_frames_on_device_restore', '0'],
-        ['citadel_unit_status_hide_names', '1'],
         ['panorama_draw_text_fast_path', '1'],
         ['panorama_draw_text_fast_path_text_shadow', '1'],
         ['panorama_hsbc_through_fast_path', '1'],
@@ -2170,6 +2169,7 @@ const OptilockFps: PerformancePreset = {
         { key: 'citadel_camera_hero_fov', value: '100', group: 'camera' },
         { key: 'citadel_unit_status_use_new', value: '1', group: 'visibility' },
         { key: 'citadel_hideout_enable_testing_tools', value: 'true', group: 'devtools' },
+        { key: 'citadel_unit_status_hide_names', value: '1', group: 'visibility' },
         { key: 'r_citadel_selection_outline2_offset', value: '2', group: 'visibility' },
         { key: 'r_citadel_selection_outline2_width', value: '50', group: 'visibility' },
         { key: 'r_citadel_glow_health_bars', value: 'false', group: 'visibility' },
@@ -2678,7 +2678,6 @@ const OptilockMax: PerformancePreset = {
         ['panorama_hsbc_through_fast_path', '1'],
         ['panorama_use_backbuffer_directly', '1'],
         ['panorama_script_cache_enabled', '1'],
-        ['citadel_unit_status_hide_names', '1'],
         ['citadel_camera_parrot_smoothing_rate', '0'],
         ['steam_inputhandler_enabled', '0'],
         ['panorama_clear_frames_on_device_restore', '0'],
@@ -2717,6 +2716,7 @@ const OptilockMax: PerformancePreset = {
         { key: 'citadel_hideout_enable_testing_tools', value: 'true', group: 'devtools' },
         { key: 'r_citadel_selection_outline2_offset', value: '2', group: 'visibility' },
         { key: 'r_citadel_selection_outline2_width', value: '50', group: 'visibility' },
+        { key: 'citadel_unit_status_hide_names', value: '1', group: 'visibility' },
     ],
 };
 

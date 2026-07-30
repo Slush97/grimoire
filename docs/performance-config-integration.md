@@ -169,15 +169,34 @@ layered on; only fresh inference is suspended.
 Convars that change what the player can see or how the camera is framed (enemy /
 trooper / boss outlines and glows, see-thru-walls, `cl_glow_brightness`,
 `r_citadel_*outline*`, `r_aspectratio`, FOV keys, camera pitch limits, hideout
-and debug-draw tooling) are stripped from every preset body at generation time
-and written only when the user turns them on. Choosing a performance preset does
-not change what someone can see.
+and debug-draw tooling, and the unit-status HUD readability keys below) are
+stripped from every preset body at generation time and written only when the
+user turns them on. Choosing a performance preset does not change what someone
+can see.
 
 The enforcement is in the generator, not in a hand-audited list:
 `optIn.patterns` in the pin manifest describes what a visibility or framing key
 looks like, and any matching key that is not classified (`optIn.keys`,
 `exclude.keys`, or `optIn.allowInBody` with a stated reason) is a hard failure.
 A list alone would rot on the first `--refresh`.
+
+#### The unit-status family is classified by key, not by pattern
+
+`citadel_unit_status_use_new` (health bar style) and
+`citadel_unit_status_hide_names` (names over units) are opt-ins because they
+change what the player reads off the HUD, but neither matches any entry in
+`optIn.patterns`. They are held back purely by their `optIn.keys` membership,
+so **a `--refresh` that introduces a new `citadel_unit_status_*` key will not
+flag it**, and it would ship inside a preset body. Re-audit that prefix by hand
+after any pin bump.
+
+Closing the gap means adding a `unit_status` pattern, which in turn forces a
+classification for the three keys the presets currently set in-body:
+`citadel_unit_status_delta_decay_delay`, `..._delta_decay_rate`, and
+`..._old_update_rate`. Those look like genuine render/update-cost settings
+rather than readability choices, so they would want `allowInBody` entries with
+a stated reason, and that reason should be verified in-game rather than
+guessed. Left open deliberately.
 
 ## Explicitly out of scope
 

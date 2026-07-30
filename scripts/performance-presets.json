@@ -185,6 +185,11 @@
         "group": "visibility",
         "why": "Swaps the unit-status health bars to the new style. Stock gameinfo.gi does not set it, four presets turn it on and two turn it off, so it is a readability preference the authors disagree about, not a frame-rate setting. Held back so applying a preset never changes how health bars look."
       },
+      {
+        "key": "citadel_unit_status_hide_names",
+        "group": "visibility",
+        "why": "Hides the names drawn over unit status bars. Stock gameinfo.gi does not set it and four presets turn it on. A name over a unit is gameplay information the player reads, not render cost, so removing it is the same class of choice as citadel_unit_status_use_new and belongs behind the same explicit opt-in."
+      },
       { "key": "cl_glow_brightness", "group": "visibility" },
       { "key": "r_citadel_outlines", "group": "visibility" },
       { "key": "r_citadel_npr_outlines", "group": "visibility" },
