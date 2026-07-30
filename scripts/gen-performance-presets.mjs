@@ -51,12 +51,56 @@ async function fetchAt(repo, commit, path) {
     return res.text();
 }
 
+const GH = { headers: { Accept: 'application/vnd.github+json' } };
+
 async function resolveHead(repo) {
-    const res = await fetch(`https://api.github.com/repos/${repo}/commits/HEAD`, {
-        headers: { Accept: 'application/vnd.github+json' },
-    });
+    const res = await fetch(`https://api.github.com/repos/${repo}/commits/HEAD`, GH);
     if (!res.ok) fail(`Could not resolve HEAD for ${repo} (${res.status})`);
     return (await res.json()).sha;
+}
+
+// The commit a tag points at, dereferencing annotated tags. Returns null when
+// the tag does not exist (upstream deleted or renamed it).
+async function resolveTag(repo, tag) {
+    const res = await fetch(
+        `https://api.github.com/repos/${repo}/git/ref/tags/${encodeURIComponent(tag)}`,
+        GH
+    );
+    if (res.status === 404) return null;
+    if (!res.ok) fail(`Could not resolve tag ${tag} for ${repo} (${res.status})`);
+    const ref = await res.json();
+    if (ref.object.type !== 'tag') return ref.object.sha;
+    const ann = await fetch(`https://api.github.com/repos/${repo}/git/tags/${ref.object.sha}`, GH);
+    if (!ann.ok) fail(`Could not dereference annotated tag ${tag} for ${repo} (${ann.status})`);
+    return (await ann.json()).object.sha;
+}
+
+async function latestReleaseTag(repo) {
+    const res = await fetch(`https://api.github.com/repos/${repo}/releases/latest`, GH);
+    if (!res.ok) fail(`Could not read the latest release of ${repo} (${res.status})`);
+    return (await res.json()).tag_name;
+}
+
+// A source pinned with refKind 'tag' claims, in the UI, that the preset comes
+// from a published release. Tags are mutable, so that claim can quietly become
+// false. The commit is still what we fetch and the sha256 still gates content:
+// this check exists so the *provenance* cannot lie either.
+async function verifyTagPins(manifest) {
+    for (const [name, source] of Object.entries(manifest.sources)) {
+        if (source.refKind !== 'tag') continue;
+        const sha = await resolveTag(source.repo, source.ref);
+        if (sha === source.commit) continue;
+        fail(
+            sha === null
+                ? `Source "${name}" claims tag ${source.ref}, which no longer exists in ${source.repo}.\n` +
+                      `  The pin still fetches ${source.commit.slice(0, 8)}, but the card would show a\n` +
+                      `  release that upstream deleted. Point "ref" at a live tag, or set\n` +
+                      `  "refKind": "prose" to state the version without claiming a release.`
+                : `Source "${name}" pins ${source.commit.slice(0, 8)} but tag ${source.ref} now points at ${sha.slice(0, 8)}.\n` +
+                      `  A moved tag means the release the card credits is not the code we ship.\n` +
+                      `  Move the pin deliberately:  pnpm perf:presets --refresh ${name}`
+        );
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -361,13 +405,10 @@ function emit(manifest, presets) {
     L.push(`    return PRESETS.find((p) => p.id === id) ?? PRESETS.find((p) => p.id === DEFAULT_PRESET_ID)!;`);
     L.push(`}`);
     L.push(``);
-    L.push(`/** UI labels for the opt-in groups are i18n keys; this maps group -> key. */`);
-    L.push(`export const OPT_IN_GROUPS: Record<OptInGroup, string> = {`);
-    for (const [g, label] of Object.entries(manifest.optIn.groups)) {
-        L.push(`    ${g}: ${q(label)},`);
-    }
-    L.push(`};`);
-    L.push(``);
+    // Group labels are deliberately NOT emitted here: they are user-facing
+    // strings and live in src/locales/en/translation.json under
+    // performance.optIn.group.*, where Weblate can reach them. A second copy in
+    // generated main-process code would only rot.
     return L.join('\n');
 }
 
@@ -385,6 +426,8 @@ async function main() {
         await refreshPins(manifest, REFRESH);
         return;
     }
+
+    await verifyTagPins(manifest);
 
     const baselineText = await fetchAt(
         manifest.baseline.repo,
@@ -435,6 +478,36 @@ async function main() {
         }
     }
 
+    // The list above is only as good as the last hand-audit of six upstream
+    // files. These patterns are what make it hold across a `--refresh`: a key
+    // that looks like a visibility or framing setting has to be classified on
+    // purpose before it can ship in a preset body.
+    const patterns = (manifest.optIn.patterns ?? []).map((p) => new RegExp(p, 'i'));
+    const allowedInBody = new Set((manifest.optIn.allowInBody ?? []).map((k) => k.key));
+    const unclassified = new Map(); // key -> preset ids
+    for (const p of presets) {
+        for (const key of [...p.convars.map(([k]) => k), ...p.sectionOps.map((op) => op.key)]) {
+            if (allowedInBody.has(key) || !patterns.some((re) => re.test(key))) continue;
+            if (!unclassified.has(key)) unclassified.set(key, []);
+            unclassified.get(key).push(p.id);
+        }
+    }
+    if (unclassified.size) {
+        const list = [...unclassified]
+            .map(([key, ids]) => `    ${key}  (${ids.join(', ')})`)
+            .join('\n');
+        fail(
+            `Unclassified gameplay-shaped keys would be applied without asking:\n\n${list}\n\n` +
+                `  Each one matches scripts/performance-presets.json optIn.patterns, so it\n` +
+                `  changes what the player sees or how the camera is framed until proven\n` +
+                `  otherwise. Classify every one of them in that manifest:\n` +
+                `    optIn.keys      offer it as a toggle (the usual answer)\n` +
+                `    exclude.keys    never write it, with a "why"\n` +
+                `    optIn.allowInBody  keep it in the body, with a "why" that says\n` +
+                `                    it costs frames rather than changing what is visible`
+        );
+    }
+
     const output = emit(manifest, presets);
 
     if (CHECK) {
@@ -481,13 +554,29 @@ async function refreshPins(manifest, target) {
 
     for (const name of sourcesToBump) {
         const source = manifest.sources[name];
-        const head = await resolveHead(source.repo);
-        if (head === source.commit) {
-            console.log(`  ${name}: already at ${head.slice(0, 8)}`);
-        } else {
-            console.log(`  ${name}: ${source.commit.slice(0, 8)} -> ${head.slice(0, 8)}`);
-            source.commit = head;
+        // A tag-pinned source moves to its newest *release*, and `ref` moves
+        // with it. Bumping such a source to a branch HEAD would leave the card
+        // claiming a release the code no longer comes from until someone
+        // remembered to hand-edit `ref`.
+        const target =
+            source.refKind === 'tag'
+                ? await (async () => {
+                      const tag = await latestReleaseTag(source.repo);
+                      const sha = await resolveTag(source.repo, tag);
+                      if (!sha) fail(`Latest release of ${source.repo} names tag ${tag}, which does not resolve.`);
+                      return { ref: tag, commit: sha };
+                  })()
+                : { ref: source.ref, commit: await resolveHead(source.repo) };
+
+        if (target.commit === source.commit && target.ref === source.ref) {
+            console.log(`  ${name}: already at ${target.ref} ${target.commit.slice(0, 8)}`);
+            continue;
         }
+        console.log(
+            `  ${name}: ${source.ref} ${source.commit.slice(0, 8)} -> ${target.ref} ${target.commit.slice(0, 8)}`
+        );
+        source.ref = target.ref;
+        source.commit = target.commit;
     }
 
     const bl = manifest.baseline;
@@ -503,8 +592,10 @@ async function refreshPins(manifest, target) {
 
     writeFileSync(MANIFEST_PATH, `${JSON.stringify(manifest, null, 2)}\n`, 'utf-8');
     console.log(
-        `\n  Pins updated. Review the manifest diff, set each source's "ref" to the\n` +
-            `  new upstream version, then run \`pnpm perf:presets\` and review that diff.\n`
+        `\n  Pins updated. Review the manifest diff. Tag-pinned sources moved their\n` +
+            `  "ref" with the release; for a prose-pinned source, set "ref" to the\n` +
+            `  version the author now states. Then run \`pnpm perf:presets\` and review\n` +
+            `  that diff: a new gameplay-shaped key will fail the run until classified.\n`
     );
 }
 

@@ -114,6 +114,18 @@
       {
         "key": "AllowKeyChordBindings",
         "why": "Author-personal keybinding preference, not a performance setting."
+      },
+      {
+        "key": "PGIVersion",
+        "why": "Valve's content hash for gameinfo.gi. Deleting or rewriting it cannot gain frames, and one upstream config comments it out, which would have commented it out of the user's live file. Never touch it either way."
+      },
+      {
+        "key": "citadel_hideout_ball_show_juggle_count",
+        "why": "Hideout-only cosmetic overlay, not a performance setting. Author-personal, like AllowKeyChordBindings."
+      },
+      {
+        "key": "citadel_hideout_ball_show_juggle_fx",
+        "why": "Hideout-only cosmetic effect, not a performance setting."
       }
     ]
   },
@@ -125,13 +137,40 @@
       "enemy visibility or changes someone's FOV under a 'performance' label.",
       "Each entry's default value is whatever the selected preset set it to;",
       "presets that do not set it simply do not offer the toggle.",
-      "`group` buckets them in the UI."
+      "`group` buckets them in the UI.",
+      "",
+      "`patterns` is the enforcement half: any key whose name matches one of",
+      "them must be classified deliberately (listed below, excluded above, or",
+      "listed in `allowInBody` with a reason). The generator hard-fails on an",
+      "unclassified match, so an upstream bump that introduces a new outline or",
+      "FOV convar cannot quietly ride into a preset body. A hand-audited list",
+      "alone would rot on the first `--refresh`."
     ],
     "groups": {
       "visibility": "Enemy and unit visibility",
       "camera": "Camera and field of view",
       "devtools": "Developer and testing tools"
     },
+    "patterns": [
+      "outline",
+      "glow",
+      "see_thru",
+      "_fov$",
+      "aspectratio",
+      "debug_draw",
+      "hideout",
+      "camera_pitch"
+    ],
+    "allowInBody": [
+      {
+        "key": "debug_draw_enable",
+        "why": "Every preset sets it to false, i.e. turns debug drawing OFF. That removes rendering cost and cannot reveal anything the player could not already see."
+      },
+      {
+        "key": "r_citadel_glow_health_bar_debug",
+        "why": "Set to false: turns a debug overlay off. Same reasoning as debug_draw_enable."
+      }
+    ],
     "keys": [
       { "key": "citadel_player_outline_enemies", "group": "visibility" },
       { "key": "citadel_trooper_outline_enabled", "group": "visibility" },
@@ -149,9 +188,18 @@
       { "key": "r_citadel_selection_outline2_alpha", "group": "visibility" },
       { "key": "r_citadel_selection_outline2_offset", "group": "visibility" },
       { "key": "r_citadel_selection_outline2_width", "group": "visibility" },
+      { "key": "r_citadel_npr_force_solid_outline", "group": "visibility" },
+      { "key": "citadel_player_glow_from_teammate_vision_max_range", "group": "visibility" },
       { "key": "r_aspectratio", "group": "camera" },
       { "key": "citadel_camera_hero_fov", "group": "camera" },
-      { "key": "citadel_hideout_enable_testing_tools", "group": "devtools" }
+      { "key": "default_fov", "group": "camera" },
+      { "key": "viewmodel_fov", "group": "camera" },
+      { "key": "citadel_camera_pitch_max", "group": "camera" },
+      { "key": "citadel_camera_pitch_min", "group": "camera" },
+      { "key": "citadel_hideout_enable_testing_tools", "group": "devtools" },
+      { "key": "movement_stats_debug_draw", "group": "devtools" },
+      { "key": "citadel_orb_debug_draw_state", "group": "devtools" },
+      { "key": "music_hideout_debug_enabled", "group": "devtools" }
     ]
   }
 }
