@@ -220,7 +220,9 @@
     "commands": {
       "emptyTitle": "No commands added",
       "emptyDescription": "Select from presets on the left",
-      "manualTooltip": "This command was already in autoexec.cfg and is shown read-only.",
+      "manualTitle": "Already in autoexec.cfg",
+      "manualDescription": "Lines that were in the file before grimoire. They are kept as-is and cannot be edited here.",
+      "removeLabel": "Remove {{command}}",
       "title_one": "Your Commands ({{count}})",
       "title_other": "Your Commands ({{count}})"
     },
@@ -230,8 +232,13 @@
       "clearMessage_other": "Remove all {{count}} commands from the list? Your saved autoexec.cfg won't change until you click Save."
     },
     "customCommand": {
+      "add": "Add",
+      "duplicate": "This command is already in your list",
       "title": "Custom Command",
       "placeholder": "e.g. fps_max 0"
+    },
+    "header": {
+      "description": "Console commands Deadlock runs every time it starts"
     },
     "launchOptions": {
       "description": "Args passed to Deadlock when launched via Steam. Written into Steam's config right before grimoire launches the game.",
@@ -244,7 +251,12 @@
     },
     "presets": {
       "title": "Premade Commands",
-      "toggle": "Toggle premade commands",
+      "description": "Pick a tuned command and add it to your list",
+      "countLabel": "{{shown}} of {{total}}",
+      "addLabel": "Add {{name}}",
+      "addedLabel": "{{name}} is already in your list",
+      "noResults": "No commands match your search",
+      "noResultsHint": "Try a shorter or different term.",
       "performance": {
         "category": "Performance",
         "uncapFps": {
@@ -357,6 +369,8 @@
     },
     "status": {
       "error": "Error: {{error}}",
+      "fileActive": "autoexec.cfg active",
+      "fileMissing": "autoexec.cfg not created yet",
       "gamePathNotConfigured": "Game path not configured",
       "gamePathWarning": "Game path not configured. Set it in Settings to save.",
       "savedToAutoexec": "Saved to autoexec.cfg!",
@@ -898,7 +912,7 @@
       "copyCode": "Copy Code",
       "importFromGame": "Import from Game",
       "importTitle": "Load your current in-game crosshair settings into the editor",
-      "saveAsNewPreset": "Save as New Preset"
+      "saveCurrent": "Save current"
     },
     "alert": {
       "applyPresetFailed": "Failed to apply preset. Make sure the game path is correct.",
@@ -921,6 +935,7 @@
       "deletePreset": "Delete this crosshair preset?"
     },
     "controls": {
+      "color": "Crosshair color",
       "gap": "Gap",
       "height": "Height",
       "opacity": "Opacity",
@@ -928,32 +943,51 @@
       "outlineGap": "Outline Gap",
       "outlineOpacity": "Outline Opacity",
       "outlineWidth": "Outline Width",
+      "rgb": "RGB({{r}}, {{g}}, {{b}})",
       "size": "Size",
       "width": "Width"
     },
+    "header": {
+      "description": "Tune your crosshair and read it against a real scene"
+    },
     "hints": {
+      "applyExplainer": "Copy Code pastes the whole crosshair into the in-game console (press F7). Applying a saved preset writes it to autoexec.cfg instead, so it survives a restart.",
+      "dotHidden": "The dot is fully transparent. Raise Opacity to see it.",
       "pressF7": "Press F7 in-game"
     },
     "presetNamePlaceholder": "Name...",
     "presets": {
       "deselectActive": "Deselect Active",
       "deselectTitle": "Remove the active crosshair from autoexec.cfg (presets are kept)",
+      "empty": "No presets yet. Save the current crosshair to switch back to it later.",
+      "saveFailed": "Couldn't save the preset. Your name is still there, try again.",
       "savedTitle_one": "Saved Presets ({{count}})",
       "savedTitle_other": "Saved Presets ({{count}})"
     },
     "preview": {
-      "description": "Preview approximates the in-game crosshair at the selected resolution. Dynamic spread bloom is not simulated.",
+      "backgrounds": {
+        "plain": "Plain",
+        "sandbox": "Sandbox",
+        "street": "Street"
+      },
+      "followHint": "Move your cursor over the scene: the crosshair follows it",
       "pinned": "Pinned",
       "pinTitle": "Keep the mod manager window on top of the game for quick adjustments",
       "pinWindow": "Pin Window",
+      "resetZoom": "Reset zoom",
       "resolutionTitle": "Render the preview at this display resolution's in-game size",
-      "zoom": "Zoom:"
+      "zoomIn": "Zoom in",
+      "zoomOut": "Zoom out"
     },
     "sections": {
-      "centerDot": "Center Dot",
+      "outline": "Outline"
+    },
+    "tabs": {
       "color": "Color",
-      "inGameBehavior": "In-Game Behavior",
-      "shape": "Crosshair Shape"
+      "dot": "Dot",
+      "game": "Game",
+      "label": "Crosshair settings",
+      "lines": "Lines"
     },
     "status": {
       "imported": "Imported"

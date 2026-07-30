@@ -18,8 +18,10 @@ import Tx from '../translation/Tx';
 
 const CUSTOM_FALLBACK: BackgroundGradient = { from: '#8b5cf6', to: '#06b6d4' };
 
+// Same 36px square as the accent swatches directly above, so the two picker
+// rows read as one control group instead of two differently-sized grids.
 const TILE_BASE =
-  'group relative flex h-12 w-20 items-center justify-center overflow-hidden rounded-sm border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary';
+  'group relative flex h-9 w-9 items-center justify-center overflow-hidden rounded-sm border transition-colors cursor-pointer focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-bg-secondary';
 
 /** A gradient swatch that shows the real thing, corner to corner. */
 function GradientTile({
@@ -47,9 +49,13 @@ function GradientTile({
     >
       {children}
       {/* Ringed badge: it is accent-colored and the swatch under it can be any
-          hue, so on the warm presets it would otherwise sit orange-on-amber. */}
-      {active && (
-        <span className="absolute right-1 top-1 rounded-sm bg-accent p-0.5 text-accent-foreground ring-1 ring-black/40">
+          hue, so on the warm presets it would otherwise sit orange-on-amber.
+          Only on the plain gradient tiles: at this size the badge would collide
+          with a centered icon, so tiles that carry one (none, custom) show
+          their active state through the border alone, as the accent picker's
+          custom swatch does. */}
+      {active && !children && (
+        <span className="absolute right-0.5 top-0.5 rounded-sm bg-accent p-0.5 text-accent-foreground ring-1 ring-black/40">
           <Check className="h-2.5 w-2.5" aria-hidden />
         </span>
       )}
@@ -174,14 +180,9 @@ export default function BackgroundGradientPicker() {
           }
         >
           <Pipette
-            className={`h-4 w-4 ${isCustomActive ? 'text-text-primary' : 'text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]'}`}
+            className={`h-3.5 w-3.5 ${isCustomActive ? 'text-text-primary' : 'text-black/70 drop-shadow-[0_1px_0_rgba(255,255,255,0.5)]'}`}
             aria-hidden
           />
-          {isCustomActive && (
-            <span className="absolute right-1 top-1 rounded-sm bg-accent p-0.5 text-accent-foreground ring-1 ring-black/40">
-              <Check className="h-2.5 w-2.5" aria-hidden />
-            </span>
-          )}
         </button>
       </div>
 

@@ -1,82 +1,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Zap, Globe, Layout, Map, Users, MousePointer2, Search, Save, AlertTriangle, Rocket, ChevronDown } from 'lucide-react';
-import { getSettings, setSettings } from '../lib/api';
-import { Card, Badge, Button } from '../components/common/ui';
+import { Terminal, Copy, Check, Plus, Trash2, RefreshCw, Save, AlertTriangle, FileWarning } from 'lucide-react';
+import { getSettings } from '../lib/api';
+import { Card, Badge, Button, IconButton } from '../components/common/ui';
 import { Input } from '../components/common/forms';
-import { ConfirmModal } from '../components/common/PageComponents';
+import { ConfirmModal, PageHeader } from '../components/common/PageComponents';
+import CommandLibrary from '../components/autoexec/CommandLibrary';
+import LaunchOptionsCard from '../components/autoexec/LaunchOptionsCard';
 import Tx from '../components/translation/Tx';
-import type { AppSettings } from '../types/mod';
-import type { SteamLaunchOptionsStatus } from '../types/electron';
 import { memeToastSuffix } from '../lib/easterEggs';
-
-// Popular Deadlock autoexec command presets
-const COMMAND_PRESETS = [
-    {
-        categoryKey: 'autoexec.presets.performance.category',
-        categoryFallback: 'Performance',
-        icon: Zap,
-        commands: [
-            { nameKey: 'autoexec.presets.performance.uncapFps.name', nameFallback: 'Uncap FPS', command: 'fps_max 0', descriptionKey: 'autoexec.presets.performance.uncapFps.description', descriptionFallback: 'Remove framerate limit' },
-            { nameKey: 'autoexec.presets.performance.capFps144.name', nameFallback: 'Cap FPS 144', command: 'fps_max 144', descriptionKey: 'autoexec.presets.performance.capFps144.description', descriptionFallback: 'Cap to 144 FPS' },
-            { nameKey: 'autoexec.presets.performance.capFps240.name', nameFallback: 'Cap FPS 240', command: 'fps_max 240', descriptionKey: 'autoexec.presets.performance.capFps240.description', descriptionFallback: 'Cap to 240 FPS' },
-            { nameKey: 'autoexec.presets.performance.lowLatencyNvidia.name', nameFallback: 'Low Latency (Nvidia)', command: 'r_low_latency 2', descriptionKey: 'autoexec.presets.performance.lowLatencyNvidia.description', descriptionFallback: 'Enable Nvidia Reflex low latency' },
-            { nameKey: 'autoexec.presets.performance.engineLowLatency.name', nameFallback: 'Engine Low Latency', command: 'engine_low_latency_sleep_after_client_tick true', descriptionKey: 'autoexec.presets.performance.engineLowLatency.description', descriptionFallback: 'Reduce input lag' },
-        ],
-    },
-    {
-        categoryKey: 'autoexec.presets.network.category',
-        categoryFallback: 'Network',
-        icon: Globe,
-        commands: [
-            { nameKey: 'autoexec.presets.network.maxNetworkRate.name', nameFallback: 'Max Network Rate', command: 'rate 1000000', descriptionKey: 'autoexec.presets.network.maxNetworkRate.description', descriptionFallback: 'Maximum network update rate' },
-        ],
-    },
-    {
-        categoryKey: 'autoexec.presets.hud.category',
-        categoryFallback: 'HUD & UI',
-        icon: Layout,
-        commands: [
-            { nameKey: 'autoexec.presets.hud.newHealthBars.name', nameFallback: 'New Health Bars', command: 'citadel_unit_status_use_new true', descriptionKey: 'autoexec.presets.hud.newHealthBars.description', descriptionFallback: 'Enable new-style health bars' },
-            { nameKey: 'autoexec.presets.hud.hideHud.name', nameFallback: 'Hide HUD', command: 'citadel_hud_visible false', descriptionKey: 'autoexec.presets.hud.hideHud.description', descriptionFallback: 'Hide the entire HUD' },
-            { nameKey: 'autoexec.presets.hud.showHud.name', nameFallback: 'Show HUD', command: 'citadel_hud_visible true', descriptionKey: 'autoexec.presets.hud.showHud.description', descriptionFallback: 'Show the HUD' },
-            { nameKey: 'autoexec.presets.hud.disablePostMatchSurvey.name', nameFallback: 'Disable Post-Match Survey', command: 'deadlock_post_match_survey_disabled true', descriptionKey: 'autoexec.presets.hud.disablePostMatchSurvey.description', descriptionFallback: 'Skip the survey after matches' },
-            { nameKey: 'autoexec.presets.hud.offscreenDamageIndicator.name', nameFallback: 'Offscreen Damage Indicators', command: 'citadel_damage_offscreen_indicator_disabled false', descriptionKey: 'autoexec.presets.hud.offscreenDamageIndicator.description', descriptionFallback: 'Show minion indicators through walls when a teammate sees a droid' },
-        ],
-    },
-    {
-        categoryKey: 'autoexec.presets.minimap.category',
-        categoryFallback: 'Minimap',
-        icon: Map,
-        commands: [
-            { nameKey: 'autoexec.presets.minimap.fasterMinimap.name', nameFallback: 'Faster Minimap', command: 'minimap_update_rate_hz 60', descriptionKey: 'autoexec.presets.minimap.fasterMinimap.description', descriptionFallback: 'Update minimap at 60Hz' },
-            { nameKey: 'autoexec.presets.minimap.largerClickRadius.name', nameFallback: 'Larger Click Radius', command: 'citadel_minimap_unit_click_radius 200', descriptionKey: 'autoexec.presets.minimap.largerClickRadius.description', descriptionFallback: 'Easier to click units on minimap' },
-            { nameKey: 'autoexec.presets.minimap.largerPlayerIcons.name', nameFallback: 'Larger Player Icons', command: 'citadel_minimap_player_width 6.5', descriptionKey: 'autoexec.presets.minimap.largerPlayerIcons.description', descriptionFallback: 'Bigger player icons on minimap' },
-            { nameKey: 'autoexec.presets.minimap.largerLocalPlayerIcon.name', nameFallback: 'Larger Local Player Icon', command: 'citadel_minimap_local_player_width 10.0', descriptionKey: 'autoexec.presets.minimap.largerLocalPlayerIcon.description', descriptionFallback: 'Make your own minimap icon larger' },
-            { nameKey: 'autoexec.presets.minimap.thickerZiplines.name', nameFallback: 'Thicker Ziplines', command: 'citadel_minimap_zip_line_thickness 2', descriptionKey: 'autoexec.presets.minimap.thickerZiplines.description', descriptionFallback: 'More visible ziplines' },
-        ],
-    },
-    {
-        categoryKey: 'autoexec.presets.matchmaking.category',
-        categoryFallback: 'Matchmaking',
-        icon: Users,
-        commands: [
-            { nameKey: 'autoexec.presets.matchmaking.soloQueueOnly.name', nameFallback: 'Solo Queue Only', command: 'mm_prefer_solo_only 1', descriptionKey: 'autoexec.presets.matchmaking.soloQueueOnly.description', descriptionFallback: 'Prefer matches with solo players' },
-            { nameKey: 'autoexec.presets.matchmaking.naRegion.name', nameFallback: 'NA Region', command: 'citadel_region_override 0', descriptionKey: 'autoexec.presets.matchmaking.naRegion.description', descriptionFallback: 'Force North America servers' },
-            { nameKey: 'autoexec.presets.matchmaking.euRegion.name', nameFallback: 'EU Region', command: 'citadel_region_override 1', descriptionKey: 'autoexec.presets.matchmaking.euRegion.description', descriptionFallback: 'Force Europe servers' },
-            { nameKey: 'autoexec.presets.matchmaking.asiaRegion.name', nameFallback: 'Asia Region', command: 'citadel_region_override 2', descriptionKey: 'autoexec.presets.matchmaking.asiaRegion.description', descriptionFallback: 'Force Asia servers' },
-            { nameKey: 'autoexec.presets.matchmaking.autoRegion.name', nameFallback: 'Auto Region', command: 'citadel_region_override -1', descriptionKey: 'autoexec.presets.matchmaking.autoRegion.description', descriptionFallback: 'Automatic region selection' },
-        ],
-    },
-    {
-        categoryKey: 'autoexec.presets.mouse.category',
-        categoryFallback: 'Mouse & Sensitivity',
-        icon: MousePointer2,
-        commands: [
-            { nameKey: 'autoexec.presets.mouse.adsSensitivity.name', nameFallback: '1:1 ADS Sensitivity', command: 'zoom_sensitivity_ratio 0.818933027098955175', descriptionKey: 'autoexec.presets.mouse.adsSensitivity.description', descriptionFallback: 'Match ADS to hip-fire sensitivity' },
-        ],
-    },
-];
 
 interface AutoexecStatus {
     exists: boolean;
@@ -91,8 +23,6 @@ export default function Autoexec() {
     const [commands, setCommands] = useState<string[]>([]);
     const [manualCommands, setManualCommands] = useState<string[]>([]);
     const [customCommand, setCustomCommand] = useState('');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [presetsExpanded, setPresetsExpanded] = useState(false);
     const [copied, setCopied] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [saveMessage, setSaveMessage] = useState<string | null>(null);
@@ -100,23 +30,11 @@ export default function Autoexec() {
     const [hasUnsaved, setHasUnsaved] = useState(false);
     const [clearConfirmOpen, setClearConfirmOpen] = useState(false);
 
-    // Steam launch options — owned by appSettings; written into Steam's
-    // localconfig.vdf right before the game launches. Local UI state holds
-    // the unsaved edit; `settings.steamLaunchOptions` is the source of truth.
-    const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
-    const [launchOptionsDraft, setLaunchOptionsDraft] = useState('');
-    const [launchStatus, setLaunchStatus] = useState<SteamLaunchOptionsStatus | null>(null);
-    const [launchSaving, setLaunchSaving] = useState(false);
-    const [launchMessage, setLaunchMessage] = useState<string | null>(null);
-    const [launchMessageTone, setLaunchMessageTone] = useState<'success' | 'error' | null>(null);
-
     // Load game path, autoexec status, and existing commands
     useEffect(() => {
         const load = async () => {
             const settings = await getSettings();
             setGamePath(settings.deadlockPath);
-            setAppSettings(settings);
-            setLaunchOptionsDraft(settings.steamLaunchOptions ?? '');
             if (settings.deadlockPath) {
                 const s = await window.electronAPI.getAutoexecStatus(settings.deadlockPath);
                 setStatus(s);
@@ -125,59 +43,9 @@ export default function Autoexec() {
                 setCommands(result.commands);
                 setManualCommands(result.manualCommands);
             }
-            try {
-                const status = await window.electronAPI.getSteamLaunchOptionsStatus();
-                setLaunchStatus(status);
-            } catch (err) {
-                console.warn('Failed to read Steam launch options status:', err);
-            }
         };
         load();
     }, []);
-
-    const launchOptionsDirty = (appSettings?.steamLaunchOptions ?? '') !== launchOptionsDraft;
-
-    const handleSaveLaunchOptions = async () => {
-        if (!appSettings) return;
-        setLaunchSaving(true);
-        setLaunchMessage(null);
-        setLaunchMessageTone(null);
-        try {
-            const next: AppSettings = { ...appSettings, steamLaunchOptions: launchOptionsDraft };
-            await setSettings(next);
-            setAppSettings(next);
-            setLaunchMessage(t('autoexec.launchOptions.saved'));
-            setLaunchMessageTone('success');
-            // Re-read current VDF value so the user sees the actual on-disk
-            // state (it only changes when we write before a launch).
-            try {
-                const status = await window.electronAPI.getSteamLaunchOptionsStatus();
-                setLaunchStatus(status);
-            } catch {
-                // best-effort
-            }
-            setTimeout(() => setLaunchMessage(null), 4000);
-        } catch (err) {
-            setLaunchMessage(t('autoexec.status.error', { error: String(err) }));
-            setLaunchMessageTone('error');
-        } finally {
-            setLaunchSaving(false);
-        }
-    };
-
-    const filteredPresets = useMemo(() => {
-        if (!searchTerm) return COMMAND_PRESETS;
-        const lowerSearch = searchTerm.toLowerCase();
-
-        return COMMAND_PRESETS.map(cat => ({
-            ...cat,
-            commands: cat.commands.filter(cmd =>
-                t(cmd.nameKey).toLowerCase().includes(lowerSearch) ||
-                cmd.command.toLowerCase().includes(lowerSearch) ||
-                t(cmd.descriptionKey).toLowerCase().includes(lowerSearch)
-            )
-        })).filter(cat => cat.commands.length > 0);
-    }, [searchTerm, t]);
 
     const visibleCommandCount = commands.length + manualCommands.length;
     const copiedCommands = useMemo(() => [...commands, ...manualCommands], [commands, manualCommands]);
@@ -241,145 +109,80 @@ export default function Autoexec() {
         setClearConfirmOpen(false);
     };
 
+    const customIsDuplicate = !!customCommand.trim() && commandAlreadyPresent(customCommand.trim());
+
     return (
-        <div className="flex flex-col min-h-0 flex-1 p-6 space-y-6 overflow-auto">
-            <div className="flex flex-col lg:flex-row flex-1 gap-6 min-h-0 overflow-auto">
-                {/* Left Panel - Command Builder */}
-                <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-hidden order-2 lg:order-1">
-                    <div className="flex-1 overflow-y-auto space-y-4 pr-2">
-                        {/* Custom Command Input */}
-                        <Card title={<Tx k="autoexec.customCommand.title" fallback="Custom Command" />}>
-                            <div className="space-y-4">
-                                <div className="flex gap-2">
-                                    <Input
-                                        type="text"
-                                        value={customCommand}
-                                        onChange={(e) => setCustomCommand(e.target.value)}
-                                        placeholder={t('autoexec.customCommand.placeholder')}
-                                        className="flex-1 font-mono"
-                                        onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
-                                    />
-                                    <Button
-                                        onClick={handleAddCustomCommand}
-                                        disabled={!customCommand.trim() || commandAlreadyPresent(customCommand.trim())}
-                                        icon={Plus}
-                                    />
-                                </div>
+        // Library left, your list right, each column owning exactly one scroll.
+        // The old page nested four scroll containers, so the wheel did something
+        // different depending on which pixel the pointer was over. Below xl the
+        // columns stack and the page scrolls as one.
+        <div className="flex min-h-full flex-col gap-4 p-6 xl:h-full xl:min-h-0">
+            <PageHeader
+                title={<Tx k="nav.autoexec" fallback="Autoexec" />}
+                description={
+                    <Tx
+                        k="autoexec.header.description"
+                        fallback="Console commands Deadlock runs every time it starts"
+                    />
+                }
+                action={
+                    status ? (
+                        <Badge variant={status.exists ? 'success' : 'warning'}>
+                            {status.exists ? (
+                                <Tx k="autoexec.status.fileActive" fallback="autoexec.cfg active" />
+                            ) : (
+                                <Tx k="autoexec.status.fileMissing" fallback="autoexec.cfg not created yet" />
+                            )}
+                        </Badge>
+                    ) : undefined
+                }
+            />
 
-                                <button
-                                    type="button"
-                                    onClick={() => setPresetsExpanded((expanded) => !expanded)}
-                                    aria-expanded={presetsExpanded}
-                                    aria-label={t('autoexec.presets.toggle')}
-                                    className="flex w-full items-center justify-between border-t border-white/5 pt-4 text-left text-sm font-semibold text-text-primary transition-colors hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                                >
-                                    <span className="flex items-center gap-2">
-                                        <Terminal className="h-4 w-4 text-accent" />
-                                        <Tx k="autoexec.presets.title" fallback="Premade Commands" />
-                                    </span>
-                                    <ChevronDown className={`h-4 w-4 text-text-secondary transition-transform ${presetsExpanded ? 'rotate-180' : ''}`} />
-                                </button>
-
-                                {presetsExpanded && (
-                                    <div className="space-y-3">
-                                        <Input
-                                            icon={Search}
-                                            type="text"
-                                            value={searchTerm}
-                                            onChange={(e) => setSearchTerm(e.target.value)}
-                                            placeholder={t('autoexec.search.placeholder')}
-                                        />
-
-                                        <div className="max-h-[min(52vh,calc(100vh-20rem))] space-y-4 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
-                                            {filteredPresets.map((category) => {
-                                                const CategoryIcon = category.icon;
-                                                return (
-                                                    <section
-                                                        key={category.categoryKey}
-                                                        className="rounded-sm border border-white/5 bg-bg-tertiary/25 p-2.5"
-                                                    >
-                                                        <div className="mb-2 flex items-center gap-2 text-sm font-semibold text-text-primary">
-                                                            <CategoryIcon className="h-4 w-4 text-accent" />
-                                                            <Tx k={category.categoryKey} fallback={category.categoryFallback} />
-                                                        </div>
-
-                                                        <div className="space-y-1">
-                                                            {category.commands.map((cmd) => {
-                                                                const isAdded = commandAlreadyPresent(cmd.command);
-                                                                const commandName = t(cmd.nameKey);
-                                                                const commandDescription = t(cmd.descriptionKey);
-                                                                return (
-                                                                    <button
-                                                                        key={cmd.command}
-                                                                        onClick={() => handleAddCommand(cmd.command)}
-                                                                        disabled={isAdded}
-                                                                        title={commandDescription}
-                                                                        aria-label={`${commandName}: ${commandDescription}. ${cmd.command}`}
-                                                                        className={`w-full p-2 rounded-sm transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent ${isAdded
-                                                                            ? 'bg-accent/10 border border-accent/20 cursor-default opacity-60'
-                                                                            : 'bg-bg-tertiary/50 hover:bg-bg-tertiary border border-transparent hover:border-white/5 cursor-pointer'
-                                                                            }`}
-                                                                    >
-                                                                        <div className="flex items-center justify-between gap-3">
-                                                                            <span className={`min-w-0 truncate text-left text-sm font-medium ${isAdded ? 'text-accent' : 'text-text-primary'}`}>
-                                                                                <Tx k={cmd.nameKey} fallback={cmd.nameFallback} />
-                                                                            </span>
-                                                                            <span className="flex min-w-0 shrink-0 items-center gap-2">
-                                                                                <code className="max-w-64 truncate rounded-sm bg-black/30 px-1.5 py-0.5 font-mono text-xs text-text-primary/80">
-                                                                                    {cmd.command}
-                                                                                </code>
-                                                                                {isAdded && <Check className="h-3 w-3 shrink-0 text-accent" />}
-                                                                            </span>
-                                                                        </div>
-                                                                    </button>
-                                                                );
-                                                            })}
-                                                        </div>
-                                                    </section>
-                                                );
-                                            })}
-                                        </div>
-                                    </div>
-                                )}
-                            </div>
-                        </Card>
-
-                    </div>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
+                {/* Left: the catalog to pick from */}
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col xl:max-h-full">
+                    <CommandLibrary isAdded={commandAlreadyPresent} onAdd={handleAddCommand} />
                 </div>
 
-                {/* Right Panel - Active Commands */}
-                <div className="w-full lg:w-1/2 flex flex-col gap-4 overflow-hidden order-1 lg:order-2">
+                {/* Right: what you have staged, plus launch args */}
+                <div className="flex min-h-0 w-full flex-col gap-4 xl:w-[460px] xl:shrink-0">
                     <Card
-                        className="flex flex-col"
-                        title={
-                            <span className="flex items-center gap-2 min-w-0">
-                                <span className="truncate">
-                                    <Tx
-                                        k="autoexec.commands.title"
-                                        values={{ count: visibleCommandCount }}
-                                        fallback={`Your Commands (${visibleCommandCount})`}
-                                    />
-                                </span>
-                                {status ? (
-                                    status.exists ? (
-                                        <Badge variant="success">
-                                            <Tx k="common.status.active" fallback="Active" />
-                                        </Badge>
-                                    ) : (
-                                        <Badge variant="warning">
-                                            <Tx k="common.status.missing" fallback="Missing" />
-                                        </Badge>
-                                    )
-                                ) : null}
-                            </span>
-                        }
+                        className="flex min-h-0 flex-1 flex-col"
+                        contentClassName="flex min-h-0 flex-1 flex-col gap-3 p-4"
                         icon={Terminal}
+                        title={
+                            <Tx
+                                k="autoexec.commands.title"
+                                values={{ count: visibleCommandCount }}
+                                fallback={`Your Commands (${visibleCommandCount})`}
+                            />
+                        }
                         action={
-                            <div className="flex gap-2">
-                                <Button size="sm" variant="secondary" onClick={() => setClearConfirmOpen(true)} disabled={commands.length === 0} icon={RefreshCw}>
+                            <div className="flex flex-wrap items-center gap-2">
+                                {/* The unsaved marker sits with Save, where the
+                                    decision to act on it is made. */}
+                                {hasUnsaved && (
+                                    <span className="flex items-center gap-1.5 text-xs text-state-warning">
+                                        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-state-warning" aria-hidden />
+                                        <Tx k="autoexec.status.unsavedChanges" fallback="You have unsaved changes" />
+                                    </span>
+                                )}
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={() => setClearConfirmOpen(true)}
+                                    disabled={commands.length === 0}
+                                    icon={RefreshCw}
+                                >
                                     <Tx k="common.actions.clear" fallback="Clear" />
                                 </Button>
-                                <Button size="sm" variant="secondary" onClick={handleCopy} disabled={copiedCommands.length === 0} icon={copied ? Check : Copy}>
+                                <Button
+                                    size="sm"
+                                    variant="secondary"
+                                    onClick={handleCopy}
+                                    disabled={copiedCommands.length === 0}
+                                    icon={copied ? Check : Copy}
+                                >
                                     {copied ? (
                                         <Tx k="common.status.copied" fallback="Copied" />
                                     ) : (
@@ -398,177 +201,133 @@ export default function Autoexec() {
                             </div>
                         }
                     >
-                        {(!gamePath || saveMessage || hasUnsaved) && (
-                            <div className="mb-3 space-y-2" role="status" aria-live="polite">
+                        {/* Adding by hand lives with the list it appends to,
+                            not in the catalog column. */}
+                        <div className="flex gap-2">
+                            <Input
+                                inputSize="sm"
+                                type="text"
+                                value={customCommand}
+                                onChange={(e) => setCustomCommand(e.target.value)}
+                                placeholder={t('autoexec.customCommand.placeholder')}
+                                aria-label={t('autoexec.customCommand.title')}
+                                className="flex-1 font-mono"
+                                onKeyDown={(e) => e.key === 'Enter' && handleAddCustomCommand()}
+                            />
+                            <Button
+                                size="sm"
+                                onClick={handleAddCustomCommand}
+                                disabled={!customCommand.trim() || customIsDuplicate}
+                                icon={Plus}
+                                title={customIsDuplicate ? t('autoexec.customCommand.duplicate') : t('autoexec.customCommand.title')}
+                            >
+                                <Tx k="autoexec.customCommand.add" fallback="Add" />
+                            </Button>
+                        </div>
+
+                        {(!gamePath || saveMessage) && (
+                            <div className="space-y-2" role="status" aria-live="polite">
                                 {!gamePath && (
-                                    <div className="text-xs text-yellow-400 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                                        <AlertTriangle className="w-3 h-3 flex-shrink-0" />
+                                    <p className="flex items-center gap-2 rounded-sm border border-state-warning/20 bg-state-warning/10 p-2 text-xs text-state-warning">
+                                        <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
                                         <Tx
                                             k="autoexec.status.gamePathWarning"
                                             fallback="Game path not configured. Set it in Settings to save."
                                         />
-                                    </div>
+                                    </p>
                                 )}
                                 {saveMessage && (
-                                    <div className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${saveMessageTone === 'error' ? 'bg-red-500/10 border-red-500/20 text-state-danger' : 'bg-green-500/10 border-green-500/20 text-green-400'}`}>
-                                        {saveMessageTone === 'error' ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
+                                    <p
+                                        className={`flex items-center gap-2 rounded-sm border p-2 text-xs ${
+                                            saveMessageTone === 'error'
+                                                ? 'border-state-danger/20 bg-state-danger/10 text-state-danger'
+                                                : 'border-state-success/20 bg-state-success/10 text-state-success'
+                                        }`}
+                                    >
+                                        {saveMessageTone === 'error' ? (
+                                            <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                                        ) : (
+                                            <Check className="h-3 w-3 shrink-0" aria-hidden />
+                                        )}
                                         {saveMessage}
-                                    </div>
-                                )}
-                                {hasUnsaved && !saveMessage && (
-                                    <div className="text-xs text-yellow-400 flex items-center gap-2 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
-                                        <div className="w-1.5 h-1.5 rounded-full bg-yellow-400 animate-pulse" />
-                                        <Tx k="autoexec.status.unsavedChanges" fallback="You have unsaved changes" />
-                                    </div>
+                                    </p>
                                 )}
                             </div>
                         )}
 
-                        <div className="overflow-y-auto space-y-2 pr-1 flex-1 min-h-0">
-                            {visibleCommandCount > 0 ? (
-                                <>
-                                    {commands.map((cmd, i) => (
-                                        <div
-                                            key={`managed-${i}-${cmd}`}
-                                            className="flex items-center gap-3 p-3 bg-bg-tertiary/50 border border-white/5 rounded-lg group hover:border-white/10 transition-colors animate-fade-in"
-                                        >
-                                            <div className="flex-1 font-mono text-sm text-text-primary truncate">
-                                                {cmd}
-                                            </div>
-                                            <button
-                                                onClick={() => handleRemoveCommand(i)}
-                                                className="opacity-0 group-hover:opacity-100 p-1.5 hover:bg-red-500/20 text-text-secondary hover:text-state-danger rounded transition-all cursor-pointer"
-                                                title={t('common.actions.remove')}
-                                            >
-                                                <Trash2 className="w-4 h-4" />
-                                            </button>
-                                        </div>
-                                    ))}
-                                    {manualCommands.map((cmd, i) => (
-                                        <div
-                                            key={`manual-${i}-${cmd}`}
-                                            className="flex items-center gap-3 p-3 bg-bg-tertiary/20 border border-white/5 rounded-lg opacity-60 cursor-help animate-fade-in"
-                                            title={t('autoexec.commands.manualTooltip')}
-                                        >
-                                            <div className="flex-1 font-mono text-sm text-text-secondary truncate">
-                                                {cmd}
-                                            </div>
-                                        </div>
-                                    ))}
-                                </>
+                        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain pr-1 [scrollbar-gutter:stable]">
+                            {visibleCommandCount === 0 ? (
+                                <div className="flex h-full flex-col items-center justify-center gap-2 py-8 text-center">
+                                    <Terminal className="h-7 w-7 text-text-secondary/40" aria-hidden />
+                                    <p className="text-sm font-medium text-text-secondary">
+                                        <Tx k="autoexec.commands.emptyTitle" fallback="No commands added" />
+                                    </p>
+                                    <p className="max-w-xs text-xs text-text-secondary/70">
+                                        <Tx k="autoexec.commands.emptyDescription" fallback="Select from presets on the left" />
+                                    </p>
+                                </div>
                             ) : (
-                                <div className="flex items-center gap-3 py-6 text-text-secondary opacity-50">
-                                    <Terminal className="w-6 h-6" />
-                                    <div>
-                                        <p className="text-sm font-medium">
-                                            <Tx k="autoexec.commands.emptyTitle" fallback="No commands added" />
-                                        </p>
-                                        <p className="text-xs">
-                                            <Tx k="autoexec.commands.emptyDescription" fallback="Select from presets on the left" />
-                                        </p>
-                                    </div>
-                                </div>
-                            )}
-                        </div>
-                    </Card>
-
-                    {/* Launch options — lives below Your Commands so the
-                        primary editor surface owns the top of the column. */}
-                    <Card title={<Tx k="autoexec.launchOptions.title" fallback="Launch Options" />} icon={Rocket} className="shrink-0">
-                        <div className="space-y-2.5">
-                            <p className="text-xs text-text-secondary">
-                                <Tx
-                                    k="autoexec.launchOptions.description"
-                                    fallback="Args passed to Deadlock when launched via Steam. Written into Steam's config right before grimoire launches the game."
-                                />
-                            </p>
-
-                            <div className="flex gap-2">
-                                <Input
-                                    type="text"
-                                    value={launchOptionsDraft}
-                                    onChange={(e) => setLaunchOptionsDraft(e.target.value)}
-                                    placeholder="-high -nojoy"
-                                    className="flex-1 font-mono"
-                                />
-                                <Button
-                                    onClick={handleSaveLaunchOptions}
-                                    disabled={launchSaving || !launchOptionsDirty || !appSettings}
-                                    isLoading={launchSaving}
-                                    icon={Save}
-                                >
-                                    <Tx k="common.actions.save" fallback="Save" />
-                                </Button>
-                            </div>
-
-                            {launchMessage && (
-                                <div
-                                    role="status"
-                                    aria-live="polite"
-                                    className={`text-xs flex items-center gap-2 p-2 rounded-lg border ${
-                                        launchMessageTone === 'error'
-                                            ? 'bg-red-500/10 border-red-500/20 text-state-danger'
-                                            : 'bg-green-500/10 border-green-500/20 text-green-400'
-                                    }`}
-                                >
-                                    {launchMessageTone === 'error' ? <AlertTriangle className="w-3 h-3" /> : <Check className="w-3 h-3" />}
-                                    {launchMessage}
-                                </div>
-                            )}
-
-                            {launchStatus && (() => {
-                                if (!launchStatus.available) {
-                                    return (
-                                        <div className="flex items-start gap-1.5 text-xs text-yellow-400">
-                                            <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                                            <span>
-                                                <Tx
-                                                    k="autoexec.launchOptions.steamConfigMissing"
-                                                    fallback="Steam config not found. Launch Deadlock via Steam once, then come back."
-                                                />
-                                            </span>
-                                        </div>
-                                    );
-                                }
-                                const savedValue = appSettings?.steamLaunchOptions ?? '';
-                                const onDisk = launchStatus.currentValue ?? '';
-                                const inSync = savedValue === onDisk;
-                                return (
-                                    <div className="space-y-2 pt-1 border-t border-border/40">
-                                        {!inSync && (
-                                            <div className="flex items-baseline justify-between gap-2 text-xs">
-                                                <span className="text-text-secondary uppercase tracking-wide">
-                                                    <Tx k="autoexec.launchOptions.inSteamNow" fallback="In Steam now" />
-                                                </span>
-                                                <code className="font-mono text-text-primary/80 bg-black/30 px-1.5 py-0.5 rounded truncate min-w-0">
-                                                    {onDisk || t('common.emptyValue')}
-                                                </code>
-                                            </div>
-                                        )}
-                                        {!inSync && !launchSaving && (
-                                            <div className="text-[11px] text-text-secondary/70">
-                                                <Tx
-                                                    k="autoexec.launchOptions.savedWillOverwrite"
-                                                    fallback="Your saved value will overwrite this on next grimoire launch."
-                                                />
-                                            </div>
-                                        )}
-                                        {launchStatus.steamRunning && (
-                                            <div className="flex items-start gap-1.5 text-xs text-yellow-400">
-                                                <AlertTriangle className="w-3 h-3 flex-shrink-0 mt-0.5" />
-                                                <span>
-                                                    <Tx
-                                                        k="autoexec.launchOptions.steamRunning"
-                                                        fallback="Steam is running. Close it before launching Deadlock via grimoire so the write isn't clobbered."
+                                <>
+                                    {commands.length > 0 && (
+                                        <ul className="space-y-1.5">
+                                            {commands.map((cmd, i) => (
+                                                <li
+                                                    key={`managed-${i}-${cmd}`}
+                                                    className="group flex animate-fade-in items-center gap-2 rounded-sm border border-white/5 bg-bg-tertiary/50 p-2 transition-colors hover:border-white/15"
+                                                >
+                                                    <code className="min-w-0 flex-1 truncate font-mono text-sm text-text-primary">
+                                                        {cmd}
+                                                    </code>
+                                                    {/* Always rendered, not hover-only: an
+                                                        invisible control cannot be found by
+                                                        keyboard or touch. */}
+                                                    <IconButton
+                                                        size="sm"
+                                                        tone="danger"
+                                                        icon={Trash2}
+                                                        label={t('autoexec.commands.removeLabel', { command: cmd })}
+                                                        onClick={() => handleRemoveCommand(i)}
+                                                        className="border-transparent opacity-60 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                                                     />
-                                                </span>
-                                            </div>
-                                        )}
-                                    </div>
-                                );
-                            })()}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+
+                                    {manualCommands.length > 0 && (
+                                        <section>
+                                            {/* Spelled out instead of the old 60%-opacity
+                                                rows whose only explanation was a tooltip. */}
+                                            <h3 className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wider text-text-secondary">
+                                                <FileWarning className="h-3.5 w-3.5" aria-hidden />
+                                                <Tx k="autoexec.commands.manualTitle" fallback="Already in autoexec.cfg" />
+                                            </h3>
+                                            <p className="mb-2 text-xs text-text-secondary/70">
+                                                <Tx
+                                                    k="autoexec.commands.manualDescription"
+                                                    fallback="Lines that were in the file before grimoire. They are kept as-is and cannot be edited here."
+                                                />
+                                            </p>
+                                            <ul className="space-y-1.5">
+                                                {manualCommands.map((cmd, i) => (
+                                                    <li
+                                                        key={`manual-${i}-${cmd}`}
+                                                        className="flex animate-fade-in items-center gap-2 rounded-sm border border-dashed border-white/10 bg-bg-tertiary/20 p-2"
+                                                    >
+                                                        <code className="min-w-0 flex-1 truncate font-mono text-sm text-text-secondary">
+                                                            {cmd}
+                                                        </code>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        </section>
+                                    )}
+                                </>
+                            )}
                         </div>
                     </Card>
+
+                    <LaunchOptionsCard />
                 </div>
             </div>
 
