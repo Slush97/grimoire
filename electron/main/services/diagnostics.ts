@@ -30,7 +30,12 @@ export function initLogger(): void {
     loggerInitialized = true;
 
     log.transports.file.level = 'info';
-    log.transports.console.level = 'debug';
+    // A packaged GUI app cannot assume its launcher's stdout/stderr pipes will
+    // remain open. Writing a later log line to a closed pipe emits an
+    // unhandled EPIPE and Electron shows it as a main-process crash dialog.
+    // Development keeps terminal output; installed builds use the rolling
+    // file below as their durable diagnostic destination.
+    log.transports.console.level = app.isPackaged ? false : 'debug';
     // Rotate at ~5 MB. electron-log keeps one archived copy (main.old.log) by
     // default, so total log footprint is capped around 10 MB.
     log.transports.file.maxSize = 5 * 1024 * 1024;
