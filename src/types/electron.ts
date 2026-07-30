@@ -391,6 +391,12 @@ export interface SearchLocalModsOptions {
     query?: string;
     section?: string;
     categoryId?: number;
+    /** Root category name for `categoryId`, resolved from the live category
+     *  tree. The cached catalog stores only a mod's root category *name* (the
+     *  list API omits `_aRootCategory._idRow`, so every cached `category_id` is
+     *  null), so this is what actually scopes a local category filter. Without
+     *  it the id comparison matches no rows at all. */
+    categoryName?: string;
     // Enhanced hero search
     heroName?: string;
     skinsCategoryId?: number;

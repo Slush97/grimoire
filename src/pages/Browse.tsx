@@ -1474,6 +1474,42 @@ export default function Browse() {
       ? (categoryId === 'all' ? undefined : categoryId)
       : heroCategoryId;
 
+  // Category id -> the name of its ROOT category.
+  //
+  // The local catalog cannot be filtered by category id at all: GameBanana's
+  // list endpoint omits `_aRootCategory._idRow`, so every cached row has a null
+  // `category_id` and the id comparison matched nothing. Only the root category
+  // *name* is stored, so resolving the picked category to that name here is what
+  // lets a local-route category filter return anything.
+  //
+  // Walks the whole tree rather than reading `categoryOptions` so that ids which
+  // never reach the dropdown still map: hero subcategories, entries dropped for
+  // having no items, and stale ids restored from a previous session.
+  const rootCategoryNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    const walk = (nodes: GameBananaCategoryNode[], rootName: string | null) => {
+      for (const node of nodes) {
+        const root = rootName ?? node.name;
+        map.set(node.id, root);
+        if (node.children?.length) walk(node.children, root);
+      }
+    };
+    walk(categories, null);
+    return map;
+  }, [categories]);
+
+  const effectiveCategoryName =
+    effectiveCategoryId === undefined ? undefined : rootCategoryNameById.get(effectiveCategoryId);
+
+  // Hero options always come from the Mod category tree, even while browsing
+  // Sound or Wip. Resolve this outside searchLocal so the asynchronously loaded
+  // name can participate in the request identity below.
+  const skinsCategory = findCategoryByName(modCategories, 'Skins');
+  const skinsCategoryId = skinsCategory?.id;
+  const selectedHeroName = heroCategoryId !== 'all' && skinsCategory?.children
+    ? skinsCategory.children.find((child) => child.id === heroCategoryId)?.name
+    : undefined;
+
   // Debounce the search input: every keystroke previously fired a full FTS5
   // query + count + render, which felt slow even when the DB was fast. 250ms
   // is short enough that typing-to-results still feels responsive but long
@@ -1500,7 +1536,10 @@ export default function Browse() {
     return Number.isFinite(t) ? Math.floor(t / 1000) : undefined;
   }, [addedWithin, addedTo]);
 
-  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${heroCategoryId}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorsStamp}`;
+  // Category and hero names resolve asynchronously with their category trees.
+  // Keep both in the request identity so an early id-only local query cannot
+  // suppress the corrected name-based query when either tree arrives.
+  const fetchFilterStamp = `${effectiveSearch}|${sort}|${section}|${effectiveCategoryId}|${effectiveCategoryName ?? ''}|${heroCategoryId}|${selectedHeroName ?? ''}|${nsfw}|${addedWithin}|${customAddedFrom ?? ''}|${customAddedTo ?? ''}|${perPage}|${submitter?.id ?? ''}|${hiddenCreatorsStamp}`;
   const browseResultsCacheRef = useRef<Map<string, BrowseResultCacheEntry>>(new Map());
   const browseScrollCacheRef = useRef<Map<string, number>>(new Map());
   const activeFetchFilterStampRef = useRef(fetchFilterStamp);
@@ -1910,21 +1949,17 @@ export default function Browse() {
         name: 'name',
       };
 
-      // Hero list lives under Mod -> Skins, but we want the filter to work on
-      // any section (Sound mods include the hero name in the title), so always
-      // resolve the hero from the Mod-category tree.
-      const skinsCat = findCategoryByName(modCategories, 'Skins');
-      const selectedHeroName = heroCategoryId !== 'all' && skinsCat?.children
-        ? skinsCat.children.find(c => c.id === heroCategoryId)?.name
-        : undefined;
-
       const result = await window.electronAPI.searchLocalMods({
         query: effectiveSearch.trim() || undefined,
         section: section,
         categoryId: effectiveCategoryId,
+        // The cached rows have no category id, only a root category name; see
+        // rootCategoryNameById. Ignored when a hero is selected, which scopes by
+        // title instead.
+        categoryName: effectiveCategoryName,
         // Enhanced hero search: pass hero name and skins parent ID
         heroName: selectedHeroName,
-        skinsCategoryId: skinsCat?.id,
+        skinsCategoryId,
         sortBy: sortMap[sort] || 'relevance',
         nsfw,
         addedWithin,
@@ -2005,7 +2040,7 @@ export default function Browse() {
         setLoadingMore(false);
       }
     }
-  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, heroCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, modCategories, fetchFilterStamp]);
+  }, [page, effectiveSearch, section, sort, perPage, effectiveCategoryId, effectiveCategoryName, selectedHeroName, skinsCategoryId, nsfw, addedWithin, customAddedFrom, customAddedTo, hiddenCreatorIds, fetchFilterStamp]);
 
   // Value-compare gate for the filter-reset: remember what filters last
   // triggered a reset; only reset when the new combination is actually
