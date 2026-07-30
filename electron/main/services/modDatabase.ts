@@ -100,6 +100,13 @@ export function initDatabase(): Database.Database {
             -- Create indexes for common queries
             CREATE INDEX IF NOT EXISTS idx_mods_section ON mods(section);
             CREATE INDEX IF NOT EXISTS idx_mods_category_id ON mods(category_id);
+            -- Category filtering matches on the root category NAME: the list API
+            -- omits _aRootCategory._idRow, so every cached category_id is null
+            -- (idx_mods_category_id is dead weight until that changes, kept
+            -- because the id comparison is still the last-resort path). The
+            -- collation has to be declared here or the NOCASE comparison in
+            -- searchService cannot use the index at all.
+            CREATE INDEX IF NOT EXISTS idx_mods_category_name ON mods(category_name COLLATE NOCASE);
             CREATE INDEX IF NOT EXISTS idx_mods_date_modified ON mods(date_modified);
             CREATE INDEX IF NOT EXISTS idx_mods_like_count ON mods(like_count);
 

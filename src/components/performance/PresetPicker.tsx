@@ -1,0 +1,117 @@
+import { useTranslation } from 'react-i18next';
+import { ExternalLink, GitCommitHorizontal, Tag, TriangleAlert } from 'lucide-react';
+import { Badge } from '../common/ui';
+import { Select, FormField } from '../common/forms';
+import type { PerformancePresetSummary } from '../../types/electron';
+
+interface PresetPickerProps {
+  presets: PerformancePresetSummary[];
+  selectedId: string;
+  onSelect: (presetId: string) => void;
+  disabled?: boolean;
+  /** Rendered inline after the upstream credit (e.g. an in-app artist link). */
+  creditSlot?: React.ReactNode;
+}
+
+const TIER_VARIANT: Record<
+  PerformancePresetSummary['tier'],
+  'success' | 'warning' | 'error' | 'info' | 'neutral'
+> = {
+  balanced: 'success',
+  preview: 'info',
+  competitive: 'neutral',
+  aggressive: 'warning',
+  maximum: 'warning',
+  potato: 'error',
+};
+
+/**
+ * Preset selector plus the provenance line for the chosen preset. Provenance is
+ * shown rather than hidden: these are third-party community configs, and the
+ * exact upstream commit is what makes a given preset reproducible (and what a
+ * bug report needs to name).
+ */
+export default function PresetPicker({
+  presets,
+  selectedId,
+  onSelect,
+  disabled,
+  creditSlot,
+}: PresetPickerProps) {
+  const { t } = useTranslation();
+  const selected = presets.find((p) => p.id === selectedId) ?? presets[0];
+  if (!selected) return null;
+
+  return (
+    <div className="space-y-2">
+      <FormField label={t('performance.preset.label')}>
+        <Select
+          value={selected.id}
+          disabled={disabled}
+          onChange={(e) => onSelect(e.target.value)}
+        >
+          {presets.map((preset) => (
+            <option key={preset.id} value={preset.id}>
+              {preset.name} ({t(`performance.preset.tier.${preset.tier}`)})
+            </option>
+          ))}
+        </Select>
+      </FormField>
+
+      <div className="flex flex-wrap items-center gap-2">
+        <Badge variant={TIER_VARIANT[selected.tier]}>
+          {t(`performance.preset.tier.${selected.tier}`)}
+        </Badge>
+        <span className="text-xs text-text-secondary">
+          {t('performance.preset.meta', {
+            count: selected.settingCount,
+            author: selected.author,
+          })}
+        </span>
+      </div>
+
+      <p className="text-xs text-text-secondary">
+        {t(`performance.preset.tierBlurb.${selected.tier}`)}
+      </p>
+
+      {selected.unstable && (
+        <p className="text-xs text-state-warning flex items-start gap-1.5">
+          <TriangleAlert className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>{t('performance.preset.unstable')}</span>
+        </p>
+      )}
+
+      <p className="text-xs text-text-secondary">
+        {t('performance.preset.credit', {
+          credit: selected.upstream.credit,
+          license: selected.upstream.license,
+        })}{' '}
+        {creditSlot}
+      </p>
+
+      {/* The pin. `ref` is a real tag for some upstreams and a version stated in
+          prose for others, so the commit is shown either way. */}
+      <p className="text-[11px] text-text-secondary/80 flex flex-wrap items-center gap-x-3 gap-y-1">
+        <span className="inline-flex items-center gap-1">
+          {selected.upstream.refKind === 'tag' ? (
+            <Tag className="w-3 h-3" aria-hidden="true" />
+          ) : (
+            <GitCommitHorizontal className="w-3 h-3" aria-hidden="true" />
+          )}
+          {selected.upstream.refKind === 'tag'
+            ? t('performance.preset.pinnedTag', { ref: selected.upstream.ref })
+            : t('performance.preset.pinnedCommit', { ref: selected.upstream.ref })}
+        </span>
+        <a
+          href={`${selected.upstream.url}/tree/${selected.upstream.commit}`}
+          target="_blank"
+          rel="noreferrer noopener"
+          className="text-accent hover:underline inline-flex items-center gap-0.5 font-mono"
+        >
+          {selected.upstream.commit.slice(0, 8)}
+          <ExternalLink className="w-3 h-3" aria-hidden="true" />
+        </a>
+      </p>
+    </div>
+  );
+}

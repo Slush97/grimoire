@@ -1,9 +1,18 @@
-// Apply/remove the bundled OptimizationLock performance preset by patching
-// the user's gameinfo.gi in place (never replacing the file). Every change is
-// tagged with an inline "grimoire-perf" marker so removal needs no external
-// state: added lines are deleted, edited lines restore the recorded original
-// value, and removed lines are uncommented. fixGameinfo (system.ts) only
-// rewrites the SearchPaths block, so the two never fight over the same lines.
+// Apply/remove one of the bundled performance presets by patching the user's
+// gameinfo.gi in place (never replacing the file). Every change is tagged with
+// an inline "grimoire-perf" marker so removal needs no external state: added
+// lines are deleted, edited lines restore the recorded original value, and
+// removed lines are uncommented. fixGameinfo (system.ts) only rewrites the
+// SearchPaths block, so the two never fight over the same lines.
+//
+// Presets are generated from pinned upstream commits into
+// performanceConfigData.ts (see scripts/gen-performance-presets.mjs). Switching
+// preset reverses the applied one by its markers first, so the file always goes
+// stock -> preset, never preset -> preset.
+//
+// Gameplay/visibility convars (enemy outlines, glows, FOV) are held out of the
+// preset bodies and applied only when the user opts in, so choosing a
+// performance preset never silently changes what they can see.
 //
 // All patching runs on LF-normalized text and the file's original EOL style
 // is restored on write: line-based regexes silently fail on CR-terminated
@@ -13,17 +22,28 @@ import { createHash } from 'crypto';
 import { existsSync, readFileSync, unlinkSync, writeFileSync } from 'fs';
 import { dirname, join } from 'path';
 import { getGameinfoPath } from './deadlock';
-import type { PerformanceConfigStatus } from '../../../src/types/electron';
+import type {
+    PerformanceConfigStatus,
+    PerformancePresetSummary,
+} from '../../../src/types/electron';
 import {
-    CONVARS,
-    PRESET_ID,
-    PRESET_VERSION,
-    SECTION_OPS,
+    DEFAULT_PRESET_ID,
+    getPreset,
+    PRESETS,
+    type PerformancePreset,
     type SectionOp,
 } from './performanceConfigData';
 
 const MARKER = 'grimoire-perf';
-const BEGIN_RE = /Grimoire Performance Config BEGIN \(preset=([\w-]+) v([\w.]+)\)/;
+// The BEGIN marker is the authoritative record of what is in the file: which
+// preset, which upstream version, and which upstream commit that version was
+// generated from. The commit is what makes "is the body in this file the body I
+// bundle today?" answerable, because these upstreams version in prose: a
+// regenerated preset can carry the same version string and a different body.
+// The `@commit` group is optional so markers written before it existed still
+// parse; a missing commit reads as "cannot prove it matches".
+const BEGIN_RE =
+    /Grimoire Performance Config BEGIN \(preset=([\w-]+) v([\w.]+)(?: @([0-9a-f]{6,40}))?\)/;
 const GAMEINFO_BACKUP_SUFFIX = '.grimoire-bak';
 // Applied-state sidecar, stored next to gameinfo.gi (game updates replace
 // gameinfo.gi but leave foreign files alone). Owned by the main process only,
@@ -43,6 +63,29 @@ const STATE_FILENAME = 'grimoire-performance.json';
  *  `<section path>/<key>`, e.g. `ConVars/citadel_unit_status_use_new`. */
 type OverrideEntry = { value?: string; omit?: boolean };
 type Overrides = Record<string, OverrideEntry>;
+
+/** Options for one apply. `presetId` picks which bundled preset to write;
+ *  `optIns` are the gameplay/visibility convar keys the user turned on for
+ *  that preset (anything not listed stays out of the file). */
+export interface ApplyOptions {
+    presetId?: string;
+    optIns?: string[];
+    resetOverrides?: boolean;
+}
+
+/** The convars a preset writes for a given opt-in selection: its performance
+ *  body plus only the opted-in gameplay controls, in preset order. */
+function effectiveConvars(
+    preset: PerformancePreset,
+    optIns: string[] | undefined
+): ReadonlyArray<readonly [string, string]> {
+    if (!optIns?.length) return preset.convars;
+    const enabled = new Set(optIns);
+    const extra = preset.optIn
+        .filter((control) => enabled.has(control.key))
+        .map((control) => [control.key, control.value] as const);
+    return extra.length ? [...preset.convars, ...extra] : preset.convars;
+}
 
 function statePath(gameinfoPath: string): string {
     return join(dirname(gameinfoPath), STATE_FILENAME);
@@ -169,17 +212,45 @@ const unquote = (v: string) => v.replace(/^"|"$/g, '');
 // Overrides: harvest hand edits so they survive reapply and wipes
 // ---------------------------------------------------------------------------
 
+/** What the file's own BEGIN marker records about the applied preset. `commit`
+ *  is null on markers written before it was recorded. */
+interface AppliedMarker {
+    version: string;
+    commit: string | null;
+}
+
+function readMarker(match: RegExpExecArray): AppliedMarker {
+    return { version: match[2], commit: match[3] ?? null };
+}
+
+/** Is the body in the file the body this build generates for that preset?
+ *  A marker with no commit cannot prove it, so it counts as "no". */
+function isCurrentDefinition(preset: PerformancePreset, marker: AppliedMarker): boolean {
+    if (marker.version !== preset.version) return false;
+    return marker.commit !== null && preset.upstream.commit.startsWith(marker.commit);
+}
+
 // Bare key -> preset value + override key. null marks a bare key that appears
 // more than once in the preset (ambiguous: harvesting it could attribute a
 // value to the wrong section, so we skip it). Remove-type ops carry no value
 // and are not overridable.
-function presetKeyIndex(): Map<string, { okey: string; value: string } | null> {
+//
+// Opt-in controls are indexed too, even when the user has not enabled them.
+// They are keys this preset owns, and the alternative is worse: an opted-in
+// convar in a file whose sidecar is missing or stale (hand-copied gameinfo,
+// deleted sidecar) would look like a convar the user added by hand and get
+// banked as a permanent override, surviving the user opting back out.
+function presetKeyIndex(
+    preset: PerformancePreset,
+    convars: ReadonlyArray<readonly [string, string]>
+): Map<string, { okey: string; value: string } | null> {
     const idx = new Map<string, { okey: string; value: string } | null>();
     const put = (bare: string, okey: string, value: string) => {
         idx.set(bare, idx.has(bare) ? null : { okey, value });
     };
-    for (const [key, value] of CONVARS) put(key, `ConVars/${key}`, value);
-    for (const op of SECTION_OPS) {
+    for (const [key, value] of convars) put(key, `ConVars/${key}`, value);
+    for (const control of preset.optIn) put(control.key, `ConVars/${control.key}`, control.value);
+    for (const op of preset.sectionOps) {
         if (!op.remove) put(op.key, `${op.path.join('/')}/${op.key}`, op.value!);
     }
     return idx;
@@ -192,11 +263,38 @@ function presetKeyIndex(): Map<string, { okey: string; value: string } | null> {
 // value drops its override). Deletions are only detected for ConVars block
 // keys: a missing section-op key usually means a game update restructured
 // the section, not user intent.
-function harvestOverrides(content: string): Overrides {
-    const idx = presetKeyIndex();
+//
+// `marker` is what the file's own BEGIN line says was written. When it does not
+// match the preset we bundle today, the body on disk was written by a DIFFERENT
+// definition of this same preset (a Grimoire update moved it), and most of what
+// this function reads stops meaning what it says:
+//
+//   - a value that differs from the preset value may just be a value the bump
+//     changed, not a value the user typed
+//   - a marker-added key the preset no longer lists is a key the bump dropped,
+//     not a convar the user added
+//   - a preset key with no line in the file is a key the bump added, not a line
+//     the user deleted
+//
+// Inferring user intent across that gap pinned stale upstream values forever,
+// suppressed every key the new version added, and (worst) re-applied gameplay
+// convars the opt-in split exists to hold back. So when the definition has
+// moved, only the unambiguous signal counts: a marker line the user commented
+// out. Overrides banked while the definitions matched are untouched; the caller
+// still layers them.
+function harvestOverrides(
+    content: string,
+    preset: PerformancePreset,
+    convars: ReadonlyArray<readonly [string, string]>,
+    marker: AppliedMarker | null
+): Overrides {
+    const idx = presetKeyIndex(preset, convars);
     const overrides: Overrides = {};
     const addedToken = `// ${MARKER} added`;
     const wasRe = new RegExp(`^(.*?) // ${MARKER} was ("[^"]*"|\\S+)\\s*$`);
+    // The file was written by a different definition of this preset, so value
+    // and absence inferences are not attributable to the user.
+    const drift = marker !== null && !isCurrentDefinition(preset, marker);
 
     for (const line of content.split('\n')) {
         const addedAt = line.indexOf(addedToken);
@@ -207,36 +305,38 @@ function harvestOverrides(content: string): Overrides {
             const key = entryKey(active);
             if (!key) continue;
             const entry = matchEntryLine(active, key);
-            const preset = idx.get(key);
-            if (preset === null) continue; // ambiguous bare key
-            if (!preset) {
-                // Not in the preset: the user's own convar inside our block.
-                if (!isCommented && entry) {
+            const managed = idx.get(key);
+            if (managed === null) continue; // ambiguous bare key
+            if (!managed) {
+                // Not in the preset: the user's own convar inside our block,
+                // unless the preset definition moved under us (see above).
+                if (!drift && !isCommented && entry) {
                     overrides[`ConVars/${key}`] = { value: unquote(entry.value) };
                 }
                 continue;
             }
-            if (isCommented) overrides[preset.okey] = { omit: true };
-            else if (entry && unquote(entry.value) !== preset.value) {
-                overrides[preset.okey] = { value: unquote(entry.value) };
+            if (isCommented) overrides[managed.okey] = { omit: true };
+            else if (!drift && entry && unquote(entry.value) !== managed.value) {
+                overrides[managed.okey] = { value: unquote(entry.value) };
             }
             continue;
         }
         const was = wasRe.exec(line);
-        if (was) {
+        if (was && !drift) {
             const key = entryKey(was[1]);
             const entry = key ? matchEntryLine(was[1], key) : null;
-            const preset = key ? idx.get(key) : null;
-            if (preset && entry && unquote(entry.value) !== preset.value) {
-                overrides[preset.okey] = { value: unquote(entry.value) };
+            const managed = key ? idx.get(key) : null;
+            if (managed && entry && unquote(entry.value) !== managed.value) {
+                overrides[managed.okey] = { value: unquote(entry.value) };
             }
         }
     }
 
-    // Deleted preset convars: every CONVARS key is present after an apply
-    // (edited in place or injected), so one with no active entry left in the
-    // ConVars section was removed by the user.
-    const convarRange = findSectionByPath(content, ['ConVars']);
+    // Deleted preset convars: every applied convar key is present after an
+    // apply (edited in place or injected), so one with no active entry left in
+    // the ConVars section was removed by the user. Absence proves nothing once
+    // the preset definition has moved.
+    const convarRange = drift ? null : findSectionByPath(content, ['ConVars']);
     if (convarRange) {
         const activeKeys = new Set(
             content
@@ -245,7 +345,7 @@ function harvestOverrides(content: string): Overrides {
                 .map(entryKey)
                 .filter(Boolean)
         );
-        for (const [key] of CONVARS) {
+        for (const [key] of convars) {
             if (!activeKeys.has(key)) overrides[`ConVars/${key}`] = { omit: true };
         }
     }
@@ -295,7 +395,7 @@ function applyOp(content: string, op: SectionOp): string | null {
 
 export function applyPerformanceConfig(
     deadlockPath: string | null,
-    opts?: { resetOverrides?: boolean }
+    opts?: ApplyOptions
 ): PerformanceConfigStatus {
     if (!deadlockPath) return status('error', 'Deadlock path not configured.');
     const gameinfoPath = getGameinfoPath(deadlockPath);
@@ -303,23 +403,56 @@ export function applyPerformanceConfig(
         return status('error', 'gameinfo.gi not found. Configure your Deadlock path first.');
     }
 
+    const preset = getPreset(opts?.presetId ?? DEFAULT_PRESET_ID);
+    const optIns = (opts?.optIns ?? []).filter((key) =>
+        preset.optIn.some((control) => control.key === key)
+    );
+    const convars = effectiveConvars(preset, optIns);
+
     try {
         const original = readFileSync(gameinfoPath, 'utf-8');
         const crlf = original.includes('\r\n');
 
         // Work in LF-space (see header comment), restore the EOL style on write.
         let content = crlf ? original.split('\r\n').join('\n') : original;
-        // User overrides: harvested fresh from the file when a config is
-        // present (so hand edits made since the last apply are captured), or
-        // carried over from the sidecar when a game update wiped the file.
+
+        const sidecar = readAppliedState(gameinfoPath);
+        const saved = allOverrides(sidecar);
+        // What is in the file right now, which is not necessarily what we are
+        // about to write: the user may be switching presets.
+        const applied = BEGIN_RE.exec(content);
+        const appliedPreset = applied ? getPreset(applied[1]) : null;
+        const switching = appliedPreset !== null && appliedPreset.id !== preset.id;
+
+        // Hand edits are harvested against the preset that is actually in the
+        // file (its keys and values are the ones on disk) and banked under that
+        // preset's id. What we then layer on is the incoming preset's own
+        // saved overrides: a value the user chose for one preset is rarely the
+        // right value for a differently-tuned one.
+        //
+        // The marker is passed too: if it does not describe the definition we
+        // bundle for that preset today, the file's body predates a Grimoire
+        // update and only its unambiguous signals can be read (see
+        // harvestOverrides).
+        if (applied && appliedPreset && !opts?.resetOverrides) {
+            const appliedOptIns = sidecar?.optIns ?? [];
+            saved[appliedPreset.id] = harvestOverrides(
+                content,
+                appliedPreset,
+                effectiveConvars(appliedPreset, appliedOptIns),
+                readMarker(applied)
+            );
+        }
         let overrides: Overrides = {};
         if (!opts?.resetOverrides) {
-            overrides = BEGIN_RE.test(content)
-                ? harvestOverrides(content)
-                : (readAppliedState(gameinfoPath)?.overrides ?? {});
+            overrides = saved[preset.id] ?? {};
+        } else {
+            delete saved[preset.id];
         }
-        // Reapplying (e.g. after a preset data update) starts from a clean base.
-        if (BEGIN_RE.test(content)) content = removeMarkers(content);
+
+        // Reapplying or switching starts from a clean base, so the file always
+        // goes stock -> preset and never accumulates two presets' markers.
+        if (applied) content = removeMarkers(content);
 
         // One-time recovery copy of the oldest version we have seen, shared
         // with fixGameinfo's backup so the user has a single restore point.
@@ -336,7 +469,7 @@ export function applyPerformanceConfig(
         }
 
         const skipped: string[] = [];
-        for (const op of SECTION_OPS) {
+        for (const op of preset.sectionOps) {
             const okey = `${op.path.join('/')}/${op.key}`;
             const override = overrides[okey];
             if (override?.omit) continue;
@@ -351,7 +484,7 @@ export function applyPerformanceConfig(
 
         // ConVars: edit keys that already exist (stock entries) in place, and
         // inject the rest as one marked block right after `ConVars {`, the
-        // insertion point OptimizationLock's own instructions use. Never both:
+        // insertion point these configs' own instructions use. Never both:
         // a duplicate convar would have ambiguous engine precedence.
         let convarRange = findSectionByPath(content, ['ConVars']);
         if (!convarRange) {
@@ -369,7 +502,7 @@ export function applyPerformanceConfig(
                 .filter(Boolean)
         );
         const toInject: Array<readonly [string, string]> = [];
-        for (const [key, value] of CONVARS) {
+        for (const [key, value] of convars) {
             const override = overrides[`ConVars/${key}`];
             if (override?.omit) continue;
             const effective = override?.value ?? value;
@@ -381,7 +514,7 @@ export function applyPerformanceConfig(
         }
         // The user's own convars (added inside the marked block by hand and
         // harvested as overrides) ride along in the injected block.
-        const presetConvarKeys = new Set(CONVARS.map(([key]) => key));
+        const presetConvarKeys = new Set(convars.map(([key]) => key));
         for (const [okey, override] of Object.entries(overrides)) {
             if (!okey.startsWith('ConVars/') || override.value === undefined) continue;
             const key = okey.slice('ConVars/'.length);
@@ -395,15 +528,30 @@ export function applyPerformanceConfig(
         convarRange = findSectionByPath(content, ['ConVars'])!;
         const indent = detectIndent(content.slice(convarRange.bodyStart, convarRange.bodyEnd));
         const width = toInject.length ? Math.max(...toInject.map(([k]) => k.length)) + 1 : 0;
+        const optInNote = optIns.length
+            ? `${indent}// Includes ${optIns.length} opt-in gameplay setting${optIns.length === 1 ? '' : 's'} you enabled [${MARKER}]`
+            : null;
         const block = [
-            `${indent}// ==== Grimoire Performance Config BEGIN (preset=${PRESET_ID} v${PRESET_VERSION}) ====`,
-            `${indent}// Values from OptimizationLock by Sqooky and contributors (GPL-3.0) [${MARKER}]`,
-            `${indent}// https://github.com/Sqooky/OptimizationLock - remove via Grimoire Settings [${MARKER}]`,
+            `${indent}// ==== Grimoire Performance Config BEGIN (preset=${preset.id} v${preset.version} @${preset.upstream.commit.slice(0, 12)}) ====`,
+            `${indent}// ${preset.name}: values from ${preset.upstream.credit} (${preset.upstream.license}) [${MARKER}]`,
+            `${indent}// ${preset.upstream.url} @ ${preset.upstream.commit.slice(0, 12)} [${MARKER}]`,
+            ...(optInNote ? [optInNote] : []),
+            `${indent}// remove or change preset via Grimoire Settings [${MARKER}]`,
             ...toInject.map(([k, v]) => `${indent}${k.padEnd(width)}${quote(v)} // ${MARKER} added`),
             `${indent}// ==== Grimoire Performance Config END ====`,
         ].join('\n');
-        content =
-            content.slice(0, convarRange.bodyStart) + '\n' + block + content.slice(convarRange.bodyStart);
+        // Insert after the rest of the `ConVars {` line, not immediately after
+        // the brace. Some configs leave trailing whitespace there ("\t{\t "),
+        // and splicing at the brace would carry those characters onto our END
+        // marker line, which Remove deletes whole: the round-trip would then
+        // silently drop them. Only skip past whitespace, so a file that opens
+        // the block and starts an entry on the same line still splices safely.
+        const lineEnd = content.indexOf('\n', convarRange.bodyStart);
+        const tail =
+            lineEnd >= 0 && !content.slice(convarRange.bodyStart, lineEnd).trim()
+                ? lineEnd
+                : convarRange.bodyStart;
+        content = content.slice(0, tail) + '\n' + block + content.slice(tail);
 
         // Sanity: line-based edits must never unbalance the file.
         if (braceCount(content) !== braceCount(original)) {
@@ -412,16 +560,28 @@ export function applyPerformanceConfig(
 
         const finalText = crlf ? content.split('\n').join('\r\n') : content;
         writeFileSync(gameinfoPath, finalText, 'utf-8');
-        writeAppliedState(gameinfoPath, true, sha256(finalText), overrides);
+        saved[preset.id] = overrides;
+        writeAppliedState(gameinfoPath, {
+            presetId: preset.id,
+            version: preset.version,
+            contentHash: sha256(finalText),
+            optIns,
+            overridesByPreset: saved,
+        });
 
         const kept = Object.keys(overrides).length;
-        const keptNote = kept
-            ? ` Kept ${kept} of your override${kept === 1 ? '' : 's'}.`
-            : '';
+        const keptNote = kept ? ` Kept ${kept} of your override${kept === 1 ? '' : 's'}.` : '';
+        const switchNote = switching ? ` Replaced ${appliedPreset.name}.` : '';
         const note = skipped.length
             ? ` (${skipped.length} setting${skipped.length === 1 ? '' : 's'} skipped: section not found, likely changed by a game update)`
             : '';
-        return status('applied', `Performance config v${PRESET_VERSION} applied${note}.${keptNote}`, kept);
+        return status(
+            'applied',
+            `${preset.name} v${preset.version} applied${note}.${switchNote}${keptNote}`,
+            kept,
+            false,
+            preset
+        );
     } catch (err) {
         return status('error', `Failed to apply performance config: ${err}`);
     }
@@ -429,9 +589,10 @@ export function applyPerformanceConfig(
 
 /** Reapply the pure preset, discarding the user's saved overrides. */
 export function resetPerformanceConfigOverrides(
-    deadlockPath: string | null
+    deadlockPath: string | null,
+    opts?: Omit<ApplyOptions, 'resetOverrides'>
 ): PerformanceConfigStatus {
-    return applyPerformanceConfig(deadlockPath, { resetOverrides: true });
+    return applyPerformanceConfig(deadlockPath, { ...opts, resetOverrides: true });
 }
 
 function braceCount(content: string): number {
@@ -491,13 +652,13 @@ export function removePerformanceConfig(deadlockPath: string | null): Performanc
     try {
         const content = readFileSync(gameinfoPath, 'utf-8');
         if (!content.includes(MARKER)) {
-            writeAppliedState(gameinfoPath, false);
+            clearAppliedState(gameinfoPath);
             return status('not-applied', 'No performance config to remove.');
         }
         const crlf = content.includes('\r\n');
         const restored = removeMarkers(crlf ? content.split('\r\n').join('\n') : content);
         writeFileSync(gameinfoPath, crlf ? restored.split('\n').join('\r\n') : restored, 'utf-8');
-        writeAppliedState(gameinfoPath, false);
+        clearAppliedState(gameinfoPath);
         return status('not-applied', 'Performance config removed; stock values restored.');
     } catch (err) {
         return status('error', `Failed to remove performance config: ${err}`);
@@ -527,7 +688,10 @@ export function restorePerformanceConfigBackup(
         // Markers are gone (the backup predates any apply) but the sidecar
         // stays, so this reads back as a clean "wiped" state: Reapply re-adds
         // the preset and folds the saved overrides back in.
-        const savedOverrides = Object.keys(readAppliedState(gameinfoPath)?.overrides ?? {}).length;
+        const sidecar = readAppliedState(gameinfoPath);
+        const savedOverrides = Object.keys(
+            allOverrides(sidecar)[sidecar?.presetId ?? DEFAULT_PRESET_ID] ?? {}
+        ).length;
         const note = savedOverrides
             ? ` Your ${savedOverrides} saved override${savedOverrides === 1 ? '' : 's'} will be restored on reapply.`
             : '';
@@ -545,6 +709,35 @@ export function restorePerformanceConfigBackup(
 // Status
 // ---------------------------------------------------------------------------
 
+/** The selectable presets, flattened for the renderer (which must not import
+ *  the generated data module: it lives in the main process). */
+export function listPerformancePresets(): PerformancePresetSummary[] {
+    return PRESETS.map((preset) => ({
+        id: preset.id,
+        name: preset.name,
+        version: preset.version,
+        tier: preset.tier,
+        author: preset.author,
+        unstable: preset.unstable === true,
+        isDefault: preset.id === DEFAULT_PRESET_ID,
+        settingCount: preset.convars.length + preset.sectionOps.length,
+        upstream: {
+            url: preset.upstream.url,
+            repo: preset.upstream.repo,
+            ref: preset.upstream.ref,
+            refKind: preset.upstream.refKind,
+            commit: preset.upstream.commit,
+            license: preset.upstream.license,
+            credit: preset.upstream.credit,
+        },
+        optIn: preset.optIn.map((control) => ({
+            key: control.key,
+            value: control.value,
+            group: control.group,
+        })),
+    }));
+}
+
 export function getPerformanceConfigStatus(deadlockPath: string | null): PerformanceConfigStatus {
     if (!deadlockPath) return status('not-applied', 'Deadlock path not configured.');
     const gameinfoPath = getGameinfoPath(deadlockPath);
@@ -560,18 +753,29 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             const sidecar = readAppliedState(gameinfoPath);
             const handEdited =
                 typeof sidecar?.contentHash === 'string' && sidecar.contentHash !== sha256(content);
-            const overrideCount = Object.keys(sidecar?.overrides ?? {}).length;
+            // The marker is authoritative for which preset is in the file: the
+            // sidecar can be stale or absent (hand-installed, restored backup).
+            const appliedId = begin[1];
+            const known = PRESETS.find((p) => p.id === appliedId) ?? null;
+            const overrideCount = Object.keys(allOverrides(sidecar)[appliedId] ?? {}).length;
+            const appliedName = known?.name ?? appliedId;
             const base =
-                begin[2] === PRESET_VERSION
-                    ? `Performance config v${begin[2]} is applied.`
-                    : `Performance config v${begin[2]} is applied; v${PRESET_VERSION} is available (reapply to update).`;
+                known && begin[2] !== known.version
+                    ? `${appliedName} v${begin[2]} is applied; v${known.version} is available (reapply to update).`
+                    : `${appliedName} v${begin[2]} is applied.`;
             const overrideNote = overrideCount
                 ? ` Keeping ${overrideCount} of your override${overrideCount === 1 ? '' : 's'}.`
                 : '';
             return {
                 state: 'applied',
+                appliedPresetId: appliedId,
                 appliedVersion: begin[2],
-                bundledVersion: PRESET_VERSION,
+                // For a preset we do not bundle (a marker from a newer or
+                // hand-written Grimoire), report the file's own version rather
+                // than the default preset's: claiming an update is available
+                // from an unrelated preset would be a lie.
+                bundledVersion: known ? known.version : begin[2],
+                appliedOptIns: sidecar?.optIns ?? [],
                 handEdited,
                 overrideCount,
                 message: handEdited
@@ -586,14 +790,17 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
         // Reapply that will only error.
         const wipedSidecar = readAppliedState(gameinfoPath);
         if (wipedSidecar) {
-            const savedOverrides = Object.keys(wipedSidecar.overrides ?? {}).length;
+            const wipedId = wipedSidecar.presetId ?? DEFAULT_PRESET_ID;
+            const savedOverrides = Object.keys(allOverrides(wipedSidecar)[wipedId] ?? {}).length;
             const restorable = canRestoreBackup(gameinfoPath, content);
+            const wipedPreset = getPreset(wipedId);
             if (restorable) {
                 return status(
                     'wiped',
                     'gameinfo.gi is empty or corrupt. Restore the Grimoire backup (or verify game files in Steam), then reapply.',
                     savedOverrides,
-                    true
+                    true,
+                    wipedPreset
                 );
             }
             const restoreNote = savedOverrides
@@ -601,8 +808,10 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 : '';
             return status(
                 'wiped',
-                `A game update reset gameinfo.gi and removed the performance config. Reapply to restore it.${restoreNote}`,
-                savedOverrides
+                `A game update reset gameinfo.gi and removed ${wipedPreset.name}. Reapply to restore it.${restoreNote}`,
+                savedOverrides,
+                false,
+                wipedPreset
             );
         }
         return status('not-applied', 'Performance config is not applied.');
@@ -615,12 +824,15 @@ function status(
     state: PerformanceConfigStatus['state'],
     message: string,
     overrideCount = 0,
-    canRestore = false
+    canRestore = false,
+    preset?: PerformancePreset
 ): PerformanceConfigStatus {
+    const target = preset ?? getPreset(DEFAULT_PRESET_ID);
     return {
         state,
-        appliedVersion: state === 'applied' ? PRESET_VERSION : null,
-        bundledVersion: PRESET_VERSION,
+        appliedPresetId: state === 'applied' || state === 'wiped' ? target.id : null,
+        appliedVersion: state === 'applied' ? target.version : null,
+        bundledVersion: target.version,
         overrideCount,
         ...(canRestore ? { canRestoreBackup: true } : {}),
         message,
@@ -635,7 +847,27 @@ interface AppliedState {
     presetId: string;
     version: string;
     contentHash?: string;
+    /** Opt-in gameplay convar keys written for `presetId`. */
+    optIns?: string[];
+    /** Overrides per preset id. Each preset is tuned differently, so a value
+     *  the user picked under one is not carried into another. */
+    overridesByPreset?: Record<string, Overrides>;
+    /** Pre-multi-preset sidecars stored a single flat map. Read-only: migrated
+     *  by `allOverrides` and never written again. */
     overrides?: Overrides;
+}
+
+/** Overrides keyed by preset id, migrating the flat single-preset shape that
+ *  sidecars written before multi-preset support used. That map belongs to
+ *  whichever preset was applied at the time, which is what `presetId` records. */
+function allOverrides(state: AppliedState | null): Record<string, Overrides> {
+    if (!state) return {};
+    const byPreset = { ...(state.overridesByPreset ?? {}) };
+    if (state.overrides && Object.keys(state.overrides).length) {
+        const legacyId = state.presetId ?? DEFAULT_PRESET_ID;
+        byPreset[legacyId] = { ...state.overrides, ...(byPreset[legacyId] ?? {}) };
+    }
+    return byPreset;
 }
 
 function readAppliedState(gameinfoPath: string): AppliedState | null {
@@ -650,21 +882,39 @@ function readAppliedState(gameinfoPath: string): AppliedState | null {
 
 function writeAppliedState(
     gameinfoPath: string,
-    applied: boolean,
-    contentHash?: string,
-    overrides?: Overrides
+    state: {
+        presetId: string;
+        version: string;
+        contentHash: string;
+        optIns: string[];
+        overridesByPreset: Record<string, Overrides>;
+    }
 ): void {
-    const file = statePath(gameinfoPath);
     try {
-        if (applied) {
-            const state: AppliedState = { presetId: PRESET_ID, version: PRESET_VERSION, contentHash };
-            if (overrides && Object.keys(overrides).length) state.overrides = overrides;
-            writeFileSync(file, JSON.stringify(state), 'utf-8');
-        } else if (existsSync(file)) {
-            unlinkSync(file);
-        }
+        const trimmed: AppliedState = {
+            presetId: state.presetId,
+            version: state.version,
+            contentHash: state.contentHash,
+        };
+        if (state.optIns.length) trimmed.optIns = state.optIns;
+        // Drop presets whose override map went empty so the sidecar does not
+        // grow a dead entry per preset the user tried.
+        const kept = Object.entries(state.overridesByPreset).filter(
+            ([, map]) => Object.keys(map).length > 0
+        );
+        if (kept.length) trimmed.overridesByPreset = Object.fromEntries(kept);
+        writeFileSync(statePath(gameinfoPath), JSON.stringify(trimmed), 'utf-8');
     } catch {
         // Best-effort: losing the sidecar only degrades wiped-detection to
         // "not applied"; it must never fail the apply/remove itself.
+    }
+}
+
+function clearAppliedState(gameinfoPath: string): void {
+    try {
+        const file = statePath(gameinfoPath);
+        if (existsSync(file)) unlinkSync(file);
+    } catch {
+        // Best-effort, as above.
     }
 }

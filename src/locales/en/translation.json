@@ -2620,7 +2620,7 @@
   },
   "performance": {
     "statusReadError": "Could not read gameinfo.gi status. Check your Deadlock path in Settings.",
-    "cardDescription": "Sqooky's community fps preset (OptimizationLock), applied without touching your mods.",
+    "cardDescription": "Community fps presets for Deadlock, applied onto gameinfo.gi without touching your mods.",
     "checkingGameinfo": "Checking gameinfo.gi...",
     "badge": {
       "applied": "Applied v{{version}}",
@@ -2630,8 +2630,8 @@
       "notApplied": "Not applied"
     },
     "status": {
-      "applied": "Performance config v{{version}} is applied.",
-      "appliedOutdated": "Performance config v{{version}} is applied; v{{latest}} is available (reapply to update).",
+      "applied": "{{preset}} v{{version}} is applied.",
+      "appliedOutdated": "{{preset}} v{{version}} is applied; v{{latest}} is available (reapply to update).",
       "overrideNote_one": " Keeping {{count}} of your override.",
       "overrideNote_other": " Keeping {{count}} of your overrides.",
       "handEditedNote": " The file has manual edits: Reapply folds them into your overrides.",
@@ -2641,7 +2641,6 @@
       "wipedRestoreNote_other": " Your {{count}} saved overrides will be restored too.",
       "notApplied": "Performance config is not applied."
     },
-    "credit": "Map looks dark? Set in-game shadows to Medium or Low. Game updates wipe the config; Grimoire spots that here so you can reapply. By <sqooky>Sqooky</sqooky> and <contributors>contributors<extlink></extlink></contributors>. If it helps, <kofi>buy them a coffee</kofi>.",
     "restoreBackup": "Restore Backup",
     "reapply": "Reapply",
     "reapplyConfig": "Reapply Config",
@@ -2655,6 +2654,48 @@
       "description": "Pick the editor for config tweaks. Grimoire remembers this; the gear button next to Edit File switches it later.",
       "systemDefaultHint": "Whatever your OS opens text files with",
       "browse": "Browse for an application..."
+    },
+    "creditSqooky": "Browse <sqooky>Sqooky's mods</sqooky> or <kofi>buy them a coffee</kofi>.",
+    "shadowsHint": "Map looks dark? Set in-game shadows to Medium or Low. Game updates wipe the config; Grimoire spots that here so you can reapply.",
+    "switchTo": "Switch to {{preset}}",
+    "switchNote": "Applying replaces {{current}} with {{next}}. Your saved tweaks for {{current}} are kept in case you switch back.",
+    "preset": {
+      "label": "Preset",
+      "meta_one": "{{count}} setting, by {{author}}",
+      "meta_other": "{{count}} settings, by {{author}}",
+      "unstable": "Upstream labels this config experimental and changes it often. Expect rough edges.",
+      "credit": "Values from {{credit}}, licensed {{license}}.",
+      "pinnedTag": "Pinned to release {{ref}}",
+      "pinnedCommit": "Pinned to upstream {{ref}} (no git tag published)",
+      "tier": {
+        "balanced": "Balanced",
+        "preview": "Preview",
+        "competitive": "Competitive",
+        "aggressive": "Aggressive",
+        "maximum": "Maximum",
+        "potato": "Potato"
+      },
+      "tierBlurb": {
+        "balanced": "A solid all-round gain that keeps the game looking close to normal. Start here.",
+        "preview": "The author's in-progress tuning. Newer changes, less testing.",
+        "competitive": "Tuned for ranked play: strips visual noise while keeping the game readable.",
+        "aggressive": "Trades noticeable visual quality for a large frame-rate gain.",
+        "maximum": "Pushes settings as far as they go. The game will look distinctly worse.",
+        "potato": "For very low-end machines. Expect the game to look rough."
+      }
+    },
+    "optIn": {
+      "title": "Gameplay settings",
+      "count": "{{enabled}} of {{count}} enabled",
+      "description": "This preset's author also changed settings that affect what you can see or how the camera is framed, not how fast the game runs. Grimoire leaves these off so a performance preset never changes your game's feel behind your back. Turn on the ones you want.",
+      "presetValue": "This preset sets it to {{value}}",
+      "pending_one": "{{count}} gameplay setting changed. Reapply to write it to gameinfo.gi.",
+      "pending_other": "{{count}} gameplay settings changed. Reapply to write them to gameinfo.gi.",
+      "group": {
+        "visibility": "Enemy and unit visibility",
+        "camera": "Camera and field of view",
+        "devtools": "Developer and testing tools"
+      }
     }
   },
   "lockerOverrides": {
