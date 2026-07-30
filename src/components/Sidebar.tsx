@@ -862,7 +862,12 @@ export default function Sidebar() {
         </button>
       </div>
 
-      <nav ref={navScrollRef} className="flex-1 min-h-0 overflow-y-auto p-2">
+      <nav
+        ref={navScrollRef}
+        className={`flex-1 min-h-0 overflow-y-auto p-2 ${
+          transparentSidebar ? 'scrollbar-track-transparent' : ''
+        }`}
+      >
         <div className="relative">
           <ul ref={navListRef} className="relative z-10 space-y-0.5">
             {navItems.map(({ to, icon: Icon, labelKey, label, tooltip, tone, badge, badgeTone }, index) => {
