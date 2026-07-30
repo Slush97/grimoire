@@ -35,7 +35,15 @@ import {
 } from './performanceConfigData';
 
 const MARKER = 'grimoire-perf';
-const BEGIN_RE = /Grimoire Performance Config BEGIN \(preset=([\w-]+) v([\w.]+)\)/;
+// The BEGIN marker is the authoritative record of what is in the file: which
+// preset, which upstream version, and which upstream commit that version was
+// generated from. The commit is what makes "is the body in this file the body I
+// bundle today?" answerable, because these upstreams version in prose: a
+// regenerated preset can carry the same version string and a different body.
+// The `@commit` group is optional so markers written before it existed still
+// parse; a missing commit reads as "cannot prove it matches".
+const BEGIN_RE =
+    /Grimoire Performance Config BEGIN \(preset=([\w-]+) v([\w.]+)(?: @([0-9a-f]{6,40}))?\)/;
 const GAMEINFO_BACKUP_SUFFIX = '.grimoire-bak';
 // Applied-state sidecar, stored next to gameinfo.gi (game updates replace
 // gameinfo.gi but leave foreign files alone). Owned by the main process only,
@@ -204,10 +212,34 @@ const unquote = (v: string) => v.replace(/^"|"$/g, '');
 // Overrides: harvest hand edits so they survive reapply and wipes
 // ---------------------------------------------------------------------------
 
+/** What the file's own BEGIN marker records about the applied preset. `commit`
+ *  is null on markers written before it was recorded. */
+interface AppliedMarker {
+    version: string;
+    commit: string | null;
+}
+
+function readMarker(match: RegExpExecArray): AppliedMarker {
+    return { version: match[2], commit: match[3] ?? null };
+}
+
+/** Is the body in the file the body this build generates for that preset?
+ *  A marker with no commit cannot prove it, so it counts as "no". */
+function isCurrentDefinition(preset: PerformancePreset, marker: AppliedMarker): boolean {
+    if (marker.version !== preset.version) return false;
+    return marker.commit !== null && preset.upstream.commit.startsWith(marker.commit);
+}
+
 // Bare key -> preset value + override key. null marks a bare key that appears
 // more than once in the preset (ambiguous: harvesting it could attribute a
 // value to the wrong section, so we skip it). Remove-type ops carry no value
 // and are not overridable.
+//
+// Opt-in controls are indexed too, even when the user has not enabled them.
+// They are keys this preset owns, and the alternative is worse: an opted-in
+// convar in a file whose sidecar is missing or stale (hand-copied gameinfo,
+// deleted sidecar) would look like a convar the user added by hand and get
+// banked as a permanent override, surviving the user opting back out.
 function presetKeyIndex(
     preset: PerformancePreset,
     convars: ReadonlyArray<readonly [string, string]>
@@ -217,6 +249,7 @@ function presetKeyIndex(
         idx.set(bare, idx.has(bare) ? null : { okey, value });
     };
     for (const [key, value] of convars) put(key, `ConVars/${key}`, value);
+    for (const control of preset.optIn) put(control.key, `ConVars/${control.key}`, control.value);
     for (const op of preset.sectionOps) {
         if (!op.remove) put(op.key, `${op.path.join('/')}/${op.key}`, op.value!);
     }
@@ -230,15 +263,38 @@ function presetKeyIndex(
 // value drops its override). Deletions are only detected for ConVars block
 // keys: a missing section-op key usually means a game update restructured
 // the section, not user intent.
+//
+// `marker` is what the file's own BEGIN line says was written. When it does not
+// match the preset we bundle today, the body on disk was written by a DIFFERENT
+// definition of this same preset (a Grimoire update moved it), and most of what
+// this function reads stops meaning what it says:
+//
+//   - a value that differs from the preset value may just be a value the bump
+//     changed, not a value the user typed
+//   - a marker-added key the preset no longer lists is a key the bump dropped,
+//     not a convar the user added
+//   - a preset key with no line in the file is a key the bump added, not a line
+//     the user deleted
+//
+// Inferring user intent across that gap pinned stale upstream values forever,
+// suppressed every key the new version added, and (worst) re-applied gameplay
+// convars the opt-in split exists to hold back. So when the definition has
+// moved, only the unambiguous signal counts: a marker line the user commented
+// out. Overrides banked while the definitions matched are untouched; the caller
+// still layers them.
 function harvestOverrides(
     content: string,
     preset: PerformancePreset,
-    convars: ReadonlyArray<readonly [string, string]>
+    convars: ReadonlyArray<readonly [string, string]>,
+    marker: AppliedMarker | null
 ): Overrides {
     const idx = presetKeyIndex(preset, convars);
     const overrides: Overrides = {};
     const addedToken = `// ${MARKER} added`;
     const wasRe = new RegExp(`^(.*?) // ${MARKER} was ("[^"]*"|\\S+)\\s*$`);
+    // The file was written by a different definition of this preset, so value
+    // and absence inferences are not attributable to the user.
+    const drift = marker !== null && !isCurrentDefinition(preset, marker);
 
     for (const line of content.split('\n')) {
         const addedAt = line.indexOf(addedToken);
@@ -249,36 +305,38 @@ function harvestOverrides(
             const key = entryKey(active);
             if (!key) continue;
             const entry = matchEntryLine(active, key);
-            const preset = idx.get(key);
-            if (preset === null) continue; // ambiguous bare key
-            if (!preset) {
-                // Not in the preset: the user's own convar inside our block.
-                if (!isCommented && entry) {
+            const managed = idx.get(key);
+            if (managed === null) continue; // ambiguous bare key
+            if (!managed) {
+                // Not in the preset: the user's own convar inside our block,
+                // unless the preset definition moved under us (see above).
+                if (!drift && !isCommented && entry) {
                     overrides[`ConVars/${key}`] = { value: unquote(entry.value) };
                 }
                 continue;
             }
-            if (isCommented) overrides[preset.okey] = { omit: true };
-            else if (entry && unquote(entry.value) !== preset.value) {
-                overrides[preset.okey] = { value: unquote(entry.value) };
+            if (isCommented) overrides[managed.okey] = { omit: true };
+            else if (!drift && entry && unquote(entry.value) !== managed.value) {
+                overrides[managed.okey] = { value: unquote(entry.value) };
             }
             continue;
         }
         const was = wasRe.exec(line);
-        if (was) {
+        if (was && !drift) {
             const key = entryKey(was[1]);
             const entry = key ? matchEntryLine(was[1], key) : null;
-            const preset = key ? idx.get(key) : null;
-            if (preset && entry && unquote(entry.value) !== preset.value) {
-                overrides[preset.okey] = { value: unquote(entry.value) };
+            const managed = key ? idx.get(key) : null;
+            if (managed && entry && unquote(entry.value) !== managed.value) {
+                overrides[managed.okey] = { value: unquote(entry.value) };
             }
         }
     }
 
     // Deleted preset convars: every applied convar key is present after an
     // apply (edited in place or injected), so one with no active entry left in
-    // the ConVars section was removed by the user.
-    const convarRange = findSectionByPath(content, ['ConVars']);
+    // the ConVars section was removed by the user. Absence proves nothing once
+    // the preset definition has moved.
+    const convarRange = drift ? null : findSectionByPath(content, ['ConVars']);
     if (convarRange) {
         const activeKeys = new Set(
             content
@@ -371,12 +429,18 @@ export function applyPerformanceConfig(
         // preset's id. What we then layer on is the incoming preset's own
         // saved overrides: a value the user chose for one preset is rarely the
         // right value for a differently-tuned one.
-        if (appliedPreset && !opts?.resetOverrides) {
+        //
+        // The marker is passed too: if it does not describe the definition we
+        // bundle for that preset today, the file's body predates a Grimoire
+        // update and only its unambiguous signals can be read (see
+        // harvestOverrides).
+        if (applied && appliedPreset && !opts?.resetOverrides) {
             const appliedOptIns = sidecar?.optIns ?? [];
             saved[appliedPreset.id] = harvestOverrides(
                 content,
                 appliedPreset,
-                effectiveConvars(appliedPreset, appliedOptIns)
+                effectiveConvars(appliedPreset, appliedOptIns),
+                readMarker(applied)
             );
         }
         let overrides: Overrides = {};
@@ -468,7 +532,7 @@ export function applyPerformanceConfig(
             ? `${indent}// Includes ${optIns.length} opt-in gameplay setting${optIns.length === 1 ? '' : 's'} you enabled [${MARKER}]`
             : null;
         const block = [
-            `${indent}// ==== Grimoire Performance Config BEGIN (preset=${preset.id} v${preset.version}) ====`,
+            `${indent}// ==== Grimoire Performance Config BEGIN (preset=${preset.id} v${preset.version} @${preset.upstream.commit.slice(0, 12)}) ====`,
             `${indent}// ${preset.name}: values from ${preset.upstream.credit} (${preset.upstream.license}) [${MARKER}]`,
             `${indent}// ${preset.upstream.url} @ ${preset.upstream.commit.slice(0, 12)} [${MARKER}]`,
             ...(optInNote ? [optInNote] : []),
@@ -693,7 +757,6 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             // sidecar can be stale or absent (hand-installed, restored backup).
             const appliedId = begin[1];
             const known = PRESETS.find((p) => p.id === appliedId) ?? null;
-            const preset = known ?? getPreset(appliedId);
             const overrideCount = Object.keys(allOverrides(sidecar)[appliedId] ?? {}).length;
             const appliedName = known?.name ?? appliedId;
             const base =
@@ -707,7 +770,11 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 state: 'applied',
                 appliedPresetId: appliedId,
                 appliedVersion: begin[2],
-                bundledVersion: preset.version,
+                // For a preset we do not bundle (a marker from a newer or
+                // hand-written Grimoire), report the file's own version rather
+                // than the default preset's: claiming an update is available
+                // from an unrelated preset would be a lie.
+                bundledVersion: known ? known.version : begin[2],
                 appliedOptIns: sidecar?.optIns ?? [],
                 handEdited,
                 overrideCount,

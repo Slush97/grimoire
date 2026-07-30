@@ -337,3 +337,164 @@ describe('game-update wipe recovery', () => {
         expect(sidecar().overrides).toBeUndefined();
     });
 });
+
+// A Grimoire update can change what a preset id MEANS: same id, different key
+// list and values (sqooky-default went 2.4.6 -> 2.7 exactly this way). The file
+// on disk still carries the old body, and the status message invites the user to
+// reapply. Nothing about that older body is user intent, and reading it as such
+// pinned retired upstream values forever, suppressed every key the new version
+// added, and re-applied gameplay convars the opt-in split holds back.
+describe('a bundled preset whose definition moved under an applied file', () => {
+    const DEFAULT_ID = 'sqooky-default';
+
+    /** Rewrite the applied file to look like an older version of the same
+     *  preset wrote it: an older marker version, one convar the current body no
+     *  longer lists, one current convar missing entirely, and a gameplay convar
+     *  the old body used to apply outright. */
+    function rewriteAsOlderVersion(optInKey: string, optInValue: string): string {
+        const preset = PRESETS.find((p) => p.id === DEFAULT_ID)!;
+        const lines = read().split('\n');
+        const beginAt = lines.findIndex((l) => l.includes('Performance Config BEGIN'));
+        lines[beginAt] = lines[beginAt].replace(`v${preset.version}`, 'v2.4.6');
+
+        // A key the current body still has, deleted from the file the way an
+        // older version that never shipped it would leave things.
+        const droppedAt = lines.findIndex(
+            (l, i) => i > beginAt && l.includes('// grimoire-perf added') && /^\s*[A-Za-z_]/.test(l)
+        );
+        const stillBundled = /^\s*"?([A-Za-z_][\w.]*)"?\s/.exec(lines[droppedAt])![1];
+        lines.splice(droppedAt, 1);
+
+        const indent = /^[ \t]*/.exec(lines[beginAt])![0];
+        lines.splice(
+            beginAt + 1,
+            0,
+            `${indent}retired_upstream_convar "7" // grimoire-perf added`,
+            `${indent}${optInKey} "${optInValue}" // grimoire-perf added`
+        );
+        write(lines.join('\n'));
+        return stillBundled;
+    }
+
+    it('does not mistake the older body for the user hand-editing the file', () => {
+        const preset = PRESETS.find((p) => p.id === DEFAULT_ID)!;
+        const control = preset.optIn[0];
+        applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID });
+        const stillBundled = rewriteAsOlderVersion(control.key, control.value);
+
+        const result = applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID, optIns: [] });
+        const text = read();
+
+        expect(result.overrideCount).toBe(0);
+        expect(sidecar().overridesByPreset).toBeUndefined();
+        // A convar the new version retired does not come back as "the user's".
+        expect(activeHas(text, 'retired_upstream_convar')).toBe(false);
+        // A convar the new version adds is written, not suppressed as a deletion.
+        expect(activeHas(text, stillBundled)).toBe(true);
+        // And the gameplay convar the old body applied silently stays out.
+        expect(activeHas(text, control.key)).toBe(false);
+    });
+
+    it('still honours a line the user commented out, the one unambiguous signal', () => {
+        applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID });
+        const preset = PRESETS.find((p) => p.id === DEFAULT_ID)!;
+        const line = read()
+            .split('\n')
+            .find((l) => l.includes('// grimoire-perf added') && /^\s*[A-Za-z_]/.test(l))!;
+        const key = /^\s*"?([A-Za-z_][\w.]*)"?\s/.exec(line)![1];
+        write(
+            read()
+                .replace(line, line.replace(/^(\s*)/, '$1// '))
+                .replace(`v${preset.version}`, 'v2.4.6')
+        );
+
+        applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID });
+        expect(activeHas(read(), key)).toBe(false);
+        // The key may sit under ConVars or under an engine section, so match on
+        // the leaf rather than assuming a path.
+        const banked: Record<string, unknown> = sidecar().overridesByPreset[DEFAULT_ID] ?? {};
+        expect(Object.entries(banked).find(([k]) => k.endsWith(`/${key}`))?.[1]).toEqual({
+            omit: true,
+        });
+    });
+
+    // These upstreams version in prose (Sqooky publishes no tags at all), so a
+    // regenerated preset can easily carry the same version string and a
+    // different body. The marker records the pinned commit for that reason.
+    it('notices a regenerated preset even when the version string is unchanged', () => {
+        const preset = PRESETS.find((p) => p.id === DEFAULT_ID)!;
+        const control = preset.optIn[0];
+        applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID });
+        write(read().replace(/@[0-9a-f]{12}\)/, '@0123456789ab)'));
+        const stillBundled = (() => {
+            const lines = read().split('\n');
+            const at = lines.findIndex(
+                (l) => l.includes('// grimoire-perf added') && /^\s*[A-Za-z_]/.test(l)
+            );
+            const key = /^\s*"?([A-Za-z_][\w.]*)"?\s/.exec(lines[at])![1];
+            const indent = /^[ \t]*/.exec(lines[at])![0];
+            lines.splice(at, 1, `${indent}${control.key} "${control.value}" // grimoire-perf added`);
+            write(lines.join('\n'));
+            return key;
+        })();
+
+        const result = applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID, optIns: [] });
+        expect(result.overrideCount).toBe(0);
+        expect(activeHas(read(), control.key)).toBe(false);
+        expect(activeHas(read(), stillBundled)).toBe(true);
+    });
+
+    it('treats a marker with no recorded commit as unprovable rather than current', () => {
+        applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID });
+        // A marker in the shape written before the commit was recorded.
+        write(read().replace(/ @[0-9a-f]{12}\)/, ')'));
+        const indent = /^([ \t]*)\/\/ ==== Grimoire/m.exec(read())![1];
+        write(
+            read().replace(
+                /(\/\/ ==== Grimoire Performance Config BEGIN[^\n]*\n)/,
+                `$1${indent}retired_upstream_convar "7" // grimoire-perf added\n`
+            )
+        );
+
+        const result = applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID });
+        expect(result.overrideCount).toBe(0);
+        expect(activeHas(read(), 'retired_upstream_convar')).toBe(false);
+        // And the file is still fully reversible afterwards.
+        removePerformanceConfig(gameRoot);
+        expect(read()).toBe(STOCK);
+    });
+
+    it('keeps harvesting hand edits when the version has not moved', () => {
+        applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID });
+        const indent = /^([ \t]*)\/\/ ==== Grimoire/m.exec(read())![1];
+        write(
+            read().replace(
+                /(\/\/ ==== Grimoire Performance Config BEGIN[^\n]*\n)/,
+                `$1${indent}my_own_convar "3" // grimoire-perf added\n`
+            )
+        );
+
+        const result = applyPerformanceConfig(gameRoot, { presetId: DEFAULT_ID });
+        expect(result.overrideCount).toBe(1);
+        expect(activeHas(read(), 'my_own_convar')).toBe(true);
+    });
+});
+
+describe('opt-ins without a sidecar', () => {
+    // The sidecar is the only record of which opt-ins were written. Losing it
+    // (hand-copied gameinfo.gi, a wiped userData, a user tidying up) must not
+    // turn an opted-in convar into a permanent user override that survives the
+    // user turning it back off.
+    it('does not turn an opted-in convar into a permanent override', () => {
+        const preset = PRESETS.find((p) => p.optIn.length)!;
+        const control = preset.optIn[0];
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [control.key] });
+        expect(activeHas(read(), control.key)).toBe(true);
+
+        rmSync(sidecarPath, { force: true });
+        applyPerformanceConfig(gameRoot, { presetId: preset.id, optIns: [] });
+
+        expect(activeHas(read(), control.key)).toBe(false);
+        expect(sidecar().overridesByPreset).toBeUndefined();
+    });
+});
