@@ -180,6 +180,11 @@
       { "key": "citadel_boss_glow_disabled", "group": "visibility" },
       { "key": "citadel_unit_status_allies_see_thru_walls", "group": "visibility" },
       { "key": "citadel_unit_status_allies_see_thru_walls_max_distance", "group": "visibility" },
+      {
+        "key": "citadel_unit_status_use_new",
+        "group": "visibility",
+        "why": "Swaps the unit-status health bars to the new style. Stock gameinfo.gi does not set it, four presets turn it on and two turn it off, so it is a readability preference the authors disagree about, not a frame-rate setting. Held back so applying a preset never changes how health bars look."
+      },
       { "key": "cl_glow_brightness", "group": "visibility" },
       { "key": "r_citadel_outlines", "group": "visibility" },
       { "key": "r_citadel_npr_outlines", "group": "visibility" },
