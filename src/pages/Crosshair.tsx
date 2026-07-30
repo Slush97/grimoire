@@ -1,12 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Copy, Check, RotateCcw, Save, Trash2, Play, Pin, XCircle, Download } from 'lucide-react';
+import { Copy, Check, RotateCcw, Pin, Download, ZoomIn, ZoomOut } from 'lucide-react';
 import { useCrosshairStore } from '../stores/crosshairStore';
-import CrosshairPreview from '../components/crosshair/CrosshairPreview';
+import CrosshairStage from '../components/crosshair/CrosshairStage';
+import { STAGE_BACKGROUNDS, type StageBackground } from '../components/crosshair/stageBackgrounds';
+import CrosshairControls from '../components/crosshair/CrosshairControls';
+import CrosshairPresetRail from '../components/crosshair/CrosshairPresetRail';
 import { renderCrosshairThumbnail } from '../components/crosshair/drawCrosshair';
 import { getSettings } from '../lib/api';
-import { Card, Slider, Toggle, Button } from '../components/common/ui';
-import { Input, Select } from '../components/common/forms';
+import { Button, SegmentedControl } from '../components/common/ui';
+import { PageHeader } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 
 // The in-game crosshair is authored in 1080p-reference px and scaled by
@@ -16,6 +19,8 @@ const RESOLUTIONS = [
     { label: '1440p', height: 1440 },
     { label: '4K', height: 2160 },
 ];
+
+const ZOOM_STEPS = [0.5, 0.75, 1, 1.5, 2, 3];
 
 function detectResolutionHeight(): number {
     const h = window.screen.height * (window.devicePixelRatio || 1);
@@ -29,52 +34,12 @@ export default function Crosshair() {
     const [copied, setCopied] = useState(false);
     const [imported, setImported] = useState(false);
     const [resolution, setResolution] = useState(detectResolutionHeight);
-    const [previewZoom, setPreviewZoom] = useState(1);
-    const [presetName, setPresetName] = useState('');
-    const [isSaving, setIsSaving] = useState(false);
-    const [showSaveInput, setShowSaveInput] = useState(false);
+    const [zoom, setZoom] = useState(1);
+    const [background, setBackground] = useState<StageBackground>('street');
     const [gamePath, setGamePath] = useState<string | null>(null);
     const [alwaysOnTop, setAlwaysOnTop] = useState(false);
 
     const {
-        pipGap,
-        pipGapStatic,
-        pipHeight,
-        pipWidth,
-        pipOpacity,
-        pipOutlineBorder,
-        pipOutlineGap,
-        pipOutlineOpacity,
-        dotOpacity,
-        dotSize,
-        dotOutlineBorder,
-        dotOutlineGap,
-        dotOutlineOpacity,
-        colorR,
-        colorG,
-        colorB,
-        outlineColorR,
-        outlineColorG,
-        outlineColorB,
-        disableHeroSpecificCrosshairs,
-        setPipGap,
-        setPipGapStatic,
-        setPipHeight,
-        setPipWidth,
-        setPipOpacity,
-        setPipOutlineBorder,
-        setPipOutlineGap,
-        setPipOutlineOpacity,
-        setDotOpacity,
-        setDotSize,
-        setDotOutlineBorder,
-        setDotOutlineGap,
-        setDotOutlineOpacity,
-        setColorR,
-        setColorG,
-        setColorB,
-        setOutlineColor,
-        setDisableHeroSpecificCrosshairs,
         reset,
         generateCommands,
         getSettings: getCrosshairSettings,
@@ -93,7 +58,6 @@ export default function Crosshair() {
     useEffect(() => {
         loadPresets();
         getSettings().then((settings) => setGamePath(settings.deadlockPath));
-        // Load always on top state
         window.electronAPI.getAlwaysOnTop().then(setAlwaysOnTop);
     }, [loadPresets]);
 
@@ -109,36 +73,6 @@ export default function Crosshair() {
         await navigator.clipboard.writeText(commands);
         setCopied(true);
         setTimeout(() => setCopied(false), 2000);
-    };
-
-    const rgbToHex = (r: number, g: number, b: number) => {
-        return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
-    };
-
-    const hexToRgb = (hex: string) => {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? {
-            r: parseInt(result[1], 16),
-            g: parseInt(result[2], 16),
-            b: parseInt(result[3], 16),
-        } : null;
-    };
-
-    const handleColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const hex = e.target.value;
-        const rgb = hexToRgb(hex);
-        if (rgb) {
-            setColorR(rgb.r);
-            setColorG(rgb.g);
-            setColorB(rgb.b);
-        }
-    };
-
-    const handleOutlineColorChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const rgb = hexToRgb(e.target.value);
-        if (rgb) {
-            setOutlineColor(rgb.r, rgb.g, rgb.b);
-        }
     };
 
     const handleImportFromGame = async () => {
@@ -160,19 +94,12 @@ export default function Crosshair() {
         }
     };
 
-    const handleSavePreset = async () => {
-        if (!presetName.trim()) return;
-        setIsSaving(true);
-        try {
-            const thumbnail = renderCrosshairThumbnail(getCrosshairSettings());
-            await savePreset(presetName.trim(), thumbnail);
-            setPresetName('');
-            setShowSaveInput(false);
-        } catch (error) {
-            console.error('Failed to save preset:', error);
-        } finally {
-            setIsSaving(false);
-        }
+    // Deliberately lets a failure propagate: the rail keeps the name field open
+    // so the save can be retried. Swallowing it here would let the rail treat a
+    // failed write as a success and clear what the user typed.
+    const handleSavePreset = async (name: string) => {
+        const thumbnail = renderCrosshairThumbnail(getCrosshairSettings());
+        await savePreset(name, thumbnail);
     };
 
     const handleApplyPreset = async (presetId: string) => {
@@ -206,9 +133,7 @@ export default function Crosshair() {
             alert(t('crosshair.alert.configureGamePath'));
             return;
         }
-        if (!confirm(t('crosshair.confirm.clearActive'))) {
-            return;
-        }
+        if (!confirm(t('crosshair.confirm.clearActive'))) return;
         try {
             await clearAutoexec(gamePath);
         } catch (error) {
@@ -217,323 +142,174 @@ export default function Crosshair() {
         }
     };
 
+    const stepZoom = (dir: -1 | 1) => {
+        const i = ZOOM_STEPS.indexOf(zoom);
+        const next = i === -1 ? 1 : Math.min(ZOOM_STEPS.length - 1, Math.max(0, i + dir));
+        setZoom(ZOOM_STEPS[next]);
+    };
+
     return (
-        <div className="p-6 lg:p-0 lg:h-full">
-            {/* On lg+ the page fills the viewport and each column scrolls
-                independently, so the preview stays reachable while the long
-                settings list scrolls. The columns carry the page padding so
-                they tile the full area: no dead zones where the wheel does
-                nothing. Below lg the page scrolls as one. */}
-            <div className="flex flex-col lg:flex-row gap-6 lg:gap-0 lg:h-full">
-                {/* Left Panel - Settings */}
-                {/* Both columns stack cards with space-y (block layout), not
-                    flex-col: Card has overflow-hidden, and a height-bounded
-                    flex column shrink-squeezes such children to fit instead
-                    of overflowing, which clips the controls and leaves
-                    nothing for overflow-y-auto to scroll. */}
-                <div className="w-full lg:w-1/3 space-y-6 lg:min-h-0 lg:overflow-y-auto lg:p-6">
-                    <Card title={<Tx k="crosshair.sections.shape" fallback="Crosshair Shape" />}>
-                        <div className="space-y-6">
-                            <Slider editable label={<Tx k="crosshair.controls.gap" fallback="Gap" />} value={pipGap} min={-10} max={50} onChange={setPipGap} />
-                            <Slider editable label={<Tx k="crosshair.controls.height" fallback="Height" />} value={pipHeight} min={0} max={50} onChange={setPipHeight} />
-                            <Slider editable label={<Tx k="crosshair.controls.width" fallback="Width" />} value={pipWidth} min={0} max={10} step={0.5} onChange={setPipWidth} />
-                            <Slider editable label={<Tx k="crosshair.controls.opacity" fallback="Opacity" />} value={pipOpacity} min={0} max={1} step={0.05} onChange={setPipOpacity} />
-                            <Slider editable label={<Tx k="crosshair.controls.outlineWidth" fallback="Outline Width" />} value={pipOutlineBorder} min={0} max={5} onChange={setPipOutlineBorder} />
-                            <Slider editable label={<Tx k="crosshair.controls.outlineGap" fallback="Outline Gap" />} value={pipOutlineGap} min={0} max={10} step={0.5} onChange={setPipOutlineGap} />
-                            <Slider editable label={<Tx k="crosshair.controls.outlineOpacity" fallback="Outline Opacity" />} value={pipOutlineOpacity} min={0} max={1} step={0.05} onChange={setPipOutlineOpacity} />
-                        </div>
-                    </Card>
+        // Stage-first: the preview is the page, the controls sit beside it, and
+        // nothing that changes the crosshair is more than a tab away. Below xl
+        // the two stack and the page scrolls as one.
+        <div className="flex min-h-full flex-col gap-4 p-6 xl:h-full xl:min-h-0">
+            <PageHeader
+                title={<Tx k="nav.crosshair" fallback="Crosshair" />}
+                description={
+                    <Tx
+                        k="crosshair.header.description"
+                        fallback="Tune your crosshair and read it against a real scene"
+                    />
+                }
+                action={
+                    <div className="flex flex-wrap items-center gap-2">
+                        <Button variant="secondary" onClick={reset} icon={RotateCcw} size="sm">
+                            <Tx k="common.actions.reset" fallback="Reset" />
+                        </Button>
+                        <Button
+                            variant={imported ? 'success' : 'secondary'}
+                            onClick={handleImportFromGame}
+                            icon={imported ? Check : Download}
+                            size="sm"
+                            title={t('crosshair.actions.importTitle')}
+                        >
+                            {imported ? (
+                                <Tx k="crosshair.status.imported" fallback="Imported" />
+                            ) : (
+                                <Tx k="crosshair.actions.importFromGame" fallback="Import from Game" />
+                            )}
+                        </Button>
+                        <Button
+                            variant={alwaysOnTop ? 'primary' : 'secondary'}
+                            size="sm"
+                            onClick={() => handleAlwaysOnTop(!alwaysOnTop)}
+                            icon={Pin}
+                            title={t('crosshair.preview.pinTitle')}
+                        >
+                            {alwaysOnTop ? (
+                                <Tx k="crosshair.preview.pinned" fallback="Pinned" />
+                            ) : (
+                                <Tx k="crosshair.preview.pinWindow" fallback="Pin Window" />
+                            )}
+                        </Button>
+                        <Button
+                            variant={copied ? 'success' : 'primary'}
+                            onClick={handleCopy}
+                            icon={copied ? Check : Copy}
+                            size="sm"
+                            title={t('crosshair.hints.pressF7')}
+                        >
+                            {copied ? (
+                                <Tx k="common.status.copied" fallback="Copied" />
+                            ) : (
+                                <Tx k="crosshair.actions.copyCode" fallback="Copy Code" />
+                            )}
+                        </Button>
+                    </div>
+                }
+            />
 
-                    <Card title={<Tx k="crosshair.sections.centerDot" fallback="Center Dot" />}>
-                        <div className="space-y-6">
-                            <Slider editable label={<Tx k="crosshair.controls.size" fallback="Size" />} value={dotSize} min={0} max={20} step={0.5} onChange={setDotSize} />
-                            <Slider editable label={<Tx k="crosshair.controls.opacity" fallback="Opacity" />} value={dotOpacity} min={0} max={1} step={0.05} onChange={setDotOpacity} />
-                            <Slider editable label={<Tx k="crosshair.controls.outlineWidth" fallback="Outline Width" />} value={dotOutlineBorder} min={0} max={5} onChange={setDotOutlineBorder} />
-                            <Slider editable label={<Tx k="crosshair.controls.outlineGap" fallback="Outline Gap" />} value={dotOutlineGap} min={0} max={10} step={0.5} onChange={setDotOutlineGap} />
-                            <Slider editable label={<Tx k="crosshair.controls.outlineOpacity" fallback="Outline Opacity" />} value={dotOutlineOpacity} min={0} max={1} step={0.05} onChange={setDotOutlineOpacity} />
-                        </div>
-                    </Card>
+            <div className="flex min-h-0 flex-1 flex-col gap-4 xl:flex-row">
+                {/* Stage column */}
+                <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
+                    {/* Below xl the column has no definite height, so the stage
+                        gets an explicit viewport-relative one that shrinks with
+                        the window instead of collapsing. From xl it goes back to
+                        taking whatever the row leaves over. */}
+                    <div className="relative h-[clamp(220px,42vh,560px)] overflow-hidden rounded-sm border border-white/5 xl:h-auto xl:min-h-[280px] xl:flex-1">
+                        <CrosshairStage scale={(resolution / 1080) * zoom} background={background} />
 
-                    <Card title={<Tx k="crosshair.sections.inGameBehavior" fallback="In-Game Behavior" />}>
-                        <div className="space-y-4">
-                            <Toggle
-                                label={<Tx k="crosshair.toggles.staticGapLabel" fallback="Static Gap" />}
-                                description={<Tx k="crosshair.toggles.staticGap" fallback="Keep the gap fixed. Off lets it expand with weapon spread (not shown in preview)." />}
-                                checked={pipGapStatic}
-                                onChange={setPipGapStatic}
-                            />
-                            <Toggle
-                                label={<Tx k="crosshair.toggles.disableHeroCrosshairsLabel" fallback="Disable Hero Crosshairs" />}
-                                description={<Tx k="crosshair.toggles.disableHeroCrosshairs" fallback="Force your custom crosshair on heroes that override it." />}
-                                checked={disableHeroSpecificCrosshairs}
-                                onChange={setDisableHeroSpecificCrosshairs}
-                            />
-                        </div>
-                    </Card>
-
-                    <Card title={<Tx k="crosshair.sections.color" fallback="Color" />}>
-                        <div className="space-y-6">
-                            <div className="flex items-center gap-4 p-3 bg-black/20 rounded-lg">
-                                <input
-                                    type="color"
-                                    value={rgbToHex(colorR, colorG, colorB)}
-                                    onChange={handleColorChange}
-                                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-none"
-                                />
-                                <div className="font-mono text-xs text-text-secondary">
-                                    RGB({colorR}, {colorG}, {colorB})
-                                </div>
-                            </div>
-                            {/* Quick color presets */}
-                            <div className="flex gap-2">
-                                {[
-                                    { label: t('crosshair.colors.white'), key: 'white', r: 255, g: 255, b: 255 },
-                                    { label: t('crosshair.colors.green'), key: 'green', r: 0, g: 255, b: 0 },
-                                    { label: t('crosshair.colors.cyan'), key: 'cyan', r: 0, g: 255, b: 255 },
-                                    { label: t('crosshair.colors.yellow'), key: 'yellow', r: 255, g: 255, b: 0 },
-                                    { label: t('crosshair.colors.red'), key: 'red', r: 255, g: 0, b: 0 },
-                                    { label: t('crosshair.colors.magenta'), key: 'magenta', r: 255, g: 0, b: 255 },
-                                ].map((color) => (
-                                    <button
-                                        key={color.key}
-                                        onClick={() => { setColorR(color.r); setColorG(color.g); setColorB(color.b); }}
-                                        className="w-6 h-6 rounded-md border border-white/20 hover:border-white/50 transition-colors cursor-pointer"
-                                        style={{ backgroundColor: `rgb(${color.r}, ${color.g}, ${color.b})` }}
-                                        title={color.label}
-                                    />
-                                ))}
-                            </div>
-                            <Slider editable label={<Tx k="crosshair.colors.red" fallback="Red" />} value={colorR} min={0} max={255} onChange={setColorR} className="accent-red-500" />
-                            <Slider editable label={<Tx k="crosshair.colors.green" fallback="Green" />} value={colorG} min={0} max={255} onChange={setColorG} className="accent-green-500" />
-                            <Slider editable label={<Tx k="crosshair.colors.blue" fallback="Blue" />} value={colorB} min={0} max={255} onChange={setColorB} className="accent-blue-500" />
-                            <div className="flex items-center gap-4 p-3 bg-black/20 rounded-lg">
-                                <input
-                                    type="color"
-                                    value={rgbToHex(outlineColorR, outlineColorG, outlineColorB)}
-                                    onChange={handleOutlineColorChange}
-                                    className="w-8 h-8 rounded cursor-pointer bg-transparent border-none"
-                                />
-                                <div className="text-xs text-text-secondary">
-                                    <Tx k="crosshair.controls.outlineColor" fallback="Outline color" />
-                                    <span className="ml-2 font-mono">RGB({outlineColorR}, {outlineColorG}, {outlineColorB})</span>
-                                </div>
-                            </div>
-                        </div>
-                    </Card>
-                </div>
-
-                {/* Right Panel - Preview & Actions */}
-                <div className="flex-1 space-y-6 min-w-0 lg:min-h-0 lg:overflow-y-auto lg:p-6 lg:pl-0">
-                    {/* Top Actions Bar. The two cards share roughly half the
-                        page, so they only sit side by side on wide windows;
-                        contents wrap rather than clip when space runs out. */}
-                    <div className="flex flex-col 2xl:flex-row gap-4">
-                        <Card className="flex-1" contentClassName="p-3">
-                            <div className="flex flex-wrap items-center justify-between gap-3">
-                                <div className="flex flex-wrap items-center gap-2">
-                                    <Button variant="secondary" onClick={reset} icon={RotateCcw} size="sm">
-                                        <Tx k="common.actions.reset" fallback="Reset" />
-                                    </Button>
-                                    <Button
-                                        variant={imported ? 'success' : 'secondary'}
-                                        onClick={handleImportFromGame}
-                                        icon={imported ? Check : Download}
-                                        size="sm"
-                                        title={t('crosshair.actions.importTitle')}
-                                    >
-                                        {imported ? (
-                                            <Tx k="crosshair.status.imported" fallback="Imported" />
-                                        ) : (
-                                            <Tx k="crosshair.actions.importFromGame" fallback="Import from Game" />
-                                        )}
-                                    </Button>
-                                    <Button
-                                        variant={copied ? 'success' : 'primary'}
-                                        onClick={handleCopy}
-                                        icon={copied ? Check : Copy}
-                                        size="sm"
-                                    >
-                                        {copied ? (
-                                            <Tx k="common.status.copied" fallback="Copied" />
-                                        ) : (
-                                            <Tx k="crosshair.actions.copyCode" fallback="Copy Code" />
-                                        )}
-                                    </Button>
-                                </div>
-                                <div className="hidden sm:block text-xs text-text-secondary whitespace-nowrap">
-                                    <Tx k="crosshair.hints.pressF7" fallback="Press F7 in-game" />
-                                </div>
-                            </div>
-                        </Card>
-
-                        <Card className="flex-1" contentClassName="p-3">
-                            <div className="flex items-center gap-2 h-full">
-                                {showSaveInput ? (
-                                    <>
-                                        <Input
-                                            inputSize="sm"
-                                            type="text"
-                                            value={presetName}
-                                            onChange={(e) => setPresetName(e.target.value)}
-                                            placeholder={t('crosshair.presetNamePlaceholder')}
-                                            className="flex-1 min-w-0"
-                                            onKeyDown={(e) => e.key === 'Enter' && handleSavePreset()}
-                                            autoFocus
-                                        />
-                                        <Button
-                                            onClick={handleSavePreset}
-                                            disabled={!presetName.trim()}
-                                            isLoading={isSaving}
-                                            icon={Save}
-                                            size="sm"
-                                        >
-                                            <Tx k="common.actions.save" fallback="Save" />
-                                        </Button>
+                        {/* Both overlay bars share one wrapping row so they move
+                            onto separate lines on a narrow window instead of
+                            growing into each other. The wrapper ignores the
+                            pointer, so only the chips themselves interrupt the
+                            crosshair's tracking, not the empty span between. */}
+                        <div className="pointer-events-none absolute inset-x-3 top-3 z-10 flex flex-wrap items-start justify-between gap-2">
+                            {/* Scene picker. Thumbnails rather than words: you're
+                                choosing an image, so show the image. */}
+                            <div className="pointer-events-auto flex items-center gap-1.5 rounded-sm border border-white/10 bg-black/50 p-1.5 backdrop-blur-md">
+                                {STAGE_BACKGROUNDS.map((b) => {
+                                    const active = b.id === background;
+                                    return (
                                         <button
-                                            onClick={() => setShowSaveInput(false)}
-                                            className="text-text-secondary hover:text-text-primary cursor-pointer"
-                                            title={t('common.actions.cancel')}
-                                            aria-label={t('common.actions.cancel')}
+                                            key={b.id}
+                                            type="button"
+                                            onClick={() => setBackground(b.id)}
+                                            aria-pressed={active}
+                                            title={t(`crosshair.preview.backgrounds.${b.id}`)}
+                                            aria-label={t(`crosshair.preview.backgrounds.${b.id}`)}
+                                            className={`h-8 w-12 cursor-pointer overflow-hidden rounded-sm border bg-bg-tertiary bg-cover bg-center transition-colors ${
+                                                active ? 'border-accent ring-1 ring-accent' : 'border-white/15 hover:border-white/40'
+                                            }`}
+                                            style={b.src ? { backgroundImage: `url(${b.src})` } : undefined}
                                         >
-                                            <RotateCcw className="w-4 h-4" />
+                                            {!b.src && (
+                                                <span className="flex h-full w-full items-center justify-center text-[9px] uppercase tracking-wider text-text-secondary">
+                                                    {t('crosshair.preview.backgrounds.plain')}
+                                                </span>
+                                            )}
                                         </button>
-                                    </>
-                                ) : (
-                                    <Button className="w-full" variant="secondary" onClick={() => setShowSaveInput(true)} icon={Save} size="sm">
-                                        <Tx k="crosshair.actions.saveAsNewPreset" fallback="Save as New Preset" />
-                                    </Button>
-                                )}
+                                    );
+                                })}
                             </div>
-                        </Card>
+
+                            {/* Resolution + zoom. Stepped zoom instead of a fiddly
+                                80px track: the useful values are few and discrete. */}
+                            <div className="pointer-events-auto flex flex-wrap items-center gap-2 rounded-sm border border-white/10 bg-black/50 px-2 py-1.5 backdrop-blur-md">
+                                <SegmentedControl
+                                    options={RESOLUTIONS.map((r) => ({ value: String(r.height), label: r.label }))}
+                                    value={String(resolution)}
+                                    onChange={(v) => setResolution(parseInt(v, 10))}
+                                    label={t('crosshair.preview.resolutionTitle')}
+                                />
+                                <div className="flex items-center gap-1 border-l border-white/10 pl-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => stepZoom(-1)}
+                                        disabled={zoom === ZOOM_STEPS[0]}
+                                        className="cursor-pointer rounded-sm p-1 text-text-secondary transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-default disabled:opacity-40"
+                                        title={t('crosshair.preview.zoomOut')}
+                                        aria-label={t('crosshair.preview.zoomOut')}
+                                    >
+                                        <ZoomOut className="h-4 w-4" />
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => setZoom(1)}
+                                        className="w-10 cursor-pointer rounded-sm py-1 text-center font-mono text-xs text-text-primary transition-colors hover:bg-white/10"
+                                        title={t('crosshair.preview.resetZoom')}
+                                    >
+                                        {zoom}x
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={() => stepZoom(1)}
+                                        disabled={zoom === ZOOM_STEPS[ZOOM_STEPS.length - 1]}
+                                        className="cursor-pointer rounded-sm p-1 text-text-secondary transition-colors hover:bg-white/10 hover:text-text-primary disabled:cursor-default disabled:opacity-40"
+                                        title={t('crosshair.preview.zoomIn')}
+                                        aria-label={t('crosshair.preview.zoomIn')}
+                                    >
+                                        <ZoomIn className="h-4 w-4" />
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    {/* Preview Area */}
-                    <Card className="relative w-full" contentClassName="p-0">
-                        <div className="absolute top-4 right-4 z-10 flex items-center gap-3 bg-black/40 backdrop-blur-md rounded-full px-3 py-1.5 border border-white/5">
-                            <Select
-                                inputSize="sm"
-                                value={resolution}
-                                onChange={(e) => setResolution(parseInt(e.target.value, 10))}
-                                title={t('crosshair.preview.resolutionTitle')}
-                                className="text-xs"
-                            >
-                                {RESOLUTIONS.map((r) => (
-                                    <option key={r.height} value={r.height}>{r.label}</option>
-                                ))}
-                            </Select>
-                            <span className="text-xs text-text-secondary">
-                                <Tx k="crosshair.preview.zoom" fallback="Zoom:" />
-                            </span>
-                            <div className="relative w-20 h-4 flex items-center">
-                                <div className="absolute w-full h-1 bg-bg-tertiary rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full bg-accent"
-                                        style={{ width: `${((previewZoom - 0.5) / 2.5) * 100}%` }}
-                                    />
-                                </div>
-                                <input
-                                    type="range"
-                                    min={0.5}
-                                    max={3}
-                                    step={0.1}
-                                    value={previewZoom}
-                                    onChange={(e) => setPreviewZoom(parseFloat(e.target.value))}
-                                    className="absolute w-full h-full opacity-0 cursor-pointer"
-                                />
-                                <div
-                                    className="absolute h-3 w-3 bg-white rounded-full shadow-lg border border-accent pointer-events-none"
-                                    style={{ left: `calc(${((previewZoom - 0.5) / 2.5) * 100}% - 6px)` }}
-                                />
-                            </div>
-                            <span className="font-mono text-xs w-8">{previewZoom.toFixed(1)}x</span>
-                        </div>
+                    <CrosshairPresetRail
+                        presets={presets}
+                        activePresetId={activePresetId}
+                        onLoad={loadSettingsFromPreset}
+                        onApply={handleApplyPreset}
+                        onDelete={handleDeletePreset}
+                        onSave={handleSavePreset}
+                        onClearActive={handleClearActive}
+                    />
+                </div>
 
-                        <div className="flex items-center justify-center bg-gradient-to-br from-bg-tertiary/50 to-bg-secondary/50 rounded-xl aspect-video lg:h-[420px] w-full overflow-hidden">
-                            <CrosshairPreview size={400} scale={(resolution / 1080) * previewZoom} />
-                        </div>
-
-                        {/* Pin Window Control */}
-                        <div className="p-4 border-t border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                            <p className="text-[10px] text-text-secondary italic">
-                                <Tx
-                                    k="crosshair.preview.description"
-                                    fallback="Preview approximates the in-game crosshair at the selected resolution. Dynamic spread bloom is not simulated."
-                                />
-                            </p>
-                            <Button
-                                variant={alwaysOnTop ? 'primary' : 'secondary'}
-                                size="sm"
-                                onClick={() => handleAlwaysOnTop(!alwaysOnTop)}
-                                icon={Pin}
-                                title={t('crosshair.preview.pinTitle')}
-                            >
-                                {alwaysOnTop ? (
-                                    <Tx k="crosshair.preview.pinned" fallback="Pinned" />
-                                ) : (
-                                    <Tx k="crosshair.preview.pinWindow" fallback="Pin Window" />
-                                )}
-                            </Button>
-                        </div>
-                    </Card>
-
-                    {/* Presets Gallery */}
-                    {presets.length > 0 && (
-                        <Card
-                            title={
-                                <Tx
-                                    k="crosshair.presets.savedTitle"
-                                    values={{ count: presets.length }}
-                                    fallback={`Saved Presets (${presets.length})`}
-                                />
-                            }
-                            action={activePresetId ? (
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={handleClearActive}
-                                    icon={XCircle}
-                                    title={t('crosshair.presets.deselectTitle')}
-                                >
-                                    <Tx k="crosshair.presets.deselectActive" fallback="Deselect Active" />
-                                </Button>
-                            ) : undefined}
-                        >
-                            <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6 gap-3">
-                                {presets.map((preset) => (
-                                    <div
-                                        key={preset.id}
-                                        onClick={() => loadSettingsFromPreset(preset)}
-                                        className={`group relative aspect-square rounded-lg border overflow-hidden transition-all bg-bg-tertiary cursor-pointer ${preset.id === activePresetId ? 'border-accent ring-1 ring-accent' : 'border-white/5 hover:border-white/20'
-                                            }`}
-                                    >
-                                        <div className="w-full h-full flex items-center justify-center">
-                                            <CrosshairPreview size={80} scale={1440 / 1080} settings={preset.settings} transparent />
-                                        </div>
-
-                                        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex flex-col items-center justify-center gap-2 p-2">
-                                            <div className="text-xs font-bold text-center truncate w-full">{preset.name}</div>
-                                            <div className="flex gap-1">
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleApplyPreset(preset.id); }}
-                                                    className="p-1.5 border border-accent/40 bg-accent/10 hover:bg-accent/20 hover:border-accent/60 rounded-md text-text-primary cursor-pointer transition-colors"
-                                                    title={t('crosshair.actions.applyToGame')}
-                                                >
-                                                    <Play className="w-3 h-3" />
-                                                </button>
-                                                <button
-                                                    onClick={(e) => { e.stopPropagation(); handleDeletePreset(preset.id); }}
-                                                    className="p-1.5 bg-red-500/20 hover:bg-red-500/40 text-state-danger rounded-md cursor-pointer"
-                                                    title={t('common.actions.delete')}
-                                                >
-                                                    <Trash2 className="w-3 h-3" />
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </Card>
-                    )}
+                {/* Controls column */}
+                <div className="flex min-h-0 w-full shrink-0 flex-col xl:w-[360px]">
+                    <CrosshairControls />
                 </div>
             </div>
         </div>
