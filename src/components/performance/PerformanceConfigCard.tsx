@@ -193,6 +193,19 @@ export default function PerformanceConfigCard() {
   // A different preset than the one in the file is selected, so the primary
   // action switches rather than reapplies.
   const willSwitch = applied && status?.appliedPresetId !== selectedId;
+  // Toggling an opt-in only records the choice; nothing reaches gameinfo.gi
+  // until the next apply. Compare what the file says was written (the sidecar,
+  // via status) with what is selected now, so a pending change is visible
+  // instead of looking like it already took effect.
+  const pendingOptIns = useMemo(() => {
+    if (!applied || willSwitch) return 0;
+    const written = new Set(status?.appliedOptIns ?? []);
+    const wanted = new Set(selectedOptIns);
+    let n = 0;
+    for (const key of wanted) if (!written.has(key)) n++;
+    for (const key of written) if (!wanted.has(key)) n++;
+    return n;
+  }, [applied, willSwitch, status?.appliedOptIns, selectedOptIns]);
   const appliedName =
     presets.find((p) => p.id === status?.appliedPresetId)?.name ?? status?.appliedPresetId ?? '';
 
@@ -280,6 +293,11 @@ export default function PerformanceConfigCard() {
                 })}
               </p>
             )}
+            {pendingOptIns > 0 && (
+              <p className="text-xs text-state-info">
+                {t('performance.optIn.pending', { count: pendingOptIns })}
+              </p>
+            )}
             <p className="text-xs text-text-secondary">{t('performance.shadowsHint')}</p>
             {openError && <p className="text-xs text-state-danger">{openError}</p>}
           </div>
@@ -328,7 +346,16 @@ export default function PerformanceConfigCard() {
             {applied && (status?.overrideCount ?? 0) > 0 && (
               <Button
                 onClick={() =>
-                  run(() => resetPerformanceConfigOverrides(selectedId, selectedOptIns))
+                  // Reset acts on the preset that is IN the file, not the one
+                  // selected in the picker: the override count this button is
+                  // gated on belongs to the applied preset, and "reset my
+                  // overrides" must not quietly switch preset as a side effect.
+                  run(() =>
+                    resetPerformanceConfigOverrides(
+                      status?.appliedPresetId ?? selectedId,
+                      status?.appliedOptIns ?? []
+                    )
+                  )
                 }
                 disabled={busy}
                 variant="ghost"

@@ -20,10 +20,17 @@ import type {
 // The preset and opt-in selection the renderer passes in are only a request:
 // the service validates the preset id and drops opt-in keys the chosen preset
 // does not define, so a stale renderer can never write an unknown convar.
+//
+// Both halves fall back to the saved settings, and they fall back together: a
+// caller that names a preset without naming opt-ins gets that preset's saved
+// opt-ins, not none of them. Defaulting the list to empty here would silently
+// strip settings the user had turned on.
 function selection(presetId?: string, optIns?: string[]) {
+    const settings = loadSettings();
+    const id = presetId ?? settings.performanceConfigPresetId;
     return {
-        presetId: presetId ?? loadSettings().performanceConfigPresetId,
-        optIns: optIns ?? [],
+        presetId: id,
+        optIns: optIns ?? (id ? settings.performanceConfigOptIns?.[id] : undefined) ?? [],
     };
 }
 

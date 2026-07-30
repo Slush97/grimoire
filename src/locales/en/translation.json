@@ -2689,6 +2689,8 @@
       "count": "{{enabled}} of {{count}} enabled",
       "description": "This preset's author also changed settings that affect what you can see or how the camera is framed, not how fast the game runs. Grimoire leaves these off so a performance preset never changes your game's feel behind your back. Turn on the ones you want.",
       "presetValue": "This preset sets it to {{value}}",
+      "pending_one": "{{count}} gameplay setting changed. Reapply to write it to gameinfo.gi.",
+      "pending_other": "{{count}} gameplay settings changed. Reapply to write them to gameinfo.gi.",
       "group": {
         "visibility": "Enemy and unit visibility",
         "camera": "Camera and field of view",
