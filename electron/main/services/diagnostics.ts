@@ -67,8 +67,10 @@ const SANITIZERS: Array<{ pattern: RegExp; replacement: string }> = [
     // PII; the username is.
     { pattern: /\/home\/[^/\s"'`]+/g, replacement: '/home/<user>' },
     { pattern: /\/Users\/[^/\s"'`]+/g, replacement: '/Users/<user>' },
-    // Windows: `C:\Users\Alice\...` -> `C:\Users\<user>\...`.
-    { pattern: /([A-Za-z]:\\Users\\)[^\\\s"'`]+/g, replacement: '$1<user>' },
+    // Windows: `C:\Users\Alice\...` -> `C:\Users\<user>\...`. The `\\{1,2}` also
+    // catches the doubled-backslash form `C:\\Users\\Alice\\...` that
+    // util.inspect emits when electron-log serializes an object argument.
+    { pattern: /([A-Za-z]:\\{1,2}Users\\{1,2})[^\\\s"'`]+/gi, replacement: '$1<user>' },
 
     // SteamID64 — real Steam user IDs start 7656119 and are 17 digits.
     { pattern: /\b7656119\d{10}\b/g, replacement: '<steamid64>' },
@@ -84,19 +86,25 @@ const SANITIZERS: Array<{ pattern: RegExp; replacement: string }> = [
     { pattern: /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/g, replacement: '<email>' },
 ];
 
-/** Strip PII / secrets from a diagnostic-bound string. The patterns above
- *  cover the structured shapes; we also do a final pass that wipes any
- *  literal occurrence of the running user's home dir, which catches edge
- *  cases like a custom Windows username with spaces that the regex misses. */
+/** Strip PII / secrets from a diagnostic-bound string. A first pass wipes any
+ *  literal occurrence of the running user's home dir; the structured patterns
+ *  above then cover everything else (other users' paths, tokens, emails). */
 export function sanitize(text: string): string {
     let out = text;
-    for (const { pattern, replacement } of SANITIZERS) {
-        out = out.replace(pattern, replacement);
-    }
+    // Home dir first: the structured patterns stop at whitespace, so a username
+    // with a space (`C:\Users\John Smith`) would otherwise be half-redacted into
+    // something this pass can no longer match literally.
     const home = os.homedir();
     if (home && home.length > 3) {
-        const escaped = home.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        out = out.replace(new RegExp(escaped, 'g'), '<home>');
+        // Doubled-backslash form before the plain one: util.inspect escapes
+        // backslashes when electron-log serializes an object argument.
+        for (const variant of [home.replace(/\\/g, '\\\\'), home]) {
+            const escaped = variant.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            out = out.replace(new RegExp(escaped, 'gi'), '<home>');
+        }
+    }
+    for (const { pattern, replacement } of SANITIZERS) {
+        out = out.replace(pattern, replacement);
     }
     return out;
 }
