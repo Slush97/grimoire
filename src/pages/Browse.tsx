@@ -102,6 +102,7 @@ import ImportCollectionModal from '../components/ImportCollectionModal';
 import ImportProfileDialog from '../components/profiles/ImportProfileDialog';
 import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, findCategoryByName } from '../lib/lockerUtils';
 import { formatAbsoluteDate, formatRelativeDate } from '../lib/dates';
+import { hasPendingUpdate } from '../lib/updateFileMatch';
 import { showToast } from '../stores/toastStore';
 
 const DEFAULT_PER_PAGE = 36;
@@ -2759,6 +2760,15 @@ export default function Browse() {
     return map;
   }, [installedMods]);
 
+  // Without this, a file the author re-uploaded renders as a plain "Install" and
+  // the mod reads as never downloaded, even though the Installed page flags the
+  // same mod as updatable. The open modal's file list is already the live list,
+  // so the check costs no extra request here.
+  const selectedModUpdateAvailable = useMemo(
+    () => (selectedMod ? hasPendingUpdate(selectedMod.id, selectedMod.files ?? [], installedMods) : false),
+    [selectedMod, installedMods]
+  );
+
   const queuedByModId = useMemo(() => {
     const map = new Map<number, QueuedDownloadState>();
     downloadQueue.forEach((queued, index) => {
@@ -3108,6 +3118,7 @@ export default function Browse() {
         mod={selectedMod}
         section={selectedDetailsSection}
         installed={installedIds.has(selectedMod.id)}
+        updateAvailable={selectedModUpdateAvailable}
         installedFileIds={installedFileIds}
         installedFileStates={installedFileStates}
         onEnableFile={toggleMod}

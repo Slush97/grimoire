@@ -16,6 +16,39 @@ export interface UpdateMatchSignals {
   sourceFileName?: string;
 }
 
+/** The installed-variant fields that decide whether an update is pending. */
+export interface InstalledVariantUpdateState {
+  gameBananaId?: number;
+  gameBananaFileId?: number;
+  ignoreUpdates?: boolean;
+}
+
+/**
+ * True when any installed variant of `gameBananaId` points at a file id that is
+ * no longer live on the mod page. An author who re-uploads a file gets a new
+ * file id and the old row is usually deleted outright rather than archived, so
+ * a missing id is the signal that the local copy has been superseded.
+ *
+ * `files` is the mod's full current file list, archived entries included. An
+ * empty list means "not loaded yet" and never flags an update.
+ */
+export function hasPendingUpdate(
+  gameBananaId: number,
+  files: GameBananaFile[],
+  installed: readonly InstalledVariantUpdateState[],
+): boolean {
+  const liveFileIds = new Set(files.filter((f) => !f.isArchived).map((f) => f.id));
+  if (liveFileIds.size === 0) return false;
+  return installed.some(
+    (mod) =>
+      mod.gameBananaId === gameBananaId &&
+      typeof mod.gameBananaFileId === 'number' &&
+      mod.gameBananaFileId > 0 &&
+      !mod.ignoreUpdates &&
+      !liveFileIds.has(mod.gameBananaFileId),
+  );
+}
+
 /** Minimum share of the old filename's meaningful tokens that must reappear
  *  in a candidate's filename before a name-based match is trusted. */
 const MIN_NAME_SCORE = 0.6;
