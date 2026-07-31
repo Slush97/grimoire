@@ -201,6 +201,62 @@ async function syncSection(section: SectionType): Promise<void> {
 }
 
 /**
+ * Cheap launch-time freshness pass: pull only page 1 of each section.
+ *
+ * `needsSync` gates the full paginated sync on a 24h staleness threshold, so
+ * a user who opens Grimoire more than once a day used to browse a mirror that
+ * could be a full day behind GameBanana with nothing refreshing it. That is
+ * invisible on the default grid (Browse routes to the live API there), but any
+ * catalog-only filter (search, hero, NSFW/date, A-Z sort, or *any* hidden
+ * creator) serves the stale rows.
+ *
+ * Sorted explicitly by date modified ('updated' -> Generic_LatestModified) so
+ * page 1 really is the 50 most recently touched submissions, covering both new
+ * uploads and edits to existing ones for three requests total. Do NOT drop the
+ * sort and lean on the default list order: checked against the live endpoint on
+ * 2026-07-30, /Wip/Index comes back unordered, and /Mod/Index left the two most
+ * recently modified rows off page 1 entirely.
+ *
+ * Deliberately does NOT write sync_state: this is a top-up, not a full mirror
+ * refresh, and claiming otherwise would suppress the real sync for another 24h.
+ * Progress is emitted terminal-only so the sync indicator stays quiet (it
+ * renders nothing for a 'complete' phase) while Browse still gets the signal
+ * it needs to re-query.
+ */
+export async function syncCatalogHead(): Promise<void> {
+    if (isSyncing) {
+        console.debug('[SyncService] Head sync skipped, sync already in progress');
+        return;
+    }
+
+    isSyncing = true;
+    try {
+        for (const section of SECTIONS) {
+            try {
+                const first = await fetchSubmissions(section, 1, SYNC_PER_PAGE, undefined, undefined, 'updated');
+                const mods = first.records.map(mod => mapToCache(mod, section));
+                timedUpsert(section, 1, mods);
+                console.debug(`[SyncService] ${section}: head sync refreshed ${mods.length} rows`);
+                emitProgress({
+                    section,
+                    currentPage: 1,
+                    totalPages: 1,
+                    modsProcessed: mods.length,
+                    totalMods: mods.length,
+                    phase: 'complete',
+                });
+            } catch (err) {
+                // Best-effort: a failed top-up leaves the existing mirror in
+                // place, and the 24h full sync still reports its own errors.
+                console.warn(`[SyncService] ${section}: head sync failed`, err);
+            }
+        }
+    } finally {
+        isSyncing = false;
+    }
+}
+
+/**
  * Sync all sections
  */
 export async function syncAllSections(): Promise<void> {

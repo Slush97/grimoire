@@ -1743,6 +1743,14 @@ export default function Browse() {
     return (hasSearchQuery || hasHeroFilter || hasContentFilter || needsLocalSort) && hasLocalCache && !localSearchFailed;
   }, [submitter, debouncedSearch, heroCategoryId, nsfw, addedWithin, sort, hiddenCreatorIds.length, hasLocalCache, localSearchFailed]);
 
+  // Mirror of the routing decision for callbacks that outlive a render (the
+  // sync-completion listener below subscribes once and must read the *current*
+  // route, not the one captured at subscribe time).
+  const useLocalSearchRef = useRef(useLocalSearch);
+  useEffect(() => {
+    useLocalSearchRef.current = useLocalSearch;
+  }, [useLocalSearch]);
+
   // Reset the failure flag whenever the user changes filters so a one-off
   // backend error doesn't permanently disable local search.
   useEffect(() => {
@@ -2206,6 +2214,46 @@ export default function Browse() {
     lastFetchedStampRef.current = null;
     traceBrowse(`routing flipped to ${useLocalSearch ? 'local' : 'remote'}; re-running current query`);
   }, [useLocalSearch]);
+
+  // A finished catalog sync writes new rows straight into mods-cache.db, but
+  // the grid keeps whatever it fetched at mount: the fetch effect below only
+  // re-runs on a filter change or `refreshKey`, and `lastFetchedStampRef`
+  // short-circuits an identical query. So a background sync could land a day's
+  // worth of new mods and a local-route grid would keep showing the pre-sync
+  // list for the entire session (and across navigation, since the session cache
+  // rehydrates it) until the user pressed Refresh. That is the "opening the app
+  // never shows new mods, refreshing does" report.
+  //
+  // Re-run the current query instead, but only where it costs the user nothing:
+  //   - local route only; remote results don't come from the mirror at all
+  //   - page 1 only, so someone who paginated deep is never yanked back to a
+  //     shorter list mid-scroll (they still get fresh rows on their next filter
+  //     change or Refresh)
+  // The list is never blanked, so searchLocal swaps it in place and the scroll
+  // offset survives.
+  useEffect(() => {
+    const unsub = window.electronAPI.onSyncProgress((data) => {
+      if (data.phase !== 'complete') return;
+      // Every cached result set in this session was read before those rows
+      // existed, so drop them all rather than letting a filter switch restore
+      // pre-sync results. Scroll offsets are kept (separate map).
+      browseResultsCacheRef.current.clear();
+      // Only the section on screen needs a live re-query; the others refetch
+      // when the user switches to them. Sections sync one at a time, so this is
+      // what keeps a three-section sync from firing three redundant queries.
+      if (data.section !== section) return;
+      if (!useLocalSearchRef.current) return;
+      if (pageRef.current !== 1) return;
+      traceBrowse(`catalog sync finished (${data.section}); re-running current query`);
+      requestGenerationRef.current += 1;
+      // Both gates that would otherwise swallow the re-run: the stamp gate, and
+      // the one-shot skip a just-hydrated session cache leaves behind.
+      lastFetchedStampRef.current = null;
+      restoredCacheSkipStampRef.current = null;
+      setRefreshKey((k) => k + 1);
+    });
+    return unsub;
+  }, [section]);
 
   useEffect(() => {
     // Wait for the first catalog answer so the opening request goes straight

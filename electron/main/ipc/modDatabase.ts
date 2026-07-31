@@ -1,7 +1,7 @@
 import { ipcMain } from 'electron';
 import { initDatabase, getModById, getModCount, wipeDatabase, getModsNsfwStatus, updateModNsfw, getModsDownloadCounts, updateModDownloadCount } from '../services/modDatabase';
 import { searchMods, getCategories, getSectionStats, type SearchOptions } from '../services/searchService';
-import { syncAllSections, syncSingleSection, getSyncStatus, needsSync, isSyncInProgress } from '../services/syncService';
+import { syncAllSections, syncSingleSection, syncCatalogHead, getSyncStatus, needsSync, isSyncInProgress } from '../services/syncService';
 
 // Initialize database on module load
 initDatabase();
@@ -14,6 +14,11 @@ ipcMain.handle('sync-all-mods', async () => {
 
 ipcMain.handle('sync-section', async (_, section: string) => {
     await syncSingleSection(section);
+    return { success: true };
+});
+
+ipcMain.handle('refresh-catalog-head', async () => {
+    await syncCatalogHead();
     return { success: true };
 });
 
