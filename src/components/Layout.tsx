@@ -81,12 +81,21 @@ export default function Layout() {
         if (!settings.hasCompletedSetup) {
           setShowWelcome(true);
         } else {
-          // Auto-sync if database needs it (first launch or stale data)
+          // Auto-sync if database needs it (first launch or stale data).
+          // Otherwise still top up the head of each section: the full sync only
+          // fires past a 24h staleness threshold, so without this a user who
+          // opens Grimoire daily browses a mirror that is always a day behind
+          // (visible to anyone whose filters route to the local catalog, which
+          // includes everyone with a hidden creator).
           const needsSync = await window.electronAPI.needsSync();
           if (needsSync) {
             console.log('[Layout] Database needs sync, starting in background...');
             window.electronAPI.syncAllMods().catch(err => {
               console.error('[Layout] Background sync failed:', err);
+            });
+          } else {
+            window.electronAPI.refreshCatalogHead().catch(err => {
+              console.error('[Layout] Catalog head refresh failed:', err);
             });
           }
         }

@@ -515,6 +515,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Mod Database (Local Cache)
     syncAllMods: () => ipcRenderer.invoke('sync-all-mods'),
     syncSection: (section: string) => ipcRenderer.invoke('sync-section', section),
+    refreshCatalogHead: () => ipcRenderer.invoke('refresh-catalog-head'),
     wipeModCache: () => ipcRenderer.invoke('wipe-mod-cache'),
     getSyncStatus: () => ipcRenderer.invoke('get-sync-status'),
     needsSync: () => ipcRenderer.invoke('needs-sync'),

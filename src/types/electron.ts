@@ -976,6 +976,9 @@ export interface ElectronAPI {
     // Mod Database (Local Cache)
     syncAllMods: () => Promise<{ success: boolean }>;
     syncSection: (section: string) => Promise<{ success: boolean }>;
+    /** Launch-time top-up: page 1 of each section only, leaving the 24h full-sync
+     *  cadence (`needsSync`) untouched. */
+    refreshCatalogHead: () => Promise<{ success: boolean }>;
     wipeModCache: () => Promise<{ success: boolean }>;
     getSyncStatus: () => Promise<Record<string, { lastSync: number; count: number } | null>>;
     needsSync: () => Promise<boolean>;
