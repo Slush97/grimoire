@@ -10,6 +10,19 @@ Requirements:
 - [pnpm](https://pnpm.io/) 10+ (pnpm 9 mis-links the out-of-root workspace package below)
 - [Git](https://git-scm.com/)
 
+With Nix, `flake.nix` provides all of the above via `nix develop`. On NixOS
+also enable `programs.nix-ld.enable = true;` (the dev workflow runs
+npm-fetched binaries: Electron, vpkmerge, 7za). Setup is the same as below,
+inside the shell:
+
+```bash
+cd grimoire-social && nix develop -c pnpm install
+cd ../grimoire && nix develop
+pnpm install
+pnpm exec electron-rebuild -f -w better-sqlite3
+pnpm dev
+```
+
 Grimoire shares its wire-format types with its companion service,
 [grimoire-social](https://github.com/Slush97/grimoire-social) (also open source),
 through the `@grimoire/social-types` workspace package. `pnpm-workspace.yaml`
