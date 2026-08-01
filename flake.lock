@@ -1,5 +1,21 @@
 {
   "nodes": {
+    "grimoire-social": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1779261108,
+        "narHash": "sha256-f+wUZOR7dqigxd/IZtay1BrLS5rcSnaDage3NXxqsPE=",
+        "owner": "Slush97",
+        "repo": "grimoire-social",
+        "rev": "efffe0b92a49d6cc8d82406d6fc163c2fd3662a5",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Slush97",
+        "repo": "grimoire-social",
+        "type": "github"
+      }
+    },
     "nixpkgs": {
       "locked": {
         "lastModified": 1785454630,
@@ -18,7 +34,26 @@
     },
     "root": {
       "inputs": {
-        "nixpkgs": "nixpkgs"
+        "grimoire-social": "grimoire-social",
+        "nixpkgs": "nixpkgs",
+        "vpkmerge": "vpkmerge"
+      }
+    },
+    "vpkmerge": {
+      "flake": false,
+      "locked": {
+        "lastModified": 1783195121,
+        "narHash": "sha256-DjGEiL6Zfm1chawjeT23KXKvmncCjDssFzguPmHNWUw=",
+        "owner": "Slush97",
+        "repo": "vpkmerge",
+        "rev": "f716f7a95aa64cb8534b18c6edc81f29a849db9a",
+        "type": "github"
+      },
+      "original": {
+        "owner": "Slush97",
+        "ref": "v0.19.0",
+        "repo": "vpkmerge",
+        "type": "github"
       }
     }
   },

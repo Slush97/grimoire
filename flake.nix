@@ -1,15 +1,40 @@
 {
-  description = "Grimoire devShell (contributor tooling, not a package build)";
+  description = "Grimoire: Deadlock mod manager (from-source package + contributor devShell)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    # Sibling repo: pnpm-lock links @grimoire/social-types from
+    # ../grimoire-social; the package build materializes this input there.
+    grimoire-social = {
+      url = "github:Slush97/grimoire-social";
+      flake = false;
+    };
+    # Rust CLI the app shells out to for VPK merge/split. Keep the ref in
+    # sync with VPKMERGE_VERSION in scripts/fetch-vpkmerge.mjs.
+    vpkmerge = {
+      url = "github:Slush97/vpkmerge?ref=v0.19.0";
+      flake = false;
+    };
   };
 
   outputs =
-    { self, nixpkgs }:
+    {
+      self,
+      nixpkgs,
+      grimoire-social,
+      vpkmerge,
+    }:
     let
       system = "x86_64-linux";
-      pkgs = import nixpkgs { inherit system; };
+      pkgs = import nixpkgs {
+        inherit system;
+        # electron_40 is nixpkgs-flagged insecure (EOL upstream) but is the
+        # newest Electron the locked electron-builder stack can rebuild
+        # natives for (node-abi ends at 40; see the callPackage below). The
+        # predicate permits insecure Electron only, nothing else. Drop it
+        # when electron-builder's node-abi learns the current Electron.
+        config.allowInsecurePredicate = pkg: (pkg.pname or "") == "electron";
+      };
       lib = pkgs.lib;
 
       nodeVersion = pkgs.nodejs_22.version;
@@ -75,8 +100,39 @@
           "/lib64/ld-linux-x86-64.so.2"
         else
           throw "unsupported system: ${system}";
+      vpkmergePkg = pkgs.callPackage ./nix/vpkmerge.nix { src = vpkmerge; };
+      grimoirePkg = pkgs.callPackage ./nix/grimoire.nix {
+        grimoire-src = self;
+        social-src = grimoire-social;
+        vpkmerge = vpkmergePkg;
+        # Not the default electron (41+): electron-builder 26's bundled
+        # @electron/rebuild uses node-abi 3.85, whose registry ends at
+        # Electron 40. Bump when the locked electron-builder stack catches up.
+        electron = pkgs.electron_40;
+      };
     in
     {
+      # From-source build. nixpkgs PR #519608 packages the released AppImage
+      # instead (grimoire-deadlock, stalled unreviewed); this flake is the
+      # canonical source build.
+      packages.${system} = {
+        default = grimoirePkg;
+        grimoire = grimoirePkg;
+        vpkmerge = vpkmergePkg;
+      };
+
+      overlays.default = final: prev: {
+        vpkmerge = final.callPackage ./nix/vpkmerge.nix { src = vpkmerge; };
+        grimoire = final.callPackage ./nix/grimoire.nix {
+          grimoire-src = self;
+          social-src = grimoire-social;
+          vpkmerge = final.vpkmerge;
+          # See packages: node-abi in the locked electron-builder stack
+          # ends at Electron 40.
+          electron = final.electron_40;
+        };
+      };
+
       devShells.${system}.default = pkgs.mkShell {
         packages =
           (with pkgs; [
