@@ -16,6 +16,7 @@ export function getInstallSource(): InstallSource {
         if (
             exec.startsWith('/opt/') ||
             exec.startsWith('/usr/') ||
+            exec.startsWith('/nix/store/') ||
             exec.startsWith('/snap/') ||
             exec.startsWith('/var/lib/flatpak/') ||
             exec.startsWith('/app/')
