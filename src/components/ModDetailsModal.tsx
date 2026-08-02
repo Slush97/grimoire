@@ -455,8 +455,8 @@ function ModDetailsModal({
     // current file shown while an update is available is the update target:
     // clicking it replaces the now-superseded installed version, so call it
     // "Update". Archived files are never update targets (they're the old ones).
-    // Browse never sets updateAvailable, so its non-installed files stay
-    // "Install" (Browse adds files, it doesn't replace).
+    // Both hosts set updateAvailable, so a file the author replaced reads the
+    // same way whether you reach it from Installed or from Browse.
     if (installedFileIds.has(fileId)) return t('modDetails.actions.reinstall');
     if (updateAvailable && !archived) return t('profiles.actions.update');
     return t('modDetails.actions.install');
