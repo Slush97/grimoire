@@ -3,27 +3,32 @@
 // never drift apart (the old DOM preview and SVG thumbnail disagreed on dot
 // size and outline z-order).
 //
-// Geometry is computed in 1080p-reference pixels (the same unit the
-// citadel_crosshair_* convars use) and multiplied by `scale`
-// (display resolution height / 1080, times any preview zoom).
+// Geometry comes from computeCrosshairLayout in src/lib/crosshair.ts, which
+// reproduces the game's rasterization: sizes composed in 1080p layout units,
+// snapped once to whole device px at `scale` (display height / 1080), centres
+// unsnapped. Drawing on that grid is what keeps a 1px pip one crisp pixel at
+// 1440p instead of two antialiased ones; see docs/crosshair-geometry.md.
 
 import type { CrosshairSettings } from '../../types/electron';
-import { normalizeCrosshairSettings } from '../../lib/crosshair';
+import {
+    computeCrosshairLayout,
+    normalizeCrosshairSettings,
+    type CrosshairRect,
+} from '../../lib/crosshair';
 
 export interface DrawCrosshairOptions {
     /** Canvas logical (CSS) size in px; the crosshair is centered in it. */
     size: number;
-    /** 1080p-px to display-px multiplier. */
+    /** 1080p-layout-px to display-px multiplier (resolution / 1080). This is
+     *  the device grid the crosshair is snapped to. */
     scale: number;
+    /** CSS px one snapped device px occupies (default 1). Applied AFTER
+     *  snapping, so magnifying shows the same whole device pixels bigger
+     *  instead of re-rasterizing finer. The stage also uses this to draw a
+     *  coarser grid's pixels physically fatter (1080p) or finer (4K). */
+    zoom?: number;
     /** Background fill; null/undefined leaves the canvas transparent. */
     background?: string | null;
-}
-
-interface Rect {
-    x: number;
-    y: number;
-    w: number;
-    h: number;
 }
 
 export function drawCrosshair(
@@ -33,6 +38,7 @@ export function drawCrosshair(
 ): void {
     const s = normalizeCrosshairSettings(raw);
     const { size, scale } = opts;
+    const zoom = opts.zoom ?? 1;
 
     ctx.clearRect(0, 0, size, size);
     if (opts.background) {
@@ -42,67 +48,57 @@ export function drawCrosshair(
 
     const cx = size / 2;
     const cy = size / 2;
-    const px = (v: number) => v * scale;
+    const layout = computeCrosshairLayout(s, scale);
 
-    // Gap formula carried over from the previous DOM preview (calibrated
-    // against the game; re-verify after any in-game crosshair update).
-    // D = distance from screen center to each pip's center line.
-    const D = Math.max(0, (9 + s.pipGap * 2.5) / 2);
+    // Device px -> canvas px; snapping already happened in device space.
+    const rect = (r: CrosshairRect) =>
+        [cx + r.x * zoom, cy + r.y * zoom, r.w * zoom, r.h * zoom] as const;
 
-    // Pip rects in 1080p units, relative to center; pips are centered on the
-    // gap boundary (half extends inward, half outward), matching the game.
-    const pips: Rect[] =
-        s.pipWidth > 0 && s.pipHeight > 0
-            ? [
-                  { x: -s.pipWidth / 2, y: -D - s.pipHeight / 2, w: s.pipWidth, h: s.pipHeight }, // top
-                  { x: -s.pipWidth / 2, y: D - s.pipHeight / 2, w: s.pipWidth, h: s.pipHeight }, // bottom
-                  { x: -D - s.pipHeight / 2, y: -s.pipWidth / 2, w: s.pipHeight, h: s.pipWidth }, // left
-                  { x: D - s.pipHeight / 2, y: -s.pipWidth / 2, w: s.pipHeight, h: s.pipWidth }, // right
-              ]
-            : [];
-
+    // Opacity is a panel property in the game (SetOpacity); multiplying it
+    // into the fill colour is equivalent for these flat draws.
     const fillColor = `rgba(${s.colorR}, ${s.colorG}, ${s.colorB}, ${s.pipOpacity})`;
     const dotColor = `rgba(${s.colorR}, ${s.colorG}, ${s.colorB}, ${s.dotOpacity})`;
     const outlineColor = (opacity: number) =>
         `rgba(${s.outlineColorR}, ${s.outlineColorG}, ${s.outlineColorB}, ${opacity})`;
 
-    // 1. Pip outlines (stroked fully outside the pip, offset by the gap)
-    if (s.pipOutlineBorder > 0 && s.pipOutlineOpacity > 0) {
-        ctx.strokeStyle = outlineColor(s.pipOutlineOpacity);
-        ctx.lineWidth = px(s.pipOutlineBorder);
-        const off = s.pipOutlineGap + s.pipOutlineBorder / 2;
-        for (const r of pips) {
-            ctx.strokeRect(
-                cx + px(r.x - off),
-                cy + px(r.y - off),
-                px(r.w + 2 * off),
-                px(r.h + 2 * off)
-            );
+    // 1. Pip outlines: the outer box with a punched-out hole, because the
+    //    game's border paints inward from the outer box edge.
+    if (layout.pipOutlineBorder > 0 && s.pipOutlineOpacity > 0) {
+        ctx.fillStyle = outlineColor(s.pipOutlineOpacity);
+        const b = layout.pipOutlineBorder * zoom;
+        for (const o of layout.pipOutlines) {
+            const [x, y, w, h] = rect(o);
+            ctx.beginPath();
+            ctx.rect(x, y, w, h);
+            if (w > 2 * b && h > 2 * b) ctx.rect(x + b, y + b, w - 2 * b, h - 2 * b);
+            ctx.fill('evenodd');
         }
     }
 
-    // 2. Dot outline ring (outside the dot, offset by the gap)
-    if (s.dotOutlineBorder > 0 && s.dotOutlineOpacity > 0) {
-        ctx.strokeStyle = outlineColor(s.dotOutlineOpacity);
-        ctx.lineWidth = px(s.dotOutlineBorder);
+    // 2. Dot outline: an annulus, border likewise inward from the outer circle
+    if (layout.dotOutlineBorder > 0 && s.dotOutlineOpacity > 0 && layout.dotOutlineSize > 0) {
+        const outer = layout.dotOutlineSize / 2;
+        const inner = Math.max(0, outer - layout.dotOutlineBorder);
+        ctx.fillStyle = outlineColor(s.dotOutlineOpacity);
         ctx.beginPath();
-        ctx.arc(cx, cy, px(s.dotSize / 2 + s.dotOutlineGap + s.dotOutlineBorder / 2), 0, Math.PI * 2);
-        ctx.stroke();
+        ctx.arc(cx, cy, outer * zoom, 0, Math.PI * 2);
+        if (inner > 0) ctx.arc(cx, cy, inner * zoom, 0, Math.PI * 2, true);
+        ctx.fill('evenodd');
     }
 
     // 3. Pips
     if (s.pipOpacity > 0) {
         ctx.fillStyle = fillColor;
-        for (const r of pips) {
-            ctx.fillRect(cx + px(r.x), cy + px(r.y), px(r.w), px(r.h));
+        for (const p of layout.pips) {
+            ctx.fillRect(...rect(p));
         }
     }
 
     // 4. Center dot (top layer)
-    if (s.dotOpacity > 0 && s.dotSize > 0) {
+    if (s.dotOpacity > 0 && layout.dotSize > 0) {
         ctx.fillStyle = dotColor;
         ctx.beginPath();
-        ctx.arc(cx, cy, px(s.dotSize / 2), 0, Math.PI * 2);
+        ctx.arc(cx, cy, (layout.dotSize / 2) * zoom, 0, Math.PI * 2);
         ctx.fill();
     }
 }

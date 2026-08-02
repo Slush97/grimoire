@@ -35,6 +35,35 @@ export const CROSSHAIR_DEFAULTS: CrosshairSettings = {
     pipBorder: true,
 };
 
+/**
+ * The defaults client.dll registers, i.e. a fresh install's crosshair. Kept
+ * separate from CROSSHAIR_DEFAULTS (Grimoire's editor starting point) so the
+ * difference stays deliberate; see docs/crosshair-geometry.md.
+ */
+export const CROSSHAIR_GAME_DEFAULTS: CrosshairSettings = {
+    pipGap: 4,
+    pipGapStatic: false,
+    pipHeight: 16,
+    pipWidth: 2,
+    pipOpacity: 0.5,
+    pipOutlineBorder: 1,
+    pipOutlineGap: 1,
+    pipOutlineOpacity: 0.7,
+    dotOpacity: 0.7,
+    dotSize: 4,
+    dotOutlineBorder: 2,
+    dotOutlineGap: 2,
+    dotOutlineOpacity: 0.7,
+    colorR: 255,
+    colorG: 255,
+    colorB: 255,
+    outlineColorR: 0,
+    outlineColorG: 0,
+    outlineColorB: 0,
+    disableHeroSpecificCrosshairs: false,
+    pipBorder: true,
+};
+
 const num = (v: unknown, fallback: number): number =>
     typeof v === 'number' && Number.isFinite(v) ? v : fallback;
 const bool = (v: unknown, fallback: boolean): boolean =>
@@ -144,6 +173,111 @@ const CONVAR_FIELDS: Array<[string, keyof CrosshairSettings, 'number' | 'boolean
     ['citadel_crosshair_outline_color_b', 'outlineColorB', 'number'],
     ['citadel_crosshair_disable_hero_specific_crosshairs', 'disableHeroSpecificCrosshairs', 'boolean'],
 ];
+
+// ---------------------------------------------------------------------------
+// Geometry. Mirrors how the game's gun HUD element lays its panels out,
+// recovered from client.dll + element_gun.vcss; the full derivation and the
+// screenshot evidence live in docs/crosshair-geometry.md. Read that before
+// changing anything below.
+
+/** cppArcDefaultOffset in element_gun.vcss: the base offset the C++ adds to
+ *  citadel_crosshair_pip_gap when positioning each pip's centre. */
+const PIP_BASE_OFFSET = 4;
+
+/** Axis-aligned box in whole device px, relative to the screen centre. */
+export interface CrosshairRect {
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+}
+
+export interface CrosshairLayout {
+    /** Pip rectangles: top, bottom, left, right. Empty when width/height is 0. */
+    pips: CrosshairRect[];
+    /** Outer boxes of the pip outline panels; the border paints inward. */
+    pipOutlines: CrosshairRect[];
+    /** Pip outline border width, device px. */
+    pipOutlineBorder: number;
+    /** Dot diameter, device px (the dot panel carries border-radius: 50%). */
+    dotSize: number;
+    /** Dot outline outer diameter, device px; its border also paints inward. */
+    dotOutlineSize: number;
+    /** Dot outline border width, device px. */
+    dotOutlineBorder: number;
+}
+
+/**
+ * Rasterize the crosshair the way the game does: sizes composed in 1080p
+ * layout units and snapped ONCE to whole device px (`scale` = display height
+ * / 1080), centres never snapped (center_nopixelsnap), so a panel's leading
+ * edge rounds half-up. The HUD truncates every size convar toward zero
+ * (cvttss2si) before use, so dot_size 8.3 is an 8px dot here too.
+ */
+export function computeCrosshairLayout(
+    raw: Partial<CrosshairSettings>,
+    scale: number
+): CrosshairLayout {
+    const s = normalizeCrosshairSettings(raw);
+
+    const pipWidth = Math.trunc(s.pipWidth);
+    const pipHeight = Math.trunc(s.pipHeight);
+    const pipGap = Math.trunc(s.pipGap);
+    const pipOutlineGap = Math.trunc(s.pipOutlineGap);
+    const pipOutlineBorder = Math.trunc(s.pipOutlineBorder);
+    const dotSize = Math.trunc(s.dotSize);
+    const dotOutlineGap = Math.trunc(s.dotOutlineGap);
+    const dotOutlineBorder = Math.trunc(s.dotOutlineBorder);
+
+    // Snap a composed layout size to device px. Snapping the parts and adding
+    // them instead is off by a pixel (round(3 * 4/3) = 4, but 1 + 2 = 3).
+    const dev = (v: number) => Math.round(v * scale);
+    // Leading edge of a panel of snapped size `size` centred (unsnapped) at
+    // layout coordinate `centre`.
+    const edge = (centre: number, size: number) => Math.round(centre * scale - size / 2);
+
+    // Each pip's centre sits D from the screen centre.
+    const D = PIP_BASE_OFFSET + pipGap;
+
+    // (cx, cy, w, h) in layout units; the left/right pair is the top/bottom
+    // pair rotated 90deg, i.e. width and height swapped.
+    const pipSpecs: Array<[number, number, number, number]> =
+        pipWidth > 0 && pipHeight > 0
+            ? [
+                  [0, -D, pipWidth, pipHeight],
+                  [0, D, pipWidth, pipHeight],
+                  [-D, 0, pipHeight, pipWidth],
+                  [D, 0, pipHeight, pipWidth],
+              ]
+            : [];
+
+    const box = ([cx, cy, w, h]: [number, number, number, number], grow: number): CrosshairRect => {
+        const dw = dev(w + grow);
+        const dh = dev(h + grow);
+        return { x: edge(cx, dw), y: edge(cy, dh), w: dw, h: dh };
+    };
+
+    return {
+        pips: pipSpecs.map((p) => box(p, 0)),
+        // Outline panels are sized to the outer box and their border eats
+        // inward, leaving gap/2 clearance per side of the pip.
+        pipOutlines: pipSpecs.map((p) => box(p, pipOutlineGap + 2 * pipOutlineBorder)),
+        pipOutlineBorder: dev(pipOutlineBorder),
+        dotSize: dev(dotSize),
+        dotOutlineSize: dev(dotSize + dotOutlineGap + 2 * dotOutlineBorder),
+        dotOutlineBorder: dev(dotOutlineBorder),
+    };
+}
+
+/** How far from the centre the crosshair can reach, in 1080p layout px (with
+ *  a small margin), for sizing preview canvases. */
+export function crosshairReach(raw: Partial<CrosshairSettings>): number {
+    const s = normalizeCrosshairSettings(raw);
+    const D = Math.abs(PIP_BASE_OFFSET + Math.trunc(s.pipGap));
+    const pipReach = D + s.pipHeight / 2 + s.pipOutlineGap / 2 + s.pipOutlineBorder;
+    const dotReach = (s.dotSize + s.dotOutlineGap) / 2 + s.dotOutlineBorder;
+    return Math.max(pipReach, dotReach) + 4;
+}
 
 /**
  * Extract crosshair convars from machine_convars.vcfg content (the KV file

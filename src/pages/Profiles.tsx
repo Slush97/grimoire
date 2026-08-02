@@ -977,7 +977,7 @@ export default function Profiles() {
                                 </Button>
                               </div>
                               <div className="flex items-center gap-4">
-                                <CrosshairPreview size={56} scale={1.3} settings={profile.crosshair} />
+                                <CrosshairPreview size={56} scale={1440 / 1080} settings={profile.crosshair} />
                                 <div className="text-xs text-text-secondary space-y-1">
                                   <div>
                                     <Tx

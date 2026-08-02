@@ -12,8 +12,11 @@ import { Button, SegmentedControl } from '../components/common/ui';
 import { PageHeader } from '../components/common/PageComponents';
 import Tx from '../components/translation/Tx';
 
-// The in-game crosshair is authored in 1080p-reference px and scaled by
-// screen height, so the preview multiplies by (resolution / 1080).
+// The in-game crosshair is authored in 1080p-reference px, scaled by screen
+// height and snapped to whole device pixels. The picker chooses that snap
+// grid; the stage keeps the scene (and the crosshair's physical size) fixed,
+// so switching resolution shows only the real rasterization differences,
+// e.g. a width-1 pip rounding thinner at 1440p than at 1080p or 4K.
 const RESOLUTIONS = [
     { label: '1080p', height: 1080 },
     { label: '1440p', height: 1440 },
@@ -217,7 +220,7 @@ export default function Crosshair() {
                         the window instead of collapsing. From xl it goes back to
                         taking whatever the row leaves over. */}
                     <div className="relative h-[clamp(220px,42vh,560px)] overflow-hidden rounded-sm border border-white/5 xl:h-auto xl:min-h-[280px] xl:flex-1">
-                        <CrosshairStage scale={(resolution / 1080) * zoom} background={background} />
+                        <CrosshairStage scale={resolution / 1080} zoom={zoom} background={background} />
 
                         {/* Both overlay bars share one wrapping row so they move
                             onto separate lines on a narrow window instead of

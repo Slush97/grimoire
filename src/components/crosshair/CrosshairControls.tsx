@@ -113,11 +113,13 @@ export default function CrosshairControls() {
           <div className="space-y-5">
             <Slider editable label={<Tx k="crosshair.controls.gap" fallback="Gap" />} value={pipGap} min={-10} max={50} onChange={setPipGap} />
             <Slider editable label={<Tx k="crosshair.controls.height" fallback="Height" />} value={pipHeight} min={0} max={50} onChange={setPipHeight} />
-            <Slider editable label={<Tx k="crosshair.controls.width" fallback="Width" />} value={pipWidth} min={0} max={10} step={0.5} onChange={setPipWidth} />
+            {/* Whole steps only: the HUD truncates the size convars toward
+                zero, so 2.5 and 2 are the same crosshair in game. */}
+            <Slider editable label={<Tx k="crosshair.controls.width" fallback="Width" />} value={pipWidth} min={0} max={10} onChange={setPipWidth} />
             <Slider editable label={<Tx k="crosshair.controls.opacity" fallback="Opacity" />} value={pipOpacity} min={0} max={1} step={0.05} onChange={setPipOpacity} />
             <SubGroup title={<Tx k="crosshair.sections.outline" fallback="Outline" />}>
               <Slider editable label={<Tx k="crosshair.controls.outlineWidth" fallback="Outline Width" />} value={pipOutlineBorder} min={0} max={5} onChange={setPipOutlineBorder} />
-              <Slider editable label={<Tx k="crosshair.controls.outlineGap" fallback="Outline Gap" />} value={pipOutlineGap} min={0} max={10} step={0.5} onChange={setPipOutlineGap} />
+              <Slider editable label={<Tx k="crosshair.controls.outlineGap" fallback="Outline Gap" />} value={pipOutlineGap} min={0} max={10} onChange={setPipOutlineGap} />
               <Slider editable label={<Tx k="crosshair.controls.outlineOpacity" fallback="Outline Opacity" />} value={pipOutlineOpacity} min={0} max={1} step={0.05} onChange={setPipOutlineOpacity} />
             </SubGroup>
           </div>
@@ -125,7 +127,7 @@ export default function CrosshairControls() {
 
         {tab === 'dot' && (
           <div className="space-y-5">
-            <Slider editable label={<Tx k="crosshair.controls.size" fallback="Size" />} value={dotSize} min={0} max={20} step={0.5} onChange={setDotSize} />
+            <Slider editable label={<Tx k="crosshair.controls.size" fallback="Size" />} value={dotSize} min={0} max={20} onChange={setDotSize} />
             <Slider editable label={<Tx k="crosshair.controls.opacity" fallback="Opacity" />} value={dotOpacity} min={0} max={1} step={0.05} onChange={setDotOpacity} />
             {dotOpacity === 0 && (
               <p className="rounded-sm border border-white/5 bg-black/20 px-3 py-2 text-xs text-text-secondary">
@@ -134,7 +136,7 @@ export default function CrosshairControls() {
             )}
             <SubGroup title={<Tx k="crosshair.sections.outline" fallback="Outline" />}>
               <Slider editable label={<Tx k="crosshair.controls.outlineWidth" fallback="Outline Width" />} value={dotOutlineBorder} min={0} max={5} onChange={setDotOutlineBorder} />
-              <Slider editable label={<Tx k="crosshair.controls.outlineGap" fallback="Outline Gap" />} value={dotOutlineGap} min={0} max={10} step={0.5} onChange={setDotOutlineGap} />
+              <Slider editable label={<Tx k="crosshair.controls.outlineGap" fallback="Outline Gap" />} value={dotOutlineGap} min={0} max={10} onChange={setDotOutlineGap} />
               <Slider editable label={<Tx k="crosshair.controls.outlineOpacity" fallback="Outline Opacity" />} value={dotOutlineOpacity} min={0} max={1} step={0.05} onChange={setDotOutlineOpacity} />
             </SubGroup>
           </div>
