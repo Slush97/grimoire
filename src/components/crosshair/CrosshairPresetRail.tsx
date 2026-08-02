@@ -144,11 +144,15 @@ export default function CrosshairPresetRail({
                   {preset.name}
                 </span>
 
-                <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 bg-black/65 opacity-0 transition-opacity group-hover:pointer-events-auto group-hover:opacity-100 group-focus-within:pointer-events-auto group-focus-within:opacity-100">
+                {/* The overlay itself never takes the pointer: only the two
+                    buttons do. If the whole layer went pointer-events-auto on
+                    hover it would sit over the load button and swallow every
+                    click on the tile (and its cursor). */}
+                <div className="pointer-events-none absolute inset-0 flex items-center justify-center gap-1.5 bg-black/65 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
                   <button
                     type="button"
                     onClick={() => onApply(preset.id)}
-                    className="cursor-pointer rounded-sm border border-accent/40 bg-accent/10 p-1.5 text-text-primary transition-colors hover:border-accent/60 hover:bg-accent/20"
+                    className="pointer-events-auto cursor-pointer rounded-sm border border-accent/40 bg-accent/10 p-1.5 text-text-primary transition-colors hover:border-accent/60 hover:bg-accent/20"
                     title={t('crosshair.actions.applyToGame')}
                     aria-label={t('crosshair.actions.applyToGame')}
                   >
@@ -157,7 +161,7 @@ export default function CrosshairPresetRail({
                   <button
                     type="button"
                     onClick={() => onDelete(preset.id)}
-                    className="cursor-pointer rounded-sm bg-red-500/20 p-1.5 text-state-danger transition-colors hover:bg-red-500/40"
+                    className="pointer-events-auto cursor-pointer rounded-sm bg-red-500/20 p-1.5 text-state-danger transition-colors hover:bg-red-500/40"
                     title={t('common.actions.delete')}
                     aria-label={t('common.actions.delete')}
                   >
