@@ -35,6 +35,25 @@ sudo apt update && sudo apt install grimoire
 
 Afterwards `sudo apt upgrade` keeps it current. More detail: [docs/apt-repo.md](docs/apt-repo.md).
 
+### Nix / NixOS (flake)
+
+Built from source via the repo's flake:
+
+```nix
+# flake.nix
+inputs.grimoire.url = "github:Slush97/grimoire";
+
+# use the package directly
+inputs.grimoire.packages.${pkgs.system}.default
+
+# or overlay it into pkgs
+nixpkgs.overlays = [ inputs.grimoire.overlays.default ];
+environment.systemPackages = [ pkgs.grimoire ];
+```
+
+Exposes `packages.<system>.{grimoire,vpkmerge}` and `overlays.default`.
+Updates come through the flake, not the in-app updater.
+
 Requires Deadlock installed via Steam.
 
 ## Features

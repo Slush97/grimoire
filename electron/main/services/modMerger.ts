@@ -103,9 +103,6 @@ function firstExistingPath(paths: string[]): string | null {
 }
 
 function devVpkmergeBinaryPath(): string | null {
-    const explicit = process.env['VPKMERGE_BINARY'];
-    if (explicit && existsSync(explicit)) return explicit;
-
     const repoRoot = app.getAppPath();
     const siblingRoot = resolve(repoRoot, '..', 'vpkmerge', 'target');
     const exeName = process.platform === 'win32' ? 'vpkmerge.exe' : 'vpkmerge';
@@ -121,6 +118,12 @@ function devVpkmergeBinaryPath(): string | null {
  * extraResources places it at process.resourcesPath/vpkmerge/.
  */
 export function vpkmergeBinaryPath(): string {
+    // An explicit override wins in dev AND packaged builds. Distro packages
+    // (e.g. nix) that run the app outside electron-builder's layout cannot
+    // rely on process.resourcesPath and point this at their own binary.
+    const explicit = process.env['VPKMERGE_BINARY'];
+    if (explicit && existsSync(explicit)) return explicit;
+
     if (!app.isPackaged) {
         const local = devVpkmergeBinaryPath();
         if (local) return local;
