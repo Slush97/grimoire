@@ -79,6 +79,16 @@ export interface ModMetadata {
      *  hero ability/VO sounds, `null` when classified and it has none, and
      *  `undefined` when not yet classified (so enrichMod skips the re-parse). */
     abilitySounds?: import('../../../src/types/mod').AbilitySoundClassification | null;
+    /** Panorama codename when this VPK is a companion ICON mod (nothing but one
+     *  hero's card art; see classifyHeroIconOnly in vpk.ts). Tri-state like
+     *  globalType: a codename when it is one, `null` when classified and it is
+     *  not, `undefined` when not yet classified. Drives which mods the Locker
+     *  offers as the icon half of a skin link. */
+    heroIconOnly?: string | null;
+    /** Set on the synthetic `locker:cardlinks` key: every skin -> icon binding.
+     *  Not a real VPK's metadata; the key is synthetic so the bindings can never
+     *  collide with a user mod that later takes a freed pakNN slot. */
+    lockerCardLinks?: import('../../../src/types/mod').LockerCardLinksInfo;
     /** Set when this VPK was built from a user GLB via the soul-container
      *  import. The orientation/glow transform + tracking status; presence marks
      *  the slot for idempotent re-import (replace the previous build). */

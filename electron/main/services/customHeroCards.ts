@@ -31,6 +31,7 @@ import {
     rebuildLockerCosmetics,
 } from './heroCards';
 import { ensureGrimoireConfigured, migrateManagedVpksToGrimoire } from './lockerVpk';
+import { dropLinksForHeroCodename } from './lockerCardLinkStore';
 import { invalidateVpkParseCache } from './vpk';
 import { fingerprintFile } from './fileMatch';
 import type { ApplyHeroCardResult, LockerCardSelection } from '../../../src/types/mod';
@@ -228,8 +229,14 @@ export async function applyCustomHeroCard(
             modName: 'Custom upload',
             sha256AtApplyTime: fp.sha256,
         },
+        origin: 'manual',
         addedAt: new Date().toISOString(),
     };
+
+    // One owner per hero: uploading custom art takes this hero over from any
+    // skin -> icon link, which would otherwise reconcile back over it on the
+    // next skin toggle.
+    dropLinksForHeroCodename(primaryCodename);
 
     const current = await currentCardSelections(deadlockPath);
     const next = [...current.filter((c) => c.heroCodename !== primaryCodename), selection];

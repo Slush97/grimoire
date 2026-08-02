@@ -148,6 +148,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('revert-hero-card', heroName),
     getActiveHeroCard: (heroName: string) =>
         ipcRenderer.invoke('get-active-hero-card', heroName),
+    getCardLinks: () => ipcRenderer.invoke('get-card-links'),
+    setCardLink: (args: {
+        skinKey: string;
+        skinName?: string;
+        heroName: string;
+        sourceKey: string;
+    }) => ipcRenderer.invoke('set-card-link', args),
+    removeCardLink: (skinKey: string) => ipcRenderer.invoke('remove-card-link', skinKey),
     getCustomCardSlots: (heroName: string) =>
         ipcRenderer.invoke('get-custom-card-slots', heroName),
     applyCustomHeroCard: (heroName: string, uploads: { variant: string; dataUrl: string }[]) =>

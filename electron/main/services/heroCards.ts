@@ -36,6 +36,7 @@ import {
     migrateManagedVpksToGrimoire,
 } from './lockerVpk';
 import { getModMetadata, setModMetadata, removeModMetadata } from './metadata';
+import { dropAllCardLinks, dropLinksForHeroCodename } from './lockerCardLinkStore';
 import { resolveVpkIdentity } from './vpkIdentity';
 import { codenamesForHero } from './heroPortraits';
 import type {
@@ -163,7 +164,10 @@ function heroCardPrefixes(heroName: string): string[] {
 }
 
 /** Paths under any of this hero's card prefixes that the VPK actually ships.
- *  Matched case-insensitively (Deadlock VPK paths are lowercase by convention). */
+ *  Matched case-insensitively (Deadlock VPK paths are lowercase by convention).
+ *  Exported as heroCardPathsForHero for the skin -> icon link service, which
+ *  validates a candidate icon mod the same way apply does. */
+export { heroCardPaths as heroCardPathsForHero };
 function heroCardPaths(vpkPath: string, heroName: string): string[] {
     const tree = parseVpkDirectoryCached(vpkPath);
     if (!tree) return [];
@@ -173,7 +177,9 @@ function heroCardPaths(vpkPath: string, heroName: string): string[] {
 
 /** Distinct variant tokens (card, vertical, mm, ...) derived from the matched
  *  card filenames. Informational for the manifest; the split takes the whole
- *  per-hero prefix regardless. */
+ *  per-hero prefix regardless. Exported as variantsForHeroPaths so a link
+ *  records the same variant list an apply would. */
+export { variantsFor as variantsForHeroPaths };
 function variantsFor(cardPaths: string[], heroName: string): string[] {
     const leads = codenamesForHero(heroName).map((c) => `${c}_`);
     const variants = new Set<string>();
@@ -343,8 +349,14 @@ export async function applyHeroCard(
             gameBananaId: srcMeta?.gameBananaId,
             sha256AtApplyTime: id.sha256,
         },
+        origin: 'manual',
         addedAt: new Date().toISOString(),
     };
+
+    // One owner per hero: a hand-picked card takes this hero over from any skin
+    // -> icon link that used to drive it. Without this the next skin toggle
+    // would reconcile the link straight back over the user's pick.
+    dropLinksForHeroCodename(primaryCodename);
 
     const current = await currentCardSelections(deadlockPath);
     const next = [...current.filter((c) => c.heroCodename !== primaryCodename), selection];
@@ -373,6 +385,11 @@ export async function revertHeroCard(
     ensureGrimoireConfigured(deadlockPath);
     await migrateManagedVpksToGrimoire(deadlockPath);
 
+    // "Reset to default" must also break the link, or a link-applied card would
+    // come straight back on the next skin toggle and the revert would look like
+    // it silently failed.
+    dropLinksForHeroCodename(primaryCodename);
+
     const current = await currentCardSelections(deadlockPath);
     if (current.length === 0) return { activeSourceFileName: null, missingSourceFileNames: [] };
 
@@ -399,8 +416,11 @@ export async function listAppliedCards(deadlockPath: string): Promise<LockerOver
     }));
 }
 
-/** Clear every applied card (rebuild to empty, which deletes the cards VPK). */
+/** Clear every applied card (rebuild to empty, which deletes the cards VPK).
+ *  Drops the skin -> icon links too: leaving them would silently re-apply their
+ *  cards on the next skin toggle, so "clear" wouldn't stay cleared. */
 export async function clearAllHeroCards(deadlockPath: string): Promise<void> {
+    dropAllCardLinks();
     await rebuildLockerCosmetics(deadlockPath, []);
 }
 

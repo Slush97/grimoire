@@ -20,6 +20,9 @@ import type {
     ImprintDetails,
     PeekImprintResult,
     ApplyHeroCardResult,
+    CardLinkReconcileResult,
+    LockerCardLink,
+    SetCardLinkArgs,
     HeroAbilitySlot,
     AbilitySlot,
     AbilitySoundParams,
@@ -634,6 +637,12 @@ export interface ElectronAPI {
     getActiveHeroCard: (
         heroName: string
     ) => Promise<{ sourceFileName: string; variants: string[] } | null>;
+    /** Every skin -> icon binding (see LockerCardLink). */
+    getCardLinks: () => Promise<LockerCardLink[]>;
+    /** Bind a skin to an icon mod, applying it right away when the skin is on. */
+    setCardLink: (args: SetCardLinkArgs) => Promise<CardLinkReconcileResult>;
+    /** Unbind a skin, reverting whatever its link had applied. */
+    removeCardLink: (skinKey: string) => Promise<CardLinkReconcileResult>;
     getCustomCardSlots: (heroName: string) => Promise<CustomCardSlot[]>;
     applyCustomHeroCard: (
         heroName: string,

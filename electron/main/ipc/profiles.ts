@@ -13,6 +13,7 @@ import {
     type ProfileCrosshairSettings,
     type ApplyProfileResult,
 } from '../services/profiles';
+import { reconcileLinkedCardsQuietly } from '../services/lockerCardLinks';
 import {
     buildPortableProfile,
     parsePortableProfile,
@@ -88,6 +89,11 @@ ipcMain.handle('apply-profile', async (_, profileId: string): Promise<ApplyProfi
     }
 
     const result = await applyProfile(deadlockPath, profileId);
+
+    // A profile switch rewrites enable/disable state across the whole library,
+    // so linked icons have to follow it. Never throws (see
+    // reconcileLinkedCardsQuietly): a link problem must not fail the apply.
+    await reconcileLinkedCardsQuietly(deadlockPath);
 
     // Save as active profile
     const settings = loadSettings();

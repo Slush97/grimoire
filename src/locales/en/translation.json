@@ -1706,6 +1706,13 @@
       "exportDialogTitle": "Export {{hero}} custom card",
       "exportedToast": "Exported to {{path}}"
     },
+    "iconLink": {
+      "matchIcons": "Match icons",
+      "linkedTo": "Icons: {{name}}",
+      "title": "Link card icons",
+      "hint": "Pick a companion icon mod for this skin. While the skin is enabled, the hero's card art is applied from it automatically, no load order needed.",
+      "unlink": "Remove link"
+    },
     "trippy": {
       "loading": "Loading...",
       "description": "Paint {{hero}}'s body and gun textures with a flowing procedural pattern: the paint scrolls in game. This composes with anything applied on the Abilities surface.",

@@ -29,6 +29,10 @@ import { readStash } from './launch';
 /** Synthetic metadata keys for the managed selection sets (decoupled from the
  *  VPK filename so they never collide with a user mod). */
 export const LOCKER_CARDS_KEY = 'locker:cards';
+/** Synthetic key for the skin -> icon bindings. Not a managed VPK of its own:
+ *  links are an INPUT that decides part of the cards VPK's contents, so they
+ *  live beside the card selection set rather than owning a pak slot. */
+export const LOCKER_CARD_LINKS_KEY = 'locker:cardlinks';
 export const LOCKER_SOUNDS_KEY = 'locker:sounds';
 export const LOCKER_COLORS_KEY = 'locker:colors';
 export const LOCKER_TRIPPY_SKINS_KEY = 'locker:trippyskins';

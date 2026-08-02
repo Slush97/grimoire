@@ -3,6 +3,13 @@ import { getActiveDeadlockPath } from '../services/settings';
 import { getHeroPortraits } from '../services/heroPortraits';
 import { applyHeroCard, revertHeroCard, getActiveHeroCard } from '../services/heroCards';
 import {
+    getCardLinks,
+    setCardLink,
+    removeCardLink,
+    type ReconcileResult,
+    type SetCardLinkArgs,
+} from '../services/lockerCardLinks';
+import {
     getCustomCardSlots,
     applyCustomHeroCard,
     exportCustomHeroCard,
@@ -28,7 +35,7 @@ import {
     type HeroEffectInfo,
 } from '../services/heroPoseModels';
 import type { HeroPortrait } from '../../../src/types/portrait';
-import type { ApplyHeroCardResult } from '../../../src/types/mod';
+import type { ApplyHeroCardResult, LockerCardLink } from '../../../src/types/mod';
 
 /** Active Deadlock install path (dev override wins, same as ipc/mods.ts). */
 ipcMain.handle(
@@ -64,6 +71,29 @@ ipcMain.handle(
         const deadlockPath = getActiveDeadlockPath();
         if (!deadlockPath) return null;
         return getActiveHeroCard(deadlockPath, heroName);
+    }
+);
+
+// Skin -> icon links. The card art itself still flows through the apply pipeline
+// above; these three only edit the bindings that decide which cards a skin pulls
+// in, then reconcile so the change is live immediately.
+ipcMain.handle('get-card-links', async (): Promise<LockerCardLink[]> => getCardLinks());
+
+ipcMain.handle(
+    'set-card-link',
+    async (_, args: SetCardLinkArgs): Promise<ReconcileResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return setCardLink(deadlockPath, args);
+    }
+);
+
+ipcMain.handle(
+    'remove-card-link',
+    async (_, skinKey: string): Promise<ReconcileResult> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) throw new Error('No Deadlock path configured');
+        return removeCardLink(deadlockPath, skinKey);
     }
 );
 

@@ -66,7 +66,84 @@ export interface LockerCardSelection {
     gameBananaId?: number;
     sha256AtApplyTime: string;
   };
+  /**
+   * Who owns this hero's card. `manual` (the default, and what an absent value
+   * means for selections written before links existed) is a direct pick in the
+   * Cards tab. `link` means it was applied automatically because a linked skin
+   * is enabled (see LockerCardLink), and reconcileLinkedCards may replace or
+   * drop it as skins toggle. Nothing else touches a `manual` entry.
+   */
+  origin?: 'manual' | 'link';
+  /** Set only when `origin` is `link`: the skin key that pulled this card in,
+   *  so the picker can label it and reconcile can tell whose it is. */
+  linkedSkinKey?: string;
   addedAt: string;
+}
+
+/**
+ * A skin -> icon binding: "whenever this skin is enabled, also apply this hero's
+ * card art from that mod."
+ *
+ * This exists because the icon ecosystem is built on companion mods: a global
+ * icon pack (DEADLOCK TOASTED and friends) plus a per-skin addon that restyles
+ * ONE hero's card to match a specific skin. Loading those correctly by hand is a
+ * three-way pakNN fight (the addon must beat both the skin bundle and the icon
+ * pack), which is what the addons' own install instructions ask users to do.
+ * A link turns that into one click: the art is split into the Locker-managed
+ * cosmetics VPK in citadel/grimoire, which wins by SearchPaths folder
+ * precedence rather than load order.
+ *
+ * INVARIANT: for any hero, either a link owns the card or a manual/custom pick
+ * does, never both. Every explicit action (link, manual apply, revert) clears
+ * the other side, so a hero's card always has exactly one owner.
+ */
+export interface LockerCardLink {
+  /** Stable Locker skin key this icon is bound to (see lockerLinkKey):
+   *  `gamebanana:<id>`, else `sha256:<sha>`, else `mod:<id>`. Deliberately NOT
+   *  keyed on mod id alone: `mod.id` is md5(metaKey) and every enable / disable
+   *  / reorder renames the VPK, so an id-keyed link would break on exactly the
+   *  toggles it exists to survive. */
+  skinKey: string;
+  /** Display name of the linked skin, for UI labels. */
+  skinName?: string;
+  heroName: string;
+  heroCodename: string;
+  /** Folder-relative metaKey of the icon mod the card art is split from. */
+  sourceKey: string;
+  sourceModName?: string;
+  sourceGameBananaId?: number;
+  /** Content identity of the icon mod at link time, so a renamed or
+   *  overflow-moved source still resolves (same recovery the card rebuild uses). */
+  sourceSha256?: string;
+  /** Variant tokens captured at link time (informational; the split takes the
+   *  whole per-hero prefix regardless). */
+  variants: string[];
+  linkedAt: string;
+}
+
+/** The full set of skin -> icon bindings, stored under the synthetic metadata
+ *  key `locker:cardlinks` (decoupled from any VPK filename). */
+export interface LockerCardLinksInfo {
+  links: LockerCardLink[];
+  updatedAt: string;
+}
+
+/** Arguments for creating (or replacing) one skin -> icon binding. */
+export interface SetCardLinkArgs {
+  /** Stable Locker skin key (see lockerLinkKey in lib/lockerCardLinks). */
+  skinKey: string;
+  /** Display name of the skin, stored for UI labels. */
+  skinName?: string;
+  heroName: string;
+  /** Folder-relative metaKey of the icon mod to bind. */
+  sourceKey: string;
+}
+
+/** Outcome of a link edit: whether the applied cards actually changed, and any
+ *  source whose VPK had vanished by rebuild time. */
+export interface CardLinkReconcileResult {
+  rebuilt: boolean;
+  missing: string[];
 }
 
 /**
@@ -645,6 +722,12 @@ export interface Mod {
    *  not yet classified or the mod has no recognized hero ability sounds.
    *  Drives the per-ability sound picker. */
   abilitySounds?: AbilitySoundClassification;
+  /** Panorama codename when this VPK is a companion ICON mod: nothing but one
+   *  hero's `panorama/images/heroes/<codename>_` art (no models, no particles,
+   *  no other hero). That is the shape of the per-skin icon addons published
+   *  alongside the big icon packs, and it's what makes a mod offerable as the
+   *  icon half of a skin link. Undefined when the mod is anything else. */
+  heroIconOnly?: string;
   /** Set when this VPK was built from a user GLB via the soul-container import.
    *  Carries the orientation/glow transform so the build is reproducible and the
    *  UI can label it as a local soul-container import. */

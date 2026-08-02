@@ -1,4 +1,4 @@
-import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, AddMergeSourcesResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult, ApplyHeroCardResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
+import type { Mod, AppSettings, GlobalModType, UnknownModFilterGuess, UnknownModDetectionProgress, ApplyUnknownModMatchArgs, ApplyUnknownCustomModArgs, AssociateUnknownModArgs, UnknownModFileList, EditLocalModArgs, MergeModsArgs, UnmergeModResult, ExtractMergeSourceResult, AddMergeSourcesResult, ImprintAllInstalledResult, ImprintInstalledProgress, ImprintPreflightResult, ImprintDetails, PeekImprintResult, ApplyHeroCardResult, LockerCardLink, SetCardLinkArgs, CardLinkReconcileResult, HeroAbilitySlot, AbilitySlot, AbilitySoundParams, ActiveHeroSound, ApplyHeroSoundResult, ActiveHeroColor, ApplyHeroColorResult, ApplyHeroPrismResult, ActiveTrippySkin, ApplyTrippySkinResult, ApplyTrippyVfxResult, TrippySpriteOptions, TrippySpriteResult, TrippyVfxChoice, LockerOverview, LockerCardThumbnail, LockerClearScope, AppearanceSurface } from '../types/mod';
 import type { DmmMigrationRequest, DmmMigrationReport } from './dmmMigration';
 import type {
   HeroPortrait,
@@ -191,6 +191,22 @@ export async function getActiveHeroCard(
   heroName: string
 ): Promise<{ sourceFileName: string; variants: string[] } | null> {
   return window.electronAPI.getActiveHeroCard(heroName);
+}
+
+/** Every skin -> icon binding (see LockerCardLink). */
+export async function getCardLinks(): Promise<LockerCardLink[]> {
+  return window.electronAPI.getCardLinks();
+}
+
+/** Bind a skin to a companion icon mod. Applies immediately when the skin is
+ *  already enabled; otherwise it applies the moment the skin is turned on. */
+export async function setCardLink(args: SetCardLinkArgs): Promise<CardLinkReconcileResult> {
+  return window.electronAPI.setCardLink(args);
+}
+
+/** Unbind a skin, reverting whatever card its link had applied. */
+export async function removeCardLink(skinKey: string): Promise<CardLinkReconcileResult> {
+  return window.electronAPI.removeCardLink(skinKey);
 }
 
 /** Uploadable card-variant slots for a hero, derived from the base game art. */

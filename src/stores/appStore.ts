@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType } from '../types/mod';
+import type { Mod, AppSettings, AppearanceSurface, EditLocalModArgs, GlobalModType, LockerCardLink } from '../types/mod';
 import type { ImportCustomModArgs, ImportCustomModResult } from '../types/electron';
 import { getActiveDeadlockPath } from '../lib/appSettings';
 import { setDateFormat } from '../lib/dateFormat';
@@ -291,6 +291,12 @@ interface AppState {
   // settings.appearanceBackgrounds; this only holds the custom image bytes.
   appearanceImages: Partial<Record<AppearanceSurface, string>>;
 
+  // Skin -> icon links: "when this skin is on, apply that hero's icons too."
+  // The bindings themselves live in the main process (which reconciles them on
+  // every enable/disable/profile/shuffle); this is the renderer's read model for
+  // showing which skins are linked. Loaded lazily when the Locker opens.
+  cardLinks: LockerCardLink[];
+
   // Actions
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
@@ -363,6 +369,19 @@ interface AppState {
   /** Hide (or show) the hero name label over this skin's grid thumbnail. */
   setLockerModThumbnailHideName: (skinKey: string, hide: boolean) => Promise<void>;
 
+  /** Load the skin -> icon bindings from the main process. */
+  loadCardLinks: () => Promise<void>;
+  /** Bind a skin to a companion icon mod. The main process applies it right
+   *  away when the skin is enabled, so callers refresh mods afterwards. */
+  linkSkinIcons: (args: {
+    skinKey: string;
+    skinName?: string;
+    heroName: string;
+    sourceKey: string;
+  }) => Promise<void>;
+  /** Unbind a skin, reverting whatever card its link had applied. */
+  unlinkSkinIcons: (skinKey: string) => Promise<void>;
+
   /** Load all custom launcher / sidebar background images from the main process. */
   loadAppearanceImages: () => Promise<void>;
   /** Store a custom image (baked data URL) for a surface and refresh the map. */
@@ -410,6 +429,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   lockerModThumbnails: {},
   lockerThumbHideHeroName: {},
   appearanceImages: {},
+  cardLinks: [],
 
   // Load settings from backend
   loadSettings: async () => {
@@ -555,6 +575,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       else delete nextFlags[skinKey];
       return { lockerThumbHideHeroName: nextFlags };
     });
+  },
+
+  // Skin -> icon links. The main process owns the bindings and does the applying
+  // (it has to: profile switches and launch shuffle change skins without the
+  // renderer involved). These actions only edit them and re-read the result.
+  loadCardLinks: async () => {
+    try {
+      set({ cardLinks: await api.getCardLinks() });
+    } catch {
+      // Non-fatal: skins simply show as unlinked.
+    }
+  },
+  linkSkinIcons: async (args) => {
+    await api.setCardLink(args);
+    set({ cardLinks: await api.getCardLinks() });
+  },
+  unlinkSkinIcons: async (skinKey: string) => {
+    await api.removeCardLink(skinKey);
+    set({ cardLinks: await api.getCardLinks() });
   },
 
   // Custom launcher / sidebar background images (issue: unify launcher backgrounds).

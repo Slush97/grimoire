@@ -2,6 +2,7 @@ import type { CSSProperties } from 'react';
 import type { GameBananaCategoryNode } from '../types/gamebanana';
 import type { AppearanceBg, AppearanceSurface, AppSettings, GlobalModType, Mod } from '../types/mod';
 import { getAssetPath } from './assetPath';
+import { loadOrderFromMetaKey } from './lockerCardLinks';
 import {
   HERO_NAMES as SHARED_HERO_NAMES,
   HERO_ALIASES as SHARED_HERO_ALIASES,
@@ -392,9 +393,7 @@ export function getLockerSkinKey(mod: Mod): string {
  * math stays consistent across both surfaces.
  */
 export function modLoadOrder(mod: Mod): number {
-  const match = mod.metaKey.match(/^addons(\d+)\//);
-  const folderIndex = match ? parseInt(match[1], 10) : 0;
-  return folderIndex * 100 + mod.priority;
+  return loadOrderFromMetaKey(mod.metaKey, mod.priority);
 }
 
 /**

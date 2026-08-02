@@ -793,6 +793,55 @@ export function classifyGlobalModFromVpk(vpkPath: string): GlobalModType | null 
 }
 
 /**
+ * Entries a companion icon addon is allowed to carry besides the hero art
+ * itself. Verified against real published addons: they ship a stray `README.txt`
+ * and the panorama compiler sidecar next to the `.vtex_c` set, and Grimoire's own
+ * imprinting adds `addoninfo.txt` / `modinfo.json`. None of these change what the
+ * game renders, so tolerating them is what keeps real-world addons detectable
+ * instead of "almost matching".
+ */
+const ICON_ADDON_INCIDENTAL =
+    /^(?:readme[^/]*|addoninfo\.txt|modinfo\.json|panorama\/image_compiler\.vdata_c)$/i;
+
+/**
+ * The panorama codename when this VPK is a companion ICON mod: nothing but ONE
+ * hero's `panorama/images/heroes/<codename>_` art. Null for anything else.
+ *
+ * This is the shape of the per-skin icon addons published alongside the big icon
+ * packs (a "<Skin> TOASTED Addon" ships exactly
+ * `panorama/images/heroes/familiar_{card,card_critical,card_gloat,mm,sm,vertical}_psd.vtex_c`),
+ * and it's the signal that makes a mod offerable as the icon half of a skin link.
+ *
+ * Deliberately stricter than "classifyGlobalModType returned null with one hero":
+ * a skin bundle that happens to ship its hero's card also lands there, and
+ * offering a whole skin as somebody's icon source would be nonsense. Requiring
+ * that EVERY substantive entry live under this one hero's card prefix is what
+ * separates "an icon addon" from "a skin that includes icons".
+ */
+export function classifyHeroIconOnly(paths: string[]): string | null {
+    if (paths.length === 0) return null;
+    const codenames = heroImageCodenames(paths);
+    if (codenames.size !== 1) return null;
+    const [codename] = [...codenames];
+    for (const p of paths) {
+        // Any nesting under heroes/ is fine (some packs use heroes/backgrounds/):
+        // heroImageCodenames already proved only ONE hero is referenced across
+        // the whole set, so the folder shape doesn't need re-checking here.
+        if (HERO_IMAGE_PREFIX.test(p)) continue;
+        if (ICON_ADDON_INCIDENTAL.test(p)) continue;
+        return null; // ships something else: a skin, a HUD layout, another hero
+    }
+    return codename;
+}
+
+/** Convenience wrapper over the cached VPK parse; see classifyHeroIconOnly. */
+export function classifyHeroIconOnlyFromVpk(vpkPath: string): string | null {
+    const paths = parseVpkDirectoryCached(vpkPath);
+    if (!paths || paths.length === 0) return null;
+    return classifyHeroIconOnly(paths);
+}
+
+/**
  * Ability-VFX layer roots. A hero's recolorable ability effects live in two
  * particle dirs, keyed by the model/particle codename (Paige = `bookworm`),
  * which is the namespace used by `models/`+`particles/abilities/`, NOT the

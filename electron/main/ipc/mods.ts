@@ -19,10 +19,11 @@ import {
 import { metaKeyFor } from '../services/deadlock';
 import { getModMetadata, setModMetadata, setModMetadataWithHash, removeModMetadata, pruneOrphanMetadata } from '../services/metadata';
 import { inferHeroFromTitle } from '@grimoire/social-types/heroes';
-import { inferHeroFromVpk, classifyGlobalModFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
+import { inferHeroFromVpk, classifyGlobalModFromVpk, classifyHeroIconOnlyFromVpk, GLOBAL_CLASSIFIER_VERSION, parseVpkDirectory, parseVpkDirectoriesAsync } from '../services/vpk';
 import { classifyAbilitySoundsFromVpk } from '../services/abilitySounds';
 import { migrateIgnoredConflictKeysForMods } from '../services/conflicts';
 import { isLockerManaged } from '../services/lockerVpk';
+import { reconcileLinkedCardsQuietly } from '../services/lockerCardLinks';
 import {
     detectUnknownModCacheMatches,
     detectUnknownModFilters,
@@ -236,6 +237,22 @@ function enrichMod(mod: Mod): WireMod {
             setModMetadata(mod.metaKey, { abilitySounds: classified });
             abilitySounds = classified;
         }
+        // Companion-icon footprint (one hero's card art and nothing else). Same
+        // lazy + persist + null-sentinel pattern as globalType/abilitySounds, and
+        // it shares the same cached VPK parse, so all three classifications cost
+        // one directory read between them. Drives which mods the Locker offers as
+        // the icon half of a skin link.
+        let heroIconOnly = metadata.heroIconOnly;
+        if (heroIconOnly === undefined) {
+            let classified: string | null = null;
+            try {
+                classified = classifyHeroIconOnlyFromVpk(mod.path);
+            } catch (err) {
+                console.warn(`[enrichMod] VPK icon-only classification failed for ${mod.fileName}:`, err);
+            }
+            setModMetadata(mod.metaKey, { heroIconOnly: classified });
+            heroIconOnly = classified;
+        }
         return {
             ...mod,
             // Use the stored mod name from GameBanana if available
@@ -262,6 +279,7 @@ function enrichMod(mod: Mod): WireMod {
             lockerCosmetics: metadata.lockerCosmetics,
             lockerSounds: metadata.lockerSounds,
             abilitySounds: abilitySounds ?? undefined,
+            heroIconOnly: heroIconOnly ?? undefined,
             soulImport: metadata.soulImport,
             urnImport: metadata.urnImport,
             ignoreUpdates: metadata.ignoreUpdates,
@@ -290,6 +308,7 @@ function needsVpkParseForEnrich(mod: Mod): boolean {
     if (metadata?.globalType === undefined) return true;
     if (metadata.globalType === null && globalTypeStamped < GLOBAL_CLASSIFIER_VERSION) return true;
     if (metadata.abilitySounds === undefined) return true;
+    if (metadata.heroIconOnly === undefined) return true;
     if (!metadata.lockerHero && metadata.sourceSection === 'Sound') return true;
     const isUnknown =
         !metadata.gameBananaId &&
@@ -400,6 +419,11 @@ ipcMain.handle('enable-mod', async (_, modId: string): Promise<Mod> => {
         throw new Error('No Deadlock path configured');
     }
     const mod = await enableMod(deadlockPath, modId);
+    // Enabling a skin that carries a skin -> icon link must bring its icons with
+    // it. Runs AFTER the mutation lock is released (the rebuild shells out to
+    // vpkmerge, so holding the lock would serialize every toggle behind it) and
+    // never throws, so a broken link can't fail the toggle the user clicked.
+    await reconcileLinkedCardsQuietly(deadlockPath);
     return enrichMod(mod);
 });
 
@@ -410,6 +434,8 @@ ipcMain.handle('disable-mod', async (_, modId: string): Promise<Mod> => {
         throw new Error('No Deadlock path configured');
     }
     const mod = await disableMod(deadlockPath, modId);
+    // Disabling a linked skin reverts its icons (see enable-mod above).
+    await reconcileLinkedCardsQuietly(deadlockPath);
     return enrichMod(mod);
 });
 
@@ -938,6 +964,9 @@ ipcMain.handle(
             throw new Error('No Deadlock path configured');
         }
         const result = await setModsEnabledBatch(deadlockPath, { enable: enableIds, disable: disableIds });
+        // Launch shuffle and "solo this mod" both come through here and can swap
+        // every hero's skin at once, so linked icons have to follow the batch.
+        await reconcileLinkedCardsQuietly(deadlockPath);
         const mods = await scanMods(deadlockPath);
         return { mods: mods.map(enrichMod), failures: result.failures };
     }
