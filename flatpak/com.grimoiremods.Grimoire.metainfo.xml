@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>com.grimoiremods.Grimoire</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Grimoire</name>
+  <summary>Mod manager for Deadlock</summary>
+  <description>
+    <p>
+      Grimoire is a mod manager and companion tool for Deadlock. Browse and
+      install mods from GameBanana, manage load order and conflicts, organize
+      skins in the Hero Locker, design crosshairs, edit your autoexec, and
+      track player stats.
+    </p>
+  </description>
+  <developer id="com.grimoiremods">
+    <name>Slush97</name>
+  </developer>
+  <launchable type="desktop-id">com.grimoiremods.Grimoire.desktop</launchable>
+  <url type="homepage">https://grimoiremods.com</url>
+  <url type="bugtracker">https://github.com/Slush97/grimoire/issues</url>
+  <categories>
+    <category>Game</category>
+  </categories>
+  <content_rating type="oars-1.1"/>
+  <releases>
+    <release version="1.26.0" date="2026-07-30"/>
+  </releases>
+</component>

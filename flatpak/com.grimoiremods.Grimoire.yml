@@ -1,0 +1,64 @@
+# Flatpak manifest for Grimoire.
+# Repackages the released deb (same binaries users already run) on top of the
+# Electron base app. Bump the url/sha256 and the metainfo release entry when
+# cutting a new version.
+#
+# Build:
+#   flatpak run org.flatpak.Builder --user --force-clean \
+#     --install-deps-from=flathub --repo=repo builddir flatpak/com.grimoiremods.Grimoire.yml
+#   flatpak build-bundle repo Grimoire-<version>.flatpak com.grimoiremods.Grimoire
+
+app-id: com.grimoiremods.Grimoire
+runtime: org.freedesktop.Platform
+runtime-version: '24.08'
+sdk: org.freedesktop.Sdk
+base: org.electronjs.Electron2.BaseApp
+base-version: '24.08'
+command: grimoire
+separate-locales: false
+
+finish-args:
+  - --share=ipc
+  - --socket=x11
+  - --socket=pulseaudio
+  - --share=network
+  - --device=dri
+  # Grimoire's whole job is editing game files (gameinfo.gi, addons, configs)
+  # inside Steam libraries, which can live on any drive per libraryfolders.vdf.
+  # Host access mirrors what the AppImage and deb already have. A future
+  # Flathub submission should narrow this to specific paths.
+  - --filesystem=host
+  # Flatpak Steam keeps its library under its own app dir, which host excludes.
+  - --filesystem=~/.var/app/com.valvesoftware.Steam
+  # Electron safeStorage talks to the Secret Service (planned social session token).
+  - --talk-name=org.freedesktop.secrets
+  # Tray icons on KDE/StatusNotifier desktops.
+  - --talk-name=org.kde.StatusNotifierWatcher
+
+modules:
+  - name: grimoire
+    buildsystem: simple
+    build-commands:
+      - ar x grimoire_1.26.0_amd64.deb
+      - tar xf data.tar.xz
+      - cp -a opt/Grimoire /app/grimoire
+      - install -Dm755 grimoire.sh /app/bin/grimoire
+      - install -Dm644 com.grimoiremods.Grimoire.desktop /app/share/applications/com.grimoiremods.Grimoire.desktop
+      - install -Dm644 com.grimoiremods.Grimoire.metainfo.xml /app/share/metainfo/com.grimoiremods.Grimoire.metainfo.xml
+      - |
+        for f in usr/share/icons/hicolor/*/apps/grimoire.png; do
+          size=$(basename $(dirname $(dirname "$f")))
+          # flatpak export rejects icons above 512x512
+          case "$size" in 1024x1024) continue ;; esac
+          install -Dm644 "$f" "/app/share/icons/hicolor/${size}/apps/com.grimoiremods.Grimoire.png"
+        done
+    sources:
+      - type: file
+        url: https://github.com/Slush97/grimoire/releases/download/v1.26.0/grimoire_1.26.0_amd64.deb
+        sha256: 631f885bb01a3970a7995783e0d84b6c9f71ab9406a850a68df392aa1002c2a7
+      - type: file
+        path: grimoire.sh
+      - type: file
+        path: com.grimoiremods.Grimoire.desktop
+      - type: file
+        path: com.grimoiremods.Grimoire.metainfo.xml
