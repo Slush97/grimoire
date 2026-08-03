@@ -1164,6 +1164,12 @@ export interface AppSettings {
    *  generated default. This is the pre-apply choice; what is actually in
    *  gameinfo.gi right now comes from the file's own marker. */
   performanceConfigPresetId?: string;
+  /** Which bundled upstream release of a preset the user picked, per preset id.
+   *  Absent (or naming a release this build no longer bundles) means the newest
+   *  one. Kept per preset so rolling one preset back does not pin the others,
+   *  and separate from `performanceConfigPresetId` so switching preset and
+   *  switching version stay independent choices. */
+  performanceConfigVersions?: Record<string, string>;
   /** Gameplay/visibility convar keys the user opted into, per preset id.
    *  These are held out of the presets by default (a performance preset must
    *  not silently enable enemy outlines or change FOV), so an empty or missing

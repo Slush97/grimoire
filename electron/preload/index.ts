@@ -374,11 +374,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     fixGameinfo: () => ipcRenderer.invoke('fix-gameinfo'),
     getPerformanceConfigStatus: () => ipcRenderer.invoke('get-performance-config-status'),
     listPerformancePresets: () => ipcRenderer.invoke('list-performance-presets'),
-    applyPerformanceConfig: (presetId?: string, optIns?: string[]) =>
-        ipcRenderer.invoke('apply-performance-config', presetId, optIns),
+    applyPerformanceConfig: (presetId?: string, optIns?: string[], version?: string | null) =>
+        ipcRenderer.invoke('apply-performance-config', presetId, optIns, version),
     removePerformanceConfig: () => ipcRenderer.invoke('remove-performance-config'),
-    resetPerformanceConfigOverrides: (presetId?: string, optIns?: string[]) =>
-        ipcRenderer.invoke('reset-performance-config-overrides', presetId, optIns),
+    resetPerformanceConfigOverrides: (
+        presetId?: string,
+        optIns?: string[],
+        version?: string | null
+    ) => ipcRenderer.invoke('reset-performance-config-overrides', presetId, optIns, version),
     restorePerformanceConfigBackup: () => ipcRenderer.invoke('restore-performance-config-backup'),
     openPerformanceConfigFile: () => ipcRenderer.invoke('open-performance-config-file'),
     listEditorCandidates: () => ipcRenderer.invoke('list-editor-candidates'),

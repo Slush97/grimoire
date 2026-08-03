@@ -129,12 +129,38 @@ export interface PerformanceOptIn {
     group: 'visibility' | 'camera' | 'devtools';
 }
 
+/** One bundled upstream release of a preset. Users can roll back to an older
+ *  release when a newer one runs worse on their machine, so every release we
+ *  ship is described here rather than fetched on demand. */
+export interface PerformancePresetVersion {
+    /** Upstream version, e.g. '2.7' or '4.2'. Goes in the gameinfo.gi marker. */
+    version: string;
+    /** Human-facing upstream version (a git tag where one exists). */
+    ref: string;
+    /** Whether `ref` is a real git tag or a version stated in prose. */
+    refKind: 'tag' | 'prose';
+    commit: string;
+    /** Upstream release date, yyyy-mm-dd. Shown because upstream tag names do
+     *  not reliably sort into release order (OptiLock tagged v4.0d after v4.1),
+     *  so the name alone cannot tell a user which release is older. */
+    date: string;
+    /** How many settings this release changes, for a rough intensity signal. */
+    settingCount: number;
+    /** Gameplay convars this release sets, offered as opt-ins rather than applied.
+     *  Differs between releases, so it is recorded per version. */
+    optIn: PerformanceOptIn[];
+}
+
 /** One selectable performance preset, as the renderer sees it. Generated from
- *  a pinned upstream commit; see scripts/performance-presets.json. */
+ *  pinned upstream commits; see scripts/performance-presets.json.
+ *
+ *  The top-level fields describe the NEWEST bundled release, so a caller that
+ *  ignores `versions` behaves exactly as it did before version selection
+ *  existed. */
 export interface PerformancePresetSummary {
     id: string;
     name: string;
-    /** Upstream version, e.g. '2.7' or '4.2'. */
+    /** Upstream version of the newest bundled release, e.g. '2.8.2' or '4.2'. */
     version: string;
     tier: 'balanced' | 'preview' | 'aggressive' | 'potato' | 'competitive' | 'maximum';
     author: string;
@@ -155,6 +181,10 @@ export interface PerformancePresetSummary {
     };
     /** Gameplay convars this preset sets, offered as opt-ins rather than applied. */
     optIn: PerformanceOptIn[];
+    /** Every bundled release of this preset, newest first, never empty.
+     *  Releases whose upstream file was byte-identical are collapsed, so two
+     *  entries here always write different things. */
+    versions: PerformancePresetVersion[];
 }
 
 /** State of the applied performance preset in gameinfo.gi.
@@ -875,12 +905,14 @@ export interface ElectronAPI {
     listPerformancePresets: () => Promise<PerformancePresetSummary[]>;
     applyPerformanceConfig: (
         presetId?: string,
-        optIns?: string[]
+        optIns?: string[],
+        version?: string | null
     ) => Promise<PerformanceConfigStatus>;
     removePerformanceConfig: () => Promise<PerformanceConfigStatus>;
     resetPerformanceConfigOverrides: (
         presetId?: string,
-        optIns?: string[]
+        optIns?: string[],
+        version?: string | null
     ) => Promise<PerformanceConfigStatus>;
     restorePerformanceConfigBackup: () => Promise<PerformanceConfigStatus>;
     openPerformanceConfigFile: () => Promise<void>;

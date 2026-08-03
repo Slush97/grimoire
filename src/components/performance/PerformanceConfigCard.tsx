@@ -6,6 +6,7 @@ import { Gauge, RefreshCw, RotateCcw, Settings2, SquarePen } from 'lucide-react'
 import { Card, Badge, Button } from '../common/ui';
 import EditorPickerModal from './EditorPickerModal';
 import PresetPicker from './PresetPicker';
+import VersionPicker from './VersionPicker';
 import GameplayOptIns from './GameplayOptIns';
 import { useAppStore, type BrowseArtistRef } from '../../stores/appStore';
 import {
@@ -42,7 +43,10 @@ const SQOOKY_ARTIST: BrowseArtistRef = {
 function performanceStatusMessage(
   status: PerformanceConfigStatus,
   t: TFunction,
-  presets: PerformancePresetSummary[]
+  presets: PerformancePresetSummary[],
+  /** The user deliberately pinned an older release, so "a newer one exists" is
+   *  not news to them. The rollback gets its own quieter line instead. */
+  pinnedOlder = false
 ): string {
   const overrideCount = status.overrideCount ?? 0;
   const appliedName =
@@ -50,7 +54,7 @@ function performanceStatusMessage(
   switch (status.state) {
     case 'applied': {
       const base =
-        status.appliedVersion === status.bundledVersion
+        pinnedOlder || status.appliedVersion === status.bundledVersion
           ? t('performance.status.applied', { preset: appliedName, version: status.appliedVersion })
           : t('performance.status.appliedOutdated', {
               preset: appliedName,
@@ -99,11 +103,30 @@ export default function PerformanceConfigCard() {
     '';
   const selected = presets.find((p) => p.id === selectedId) ?? null;
 
+  // Which bundled release of that preset to write. A saved pin naming a release
+  // this build no longer bundles falls back to the newest rather than erroring:
+  // the history window slides on every upstream bump, so an old pin aging out is
+  // expected, not a fault.
+  const selectedVersion = useMemo(() => {
+    if (!selected) return '';
+    const saved = settings?.performanceConfigVersions?.[selectedId];
+    return selected.versions.some((v) => v.version === saved)
+      ? saved!
+      : selected.versions[0].version;
+  }, [settings?.performanceConfigVersions, selectedId, selected]);
+
+  const selectedRelease =
+    selected?.versions.find((v) => v.version === selectedVersion) ?? selected?.versions[0] ?? null;
+
   const selectedOptIns = useMemo(() => {
     const saved = settings?.performanceConfigOptIns?.[selectedId] ?? [];
-    // Drop keys the preset no longer defines (an upstream bump can retire one).
-    return selected ? saved.filter((key) => selected.optIn.some((c) => c.key === key)) : [];
-  }, [settings?.performanceConfigOptIns, selectedId, selected]);
+    // Drop keys this release does not define. Opt-ins differ between releases,
+    // not just between presets, so this is filtered against the chosen release
+    // rather than the newest one.
+    return selectedRelease
+      ? saved.filter((key) => selectedRelease.optIn.some((c) => c.key === key))
+      : [];
+  }, [settings?.performanceConfigOptIns, selectedId, selectedRelease]);
 
   const viewSqookyInBrowse = () => {
     setBrowseUi({ submitter: SQOOKY_ARTIST });
@@ -154,6 +177,17 @@ export default function PerformanceConfigCard() {
     await saveSettings({ ...settings, performanceConfigPresetId: presetId });
   };
 
+  const onSelectVersion = async (version: string) => {
+    if (!settings || !selected) return;
+    // Picking the newest clears the pin rather than recording it, so the preset
+    // keeps following upstream on future bumps instead of silently freezing at
+    // whatever happened to be newest the day the user clicked.
+    const next = { ...(settings.performanceConfigVersions ?? {}) };
+    if (version === selected.versions[0].version) delete next[selectedId];
+    else next[selectedId] = version;
+    await saveSettings({ ...settings, performanceConfigVersions: next });
+  };
+
   const onChangeOptIns = async (keys: string[]) => {
     if (!settings) return;
     await saveSettings({
@@ -193,6 +227,14 @@ export default function PerformanceConfigCard() {
   // A different preset than the one in the file is selected, so the primary
   // action switches rather than reapplies.
   const willSwitch = applied && status?.appliedPresetId !== selectedId;
+  // The user deliberately chose an older release. This suppresses the
+  // "reapply to update" nag: they already know a newer one exists, that is
+  // precisely what they rolled back from.
+  const pinnedOlder = !!selected && selectedVersion !== selected.versions[0].version;
+  // Same preset, different release than the file holds: a reapply is needed to
+  // write it, just like a pending opt-in change.
+  const pendingVersion =
+    applied && !willSwitch && !!selectedVersion && status?.appliedVersion !== selectedVersion;
   // Toggling an opt-in only records the choice; nothing reaches gameinfo.gi
   // until the next apply. Compare what the file says was written (the sidecar,
   // via status) with what is selected now, so a pending change is visible
@@ -240,6 +282,7 @@ export default function PerformanceConfigCard() {
           <PresetPicker
             presets={presets}
             selectedId={selectedId}
+            selectedRelease={selectedRelease}
             onSelect={(id) => void onSelectPreset(id)}
             disabled={busy}
             creditSlot={
@@ -270,8 +313,17 @@ export default function PerformanceConfigCard() {
         )}
 
         {selected && (
+          <VersionPicker
+            versions={selected.versions}
+            selected={selectedVersion}
+            onSelect={(version) => void onSelectVersion(version)}
+            disabled={busy}
+          />
+        )}
+
+        {selectedRelease && (
           <GameplayOptIns
-            preset={selected}
+            controls={selectedRelease.optIn}
             selected={selectedOptIns}
             onChange={(keys) => void onChangeOptIns(keys)}
             disabled={busy}
@@ -282,7 +334,7 @@ export default function PerformanceConfigCard() {
           <div className="min-w-0 space-y-1">
             <p className="text-sm text-text-secondary">
               {status
-                ? performanceStatusMessage(status, t, presets)
+                ? performanceStatusMessage(status, t, presets, pinnedOlder)
                 : t('performance.checkingGameinfo')}
             </p>
             {willSwitch && (
@@ -290,6 +342,19 @@ export default function PerformanceConfigCard() {
                 {t('performance.switchNote', {
                   current: appliedName,
                   next: selected?.name ?? '',
+                })}
+              </p>
+            )}
+            {pendingVersion && (
+              <p className="text-xs text-state-info">
+                {t('performance.version.pending', { version: selectedVersion })}
+              </p>
+            )}
+            {pinnedOlder && !pendingVersion && (
+              <p className="text-xs text-text-secondary">
+                {t('performance.version.pinned', {
+                  version: selectedVersion,
+                  latest: selected?.versions[0].version ?? '',
                 })}
               </p>
             )}
@@ -313,7 +378,9 @@ export default function PerformanceConfigCard() {
               </Button>
             )}
             <Button
-              onClick={() => run(() => applyPerformanceConfig(selectedId, selectedOptIns))}
+              onClick={() =>
+                run(() => applyPerformanceConfig(selectedId, selectedOptIns, selectedVersion))
+              }
               isLoading={busy}
               icon={wiped || willSwitch ? RefreshCw : undefined}
               variant={canRestore ? 'secondary' : 'primary'}
@@ -350,10 +417,14 @@ export default function PerformanceConfigCard() {
                   // selected in the picker: the override count this button is
                   // gated on belongs to the applied preset, and "reset my
                   // overrides" must not quietly switch preset as a side effect.
+                  // The applied version is passed for the same reason: resetting
+                  // overrides must not also move the user off the release they
+                  // rolled back to.
                   run(() =>
                     resetPerformanceConfigOverrides(
                       status?.appliedPresetId ?? selectedId,
-                      status?.appliedOptIns ?? []
+                      status?.appliedOptIns ?? [],
+                      status?.appliedVersion ?? selectedVersion
                     )
                   )
                 }

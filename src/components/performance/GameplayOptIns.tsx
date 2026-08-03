@@ -2,10 +2,13 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown, Eye } from 'lucide-react';
 import { Toggle } from '../common/ui';
-import type { PerformanceOptIn, PerformancePresetSummary } from '../../types/electron';
+import type { PerformanceOptIn } from '../../types/electron';
 
 interface GameplayOptInsProps {
-  preset: PerformancePresetSummary;
+  /** The chosen release's opt-in controls. Passed in rather than read off a
+   *  preset, because these differ between releases of the same preset: rolling
+   *  back must offer the toggles that release actually defines. */
+  controls: PerformanceOptIn[];
   /** Currently selected opt-in convar keys for this preset. */
   selected: string[];
   onChange: (keys: string[]) => void;
@@ -25,26 +28,26 @@ const GROUP_ORDER: PerformanceOptIn['group'][] = ['visibility', 'camera', 'devto
  * credited for the values; the user decides whether to take them.
  */
 export default function GameplayOptIns({
-  preset,
+  controls,
   selected,
   onChange,
   disabled,
 }: GameplayOptInsProps) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
-  if (preset.optIn.length === 0) return null;
+  if (controls.length === 0) return null;
 
   const enabled = new Set(selected);
   const toggle = (key: string, on: boolean) => {
     const next = new Set(enabled);
     if (on) next.add(key);
     else next.delete(key);
-    onChange(preset.optIn.filter((c) => next.has(c.key)).map((c) => c.key));
+    onChange(controls.filter((c) => next.has(c.key)).map((c) => c.key));
   };
 
   const groups = GROUP_ORDER.map((group) => ({
     group,
-    controls: preset.optIn.filter((c) => c.group === group),
+    controls: controls.filter((c) => c.group === group),
   })).filter((g) => g.controls.length > 0);
 
   return (
@@ -62,7 +65,7 @@ export default function GameplayOptIns({
           </span>
           <span className="text-xs text-text-secondary">
             {t('performance.optIn.count', {
-              count: preset.optIn.length,
+              count: controls.length,
               enabled: enabled.size,
             })}
           </span>

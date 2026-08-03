@@ -2751,6 +2751,16 @@
         "camera": "Camera and field of view",
         "devtools": "Developer and testing tools"
       }
+    },
+    "version": {
+      "label": "Version",
+      "description": "Grimoire bundles the last few releases of each preset. If a newer one runs worse on your machine, roll back: your gameplay settings and hand edits carry over.",
+      "newest": "Newest",
+      "releasedOn": "Released {{date}}",
+      "settings_one": "{{count}} setting",
+      "settings_other": "{{count}} settings",
+      "pending": "Version changed to v{{version}}. Reapply to write it to gameinfo.gi.",
+      "pinned": "Staying on v{{version}}. The newest bundled version is v{{latest}}."
     }
   },
   "lockerOverrides": {

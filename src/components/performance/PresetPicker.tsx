@@ -2,11 +2,16 @@ import { useTranslation } from 'react-i18next';
 import { ExternalLink, GitCommitHorizontal, Tag, TriangleAlert } from 'lucide-react';
 import { Badge } from '../common/ui';
 import { Select, FormField } from '../common/forms';
-import type { PerformancePresetSummary } from '../../types/electron';
+import type { PerformancePresetSummary, PerformancePresetVersion } from '../../types/electron';
 
 interface PresetPickerProps {
   presets: PerformancePresetSummary[];
   selectedId: string;
+  /** The release the user will actually write. The provenance line describes
+   *  THIS release, not the newest one: after a rollback, crediting the newest
+   *  commit would name code the user is not about to apply, which is the same
+   *  false claim the tag-pin check in the generator exists to prevent. */
+  selectedRelease: PerformancePresetVersion | null;
   onSelect: (presetId: string) => void;
   disabled?: boolean;
   /** Rendered inline after the upstream credit (e.g. an in-app artist link). */
@@ -34,6 +39,7 @@ const TIER_VARIANT: Record<
 export default function PresetPicker({
   presets,
   selectedId,
+  selectedRelease,
   onSelect,
   disabled,
   creditSlot,
@@ -41,6 +47,9 @@ export default function PresetPicker({
   const { t } = useTranslation();
   const selected = presets.find((p) => p.id === selectedId) ?? presets[0];
   if (!selected) return null;
+  // Falls back to the newest release, which is what `selected` already
+  // describes, so an omitted release changes nothing.
+  const release = selectedRelease ?? selected.versions[0];
 
   return (
     <div className="space-y-2">
@@ -64,7 +73,7 @@ export default function PresetPicker({
         </Badge>
         <span className="text-xs text-text-secondary">
           {t('performance.preset.meta', {
-            count: selected.settingCount,
+            count: release.settingCount,
             author: selected.author,
           })}
         </span>
@@ -93,22 +102,22 @@ export default function PresetPicker({
           prose for others, so the commit is shown either way. */}
       <p className="text-[11px] text-text-secondary/80 flex flex-wrap items-center gap-x-3 gap-y-1">
         <span className="inline-flex items-center gap-1">
-          {selected.upstream.refKind === 'tag' ? (
+          {release.refKind === 'tag' ? (
             <Tag className="w-3 h-3" aria-hidden="true" />
           ) : (
             <GitCommitHorizontal className="w-3 h-3" aria-hidden="true" />
           )}
-          {selected.upstream.refKind === 'tag'
-            ? t('performance.preset.pinnedTag', { ref: selected.upstream.ref })
-            : t('performance.preset.pinnedCommit', { ref: selected.upstream.ref })}
+          {release.refKind === 'tag'
+            ? t('performance.preset.pinnedTag', { ref: release.ref })
+            : t('performance.preset.pinnedCommit', { ref: release.ref })}
         </span>
         <a
-          href={`${selected.upstream.url}/tree/${selected.upstream.commit}`}
+          href={`${selected.upstream.url}/tree/${release.commit}`}
           target="_blank"
           rel="noreferrer noopener"
           className="text-accent hover:underline inline-flex items-center gap-0.5 font-mono"
         >
-          {selected.upstream.commit.slice(0, 8)}
+          {release.commit.slice(0, 8)}
           <ExternalLink className="w-3 h-3" aria-hidden="true" />
         </a>
       </p>
