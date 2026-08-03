@@ -92,7 +92,7 @@ import PriorityEditor from '../components/PriorityEditor';
 import { IMAGE_EXTS, deriveModNameFromPath } from '../lib/customModImport';
 import { Modal } from '../components/common/Modal';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
@@ -290,16 +290,6 @@ function isEntryEnabled(entry: ModEntry): boolean {
 /** Sort key for ordering enabled/disabled sections. Uses the primary's
  *  priority for groups so reorder math stays consistent with the existing
  *  per-mod priority system. */
-/** Global load-order rank of a mod: lower = higher priority. With overflow
- *  folders the pakNN (mod.priority) repeats per folder, so we fold in the folder
- *  index from metaKey (addons{N}/...) to get a single monotonic order. Base
- *  citadel/addons (and disabled) is folder 0, addons1 is 1, etc. */
-function modLoadOrder(mod: Mod): number {
-  const match = mod.metaKey.match(/^addons(\d+)\//);
-  const folderIndex = match ? parseInt(match[1], 10) : 0;
-  return folderIndex * 100 + mod.priority;
-}
-
 function entrySortPriority(entry: ModEntry): number {
   return modLoadOrder(entry.kind === 'single' ? entry.mod : entry.primary);
 }
@@ -426,6 +416,26 @@ function entryRepresentativeId(entry: ModEntry): string {
 
 function entryDisabledPreferenceKey(entry: ModEntry): string {
   return modPreferenceKey(entry.kind === 'single' ? entry.mod : entry.primary);
+}
+
+/** Stand-in for PriorityEditor on Global (priority-root) cards. They load
+ *  before every numbered mod and reorderMods filters them out of reposition
+ *  batches, so a position number would be both a lie and dead UI. Echoes the
+ *  PriorityEditor chip geometry, accent-tinted so Global reads as its own
+ *  tier rather than position zero. */
+function GlobalLoadBadge({ variant }: { variant: 'overlay' | 'inline' }) {
+  const { t } = useTranslation();
+  return (
+    <span
+      title={t('installed.priority.hint')}
+      aria-label={t('installed.priority.chip')}
+      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/60 px-2 text-accent ${
+        variant === 'overlay' ? 'bg-black/70' : 'bg-bg-tertiary'
+      }`}
+    >
+      <ArrowUpToLine className="h-3 w-3" strokeWidth={2.5} />
+    </span>
+  );
 }
 
 /**
@@ -3487,8 +3497,13 @@ export default function Installed() {
   const enabledByLoadOrder = visibleMods
     .filter((m) => m.enabled)
     .sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
-  const enabledModCount = enabledByLoadOrder.length;
-  const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
+  // Priority-root (Global) mods sit outside the pakNN ordering: they win by
+  // search-path position and reorderMods filters them out. Numbering only the
+  // rest keeps positions 1..N meaningful and editable, while Global cards get
+  // their own badge.
+  const numberedByLoadOrder = enabledByLoadOrder.filter((m) => !m.priorityMod);
+  const enabledModCount = numberedByLoadOrder.length;
+  const loadPositionById = new Map(numberedByLoadOrder.map((m, i) => [m.id, i + 1] as const));
 
   const handleCopyEnabledMods = async () => {
     // Use the same enabled list the UI shows (visibleMods / load order), not the
@@ -3767,7 +3782,7 @@ export default function Installed() {
    * modsError.
    */
   const commitLoadPosition = async (modId: string, newPosition: number): Promise<void> => {
-    const ordered = enabledByLoadOrder.slice();
+    const ordered = numberedByLoadOrder.slice();
     const fromIdx = ordered.findIndex((m) => m.id === modId);
     if (fromIdx === -1) throw new Error('Mod not found');
     // The editor validates 1..N, but a stale render could submit out of range;
@@ -7519,7 +7534,9 @@ function ModListRowContent({
   return (
     <>
       <div className="flex min-w-0 items-center justify-start">
-        {mod.enabled ? (
+        {mod.enabled && mod.priorityMod ? (
+          <GlobalLoadBadge variant="inline" />
+        ) : mod.enabled ? (
           <span data-card-action="true">
             <PriorityEditor
               modName={mod.name}
@@ -8304,7 +8321,7 @@ function ModCard({
       <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
-      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
+      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {selectMode && (
@@ -8376,6 +8393,11 @@ function ModCard({
         const overlayBadges = (
           <>
             {mod.enabled && !selectMode && (
+              mod.priorityMod ? (
+                <div className="absolute top-2 left-2 z-10 flex h-5 items-start">
+                  <GlobalLoadBadge variant="overlay" />
+                </div>
+              ) : (
               <div className="absolute top-2 left-2 z-10 flex h-5 items-start" data-card-action="true">
                 <PriorityEditor
                   modName={mod.name}
@@ -8385,6 +8407,7 @@ function ModCard({
                   onCommit={onCommitPriority}
                 />
               </div>
+              )
             )}
             {!mod.enabled && !selectMode && (
               <div className="absolute top-2 left-2 z-10 flex h-5 items-start">

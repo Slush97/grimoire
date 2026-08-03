@@ -400,6 +400,18 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
 
     const mods = scanned.flat();
 
+    // Self-heal: an enabled user VPK living in the priority root must carry
+    // the priorityMod flag, or the Global surfaces can't see it and the next
+    // disable/enable silently demotes it to addons. Also adopts hand-placed
+    // VPKs. (Reserved Locker-managed slots never reach this list.)
+    for (const m of mods) {
+        if (!m.enabled || !isPriorityFolderPath(m.path)) continue;
+        if (!getModMetadata(m.metaKey)?.priorityMod) {
+            setModMetadata(m.metaKey, { priorityMod: true });
+            modTrace(`scanMods: healed missing priorityMod flag on ${m.metaKey}`);
+        }
+    }
+
     // Sort by global load order: folder first (base, then addons1, addons2, ...),
     // then pakNN within a folder, so the list reflects real load priority.
     mods.sort(
@@ -812,6 +824,14 @@ export function setModPriorityFolder(deadlockPath: string, modId: string, priori
             return target;
         }
 
+        // Refuse before touching metadata: writing the flag first would let a
+        // remove blocked by this guard clear the flag while the VPK stays in
+        // the priority root, stranding an unflagged Global mod (invisible to
+        // the Global surfaces, demoted to addons on its next enable).
+        if (target.enabled) {
+            assertCanMoveLoadedGameMod(target);
+        }
+
         // Record the intent before any rename, so a crash mid-move leaves the
         // flag and the next enable heals the placement.
         setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
@@ -822,8 +842,6 @@ export function setModPriorityFolder(deadlockPath: string, modId: string, priori
             // puts it.
             return target;
         }
-
-        assertCanMoveLoadedGameMod(target);
 
         let destination: AllocatedSlot;
         if (priority) {

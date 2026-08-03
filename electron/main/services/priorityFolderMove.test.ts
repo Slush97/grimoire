@@ -20,13 +20,13 @@ import { mkdtempSync, mkdirSync, writeFileSync, existsSync, readdirSync } from '
 import { tmpdir } from 'os';
 import { join } from 'path';
 
-const h = vi.hoisted(() => ({ userData: '' }));
+const h = vi.hoisted(() => ({ userData: '', gameRunning: false }));
 vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
 // The loaded-mod guard asks the real process table (pgrep/tasklist) whether
 // Deadlock is running, so an unmocked run fails on any machine where the game
-// is open. Pin the sandbox's truth: no game, no vanilla stash.
+// is open. Pin it to the flag so the blocked-move test can flip it.
 vi.mock('./launch', () => ({
-  isDeadlockRunning: async () => false,
+  isDeadlockRunning: async () => h.gameRunning,
   readStash: async () => null,
 }));
 
@@ -117,6 +117,24 @@ describe('setModPriorityFolder', () => {
     expect(names(GRIMOIRE)).toEqual(['pak01_dir.vpk', 'pak05_dir.vpk']);
   });
 
+  // Regression: the flag write used to run before the game-running guard, so a
+  // blocked remove cleared priorityMod while the VPK stayed in the priority
+  // root: an unflagged Global mod invisible to the Global surfaces, demoted to
+  // addons on its next enable.
+  it('a remove blocked by the game-running guard keeps the flag and the file', async () => {
+    const mods = await scanMods(dl);
+    const global = mods.find((m) => m.metaKey === 'grimoire/pak05_dir.vpk')!;
+
+    h.gameRunning = true;
+    try {
+      await expect(setModPriorityFolder(dl, global.id, false)).rejects.toThrow('Game is running');
+    } finally {
+      h.gameRunning = false;
+    }
+    expect(getModMetadata('grimoire/pak05_dir.vpk')?.priorityMod).toBe(true);
+    expect(names(GRIMOIRE)).toEqual(['pak01_dir.vpk', 'pak05_dir.vpk']);
+  });
+
   it('moves a mod back out to the addons folder', async () => {
     const mods = await scanMods(dl);
     const global = mods.find((m) => m.metaKey === 'grimoire/pak05_dir.vpk')!;
@@ -131,5 +149,18 @@ describe('setModPriorityFolder', () => {
     const off = await disableMod(dl, cleared.id);
     const back = await enableMod(dl, off.id);
     expect(back.metaKey).not.toContain('grimoire/');
+  });
+
+  // scanMods self-heal: an enabled non-reserved VPK found in the priority root
+  // without the flag (stranded by the pre-guard-fix remove path, or hand-placed)
+  // gets priorityMod stamped so the Global surfaces see it and the next
+  // disable/enable round trip cannot demote it.
+  it('heals a flagless resident of the priority root on scan', async () => {
+    writeVpk(join(dl, ...GRIMOIRE, 'pak06_dir.vpk'));
+    expect(getModMetadata('grimoire/pak06_dir.vpk')?.priorityMod).toBeUndefined();
+
+    const mods = await scanMods(dl);
+    expect(mods.some((m) => m.metaKey === 'grimoire/pak06_dir.vpk')).toBe(true);
+    expect(getModMetadata('grimoire/pak06_dir.vpk')?.priorityMod).toBe(true);
   });
 });
