@@ -95,6 +95,22 @@ function selectionForLink(link: LockerCardLink, addedAt: string): LockerCardSele
   };
 }
 
+/** Stable identity for the icon source behind a selection. A content hash wins
+ * over its current metaKey so enable/disable and overflow renames do not make an
+ * unchanged source look new. */
+function selectionSourceIdentity(selection: LockerCardSelection): string {
+  return selection.source.sha256AtApplyTime
+    ? `sha256:${selection.source.sha256AtApplyTime.toLowerCase()}`
+    : `key:${selection.source.fileName}`;
+}
+
+/** Stable identity for the icon source captured by a link. */
+function linkSourceIdentity(link: LockerCardLink): string {
+  return link.sourceSha256
+    ? `sha256:${link.sourceSha256.toLowerCase()}`
+    : `key:${link.sourceKey}`;
+}
+
 /**
  * The card selection set implied by `links` given which skins are enabled.
  *
@@ -151,7 +167,7 @@ export function planLinkedCards(input: {
         sel.origin === 'link' &&
         sel.heroCodename === link.heroCodename &&
         sel.linkedSkinKey === link.skinKey &&
-        sel.source.fileName === link.sourceKey
+        selectionSourceIdentity(sel) === linkSourceIdentity(link)
     );
     next.push(selectionForLink(link, prior?.addedAt ?? now));
   }
@@ -169,9 +185,9 @@ export function selectionsSignature(selections: readonly LockerCardSelection[]):
   return selections
     .map(
       (sel) =>
-        `${sel.heroCodename}|${sel.origin ?? 'manual'}|${sel.source.kind ?? 'mod'}|${
-          sel.source.fileName
-        }|${sel.linkedSkinKey ?? ''}`
+        `${sel.heroCodename}|${sel.origin ?? 'manual'}|${sel.source.kind ?? 'mod'}|${selectionSourceIdentity(
+          sel
+        )}|${sel.linkedSkinKey ?? ''}|${[...sel.variants].sort().join(',')}`
     )
     .sort()
     .join('\n');
@@ -192,17 +208,16 @@ export function withoutSkin(links: readonly LockerCardLink[], skinKey: string): 
 }
 
 /**
- * Upsert `link`, replacing any prior binding for the same skin AND any other
- * binding for the same hero. Both are required by the one-owner invariant: a
- * skin links to at most one icon mod, and a hero's card has at most one source.
+ * Upsert `link`, replacing the prior binding for the same skin. A hero may have
+ * several linked skins: planLinkedCards chooses the enabled skin that wins load
+ * order, while the one-owner invariant only prevents a manual card and the link
+ * set from fighting over that hero.
  */
 export function upsertLink(
   links: readonly LockerCardLink[],
   link: LockerCardLink
 ): LockerCardLink[] {
-  const kept = links.filter(
-    (existing) => existing.skinKey !== link.skinKey && existing.heroCodename !== link.heroCodename
-  );
+  const kept = links.filter((existing) => existing.skinKey !== link.skinKey);
   return [...kept, link];
 }
 

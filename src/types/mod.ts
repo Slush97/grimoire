@@ -93,9 +93,10 @@ export interface LockerCardSelection {
  * cosmetics VPK in citadel/grimoire, which wins by SearchPaths folder
  * precedence rather than load order.
  *
- * INVARIANT: for any hero, either a link owns the card or a manual/custom pick
- * does, never both. Every explicit action (link, manual apply, revert) clears
- * the other side, so a hero's card always has exactly one owner.
+ * INVARIANT: for any hero, either its link set owns the card or a manual/custom
+ * pick does, never both. A hero may have one link per skin; when several linked
+ * skins are enabled, load order chooses the active card. Manual apply/revert
+ * clears the hero's whole link set so the two ownership modes never fight.
  */
 export interface LockerCardLink {
   /** Stable Locker skin key this icon is bound to (see lockerLinkKey):

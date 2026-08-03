@@ -69,6 +69,7 @@ interface PortraitFileGroup {
 export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
   const { t } = useTranslation();
   const loadMods = useAppStore((s) => s.loadMods);
+  const loadCardLinks = useAppStore((s) => s.loadCardLinks);
   // This component is remounted per hero (the parent LockerHeroView is keyed
   // by hero.id), so initial state stands in for the per-hero reset.
   const [portraits, setPortraits] = useState<HeroPortrait[]>([]);
@@ -152,7 +153,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
       }
       // Rebuild changed the cosmetics VPK and possibly the load order; refresh
       // the shared mod list so Installed/Locker stay in sync.
-      await loadMods({ silent: true });
+      await Promise.all([loadMods({ silent: true }), loadCardLinks()]);
     } catch (err) {
       setActionError(String(err));
     } finally {
@@ -205,7 +206,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
       // Mark these exact picks as applied so the button reads "Applied" until
       // the user changes a slot.
       setAppliedSig(sigAtApply);
-      await loadMods({ silent: true });
+      await Promise.all([loadMods({ silent: true }), loadCardLinks()]);
     } catch (err) {
       setActionError(String(err));
     } finally {
@@ -222,7 +223,7 @@ export default function HeroCardPicker({ heroName }: HeroCardPickerProps) {
       setActiveSource(null);
       setPicks({});
       setAppliedSig(null);
-      await loadMods({ silent: true });
+      await Promise.all([loadMods({ silent: true }), loadCardLinks()]);
     } catch (err) {
       setActionError(String(err));
     } finally {

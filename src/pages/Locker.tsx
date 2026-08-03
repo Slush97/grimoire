@@ -230,7 +230,7 @@ function FacetSheenDefs() {
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, shuffleVariants, setShuffleVariant } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, loadCardLinks, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, shuffleVariants, setShuffleVariant } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -320,8 +320,12 @@ export default function Locker() {
   useEffect(() => {
     if (activeDeadlockPath) {
       loadMods({ silent: useAppStore.getState().modsLoaded });
+      // Bindings live in main-process metadata and survive app restarts. Load
+      // them with the Locker so linked badges and unlink controls reflect disk,
+      // not just edits made during this renderer session.
+      loadCardLinks();
     }
-  }, [activeDeadlockPath, loadMods]);
+  }, [activeDeadlockPath, loadMods, loadCardLinks]);
 
   // Refresh on any completed download so a newly-installed mod (and its
   // freshly-classified globalType) surfaces here without leaving the page,

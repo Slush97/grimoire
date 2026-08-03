@@ -233,14 +233,12 @@ export async function applyCustomHeroCard(
         addedAt: new Date().toISOString(),
     };
 
-    // One owner per hero: uploading custom art takes this hero over from any
-    // skin -> icon link, which would otherwise reconcile back over it on the
-    // next skin toggle.
-    dropLinksForHeroCodename(primaryCodename);
-
     const current = await currentCardSelections(deadlockPath);
     const next = [...current.filter((c) => c.heroCodename !== primaryCodename), selection];
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
+    // Commit the ownership handoff only after the custom card rebuild succeeds;
+    // a failed build must leave the previous link metadata intact.
+    dropLinksForHeroCodename(primaryCodename);
     return {
         activeSourceFileName: missing.includes(fileName) ? null : fileName,
         missingSourceFileNames: missing,

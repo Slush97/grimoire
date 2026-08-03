@@ -15,8 +15,9 @@
  * failure this feature exists to prevent. reconcileLinkedCards is therefore
  * called from the IPC layer after every mutation that can change the enabled set.
  *
- * INVARIANT (enforced here and in heroCards.ts): for any hero, either a link
- * owns the card or a manual/custom pick does, never both.
+ * INVARIANT (enforced here and in heroCards.ts): for any hero, either its link
+ * set owns the card or a manual/custom pick does, never both. Multiple skins
+ * for one hero may each have a link; load order selects the live one.
  *
  * See docs/locker-hero-card-apply.md for the underlying card apply pipeline.
  */
@@ -73,6 +74,18 @@ export interface ReconcileResult {
     missing: string[];
 }
 
+interface ReconcileOptions {
+    /** Codenames whose manual/custom selection a newly-created link set takes
+     * over during this reconcile. */
+    takeOverHeroes?: readonly string[];
+    /** Continue when the stored link set is empty so the final removed link can
+     * also remove its already-applied selection. */
+    allowEmptyLinks?: boolean;
+    /** Rebuild even when the desired manifest is unchanged. Used after deletes
+     * to validate that every selected source still exists. */
+    forceRebuild?: boolean;
+}
+
 /**
  * Bring the applied card set in line with the bindings and the current enabled
  * set. Idempotent, and safe to call after any mod mutation.
@@ -91,10 +104,19 @@ export interface ReconcileResult {
  */
 export async function reconcileLinkedCards(
     deadlockPath: string,
-    takeOverHeroes: readonly string[] = []
+    options: ReconcileOptions = {}
 ): Promise<ReconcileResult> {
+    const {
+        takeOverHeroes = [],
+        allowEmptyLinks = false,
+        forceRebuild = false,
+    } = options;
     const links = getCardLinks();
-    if (links.length === 0 && takeOverHeroes.length === 0) {
+    if (
+        links.length === 0 &&
+        takeOverHeroes.length === 0 &&
+        !allowEmptyLinks
+    ) {
         return { rebuilt: false, missing: [] };
     }
 
@@ -107,10 +129,12 @@ export async function reconcileLinkedCards(
     const next = planLinkedCards({
         links,
         current,
-        activeSkins: await activeSkins(deadlockPath),
+        // Removing a dormant final link needs no mod scan: with no links there
+        // is nothing that can consume the enabled set.
+        activeSkins: links.length > 0 ? await activeSkins(deadlockPath) : [],
         now: new Date().toISOString(),
     });
-    if (selectionsSignature(next) === selectionsSignature(stored)) {
+    if (!forceRebuild && selectionsSignature(next) === selectionsSignature(stored)) {
         return { rebuilt: false, missing: [] };
     }
 
@@ -125,9 +149,12 @@ export async function reconcileLinkedCards(
  * plain "enable this mod" click into a failure. The applied cards just stay as
  * they were, and the next successful reconcile catches up.
  */
-export async function reconcileLinkedCardsQuietly(deadlockPath: string): Promise<void> {
+export async function reconcileLinkedCardsQuietly(
+    deadlockPath: string,
+    options: ReconcileOptions = {}
+): Promise<void> {
     try {
-        await reconcileLinkedCards(deadlockPath);
+        await reconcileLinkedCards(deadlockPath, options);
     } catch (err) {
         console.warn('[lockerCardLinks] reconcile failed (applied cards left unchanged):', err);
     }
@@ -183,11 +210,19 @@ export async function setCardLink(
         linkedAt: new Date().toISOString(),
     };
 
-    // upsertLink drops any prior binding for this skin AND any other binding for
-    // this hero; takeOverHeroes then drops the hero's manual pick. Together that
-    // leaves exactly one owner for the hero.
-    saveCardLinks(upsertLink(getCardLinks(), link));
-    return reconcileLinkedCards(deadlockPath, [codename]);
+    // One binding per skin, but any number of linked skins per hero. The planner
+    // chooses the live one by load order. takeOverHeroes drops a manual/custom
+    // pick so the hero is owned by the link set instead.
+    const previous = getCardLinks();
+    saveCardLinks(upsertLink(previous, link));
+    try {
+        return await reconcileLinkedCards(deadlockPath, { takeOverHeroes: [codename] });
+    } catch (err) {
+        // A failed build must not leave a link persisted over the still-current
+        // manual card. Restore the metadata transaction before surfacing it.
+        saveCardLinks(previous);
+        throw err;
+    }
 }
 
 /** Remove the binding for one skin and revert whatever it had applied. */
@@ -199,5 +234,12 @@ export async function removeCardLink(
     const next = withoutSkin(links, skinKey);
     if (next.length === links.length) return { rebuilt: false, missing: [] };
     saveCardLinks(next);
-    return reconcileLinkedCards(deadlockPath);
+    try {
+        return await reconcileLinkedCards(deadlockPath, { allowEmptyLinks: true });
+    } catch (err) {
+        // Keep the binding when its applied output could not be reverted; the UI
+        // can retry instead of claiming an unlink that never took effect.
+        saveCardLinks(links);
+        throw err;
+    }
 }

@@ -180,7 +180,7 @@ function resolveUnknownLockerHero(
 }
 
 function enrichMod(mod: Mod): WireMod {
-    const metadata = getModMetadata(mod.metaKey);
+    let metadata = getModMetadata(mod.metaKey);
     const isUnknown =
         !metadata?.gameBananaId &&
         !(typeof metadata?.modName === 'string' && metadata.modName.trim().length > 0);
@@ -189,6 +189,10 @@ function enrichMod(mod: Mod): WireMod {
     // downloaded ones. resolveGlobalType persists the result + classifier
     // version so subsequent scans skip the parse.
     const globalType = resolveGlobalType(mod, metadata);
+    // resolveGlobalType creates the first metadata row for a VPK dropped
+    // directly into addons. Refresh the reference so the remaining lazy
+    // classifiers—including heroIconOnly—run on that very first get-mods call.
+    metadata = getModMetadata(mod.metaKey);
     if (metadata) {
         let lockerHero = metadata.lockerHero;
         let lockerHeroSource = metadata.lockerHeroSource;
@@ -460,6 +464,10 @@ ipcMain.handle('delete-mod', async (_, modId: string): Promise<void> => {
         throw new Error('No Deadlock path configured');
     }
     await deleteMod(deadlockPath, modId);
+    // Deleting either an enabled linked skin or the icon source behind one can
+    // invalidate the applied card without an enable/disable event. Force source
+    // validation so stale art is removed immediately.
+    await reconcileLinkedCardsQuietly(deadlockPath, { forceRebuild: true });
 });
 
 // detect-unknown-mod-filters

@@ -53,7 +53,7 @@ export default function SkinIconLinkPicker({
 
   const skinKey = useMemo(() => lockerLinkKey(skin), [skin]);
   const activeLink = cardLinks.find((link) => link.skinKey === skinKey);
-  const linkedSourceKey = activeLink?.sourceKey;
+  const linked = Boolean(activeLink);
 
   useEffect(() => {
     if (!open) return;
@@ -71,8 +71,10 @@ export default function SkinIconLinkPicker({
     };
   }, [open]);
 
-  // Nothing to pair with: stay out of the way entirely.
-  if (candidates.length === 0) return null;
+  // With neither candidates nor a stored link there is nothing useful to show.
+  // A broken/missing source still renders its linked control so the user always
+  // has a way to remove the binding.
+  if (candidates.length === 0 && !activeLink) return null;
 
   const choose = async (sourceKey: string | null) => {
     setBusy(true);
@@ -93,7 +95,6 @@ export default function SkinIconLinkPicker({
     }
   };
 
-  const linked = Boolean(activeLink);
   const label = linked
     ? t('locker.iconLink.linkedTo', { name: activeLink?.sourceModName ?? activeLink?.sourceKey })
     : t('locker.iconLink.matchIcons');
@@ -140,7 +141,12 @@ export default function SkinIconLinkPicker({
           </div>
           <div className="flex flex-col gap-0.5">
             {candidates.map((candidate) => {
-              const isActive = candidate.metaKey === linkedSourceKey;
+              // Content identity survives the pakNN/addons rename caused by an
+              // enable, disable, or reorder. Fall back to the captured metaKey
+              // for older links that predate source hashes.
+              const isActive = activeLink?.sourceSha256 && candidate.sha256
+                ? activeLink.sourceSha256.toLowerCase() === candidate.sha256.toLowerCase()
+                : candidate.metaKey === activeLink?.sourceKey;
               return (
                 <button
                   key={candidate.id}

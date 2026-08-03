@@ -353,14 +353,12 @@ export async function applyHeroCard(
         addedAt: new Date().toISOString(),
     };
 
-    // One owner per hero: a hand-picked card takes this hero over from any skin
-    // -> icon link that used to drive it. Without this the next skin toggle
-    // would reconcile the link straight back over the user's pick.
-    dropLinksForHeroCodename(primaryCodename);
-
     const current = await currentCardSelections(deadlockPath);
     const next = [...current.filter((c) => c.heroCodename !== primaryCodename), selection];
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
+    // Commit the ownership handoff only after the card rebuild succeeds. If the
+    // build fails, the previous link set and its applied card stay consistent.
+    dropLinksForHeroCodename(primaryCodename);
     // A mod card replacing a prior custom upload for this hero leaves the custom
     // staging VPK orphaned; drop it (it's unmounted, just unused).
     if (current.some((c) => c.heroCodename === primaryCodename && c.source.kind === 'custom')) {
@@ -385,17 +383,19 @@ export async function revertHeroCard(
     ensureGrimoireConfigured(deadlockPath);
     await migrateManagedVpksToGrimoire(deadlockPath);
 
-    // "Reset to default" must also break the link, or a link-applied card would
-    // come straight back on the next skin toggle and the revert would look like
-    // it silently failed.
-    dropLinksForHeroCodename(primaryCodename);
-
     const current = await currentCardSelections(deadlockPath);
-    if (current.length === 0) return { activeSourceFileName: null, missingSourceFileNames: [] };
+    if (current.length === 0) {
+        // There may still be a dormant link for a disabled skin. Reset means the
+        // hero should remain default when that skin is enabled later.
+        dropLinksForHeroCodename(primaryCodename);
+        return { activeSourceFileName: null, missingSourceFileNames: [] };
+    }
 
     const removed = current.filter((c) => c.heroCodename === primaryCodename);
     const next = current.filter((c) => c.heroCodename !== primaryCodename);
     const { missing } = await rebuildLockerCosmetics(deadlockPath, next);
+    // As above, only commit the link-set removal after the VPK change succeeds.
+    dropLinksForHeroCodename(primaryCodename);
     // Drop the staging VPK behind any custom upload we just reverted, so a stale
     // PNG set doesn't linger in userData (it's not mounted, just unused).
     for (const sel of removed) {
@@ -420,8 +420,8 @@ export async function listAppliedCards(deadlockPath: string): Promise<LockerOver
  *  Drops the skin -> icon links too: leaving them would silently re-apply their
  *  cards on the next skin toggle, so "clear" wouldn't stay cleared. */
 export async function clearAllHeroCards(deadlockPath: string): Promise<void> {
-    dropAllCardLinks();
     await rebuildLockerCosmetics(deadlockPath, []);
+    dropAllCardLinks();
 }
 
 interface PortraitManifest {

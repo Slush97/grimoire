@@ -225,7 +225,7 @@ describe('planLinkedCards', () => {
       now: NOW,
     });
     const swapped = planLinkedCards({
-      links: [link({ sourceKey: 'pak22_dir.vpk' })],
+      links: [link({ sourceKey: 'pak22_dir.vpk', sourceSha256: 'different-content' })],
       current: applied,
       activeSkins: active('gamebanana:111'),
       now: NOW,
@@ -251,6 +251,28 @@ describe('selectionsSignature', () => {
     });
     expect(selectionsSignature([asManual])).not.toBe(selectionsSignature([asLink]));
   });
+
+  it('changes when source content changes under the same metaKey', () => {
+    const before = manual({
+      source: { kind: 'mod', fileName: 'pak04_dir.vpk', sha256AtApplyTime: 'old' },
+    });
+    const after = manual({
+      source: { kind: 'mod', fileName: 'pak04_dir.vpk', sha256AtApplyTime: 'new' },
+    });
+    expect(selectionsSignature([before])).not.toBe(selectionsSignature([after]));
+  });
+
+  it('ignores a pakNN rename when the source content identity is unchanged', () => {
+    const before = manual({
+      variants: ['vertical', 'card'],
+      source: { kind: 'mod', fileName: 'pak04_dir.vpk', sha256AtApplyTime: 'same' },
+    });
+    const after = manual({
+      variants: ['card', 'vertical'],
+      source: { kind: 'mod', fileName: 'addons2/pak19_dir.vpk', sha256AtApplyTime: 'same' },
+    });
+    expect(selectionsSignature([before])).toBe(selectionsSignature([after]));
+  });
 });
 
 describe('link set edits', () => {
@@ -260,10 +282,10 @@ describe('link set edits', () => {
     expect(next[0].sourceKey).toBe('new.vpk');
   });
 
-  it('upsert replaces another skin binding for the same hero (one owner per hero)', () => {
+  it('keeps another skin binding for the same hero', () => {
     const next = upsertLink([link()], link({ skinKey: 'gamebanana:999', sourceKey: 'new.vpk' }));
-    expect(next).toHaveLength(1);
-    expect(next[0].skinKey).toBe('gamebanana:999');
+    expect(next).toHaveLength(2);
+    expect(next.map((item) => item.skinKey)).toEqual(['gamebanana:111', 'gamebanana:999']);
   });
 
   it('upsert leaves bindings for other heroes alone', () => {
