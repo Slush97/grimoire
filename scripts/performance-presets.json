@@ -16,9 +16,9 @@
   "baseline": {
     "$comment": "Stock gameinfo.gi. Every preset is stored as a diff against this, which is what lets Grimoire patch in place instead of replacing the user's file.",
     "repo": "Sqooky/OptimizationLock",
-    "commit": "005ca7741fb98c9793dc80ec28a703b3bc47fff1",
+    "commit": "a7ba9d63dc6bb660208374ba2f18955e77042442",
     "path": "clean gameinfo.gi/gameinfo.gi",
-    "sha256": "2e6c4d4184383e8db97df172b7203089116bd93c4a3a9971b4d231009cf9e238"
+    "sha256": "0ba6d49dab17a428f210bb2413af8d3b9724064aab091eb52aea124c3902936b"
   },
   "sources": {
     "optimizationlock": {
@@ -26,10 +26,10 @@
       "url": "https://github.com/Sqooky/OptimizationLock",
       "license": "GPL-3.0",
       "credit": "OptimizationLock by Sqooky and contributors",
-      "commit": "005ca7741fb98c9793dc80ec28a703b3bc47fff1",
-      "ref": "2.7",
+      "commit": "a7ba9d63dc6bb660208374ba2f18955e77042442",
+      "ref": "2.8.2",
       "refKind": "prose",
-      "$comment": "Upstream publishes no git tags or releases; 'ref' is the version from the 2026-07-25 release commit message. Pin is the commit SHA. If Sqooky starts tagging, switch refKind to 'tag' and pin the tag's resolved SHA."
+      "$comment": "Upstream publishes no git tags or releases; 'ref' is the version stated in the 2026-08-02 commit message and the config's own header comment. Pin is the commit SHA. If Sqooky starts tagging, switch refKind to 'tag' and pin the tag's resolved SHA."
     },
     "optilock": {
       "repo": "dacooderr/OptiLock",
@@ -39,7 +39,7 @@
       "commit": "fdfce93a95db176c539d3dbcb601238e181008b9",
       "ref": "v4.2",
       "refKind": "tag",
-      "$comment": "Tag v4.2 resolved to this commit on 2026-07-29. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate."
+      "$comment": "Tag v4.2 resolved to this commit on 2026-07-29, rechecked 2026-08-03. GitHub tags are mutable, so the SHA is authoritative and the sha256 below is the real gate. KNOWN ISSUE: one day after tagging v4.2, upstream commit 40788927 flipped r_render_portals back to \"true\" in the FPS preset because \"false\" broke Doorman's door. That fix is on main but not in any release, so a tag-pinned refresh cannot pick it up. Rather than pin past the tag (which would make the card claim a release the code is not from), r_render_portals is excluded outright below, so Grimoire never writes either value and the engine default stands. Drop that exclusion once upstream tags a release containing the fix."
     }
   },
   "presets": [
@@ -50,7 +50,7 @@
       "default": true,
       "source": "optimizationlock",
       "path": "Sqooky's .gi/gameinfo.gi",
-      "sha256": "4472f50c2925b99bf907d6d6444a08d0ef26a7586b74f575820ec8ffcf265333",
+      "sha256": "6c3753fabda7c724a01c9a9747e4a14c8618fe3815ecddae929623252e60db5c",
       "author": "Sqooky"
     },
     {
@@ -59,7 +59,7 @@
       "tier": "preview",
       "source": "optimizationlock",
       "path": "test_cfg/gameinfo.gi",
-      "sha256": "b8e2e34ae293d9a6d3a5bd115d6f92626d19662684033beb906401f6a7b6f0bf",
+      "sha256": "7cb2c5d0f7100d90e6f4ddd4fa8b067533d2bcd3a520ebe936fec75263c4084b",
       "author": "Sqooky",
       "unstable": true
     },
@@ -78,7 +78,7 @@
       "tier": "potato",
       "source": "optimizationlock",
       "path": "kaizuchanerus minimum spec/gameinfo.gi",
-      "sha256": "f27e7d6fd479472f4aa127d4dd5eadb8ec6805e71e3f561e6f02ff879354c1c9",
+      "sha256": "e4be5933e6f24de0c368c77957dd7579ef8e2e8169fe4e9740977c09db08fa68",
       "author": "kaizuchanerus"
     },
     {
@@ -126,6 +126,14 @@
       {
         "key": "citadel_hideout_ball_show_juggle_fx",
         "why": "Hideout-only cosmetic effect, not a performance setting."
+      },
+      {
+        "key": "LocalServerClientAccess",
+        "why": "Valve added this key under Engine2 in the stock gameinfo.gi; OptimizationLock 2.8.2 transcribed it into the Localize block by mistake. Diffs are path-scoped, so without this the generator would emit an add against Localize and Grimoire would faithfully write upstream's typo into the user's file. It is engine plumbing, not a performance setting, so never write it from either section."
+      },
+      {
+        "key": "r_render_portals",
+        "why": "OptiLock v4.2's FPS preset sets this to false, which breaks Doorman's door. Upstream fixed it to true one day after tagging (commit 40788927) but has published no release containing the fix, so a tag-pinned refresh cannot reach it. Excluding costs nothing: the stock gameinfo.gi never sets the key, and the two presets that do set it write true, which is the engine default. Remove this once a release carries the fix."
       }
     ]
   },
@@ -158,8 +166,10 @@
       "_fov$",
       "aspectratio",
       "debug_draw",
+      "debug_show",
       "hideout",
-      "camera_pitch"
+      "camera_pitch",
+      "citadel_unit_status_"
     ],
     "allowInBody": [
       {
@@ -169,6 +179,14 @@
       {
         "key": "r_citadel_glow_health_bar_debug",
         "why": "Set to false: turns a debug overlay off. Same reasoning as debug_draw_enable."
+      },
+      {
+        "key": "citadel_unit_status_old_update_rate",
+        "why": "Caught by the citadel_unit_status_ pattern, but it is the one member of that family that is genuinely a frame-rate setting: it caps how often health bars redraw. All six presets set 15 against a stock default of 30. It changes redraw cost, not what the bars show."
+      },
+      {
+        "key": "citadel_hud_objective_health_debug_show_midboss",
+        "why": "Set to false by both presets that mention it, i.e. the debug midboss health bar stays OFF, which is also the engine default. Turning a debug overlay off cannot reveal anything. Same reasoning as debug_draw_enable."
       }
     ],
     "keys": [
@@ -189,6 +207,36 @@
         "key": "citadel_unit_status_hide_names",
         "group": "visibility",
         "why": "Hides the names drawn over unit status bars. Stock gameinfo.gi does not set it and four presets turn it on. A name over a unit is gameplay information the player reads, not render cost, so removing it is the same class of choice as citadel_unit_status_use_new and belongs behind the same explicit opt-in."
+      },
+      {
+        "key": "citadel_unit_status_use_v2",
+        "group": "visibility",
+        "why": "The predecessor of citadel_unit_status_use_new and the same class of choice: it swaps the health bar to the v2 style. Stock does not set it. Held back for the same reason use_new is."
+      },
+      {
+        "key": "citadel_unit_status_use_v2_for_nonplayers",
+        "group": "visibility",
+        "why": "Extends the v2 health bar to troopers, objectives, and camps. A readability preference about how neutral units are drawn, not render cost."
+      },
+      {
+        "key": "citadel_unit_status_single_bar_mode",
+        "group": "visibility",
+        "why": "Collapses the v2 health bar into one bar instead of several. Purely how the bar reads; the authors disagree about it."
+      },
+      {
+        "key": "citadel_unit_status_delta_decay_delay",
+        "group": "visibility",
+        "why": "Controls how long the damage-delta segment lingers on a health bar before it starts decaying. boot's and OptiLock Max set 0, which makes it vanish at once. How long you can read recent damage off a bar is gameplay information, not render cost. Was riding in the preset body until the citadel_unit_status_ pattern caught it."
+      },
+      {
+        "key": "citadel_unit_status_delta_decay_rate",
+        "group": "visibility",
+        "why": "The decay speed for the same damage-delta segment; set to 10 alongside a delay of 0. Classified with citadel_unit_status_delta_decay_delay for the same reason."
+      },
+      {
+        "key": "citadel_unit_status_dpi",
+        "group": "visibility",
+        "why": "Scales the health bar. The author's own comment says it LOWERS performance and they set it anyway for readability, which makes it the clearest case in the family of a look preference rather than a frame-rate setting."
       },
       { "key": "cl_glow_brightness", "group": "visibility" },
       { "key": "r_citadel_outlines", "group": "visibility" },
