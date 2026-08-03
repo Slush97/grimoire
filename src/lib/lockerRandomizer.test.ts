@@ -385,6 +385,67 @@ describe('planRandomization', () => {
     });
     expect(plan).toEqual({ enableIds: [], disableIds: [], changedHeroes: [] });
   });
+
+  // The reported bug: a mod the user wants kept on was turned off every time
+  // the hero's skins re-rolled, forcing them to merge it into each skin.
+  it('never disables a Global mod when the hero re-rolls', () => {
+    const heroSkins = new Map<number, Mod[]>([
+      [
+        1,
+        [
+          mod({ id: 'keep', gameBananaId: 9, enabled: true, priority: 1, priorityMod: true }),
+          mod({ id: 'a', gameBananaId: 1, enabled: true, priority: 2 }),
+          mod({ id: 'b', gameBananaId: 2, priority: 3 }),
+        ],
+      ],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1', 'gamebanana:2']),
+      rng: fixedRng(0),
+    });
+    expect(plan.disableIds).not.toContain('keep');
+    // The ordinary enabled skin still gets swapped out, so the shuffle keeps
+    // working around the Global mod rather than being disabled by it.
+    expect(plan.disableIds).toContain('a');
+    expect(plan.enableIds).toEqual(['b']);
+  });
+
+  it('never picks a Global mod as the re-rolled skin, even when pooled', () => {
+    const heroSkins = new Map<number, Mod[]>([
+      [
+        1,
+        [
+          mod({ id: 'glob', gameBananaId: 1, enabled: true, priority: 1, priorityMod: true }),
+          mod({ id: 'b', gameBananaId: 2, priority: 2 }),
+        ],
+      ],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1', 'gamebanana:2']),
+      rng: fixedRng(0),
+    });
+    expect(plan.enableIds).toEqual(['b']);
+    expect(plan.disableIds).toEqual([]);
+  });
+
+  // Pin beats pool: with nothing left to re-roll, the hero is skipped rather
+  // than the Global mod being cycled with itself.
+  it('skips a hero whose only pooled skin is Global', () => {
+    const heroSkins = new Map<number, Mod[]>([
+      [1, [mod({ id: 'glob', gameBananaId: 1, enabled: true, priority: 1, priorityMod: true })]],
+    ]);
+    const plan = planRandomization({
+      heroSkins,
+      heroIds: [1],
+      included: new Set(['gamebanana:1']),
+      rng: fixedRng(0),
+    });
+    expect(plan).toEqual({ enableIds: [], disableIds: [], changedHeroes: [] });
+  });
 });
 
 describe('planLaunchShuffle', () => {

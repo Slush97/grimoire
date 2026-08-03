@@ -116,6 +116,12 @@ export interface ModMetadata {
      *  when the user wants to stay on a specific version after the author
      *  replaces or rearranges files. */
     ignoreUpdates?: boolean;
+    /** User marked this mod Global: it lives in the priority root
+     *  (citadel/grimoire), which the engine searches before citadel/addons, so
+     *  it wins every file collision and the launch shuffle leaves it enabled.
+     *  Source of truth for placement, because a disabled mod sits in .disabled/
+     *  where the folder can't tell us. Undefined (not false) when unset. */
+    priorityMod?: boolean;
 }
 
 export type ModMetadataMap = Record<string, ModMetadata>;

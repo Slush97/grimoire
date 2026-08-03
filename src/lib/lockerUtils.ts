@@ -392,6 +392,12 @@ export function getLockerSkinKey(mod: Mod): string {
  * math stays consistent across both surfaces.
  */
 export function modLoadOrder(mod: Mod): number {
+  // The priority root (citadel/grimoire) is the FIRST Game line in the
+  // canonical SearchPaths block, so it outranks every addons folder. Ranking it
+  // -1 is what makes a Global mod sort ahead of pak01 in the base folder. Keep
+  // in step with addonFolderIndex in electron/main/services/mods.ts, which
+  // applies the same rule on the main-process side.
+  if (mod.metaKey.startsWith('grimoire/')) return -100 + mod.priority;
   const match = mod.metaKey.match(/^addons(\d+)\//);
   const folderIndex = match ? parseInt(match[1], 10) : 0;
   return folderIndex * 100 + mod.priority;

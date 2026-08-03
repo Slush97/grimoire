@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import { existsSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { createHash, randomBytes } from 'crypto';
-import { getAddonsPath, getDisabledPath, getAddonFolderPaths, createNextOverflowFolder, overflowAddonsPath, MAX_ADDON_FOLDERS, metaKeyFor } from './deadlock';
+import { getAddonsPath, getDisabledPath, getAddonFolderPaths, getModScanRootPaths, getGrimoirePath, createNextOverflowFolder, overflowAddonsPath, MAX_ADDON_FOLDERS, metaKeyFor, isPriorityFolderPath, isReservedPriorityVpk, PRIORITY_FIRST_SLOT } from './deadlock';
 import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
 import { compareFileContents } from './fileMatch';
@@ -138,6 +138,10 @@ export interface Mod {
     /** User opted out of the "update available" flag for this mod. The
      *  enricher reads this from the mod metadata sidecar. */
     ignoreUpdates?: boolean;
+    /** User marked this mod Global: it lives in the citadel/grimoire priority
+     *  root, which the engine searches ahead of citadel/addons. The enricher
+     *  reads this from the mod metadata sidecar. */
+    priorityMod?: boolean;
 }
 
 /**
@@ -243,11 +247,20 @@ function slugify(value: string): string {
 }
 
 /**
- * Folder index of an addon VPK from its on-disk path: 0 for the base
+ * Folder index of an addon VPK from its on-disk path, ordered the way the
+ * engine searches: PRIORITY_FOLDER_INDEX for citadel/grimoire, 0 for the base
  * citadel/addons, N for an overflow citadel/addonsN. Anything else (e.g. a
  * .disabled file) reports 0; callers that care gate on mod.enabled first.
+ *
+ * The priority root sorts BELOW zero because it is the first Game line in the
+ * canonical SearchPaths block (system.ts), and earlier lines win. That single
+ * fact is what makes a Global mod outrank every addons mod without any pakNN
+ * bookkeeping, so every load-order consumer must go through this function.
  */
+const PRIORITY_FOLDER_INDEX = -1;
+
 function addonFolderIndex(vpkPath: string): number {
+    if (isPriorityFolderPath(vpkPath)) return PRIORITY_FOLDER_INDEX;
     const match = basename(dirname(vpkPath)).match(/^addons(\d+)$/i);
     return match ? parseInt(match[1], 10) : 0;
 }
@@ -306,6 +319,12 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
 
     for (const entry of entries) {
         const fullPath = join(folder, entry);
+
+        // Reserved priority slots (pak01-pak04 in citadel/grimoire) are the
+        // Locker's own managed VPKs. They are keyed by synthetic metadata keys
+        // (locker:cards and friends), so surfacing them here would invent
+        // phantom user mods for artifacts the user never installed.
+        if (isPriorityFolderPath(fullPath) && isReservedPriorityVpk(entry)) continue;
 
         try {
             const stats = await fs.stat(fullPath);
@@ -369,7 +388,10 @@ export async function scanMods(deadlockPath: string): Promise<Mod[]> {
     // Scan every enabled addon folder (base citadel/addons plus any overflow
     // addons1, addons2, ...) and the single shared .disabled parking lot. Each
     // mod's metaKey is stamped in scanFolder from its folder location.
-    const enabledFolders = getAddonFolderPaths(deadlockPath);
+    // Scan roots include the priority root (citadel/grimoire) ahead of the
+    // addon roots, so a mod the user marked Global stays visible and fully
+    // manageable in the list instead of vanishing when it moves there.
+    const enabledFolders = getModScanRootPaths(deadlockPath);
     await cleanupStaleMergeRebuildArtifacts(enabledFolders);
     const scanned = await Promise.all([
         ...enabledFolders.map((folder) => scanFolder(folder, true)),
@@ -738,6 +760,92 @@ export async function allocateEnabledVpkPath(deadlockPath: string): Promise<stri
 }
 
 /**
+ * Message for a full priority root. Distinct from ENABLE_LIMIT_MESSAGE because
+ * the remedy is different (un-Global something, not disable something) and
+ * because the priority root has no overflow: it is one folder with one
+ * SearchPaths line, and minting siblings would mean rewriting gameinfo for what
+ * is meant to be a small curated set.
+ */
+export const PRIORITY_LIMIT_MESSAGE =
+    'You can have at most 95 Global mods. Remove one from Global to make room.';
+
+/**
+ * Find a free user slot in the priority root. Slots below PRIORITY_FIRST_SLOT
+ * belong to the Locker's managed VPKs and are never handed out, which is also
+ * what keeps those artifacts loading ahead of user Global mods.
+ */
+async function allocatePrioritySlot(deadlockPath: string): Promise<AllocatedSlot> {
+    const folder = getGrimoirePath(deadlockPath);
+    const used = await folderPakNumbers(folder);
+    for (let slot = PRIORITY_FIRST_SLOT; slot <= MAX_VPK_PRIORITY; slot++) {
+        if (!used.has(slot)) {
+            return { folder, fileName: `pak${String(slot).padStart(2, '0')}_dir.vpk` };
+        }
+    }
+    throw new Error(PRIORITY_LIMIT_MESSAGE);
+}
+
+/**
+ * Move a mod into or out of the priority root (the "Global" affordance).
+ *
+ * The metadata flag is the source of truth rather than the current folder,
+ * because a disabled mod lives in .disabled/ and has no folder to read: without
+ * the flag, disabling a Global mod and re-enabling it would silently demote it
+ * back to citadel/addons. enableModImpl consults the flag for exactly that
+ * reason.
+ *
+ * A disabled mod can still be marked Global; the flag is recorded and the move
+ * happens on the next enable.
+ */
+export function setModPriorityFolder(deadlockPath: string, modId: string, priority: boolean): Promise<Mod> {
+    return withModMutationLock(async () => {
+        const mods = await scanMods(deadlockPath);
+        await syncRunningGameModSnapshotFromMods(mods);
+        const target = mods.find((m) => m.id === modId);
+        if (!target) throw new Error(`Mod not found: ${modId}`);
+
+        const alreadyThere = isPriorityFolderPath(target.path);
+        if (alreadyThere === priority) {
+            // Folder already correct; just make sure the flag agrees so a
+            // later disable/enable round trip preserves the choice.
+            setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
+            return target;
+        }
+
+        // Record the intent before any rename, so a crash mid-move leaves the
+        // flag and the next enable heals the placement.
+        setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
+
+        if (!target.enabled) {
+            // Nothing to move: the file is parked in .disabled/ under a
+            // free-form name. The flag alone decides where the next enable
+            // puts it.
+            return target;
+        }
+
+        assertCanMoveLoadedGameMod(target);
+
+        let destination: AllocatedSlot;
+        if (priority) {
+            destination = await allocatePrioritySlot(deadlockPath);
+        } else {
+            const disabledForbidden = await folderPakNumbers(getDisabledPath(deadlockPath));
+            destination = await allocateSlot(deadlockPath, {
+                disabledForbidden,
+                preferred: [getModMetadata(target.metaKey)?.lastPriority],
+            });
+        }
+
+        const moved = await moveModToFolderAs(target, destination.folder, destination.fileName, true);
+        modTrace(
+            `priority: "${target.name}" ${target.metaKey} -> ${moved.metaKey} (global=${priority})`
+        );
+        return moved;
+    });
+}
+
+
+/**
  * Serialize every mod-folder mutation (enable / disable / delete / reorder /
  * priority) through one in-process queue.
  *
@@ -908,7 +1016,21 @@ async function enableModImpl(deadlockPath: string, modId: string): Promise<Mod> 
     // allocateSlot fills the base addons folder first, then each overflow folder
     // in order, minting a new one (and patching gameinfo) only when all are full.
     const meta = getModMetadata(targetMod.metaKey);
-    const { folder, fileName } = await allocateSlot(deadlockPath, {
+    // A mod the user marked Global returns to the priority root, not to
+    // citadel/addons. Without this, disabling and re-enabling a Global mod
+    // would silently demote it. If the priority root is full we fall back to a
+    // normal slot rather than refusing the enable outright: losing the Global
+    // status is recoverable and visible, a failed enable is neither.
+    let allocated: AllocatedSlot | null = null;
+    if (meta?.priorityMod) {
+        try {
+            allocated = await allocatePrioritySlot(deadlockPath);
+        } catch {
+            setModMetadata(targetMod.metaKey, { priorityMod: undefined });
+            modTrace(`enable: priority root full, demoting "${meta?.modName ?? targetMod.name}" to addons`);
+        }
+    }
+    const { folder, fileName } = allocated ?? await allocateSlot(deadlockPath, {
         disabledForbidden: disabledUsed,
         preferred: [meta?.lastPriority, ownNumber ?? undefined],
     });
@@ -1090,7 +1212,12 @@ async function reorderModsImpl(deadlockPath: string, orderedIds: string[]): Prom
     for (const id of orderedIds) {
         const mod = modById.get(id);
         if (!mod) throw new Error(`Mod not in list: ${id}`);
-        if (mod.enabled) targets.push(mod);
+        // Priority-root mods are outside the addons pakNN ordering entirely:
+        // they win by search-path position, not by slot number. Including one
+        // here would pack it into citadel/addons and silently strip its Global
+        // status. Callers pass the full enabled list, so filter rather than
+        // throw.
+        if (mod.enabled && !isPriorityFolderPath(mod.path)) targets.push(mod);
     }
     if (targets.length === 0) return;
     const targetIds = new Set(targets.map((m) => m.id));

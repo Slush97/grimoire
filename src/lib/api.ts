@@ -434,6 +434,13 @@ export async function setModIgnoreUpdates(
   return window.electronAPI.setModIgnoreUpdates(modId, ignore);
 }
 
+export async function setModPriorityFolder(
+  modId: string,
+  priority: boolean
+): Promise<Mod> {
+  return window.electronAPI.setModPriorityFolder(modId, priority);
+}
+
 export async function backfillGameBananaFileId(
   modId: string,
   payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }

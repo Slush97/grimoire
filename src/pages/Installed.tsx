@@ -67,6 +67,7 @@ import {
   Copy,
   ExternalLink,
   Star,
+  ArrowUpToLine,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuSeparator, MenuTrigger } from '../components/common/menu';
@@ -529,6 +530,8 @@ interface InstalledEntryCardProps {
   onViewImprint: (mod: Mod) => void;
   onTagLocker: (entry: ModEntry, heroName: string | null) => Promise<void>;
   onTagGlobal: (entry: ModEntry, globalType: GlobalModType | null) => Promise<void>;
+  /** Move an entry into or out of the citadel/grimoire priority root. */
+  onSetPriority: (entry: ModEntry, priority: boolean) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
   onCommitPriority: (modId: string, newPosition: number) => Promise<void>;
   onUnmerge: (mod: Mod) => void;
@@ -577,6 +580,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onViewImprint,
   onTagLocker,
   onTagGlobal,
+  onSetPriority,
   onFixUnknown,
   onCommitPriority,
   onUnmerge,
@@ -612,6 +616,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
         onTagLocker={(heroName) => onTagLocker(entry, heroName)}
         onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
+        onSetPriority={(priority) => onSetPriority(entry, priority)}
         onFixUnknown={
           // Any local (unlinked, non-merged) mod can search GameBanana and
           // link, not just ones flagged "unknown": naming a local mod via
@@ -672,6 +677,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onDelete={() => onDelete(entry)}
       onTagLocker={(heroName) => onTagLocker(entry, heroName)}
       onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
+      onSetPriority={(priority) => onSetPriority(entry, priority)}
       loadPosition={loadPosition}
       loadCount={loadCount}
       onCommitPriority={(p) => onCommitPriority(entry.primary.id, p)}
@@ -800,6 +806,7 @@ export default function Installed() {
     editLocalMod,
     setModLockerHero,
     setModGlobalType,
+    setModPriorityFolder,
     setVariantLabel,
     soundVolume,
     setInstalledScrollTop,
@@ -3354,6 +3361,17 @@ export default function Installed() {
       await setModGlobalType(entry.mod.id, globalType);
     }
   });
+  // Marking a grouped entry Global moves every variant, so a submission whose
+  // files co-require each other (model plus voice lines) doesn't end up half in
+  // the priority root. Sequential, like the other per-variant loops here: each
+  // move renames a VPK under the main-process mutation lock.
+  const setEntryPriority = useStableCallback(async (entry: ModEntry, priority: boolean) => {
+    if (entry.kind === 'group') {
+      for (const variant of entry.variants) await setModPriorityFolder(variant.id, priority);
+    } else {
+      await setModPriorityFolder(entry.mod.id, priority);
+    }
+  });
   const fixUnknownEntry = useStableCallback((mod: Mod) => openUnknownModFix(mod, 'single'));
   // commitLoadPosition is declared after the early returns (it reads the
   // compact order built there); bridge it through the same synchronous-ref
@@ -3804,6 +3822,7 @@ export default function Installed() {
     onViewImprint: viewEntryImprint,
     onTagLocker: tagEntryLocker,
     onTagGlobal: tagEntryGlobal,
+    onSetPriority: setEntryPriority,
     onFixUnknown: fixUnknownEntry,
     onCommitPriority: commitEntryPriority,
     onUnmerge: unmergeEntry,
@@ -6962,6 +6981,9 @@ interface ModCardProps {
     lockerHero?: string;
     lockerHeroSource?: Mod['lockerHeroSource'];
     globalType?: GlobalModType;
+    /** Lives in the citadel/grimoire priority root: wins every file collision
+     *  and is never disabled by the launch shuffle. */
+    priorityMod?: boolean;
     merged?: import('../types/mod').MergedModInfo;
   };
   viewMode: ViewMode;
@@ -6989,6 +7011,8 @@ interface ModCardProps {
   onViewImprint?: () => void;
   onTagLocker?: (heroName: string | null) => void | Promise<void>;
   onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
+  /** Toggle this mod's Global (priority root) placement. */
+  onSetPriority?: (priority: boolean) => void | Promise<void>;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
   /** Reposition commit. Passed through to PriorityEditor; the argument is a
@@ -7642,6 +7666,7 @@ function ModCard({
   onViewImprint,
   onTagLocker,
   onTagGlobal,
+  onSetPriority,
   onFixUnknown,
   fixingUnknown,
   onCommitPriority,
@@ -7767,6 +7792,24 @@ function ModCard({
       setTagPickerOpen(false);
     } catch (err) {
       console.error('[Installed] Failed to set global locker tag:', err);
+      setMenuError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMenuBusy(false);
+    }
+  };
+
+  // Toggle the Global (priority root) placement. The move renames the VPK, so
+  // the resulting mod carries a new id; the store refreshes the list, and this
+  // card is re-rendered from the new entry rather than trying to patch itself.
+  const togglePriority = async () => {
+    if (!onSetPriority || menuBusy) return;
+    setMenuBusy(true);
+    setMenuError(null);
+    try {
+      await onSetPriority(!mod.priorityMod);
+      setMenuOpen(false);
+    } catch (err) {
+      console.error('[Installed] Failed to change Global placement:', err);
       setMenuError(err instanceof Error ? err.message : String(err));
     } finally {
       setMenuBusy(false);
@@ -8051,6 +8094,28 @@ function ModCard({
               >
                 <Beaker className="w-3.5 h-3.5" />
                 {t('installed.card.soloLaunch')}
+              </button>
+            )}
+            {onSetPriority && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void togglePriority();
+                }}
+                disabled={menuBusy}
+                title={t('installed.priority.hint')}
+                className={`${menuItemClasses} disabled:cursor-not-allowed disabled:opacity-50 ${
+                  mod.priorityMod ? 'text-accent' : ''
+                }`}
+              >
+                <ArrowUpToLine className="w-3.5 h-3.5" />
+                {menuBusy
+                  ? t('installed.priority.busy')
+                  : mod.priorityMod
+                    ? t('installed.priority.clear')
+                    : t('installed.priority.make')}
               </button>
             )}
             {(onTagLocker || onTagGlobal) && (
@@ -8414,6 +8479,13 @@ function ModCard({
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
+              {mod.priorityMod && (
+                <MetaTextChip
+                  label={t('installed.priority.chip')}
+                  className={manualTagChipClasses}
+                  title={t('installed.priority.hint')}
+                />
+              )}
               <LockerHeroChip
                 mod={mod}
                 manualTagChipClasses={manualTagChipClasses}

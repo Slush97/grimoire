@@ -182,12 +182,25 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
     if (!mods || mods.length === 0) continue;
 
     const skins = groupLockerSkins(mods);
-    const eligible = skins.filter((skin) => included.has(shuffleSkinKey(skin.primary)));
+    // A Global mod is pinned by construction: it lives in the priority root and
+    // outranks everything, so offering it as a shuffle candidate is
+    // contradictory (it is already always on). Dropping it from the pool also
+    // means a hero whose only pooled skin is Global is skipped entirely, which
+    // is the right outcome: there is nothing left to re-roll.
+    const eligible = skins.filter(
+      (skin) => included.has(shuffleSkinKey(skin.primary)) && !skin.primary.priorityMod
+    );
     if (eligible.length === 0) continue;
 
     // Bias away from the currently-active skin so each launch changes the look.
     // Only when there's an alternative left to pick.
-    const activeMod = activeLockerSkin(mods);
+    //
+    // Global mods are excluded from the "active" lookup: activeLockerSkin picks
+    // the lowest load order, and a Global mod lives in the priority root, so it
+    // sorts ahead of every addons mod by construction. Without this filter one
+    // Global mod would make every hero's avoid-current bias compare against the
+    // wrong skin, and the shuffle could re-pick the skin already on screen.
+    const activeMod = activeLockerSkin(mods.filter((m) => !m.priorityMod));
     const activeKey = activeMod ? shuffleSkinKey(activeMod) : undefined;
     let pool = eligible;
     if (avoidCurrent && eligible.length > 1 && activeKey) {
@@ -230,6 +243,10 @@ export function planRandomization(options: RandomizePlanOptions): RandomizePlan 
       explicitChoice ? [chosenVariant.id] : chosen.variants.map((variant) => variant.id)
     );
     for (const mod of mods) {
+      // Global mods survive every re-roll. This is the whole point of the
+      // feature: without it, marking a mod Global would keep it winning file
+      // collisions right up until the next launch turned it off.
+      if (mod.priorityMod) continue;
       if (mod.enabled && !chosenVariantIds.has(mod.id)) {
         disableIds.push(mod.id);
         heroChanged = true;

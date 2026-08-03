@@ -234,6 +234,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.invoke('set-mod-global-type', modId, globalType),
     setModIgnoreUpdates: (modId: string, ignore: boolean) =>
         ipcRenderer.invoke('set-mod-ignore-updates', modId, ignore),
+    setModPriorityFolder: (modId: string, priority: boolean) =>
+        ipcRenderer.invoke('set-mod-priority-folder', modId, priority),
     backfillGameBananaFileId: (
         modId: string,
         payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }

@@ -179,9 +179,21 @@ export function getDisabledPath(deadlockPath: string): string {
  * Get the Grimoire-managed addon folder path, creating it if necessary.
  *
  * This is a SECOND addon search path (sibling of citadel/addons), listed FIRST
- * in gameinfo.gi's SearchPaths so it outranks every user mod. It holds only the
- * Locker-managed override VPKs (hero cards + ability sounds), keeping them off
- * the user's 99-slot citadel/addons budget while still winning every collision.
+ * in gameinfo.gi's SearchPaths so it outranks every user mod, and it does not
+ * consume the user's 99-slot citadel/addons budget.
+ *
+ * Two kinds of VPK live here:
+ *
+ * - Slots pak01-pak04 are RESERVED for the Locker-managed override VPKs (hero
+ *   cards, ability sounds, ability colors, trippy skins). They are written by
+ *   lockerVpk.ts under synthetic metadata keys and are never user mods.
+ * - Slots pak05-pak99 hold user mods the user marked "Global" (see
+ *   PRIORITY_FIRST_SLOT). Being here IS the whole feature: the engine's search
+ *   path order makes them win every file collision with no load-order
+ *   bookkeeping, and the launch shuffle leaves them alone.
+ *
+ * Reserved-first ordering is deliberate: a lower pakNN loads first and wins, so
+ * the Locker's own managed artifacts still outrank a user's Global mod.
  */
 export function getGrimoirePath(deadlockPath: string): string {
     const grimoirePath = join(deadlockPath, 'game', 'citadel', 'grimoire');
@@ -191,6 +203,33 @@ export function getGrimoirePath(deadlockPath: string): string {
     }
 
     return grimoirePath;
+}
+
+/** Folder name of the priority root, as it appears under citadel/. */
+export const PRIORITY_FOLDER_NAME = 'grimoire';
+
+/**
+ * First pakNN slot in citadel/grimoire available to user mods. Slots 1-4 are
+ * the Locker-managed VPKs (cards, sounds, colors, trippy skins); see
+ * lockerVpk.ts, which owns those filenames. Keep this in sync if a fifth
+ * managed artifact is ever added.
+ */
+export const PRIORITY_FIRST_SLOT = 5;
+
+/**
+ * True for a citadel/grimoire filename in the reserved pak01-pak04 range. The
+ * scan uses this to skip the Locker-managed VPKs, which are keyed by synthetic
+ * metadata keys (locker:cards and friends) and must never surface as user mods.
+ */
+export function isReservedPriorityVpk(fileName: string): boolean {
+    const match = fileName.match(/^pak(\d+)_dir\.vpk$/i);
+    if (!match) return false;
+    return parseInt(match[1], 10) < PRIORITY_FIRST_SLOT;
+}
+
+/** True when this absolute VPK path sits in the priority root. */
+export function isPriorityFolderPath(vpkPath: string): boolean {
+    return basename(dirname(vpkPath)).toLowerCase() === PRIORITY_FOLDER_NAME;
 }
 
 /**
@@ -228,6 +267,19 @@ export function getAddonFolderPaths(deadlockPath: string): string[] {
         // citadel/ unreadable: base-only is the safe fallback.
     }
     return folders;
+}
+
+/**
+ * Every enabled-mod root the scan walks, in engine search-path order: the
+ * priority root (citadel/grimoire) first, then the addon roots.
+ *
+ * Deliberately separate from getAddonFolderPaths, which stays the *allocation*
+ * view: slot allocation, overflow minting, and the gameinfo SearchPaths rewrite
+ * must never treat the priority root as somewhere a mod can spill into. A mod
+ * only lands there by explicit user action (setModPriorityFolder).
+ */
+export function getModScanRootPaths(deadlockPath: string): string[] {
+    return [getGrimoirePath(deadlockPath), ...getAddonFolderPaths(deadlockPath)];
 }
 
 /**
@@ -275,13 +327,17 @@ export function createNextOverflowFolder(deadlockPath: string): string | null {
  * Mods in the base citadel/addons folder and in .disabled/ key to their BARE
  * filename, exactly as they always have, so existing installs need no migration.
  * Mods in an overflow folder key to `addons{N}/<filename>` so a pak01_dir.vpk in
- * addons1 can't collide with the pak01_dir.vpk in the base folder. This is the
+ * addons1 can't collide with the pak01_dir.vpk in the base folder. Mods in the
+ * priority root key to `grimoire/<filename>` for the same reason. This is the
  * single source of truth for the rule; metadata access and id generation both
  * route through it.
  */
 export function metaKeyFor(vpkPath: string): string {
     const fileName = basename(vpkPath);
     const parentName = basename(dirname(vpkPath));
+    if (parentName.toLowerCase() === PRIORITY_FOLDER_NAME) {
+        return `${PRIORITY_FOLDER_NAME}/${fileName}`;
+    }
     return OVERFLOW_FOLDER_RE.test(parentName) ? `${parentName}/${fileName}` : fileName;
 }
 

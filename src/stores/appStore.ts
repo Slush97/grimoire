@@ -326,6 +326,9 @@ interface AppState {
   editLocalMod: (modId: string, args: EditLocalModArgs) => Promise<void>;
   setModLockerHero: (modId: string, heroName: string | null) => Promise<void>;
   setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<void>;
+  /** Mark a mod Global (priority root) or clear it. Moves the VPK, so it goes
+   *  through the toggle queue like every other folder mutation. */
+  setModPriorityFolder: (modId: string, priority: boolean) => Promise<void>;
   setVariantLabel: (modId: string, label: string) => Promise<void>;
   /** Batch local import. Resolves with one result per source, in request order. */
   importCustomMods: (items: ImportCustomModArgs[]) => Promise<ImportCustomModResult[]>;
@@ -861,6 +864,22 @@ export const useAppStore = create<AppState>((set, get) => ({
     const updated = await api.setModGlobalType(modId, globalType);
     set({
       mods: get().mods.map((m) => (m.id === modId ? updated : m)),
+    });
+  },
+
+  // Marking a mod Global renames its VPK into citadel/grimoire, which changes
+  // its id (ids derive from the filename). Route through enqueueToggle so the
+  // move can't interleave with a Locker/Installed toggle and work off a stale
+  // id, the same hazard documented on the mutation queue in mods.ts.
+  setModPriorityFolder: async (modId: string, priority: boolean) => {
+    await enqueueToggle(async () => {
+      try {
+        const updated = await api.setModPriorityFolder(modId, priority);
+        set({ mods: get().mods.map((m) => (m.id === modId ? updated : m)) });
+      } catch (err) {
+        if (!isGameRunningModLockError(err)) set({ modsError: String(err) });
+        await get().loadMods();
+      }
     });
   },
 
