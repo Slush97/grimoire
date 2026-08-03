@@ -1,0 +1,10 @@
+[Desktop Entry]
+Name=Grimoire
+Exec=grimoire %U
+Terminal=false
+Type=Application
+Icon=com.grimoiremods.Grimoire
+StartupWMClass=Grimoire
+Comment=Mod manager for Deadlock
+MimeType=x-scheme-handler/grimoire;
+Categories=Game;
