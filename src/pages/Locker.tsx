@@ -1771,9 +1771,20 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
 
       {/* Right pane: the selected type's mods as cards. Keyed on the active type
           so its content re-runs the fade on every tab switch (the tab-content
-          transition), which doubles as the drill-in entrance on first mount. */}
+          transition), which doubles as the drill-in entrance on first mount.
+
+          The fade is skipped on prop-container tabs (Soul Container / Spirit
+          Urn): animate-fade-in fills forwards, and a running-or-filling opacity
+          animation makes this wrapper a permanent stacking context, which traps
+          the cards' z-10 tags and z-20 kebab/delete chrome at the wrapper's
+          z-auto level, UNDER the shared model canvas (z-[5], a sibling below).
+          The models pop in on their own schedule anyway (the overlay canvas
+          ignores CSS opacity), so those tabs lose nothing real. */}
       <div ref={paneRef} className="relative z-10 flex-1 overflow-y-auto scrollbar-glass">
-        <div key={activeType} className="space-y-4 p-6 animate-fade-in">
+        <div
+          key={activeType}
+          className={`space-y-4 p-6 ${isPropContainer ? '' : 'animate-fade-in'}`}
+        >
           {activeType ? (
             <>
               <div className="flex items-baseline gap-2">
@@ -1851,8 +1862,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                       // Skipped for prop containers: their model is painted by the
                       // shared overlay canvas, which ignores the card's CSS
                       // opacity, so an opacity entrance would briefly float the
-                      // model over an invisible card. The parent fade + the
-                      // model's own load-in cover their entrance instead.
+                      // model over an invisible card. (The pane wrapper's fade is
+                      // skipped on these tabs too, see above.) The model's own
+                      // load-in covers their entrance instead.
                       style={
                         isPropContainer
                           ? undefined
