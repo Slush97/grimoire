@@ -14,7 +14,8 @@
 import { promises as fs } from 'fs';
 import { basename, join } from 'path';
 import { app } from 'electron';
-import { getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
+import { metaKeyFor } from './deadlock';
+import { listInstalledUserVpks } from './modLibrary';
 import { parseVpkDirectoryCached } from './vpk';
 import { vpkmergeBinaryPath, runVpkmerge } from './modMerger';
 import { getModMetadata } from './metadata';
@@ -113,23 +114,10 @@ function sanitize(value: string): string {
     return value.replace(/[^a-zA-Z0-9_-]+/g, '_');
 }
 
-/** Enabled addon VPKs across every addon folder (base citadel/addons plus any
- *  overflow addonsN) plus the ones parked in `.disabled/`, so a source that
- *  overflowed past slot 99 still surfaces in the picker. */
+/** User VPKs across Global, every addon folder, and `.disabled`, so a source
+ *  remains discoverable after any placement or enable-state change. */
 async function listAddonVpks(deadlockPath: string): Promise<string[]> {
-    const vpks: string[] = [];
-    for (const dir of [...getAddonFolderPaths(deadlockPath), getDisabledPath(deadlockPath)]) {
-        let entries: string[];
-        try {
-            entries = await fs.readdir(dir);
-        } catch {
-            continue; // .disabled may not exist
-        }
-        for (const entry of entries) {
-            if (entry.endsWith('_dir.vpk')) vpks.push(join(dir, entry));
-        }
-    }
-    return vpks;
+    return (await listInstalledUserVpks(deadlockPath)).map((vpk) => vpk.path);
 }
 
 interface PortraitManifest {
@@ -145,7 +133,7 @@ interface PortraitManifest {
 /**
  * Decode every hero portrait/card the installed mods ship for `heroName`.
  *
- * Scans enabled + disabled addon VPKs, cheaply pre-filters by the VPK file
+ * Scans every installed user VPK, cheaply pre-filters by the VPK file
  * tree (reusing the cached parser so we don't re-read every pak), then shells
  * out to `vpkmerge portrait` only for VPKs that actually carry this hero's
  * panorama art.

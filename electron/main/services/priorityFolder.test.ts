@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { isReservedPriorityVpk, isPriorityFolderPath, metaKeyFor, PRIORITY_FIRST_SLOT } from './deadlock';
+import {
+    isReservedPriorityVpk,
+    isReservedPriorityVpkArtifact,
+    isReservedPriorityVpkPath,
+    isPriorityFolderPath,
+    metaKeyFor,
+    PRIORITY_FIRST_SLOT,
+} from './deadlock';
 
 /**
  * The priority root (citadel/grimoire) mixes two populations: the Locker's own
@@ -33,6 +40,12 @@ describe('isReservedPriorityVpk', () => {
         expect(isReservedPriorityVpk('something.vpk')).toBe(false);
         expect(isReservedPriorityVpk('pak01.vpk')).toBe(false);
     });
+
+    it('recognizes reserved chunk siblings for Vanilla stashing', () => {
+        expect(isReservedPriorityVpkArtifact('pak01_000.vpk')).toBe(true);
+        expect(isReservedPriorityVpkArtifact('pak04_999.vpk')).toBe(true);
+        expect(isReservedPriorityVpkArtifact('pak05_000.vpk')).toBe(false);
+    });
 });
 
 describe('isPriorityFolderPath', () => {
@@ -41,6 +54,12 @@ describe('isPriorityFolderPath', () => {
         expect(isPriorityFolderPath('/game/citadel/addons/pak05_dir.vpk')).toBe(false);
         expect(isPriorityFolderPath('/game/citadel/addons1/pak05_dir.vpk')).toBe(false);
         expect(isPriorityFolderPath('/game/citadel/.disabled/whatever.vpk')).toBe(false);
+    });
+
+    it('combines folder and reserved filename checks for inventory scans', () => {
+        expect(isReservedPriorityVpkPath('/game/citadel/grimoire/pak01_dir.vpk')).toBe(true);
+        expect(isReservedPriorityVpkPath('/game/citadel/grimoire/pak05_dir.vpk')).toBe(false);
+        expect(isReservedPriorityVpkPath('/game/citadel/addons/pak01_dir.vpk')).toBe(false);
     });
 });
 

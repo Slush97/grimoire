@@ -877,8 +877,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         const updated = await api.setModPriorityFolder(modId, priority);
         set({ mods: get().mods.map((m) => (m.id === modId ? updated : m)) });
       } catch (err) {
-        if (!isGameRunningModLockError(err)) set({ modsError: String(err) });
-        await get().loadMods();
+        // Reconcile any partial batch progress, then preserve the rejection for
+        // the initiating surface. The picker and card menus own contextual
+        // errors; swallowing here made them close as if a failed move worked.
+        await get().loadMods({ silent: true });
+        throw err;
       }
     });
   },

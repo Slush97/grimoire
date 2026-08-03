@@ -227,9 +227,25 @@ export function isReservedPriorityVpk(fileName: string): boolean {
     return parseInt(match[1], 10) < PRIORITY_FIRST_SLOT;
 }
 
+/**
+ * True for any VPK artifact owned by a reserved priority slot. Vanilla launch
+ * moves chunk siblings as well as *_dir.vpk files, so its filter must recognize
+ * pak01_000.vpk in addition to pak01_dir.vpk.
+ */
+export function isReservedPriorityVpkArtifact(fileName: string): boolean {
+    const match = fileName.match(/^pak(\d+)_(?:dir|\d{3})\.vpk$/i);
+    if (!match) return false;
+    return parseInt(match[1], 10) < PRIORITY_FIRST_SLOT;
+}
+
 /** True when this absolute VPK path sits in the priority root. */
 export function isPriorityFolderPath(vpkPath: string): boolean {
     return basename(dirname(vpkPath)).toLowerCase() === PRIORITY_FOLDER_NAME;
+}
+
+/** True when an absolute path is one of the Locker-managed priority VPKs. */
+export function isReservedPriorityVpkPath(vpkPath: string): boolean {
+    return isPriorityFolderPath(vpkPath) && isReservedPriorityVpk(basename(vpkPath));
 }
 
 /**

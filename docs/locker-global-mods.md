@@ -75,7 +75,10 @@ walks, so a Global mod stays visible and manageable. `getAddonFolderPaths`
 (addon roots only) stays the *allocation* view: slot allocation, overflow
 minting, and the gameinfo rewrite must never treat the priority root as
 somewhere a mod can spill into. A mod only lands there via
-`setModPriorityFolder`.
+`setModPriorityFolder`. Features that inspect the complete installed library
+(metadata identity, Locker cards/sounds/portraits) go through
+`listInstalledUserVpks` in `modLibrary.ts`, which adds `.disabled` and filters
+the reserved priority range once for every consumer.
 
 **The scan skips the reserved range.** The managed VPKs are keyed by synthetic
 metadata keys (`locker:cards` and friends), so surfacing them would invent
@@ -97,6 +100,22 @@ number, so including one in `reorderModsImpl` would pack it back into
 per-hero reorder and an `applyProfile` from demoting a Global mod. As a
 consequence, Global survives profile switches (`priorityMod` is not carried in
 the portable profile format, same as `globalType`).
+
+**Placement changes are failure-atomic.** Destination allocation happens before
+metadata changes. Moving into Global renames first and stamps the destination
+key afterward; if the app stops between those steps, the priority-root scan
+self-heals the flag. Moving out clears the flag before the rename so the
+migrated row is already correct; a failed rename immediately restores it, with
+the scan as the durable fallback. Renderer actions rethrow failures so pickers
+and menus stay open with contextual feedback.
+
+## Vanilla launch interaction
+
+Launch Vanilla stashes user Global VPKs alongside ordinary addon VPKs, including
+their chunk siblings, and restores each file to its recorded root. The reserved
+Locker artifacts in pak01-pak04 keep their established lifecycle and are not
+part of the user-mod stash. `isReservedPriorityVpkArtifact` owns the broader
+directory-plus-chunk reserved check used by this path.
 
 ## Shuffle interaction
 
@@ -142,6 +161,11 @@ shuffle occasionally re-picking the skin already on screen.
   match, metaKey namespacing).
 - `lockerUtils.test.ts` pins the folder-beats-number ordering rule.
 - `lockerRandomizer.test.ts` covers the three shuffle rules above.
+- `priorityFolderFailure.test.ts` pins full-root and failed-rename metadata
+  atomicity.
+- `modLibrary.test.ts`, `metadata.backfill.test.ts`, and
+  `launchVanilla.test.ts` cover complete Global discovery, hash backfill, and
+  Vanilla stash/restore without moving reserved Locker artifacts.
 
 ## Known gaps
 

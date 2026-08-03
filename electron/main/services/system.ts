@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync, existsSync, readdirSync, unlinkSync } from 'fs';
 import { join, extname } from 'path';
-import { getGameinfoPath, getDisabledPath, getCitadelPath, getGrimoirePath, getOverflowFolderNames, getAddonFolderPaths, hasDeadworksContentRoot, DEADWORKS_SEARCH_PATH } from './deadlock';
+import { getGameinfoPath, getDisabledPath, getCitadelPath, getGrimoirePath, getOverflowFolderNames, getModScanRootPaths, hasDeadworksContentRoot, DEADWORKS_SEARCH_PATH } from './deadlock';
 import { ensureReplayFolderLink } from './replayFolder';
 
 // The canonical SearchPaths block for Deadlock with mod support
@@ -379,10 +379,10 @@ export function cleanupAddons(deadlockPath: string): CleanupResult {
 
     const disabledPath = getDisabledPath(deadlockPath);
 
-    // Process every enabled addon folder (base citadel/addons plus any overflow
-    // addonsN) and the shared .disabled parking lot, so leftover archives are
+    // Process every enabled user-mod root (priority, base addons, and overflow
+    // addonsN) plus the shared .disabled parking lot, so leftover archives are
     // removed wherever a mod ended up.
-    for (const folder of [...getAddonFolderPaths(deadlockPath), disabledPath]) {
+    for (const folder of [...getModScanRootPaths(deadlockPath), disabledPath]) {
         if (!existsSync(folder)) continue;
 
         const files = readdirSync(folder);

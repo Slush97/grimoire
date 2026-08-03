@@ -2,7 +2,7 @@ import { promises as fs } from 'fs';
 import { existsSync } from 'fs';
 import { join, dirname, basename } from 'path';
 import { createHash, randomBytes } from 'crypto';
-import { getAddonsPath, getDisabledPath, getAddonFolderPaths, getModScanRootPaths, getGrimoirePath, createNextOverflowFolder, overflowAddonsPath, MAX_ADDON_FOLDERS, metaKeyFor, isPriorityFolderPath, isReservedPriorityVpk, PRIORITY_FIRST_SLOT } from './deadlock';
+import { getAddonsPath, getDisabledPath, getAddonFolderPaths, getModScanRootPaths, getGrimoirePath, createNextOverflowFolder, overflowAddonsPath, MAX_ADDON_FOLDERS, metaKeyFor, isPriorityFolderPath, isReservedPriorityVpkPath, PRIORITY_FIRST_SLOT } from './deadlock';
 import { fixGameinfo } from './system';
 import { getModMetadata, setModMetadata, removeModMetadata, migrateModMetadata } from './metadata';
 import { compareFileContents } from './fileMatch';
@@ -324,7 +324,7 @@ async function scanFolder(folder: string, enabled: boolean): Promise<Mod[]> {
         // Locker's own managed VPKs. They are keyed by synthetic metadata keys
         // (locker:cards and friends), so surfacing them here would invent
         // phantom user mods for artifacts the user never installed.
-        if (isPriorityFolderPath(fullPath) && isReservedPriorityVpk(entry)) continue;
+        if (isReservedPriorityVpkPath(fullPath)) continue;
 
         try {
             const stats = await fs.stat(fullPath);
@@ -832,14 +832,11 @@ export function setModPriorityFolder(deadlockPath: string, modId: string, priori
             assertCanMoveLoadedGameMod(target);
         }
 
-        // Record the intent before any rename, so a crash mid-move leaves the
-        // flag and the next enable heals the placement.
-        setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
-
         if (!target.enabled) {
             // Nothing to move: the file is parked in .disabled/ under a
             // free-form name. The flag alone decides where the next enable
             // puts it.
+            setModMetadata(target.metaKey, { priorityMod: priority ? true : undefined });
             return target;
         }
 
@@ -854,7 +851,38 @@ export function setModPriorityFolder(deadlockPath: string, modId: string, priori
             });
         }
 
-        const moved = await moveModToFolderAs(target, destination.folder, destination.fileName, true);
+        // Keep placement and metadata atomic from the caller's perspective.
+        //
+        // Moving IN: rename first, then stamp the destination key. If the app
+        // crashes between those steps, scanMods sees a user VPK in grimoire and
+        // self-heals the missing flag. Allocation/rename failures leave the
+        // original metadata untouched.
+        //
+        // Moving OUT: clear first so the migrated row is already correct when
+        // the rename lands. If the rename fails (or the app crashes before it),
+        // scanMods sees the still-resident priority VPK and restores the flag.
+        if (!priority) {
+            setModMetadata(target.metaKey, { priorityMod: undefined });
+        }
+
+        let moved: Mod;
+        try {
+            moved = await moveModToFolderAs(target, destination.folder, destination.fileName, true);
+        } catch (err) {
+            if (!priority) {
+                // Best-effort immediate rollback; scanMods is the durable
+                // fallback if persisting this restoration itself fails.
+                try {
+                    setModMetadata(target.metaKey, { priorityMod: true });
+                } catch {
+                    // Preserve the original filesystem error.
+                }
+            }
+            throw err;
+        }
+        if (priority) {
+            setModMetadata(moved.metaKey, { priorityMod: true });
+        }
         modTrace(
             `priority: "${target.name}" ${target.metaKey} -> ${moved.metaKey} (global=${priority})`
         );

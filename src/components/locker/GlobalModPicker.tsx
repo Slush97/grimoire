@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUpToLine, Check, Search, X } from 'lucide-react';
 import type { Mod } from '../../types/mod';
@@ -39,6 +39,17 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
   // artifacts (the cards/sounds/colors VPKs) never appear in the mod list, so
   // there is nothing to exclude for them here.
   const candidates = useMemo(() => mods.filter((m) => !m.priorityMod), [mods]);
+
+  // A multi-move can make partial progress before a later item fails. Successful
+  // moves receive new ids and disappear from candidates; prune those stale ids
+  // so retrying submits only the remaining visible selections.
+  useEffect(() => {
+    const candidateIds = new Set(candidates.map((mod) => mod.id));
+    setSelected((prev) => {
+      const next = new Set([...prev].filter((id) => candidateIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [candidates]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();

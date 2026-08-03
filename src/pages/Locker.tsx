@@ -45,7 +45,6 @@ import {
   activeLockerSkin,
   buildHeroList,
   canonicalHeroName,
-  countGlobalMods,
   countLockerSkins,
   getLockerSkinKey,
   getEffectiveGlobalType,
@@ -480,7 +479,15 @@ export default function Locker() {
     [mods]
   );
   const globalGroups = useMemo(() => groupGlobalMods(mods), [mods]);
-  const globalCount = useMemo(() => countGlobalMods(mods), [mods]);
+  // The General tile is the entry point for both independent axes. Count each
+  // mod once even when it has a General classification and Global placement.
+  const globalCount = useMemo(
+    () => mods.reduce(
+      (count, mod) => count + (getEffectiveGlobalType(mod) || mod.priorityMod ? 1 : 0),
+      0
+    ),
+    [mods]
+  );
   const [globalPickerOpen, setGlobalPickerOpen] = useState(false);
   // Sequential on purpose: each call renames a VPK under the main-process
   // mutation lock, so firing them concurrently would just queue anyway, and
@@ -489,8 +496,10 @@ export default function Locker() {
     for (const modId of modIds) await setModPriorityFolder(modId, true);
   };
   const globalTypeCount = useMemo(
-    () => GLOBAL_MOD_TYPE_ORDER.filter((type) => globalGroups[type].length > 0).length,
-    [globalGroups]
+    () =>
+      GLOBAL_MOD_TYPE_ORDER.filter((type) => globalGroups[type].length > 0).length +
+      (priorityMods.length > 0 ? 1 : 0),
+    [globalGroups, priorityMods]
   );
 
   // Calculate heroMods, passing heroList for name-based category inference
@@ -1665,6 +1674,12 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // Open retag menu, anchored in viewport coords (fixed-positioned) so it never
   // clips against the scrolling card pane. Null when closed.
   const [retagMenu, setRetagMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [priorityActionBusy, setPriorityActionBusy] = useState(false);
+  const [priorityActionError, setPriorityActionError] = useState<string | null>(null);
+  useEffect(() => {
+    setPriorityActionBusy(false);
+    setPriorityActionError(null);
+  }, [retagMenu?.id]);
   // Close the menu on any scroll / resize / Escape — a fixed menu would
   // otherwise float away from its anchor once the pane scrolls.
   useEffect(() => {
@@ -1698,8 +1713,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // Never true for the Global tab: priority mods are ordinary multi-toggle
   // cards, never the single-select live-3D treatment.
   const isPropContainer = !isPriorityTab && isPropContainerType(activeType);
-  const total =
-    GLOBAL_MOD_TYPE_ORDER.reduce((sum, type) => sum + groups[type].length, 0) + priorityMods.length;
+  const total = new Set([
+    ...GLOBAL_MOD_TYPE_ORDER.flatMap((type) => groups[type].map((mod) => mod.id)),
+    ...priorityMods.map((mod) => mod.id),
+  ]).size;
   // The scrollable card pane: the shared soul-container canvas clamps each
   // card's render rect to this element so models never bleed past the pane.
   const paneRef = useRef<HTMLDivElement>(null);
@@ -2200,17 +2217,36 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 seven classification types would write `globalType` on a mod
                 whose whole point is where its VPK lives. */}
             {isPriorityTab ? (
+              <>
               <button
                 type="button"
                 role="menuitem"
+                disabled={priorityActionBusy}
                 onClick={() => {
-                  void onRemoveGlobal(retagMenu.id);
-                  setRetagMenu(null);
+                  if (priorityActionBusy) return;
+                  setPriorityActionBusy(true);
+                  setPriorityActionError(null);
+                  void (async () => {
+                    try {
+                      await onRemoveGlobal(retagMenu.id);
+                      setRetagMenu(null);
+                    } catch (err) {
+                      setPriorityActionError(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setPriorityActionBusy(false);
+                    }
+                  })();
                 }}
-                className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer"
+                className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
               >
-                {t('installed.priority.clear')}
+                {priorityActionBusy ? t('installed.priority.busy') : t('installed.priority.clear')}
               </button>
+              {priorityActionError && (
+                <p role="alert" className="px-2 py-1 text-[11px] text-state-danger">
+                  {priorityActionError}
+                </p>
+              )}
+              </>
             ) : (
             <>
             <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
