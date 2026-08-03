@@ -656,6 +656,12 @@ export interface Mod {
   /** User opted out of the "update available" flag for this mod. Persisted
    *  in metadata; toggled from the mod details modal. */
   ignoreUpdates?: boolean;
+  /** User marked this mod Global. It lives in citadel/grimoire, the search
+   *  path the engine reads before citadel/addons, so it wins every file
+   *  collision and the launch shuffle never disables it. Note this is the
+   *  *precedence* axis and has nothing to do with `globalType`, which is the
+   *  Locker's non-hero *classification* axis (labelled "General" in the UI). */
+  priorityMod?: boolean;
   /** True once this VPK has been re-packed in place with a self-identifying
    *  `addoninfo.txt` embed (path B imprinting). A UI hint only: it does NOT
    *  affect canonical identity (sha256 stays the original). Projected from

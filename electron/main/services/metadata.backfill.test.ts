@@ -25,12 +25,14 @@ import { resolveVpkIdentity } from './vpkIdentity';
 
 const hash = (letter: string) => letter.repeat(64);
 
-function createDeadlockRoot(): { root: string; addons: string; disabled: string } {
+function createDeadlockRoot(): { root: string; addons: string; disabled: string; grimoire: string } {
     const root = mkdtempSync(join(tmpdir(), 'metadata-backfill-game-'));
     const addons = join(root, 'game', 'citadel', 'addons');
     const disabled = join(addons, '.disabled');
+    const grimoire = join(root, 'game', 'citadel', 'grimoire');
     mkdirSync(disabled, { recursive: true });
-    return { root, addons, disabled };
+    mkdirSync(grimoire, { recursive: true });
+    return { root, addons, disabled, grimoire };
 }
 
 beforeEach(() => {
@@ -74,6 +76,23 @@ describe('backfillMissingMetadataHashes', () => {
 
         expect(getModMetadata('local_skin_dir.vpk')).toEqual({ sha256: hash('c') });
         expect(resolveVpkIdentity).toHaveBeenCalledWith(imprintedPath);
+    });
+
+    it('backfills Global user VPKs and ignores reserved Locker artifacts', async () => {
+        const { root, grimoire } = createDeadlockRoot();
+        const managedPath = join(grimoire, 'pak01_dir.vpk');
+        const globalPath = join(grimoire, 'pak05_dir.vpk');
+        writeFileSync(managedPath, 'managed');
+        writeFileSync(globalPath, 'global');
+        harness.identities.set(globalPath, hash('e'));
+
+        const updated = await backfillMissingMetadataHashes(root);
+
+        expect(updated).toBe(1);
+        expect(getModMetadata('grimoire/pak05_dir.vpk')).toEqual({ sha256: hash('e') });
+        expect(getModMetadata('grimoire/pak01_dir.vpk')).toBeUndefined();
+        expect(resolveVpkIdentity).toHaveBeenCalledTimes(1);
+        expect(resolveVpkIdentity).toHaveBeenCalledWith(globalPath);
     });
 
     it('migrates a minimal hash row with its mod across a metaKey rename', () => {

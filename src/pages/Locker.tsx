@@ -2,7 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useId, useLayoutEffect, useMemo
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { ArrowLeft, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Images, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
+import { ArrowLeft, ArrowUpToLine, Box, Check, ChevronDown, ChevronsDownUp, ChevronsUpDown, ExternalLink, Filter, Ghost, Images, Layers, MoreVertical, Music, Palette, PowerOff, Shield, Shirt, Shuffle, Sparkles, Star, Trash2 } from 'lucide-react';
 import { useAppStore } from '../stores/appStore';
 import {
   getGamebananaCategories,
@@ -14,6 +14,7 @@ import {
 import { getActiveDeadlockPath, shouldBlurNsfw } from '../lib/appSettings';
 import { getAssetPath } from '../lib/assetPath';
 import HeroSkinsPanel from '../components/locker/HeroSkinsPanel';
+import GlobalModPicker from '../components/locker/GlobalModPicker';
 import { LockerHeroView } from './LockerHero';
 import ModThumbnail from '../components/ModThumbnail';
 import { ErrorBoundary } from '../components/common/ErrorBoundary';
@@ -44,7 +45,6 @@ import {
   activeLockerSkin,
   buildHeroList,
   canonicalHeroName,
-  countGlobalMods,
   countLockerSkins,
   getLockerSkinKey,
   getEffectiveGlobalType,
@@ -230,7 +230,7 @@ function FacetSheenDefs() {
 
 export default function Locker() {
   const { t } = useTranslation();
-  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, shuffleVariants, setShuffleVariant } =
+  const { settings, mods, modsLoading, modsError, loadSettings, loadMods, toggleMod, reorderMods, deleteMod, setModPriorityFolder, setBrowseUi, setLockerHeroName, lockerModImages, lockerHideHeroName, lockerModThumbnails, lockerThumbHideHeroName, loadLockerModImages, shuffleOnLaunch, setShuffleOnLaunch, shuffleIncluded, toggleShuffleIncluded, shuffleVariants, setShuffleVariant } =
     useAppStore();
   const activeDeadlockPath = getActiveDeadlockPath(settings);
   const [categories, setCategories] = useState<GameBananaCategoryNode[]>(
@@ -470,11 +470,36 @@ export default function Locker() {
     () => mods.filter((m) => isLockerManagedSound(m) && !getEffectiveGlobalType(m)),
     [mods]
   );
+  // Global (priority-root) mods are a placement axis, not a classification, so
+  // they are NOT filtered out of the hero grouping: a Global hero skin still
+  // belongs in that hero's pile, it just also wins every collision. This list
+  // only feeds the General view's Global tab.
+  const priorityMods = useMemo(
+    () => mods.filter((m) => m.priorityMod).sort((a, b) => a.name.localeCompare(b.name)),
+    [mods]
+  );
   const globalGroups = useMemo(() => groupGlobalMods(mods), [mods]);
-  const globalCount = useMemo(() => countGlobalMods(mods), [mods]);
+  // The General tile is the entry point for both independent axes. Count each
+  // mod once even when it has a General classification and Global placement.
+  const globalCount = useMemo(
+    () => mods.reduce(
+      (count, mod) => count + (getEffectiveGlobalType(mod) || mod.priorityMod ? 1 : 0),
+      0
+    ),
+    [mods]
+  );
+  const [globalPickerOpen, setGlobalPickerOpen] = useState(false);
+  // Sequential on purpose: each call renames a VPK under the main-process
+  // mutation lock, so firing them concurrently would just queue anyway, and
+  // serially means a mid-batch failure leaves a coherent partial result.
+  const addModsToGlobal = async (modIds: string[]) => {
+    for (const modId of modIds) await setModPriorityFolder(modId, true);
+  };
   const globalTypeCount = useMemo(
-    () => GLOBAL_MOD_TYPE_ORDER.filter((type) => globalGroups[type].length > 0).length,
-    [globalGroups]
+    () =>
+      GLOBAL_MOD_TYPE_ORDER.filter((type) => globalGroups[type].length > 0).length +
+      (priorityMods.length > 0 ? 1 : 0),
+    [globalGroups, priorityMods]
   );
 
   // Calculate heroMods, passing heroList for name-based category inference
@@ -1421,8 +1446,20 @@ export default function Locker() {
             onRequestDelete={(ids, name) => setDeletePrompt({ ids, name })}
             onImportSoul={() => setSoulImportOpen(true)}
             onImportUrn={() => setUrnImportOpen(true)}
+            priorityMods={priorityMods}
+            onAddGlobal={() => setGlobalPickerOpen(true)}
+            onRemoveGlobal={(modId) => setModPriorityFolder(modId, false)}
           />
         </div>
+      )}
+
+      {globalPickerOpen && (
+        <GlobalModPicker
+          mods={mods}
+          hideNsfwPreviews={shouldBlurNsfw(settings)}
+          onClose={() => setGlobalPickerOpen(false)}
+          onConfirm={addModsToGlobal}
+        />
       )}
 
       {soulImportOpen && (
@@ -1569,6 +1606,21 @@ function GlobalGalleryCard({ count, typeCount, onNavigate, typeaheadClassName = 
   );
 }
 
+/**
+ * Synthetic tab id for the Global (precedence) tab in the General view. It is
+ * NOT a GlobalModType: those seven are the classification axis stored in the
+ * metadata sidecar's `globalType`, while Global is folder placement
+ * (Mod.priorityMod). Keeping it a separate sentinel is what stops a Global mod
+ * from ever being written into the classification field.
+ */
+const PRIORITY_TAB = 'priority' as const;
+type GeneralTabId = GlobalModType | typeof PRIORITY_TAB;
+
+/** Display label for a General-view tab: builtin type labels, plus Global. */
+function generalTabLabel(tab: GeneralTabId, t: (key: string) => string): string {
+  return tab === PRIORITY_TAB ? t('installed.priority.chip') : GLOBAL_MOD_TYPE_LABELS[tab];
+}
+
 interface LockerGlobalViewProps {
   groups: GlobalModGroups;
   hideNsfw: boolean;
@@ -1582,6 +1634,12 @@ interface LockerGlobalViewProps {
   onImportSoul: () => void;
   /** Open the Spirit Urn GLB import modal (shown on the spirit-urn tab). */
   onImportUrn: () => void;
+  /** Mods living in the citadel/grimoire priority root (the "Global" tab). */
+  priorityMods: Mod[];
+  /** Open the picker that adds installed mods to Global. */
+  onAddGlobal: () => void;
+  /** Move a mod back out of the priority root. */
+  onRemoveGlobal: (modId: string) => void | Promise<unknown>;
 }
 
 /**
@@ -1589,7 +1647,7 @@ interface LockerGlobalViewProps {
  * frosted-glass carousel of cosmetic types (echoing the LockerHeroView shell's
  * art + blur language). Selecting a tile reveals that type's toggleable mods.
  */
-function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn }: LockerGlobalViewProps) {
+function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType, onRequestDelete, onImportSoul, onImportUrn, priorityMods, onAddGlobal, onRemoveGlobal }: LockerGlobalViewProps) {
   const { t } = useTranslation();
   const soundVolume = useAppStore((s) => s.soundVolume);
   // Every tab is selectable, empty or not. We still default the landing tab to
@@ -1598,17 +1656,30 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   const firstPopulated = GLOBAL_MOD_TYPE_ORDER.filter(
     (type) => groups[type].length > 0 || isPropContainerType(type)
   );
-  const [selectedType, setSelectedType] = useState<GlobalModType>(
+  const [selectedType, setSelectedType] = useState<GeneralTabId>(
     () => firstPopulated[0] ?? 'soul-container'
   );
+  // Tab order: the seven classification types, then Global (the precedence
+  // axis). Global is deliberately last and visually separated: it answers a
+  // different question ("does this mod win?") than the types above it ("what
+  // kind of mod is this?").
+  const tabIds: readonly GeneralTabId[] = [...GLOBAL_MOD_TYPE_ORDER, PRIORITY_TAB];
+  const countForTab = (tab: GeneralTabId) =>
+    tab === PRIORITY_TAB ? priorityMods.length : groups[tab].length;
   // Sliding active-tab highlight, mirroring the main sidebar's glide: one
   // indicator element animates between the tab rows rather than each row
   // toggling its own background (which snaps). Refs feed its measured position.
-  const tabRefs = useRef<Map<GlobalModType, HTMLButtonElement | null>>(new Map());
+  const tabRefs = useRef<Map<GeneralTabId, HTMLButtonElement | null>>(new Map());
   const [tabIndicator, setTabIndicator] = useState<{ top: number; height: number } | null>(null);
   // Open retag menu, anchored in viewport coords (fixed-positioned) so it never
   // clips against the scrolling card pane. Null when closed.
   const [retagMenu, setRetagMenu] = useState<{ id: string; x: number; y: number } | null>(null);
+  const [priorityActionBusy, setPriorityActionBusy] = useState(false);
+  const [priorityActionError, setPriorityActionError] = useState<string | null>(null);
+  useEffect(() => {
+    setPriorityActionBusy(false);
+    setPriorityActionError(null);
+  }, [retagMenu?.id]);
   // Close the menu on any scroll / resize / Escape — a fixed menu would
   // otherwise float away from its anchor once the pane scrolls.
   useEffect(() => {
@@ -1629,7 +1700,8 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   // Any type is a valid selection now (empty tabs render their own empty
   // state), so the active tab is simply whatever the user picked.
   const activeType = selectedType;
-  const activeMods = groups[activeType] ?? [];
+  const isPriorityTab = activeType === PRIORITY_TAB;
+  const activeMods = isPriorityTab ? priorityMods : groups[activeType] ?? [];
   // Track the active row's box so the highlight can glide to it. Measured in a
   // layout effect (pre-paint) to avoid a one-frame jump on first mount.
   useLayoutEffect(() => {
@@ -1638,8 +1710,13 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
   }, [activeType]);
   // Soul containers and spirit urns share the single-select + live-3D-tile
   // treatment (frosted glass, content-stable key, active badge, import button).
-  const isPropContainer = isPropContainerType(activeType);
-  const total = GLOBAL_MOD_TYPE_ORDER.reduce((sum, type) => sum + groups[type].length, 0);
+  // Never true for the Global tab: priority mods are ordinary multi-toggle
+  // cards, never the single-select live-3D treatment.
+  const isPropContainer = !isPriorityTab && isPropContainerType(activeType);
+  const total = new Set([
+    ...GLOBAL_MOD_TYPE_ORDER.flatMap((type) => groups[type].map((mod) => mod.id)),
+    ...priorityMods.map((mod) => mod.id),
+  ]).size;
   // The scrollable card pane: the shared soul-container canvas clamps each
   // card's render rect to this element so models never bleed past the pane.
   const paneRef = useRef<HTMLDivElement>(null);
@@ -1740,10 +1817,10 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
               }}
             />
           )}
-          {GLOBAL_MOD_TYPE_ORDER.map((type) => {
-            const items = groups[type];
+          {tabIds.map((type) => {
+            const count = countForTab(type);
             const isActive = type === activeType;
-            const isEmpty = items.length === 0;
+            const isEmpty = count === 0;
             // Every tab is clickable, empty or not: an empty tab opens its own
             // empty state (the importer for prop containers, a Browse hint for
             // the rest), which is more discoverable than a dead disabled row.
@@ -1760,9 +1837,9 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                 }`}
               >
                 <span className={`flex-1 truncate text-sm font-medium text-white ${isEmpty && !isActive ? 'opacity-50' : ''}`}>
-                  {GLOBAL_MOD_TYPE_LABELS[type]}
+                  {generalTabLabel(type, t)}
                 </span>
-                <span className="text-xs text-white/50">{items.length}</span>
+                <span className="text-xs text-white/50">{count}</span>
               </button>
             );
           })}
@@ -1789,11 +1866,22 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             <>
               <div className="flex items-baseline gap-2">
                 <h3 className="text-base font-semibold text-white drop-shadow-[0_2px_12px_rgba(0,0,0,0.6)]">
-                  {GLOBAL_MOD_TYPE_LABELS[activeType]}
+                  {generalTabLabel(activeType, t)}
                 </h3>
                 <span className="text-xs text-white/60">
                   {t('locker.page.modCount', { count: activeMods.length })}
                 </span>
+                {isPriorityTab && (
+                  <button
+                    type="button"
+                    onClick={onAddGlobal}
+                    className="ml-auto inline-flex items-center gap-1.5 self-center rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                    title={t('locker.globalPicker.description')}
+                  >
+                    <ArrowUpToLine className="h-3.5 w-3.5" />
+                    {t('locker.globalPicker.trigger')}
+                  </button>
+                )}
                 {isPropContainer && (
                   <button
                     type="button"
@@ -1827,6 +1915,19 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                     {activeType === 'spirit-urn' ? t('locker.urnImport.trigger.label') : t('locker.soulImport.trigger.label')}
                   </button>
                 </div>
+              ) : activeMods.length === 0 && isPriorityTab ? (
+                <div className="flex flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-white/15 bg-bg-sunken/30 px-6 py-12 text-center">
+                  <ArrowUpToLine className="h-8 w-8 text-white/40" />
+                  <p className="max-w-sm text-sm text-white/70">{t('locker.globalPicker.empty')}</p>
+                  <button
+                    type="button"
+                    onClick={onAddGlobal}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent/10 px-3 py-1.5 text-xs font-medium text-white transition-colors hover:border-accent/60 hover:bg-accent/20"
+                  >
+                    <ArrowUpToLine className="h-3.5 w-3.5" />
+                    {t('locker.globalPicker.trigger')}
+                  </button>
+                </div>
               ) : activeMods.length === 0 ? (
                 // Non-prop types can't be imported, so the empty state just
                 // points the user at Browse instead of an import button.
@@ -1834,7 +1935,7 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
                   <Layers className="h-8 w-8 text-white/40" />
                   <p className="max-w-sm text-sm text-white/70">
                     {t('locker.global.typeEmpty', {
-                      type: GLOBAL_MOD_TYPE_LABELS[activeType],
+                      type: generalTabLabel(activeType, t),
                     })}
                   </p>
                 </div>
@@ -2123,6 +2224,43 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             className="fixed z-[80] w-52 rounded-lg border border-border bg-bg-secondary p-1 shadow-xl animate-fade-in"
             style={{ top: retagMenu.y, left: retagMenu.x }}
           >
+            {/* The Global tab is folder placement, not classification, so its
+                cards get the one action that makes sense there. Offering the
+                seven classification types would write `globalType` on a mod
+                whose whole point is where its VPK lives. */}
+            {isPriorityTab ? (
+              <>
+              <button
+                type="button"
+                role="menuitem"
+                disabled={priorityActionBusy}
+                onClick={() => {
+                  if (priorityActionBusy) return;
+                  setPriorityActionBusy(true);
+                  setPriorityActionError(null);
+                  void (async () => {
+                    try {
+                      await onRemoveGlobal(retagMenu.id);
+                      setRetagMenu(null);
+                    } catch (err) {
+                      setPriorityActionError(err instanceof Error ? err.message : String(err));
+                    } finally {
+                      setPriorityActionBusy(false);
+                    }
+                  })();
+                }}
+                className="w-full rounded px-2 py-1.5 text-left text-xs text-text-secondary hover:bg-bg-tertiary hover:text-text-primary cursor-pointer disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {priorityActionBusy ? t('installed.priority.busy') : t('installed.priority.clear')}
+              </button>
+              {priorityActionError && (
+                <p role="alert" className="px-2 py-1 text-[11px] text-state-danger">
+                  {priorityActionError}
+                </p>
+              )}
+              </>
+            ) : (
+            <>
             <div className="px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-text-secondary">
               {t('locker.page.moveToCategory')}
             </div>
@@ -2160,6 +2298,8 @@ function LockerGlobalView({ groups, hideNsfw, onBack, onToggle, onSetGlobalType,
             >
               {t('locker.page.removeFromGlobal')}
             </button>
+            </>
+            )}
           </div>
         </>
       )}

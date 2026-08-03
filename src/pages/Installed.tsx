@@ -67,6 +67,7 @@ import {
   Copy,
   ExternalLink,
   Star,
+  ArrowUpToLine,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { MenuContent, MenuItem, MenuRoot, MenuSeparator, MenuTrigger } from '../components/common/menu';
@@ -91,7 +92,7 @@ import PriorityEditor from '../components/PriorityEditor';
 import { IMAGE_EXTS, deriveModNameFromPath } from '../lib/customModImport';
 import { Modal } from '../components/common/Modal';
 import { useBackdropDismiss } from '../components/common/useBackdropDismiss';
-import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType } from '../lib/lockerUtils';
+import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChipIconPath, HERO_NAMES, HERO_NAMES_SORTED, canonicalHeroName, GLOBAL_MOD_TYPE_ORDER, GLOBAL_MOD_TYPE_LABELS, getEffectiveGlobalType, modLoadOrder } from '../lib/lockerUtils';
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
@@ -289,16 +290,6 @@ function isEntryEnabled(entry: ModEntry): boolean {
 /** Sort key for ordering enabled/disabled sections. Uses the primary's
  *  priority for groups so reorder math stays consistent with the existing
  *  per-mod priority system. */
-/** Global load-order rank of a mod: lower = higher priority. With overflow
- *  folders the pakNN (mod.priority) repeats per folder, so we fold in the folder
- *  index from metaKey (addons{N}/...) to get a single monotonic order. Base
- *  citadel/addons (and disabled) is folder 0, addons1 is 1, etc. */
-function modLoadOrder(mod: Mod): number {
-  const match = mod.metaKey.match(/^addons(\d+)\//);
-  const folderIndex = match ? parseInt(match[1], 10) : 0;
-  return folderIndex * 100 + mod.priority;
-}
-
 function entrySortPriority(entry: ModEntry): number {
   return modLoadOrder(entry.kind === 'single' ? entry.mod : entry.primary);
 }
@@ -427,6 +418,26 @@ function entryDisabledPreferenceKey(entry: ModEntry): string {
   return modPreferenceKey(entry.kind === 'single' ? entry.mod : entry.primary);
 }
 
+/** Stand-in for PriorityEditor on Global (priority-root) cards. They load
+ *  before every numbered mod and reorderMods filters them out of reposition
+ *  batches, so a position number would be both a lie and dead UI. Echoes the
+ *  PriorityEditor chip geometry, accent-tinted so Global reads as its own
+ *  tier rather than position zero. */
+function GlobalLoadBadge({ variant }: { variant: 'overlay' | 'inline' }) {
+  const { t } = useTranslation();
+  return (
+    <span
+      title={t('installed.priority.hint')}
+      aria-label={t('installed.priority.chip')}
+      className={`inline-flex h-[22px] min-w-[30px] items-center justify-center rounded-md border border-accent/60 px-2 text-accent ${
+        variant === 'overlay' ? 'bg-black/70' : 'bg-bg-tertiary'
+      }`}
+    >
+      <ArrowUpToLine className="h-3 w-3" strokeWidth={2.5} />
+    </span>
+  );
+}
+
 /**
  * Sortable grid item: useSortable wrapper + the memoized card, merged into a
  * single memo boundary. Keeping useSortable inside the memo matters: with the
@@ -529,6 +540,8 @@ interface InstalledEntryCardProps {
   onViewImprint: (mod: Mod) => void;
   onTagLocker: (entry: ModEntry, heroName: string | null) => Promise<void>;
   onTagGlobal: (entry: ModEntry, globalType: GlobalModType | null) => Promise<void>;
+  /** Move an entry into or out of the citadel/grimoire priority root. */
+  onSetPriority: (entry: ModEntry, priority: boolean) => Promise<void>;
   onFixUnknown: (mod: Mod) => void;
   onCommitPriority: (modId: string, newPosition: number) => Promise<void>;
   onUnmerge: (mod: Mod) => void;
@@ -577,6 +590,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
   onViewImprint,
   onTagLocker,
   onTagGlobal,
+  onSetPriority,
   onFixUnknown,
   onCommitPriority,
   onUnmerge,
@@ -612,6 +626,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
         onViewImprint={mod.imprinted ? () => onViewImprint(mod) : undefined}
         onTagLocker={(heroName) => onTagLocker(entry, heroName)}
         onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
+        onSetPriority={(priority) => onSetPriority(entry, priority)}
         onFixUnknown={
           // Any local (unlinked, non-merged) mod can search GameBanana and
           // link, not just ones flagged "unknown": naming a local mod via
@@ -672,6 +687,7 @@ const InstalledEntryCard = memo(function InstalledEntryCard({
       onDelete={() => onDelete(entry)}
       onTagLocker={(heroName) => onTagLocker(entry, heroName)}
       onTagGlobal={(globalType) => onTagGlobal(entry, globalType)}
+      onSetPriority={(priority) => onSetPriority(entry, priority)}
       loadPosition={loadPosition}
       loadCount={loadCount}
       onCommitPriority={(p) => onCommitPriority(entry.primary.id, p)}
@@ -800,6 +816,7 @@ export default function Installed() {
     editLocalMod,
     setModLockerHero,
     setModGlobalType,
+    setModPriorityFolder,
     setVariantLabel,
     soundVolume,
     setInstalledScrollTop,
@@ -3354,6 +3371,17 @@ export default function Installed() {
       await setModGlobalType(entry.mod.id, globalType);
     }
   });
+  // Marking a grouped entry Global moves every variant, so a submission whose
+  // files co-require each other (model plus voice lines) doesn't end up half in
+  // the priority root. Sequential, like the other per-variant loops here: each
+  // move renames a VPK under the main-process mutation lock.
+  const setEntryPriority = useStableCallback(async (entry: ModEntry, priority: boolean) => {
+    if (entry.kind === 'group') {
+      for (const variant of entry.variants) await setModPriorityFolder(variant.id, priority);
+    } else {
+      await setModPriorityFolder(entry.mod.id, priority);
+    }
+  });
   const fixUnknownEntry = useStableCallback((mod: Mod) => openUnknownModFix(mod, 'single'));
   // commitLoadPosition is declared after the early returns (it reads the
   // compact order built there); bridge it through the same synchronous-ref
@@ -3469,8 +3497,13 @@ export default function Installed() {
   const enabledByLoadOrder = visibleMods
     .filter((m) => m.enabled)
     .sort((a, b) => modLoadOrder(a) - modLoadOrder(b));
-  const enabledModCount = enabledByLoadOrder.length;
-  const loadPositionById = new Map(enabledByLoadOrder.map((m, i) => [m.id, i + 1] as const));
+  // Priority-root (Global) mods sit outside the pakNN ordering: they win by
+  // search-path position and reorderMods filters them out. Numbering only the
+  // rest keeps positions 1..N meaningful and editable, while Global cards get
+  // their own badge.
+  const numberedByLoadOrder = enabledByLoadOrder.filter((m) => !m.priorityMod);
+  const enabledModCount = numberedByLoadOrder.length;
+  const loadPositionById = new Map(numberedByLoadOrder.map((m, i) => [m.id, i + 1] as const));
 
   const handleCopyEnabledMods = async () => {
     // Use the same enabled list the UI shows (visibleMods / load order), not the
@@ -3749,7 +3782,7 @@ export default function Installed() {
    * modsError.
    */
   const commitLoadPosition = async (modId: string, newPosition: number): Promise<void> => {
-    const ordered = enabledByLoadOrder.slice();
+    const ordered = numberedByLoadOrder.slice();
     const fromIdx = ordered.findIndex((m) => m.id === modId);
     if (fromIdx === -1) throw new Error('Mod not found');
     // The editor validates 1..N, but a stale render could submit out of range;
@@ -3804,6 +3837,7 @@ export default function Installed() {
     onViewImprint: viewEntryImprint,
     onTagLocker: tagEntryLocker,
     onTagGlobal: tagEntryGlobal,
+    onSetPriority: setEntryPriority,
     onFixUnknown: fixUnknownEntry,
     onCommitPriority: commitEntryPriority,
     onUnmerge: unmergeEntry,
@@ -6962,6 +6996,9 @@ interface ModCardProps {
     lockerHero?: string;
     lockerHeroSource?: Mod['lockerHeroSource'];
     globalType?: GlobalModType;
+    /** Lives in the citadel/grimoire priority root: wins every file collision
+     *  and is never disabled by the launch shuffle. */
+    priorityMod?: boolean;
     merged?: import('../types/mod').MergedModInfo;
   };
   viewMode: ViewMode;
@@ -6989,6 +7026,8 @@ interface ModCardProps {
   onViewImprint?: () => void;
   onTagLocker?: (heroName: string | null) => void | Promise<void>;
   onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
+  /** Toggle this mod's Global (priority root) placement. */
+  onSetPriority?: (priority: boolean) => void | Promise<void>;
   onFixUnknown?: () => void;
   fixingUnknown?: boolean;
   /** Reposition commit. Passed through to PriorityEditor; the argument is a
@@ -7495,7 +7534,9 @@ function ModListRowContent({
   return (
     <>
       <div className="flex min-w-0 items-center justify-start">
-        {mod.enabled ? (
+        {mod.enabled && mod.priorityMod ? (
+          <GlobalLoadBadge variant="inline" />
+        ) : mod.enabled ? (
           <span data-card-action="true">
             <PriorityEditor
               modName={mod.name}
@@ -7642,6 +7683,7 @@ function ModCard({
   onViewImprint,
   onTagLocker,
   onTagGlobal,
+  onSetPriority,
   onFixUnknown,
   fixingUnknown,
   onCommitPriority,
@@ -7767,6 +7809,24 @@ function ModCard({
       setTagPickerOpen(false);
     } catch (err) {
       console.error('[Installed] Failed to set global locker tag:', err);
+      setMenuError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setMenuBusy(false);
+    }
+  };
+
+  // Toggle the Global (priority root) placement. The move renames the VPK, so
+  // the resulting mod carries a new id; the store refreshes the list, and this
+  // card is re-rendered from the new entry rather than trying to patch itself.
+  const togglePriority = async () => {
+    if (!onSetPriority || menuBusy) return;
+    setMenuBusy(true);
+    setMenuError(null);
+    try {
+      await onSetPriority(!mod.priorityMod);
+      setMenuOpen(false);
+    } catch (err) {
+      console.error('[Installed] Failed to change Global placement:', err);
       setMenuError(err instanceof Error ? err.message : String(err));
     } finally {
       setMenuBusy(false);
@@ -8053,6 +8113,28 @@ function ModCard({
                 {t('installed.card.soloLaunch')}
               </button>
             )}
+            {onSetPriority && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void togglePriority();
+                }}
+                disabled={menuBusy}
+                title={t('installed.priority.hint')}
+                className={`${menuItemClasses} disabled:cursor-not-allowed disabled:opacity-50 ${
+                  mod.priorityMod ? 'text-accent' : ''
+                }`}
+              >
+                <ArrowUpToLine className="w-3.5 h-3.5" />
+                {menuBusy
+                  ? t('installed.priority.busy')
+                  : mod.priorityMod
+                    ? t('installed.priority.clear')
+                    : t('installed.priority.make')}
+              </button>
+            )}
             {(onTagLocker || onTagGlobal) && (
               <>
                 <button
@@ -8239,7 +8321,7 @@ function ModCard({
       <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
-      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : ''}`}
+      className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
         {selectMode && (
@@ -8311,6 +8393,11 @@ function ModCard({
         const overlayBadges = (
           <>
             {mod.enabled && !selectMode && (
+              mod.priorityMod ? (
+                <div className="absolute top-2 left-2 z-10 flex h-5 items-start">
+                  <GlobalLoadBadge variant="overlay" />
+                </div>
+              ) : (
               <div className="absolute top-2 left-2 z-10 flex h-5 items-start" data-card-action="true">
                 <PriorityEditor
                   modName={mod.name}
@@ -8320,6 +8407,7 @@ function ModCard({
                   onCommit={onCommitPriority}
                 />
               </div>
+              )
             )}
             {!mod.enabled && !selectMode && (
               <div className="absolute top-2 left-2 z-10 flex h-5 items-start">
@@ -8414,6 +8502,13 @@ function ModCard({
             title={`${mod.fileName} | ${formatBytes(mod.size)} | installed ${formatAbsoluteDate(mod.installedAt)}`}
           >
             <div className={`flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-text-secondary ${gridTagsClasses}`}>
+              {mod.priorityMod && (
+                <MetaTextChip
+                  label={t('installed.priority.chip')}
+                  className={manualTagChipClasses}
+                  title={t('installed.priority.hint')}
+                />
+              )}
               <LockerHeroChip
                 mod={mod}
                 manualTagChipClasses={manualTagChipClasses}

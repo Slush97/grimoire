@@ -1,8 +1,8 @@
 import { createHash } from 'crypto';
 import { createReadStream, readFileSync, writeFileSync, existsSync, renameSync, unlinkSync, statSync, mkdirSync, copyFileSync, readdirSync } from 'fs';
-import { promises as fs } from 'fs';
 import { join, dirname } from 'path';
-import { getAddonFolderPaths, getDisabledPath, metaKeyFor } from './deadlock';
+import { metaKeyFor } from './deadlock';
+import { listInstalledUserVpks } from './modLibrary';
 import { resolveVpkIdentity } from './vpkIdentity';
 import { getMetadataPath } from '../utils/paths';
 
@@ -116,6 +116,12 @@ export interface ModMetadata {
      *  when the user wants to stay on a specific version after the author
      *  replaces or rearranges files. */
     ignoreUpdates?: boolean;
+    /** User marked this mod Global: it lives in the priority root
+     *  (citadel/grimoire), which the engine searches before citadel/addons, so
+     *  it wins every file collision and the launch shuffle leaves it enabled.
+     *  Source of truth for placement, because a disabled mod sits in .disabled/
+     *  where the folder can't tell us. Undefined (not false) when unset. */
+    priorityMod?: boolean;
 }
 
 export type ModMetadataMap = Record<string, ModMetadata>;
@@ -282,20 +288,16 @@ export async function backfillMissingMetadataHashes(deadlockPath: string): Promi
     return updated;
 }
 
-// Map every installed VPK to its absolute path, keyed by metaKey (lowercased) so
-// it lines up with the metaKey-keyed metadata entries. Scans every addon folder
-// (base + overflow) plus .disabled; for base/.disabled the key is the bare
-// filename, for overflow it's addons{N}/<file>.
+// Map every installed user VPK to its absolute path, keyed by metaKey
+// (lowercased) so it lines up with the metaKey-keyed metadata entries. The
+// shared inventory includes Global, addons/overflow, and .disabled while
+// excluding the Locker-managed reserved priority VPKs.
 async function collectInstalledVpkPaths(deadlockPath: string): Promise<Map<string, string>> {
     const filesByKey = new Map<string, string>();
 
-    for (const folder of [...getAddonFolderPaths(deadlockPath), getDisabledPath(deadlockPath)]) {
-        for (const entry of await fs.readdir(folder, { withFileTypes: true }).catch(() => [])) {
-            if (!entry.isFile() || !entry.name.toLowerCase().endsWith('_dir.vpk')) continue;
-            const full = join(folder, entry.name);
-            const key = metaKeyFor(full).toLowerCase();
-            if (!filesByKey.has(key)) filesByKey.set(key, full);
-        }
+    for (const vpk of await listInstalledUserVpks(deadlockPath)) {
+        const key = vpk.metaKey.toLowerCase();
+        if (!filesByKey.has(key)) filesByKey.set(key, vpk.path);
     }
 
     return filesByKey;

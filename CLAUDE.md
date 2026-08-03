@@ -97,6 +97,7 @@ Design docs and references live in `docs/`:
 - `design-overhaul-brief.md` - UI design language reference
 - `social-architecture.md` + `social-architecture-decisions.md` - Architecture and ADRs for the planned `grimoire-social` companion service (see below)
 - `ability-vfx-recolor.md` - Hero ability VFX layer extraction + in app recoloring. Read before touching `detectVfxLayer`/`extractVfxLayer` (in `vpk.ts`/`modMerger.ts`) or building the recolor/Locker surface. Covers why particle recolor must use an in place scalar patch, not a KV3 re-encode.
+- `locker-global-mods.md` - "Global" mods: the `citadel/grimoire` priority root that outranks every other mod. Read before touching grimoire-folder handling, the `modLoadOrder` helpers, or the shuffle planner. Covers the deliberate split between `globalType` (classification, labelled "General") and `priorityMod` (placement, labelled "Global").
 - `deadworks-servers.md` - The Deadworks server browser: relay data flow, content provisioning, and (critically) how the deadworks content path is woven into grimoire's canonical `gameinfo.gi` block so Fix Configuration never erases it. Read before touching `deadworksServers.ts`, `ipc/servers.ts`, or the gameinfo handling in `system.ts`/`deadlock.ts`.
 
 ## Companion Service: grimoire-social

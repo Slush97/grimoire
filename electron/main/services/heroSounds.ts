@@ -21,7 +21,8 @@ import { promises as fs, existsSync } from 'fs';
 import { basename, join } from 'path';
 import { randomUUID } from 'crypto';
 import { app } from 'electron';
-import { getAddonFolderPaths, getDisabledPath, getCitadelPath, getGrimoirePath, metaKeyFor } from './deadlock';
+import { getCitadelPath, getGrimoirePath } from './deadlock';
+import { listInstalledUserVpks } from './modLibrary';
 import { invalidateVpkParseCache } from './vpk';
 import { runVpkmerge, runVpkmergeStdout, vpkmergeBinaryPath, verifyVpkOutput } from './modMerger';
 import {
@@ -51,30 +52,10 @@ interface VpkRef {
     enabled: boolean;
 }
 
-/** Enabled addon VPKs across every addon folder (base citadel/addons plus any
- *  overflow addonsN) plus the ones parked in `.disabled/`, so a sound source that
- *  overflowed past slot 99 is still found at apply/rebuild time. */
+/** User VPKs across Global, every addon folder, and `.disabled`, so a source
+ *  remains discoverable after any placement or enable-state change. */
 async function listAddonVpks(deadlockPath: string): Promise<VpkRef[]> {
-    const out: VpkRef[] = [];
-    const folders: Array<[string, boolean]> = [
-        ...getAddonFolderPaths(deadlockPath).map((p) => [p, true] as [string, boolean]),
-        [getDisabledPath(deadlockPath), false],
-    ];
-    for (const [dir, enabled] of folders) {
-        let entries: string[];
-        try {
-            entries = await fs.readdir(dir);
-        } catch {
-            continue;
-        }
-        for (const entry of entries) {
-            if (entry.toLowerCase().endsWith('_dir.vpk')) {
-                const path = join(dir, entry);
-                out.push({ fileName: entry, path, metaKey: metaKeyFor(path), enabled });
-            }
-        }
-    }
-    return out;
+    return listInstalledUserVpks(deadlockPath);
 }
 
 /** The single Locker sound VPK (metadata carries `lockerSounds`), or null. Only

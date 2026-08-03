@@ -3,7 +3,14 @@ import { join, basename, dirname } from 'path';
 import { spawn } from 'child_process';
 import { shell } from 'electron';
 import { getUserDataPath } from '../utils/paths';
-import { getAddonsPath, getDisabledPath, getAddonFolderPaths, getCitadelPath } from './deadlock';
+import {
+    getAddonsPath,
+    getDisabledPath,
+    getModScanRootPaths,
+    getCitadelPath,
+    isReservedPriorityVpkArtifact,
+    PRIORITY_FOLDER_NAME,
+} from './deadlock';
 import { loadSettings } from './settings';
 import { writeLaunchOptions, readLaunchOptions, isSteamRunning } from './launchOptions';
 
@@ -39,15 +46,15 @@ export interface VanillaStash {
     version: 1;
     status: 'pending' | 'active';
     startedAt: string;
-    /** Each stashed VPK plus the addon folder it came from, so restore returns
-     *  it to the right place. `folder` is the addon root basename: "addons" for
-     *  the base folder, "addonsN" for an overflow folder. Absent on stashes
-     *  written before multi-folder overflow existed; those are all base addons. */
+    /** Each stashed VPK plus the enabled-mod root it came from, so restore
+     *  returns it to the right place. `folder` is "grimoire", "addons", or an
+     *  overflow "addonsN" basename. Absent on stashes written before
+     *  multi-folder overflow existed; those are all base addons. */
     mods: Array<{ fileName: string; folder?: string }>;
 }
 
-/** Absolute path of an addon root folder from the basename recorded in the
- *  stash ("addons" -> base citadel/addons, "addonsN" -> citadel/addonsN). */
+/** Absolute path of an enabled-mod root from the basename recorded in the
+ *  stash ("addons" -> base citadel/addons; others are siblings under citadel). */
 function originFolderPath(deadlockPath: string, folder: string): string {
     return folder === 'addons'
         ? getAddonsPath(deadlockPath)
@@ -201,25 +208,24 @@ export async function stopDeadlockGame(): Promise<StopDeadlockResult> {
 }
 
 /**
- * Stash every VPK across every addon folder (base citadel/addons plus any
- * overflow addonsN): record them to the stash file first (so a crash mid-move
- * leaves a recoverable breadcrumb that knows each file's origin folder), then
- * move the files into disabled/. Mark the stash 'active' only once all moves
- * succeed.
+ * Stash every user VPK across every enabled-mod root (priority, base addons,
+ * and overflow addonsN): record them to the stash file first (so a crash
+ * mid-move leaves a recoverable breadcrumb that knows each file's origin),
+ * then move the files into disabled/. Locker-managed priority slots pak01-pak04
+ * retain their established lifecycle and are deliberately left in place.
  *
  * If a move fails mid-operation, we leave the stash at 'pending' and rethrow.
  * The caller (or next app startup) can then invoke restoreFromStash to
  * reassemble whatever state made it to disk.
  */
-async function stashEnabledMods(deadlockPath: string): Promise<VanillaStash> {
+export async function stashEnabledMods(deadlockPath: string): Promise<VanillaStash> {
     const disabledPath = getDisabledPath(deadlockPath);
 
-    // Enumerate every addon root (base citadel/addons first, then overflow
-    // addons1, addons2, ...) and record each enabled VPK with its origin folder
-    // BEFORE moving anything, so a crash mid-move leaves a recoverable breadcrumb
-    // that knows where each file belongs.
+    // Enumerate every enabled-mod root and record each user VPK with its origin
+    // BEFORE moving anything, so a crash mid-move leaves a recoverable
+    // breadcrumb that knows where each file belongs.
     const mods: Array<{ fileName: string; folder: string }> = [];
-    for (const folder of getAddonFolderPaths(deadlockPath)) {
+    for (const folder of getModScanRootPaths(deadlockPath)) {
         const name = basename(folder);
         let entries: string[];
         try {
@@ -229,7 +235,14 @@ async function stashEnabledMods(deadlockPath: string): Promise<VanillaStash> {
         }
         // Stash only VPK files (addon folders may contain other junk).
         for (const fileName of entries) {
-            if (fileName.toLowerCase().endsWith('.vpk')) mods.push({ fileName, folder: name });
+            if (!fileName.toLowerCase().endsWith('.vpk')) continue;
+            if (
+                name.toLowerCase() === PRIORITY_FOLDER_NAME &&
+                isReservedPriorityVpkArtifact(fileName)
+            ) {
+                continue;
+            }
+            mods.push({ fileName, folder: name });
         }
     }
 
@@ -267,10 +280,9 @@ export interface RestoreResult {
 }
 
 /**
- * Move stashed VPKs from disabled/ back to each one's origin addon folder (base
- * addons or an overflow addonsN, per the stash record), with retries for
- * transient Windows file locks. Deletes the stash only if every file is
- * accounted for.
+ * Move stashed VPKs from disabled/ back to each one's origin enabled-mod root
+ * (priority, base addons, or overflow addonsN), with retries for transient
+ * Windows file locks. Deletes the stash only if every file is accounted for.
  *
  * Hazard notes:
  * - If the game is still running and holds a handle on the _dir.vpk, Windows
@@ -467,8 +479,10 @@ export async function launchModded({
 }
 
 /**
- * Launch the game WITHOUT any mods active. Stashes every VPK in addons/,
- * triggers Steam, then schedules a background restore after the game mounts.
+ * Launch the game without user mods active. Stashes every user VPK in the
+ * priority/addon roots, triggers Steam, then schedules a background restore
+ * after the game mounts. Locker-managed priority artifacts keep their existing
+ * lifecycle and are not part of the user-mod stash.
  *
  * If the Steam launch itself fails, we immediately restore from the stash
  * we just wrote, leaving the user in exactly the state they were in before.

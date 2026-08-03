@@ -12,6 +12,7 @@ import {
     reorderMods,
     swapModPriority,
     setModsEnabledBatch,
+    setModPriorityFolder,
     allocateEnabledVpkPath,
     runExclusiveModMutation,
     type Mod,
@@ -265,6 +266,7 @@ function enrichMod(mod: Mod): WireMod {
             soulImport: metadata.soulImport,
             urnImport: metadata.urnImport,
             ignoreUpdates: metadata.ignoreUpdates,
+            priorityMod: metadata.priorityMod,
             imprinted: metadata.imprinted,
             imprintStale: metadata.imprintStale,
         };
@@ -848,6 +850,27 @@ ipcMain.handle(
             ignoreUpdates: ignore ? true : undefined,
         });
         return enrichMod(target);
+    }
+);
+
+// set-mod-priority: mark a mod Global (or clear it). Global mods move to the
+// priority root citadel/grimoire, which gameinfo.gi lists ahead of
+// citadel/addons, so they win every file collision without any load-order
+// bookkeeping and the launch shuffle leaves them alone. Moving a mod is a
+// folder mutation, so setModPriorityFolder takes the mutation lock.
+ipcMain.handle(
+    'set-mod-priority-folder',
+    async (_, modId: string, priority: boolean): Promise<Mod> => {
+        const deadlockPath = getActiveDeadlockPath();
+        if (!deadlockPath) {
+            throw new Error('No Deadlock path configured');
+        }
+        // enrichMod, like every sibling handler: the service returns a raw
+        // scanned Mod, and the renderer's copy must carry the projected
+        // sidecar fields (priorityMod included) or the card would drop its
+        // Global chip until the next full reload.
+        const mod = await setModPriorityFolder(deadlockPath, modId, priority);
+        return enrichMod(mod);
     }
 );
 

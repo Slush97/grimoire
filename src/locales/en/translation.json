@@ -1307,15 +1307,22 @@
       "mergeCombineHint_other": "Combine {{count}} mods into one VPK",
       "tag": "Tag",
       "tagEmptyHint": "Select mods to tag for the Locker",
-      "tagCountHint_one": "Tag {{count}} mod for a hero or Global category in the Locker",
-      "tagCountHint_other": "Tag {{count}} mods for a hero or Global category in the Locker",
+      "tagCountHint_one": "Tag {{count}} mod for a hero or General category in the Locker",
+      "tagCountHint_other": "Tag {{count}} mods for a hero or General category in the Locker",
       "tagDialogLabel": "Tag selected mods for the Locker"
     },
     "tag": {
       "clearLockerTag": "Clear Locker tag",
       "setLockerTag": "Set Locker tag",
-      "global": "Global",
+      "global": "General",
       "hero": "Hero"
+    },
+    "priority": {
+      "make": "Make Global",
+      "clear": "Remove from Global",
+      "chip": "Global",
+      "hint": "Global mods load before every other mod, so they always win when two mods change the same file. Shuffling skins never turns them off.",
+      "busy": "Moving..."
     },
     "card": {
       "soundPreview": "Sound Preview",
@@ -1455,6 +1462,20 @@
       "useLockerImage": "Use Locker image",
       "hideHeroName": "Hide hero name label",
       "hideHeroNameHint": "Turn on when the image already shows the hero's name."
+    },
+    "globalPicker": {
+      "title": "Add mods to Global",
+      "description": "Global mods load before everything else, so they always win when two mods change the same file. Shuffling skins never turns them off.",
+      "trigger": "Add mods",
+      "searchPlaceholder": "Search installed mods...",
+      "selectedCount_one": "{{count}} selected",
+      "selectedCount_other": "{{count}} selected",
+      "add": "Add to Global",
+      "adding": "Adding...",
+      "disabled": "Off",
+      "noMatches": "No installed mods match that search.",
+      "allGlobal": "Every installed mod is already Global.",
+      "empty": "Nothing is Global yet. Add a mod here to keep it on and winning over everything else."
     },
     "global": {
       "activeBadgeTitle": "This soul container is active and loaded in-game",
@@ -1810,7 +1831,7 @@
       "gallery": "Gallery",
       "list": "List",
       "noHeroCategoriesFound": "No hero categories found.",
-      "global": "Global",
+      "global": "General",
       "globalEmptyHint": "Import soul containers & spirit urns",
       "unassigned": "Unassigned",
       "unassignedDescription": "These mods couldn't be matched to a hero automatically. Tag one to move it into that hero's locker pile.",
@@ -1823,10 +1844,10 @@
       "back": "Back",
       "changeCategory": "Change category",
       "changeCategoryForNamed": "Change category for {{name}}",
-      "changeGlobalCategory": "Change global category",
+      "changeGlobalCategory": "Change General category",
       "moveToCategory": "Move to category",
-      "removeFromGlobal": "Remove from Global",
-      "noGlobalNonHeroCosmeticsInstalledYet": "No global (non-hero) cosmetics installed yet.",
+      "removeFromGlobal": "Remove from General",
+      "noGlobalNonHeroCosmeticsInstalledYet": "No general (non-hero) cosmetics installed yet.",
       "disableNamed": "Disable {{name}}",
       "enableNamed": "Enable {{name}}",
       "clickToDisable": "Click to disable",

@@ -23,6 +23,7 @@ import {
 import type { ModConflict } from '../lib/api';
 import type { Mod } from '../types/mod';
 import { useAppStore } from '../stores/appStore';
+import { modLoadOrder } from '../lib/lockerUtils';
 import { Button } from '../components/common/ui';
 import { PageHeader, EmptyState, ConfirmModal, ViewModeToggle, PageLayout, type ViewMode } from '../components/common/PageComponents';
 import ConflictReorderActions from '../components/conflicts/ConflictReorderActions';
@@ -60,15 +61,10 @@ function ModThumbMenu({
   );
 }
 
-/** Global load-order rank of a mod: lower = loads first. The pakNN (mod.priority)
- *  repeats per overflow folder, so fold in the folder index from metaKey
- *  (addons{N}/...) for a single monotonic order. Mirrors modLoadOrder in
- *  Installed.tsx so the conflict reorder matches the load-order list. */
-function modLoadOrder(mod: Mod): number {
-  const match = mod.metaKey.match(/^addons(\d+)\//);
-  const folderIndex = match ? parseInt(match[1], 10) : 0;
-  return folderIndex * 100 + mod.priority;
-}
+// Load-order rank comes from lockerUtils rather than a local copy: this page
+// used to mirror the math by hand, which silently went stale when the
+// citadel/grimoire priority root was added (a Global mod outranks every addons
+// mod, so a hand-rolled addons-only rank reports the wrong conflict winner).
 interface ModWithThumbnail {
   id: string;
   name: string;

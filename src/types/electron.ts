@@ -724,6 +724,10 @@ export interface ElectronAPI {
     clearLockerOverrides: (scope: LockerClearScope) => Promise<void>;
     setModGlobalType: (modId: string, globalType: GlobalModType | null) => Promise<Mod>;
     setModIgnoreUpdates: (modId: string, ignore: boolean) => Promise<Mod>;
+    /** Mark a mod Global (moves it to the citadel/grimoire priority root) or
+     *  clear it. See Mod.priorityMod. Distinct from setModPriority, which sets
+     *  a mod's pakNN slot within citadel/addons. */
+    setModPriorityFolder: (modId: string, priority: boolean) => Promise<Mod>;
     backfillGameBananaFileId: (
       modId: string,
       payload: { gameBananaFileId: number; fileDescription?: string; sourceFileName?: string }
