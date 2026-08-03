@@ -2711,7 +2711,7 @@
       "browse": "Browse for an application..."
     },
     "creditSqooky": "Browse <sqooky>Sqooky's mods</sqooky> or <kofi>buy them a coffee</kofi>.",
-    "shadowsHint": "Map looks dark? Set in-game shadows to Medium or Low. Game updates wipe the config; Grimoire spots that here so you can reapply.",
+    "shadowsHint": "Map looks dark? Set in-game shadows to Medium or Low.",
     "switchTo": "Switch to {{preset}}",
     "switchNote": "Applying replaces {{current}} with {{next}}. Your saved tweaks for {{current}} are kept in case you switch back.",
     "preset": {
@@ -2754,14 +2754,13 @@
     },
     "version": {
       "label": "Version",
-      "description": "Grimoire bundles the last few releases of each preset. If a newer one runs worse on your machine, roll back: your gameplay settings and hand edits carry over.",
-      "newest": "Newest",
-      "releasedOn": "Released {{date}}",
-      "settings_one": "{{count}} setting",
-      "settings_other": "{{count}} settings",
+      "hint": "Roll back if a newer release runs worse. Your tweaks carry over.",
+      "option": "{{ref}} ({{date}})",
+      "optionNewest": "{{ref}} ({{date}}, newest)",
       "pending": "Version changed to v{{version}}. Reapply to write it to gameinfo.gi.",
       "pinned": "Staying on v{{version}}. The newest bundled version is v{{latest}}."
-    }
+    },
+    "moreActions": "More actions"
   },
   "lockerOverrides": {
     "volume": "Volume",

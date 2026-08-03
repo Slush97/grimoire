@@ -51,12 +51,12 @@ export default function GameplayOptIns({
   })).filter((g) => g.controls.length > 0);
 
   return (
-    <div className="rounded-sm border border-white/5 bg-black/20">
+    <div className="rounded-sm border border-white/5 bg-bg-tertiary/40">
       <button
         type="button"
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
-        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-white/[0.03] transition-colors"
+        className="w-full flex items-center justify-between gap-3 px-4 py-3 text-left cursor-pointer hover:bg-white/[0.03] transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-sm"
       >
         <span className="flex items-center gap-2 min-w-0">
           <Eye className="w-4 h-4 text-accent shrink-0" aria-hidden="true" />
