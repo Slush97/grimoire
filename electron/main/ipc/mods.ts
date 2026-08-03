@@ -853,7 +853,7 @@ ipcMain.handle(
     }
 );
 
-// set-mod-priority — mark a mod Global (or clear it). Global mods move to the
+// set-mod-priority: mark a mod Global (or clear it). Global mods move to the
 // priority root citadel/grimoire, which gameinfo.gi lists ahead of
 // citadel/addons, so they win every file collision without any load-order
 // bookkeeping and the launch shuffle leaves them alone. Moving a mod is a

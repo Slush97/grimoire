@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowUpToLine, Check, Search, X } from 'lucide-react';
 import type { Mod } from '../../types/mod';
@@ -25,8 +25,8 @@ interface GlobalModPickerProps {
  *
  * Selection is keyed by mod id. Ids are derived from the pakNN filename and
  * change when a mod moves, but nothing here re-scans between opening and
- * confirming, so the ids stay valid for the life of the dialog. The caller
- * refreshes the list afterwards.
+ * confirming, so the ids stay valid for the life of the dialog. The store
+ * action behind onConfirm updates the mod list as each move lands.
  */
 export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: GlobalModPickerProps) {
   const { t } = useTranslation();
@@ -34,7 +34,6 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
   const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
 
   // Candidates are every installed mod that isn't already Global. Locker-managed
   // artifacts (the cards/sounds/colors VPKs) never appear in the mod list, so
@@ -113,7 +112,6 @@ export function GlobalModPicker({ mods, hideNsfwPreviews, onClose, onConfirm }: 
         <div className="relative">
           <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-secondary" />
           <input
-            ref={searchRef}
             type="text"
             autoFocus
             value={query}

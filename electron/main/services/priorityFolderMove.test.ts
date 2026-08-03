@@ -22,6 +22,13 @@ import { join } from 'path';
 
 const h = vi.hoisted(() => ({ userData: '' }));
 vi.mock('electron', () => ({ app: { getPath: () => h.userData } }));
+// The loaded-mod guard asks the real process table (pgrep/tasklist) whether
+// Deadlock is running, so an unmocked run fails on any machine where the game
+// is open. Pin the sandbox's truth: no game, no vanilla stash.
+vi.mock('./launch', () => ({
+  isDeadlockRunning: async () => false,
+  readStash: async () => null,
+}));
 
 import { scanMods, setModPriorityFolder, disableMod, enableMod } from './mods';
 import { getModMetadata } from './metadata';
