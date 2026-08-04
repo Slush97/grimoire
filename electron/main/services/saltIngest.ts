@@ -7,8 +7,8 @@
 // match's full metadata, so submitting them helps every player's stats.
 //
 // This service reimplements what the official deadlock-api-ingest tool does,
-// minus its two privacy leaks: we never send a username/account id (the field
-// is optional in the API schema) and we never ping statlocker.gg. The only
+// minus its two privacy leaks: the "username" field carries a constant client
+// tag instead of the player's name, and we never ping statlocker.gg. The only
 // thing that leaves the machine is match_id, cluster_id and the two salts:
 // numbers that describe the match, not the player.
 //
@@ -29,6 +29,7 @@ import type { SaltIngestStatus } from '../../../src/types/electron';
 export type { SaltIngestStatus };
 
 const INGEST_URL = 'https://api.deadlock-api.com/v1/matches/salts';
+const INGEST_USERNAME = 'grimoire';
 const DEADLOCK_APP_ID = '1422450';
 const HEADER_BYTES = 512;
 const RESCAN_INTERVAL_MS = 15 * 60 * 1000;
@@ -221,7 +222,7 @@ async function submitSalts(salts: MatchSalts[]): Promise<void> {
             'Content-Type': 'application/json',
             'User-Agent': GRIMOIRE_USER_AGENT,
         },
-        body: JSON.stringify(salts),
+        body: JSON.stringify(salts.map((s) => ({ ...s, username: INGEST_USERNAME }))),
     });
     if (!res.ok) {
         throw new Error(`ingest responded ${res.status}`);
