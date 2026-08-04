@@ -11,8 +11,9 @@
 // stock -> preset, never preset -> preset.
 //
 // Gameplay/visibility convars (enemy outlines, glows, FOV) are held out of the
-// preset bodies and applied only when the user opts in, so choosing a
-// performance preset never silently changes what they can see.
+// generated performance bodies so the UI can expose them individually. The
+// creator's visibility/camera values are included by default; users can turn
+// any of them off. Developer/testing controls remain explicit opt-ins.
 //
 // All patching runs on LF-normalized text and the file's original EOL style
 // is restored on write: line-based regexes silently fail on CR-terminated
@@ -65,10 +66,14 @@ type OverrideEntry = { value?: string; omit?: boolean };
 type Overrides = Record<string, OverrideEntry>;
 
 /** Options for one apply. `presetId` picks which bundled preset to write;
- *  `optIns` are the gameplay/visibility convar keys the user turned on for
- *  that preset (anything not listed stays out of the file). */
+ *  `optIns` are the gameplay/visibility convar keys to include (anything not
+ *  listed stays out of the file). Undefined uses the creator defaults:
+ *  visibility/camera on, developer/testing tools off. An explicit empty list
+ *  disables every optional gameplay setting. `version` picks which bundled
+ *  upstream release of that preset to write, defaulting to the newest. */
 export interface ApplyOptions {
     presetId?: string;
+    version?: string | null;
     optIns?: string[];
     resetOverrides?: boolean;
 }
@@ -85,6 +90,15 @@ function effectiveConvars(
         .filter((control) => enabled.has(control.key))
         .map((control) => [control.key, control.value] as const);
     return extra.length ? [...preset.convars, ...extra] : preset.convars;
+}
+
+/** Creator-authored settings that form the default experience. Debug and
+ *  hideout tooling is intentionally excluded: it is useful for config authors,
+ *  but is not part of normal gameplay. */
+function creatorDefaultOptIns(preset: PerformancePreset): string[] {
+    return preset.optIn
+        .filter((control) => control.group !== 'devtools')
+        .map((control) => control.key);
 }
 
 function statePath(gameinfoPath: string): string {
@@ -278,10 +292,10 @@ function presetKeyIndex(
 //
 // Inferring user intent across that gap pinned stale upstream values forever,
 // suppressed every key the new version added, and (worst) re-applied gameplay
-// convars the opt-in split exists to hold back. So when the definition has
-// moved, only the unambiguous signal counts: a marker line the user commented
-// out. Overrides banked while the definitions matched are untouched; the caller
-// still layers them.
+// convars the creator-setting split keeps individually controllable. So when
+// the definition has moved, only the unambiguous signal counts: a marker line
+// the user commented out. Overrides banked while the definitions matched are
+// untouched; the caller still layers them.
 function harvestOverrides(
     content: string,
     preset: PerformancePreset,
@@ -403,8 +417,8 @@ export function applyPerformanceConfig(
         return status('error', 'gameinfo.gi not found. Configure your Deadlock path first.');
     }
 
-    const preset = getPreset(opts?.presetId ?? DEFAULT_PRESET_ID);
-    const optIns = (opts?.optIns ?? []).filter((key) =>
+    const preset = getPreset(opts?.presetId ?? DEFAULT_PRESET_ID, opts?.version);
+    const optIns = (opts?.optIns ?? creatorDefaultOptIns(preset)).filter((key) =>
         preset.optIn.some((control) => control.key === key)
     );
     const convars = effectiveConvars(preset, optIns);
@@ -421,7 +435,11 @@ export function applyPerformanceConfig(
         // What is in the file right now, which is not necessarily what we are
         // about to write: the user may be switching presets.
         const applied = BEGIN_RE.exec(content);
-        const appliedPreset = applied ? getPreset(applied[1]) : null;
+        // Resolve the applied preset at the version its own marker records, not
+        // at the newest one we bundle. Overrides are harvested against it, so
+        // reading a rolled-back file with the newest definition would attribute
+        // every difference between the two releases to the user.
+        const appliedPreset = applied ? getPreset(applied[1], applied[2]) : null;
         const switching = appliedPreset !== null && appliedPreset.id !== preset.id;
 
         // Hand edits are harvested against the preset that is actually in the
@@ -529,7 +547,7 @@ export function applyPerformanceConfig(
         const indent = detectIndent(content.slice(convarRange.bodyStart, convarRange.bodyEnd));
         const width = toInject.length ? Math.max(...toInject.map(([k]) => k.length)) + 1 : 0;
         const optInNote = optIns.length
-            ? `${indent}// Includes ${optIns.length} opt-in gameplay setting${optIns.length === 1 ? '' : 's'} you enabled [${MARKER}]`
+            ? `${indent}// Includes ${optIns.length} creator gameplay setting${optIns.length === 1 ? '' : 's'} [${MARKER}]`
             : null;
         const block = [
             `${indent}// ==== Grimoire Performance Config BEGIN (preset=${preset.id} v${preset.version} @${preset.upstream.commit.slice(0, 12)}) ====`,
@@ -712,30 +730,50 @@ export function restorePerformanceConfigBackup(
 /** The selectable presets, flattened for the renderer (which must not import
  *  the generated data module: it lives in the main process). */
 export function listPerformancePresets(): PerformancePresetSummary[] {
-    return PRESETS.map((preset) => ({
-        id: preset.id,
-        name: preset.name,
-        version: preset.version,
-        tier: preset.tier,
-        author: preset.author,
-        unstable: preset.unstable === true,
-        isDefault: preset.id === DEFAULT_PRESET_ID,
-        settingCount: preset.convars.length + preset.sectionOps.length,
-        upstream: {
-            url: preset.upstream.url,
-            repo: preset.upstream.repo,
-            ref: preset.upstream.ref,
-            refKind: preset.upstream.refKind,
-            commit: preset.upstream.commit,
-            license: preset.upstream.license,
-            credit: preset.upstream.credit,
-        },
-        optIn: preset.optIn.map((control) => ({
-            key: control.key,
-            value: control.value,
-            group: control.group,
-        })),
-    }));
+    return PRESETS.map((family) => {
+        // Top-level fields describe the newest release, which is what a caller
+        // that never touches the version picker gets. `versions` carries the
+        // rest, newest first.
+        const newest = family.releases[0];
+        const summarize = (release: (typeof family.releases)[number]) => ({
+            version: release.version,
+            ref: release.ref,
+            refKind: release.refKind,
+            commit: release.commit,
+            date: release.date,
+            settingCount: release.convars.length + release.sectionOps.length,
+            optIn: release.optIn.map((control) => ({
+                key: control.key,
+                value: control.value,
+                group: control.group,
+            })),
+        });
+        return {
+            id: family.id,
+            name: family.name,
+            version: newest.version,
+            tier: family.tier,
+            author: family.author,
+            unstable: family.unstable === true,
+            isDefault: family.id === DEFAULT_PRESET_ID,
+            settingCount: newest.convars.length + newest.sectionOps.length,
+            upstream: {
+                url: family.upstream.url,
+                repo: family.upstream.repo,
+                ref: newest.ref,
+                refKind: newest.refKind,
+                commit: newest.commit,
+                license: family.upstream.license,
+                credit: family.upstream.credit,
+            },
+            optIn: newest.optIn.map((control) => ({
+                key: control.key,
+                value: control.value,
+                group: control.group,
+            })),
+            versions: family.releases.map(summarize),
+        };
+    });
 }
 
 export function getPerformanceConfigStatus(deadlockPath: string | null): PerformanceConfigStatus {
@@ -759,9 +797,14 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             const known = PRESETS.find((p) => p.id === appliedId) ?? null;
             const overrideCount = Object.keys(allOverrides(sidecar)[appliedId] ?? {}).length;
             const appliedName = known?.name ?? appliedId;
+            // "Newest we bundle", not "the one the user picked": the selection
+            // lives in renderer settings, so the card decides whether a newer
+            // release is a nag ("you are behind") or a note ("you rolled back
+            // on purpose"). Main only reports the two facts.
+            const newestVersion = known?.releases[0].version ?? null;
             const base =
-                known && begin[2] !== known.version
-                    ? `${appliedName} v${begin[2]} is applied; v${known.version} is available (reapply to update).`
+                newestVersion && begin[2] !== newestVersion
+                    ? `${appliedName} v${begin[2]} is applied; v${newestVersion} is available (reapply to update).`
                     : `${appliedName} v${begin[2]} is applied.`;
             const overrideNote = overrideCount
                 ? ` Keeping ${overrideCount} of your override${overrideCount === 1 ? '' : 's'}.`
@@ -774,7 +817,7 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
                 // hand-written Grimoire), report the file's own version rather
                 // than the default preset's: claiming an update is available
                 // from an unrelated preset would be a lie.
-                bundledVersion: known ? known.version : begin[2],
+                bundledVersion: newestVersion ?? begin[2],
                 appliedOptIns: sidecar?.optIns ?? [],
                 handEdited,
                 overrideCount,
@@ -793,7 +836,11 @@ export function getPerformanceConfigStatus(deadlockPath: string | null): Perform
             const wipedId = wipedSidecar.presetId ?? DEFAULT_PRESET_ID;
             const savedOverrides = Object.keys(allOverrides(wipedSidecar)[wipedId] ?? {}).length;
             const restorable = canRestoreBackup(gameinfoPath, content);
-            const wipedPreset = getPreset(wipedId);
+            // Resolve at the version the sidecar recorded: a user who rolled
+            // back to an older release and then got wiped by a game update
+            // should be offered their release back, not quietly moved to the
+            // newest one they had already rejected.
+            const wipedPreset = getPreset(wipedId, wipedSidecar.version);
             if (restorable) {
                 return status(
                     'wiped',

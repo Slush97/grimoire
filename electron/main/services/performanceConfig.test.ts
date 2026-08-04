@@ -19,6 +19,7 @@ import {
     removePerformanceConfig,
     resetPerformanceConfigOverrides,
 } from './performanceConfig';
+import { getPreset } from './performanceConfigData';
 
 const STOCK = readFileSync(join(__dirname, '__fixtures__/stock-gameinfo.gi'), 'utf-8');
 const STOCK_CRLF = STOCK.split('\n').join('\r\n');
@@ -76,6 +77,12 @@ describe('performance presets', () => {
         expect(PRESETS.length).toBeGreaterThanOrEqual(4);
         expect(PRESETS.filter((p) => p.isDefault)).toHaveLength(1);
         expect(new Set(PRESETS.map((p) => p.id)).size).toBe(PRESETS.length);
+    });
+
+    it('quarantines boot\'s crashing DistanceField edit', () => {
+        expect(
+            getPreset('boot-max-fps').sectionOps.some((op) => op.key === 'DistanceField')
+        ).toBe(false);
     });
 
     it.each(PRESETS.map((p) => [p.id] as const))(
@@ -140,26 +147,161 @@ describe('performance presets', () => {
     });
 });
 
-describe('gameplay opt-ins', () => {
+// Older releases are bundled so a user whose frame rate got worse after an
+// upstream bump can go back. They are diffed against the CURRENT baseline, not
+// the stock file of their own era, so "an old release still applies cleanly to
+// today's gameinfo.gi" is an assumption that has to be tested rather than
+// assumed: it is exactly what would rot silently as the game updates.
+describe('preset version history', () => {
+    /** Every (preset, bundled release) pair. */
+    const ALL = PRESETS.flatMap((p) => p.versions.map((v) => [p.id, v.version] as const));
+
+    it('every preset bundles at least one release, newest first', () => {
+        for (const preset of PRESETS) {
+            expect(preset.versions.length).toBeGreaterThanOrEqual(1);
+            // The top-level fields must describe the newest release, or a caller
+            // that ignores `versions` silently gets a different preset than the
+            // one the card credits.
+            expect(preset.versions[0].version).toBe(preset.version);
+            const dates = preset.versions.map((v) => v.date);
+            expect([...dates].sort().reverse()).toEqual(dates);
+        }
+    });
+
+    it('no preset offers the same version twice', () => {
+        for (const preset of PRESETS) {
+            const versions = preset.versions.map((v) => v.version);
+            expect(new Set(versions).size).toBe(versions.length);
+        }
+    });
+
+    it.each(ALL)('%s v%s: apply then remove restores the file byte for byte', (id, version) => {
+        expect(applyPerformanceConfig(gameRoot, { presetId: id, version }).state).toBe('applied');
+        expect(read()).not.toBe(STOCK);
+        expect(removePerformanceConfig(gameRoot).state).toBe('not-applied');
+        expect(read()).toBe(STOCK);
+    });
+
+    it.each(ALL)('%s v%s: writes a marker naming that release', (id, version) => {
+        applyPerformanceConfig(gameRoot, { presetId: id, version });
+        expect(read()).toContain(`preset=${id} v${version}`);
+        expect(sidecar()?.version).toBe(version);
+    });
+
+    it.each(ALL)('%s v%s: no duplicate active convars with every opt-in on', (id, version) => {
+        const release = PRESETS.find((p) => p.id === id)!.versions.find(
+            (v) => v.version === version
+        )!;
+        applyPerformanceConfig(gameRoot, {
+            presetId: id,
+            version,
+            optIns: release.optIn.map((c) => c.key),
+        });
+        const dupes = [...topLevelConvarCounts(read())].filter(([, n]) => n > 1);
+        expect(dupes).toEqual([]);
+    });
+
+    const rollbackable = PRESETS.filter((p) => p.versions.length > 1);
+
+    it('at least one preset has something to roll back to', () => {
+        expect(rollbackable.length).toBeGreaterThan(0);
+    });
+
+    it.each(rollbackable.map((p) => [p.id] as const))(
+        '%s: rolling back from newest to older leaves a clean file',
+        (id) => {
+            const preset = PRESETS.find((p) => p.id === id)!;
+            const older = preset.versions[preset.versions.length - 1].version;
+            applyPerformanceConfig(gameRoot, { presetId: id, version: preset.version });
+            expect(read()).toContain(`preset=${id} v${preset.version}`);
+
+            // Rolling back goes through the same revert-then-inject path as a
+            // preset switch, so the newer release's lines must be gone, not
+            // merely overwritten where the two happen to share a key.
+            applyPerformanceConfig(gameRoot, { presetId: id, version: older });
+            const after = read();
+            expect(after).toContain(`preset=${id} v${older}`);
+            expect(after).not.toContain(`v${preset.version})`);
+            expect([...topLevelConvarCounts(after)].filter(([, n]) => n > 1)).toEqual([]);
+
+            expect(removePerformanceConfig(gameRoot).state).toBe('not-applied');
+            expect(read()).toBe(STOCK);
+        }
+    );
+
+    it('an unknown version falls back to the newest release', () => {
+        // A saved pin naming a release that has aged out of the bundle must not
+        // error or write nothing: the window slides on every upstream bump.
+        applyPerformanceConfig(gameRoot, { presetId: 'sqooky-default', version: '0.0.1-gone' });
+        const newest = PRESETS.find((p) => p.id === 'sqooky-default')!.version;
+        expect(read()).toContain(`preset=sqooky-default v${newest}`);
+    });
+
+    // Release pairs where the newest holds back a gameplay key the older one
+    // does not define at all. Asking for that key while the older release is
+    // selected must drop it rather than write an unknown convar.
+    const divergentOptIns = rollbackable.flatMap((p) =>
+        p.versions.slice(1).flatMap((older) => {
+            const onlyInNewest = p.versions[0].optIn
+                .map((c) => c.key)
+                .filter((key) => !older.optIn.some((c) => c.key === key));
+            return onlyInNewest.length ? [[p.id, older.version, onlyInNewest] as const] : [];
+        })
+    );
+
+    it('some release pair disagrees about opt-ins, so the next test is not vacuous', () => {
+        expect(divergentOptIns.length).toBeGreaterThan(0);
+    });
+
+    it.each(divergentOptIns)(
+        '%s v%s: opt-in keys are honoured per release, not per preset',
+        (id, version, onlyInNewest) => {
+            const preset = PRESETS.find((p) => p.id === id)!;
+            applyPerformanceConfig(gameRoot, {
+                presetId: id,
+                version,
+                // Ask for every newest-release opt-in while an older release is
+                // selected: the ones that release does not define must be dropped.
+                optIns: preset.versions[0].optIn.map((c) => c.key),
+            });
+            const text = read();
+            for (const key of onlyInNewest) expect(activeHas(text, key)).toBe(false);
+        }
+    );
+});
+
+describe('creator gameplay settings', () => {
     const withOptIns = PRESETS.filter((p) => p.optIn.length > 0);
 
-    it('every preset holds back at least one gameplay convar', () => {
+    it('every preset exposes at least one creator gameplay convar', () => {
         expect(withOptIns.length).toBe(PRESETS.length);
     });
 
     it.each(withOptIns.map((p) => [p.id] as const))(
-        '%s: applies no gameplay convar unless asked',
+        '%s: defaults creator visibility/camera on and developer tools off',
         (id) => {
             const preset = PRESETS.find((p) => p.id === id)!;
             applyPerformanceConfig(gameRoot, { presetId: id });
             const text = read();
-            const leaked = preset.optIn.filter((c) => activeHas(text, c.key));
-            expect(leaked.map((c) => c.key)).toEqual([]);
+            for (const control of preset.optIn) {
+                expect(activeHas(text, control.key), control.key).toBe(control.group !== 'devtools');
+            }
         }
     );
 
     it.each(withOptIns.map((p) => [p.id] as const))(
-        '%s: writes exactly the opted-in keys and no others',
+        '%s: an explicit empty selection disables every creator gameplay setting',
+        (id) => {
+            const preset = PRESETS.find((p) => p.id === id)!;
+            applyPerformanceConfig(gameRoot, { presetId: id, optIns: [] });
+            const text = read();
+            const included = preset.optIn.filter((c) => activeHas(text, c.key));
+            expect(included.map((c) => c.key)).toEqual([]);
+        }
+    );
+
+    it.each(withOptIns.map((p) => [p.id] as const))(
+        '%s: writes exactly the selected keys and no others',
         (id) => {
             const preset = PRESETS.find((p) => p.id === id)!;
             const chosen = preset.optIn.slice(0, 2).map((c) => c.key);
@@ -173,7 +315,7 @@ describe('gameplay opt-ins', () => {
         }
     );
 
-    it('removing after an opt-in apply still restores the file exactly', () => {
+    it('removing after applying every creator setting still restores the file exactly', () => {
         const preset = PRESETS.find((p) => p.optIn.length)!;
         applyPerformanceConfig(gameRoot, {
             presetId: preset.id,
@@ -183,7 +325,7 @@ describe('gameplay opt-ins', () => {
         expect(read()).toBe(STOCK);
     });
 
-    it('ignores opt-in keys the preset does not define', () => {
+    it('ignores creator-setting keys the preset does not define', () => {
         applyPerformanceConfig(gameRoot, {
             presetId: 'sqooky-default',
             optIns: ['definitely_not_a_convar'],
@@ -343,7 +485,7 @@ describe('game-update wipe recovery', () => {
 // on disk still carries the old body, and the status message invites the user to
 // reapply. Nothing about that older body is user intent, and reading it as such
 // pinned retired upstream values forever, suppressed every key the new version
-// added, and re-applied gameplay convars the opt-in split holds back.
+// added, and re-applied gameplay convars the creator-setting split keeps separate.
 describe('a bundled preset whose definition moved under an applied file', () => {
     const DEFAULT_ID = 'sqooky-default';
 

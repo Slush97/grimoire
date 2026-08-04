@@ -890,9 +890,10 @@ export async function listPerformancePresets(): Promise<PerformancePresetSummary
 
 export async function applyPerformanceConfig(
   presetId?: string,
-  optIns?: string[]
+  optIns?: string[],
+  version?: string | null
 ): Promise<PerformanceConfigStatus> {
-  return window.electronAPI.applyPerformanceConfig(presetId, optIns);
+  return window.electronAPI.applyPerformanceConfig(presetId, optIns, version);
 }
 
 export async function removePerformanceConfig(): Promise<PerformanceConfigStatus> {
@@ -901,9 +902,10 @@ export async function removePerformanceConfig(): Promise<PerformanceConfigStatus
 
 export async function resetPerformanceConfigOverrides(
   presetId?: string,
-  optIns?: string[]
+  optIns?: string[],
+  version?: string | null
 ): Promise<PerformanceConfigStatus> {
-  return window.electronAPI.resetPerformanceConfigOverrides(presetId, optIns);
+  return window.electronAPI.resetPerformanceConfigOverrides(presetId, optIns, version);
 }
 
 export async function restorePerformanceConfigBackup(): Promise<PerformanceConfigStatus> {

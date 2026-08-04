@@ -1,11 +1,28 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation, Trans } from 'react-i18next';
 import type { TFunction } from 'i18next';
 import { useNavigate } from 'react-router-dom';
-import { Gauge, RefreshCw, RotateCcw, Settings2, SquarePen } from 'lucide-react';
-import { Card, Badge, Button } from '../common/ui';
+import {
+  CircleAlert,
+  CircleCheck,
+  CircleDashed,
+  Eraser,
+  Gauge,
+  Info,
+  MoreHorizontal,
+  RefreshCw,
+  RotateCcw,
+  Settings2,
+  SquarePen,
+  TriangleAlert,
+  type LucideIcon,
+} from 'lucide-react';
+import { Card, Badge, Button, IconButton } from '../common/ui';
+import { AnchoredPopover } from '../common/AnchoredPopover';
 import EditorPickerModal from './EditorPickerModal';
 import PresetPicker from './PresetPicker';
+import PresetSummary from './PresetSummary';
+import VersionPicker from './VersionPicker';
 import GameplayOptIns from './GameplayOptIns';
 import { useAppStore, type BrowseArtistRef } from '../../stores/appStore';
 import {
@@ -42,7 +59,10 @@ const SQOOKY_ARTIST: BrowseArtistRef = {
 function performanceStatusMessage(
   status: PerformanceConfigStatus,
   t: TFunction,
-  presets: PerformancePresetSummary[]
+  presets: PerformancePresetSummary[],
+  /** The user deliberately pinned an older release, so "a newer one exists" is
+   *  not news to them. The rollback gets its own quieter line instead. */
+  pinnedOlder = false
 ): string {
   const overrideCount = status.overrideCount ?? 0;
   const appliedName =
@@ -50,7 +70,7 @@ function performanceStatusMessage(
   switch (status.state) {
     case 'applied': {
       const base =
-        status.appliedVersion === status.bundledVersion
+        pinnedOlder || status.appliedVersion === status.bundledVersion
           ? t('performance.status.applied', { preset: appliedName, version: status.appliedVersion })
           : t('performance.status.appliedOutdated', {
               preset: appliedName,
@@ -77,6 +97,45 @@ function performanceStatusMessage(
   }
 }
 
+/**
+ * Icon and tone for the status sentence. The state is the one thing on this
+ * card a user scans for, so it gets a glyph rather than being a fourth
+ * paragraph of grey text.
+ */
+function statusLook(status: PerformanceConfigStatus): { Icon: LucideIcon; tone: string } {
+  switch (status.state) {
+    case 'applied':
+      return status.handEdited
+        ? { Icon: SquarePen, tone: 'text-state-info' }
+        : { Icon: CircleCheck, tone: 'text-state-success' };
+    case 'wiped':
+      return { Icon: TriangleAlert, tone: 'text-state-warning' };
+    case 'error':
+      return { Icon: CircleAlert, tone: 'text-state-danger' };
+    default:
+      return { Icon: CircleDashed, tone: 'text-text-secondary' };
+  }
+}
+
+/** The header pill: same state, said in two words. */
+function statusBadge(
+  status: PerformanceConfigStatus,
+  t: TFunction
+): { variant: 'success' | 'warning' | 'error' | 'info' | 'neutral'; label: string } {
+  switch (status.state) {
+    case 'applied':
+      return status.handEdited
+        ? { variant: 'info', label: t('performance.badge.appliedEdited', { version: status.appliedVersion }) }
+        : { variant: 'success', label: t('performance.badge.applied', { version: status.appliedVersion }) };
+    case 'wiped':
+      return { variant: 'warning', label: t('performance.badge.wiped') };
+    case 'error':
+      return { variant: 'error', label: t('performance.badge.error') };
+    default:
+      return { variant: 'neutral', label: t('performance.badge.notApplied') };
+  }
+}
+
 // Settings card for the bundled performance presets (experimental). Applies a
 // selected community fps config onto gameinfo.gi in place, shows whether a game
 // update wiped it, and credits the upstream project the preset came from.
@@ -86,6 +145,8 @@ export default function PerformanceConfigCard() {
   const [presets, setPresets] = useState<PerformancePresetSummary[]>([]);
   const [busy, setBusy] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const { settings, saveSettings, setBrowseUi } = useAppStore();
   const navigate = useNavigate();
@@ -99,16 +160,46 @@ export default function PerformanceConfigCard() {
     '';
   const selected = presets.find((p) => p.id === selectedId) ?? null;
 
+  // Which bundled release of that preset to write. A saved pin naming a release
+  // this build no longer bundles falls back to the newest rather than erroring:
+  // the history window slides on every upstream bump, so an old pin aging out is
+  // expected, not a fault.
+  const selectedVersion = useMemo(() => {
+    if (!selected) return '';
+    const saved = settings?.performanceConfigVersions?.[selectedId];
+    return selected.versions.some((v) => v.version === saved)
+      ? saved!
+      : selected.versions[0].version;
+  }, [settings?.performanceConfigVersions, selectedId, selected]);
+
+  const selectedRelease =
+    selected?.versions.find((v) => v.version === selectedVersion) ?? selected?.versions[0] ?? null;
+
   const selectedOptIns = useMemo(() => {
-    const saved = settings?.performanceConfigOptIns?.[selectedId] ?? [];
-    // Drop keys the preset no longer defines (an upstream bump can retire one).
-    return selected ? saved.filter((key) => selected.optIn.some((c) => c.key === key)) : [];
-  }, [settings?.performanceConfigOptIns, selectedId, selected]);
+    if (!selectedRelease) return [];
+    const saved = settings?.performanceConfigOptIns?.[selectedId];
+    // Missing means the user has not customized this preset yet: preserve the
+    // creator's intended visibility/camera values. An explicit [] is different
+    // and means the user turned every optional setting off. Developer/testing
+    // tools are never implicit defaults.
+    const wanted =
+      saved ??
+      selectedRelease.optIn
+        .filter((control) => control.group !== 'devtools')
+        .map((control) => control.key);
+    // Drop keys this release does not define. Optional settings differ between
+    // releases, so filter against the chosen release rather than the newest.
+    return wanted.filter((key) => selectedRelease.optIn.some((c) => c.key === key));
+  }, [settings?.performanceConfigOptIns, selectedId, selectedRelease]);
 
   const viewSqookyInBrowse = () => {
     setBrowseUi({ submitter: SQOOKY_ARTIST });
     navigate('/browse');
   };
+
+  // Dismissal (outside click, Escape) is AnchoredPopover's job; it just needs a
+  // stable closer.
+  const closeMenu = useCallback(() => setMenuOpen(false), []);
 
   const refresh = useCallback(async () => {
     try {
@@ -154,6 +245,17 @@ export default function PerformanceConfigCard() {
     await saveSettings({ ...settings, performanceConfigPresetId: presetId });
   };
 
+  const onSelectVersion = async (version: string) => {
+    if (!settings || !selected) return;
+    // Picking the newest clears the pin rather than recording it, so the preset
+    // keeps following upstream on future bumps instead of silently freezing at
+    // whatever happened to be newest the day the user clicked.
+    const next = { ...(settings.performanceConfigVersions ?? {}) };
+    if (version === selected.versions[0].version) delete next[selectedId];
+    else next[selectedId] = version;
+    await saveSettings({ ...settings, performanceConfigVersions: next });
+  };
+
   const onChangeOptIns = async (keys: string[]) => {
     if (!settings) return;
     await saveSettings({
@@ -193,7 +295,15 @@ export default function PerformanceConfigCard() {
   // A different preset than the one in the file is selected, so the primary
   // action switches rather than reapplies.
   const willSwitch = applied && status?.appliedPresetId !== selectedId;
-  // Toggling an opt-in only records the choice; nothing reaches gameinfo.gi
+  // The user deliberately chose an older release. This suppresses the
+  // "reapply to update" nag: they already know a newer one exists, that is
+  // precisely what they rolled back from.
+  const pinnedOlder = !!selected && selectedVersion !== selected.versions[0].version;
+  // Same preset, different release than the file holds: a reapply is needed to
+  // write it, just like a pending creator-setting change.
+  const pendingVersion =
+    applied && !willSwitch && !!selectedVersion && status?.appliedVersion !== selectedVersion;
+  // Toggling a creator setting only records the choice; nothing reaches gameinfo.gi
   // until the next apply. Compare what the file says was written (the sidecar,
   // via status) with what is selected now, so a pending change is visible
   // instead of looking like it already took effect.
@@ -217,154 +327,238 @@ export default function PerformanceConfigCard() {
         ? t('performance.reapplyConfig')
         : t('performance.applyConfig');
 
+  // Everything the next apply would change, collected into one callout. Three
+  // separate blue sentences all saying "press Reapply" was the bulk of the
+  // card's noise; they mean one thing, so they look like one thing.
+  const pendingNotes: string[] = [];
+  if (willSwitch) {
+    pendingNotes.push(
+      t('performance.switchNote', { current: appliedName, next: selected?.name ?? '' })
+    );
+  }
+  if (pendingVersion) pendingNotes.push(t('performance.version.pending', { version: selectedVersion }));
+  if (pendingOptIns > 0) pendingNotes.push(t('performance.optIn.pending', { count: pendingOptIns }));
+
+  // Actions that operate on the file rather than on the config: rarely used,
+  // and five buttons of near-equal weight in one row was reading as a toolbar
+  // rather than as "one obvious action plus some tools".
+  const menuActions = applied
+    ? [
+        { key: 'edit', icon: SquarePen, label: t('performance.editFile'), run: onEditFile },
+        ...(settings?.externalEditorPath !== undefined
+          ? [
+              {
+                key: 'editor',
+                icon: Settings2,
+                label: t('performance.changeEditor'),
+                run: () => setPickerOpen(true),
+              },
+            ]
+          : []),
+        ...((status?.overrideCount ?? 0) > 0
+          ? [
+              {
+                key: 'reset',
+                icon: Eraser,
+                label: t('performance.resetOverrides'),
+                // Reset acts on the preset that is IN the file, not the one
+                // selected in the picker: the override count this is gated on
+                // belongs to the applied preset, and "reset my overrides" must
+                // not quietly switch preset as a side effect. The applied
+                // version is passed for the same reason: resetting overrides
+                // must not also move the user off the release they rolled back
+                // to.
+                run: () =>
+                  void run(() =>
+                    resetPerformanceConfigOverrides(
+                      status?.appliedPresetId ?? selectedId,
+                      status?.appliedOptIns ?? [],
+                      status?.appliedVersion ?? selectedVersion
+                    )
+                  ),
+              },
+            ]
+          : []),
+      ]
+    : [];
+
+  const look = status ? statusLook(status) : null;
+  const badge = status ? statusBadge(status, t) : null;
+
   return (
     <Card
       title={t('settings.experimental.performanceConfig')}
       icon={Gauge}
       className="lg:col-span-2"
       description={t('performance.cardDescription')}
-      action={
-        status && (
-          <Badge variant={applied ? (status.handEdited ? 'info' : 'success') : wiped ? 'warning' : status.state === 'error' ? 'error' : 'neutral'}>
-            {applied
-              ? status.handEdited
-                ? t('performance.badge.appliedEdited', { version: status.appliedVersion })
-                : t('performance.badge.applied', { version: status.appliedVersion })
-              : wiped ? t('performance.badge.wiped') : status.state === 'error' ? t('performance.badge.error') : t('performance.badge.notApplied')}
-          </Badge>
-        )
-      }
+      action={badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
     >
-      <div className="space-y-4">
-        {presets.length > 0 && (
-          <PresetPicker
-            presets={presets}
-            selectedId={selectedId}
-            onSelect={(id) => void onSelectPreset(id)}
-            disabled={busy}
-            creditSlot={
-              selected?.upstream.repo === SQOOKY_REPO ? (
-                <Trans
-                  i18nKey="performance.creditSqooky"
-                  components={{
-                    sqooky: (
-                      <button
-                        type="button"
-                        onClick={viewSqookyInBrowse}
-                        className="text-accent hover:underline"
-                      />
-                    ),
-                    kofi: (
-                      <a
-                        href={SQOOKY_KOFI_URL}
-                        target="_blank"
-                        rel="noreferrer noopener"
-                        className="text-accent hover:underline"
-                      />
-                    ),
-                  }}
-                />
-              ) : null
-            }
-          />
-        )}
+      <div className="space-y-5">
+        <div className="space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2 sm:items-start">
+            {presets.length > 0 && (
+              <PresetPicker
+                presets={presets}
+                selectedId={selectedId}
+                onSelect={(id) => void onSelectPreset(id)}
+                disabled={busy}
+              />
+            )}
+            {selected && (
+              <VersionPicker
+                versions={selected.versions}
+                selected={selectedVersion}
+                onSelect={(version) => void onSelectVersion(version)}
+                disabled={busy}
+              />
+            )}
+          </div>
 
-        {selected && (
+          {selected && selectedRelease && (
+            <PresetSummary
+              preset={selected}
+              release={selectedRelease}
+              creditSlot={
+                selected.upstream.repo === SQOOKY_REPO ? (
+                  <Trans
+                    i18nKey="performance.creditSqooky"
+                    components={{
+                      sqooky: (
+                        <button
+                          type="button"
+                          onClick={viewSqookyInBrowse}
+                          className="text-accent hover:underline"
+                        />
+                      ),
+                      kofi: (
+                        <a
+                          href={SQOOKY_KOFI_URL}
+                          target="_blank"
+                          rel="noreferrer noopener"
+                          className="text-accent hover:underline"
+                        />
+                      ),
+                    }}
+                  />
+                ) : null
+              }
+            />
+          )}
+        </div>
+
+        {selectedRelease && (
           <GameplayOptIns
-            preset={selected}
+            controls={selectedRelease.optIn}
             selected={selectedOptIns}
             onChange={(keys) => void onChangeOptIns(keys)}
             disabled={busy}
           />
         )}
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="min-w-0 space-y-1">
-            <p className="text-sm text-text-secondary">
-              {status
-                ? performanceStatusMessage(status, t, presets)
-                : t('performance.checkingGameinfo')}
-            </p>
-            {willSwitch && (
-              <p className="text-xs text-state-info">
-                {t('performance.switchNote', {
-                  current: appliedName,
-                  next: selected?.name ?? '',
-                })}
+        <div className="border-t border-white/5 pt-4 space-y-3">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-2">
+              <p className="flex items-start gap-2 text-sm text-text-secondary">
+                {look && <look.Icon className={`w-4 h-4 mt-0.5 shrink-0 ${look.tone}`} aria-hidden="true" />}
+                <span>
+                  {status
+                    ? performanceStatusMessage(status, t, presets, pinnedOlder)
+                    : t('performance.checkingGameinfo')}
+                </span>
               </p>
-            )}
-            {pendingOptIns > 0 && (
-              <p className="text-xs text-state-info">
-                {t('performance.optIn.pending', { count: pendingOptIns })}
-              </p>
-            )}
-            <p className="text-xs text-text-secondary">{t('performance.shadowsHint')}</p>
-            {openError && <p className="text-xs text-state-danger">{openError}</p>}
-          </div>
-          <div className="flex flex-wrap items-center gap-2 shrink-0">
-            {canRestore && (
-              <Button
-                onClick={() => run(restorePerformanceConfigBackup)}
-                disabled={busy}
-                icon={RotateCcw}
-                size="sm"
-              >
-                {t('performance.restoreBackup')}
-              </Button>
-            )}
-            <Button
-              onClick={() => run(() => applyPerformanceConfig(selectedId, selectedOptIns))}
-              isLoading={busy}
-              icon={wiped || willSwitch ? RefreshCw : undefined}
-              variant={canRestore ? 'secondary' : 'primary'}
-              size="sm"
-            >
-              {primaryLabel}
-            </Button>
-            {(applied || wiped) && (
-              <Button onClick={() => run(removePerformanceConfig)} disabled={busy} variant="secondary" size="sm">
-                {t('common.actions.remove')}
-              </Button>
-            )}
-            {applied && (
-              <Button onClick={onEditFile} disabled={busy} variant="ghost" size="sm" icon={SquarePen}>
-                {t('performance.editFile')}
-              </Button>
-            )}
-            {applied && settings?.externalEditorPath !== undefined && (
-              <button
-                type="button"
-                onClick={() => setPickerOpen(true)}
-                disabled={busy}
-                title={t('performance.changeEditor')}
-                aria-label={t('performance.changeEditor')}
-                className="p-2 rounded-lg hover:bg-white/5 transition-colors cursor-pointer text-text-secondary hover:text-text-primary"
-              >
-                <Settings2 className="w-4 h-4" aria-hidden="true" />
-              </button>
-            )}
-            {applied && (status?.overrideCount ?? 0) > 0 && (
+              {pinnedOlder && !pendingVersion && (
+                <p className="text-xs text-text-secondary">
+                  {t('performance.version.pinned', {
+                    version: selectedVersion,
+                    latest: selected?.versions[0].version ?? '',
+                  })}
+                </p>
+              )}
+              {openError && <p className="text-xs text-state-danger">{openError}</p>}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 shrink-0">
+              {canRestore && (
+                <Button
+                  onClick={() => run(restorePerformanceConfigBackup)}
+                  disabled={busy}
+                  icon={RotateCcw}
+                  size="sm"
+                >
+                  {t('performance.restoreBackup')}
+                </Button>
+              )}
               <Button
                 onClick={() =>
-                  // Reset acts on the preset that is IN the file, not the one
-                  // selected in the picker: the override count this button is
-                  // gated on belongs to the applied preset, and "reset my
-                  // overrides" must not quietly switch preset as a side effect.
-                  run(() =>
-                    resetPerformanceConfigOverrides(
-                      status?.appliedPresetId ?? selectedId,
-                      status?.appliedOptIns ?? []
-                    )
-                  )
+                  run(() => applyPerformanceConfig(selectedId, selectedOptIns, selectedVersion))
                 }
-                disabled={busy}
-                variant="ghost"
+                isLoading={busy}
+                icon={wiped || willSwitch ? RefreshCw : undefined}
+                variant={canRestore ? 'secondary' : 'primary'}
                 size="sm"
               >
-                {t('performance.resetOverrides')}
+                {primaryLabel}
               </Button>
-            )}
+              {(applied || wiped) && (
+                <Button onClick={() => run(removePerformanceConfig)} disabled={busy} variant="secondary" size="sm">
+                  {t('common.actions.remove')}
+                </Button>
+              )}
+              {menuActions.length > 0 && (
+                // Wrapper, not the button itself: AnchoredPopover treats the
+                // anchor as the "inside" region for outside-click, and the
+                // trigger owns toggling.
+                <div ref={menuRef} className="relative shrink-0">
+                  <IconButton
+                    icon={MoreHorizontal}
+                    label={t('performance.moreActions')}
+                    onClick={() => setMenuOpen((v) => !v)}
+                    disabled={busy}
+                    aria-expanded={menuOpen}
+                    aria-haspopup="menu"
+                  />
+                  <AnchoredPopover
+                    open={menuOpen}
+                    onClose={closeMenu}
+                    anchorRef={menuRef}
+                    width={224}
+                    role="menu"
+                    ariaLabel={t('performance.moreActions')}
+                    className="p-1"
+                  >
+                    {menuActions.map(({ key, icon: Icon, label, run: onRun }) => (
+                      <button
+                        key={key}
+                        type="button"
+                        role="menuitem"
+                        onClick={() => {
+                          setMenuOpen(false);
+                          onRun();
+                        }}
+                        className="w-full flex items-center gap-3 px-3 py-2 text-left text-sm text-text-primary hover:bg-bg-tertiary rounded-md transition-colors cursor-pointer"
+                      >
+                        <Icon className="w-4 h-4 text-text-secondary shrink-0" aria-hidden="true" />
+                        <span className="min-w-0 truncate">{label}</span>
+                      </button>
+                    ))}
+                  </AnchoredPopover>
+                </div>
+              )}
+            </div>
           </div>
+
+          {pendingNotes.length > 0 && (
+            <div className="rounded-sm border border-state-info/20 bg-state-info/5 px-3 py-2 space-y-1">
+              {pendingNotes.map((note) => (
+                <p key={note} className="flex items-start gap-2 text-xs text-state-info">
+                  <Info className="w-3.5 h-3.5 mt-px shrink-0" aria-hidden="true" />
+                  <span>{note}</span>
+                </p>
+              ))}
+            </div>
+          )}
+
+          <p className="text-xs text-text-secondary/70">{t('performance.shadowsHint')}</p>
         </div>
       </div>
       {pickerOpen && (
