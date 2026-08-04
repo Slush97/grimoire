@@ -146,7 +146,7 @@ export interface PerformancePresetVersion {
     date: string;
     /** How many settings this release changes, for a rough intensity signal. */
     settingCount: number;
-    /** Gameplay convars this release sets, offered as opt-ins rather than applied.
+    /** Creator-authored gameplay convars exposed as individual controls.
      *  Differs between releases, so it is recorded per version. */
     optIn: PerformanceOptIn[];
 }
@@ -179,7 +179,7 @@ export interface PerformancePresetSummary {
         license: string;
         credit: string;
     };
-    /** Gameplay convars this preset sets, offered as opt-ins rather than applied. */
+    /** Creator-authored gameplay convars exposed as individual controls. */
     optIn: PerformanceOptIn[];
     /** Every bundled release of this preset, newest first, never empty.
      *  Releases whose upstream file was byte-identical are collapsed, so two

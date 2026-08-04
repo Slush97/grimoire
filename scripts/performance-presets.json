@@ -180,6 +180,10 @@
       {
         "key": "r_render_portals",
         "why": "OptiLock v4.2's FPS preset sets this to false, which breaks Doorman's door. Upstream fixed it to true one day after tagging (commit 40788927) but has published no release containing the fix, so a tag-pinned refresh cannot reach it. Excluding costs nothing: the stock gameinfo.gi never sets the key, and the two presets that do set it write true, which is the engine default. Remove this once a release carries the fix."
+      },
+      {
+        "key": "DistanceField",
+        "why": "The current Deadlock build access-violates shortly after loading the hideout when boot's config combines Engine2/RenderingPipeline/DistanceField=0 with its core convar body. A live binary-search launch check reproduced the crash with this section op alone and confirmed the full preset remains running without it. No other bundled preset currently sets this key."
       }
     ]
   },
@@ -187,8 +191,9 @@
     "$comment": [
       "Convars that change what the player can see or how the camera frames the",
       "world rather than how fast it renders. Stripped from every preset and",
-      "offered as explicit opt-ins instead, so Grimoire never silently turns on",
-      "enemy visibility or changes someone's FOV under a 'performance' label.",
+      "offered as individual controls. Creator visibility and camera choices",
+      "are included by default; users can exclude any they do not want.",
+      "Developer and testing tools remain off until explicitly enabled.",
       "Each entry's default value is whatever the selected preset set it to;",
       "presets that do not set it simply do not offer the toggle.",
       "`group` buckets them in the UI.",

@@ -22,9 +22,10 @@ import type {
 // does not define, so a stale renderer can never write an unknown convar.
 //
 // Both halves fall back to the saved settings, and they fall back together: a
-// caller that names a preset without naming opt-ins gets that preset's saved
-// opt-ins, not none of them. Defaulting the list to empty here would silently
-// strip settings the user had turned on.
+// caller that names a preset without naming optional settings gets that
+// preset's saved choices. If no choices have ever been saved, undefined flows
+// through to the service and means "creator defaults"; an explicitly saved []
+// still means the user disabled every optional gameplay setting.
 // `version` falls back the same way. An unknown version is not rejected here:
 // the service resolves it to the newest release, which is what should happen
 // when a saved pin names a release that has since aged out of the bundle.
@@ -33,7 +34,7 @@ function selection(presetId?: string, optIns?: string[], version?: string | null
     const id = presetId ?? settings.performanceConfigPresetId;
     return {
         presetId: id,
-        optIns: optIns ?? (id ? settings.performanceConfigOptIns?.[id] : undefined) ?? [],
+        optIns: optIns ?? (id ? settings.performanceConfigOptIns?.[id] : undefined),
         version: version ?? (id ? settings.performanceConfigVersions?.[id] : undefined) ?? null,
     };
 }

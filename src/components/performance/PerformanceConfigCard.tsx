@@ -176,13 +176,20 @@ export default function PerformanceConfigCard() {
     selected?.versions.find((v) => v.version === selectedVersion) ?? selected?.versions[0] ?? null;
 
   const selectedOptIns = useMemo(() => {
-    const saved = settings?.performanceConfigOptIns?.[selectedId] ?? [];
-    // Drop keys this release does not define. Opt-ins differ between releases,
-    // not just between presets, so this is filtered against the chosen release
-    // rather than the newest one.
-    return selectedRelease
-      ? saved.filter((key) => selectedRelease.optIn.some((c) => c.key === key))
-      : [];
+    if (!selectedRelease) return [];
+    const saved = settings?.performanceConfigOptIns?.[selectedId];
+    // Missing means the user has not customized this preset yet: preserve the
+    // creator's intended visibility/camera values. An explicit [] is different
+    // and means the user turned every optional setting off. Developer/testing
+    // tools are never implicit defaults.
+    const wanted =
+      saved ??
+      selectedRelease.optIn
+        .filter((control) => control.group !== 'devtools')
+        .map((control) => control.key);
+    // Drop keys this release does not define. Optional settings differ between
+    // releases, so filter against the chosen release rather than the newest.
+    return wanted.filter((key) => selectedRelease.optIn.some((c) => c.key === key));
   }, [settings?.performanceConfigOptIns, selectedId, selectedRelease]);
 
   const viewSqookyInBrowse = () => {
@@ -293,10 +300,10 @@ export default function PerformanceConfigCard() {
   // precisely what they rolled back from.
   const pinnedOlder = !!selected && selectedVersion !== selected.versions[0].version;
   // Same preset, different release than the file holds: a reapply is needed to
-  // write it, just like a pending opt-in change.
+  // write it, just like a pending creator-setting change.
   const pendingVersion =
     applied && !willSwitch && !!selectedVersion && status?.appliedVersion !== selectedVersion;
-  // Toggling an opt-in only records the choice; nothing reaches gameinfo.gi
+  // Toggling a creator setting only records the choice; nothing reaches gameinfo.gi
   // until the next apply. Compare what the file says was written (the sidecar,
   // via status) with what is selected now, so a pending change is visible
   // instead of looking like it already took effect.

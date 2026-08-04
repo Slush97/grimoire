@@ -11,8 +11,9 @@
 // stock -> preset, never preset -> preset.
 //
 // Gameplay/visibility convars (enemy outlines, glows, FOV) are held out of the
-// preset bodies and applied only when the user opts in, so choosing a
-// performance preset never silently changes what they can see.
+// generated performance bodies so the UI can expose them individually. The
+// creator's visibility/camera values are included by default; users can turn
+// any of them off. Developer/testing controls remain explicit opt-ins.
 //
 // All patching runs on LF-normalized text and the file's original EOL style
 // is restored on write: line-based regexes silently fail on CR-terminated
@@ -65,10 +66,11 @@ type OverrideEntry = { value?: string; omit?: boolean };
 type Overrides = Record<string, OverrideEntry>;
 
 /** Options for one apply. `presetId` picks which bundled preset to write;
- *  `optIns` are the gameplay/visibility convar keys the user turned on for
- *  that preset (anything not listed stays out of the file). `version` picks
- *  which bundled upstream release of that preset to write, defaulting to the
- *  newest: users roll back when a new release runs worse on their machine. */
+ *  `optIns` are the gameplay/visibility convar keys to include (anything not
+ *  listed stays out of the file). Undefined uses the creator defaults:
+ *  visibility/camera on, developer/testing tools off. An explicit empty list
+ *  disables every optional gameplay setting. `version` picks which bundled
+ *  upstream release of that preset to write, defaulting to the newest. */
 export interface ApplyOptions {
     presetId?: string;
     version?: string | null;
@@ -88,6 +90,15 @@ function effectiveConvars(
         .filter((control) => enabled.has(control.key))
         .map((control) => [control.key, control.value] as const);
     return extra.length ? [...preset.convars, ...extra] : preset.convars;
+}
+
+/** Creator-authored settings that form the default experience. Debug and
+ *  hideout tooling is intentionally excluded: it is useful for config authors,
+ *  but is not part of normal gameplay. */
+function creatorDefaultOptIns(preset: PerformancePreset): string[] {
+    return preset.optIn
+        .filter((control) => control.group !== 'devtools')
+        .map((control) => control.key);
 }
 
 function statePath(gameinfoPath: string): string {
@@ -281,10 +292,10 @@ function presetKeyIndex(
 //
 // Inferring user intent across that gap pinned stale upstream values forever,
 // suppressed every key the new version added, and (worst) re-applied gameplay
-// convars the opt-in split exists to hold back. So when the definition has
-// moved, only the unambiguous signal counts: a marker line the user commented
-// out. Overrides banked while the definitions matched are untouched; the caller
-// still layers them.
+// convars the creator-setting split keeps individually controllable. So when
+// the definition has moved, only the unambiguous signal counts: a marker line
+// the user commented out. Overrides banked while the definitions matched are
+// untouched; the caller still layers them.
 function harvestOverrides(
     content: string,
     preset: PerformancePreset,
@@ -407,7 +418,7 @@ export function applyPerformanceConfig(
     }
 
     const preset = getPreset(opts?.presetId ?? DEFAULT_PRESET_ID, opts?.version);
-    const optIns = (opts?.optIns ?? []).filter((key) =>
+    const optIns = (opts?.optIns ?? creatorDefaultOptIns(preset)).filter((key) =>
         preset.optIn.some((control) => control.key === key)
     );
     const convars = effectiveConvars(preset, optIns);
@@ -536,7 +547,7 @@ export function applyPerformanceConfig(
         const indent = detectIndent(content.slice(convarRange.bodyStart, convarRange.bodyEnd));
         const width = toInject.length ? Math.max(...toInject.map(([k]) => k.length)) + 1 : 0;
         const optInNote = optIns.length
-            ? `${indent}// Includes ${optIns.length} opt-in gameplay setting${optIns.length === 1 ? '' : 's'} you enabled [${MARKER}]`
+            ? `${indent}// Includes ${optIns.length} creator gameplay setting${optIns.length === 1 ? '' : 's'} [${MARKER}]`
             : null;
         const block = [
             `${indent}// ==== Grimoire Performance Config BEGIN (preset=${preset.id} v${preset.version} @${preset.upstream.commit.slice(0, 12)}) ====`,

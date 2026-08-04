@@ -1170,10 +1170,9 @@ export interface AppSettings {
    *  and separate from `performanceConfigPresetId` so switching preset and
    *  switching version stay independent choices. */
   performanceConfigVersions?: Record<string, string>;
-  /** Gameplay/visibility convar keys the user opted into, per preset id.
-   *  These are held out of the presets by default (a performance preset must
-   *  not silently enable enemy outlines or change FOV), so an empty or missing
-   *  list means none are applied. */
+  /** Gameplay/visibility convar keys included for each preset. A missing entry
+   *  means creator defaults (visibility/camera on, developer tools off); an
+   *  explicit empty list means the user disabled every optional setting. */
   performanceConfigOptIns?: Record<string, string[]>;
   /** Editor binary used to open gameinfo.gi for hand edits. null = the OS
    *  default app; undefined = never chosen, so the picker is shown first.

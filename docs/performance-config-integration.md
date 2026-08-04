@@ -127,6 +127,12 @@ Invariants that hold:
 - Switching preset removes the applied one by its markers first, so the file
   always goes stock -> preset and never accumulates two presets' markers.
 
+Documented safety exclusions live beside the pins. They currently include the
+broken `r_render_portals=0` value and boot's `DistanceField=0` section
+edit. The latter access-violates in the current Deadlock build when combined
+with boot's convar body; live launch bisection confirmed the full boot preset
+stays running without that one edit. No other bundled preset currently sets it.
+
 ### Marker grammar
 
 The block header is the authoritative record of what is in the file; the sidecar
@@ -160,19 +166,20 @@ the preset), only a marker line the user commented out is unambiguous:
 - a preset key with no line in the file is a key the bump added
 
 Reading those as user intent pinned retired upstream values forever, suppressed
-every key the new version added, and re-applied gameplay convars the opt-in split
-exists to hold back. Overrides banked while the definitions matched are still
-layered on; only fresh inference is suspended.
+every key the new version added, and re-applied gameplay convars the
+creator-setting split keeps separate. Overrides banked while the definitions
+matched are still layered on; only fresh inference is suspended.
 
-### Gameplay convars are opt-in
+### Creator gameplay convars are individually controlled
 
 Convars that change what the player can see or how the camera is framed (enemy /
 trooper / boss outlines and glows, see-thru-walls, `cl_glow_brightness`,
 `r_citadel_*outline*`, `r_aspectratio`, FOV keys, camera pitch limits, hideout
 and debug-draw tooling, and the unit-status HUD readability keys below) are
-stripped from every preset body at generation time and written only when the
-user turns them on. Choosing a performance preset does not change what someone
-can see.
+stripped from every preset body at generation time and exposed as individual
+controls. The creator's visibility and camera values are included by default,
+and the user can exclude any of them. Developer and hideout-testing tools stay
+off unless explicitly enabled.
 
 The enforcement is in the generator, not in a hand-audited list:
 `optIn.patterns` in the pin manifest describes what a visibility or framing key
@@ -183,7 +190,7 @@ A list alone would rot on the first `--refresh`.
 #### The unit-status family is classified by key, not by pattern
 
 `citadel_unit_status_use_new` (health bar style) and
-`citadel_unit_status_hide_names` (names over units) are opt-ins because they
+`citadel_unit_status_hide_names` (names over units) are creator controls because they
 change what the player reads off the HUD, but neither matches any entry in
 `optIn.patterns`. They are held back purely by their `optIn.keys` membership,
 so **a `--refresh` that introduces a new `citadel_unit_status_*` key will not

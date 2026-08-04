@@ -9,10 +9,10 @@
 // That keeps Grimoire's SearchPaths block (mods, overflow folders,
 // deadworks content) and any game-update changes intact.
 //
-// Convars that change what the player can see, or the camera framing,
-// are pulled out of every preset into `optIn` and are applied only when
-// the user turns them on. Grimoire does not enable enemy visibility or
-// change someone's FOV as a side effect of a performance preset.
+// Convars that change what the player can see, the camera framing, or
+// expose developer tools are pulled out into `optIn`. This keeps them
+// individually controllable: creator visibility/camera values default on,
+// while developer/testing tools require explicit opt-in.
 //
 // Upstream licensing: the preset values below are derived from GPL-3.0
 // projects, credited per preset in `upstream`.
@@ -28,11 +28,11 @@ export interface SectionOp {
     remove?: boolean;
 }
 
-/** A gameplay/visibility convar the preset's author set, held back from
- *  the preset body and applied only on explicit opt-in. */
+/** A creator-authored gameplay/visibility convar kept separate from the
+ *  preset body so it can be controlled individually. */
 export interface OptInControl {
     key: string;
-    /** The value this preset's author chose, used when the user opts in. */
+    /** The value this preset's author chose, used when included. */
     value: string;
     group: OptInGroup;
 }
@@ -2106,7 +2106,6 @@ const BootMaxFps: PerformancePresetFamily = {
             sectionOps: [
                 { path: ['Engine2'], key: 'LightmapUVQuery', value: '0' },
                 { path: ['Engine2', 'RenderingPipeline'], key: 'AmbientOcclusionProxies', value: '0' },
-                { path: ['Engine2', 'RenderingPipeline'], key: 'DistanceField', value: '0' },
                 { path: ['NVNGX'], key: 'ReflexLateWarp', value: '1' },
                 { path: ['NetworkSystem'], key: 'UseSerializedEntityPool', value: '1' },
                 { path: ['NetworkSystem', 'BetaUniverse'], key: 'FakeLag', value: '0' },

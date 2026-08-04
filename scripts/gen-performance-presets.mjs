@@ -228,7 +228,7 @@ function diffAgainstBaseline(baselineParsed, configParsed, manifest) {
     const baseline = baselineParsed.entries;
     const { entries: config, commented } = configParsed;
     const excludedSections = manifest.exclude.sections;
-    const excludedKeys = new Set(manifest.exclude.keys.map((k) => k.key));
+    const excludedKeys = new Set(manifest.exclude.keys.map((item) => item.key));
     const optInGroup = new Map(manifest.optIn.keys.map((k) => [k.key, k.group]));
 
     const sectionOps = [];
@@ -316,10 +316,10 @@ function emit(manifest, presets) {
     L.push(`// That keeps Grimoire's SearchPaths block (mods, overflow folders,`);
     L.push(`// deadworks content) and any game-update changes intact.`);
     L.push(`//`);
-    L.push(`// Convars that change what the player can see, or the camera framing,`);
-    L.push(`// are pulled out of every preset into \`optIn\` and are applied only when`);
-    L.push(`// the user turns them on. Grimoire does not enable enemy visibility or`);
-    L.push(`// change someone's FOV as a side effect of a performance preset.`);
+    L.push(`// Convars that change what the player can see, the camera framing, or`);
+    L.push(`// expose developer tools are pulled out into \`optIn\`. This keeps them`);
+    L.push(`// individually controllable: creator visibility/camera values default on,`);
+    L.push(`// while developer/testing tools require explicit opt-in.`);
     L.push(`//`);
     L.push(`// Upstream licensing: the preset values below are derived from GPL-3.0`);
     L.push(`// projects, credited per preset in \`upstream\`.`);
@@ -335,11 +335,11 @@ function emit(manifest, presets) {
     L.push(`    remove?: boolean;`);
     L.push(`}`);
     L.push(``);
-    L.push(`/** A gameplay/visibility convar the preset's author set, held back from`);
-    L.push(` *  the preset body and applied only on explicit opt-in. */`);
+    L.push(`/** A creator-authored gameplay/visibility convar kept separate from the`);
+    L.push(` *  preset body so it can be controlled individually. */`);
     L.push(`export interface OptInControl {`);
     L.push(`    key: string;`);
-    L.push(`    /** The value this preset's author chose, used when the user opts in. */`);
+    L.push(`    /** The value this preset's author chose, used when included. */`);
     L.push(`    value: string;`);
     L.push(`    group: OptInGroup;`);
     L.push(`}`);
@@ -647,8 +647,8 @@ async function main() {
     if (!presets.some((p) => p.isDefault)) fail('No preset is marked "default": true in the manifest.');
     if (presets.filter((p) => p.isDefault).length > 1) fail('More than one preset is marked default.');
 
-    // The whole point of the opt-in split: a classified key must never end up
-    // in a preset body, where it would be applied without the user asking.
+    // The whole point of this split: a classified key must never end up in a
+    // preset body, where the UI could not expose it as an individual control.
     const optInKeys = new Set(manifest.optIn.keys.map((k) => k.key));
     for (const p of presets) {
         for (const r of p.releases) {

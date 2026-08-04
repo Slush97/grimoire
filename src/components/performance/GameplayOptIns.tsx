@@ -9,7 +9,7 @@ interface GameplayOptInsProps {
    *  preset, because these differ between releases of the same preset: rolling
    *  back must offer the toggles that release actually defines. */
   controls: PerformanceOptIn[];
-  /** Currently selected opt-in convar keys for this preset. */
+  /** Creator convar keys currently included for this preset. */
   selected: string[];
   onChange: (keys: string[]) => void;
   disabled?: boolean;
@@ -18,14 +18,12 @@ interface GameplayOptInsProps {
 const GROUP_ORDER: PerformanceOptIn['group'][] = ['visibility', 'camera', 'devtools'];
 
 /**
- * The gameplay/visibility convars a preset's author set, which Grimoire holds
- * back and applies only on explicit opt-in.
+ * The gameplay/visibility convars a preset's author set. Visibility and camera
+ * values follow the creator by default but stay individually removable;
+ * developer/testing controls require explicit opt-in.
  *
- * These are separated from the performance body on purpose: forcing enemy
- * outlines or changing someone's FOV is not a frame-rate change, and shipping
- * it silently under a "performance preset" label would be the kind of thing a
- * competitive community is right to be annoyed about. Upstream still gets
- * credited for the values; the user decides whether to take them.
+ * These are separated from the generated performance body so the user can see
+ * and customize them instead of receiving an opaque all-or-nothing preset.
  */
 export default function GameplayOptIns({
   controls,
