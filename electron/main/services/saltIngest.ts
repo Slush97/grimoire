@@ -8,9 +8,9 @@
 //
 // This service reimplements what the official deadlock-api-ingest tool does,
 // minus its two privacy leaks: the "username" field carries a constant client
-// tag instead of the player's name, and we never ping statlocker.gg. The only
-// thing that leaves the machine is match_id, cluster_id and the two salts:
-// numbers that describe the match, not the player.
+// tag instead of the player's name, and we never ping statlocker.gg. What
+// leaves the machine is match_id, cluster_id, the two salts, and the constant
+// "grimoire" tag: data that describes the match and the client, never the player.
 //
 // Cache-file format note: the host and path are stored as null-separated
 // fields in a small binary header (not a literal http:// URL), always within
