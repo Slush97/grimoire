@@ -1,43 +1,24 @@
 import { type ReactNode, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Check, ExternalLink, Fingerprint, FolderOpen, ImageDown, Link, Loader2 } from 'lucide-react';
+import { Check, ExternalLink, ImageDown, Link, Loader2 } from 'lucide-react';
 import { MenuContent, MenuItem, MenuLabel, MenuRoot, MenuSeparator, MenuTrigger } from './common/menu';
+import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../lib/imageActions';
 
 interface ImageContextMenuProps {
   src: string;
   alt: string;
   copySrc?: string;
-  /** When set, appends a "Reveal mod in folder" item. The image menu swallows
-   *  right-clicks (its trigger stops propagation), so card surfaces that offer
-   *  reveal-in-folder pass it down here too to keep the action reachable. */
-  onRevealInFolder?: () => void;
-  /** When set, appends a "View imprint" item (Fingerprint icon). Same rationale
-   *  as onRevealInFolder: mod cards offer this on right-click, and the image
-   *  menu swallows those clicks. Callers pass it only for imprinted mods. */
-  onViewImprint?: () => void;
-  /** Extra menu items appended below the reveal/imprint block (the Installed
-   *  card's "Add to list" submenu). Same rationale as onRevealInFolder: this
-   *  menu swallows the card's right-clicks, so card-level actions have to be
-   *  threaded through to stay reachable from the thumbnail. */
-  extraItems?: ReactNode;
   children: ReactNode;
 }
 
 type CopyState = 'idle' | 'copying' | 'copied' | 'failed';
 
-export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, onViewImprint, extraItems, children }: ImageContextMenuProps) {
+export default function ImageContextMenu({ src, alt, copySrc, children }: ImageContextMenuProps) {
   const { t } = useTranslation();
   const [imageCopyState, setImageCopyState] = useState<CopyState>('idle');
   const [urlCopyState, setUrlCopyState] = useState<CopyState>('idle');
   const source = useMemo(() => resolveImageSource(copySrc ?? src), [copySrc, src]);
-  const canOpenImage = useMemo(() => {
-    try {
-      const protocol = new URL(source).protocol;
-      return protocol === 'http:' || protocol === 'https:';
-    } catch {
-      return false;
-    }
-  }, [source]);
+  const canOpenImage = useMemo(() => canOpenImageSource(source), [source]);
 
   const resetTransientState = () => {
     setImageCopyState('idle');
@@ -53,11 +34,7 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
   const copyImage = async () => {
     setImageCopyState('copying');
     try {
-      if (typeof window.electronAPI.copyImageToClipboard === 'function') {
-        await window.electronAPI.copyImageToClipboard(source);
-      } else {
-        await copyImageWithWebClipboard(source);
-      }
+      await copyImageToClipboard(source);
       setImageCopyState('copied');
       finishAndClose();
     } catch (err) {
@@ -155,53 +132,7 @@ export default function ImageContextMenu({ src, alt, copySrc, onRevealInFolder, 
               </MenuItem>
             </>
           )}
-          {(onRevealInFolder || onViewImprint) && (
-            <>
-              <MenuSeparator />
-              {onRevealInFolder && (
-                <MenuItem icon={FolderOpen} onSelect={onRevealInFolder}>
-                  {t('imageContextMenu.revealModInFolder')}
-                </MenuItem>
-              )}
-              {onViewImprint && (
-                <MenuItem icon={Fingerprint} onSelect={onViewImprint}>
-                  {t('installed.imprintDetails.menuEntry')}
-                </MenuItem>
-              )}
-            </>
-          )}
-          {extraItems && (
-            <>
-              <MenuSeparator />
-              {extraItems}
-            </>
-          )}
       </MenuContent>
     </MenuRoot>
   );
-}
-
-function resolveImageSource(src: string): string {
-  try {
-    return new URL(src, window.location.href).toString();
-  } catch {
-    return src;
-  }
-}
-
-async function copyImageWithWebClipboard(source: string): Promise<void> {
-  if (!('ClipboardItem' in window) || !navigator.clipboard?.write) {
-    throw new Error('Image clipboard API is unavailable until the Electron preload reloads');
-  }
-  const response = await fetch(source);
-  if (!response.ok) {
-    throw new Error(`Image request failed with status ${response.status}`);
-  }
-  const blob = await response.blob();
-  if (!blob.type.startsWith('image/')) {
-    throw new Error('Clipboard source is not an image');
-  }
-  await navigator.clipboard.write([
-    new ClipboardItem({ [blob.type]: blob }),
-  ]);
 }

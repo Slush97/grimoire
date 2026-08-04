@@ -24,11 +24,9 @@ interface ModThumbnailProps {
    *  is still used when the user uploaded an override thumbnail (we treat
    *  any non-empty `src` as the explicit choice). */
   mergedSources?: MergedModSource[];
-  /** Forwarded to the image context menu as a "Reveal mod in folder" item. */
-  onRevealInFolder?: () => void;
-  /** Forwarded to the image context menu as a "View imprint" item. Callers
-   *  pass it only for imprinted mods. */
-  onViewImprint?: () => void;
+  /** Disable the image-specific right-click menu when the thumbnail belongs to
+   *  a larger interactive surface with its own context menu. */
+  enableImageContextMenu?: boolean;
 }
 
 export default function ModThumbnail({
@@ -43,8 +41,7 @@ export default function ModThumbnail({
   fallback,
   heroPortrait,
   mergedSources,
-  onRevealInFolder,
-  onViewImprint,
+  enableImageContextMenu = true,
 }: ModThumbnailProps) {
   const { t } = useTranslation();
   const shouldBlur = nsfw && hideNsfw;
@@ -63,8 +60,7 @@ export default function ModThumbnail({
         alt={alt}
         className={className}
         shouldBlur={shouldBlur}
-        onRevealInFolder={onRevealInFolder}
-        onViewImprint={onViewImprint}
+        enableImageContextMenu={enableImageContextMenu}
       />
     );
   }
@@ -102,10 +98,10 @@ export default function ModThumbnail({
     </div>
   );
 
-  if (resolvedBlur) return thumbnail;
+  if (resolvedBlur || !enableImageContextMenu) return thumbnail;
 
   return (
-    <ImageContextMenu src={resolvedSrc} alt={alt} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
+    <ImageContextMenu src={resolvedSrc} alt={alt}>
       {thumbnail}
     </ImageContextMenu>
   );
@@ -116,8 +112,7 @@ interface MergedCollageProps {
   alt: string;
   className: string;
   shouldBlur?: boolean;
-  onRevealInFolder?: () => void;
-  onViewImprint?: () => void;
+  enableImageContextMenu: boolean;
 }
 
 /**
@@ -126,7 +121,7 @@ interface MergedCollageProps {
  * cells. Grid shape is picked to keep cells roughly square on a wide card;
  * with more than 16 thumbnails the last cell becomes a "+N more" tile.
  */
-function MergedCollage({ sources, alt, className, shouldBlur, onRevealInFolder, onViewImprint }: MergedCollageProps) {
+function MergedCollage({ sources, alt, className, shouldBlur, enableImageContextMenu }: MergedCollageProps) {
   const { t } = useTranslation();
   const { cells, cols } = buildCollage(sources);
   return (
@@ -147,8 +142,8 @@ function MergedCollage({ sources, alt, className, shouldBlur, onRevealInFolder, 
                   decoding="async"
                   className="block w-full h-full object-cover blur-xl scale-110"
                 />
-              ) : (
-                <ImageContextMenu src={cell.url} alt={alt} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint}>
+              ) : enableImageContextMenu ? (
+                <ImageContextMenu src={cell.url} alt={alt}>
                   <img
                     src={cell.url}
                     alt=""
@@ -157,6 +152,14 @@ function MergedCollage({ sources, alt, className, shouldBlur, onRevealInFolder, 
                     className="block w-full h-full object-cover"
                   />
                 </ImageContextMenu>
+              ) : (
+                <img
+                  src={cell.url}
+                  alt=""
+                  loading="lazy"
+                  decoding="async"
+                  className="block w-full h-full object-cover"
+                />
               )
             ) : (
               <div className="w-full h-full flex items-center justify-center text-xs font-semibold text-text-secondary">

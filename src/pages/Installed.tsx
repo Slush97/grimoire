@@ -68,9 +68,10 @@ import {
   ExternalLink,
   Star,
   ArrowUpToLine,
+  ImageDown,
+  Link,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { MenuContent, MenuItem, MenuRoot, MenuSeparator, MenuTrigger } from '../components/common/menu';
 import { showToast } from '../stores/toastStore';
 import { useAppStore, type BrowseArtistRef } from '../stores/appStore';
 import { getActiveDeadlockPath } from '../lib/appSettings';
@@ -82,7 +83,6 @@ import type { Mod, GlobalModType, UnknownModDetectionProgress, UnknownModFilterG
 import type { GameBananaModDetails, GameBananaMod, GameBananaItemRef } from '../types/gamebanana';
 import { getModThumbnail } from '../types/gamebanana';
 import ModThumbnail from '../components/ModThumbnail';
-import ImageContextMenu from '../components/ImageContextMenu';
 import AudioPreviewPlayer from '../components/AudioPreviewPlayer';
 import ModDetailsModal from '../components/ModDetailsModal';
 import VariantPickerModal from '../components/VariantPickerModal';
@@ -96,6 +96,7 @@ import { inferHeroFromTitle, getHeroRenderPath, getHeroFacePosition, getHeroChip
 import { formatRelativeDate, formatAbsoluteDate } from '../lib/dates';
 import { useStableCallback } from '../lib/useStableCallback';
 import { formatBytes } from '../lib/formatBytes';
+import { canOpenImageSource, copyImageToClipboard, resolveImageSource } from '../lib/imageActions';
 import { resolveUpdateTarget } from '../lib/updateFileMatch';
 import { createEnabledVpkRestoreSnapshot, shouldRestoreVpkEnabled, type EnabledVpkRestoreSnapshot } from '../lib/vpkRestore';
 import { modRestoreKey } from '../lib/soloRestore';
@@ -121,7 +122,7 @@ import {
   toggleListMembership,
   writeStoredModLists,
 } from '../lib/modLists';
-import { CreateModListModal, ModListSubmenu } from '../components/installed/ModListMenu';
+import { CreateModListModal } from '../components/installed/ModListMenu';
 import { ManageModListsModal } from '../components/installed/ManageModListsModal';
 import { FilterCheckList } from '../components/installed/FilterCheckList';
 import { Button, CheckboxMark, IconButton, ModalHeader, Tag } from '../components/common/ui';
@@ -7022,7 +7023,7 @@ interface ModCardProps {
   onRenameLocal?: (newName: string) => Promise<void>;
   /** Open the imprint details modal. Passed only when the mod's wire
    *  `imprinted` flag is true (the parent gates on it); shown in the card's
-   *  right-click menu and the thumbnail image menus. */
+   *  right-click menu. */
   onViewImprint?: () => void;
   onTagLocker?: (heroName: string | null) => void | Promise<void>;
   onTagGlobal?: (globalType: GlobalModType | null) => void | Promise<void>;
@@ -7083,11 +7084,6 @@ interface ModMediaPreviewProps {
   audioPlayerClassName: string;
   onOpenDetails?: () => void;
   isGroupCard: boolean;
-  onRevealInFolder?: () => void;
-  onViewImprint?: () => void;
-  /** The card's "Add to list" submenu, threaded down because the image menu
-   *  rendered here swallows the right-clicks that would reach the card. */
-  listMenu?: ReactNode;
 }
 
 function SoundPlaceholder() {
@@ -7127,9 +7123,6 @@ function ModMediaPreview({
   audioPlayerClassName,
   onOpenDetails,
   isGroupCard,
-  onRevealInFolder,
-  onViewImprint,
-  listMenu,
 }: ModMediaPreviewProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -7157,22 +7150,19 @@ function ModMediaPreview({
       nsfw={mod.nsfw}
       hideNsfw={hideNsfwPreviews}
       className="w-full h-full"
+      enableImageContextMenu={false}
       imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
       mergedSources={mod.merged?.sources}
-      onRevealInFolder={onRevealInFolder}
-      onViewImprint={onViewImprint}
     />
   );
   const soundMedia = mod.thumbnailUrl ? image : soundHeroRenderUrl ? (
-    <ImageContextMenu src={soundHeroRenderUrl} alt={soundHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint} extraItems={listMenu}>
-      <img
-        src={soundHeroRenderUrl}
-        alt={soundHeroName ?? mod.name}
-        draggable={false}
-        className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
-        style={{ objectPosition: `${soundHeroFacePosX}% 25%` }}
-      />
-    </ImageContextMenu>
+    <img
+      src={soundHeroRenderUrl}
+      alt={soundHeroName ?? mod.name}
+      draggable={false}
+      className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+      style={{ objectPosition: `${soundHeroFacePosX}% 25%` }}
+    />
   ) : (
     <SoundPlaceholder />
   );
@@ -7268,11 +7258,6 @@ interface ModListRowContentProps {
   tagIconClassName: string;
   technicalMetaClasses: string;
   actions: ReactNode;
-  onRevealInFolder?: () => void;
-  onViewImprint?: () => void;
-  /** The card's "Add to list" submenu, threaded down for the same reason as in
-   *  ModMediaPreview: the thumbnail's image menu swallows the card's clicks. */
-  listMenu?: ReactNode;
 }
 
 function lockerHeroSourceLabel(source: Mod['lockerHeroSource']): string {
@@ -7518,9 +7503,6 @@ function ModListRowContent({
   tagIconClassName,
   technicalMetaClasses,
   actions,
-  onRevealInFolder,
-  onViewImprint,
-  listMenu,
 }: ModListRowContentProps) {
   const { t } = useTranslation();
   const isSound = mod.sourceSection === 'Sound' && !!mod.audioUrl;
@@ -7569,15 +7551,13 @@ function ModListRowContent({
         onDragStart={stopMediaDrag}
       >
         {listHeroRenderUrl ? (
-          <ImageContextMenu src={listHeroRenderUrl} alt={listHeroName ?? mod.name} onRevealInFolder={onRevealInFolder} onViewImprint={onViewImprint} extraItems={listMenu}>
-            <img
-              src={listHeroRenderUrl}
-              alt={listHeroName ?? mod.name}
-              draggable={false}
-              className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
-              style={{ objectPosition: `${listHeroFacePosX}% 25%` }}
-            />
-          </ImageContextMenu>
+          <img
+            src={listHeroRenderUrl}
+            alt={listHeroName ?? mod.name}
+            draggable={false}
+            className="block h-full w-full object-cover origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
+            style={{ objectPosition: `${listHeroFacePosX}% 25%` }}
+          />
         ) : isSound && !mod.thumbnailUrl ? (
           <SoundPlaceholder />
         ) : (
@@ -7587,8 +7567,7 @@ function ModListRowContent({
             nsfw={mod.nsfw}
             hideNsfw={hideNsfwPreviews}
             className="w-full h-full"
-            onRevealInFolder={onRevealInFolder}
-            onViewImprint={onViewImprint}
+            enableImageContextMenu={false}
             imageClassName="origin-center transition-transform duration-200 group-enabled:group-hover:scale-[1.03]"
             mergedSources={mod.merged?.sources}
           />
@@ -7706,28 +7685,22 @@ function ModCard({
   const { t } = useTranslation();
   const hasConflicts = conflicts.length > 0;
   const isGroupCard = !!group;
-  // Shared by the card's own context menu and the image context menus on the
-  // thumbnail (which swallow right-clicks before they reach the card).
   const handleRevealInFolder = () => {
     revealModInFolder(mod.id).catch((err) => {
       console.error('[Installed] Failed to reveal mod in folder:', err);
     });
   };
-  const revealAction = selectMode ? undefined : handleRevealInFolder;
-  // "View imprint" mirrors reveal-in-folder: offered on the card's right-click
-  // menu and the image menus (which swallow right-clicks), hidden in select mode.
-  const imprintAction = selectMode ? undefined : onViewImprint;
-  // "Add to list" follows the same rules: shared across the card menu and both
-  // image menus, and stood down in select mode where clicks belong to selection.
-  const listSubmenu =
-    !selectMode && lists && onToggleList && onCreateList ? (
-      <ModListSubmenu
-        lists={lists}
-        memberIds={listIds}
-        onToggle={onToggleList}
-        onCreateNew={onCreateList}
-      />
-    ) : null;
+  const hasListActions = !selectMode && !!lists && !!onToggleList && !!onCreateList;
+  const menuHeroName = mod.sourceSection === 'Sound' && !mod.thumbnailUrl
+    ? mod.lockerHero ?? inferHeroFromTitle(mod.name)
+    : null;
+  const rawCardImageSource = mod.thumbnailUrl
+    ?? (menuHeroName ? getHeroRenderPath(menuHeroName) : undefined)
+    ?? mod.merged?.sources.find((source) => !!source.thumbnailUrl)?.thumbnailUrl;
+  const cardImageSource = rawCardImageSource && !(mod.nsfw && hideNsfwPreviews)
+    ? resolveImageSource(rawCardImageSource)
+    : null;
+  const canOpenCardImage = cardImageSource ? canOpenImageSource(cardImageSource) : false;
   const variantStatusLabel = group ? `${group.enabledCount}/${group.variantCount}` : null;
   const enabledTitle = group?.enabledLabels.join(', ') ?? '';
   const variantStatusTitle = group
@@ -7735,6 +7708,9 @@ function ModCard({
     : '';
   const [menuOpen, setMenuOpen] = useState(false);
   const [tagPickerOpen, setTagPickerOpen] = useState(false);
+  const [listPickerOpen, setListPickerOpen] = useState(false);
+  const [imagePickerOpen, setImagePickerOpen] = useState(false);
+  const [imageActionBusy, setImageActionBusy] = useState(false);
   const [menuBusy, setMenuBusy] = useState(false);
   const [menuError, setMenuError] = useState<string | null>(null);
   // The menu (and its tall tag picker) opens upward by default, but for cards
@@ -7749,6 +7725,65 @@ function ModCard({
   const menuRef = useRef<HTMLDivElement>(null);
   const menuPanelRef = useRef<HTMLDivElement>(null);
 
+  const closeActionsMenu = () => {
+    setMenuOpen(false);
+    setTagPickerOpen(false);
+    setListPickerOpen(false);
+    setImagePickerOpen(false);
+  };
+
+  const openActionsMenu = () => {
+    if (!menuRef.current) return;
+    const rect = menuRef.current.getBoundingClientRect();
+    setMenuRect(rect);
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    setMenuPlacement(spaceAbove < 340 && spaceBelow > spaceAbove ? 'down' : 'up');
+    setTagPickerOpen(false);
+    setListPickerOpen(false);
+    setImagePickerOpen(false);
+    setMenuError(null);
+    setMenuOpen(true);
+  };
+
+  const copyCardImage = async () => {
+    if (!cardImageSource || imageActionBusy) return;
+    setImageActionBusy(true);
+    setMenuError(null);
+    try {
+      await copyImageToClipboard(cardImageSource);
+      closeActionsMenu();
+      showToast(t('imageContextMenu.imageCopied'), { tone: 'success', duration: 2200 });
+    } catch (err) {
+      console.error('[Installed] Failed to copy card image:', err);
+      setMenuError(t('imageContextMenu.copyImageFailed'));
+    } finally {
+      setImageActionBusy(false);
+    }
+  };
+
+  const copyCardImageAddress = async () => {
+    if (!cardImageSource || imageActionBusy) return;
+    setImageActionBusy(true);
+    setMenuError(null);
+    try {
+      await navigator.clipboard.writeText(cardImageSource);
+      closeActionsMenu();
+      showToast(t('imageContextMenu.addressCopied'), { tone: 'success', duration: 2200 });
+    } catch (err) {
+      console.error('[Installed] Failed to copy card image address:', err);
+      setMenuError(t('imageContextMenu.copyAddressFailed'));
+    } finally {
+      setImageActionBusy(false);
+    }
+  };
+
+  const openCardImage = () => {
+    if (!cardImageSource) return;
+    closeActionsMenu();
+    window.open(cardImageSource, '_blank', 'noopener,noreferrer');
+  };
+
   useEffect(() => {
     if (!menuOpen) return;
     const onMouseDown = (event: MouseEvent) => {
@@ -7759,11 +7794,15 @@ function ModCard({
       if (menuPanelRef.current?.contains(target)) return;
       setMenuOpen(false);
       setTagPickerOpen(false);
+      setListPickerOpen(false);
+      setImagePickerOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === 'Escape') {
         setMenuOpen(false);
         setTagPickerOpen(false);
+        setListPickerOpen(false);
+        setImagePickerOpen(false);
       }
     };
     // Keep the portaled menu anchored to its card as the list scrolls/resizes.
@@ -8009,21 +8048,8 @@ function ModCard({
           type="button"
           onClick={(e) => {
             e.stopPropagation();
-            setMenuOpen((open) => {
-              const willOpen = !open;
-              if (willOpen && menuRef.current) {
-                const rect = menuRef.current.getBoundingClientRect();
-                setMenuRect(rect);
-                // The menu can grow tall (tag picker). Prefer opening upward,
-                // but flip down when there's clearly more room below.
-                const spaceAbove = rect.top;
-                const spaceBelow = window.innerHeight - rect.bottom;
-                setMenuPlacement(spaceAbove < 340 && spaceBelow > spaceAbove ? 'down' : 'up');
-              }
-              return willOpen;
-            });
-            setTagPickerOpen(false);
-            setMenuError(null);
+            if (menuOpen) closeActionsMenu();
+            else openActionsMenu();
           }}
           className={`${utilityActionClasses} ${selectMode ? 'hidden' : `${isList ? '' : hoverRevealClasses} aria-expanded:opacity-100 aria-expanded:pointer-events-auto`}`}
           title={t('installed.card.moreActions')}
@@ -8097,6 +8123,159 @@ function ModCard({
                 {t('installed.card.viewAuthorPage')}
               </button>
             )}
+            {cardImageSource && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-expanded={imagePickerOpen}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setImagePickerOpen((open) => !open);
+                    setListPickerOpen(false);
+                    setTagPickerOpen(false);
+                  }}
+                  className={menuItemClasses}
+                >
+                  <ImagePlus className="w-3.5 h-3.5" />
+                  {t('imageContextMenu.image')}
+                </button>
+                {imagePickerOpen && (
+                  <div className="my-1 rounded-md border border-border bg-bg-primary/40 p-1">
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={imageActionBusy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void copyCardImage();
+                      }}
+                      className={menuItemClasses}
+                    >
+                      {imageActionBusy ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <ImageDown className="w-3.5 h-3.5" />
+                      )}
+                      {imageActionBusy ? t('imageContextMenu.copyingImage') : t('imageContextMenu.copyImage')}
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      disabled={imageActionBusy}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void copyCardImageAddress();
+                      }}
+                      className={menuItemClasses}
+                    >
+                      <Link className="w-3.5 h-3.5" />
+                      {t('imageContextMenu.copyImageAddress')}
+                    </button>
+                    {canOpenCardImage && (
+                      <button
+                        type="button"
+                        role="menuitem"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openCardImage();
+                        }}
+                        className={menuItemClasses}
+                      >
+                        <ExternalLink className="w-3.5 h-3.5" />
+                        {t('imageContextMenu.openImage')}
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+            <div className="my-1 h-px bg-border" />
+            {hasListActions && lists && onToggleList && onCreateList && (
+              <>
+                <button
+                  type="button"
+                  role="menuitem"
+                  aria-expanded={listPickerOpen}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setListPickerOpen((open) => !open);
+                    setTagPickerOpen(false);
+                    setImagePickerOpen(false);
+                  }}
+                  className={menuItemClasses}
+                >
+                  <List className="w-3.5 h-3.5" />
+                  {t('installed.lists.menuTrigger')}
+                </button>
+                {listPickerOpen && (
+                  <div className="my-1 max-h-64 overflow-y-auto rounded-md border border-border bg-bg-primary/40 p-1">
+                    {lists.map((list) => {
+                      const checked = listIds.includes(list.id);
+                      return (
+                        <button
+                          key={list.id}
+                          type="button"
+                          role="menuitemcheckbox"
+                          aria-checked={checked}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleList(list.id);
+                          }}
+                          className="flex w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary"
+                        >
+                          <span className="truncate">{list.name}</span>
+                          {checked && <Check className="w-3.5 h-3.5 flex-shrink-0 text-accent" />}
+                        </button>
+                      );
+                    })}
+                    {lists.length > 0 && <div className="my-1 h-px bg-border" />}
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        closeActionsMenu();
+                        onCreateList();
+                      }}
+                      className="flex w-full items-center gap-2 rounded px-2 py-1.5 text-left text-xs text-text-primary hover:bg-bg-tertiary"
+                    >
+                      <FilePlus className="w-3.5 h-3.5" />
+                      {t('installed.lists.newList')}
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+            <button
+              type="button"
+              role="menuitem"
+              onClick={(e) => {
+                e.stopPropagation();
+                closeActionsMenu();
+                handleRevealInFolder();
+              }}
+              className={menuItemClasses}
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              {t('installed.card.revealInFolder')}
+            </button>
+            {onViewImprint && (
+              <button
+                type="button"
+                role="menuitem"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  closeActionsMenu();
+                  onViewImprint();
+                }}
+                className={menuItemClasses}
+              >
+                <Fingerprint className="w-3.5 h-3.5" />
+                {t('installed.imprintDetails.menuEntry')}
+              </button>
+            )}
+            <div className="my-1 h-px bg-border" />
             {onSoloLaunch && (
               <button
                 type="button"
@@ -8143,6 +8322,8 @@ function ModCard({
                   onClick={(e) => {
                     e.stopPropagation();
                     setTagPickerOpen((open) => !open);
+                    setListPickerOpen(false);
+                    setImagePickerOpen(false);
                   }}
                   className={menuItemClasses}
                 >
@@ -8314,13 +8495,14 @@ function ModCard({
     </div>
   );
   return (
-    <MenuRoot>
-      {/* Disabled in select mode so right-click doesn't fight the full-card
-          select overlay. Thumbnail right-clicks never reach here: the image
-          context menu's trigger stops propagation. */}
-      <MenuTrigger asChild disabled={selectMode}>
     <div
       data-mod-entry-key={entryKey}
+      onContextMenu={(event) => {
+        if (selectMode) return;
+        event.preventDefault();
+        event.stopPropagation();
+        openActionsMenu();
+      }}
       className={`group/card relative rounded-xl border transform-gpu ${isList ? 'transition-[transform,box-shadow,border-color,background-color,opacity] duration-200 ease-out ' + stateClasses : glassStateClasses} ${mergedStackShadow} ${updateAvailable ? 'update-stripes' : ''} ${shellClasses} ${selected ? 'ring-2 ring-accent ring-offset-2 ring-offset-bg-primary' : mod.priorityMod ? 'ring-1 ring-accent/40' : ''}`}
     >
       <div className={isList ? 'contents' : ''}>
@@ -8369,9 +8551,6 @@ function ModCard({
             tagIconClassName={tagIconClassName}
             technicalMetaClasses={technicalMetaClasses}
             actions={actions}
-            onRevealInFolder={revealAction}
-            onViewImprint={imprintAction}
-            listMenu={listSubmenu}
           />
         ) : (
         <>
@@ -8484,9 +8663,6 @@ function ModCard({
             audioPlayerClassName={audioPlayerClassName}
             onOpenDetails={onOpenDetails}
             isGroupCard={isGroupCard}
-            onRevealInFolder={revealAction}
-            onViewImprint={imprintAction}
-            listMenu={listSubmenu}
           />
         );
         })()}
@@ -8565,24 +8741,6 @@ function ModCard({
       </div>
 
     </div>
-      </MenuTrigger>
-      <MenuContent>
-        {listSubmenu && (
-          <>
-            {listSubmenu}
-            <MenuSeparator />
-          </>
-        )}
-        <MenuItem icon={FolderOpen} onSelect={handleRevealInFolder}>
-          {t('installed.card.revealInFolder')}
-        </MenuItem>
-        {onViewImprint && (
-          <MenuItem icon={Fingerprint} onSelect={onViewImprint}>
-            {t('installed.imprintDetails.menuEntry')}
-          </MenuItem>
-        )}
-      </MenuContent>
-    </MenuRoot>
   );
 }
 
