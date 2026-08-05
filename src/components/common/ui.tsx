@@ -77,10 +77,10 @@ export function Badge({ children, variant = 'neutral', className = '' }: BadgePr
 // Color-bearing text/bg/border/ring utilities, by token namespace, Tailwind
 // palette, literal, or arbitrary color value. Deliberately narrow: it must not
 // match sizing/layout utilities that share the same prefixes (text-xs,
-// text-left, border-2, ring-1). `pnpm theme:check` enforces the same rule
-// statically; this is the runtime backstop.
+// text-left, border-2, ring-1). Mirrored by the overlay-Tag rule in
+// scripts/check-theme-source.mjs; keep the two in sync.
 const OVERLAY_COLOR_OVERRIDE =
-    /(?:^|:)(?:text|bg|border|ring)-(?:(?:hl|white|black|current|inherit|transparent|accent|brand|state|overlay|control|bg|text|mod-title|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)(?:[-/]|$)|\[(?:#|rgb|hsl|oklch|oklab|color|var))/;
+    /(?:^|:)(?:text|bg|border|ring|fill|stroke|divide|decoration|caret|outline)-(?:(?:hl|white|black|current|inherit|transparent|accent|brand|state|overlay|control|border|bg|text|mod-title|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)(?:[-/]|$)|\[(?:#|rgb|hsl|oklch|oklab|color|var|--)|\((?:--))/;
 
 type TagTone = 'accent' | 'warning' | 'danger' | 'success' | 'info' | 'neutral';
 

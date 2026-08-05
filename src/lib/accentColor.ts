@@ -124,6 +124,18 @@ export const DARK_INK_SURFACE = '#242424';
 export const LIGHT_INK_SURFACE = '#dcdce0';
 
 /**
+ * Hover variant of an already-resolved accent ink.
+ *
+ * Derived from the ink rather than from the preset's `hover`: accentInk clamps
+ * to exactly the 4.5:1 floor, so passing it a second near-threshold color
+ * collapses hover onto the base. Moving the resolved ink further from its own
+ * surface only raises contrast, so the lift is visible and stays AA.
+ */
+export function accentInkHover(ink: string, theme: 'dark' | 'light'): string {
+  return theme === 'dark' ? lighten(ink) : darken(ink, 0.22);
+}
+
+/**
  * Write the accent color to the document root as CSS variables. Tailwind's
  * @theme tokens read these at use-site (e.g. `bg-accent`), so every component
  * already wired to `--color-accent` updates without rerendering.
@@ -143,11 +155,10 @@ export function applyAccentColor(color: string | null | undefined): void {
   root.style.setProperty('--color-accent-solid-foreground', '#ffffff');
   // Each ink is checked against the least forgiving surface in its theme, so
   // it remains readable throughout that theme rather than on cards alone.
-  root.style.setProperty('--color-accent-ink-dark', accentInk(base, DARK_INK_SURFACE));
-  root.style.setProperty('--color-accent-ink-light', accentInk(base, LIGHT_INK_SURFACE));
-  // Hover moves the ink away from its surface so the feedback reads as a lift
-  // in both themes. The preset's curated `hover` is a darkening, which only
-  // reads as hover against light; dark needs the opposite direction.
-  root.style.setProperty('--color-accent-ink-hover-dark', accentInk(lighten(base), DARK_INK_SURFACE));
-  root.style.setProperty('--color-accent-ink-hover-light', accentInk(hover, LIGHT_INK_SURFACE));
+  const inkDark = accentInk(base, DARK_INK_SURFACE);
+  const inkLight = accentInk(base, LIGHT_INK_SURFACE);
+  root.style.setProperty('--color-accent-ink-dark', inkDark);
+  root.style.setProperty('--color-accent-ink-light', inkLight);
+  root.style.setProperty('--color-accent-ink-hover-dark', accentInkHover(inkDark, 'dark'));
+  root.style.setProperty('--color-accent-ink-hover-light', accentInkHover(inkLight, 'light'));
 }

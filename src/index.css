@@ -117,7 +117,7 @@
   --color-accent-ink-light: #9d490e;
   --color-accent-ink: var(--color-accent-ink-dark);
   --color-accent-ink-hover-dark: #fa8c40;
-  --color-accent-ink-hover-light: #a93f09;
+  --color-accent-ink-hover-light: #7a390b;
   --color-accent-ink-hover: var(--color-accent-ink-hover-dark);
   --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1aa;
@@ -197,16 +197,26 @@
   --shadow-toast: 0 10px 30px rgb(0 0 0 / 0.4);
 }
 
+/* These mirror what Tailwind generates for a `shadow-<name>` utility, but read
+   the value through `var()` so the light overrides above still apply. Setting
+   `--tw-shadow` rather than `box-shadow` is load-bearing: a bare `box-shadow`
+   sorts after `.ring-*` at equal specificity and would silently erase any ring
+   on the same element (and lose to `focus-visible:ring-*`, which outranks it).
+   Composing through the `--tw-*` chain keeps shadow and ring independent.
+   Tradeoff: the color is baked in, so `shadow-<color>` cannot recolor these. */
 @utility shadow-popup {
-  box-shadow: var(--shadow-popup);
+  --tw-shadow: var(--shadow-popup);
+  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 
 @utility shadow-modal {
-  box-shadow: var(--shadow-modal);
+  --tw-shadow: var(--shadow-modal);
+  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 
 @utility shadow-toast {
-  box-shadow: var(--shadow-toast);
+  --tw-shadow: var(--shadow-toast);
+  box-shadow: var(--tw-inset-shadow), var(--tw-inset-ring-shadow), var(--tw-ring-offset-shadow), var(--tw-ring-shadow), var(--tw-shadow);
 }
 
 :root[data-theme='light'] {
@@ -224,7 +234,10 @@
   --color-accent-ink-hover: var(--color-accent-ink-hover-light);
   --color-text-primary: #18181b;
   --color-text-secondary: #52525b;
-  --color-text-tertiary: #686872;
+  /* Darkened from #686872, which failed AA on the recessed light surfaces
+     (4.03:1 on bg-sunken). Still lighter than text-secondary, so the ramp
+     keeps its order. */
+  --color-text-tertiary: #5c5c66;
   --color-border: #c7c7cc;
   --color-mod-title: #292524;
 

@@ -46,11 +46,20 @@ const TAILWIND_PALETTES = [
   'slate', 'gray', 'zinc', 'neutral', 'stone',
 ].join('|');
 
+// `border-t-red-500` / `divide-y-slate-200` / `ring-offset-blue-500` are just
+// as wrong as the unscoped forms, so the side/axis/offset segment is optional.
 const RAW_PALETTE_PATTERN = new RegExp(
-  `\\b(?:text|bg|border|ring|fill|stroke|from|via|to|divide|outline|decoration|caret|accent|shadow)`
+  `\\b(?:text|bg|border|ring|fill|stroke|from|via|to|divide|outline|decoration|caret|accent|shadow|placeholder)`
+  + `(?:-(?:[xytrbles]|inline|block|offset))?`
   + `-(?:${TAILWIND_PALETTES})-(?:50|[1-9]\\d{2})(?:\\/(?:\\d+|\\[.*?\\]))?\\b`,
   'g'
 );
+
+// Kept in sync with OVERLAY_COLOR_OVERRIDE in src/components/common/ui.tsx.
+// The previous rule here flagged any text-/bg-/border-/ring- prefix, so a
+// legitimate `text-xs` on an overlay Tag rendered fine but failed CI.
+const OVERLAY_COLOR_OVERRIDE =
+  /(?:^|:)(?:text|bg|border|ring|fill|stroke|divide|decoration|caret|outline)-(?:(?:hl|white|black|current|inherit|transparent|accent|brand|state|overlay|control|border|bg|text|mod-title|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)(?:[-/]|$)|\[(?:#|rgb|hsl|oklch|oklab|color|var|--)|\((?:--))/;
 
 function parseColorTokens(css) {
   return new Set([...css.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((match) => match[1]));
@@ -81,8 +90,15 @@ function contrast(a, b) {
 // `bg-glass` is deliberately dark in both themes, so it is not a themed
 // surface and is excluded. Everything else a themed foreground can land on is
 // listed, including the extremes (bg-tertiary in dark, bg-sunken in light).
-const THEMED_SURFACES = ['bg-primary', 'bg-secondary', 'bg-card', 'bg-tertiary', 'bg-sunken'];
-const STATUS_TOKENS = ['state-success', 'state-warning', 'state-danger', 'state-info', 'state-note'];
+const THEMED_SURFACES = [
+  'bg-primary', 'bg-secondary', 'bg-card', 'bg-tertiary', 'bg-sunken', 'bg-sidebar',
+];
+// The body-copy ramp belongs here too. Checking only state-* let a light
+// text-tertiary that fails AA on the recessed surfaces ship unnoticed.
+const STATUS_TOKENS = [
+  'state-success', 'state-warning', 'state-danger', 'state-info', 'state-note',
+  'text-primary', 'text-secondary', 'text-tertiary',
+];
 
 function checkStatusContrast(css, violations) {
   const defaults = parseHexDeclarations(css, /@theme\s*\{([\s\S]*?)\n\}/);
@@ -162,7 +178,7 @@ for (const file of await sourceFiles(sourceRoot)) {
     for (const match of source.matchAll(/<Tag\b[\s\S]*?>/g)) {
       if (!/variant=["']overlay["']/.test(match[0])) continue;
       const className = match[0].match(/className=["']([^"']*)["']/)?.[1];
-      if (className && /(?:^|\s)(?:[a-z-]+:)*(?:text|bg|border|ring)-/.test(className)) {
+      if (className && className.split(/\s+/).some((u) => OVERLAY_COLOR_OVERRIDE.test(u))) {
         violations.push({
           file: relative(file),
           line: lineNumber(source, match.index),

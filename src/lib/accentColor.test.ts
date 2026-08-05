@@ -3,6 +3,7 @@ import {
   ACCENT_PRESETS,
   accentForeground,
   accentInk,
+  accentInkHover,
   contrastRatio,
   DARK_INK_SURFACE,
   LIGHT_INK_SURFACE,
@@ -36,6 +37,25 @@ describe('accent color contrast', () => {
       for (const surface of lightSurfaces) {
         expect(contrastRatio(accentInk(preset.color, LIGHT_INK_SURFACE), surface)).toBeGreaterThanOrEqual(4.5);
       }
+    }
+  });
+
+  // Regression: hover ink used to be accentInk(preset.hover, surface). Both it
+  // and the base clamp to exactly 4.5:1, so hover collapsed onto the base and
+  // for Ember it actually moved the wrong way.
+  it('gives hover ink a visible lift away from its surface, still AA', () => {
+    for (const preset of ACCENT_PRESETS) {
+      const inkDark = accentInk(preset.color, DARK_INK_SURFACE);
+      const inkLight = accentInk(preset.color, LIGHT_INK_SURFACE);
+      const hoverDark = accentInkHover(inkDark, 'dark');
+      const hoverLight = accentInkHover(inkLight, 'light');
+
+      expect(contrastRatio(hoverDark, DARK_INK_SURFACE))
+        .toBeGreaterThan(contrastRatio(inkDark, DARK_INK_SURFACE));
+      expect(contrastRatio(hoverLight, LIGHT_INK_SURFACE))
+        .toBeGreaterThan(contrastRatio(inkLight, LIGHT_INK_SURFACE));
+      expect(contrastRatio(hoverDark, DARK_INK_SURFACE)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(hoverLight, LIGHT_INK_SURFACE)).toBeGreaterThanOrEqual(4.5);
     }
   });
 
