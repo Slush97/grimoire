@@ -1,15 +1,20 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useCrosshairStore } from '../../stores/crosshairStore';
+import { crosshairReach } from '../../lib/crosshair';
 import CrosshairPreview from './CrosshairPreview';
-import { STAGE_BACKGROUNDS, type StageBackground } from './stageBackgrounds';
+import { STAGE_BACKGROUNDS, STAGE_CAPTURE_HEIGHT, type StageBackground } from './stageBackgrounds';
 
 /** How long the crosshair takes to glide back to center after the pointer leaves. */
 const RECENTER_MS = 260;
 
 interface CrosshairStageProps {
-  /** Total draw scale (resolution factor x zoom). */
+  /** Resolution factor (display height / 1080): the pixel-snap grid. Changing
+   *  it re-rasterizes the crosshair on the new grid; it does NOT resize the
+   *  scene, because switching resolution doesn't make a monitor bigger. */
   scale: number;
+  /** Magnification of the whole stage (scene and crosshair together). */
+  zoom: number;
   background: StageBackground;
 }
 
@@ -30,7 +35,7 @@ interface CrosshairStageProps {
  * the scene, the crosshair, and the hint. `inset-0` resolves against the
  * parent's used size, so it holds regardless of how that height was arrived at.
  */
-export default function CrosshairStage({ scale, background }: CrosshairStageProps) {
+export default function CrosshairStage({ scale, zoom, background }: CrosshairStageProps) {
   const { t } = useTranslation();
   const stageRef = useRef<HTMLDivElement>(null);
   const followRef = useRef<HTMLDivElement>(null);
@@ -41,17 +46,20 @@ export default function CrosshairStage({ scale, background }: CrosshairStageProp
   const settings = useCrosshairStore();
   const bg = STAGE_BACKGROUNDS.find((b) => b.id === background) ?? STAGE_BACKGROUNDS[0];
 
+  // The simulated screen is the capture: CAPTURE_HEIGHT device-ish px tall,
+  // shown at zoom CSS px each, regardless of the selected resolution. The
+  // crosshair rasterizes on the selected resolution's grid (1080 * scale
+  // device px per screen height), so one of its device px occupies this many
+  // CSS px. At 1440p on a 1440p monitor this is exactly `zoom`; at 1080p the
+  // coarser pixels draw proportionally fatter, at 4K finer, which is the only
+  // visible difference switching resolution SHOULD make.
+  const deviceToCss = (STAGE_CAPTURE_HEIGHT * zoom) / (1080 * scale);
+
   // Size the canvas to what the crosshair actually needs at this scale, so a
-  // wide gap at 4K/3x zoom isn't clipped by a fixed-size backing store (and a
-  // tiny dot doesn't allocate a huge one). Mirrors drawCrosshair's geometry:
-  // pips sit centered on a gap boundary D away from the middle.
-  const pipDistance = Math.max(0, (9 + settings.pipGap * 2.5) / 2);
-  const reach =
-    Math.max(
-      pipDistance + settings.pipHeight / 2 + settings.pipOutlineGap + settings.pipOutlineBorder,
-      settings.dotSize / 2 + settings.dotOutlineGap + settings.dotOutlineBorder
-    ) + 4;
-  const canvasSize = Math.min(1400, Math.max(120, Math.ceil(reach * 2 * scale)));
+  // wide gap at 3x zoom isn't clipped by a fixed-size backing store (and a
+  // tiny dot doesn't allocate a huge one). Kept EVEN so the canvas centre sits
+  // on a whole pixel and the snapped device pixels land crisp.
+  const canvasSize = Math.min(1400, Math.max(120, 2 * Math.ceil(crosshairReach(settings) * scale * deviceToCss)));
 
   const write = useCallback(() => {
     frameRef.current = null;
@@ -110,6 +118,11 @@ export default function CrosshairStage({ scale, background }: CrosshairStageProp
       {/* The gradient always sits underneath, so a screenshot that fails to
           load degrades to the plain surface instead of a broken-image gap. */}
       <div aria-hidden className="absolute inset-0 bg-gradient-to-br from-bg-tertiary to-bg-secondary" />
+      {/* The scene is a 1:1 centre crop of the native 2560x1440 capture,
+          scaled only by zoom: never by the selected resolution (a monitor
+          doesn't grow when you switch resolution) and never cover-fitted
+          (which squeezed the scene to ~half size and made every crosshair
+          read about twice as thick as in game). */}
       {bg.src && (
         <img
           key={bg.id}
@@ -118,7 +131,8 @@ export default function CrosshairStage({ scale, background }: CrosshairStageProp
           aria-hidden
           draggable={false}
           onError={(e) => { e.currentTarget.style.display = 'none'; }}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="absolute left-1/2 top-1/2 max-w-none -translate-x-1/2 -translate-y-1/2"
+          style={{ height: STAGE_CAPTURE_HEIGHT * zoom, width: 'auto' }}
         />
       )}
 
@@ -131,7 +145,7 @@ export default function CrosshairStage({ scale, background }: CrosshairStageProp
           transitionDuration: `${RECENTER_MS}ms`,
         }}
       >
-        <CrosshairPreview size={canvasSize} scale={scale} transparent />
+        <CrosshairPreview size={canvasSize} scale={scale} zoom={deviceToCss} transparent />
       </div>
 
       {/* Fades out on hover: once the crosshair is tracking, the hint has done
