@@ -153,11 +153,16 @@ function MergedCollage({ sources, alt, className, shouldBlur, enableImageContext
                   />
                 </ImageContextMenu>
               ) : (
+                // No image menu of its own (the surrounding card owns the
+                // right-click), but the cell still marks its own source so that
+                // menu can act on the tile actually under the pointer rather
+                // than on the merged mod's first source.
                 <img
                   src={cell.url}
                   alt=""
                   loading="lazy"
                   decoding="async"
+                  data-collage-src={cell.url}
                   className="block w-full h-full object-cover"
                 />
               )
