@@ -156,12 +156,6 @@
   --color-state-danger-foreground: #ffffff;
   --color-brand-kofi-foreground: #ffffff;
 
-  /* Shared elevation strengths. Light mode overrides these below to avoid the
-     dense, dirty-looking black shadows used by dark floating surfaces. */
-  --shadow-popup: 0 18px 48px rgb(0 0 0 / 0.45);
-  --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.55);
-  --shadow-toast: 0 10px 30px rgb(0 0 0 / 0.4);
-
   /* Third-party brand colors (buttons/links that represent the brand itself). */
   --color-brand-discord: #5865F2;
   --color-brand-foreground: #ffffff;
@@ -184,6 +178,29 @@
    system mode therefore follows the OS after theme.ts resolves it. */
 :root {
   color-scheme: dark;
+
+  /* Shared elevation strengths. Light mode overrides these below to avoid the
+     dense, dirty-looking black shadows used by dark floating surfaces.
+     These deliberately live outside `@theme`: Tailwind resolves a `@theme`
+     `--shadow-*` token into the generated utility at build time rather than
+     emitting `var(--shadow-name)`, so a per-theme override of a `@theme`
+     shadow is silently dead CSS. Pairing plain `:root` vars with the
+     `@utility` rules below keeps the indirection intact at runtime. */
+  --shadow-popup: 0 18px 48px rgb(0 0 0 / 0.45);
+  --shadow-modal: 0 24px 64px rgb(0 0 0 / 0.55);
+  --shadow-toast: 0 10px 30px rgb(0 0 0 / 0.4);
+}
+
+@utility shadow-popup {
+  box-shadow: var(--shadow-popup);
+}
+
+@utility shadow-modal {
+  box-shadow: var(--shadow-modal);
+}
+
+@utility shadow-toast {
+  box-shadow: var(--shadow-toast);
 }
 
 :root[data-theme='light'] {
