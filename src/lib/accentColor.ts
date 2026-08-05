@@ -33,6 +33,14 @@ function darken(hex: string, amount = 0.12): string {
   return `#${[adj(r), adj(g), adj(b)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
 }
 
+function lighten(hex: string, amount = 0.18): string {
+  const m = hex.replace('#', '').match(/.{2}/g);
+  if (!m) return hex;
+  const [r, g, b] = m.map((c) => parseInt(c, 16));
+  const adj = (v: number) => Math.max(0, Math.min(255, Math.round(v + (255 - v) * amount)));
+  return `#${[adj(r), adj(g), adj(b)].map((v) => v.toString(16).padStart(2, '0')).join('')}`;
+}
+
 type Rgb = [number, number, number];
 
 function parseHex(hex: string): Rgb | null {
@@ -107,6 +115,15 @@ export function accentInk(hex: string, background: string): string {
 }
 
 /**
+ * Least forgiving surface in each theme: the lightest dark surface
+ * (`bg-tertiary`) and the darkest light surface (`bg-sunken`). Ink that clears
+ * AA against these stays readable on every themed surface in between, which
+ * checking against pure white would not guarantee.
+ */
+export const DARK_INK_SURFACE = '#242424';
+export const LIGHT_INK_SURFACE = '#dcdce0';
+
+/**
  * Write the accent color to the document root as CSS variables. Tailwind's
  * @theme tokens read these at use-site (e.g. `bg-accent`), so every component
  * already wired to `--color-accent` updates without rerendering.
@@ -124,10 +141,13 @@ export function applyAccentColor(color: string | null | undefined): void {
   root.style.setProperty('--color-accent-foreground', accentForeground(base));
   root.style.setProperty('--color-accent-solid', accentInk(base, '#ffffff'));
   root.style.setProperty('--color-accent-solid-foreground', '#ffffff');
-  // Dark ink is checked against the lightest dark surface; light ink against
-  // a white card, so either remains readable throughout its theme.
-  root.style.setProperty('--color-accent-ink-dark', accentInk(base, '#242424'));
-  root.style.setProperty('--color-accent-ink-light', accentInk(base, '#ffffff'));
-  root.style.setProperty('--color-accent-ink-hover-dark', accentInk(hover, '#242424'));
-  root.style.setProperty('--color-accent-ink-hover-light', accentInk(hover, '#ffffff'));
+  // Each ink is checked against the least forgiving surface in its theme, so
+  // it remains readable throughout that theme rather than on cards alone.
+  root.style.setProperty('--color-accent-ink-dark', accentInk(base, DARK_INK_SURFACE));
+  root.style.setProperty('--color-accent-ink-light', accentInk(base, LIGHT_INK_SURFACE));
+  // Hover moves the ink away from its surface so the feedback reads as a lift
+  // in both themes. The preset's curated `hover` is a darkening, which only
+  // reads as hover against light; dark needs the opposite direction.
+  root.style.setProperty('--color-accent-ink-hover-dark', accentInk(lighten(base), DARK_INK_SURFACE));
+  root.style.setProperty('--color-accent-ink-hover-light', accentInk(hover, LIGHT_INK_SURFACE));
 }

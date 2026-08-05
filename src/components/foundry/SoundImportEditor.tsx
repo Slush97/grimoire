@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, Pause, Play, RotateCcw, Volume2 } from 'lucide-react';
 
 import { foundryVoiceclip } from '../../lib/api';
+import { useResolvedTheme } from '../../lib/theme';
 import { useAppStore } from '../../stores/appStore';
 
 /** Pre-mint edits the editor reports up to the swap panel. All optional: an
@@ -90,6 +91,7 @@ function fmt(ms: number): string {
 export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImportEditorProps) {
     const { t } = useTranslation();
     const soundVolume = useAppStore((s) => s.soundVolume);
+    const theme = useResolvedTheme();
 
     const ctxRef = useRef<AudioContext | null>(null);
     const [buffer, setBuffer] = useState<AudioBuffer | null>(null);
@@ -295,6 +297,7 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
 
         const accent = themeColor('--color-accent', '#b07a3c');
         const muted = themeColor('--color-text-secondary', '#9a8a72');
+        const ink = themeColor('--color-text-primary', '#ffffff');
         const mid = h / 2;
         const sx = durationMs ? (startMs / durationMs) * w : 0;
         const ex = durationMs ? (endMs / durationMs) * w : w;
@@ -306,16 +309,21 @@ export function SoundImportEditor({ file, targetClipPath, onChange }: SoundImpor
             g.fillStyle = x >= sx && x <= ex ? accent : muted;
             g.fillRect(x, mid - amp, barW, amp * 2);
         }
-        g.fillStyle = 'rgba(0,0,0,0.28)';
+        // Wash the out-of-selection regions away from the surface: darken on a
+        // dark canvas, lighten on a light one.
+        g.fillStyle = theme === 'light' ? 'rgba(255,255,255,0.55)' : 'rgba(0,0,0,0.28)';
         if (sx > 0) g.fillRect(0, 0, sx, h);
         if (ex < w) g.fillRect(ex, 0, w - ex, h);
 
         if (playheadMs != null && durationMs) {
             const px = (playheadMs / durationMs) * w;
-            g.fillStyle = '#ffffff';
+            g.fillStyle = ink;
             g.fillRect(px - 0.5, 0, 1.5, h);
         }
-    }, [peaks, startMs, endMs, durationMs, playheadMs]);
+        // `theme` is not read by every branch, but it must stay in the deps:
+        // the themeColor() reads above are one-shot samples of CSS custom
+        // properties, so a theme flip has to force a repaint.
+    }, [peaks, startMs, endMs, durationMs, playheadMs, theme]);
 
     const dragHandle = useCallback(
         (which: 'start' | 'end') => (e: React.PointerEvent) => {

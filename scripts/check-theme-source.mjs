@@ -36,6 +36,22 @@ function addMatches(violations, file, source, pattern, message) {
   }
 }
 
+// Every named Tailwind palette. The previous list covered only the status
+// hues, which let text-zinc-300 / text-violet-300 / text-orange-400 reach light
+// mode unreadable. Utility prefixes cover fills and line art too, not just
+// text. Literal black/white are handled by their own rules below.
+const TAILWIND_PALETTES = [
+  'red', 'orange', 'amber', 'yellow', 'lime', 'green', 'emerald', 'teal', 'cyan',
+  'sky', 'blue', 'indigo', 'violet', 'purple', 'fuchsia', 'pink', 'rose',
+  'slate', 'gray', 'zinc', 'neutral', 'stone',
+].join('|');
+
+const RAW_PALETTE_PATTERN = new RegExp(
+  `\\b(?:text|bg|border|ring|fill|stroke|from|via|to|divide|outline|decoration|caret|accent|shadow)`
+  + `-(?:${TAILWIND_PALETTES})-(?:50|[1-9]\\d{2})(?:\\/(?:\\d+|\\[.*?\\]))?\\b`,
+  'g'
+);
+
 function parseColorTokens(css) {
   return new Set([...css.matchAll(/--color-([a-z0-9-]+)\s*:/g)].map((match) => match[1]));
 }
@@ -62,18 +78,29 @@ function contrast(a, b) {
   return (light + 0.05) / (dark + 0.05);
 }
 
+// `bg-glass` is deliberately dark in both themes, so it is not a themed
+// surface and is excluded. Everything else a themed foreground can land on is
+// listed, including the extremes (bg-tertiary in dark, bg-sunken in light).
+const THEMED_SURFACES = ['bg-primary', 'bg-secondary', 'bg-card', 'bg-tertiary', 'bg-sunken'];
+const STATUS_TOKENS = ['state-success', 'state-warning', 'state-danger', 'state-info', 'state-note'];
+
 function checkStatusContrast(css, violations) {
   const defaults = parseHexDeclarations(css, /@theme\s*\{([\s\S]*?)\n\}/);
   const light = new Map(defaults);
   for (const [token, value] of parseHexDeclarations(css, /:root\[data-theme='light'\]\s*\{([\s\S]*?)\n\}/)) {
     light.set(token, value);
   }
-  const states = ['state-success', 'state-warning', 'state-danger', 'state-info'];
-  const surfaces = ['bg-primary', 'bg-secondary', 'bg-card'];
-  for (const [theme, palette] of [['dark', defaults], ['light', light]]) {
-    for (const state of states) {
-      for (const surface of surfaces) {
-        const foreground = palette.get(state);
+  // The accent inks are recomputed at runtime by applyAccentColor(), so this
+  // only pins the shipped defaults. accentColor.ts enforces the same floor for
+  // user-selected accents; see its DARK_INK_SURFACE / LIGHT_INK_SURFACE.
+  const themes = [
+    ['dark', defaults, ['accent-ink-dark', 'accent-ink-hover-dark']],
+    ['light', light, ['accent-ink-light', 'accent-ink-hover-light']],
+  ];
+  for (const [theme, palette, inks] of themes) {
+    for (const token of [...STATUS_TOKENS, ...inks]) {
+      for (const surface of THEMED_SURFACES) {
+        const foreground = palette.get(token);
         const background = palette.get(surface);
         if (!foreground || !background) continue;
         const ratio = contrast(foreground, background);
@@ -81,8 +108,8 @@ function checkStatusContrast(css, violations) {
           violations.push({
             file: 'src/index.css',
             line: 1,
-            value: `${theme}:${state} on ${surface} (${ratio.toFixed(2)}:1)`,
-            message: 'semantic status text must meet WCAG AA for normal text',
+            value: `${theme}:${token} on ${surface} (${ratio.toFixed(2)}:1)`,
+            message: 'semantic foreground text must meet WCAG AA for normal text',
           });
         }
       }
@@ -101,8 +128,8 @@ for (const file of await sourceFiles(sourceRoot)) {
     violations,
     file,
     source,
-    /\btext-(?:yellow|amber|green|emerald|red|rose|blue|sky|cyan)-(?:50|[1-9]\d{2})(?:\/(?:\d+|\[.*?\]))?\b/g,
-    'use text-state-success/warning/danger/info instead of a raw status shade'
+    RAW_PALETTE_PATTERN,
+    'use a semantic token (state-*, accent, accent-ink, hl, text-*, bg-*) instead of a raw Tailwind palette color'
   );
   addMatches(
     violations,

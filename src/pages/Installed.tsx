@@ -5247,7 +5247,7 @@ function UnknownFilterGuessModal({
           <div className="min-w-0">
             <h2 id="unknown-filter-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
               {mod.isUnknown ? (
-                <Wrench className="w-4 h-4 text-orange-400" />
+                <Wrench className="w-4 h-4 text-state-warning" />
               ) : (
                 <Link2 className="w-4 h-4 text-accent-ink" />
               )}
@@ -5354,7 +5354,7 @@ function BulkUnknownFixModal({
         <div className="flex items-center justify-between gap-3 px-5 py-4 border-b border-hl/10">
           <div className="min-w-0">
             <h2 id="bulk-unknown-title" className="text-lg font-semibold text-text-primary flex items-center gap-2">
-              <Wrench className="w-4 h-4 text-orange-400" />
+              <Wrench className="w-4 h-4 text-state-warning" />
               {t('settings.experimental.fixUnknownMods')}
             </h2>
             <p className="text-xs text-text-secondary mt-1">

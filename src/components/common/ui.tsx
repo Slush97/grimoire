@@ -74,6 +74,14 @@ export function Badge({ children, variant = 'neutral', className = '' }: BadgePr
 // soft web-style pills.
 // ============================================================================
 
+// Color-bearing text/bg/border/ring utilities, by token namespace, Tailwind
+// palette, literal, or arbitrary color value. Deliberately narrow: it must not
+// match sizing/layout utilities that share the same prefixes (text-xs,
+// text-left, border-2, ring-1). `pnpm theme:check` enforces the same rule
+// statically; this is the runtime backstop.
+const OVERLAY_COLOR_OVERRIDE =
+    /(?:^|:)(?:text|bg|border|ring)-(?:(?:hl|white|black|current|inherit|transparent|accent|brand|state|overlay|control|bg|text|mod-title|red|orange|amber|yellow|lime|green|emerald|teal|cyan|sky|blue|indigo|violet|purple|fuchsia|pink|rose|slate|gray|zinc|neutral|stone)(?:[-/]|$)|\[(?:#|rgb|hsl|oklch|oklab|color|var))/;
+
 type TagTone = 'accent' | 'warning' | 'danger' | 'success' | 'info' | 'neutral';
 
 interface TagProps {
@@ -109,13 +117,13 @@ export function Tag({
     };
     const t = tones[tone];
     const isOverlay = variant === 'overlay';
-    // Overlay colors are owned by this component. Layout/typography utilities
-    // remain customizable, but a call site cannot repaint the invariant dark
-    // treatment with literal or arbitrary text-*, bg-*, border-*, or ring-*.
+    // Overlay colors are owned by this component: a call site cannot repaint
+    // the invariant dark treatment. Only color-bearing values are stripped, so
+    // layout and typography (text-xs, text-left, border-2) still pass through.
     const safeClassName = isOverlay
         ? className
             .split(/\s+/)
-            .filter((utility) => !/(?:^|:)(?:text|bg|border|ring)-(?!transparent$|current$)/.test(utility))
+            .filter((utility) => !OVERLAY_COLOR_OVERRIDE.test(utility))
             .join(' ')
         : className;
     const surface = isOverlay
@@ -269,7 +277,7 @@ export function Slider({
                     className="absolute w-full h-full opacity-0 cursor-pointer"
                 />
                 <div
-                    className="absolute h-4 w-4 rounded-full border-2 border-accent bg-bg-secondary shadow-sm pointer-events-none transition-all duration-100 ease-out group-hover:scale-110"
+                    className="absolute h-4 w-4 rounded-full border-2 border-accent bg-control-thumb shadow-sm pointer-events-none transition-all duration-100 ease-out group-hover:scale-110"
                     style={{ left: `calc(${percentage}% - 8px)` }}
                 />
             </div>
@@ -331,7 +339,7 @@ export function Toggle({ checked, onChange, label, description, className = '', 
                 />
             </div>
             <div>
-                {label && <span className="block text-sm font-medium text-text-primary group-hover:text-text-primary transition-colors">{label}</span>}
+                {label && <span className="block text-sm font-medium text-text-primary">{label}</span>}
                 {description && <p className="text-xs text-text-secondary mt-0.5">{description}</p>}
             </div>
         </label>

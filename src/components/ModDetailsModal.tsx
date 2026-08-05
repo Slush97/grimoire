@@ -543,9 +543,9 @@ function ModDetailsModal({
       case 'refactor':
         return 'bg-state-warning/15 text-state-warning border-state-warning/30';
       case 'removal':
-        return 'bg-zinc-500/15 text-zinc-300 border-zinc-500/40';
+        return 'bg-hl/10 text-text-secondary border-hl/25';
       case 'suggestion':
-        return 'bg-violet-500/15 text-violet-300 border-violet-500/30';
+        return 'bg-state-note/15 text-state-note border-state-note/30';
       default:
         return 'bg-bg-secondary text-text-secondary border-border';
     }

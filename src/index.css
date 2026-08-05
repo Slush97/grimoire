@@ -109,12 +109,15 @@
      applyAccentColor(); this default matches the shipped Ember orange. */
   --color-accent-foreground: #0f0f0f;
   /* Accent used as text/line art on themed surfaces. Runtime accent changes
-     calculate both variants; the active theme selects the appropriate one. */
+     calculate both variants; the active theme selects the appropriate one.
+     These defaults are what applyAccentColor() computes for the shipped Ember
+     orange, so the pre-JS paint matches. Each clears AA against the least
+     forgiving surface in its theme (bg-tertiary dark, bg-sunken light). */
   --color-accent-ink-dark: #f97316;
-  --color-accent-ink-light: #c2410c;
+  --color-accent-ink-light: #9d490e;
   --color-accent-ink: var(--color-accent-ink-dark);
-  --color-accent-ink-hover-dark: #fb923c;
-  --color-accent-ink-hover-light: #9a3412;
+  --color-accent-ink-hover-dark: #fa8c40;
+  --color-accent-ink-hover-light: #a93f09;
   --color-accent-ink-hover: var(--color-accent-ink-hover-dark);
   --color-text-primary: #ffffff;
   --color-text-secondary: #a1a1aa;
@@ -131,6 +134,9 @@
   --color-state-warning: #facc15;
   --color-state-danger:  #f87171;
   --color-state-info:    #60a5fa;
+  /* Advisory/editorial, distinct from the four outcome states. Currently the
+     GameBanana changelog "suggestion" chip. */
+  --color-state-note:    #c4b5fd;
 
   /* Invariant media-overlay palette. These colors always sit on the dark
      overlay surface, regardless of the resolved app theme. App copy must use
@@ -222,11 +228,12 @@
   --color-border: #c7c7cc;
   --color-mod-title: #292524;
 
-  /* All four are >= 4.5:1 against both white cards and the page background. */
+  /* All are >= 4.5:1 against every light surface, down to bg-sunken. */
   --color-state-success: #166534;
   --color-state-warning: #92400e;
   --color-state-danger:  #b91c1c;
   --color-state-info:    #1d4ed8;
+  --color-state-note:    #6d28d9;
   --shadow-popup: 0 14px 38px rgb(24 24 27 / 0.16);
   --shadow-modal: 0 22px 58px rgb(24 24 27 / 0.2);
   --shadow-toast: 0 8px 24px rgb(24 24 27 / 0.16);
